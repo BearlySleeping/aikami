@@ -62,7 +62,8 @@ describe('selectInteractionTarget', () => {
 
   it('prioritises item over NPC when both in range', () => {
     const itemEid = addItem(world, 'potion', 30, 0);
-    addNPC(world, 'npc-1', 'Merchant', 40, 0, 50);
+    // Place NPC closer than the item — item should still win due to items-before-NPCs priority
+    addNPC(world, 'npc-1', 'Merchant', 20, 0, 50);
 
     const target = selectInteractionTarget({ world, playerX: 0, playerY: 0 });
     expect(target).toBeDefined();

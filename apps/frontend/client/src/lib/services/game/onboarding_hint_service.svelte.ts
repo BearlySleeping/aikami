@@ -137,10 +137,11 @@ export class OnboardingHintService
     this._enqueuePendingHints();
   }
 
-  /** Hides the current hint toast. Called manually by the ViewModel. */
+  /** Hides the current hint toast and advances to the next eligible hint. */
   dismissCurrentHint(): void {
     this.hintVisible = false;
     this.currentHint = undefined;
+    this._enqueuePendingHints();
   }
 
   /** Resets learned state for the current pack (replay tutorial). */
@@ -236,7 +237,10 @@ export class OnboardingHintService
         const progress: OnboardingProgress = JSON.parse(raw);
         if (progress.packId === this._packId) {
           this._learned = { ...progress.learned };
-          if (progress.completedAt) {
+          // Derive isComplete from current manifest steps —
+          // newly added steps under the same packId must still be eligible
+          const allStepsLearned = this._steps.length > 0 && this._steps.every((s) => this._learned[s.id]);
+          if (allStepsLearned) {
             this.isComplete = true;
           }
           return;

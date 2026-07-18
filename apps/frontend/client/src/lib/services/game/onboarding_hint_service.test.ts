@@ -151,19 +151,22 @@ describe('OnboardingHintService', () => {
 
   // ── Dismiss ──
 
-  test('dismissCurrentHint should hide hint toast without marking as learned', () => {
+  test('dismissCurrentHint should hide hint toast and advance to next hint', () => {
     expect(service.currentHint?.id).toBe('hint_move');
     expect(service.hintVisible).toBe(true);
 
     service.dismissCurrentHint();
 
-    expect(service.currentHint).toBeUndefined();
-    expect(service.hintVisible).toBe(false);
-
-    // The hint was NOT learned — calling onActionPerformed should still advance
-    // after reloading (refreshProgress re-enqueues)
-    service.refreshProgress();
+    // After dismissal, the next eligible hint should be enqueued
+    // hint_move was dismissed but not learned — _enqueuePendingHints will show it again
     expect(service.currentHint?.id).toBe('hint_move');
+    expect(service.hintVisible).toBe(true);
+
+    // Mark it as learned to advance
+    service.onActionPerformed('move_up');
+
+    // Should now show hint_interact
+    expect(service.currentHint?.id).toBe('hint_interact');
     expect(service.hintVisible).toBe(true);
   });
 

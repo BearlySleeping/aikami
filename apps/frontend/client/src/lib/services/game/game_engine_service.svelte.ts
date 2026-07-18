@@ -455,7 +455,13 @@ class GameEngineService
           packId: this.contentPackId,
           onboarding: pack.manifest.onboarding,
         });
-        // Also refresh keybindings when loading the pack (for current bindings)
+      } else {
+        // Clear stale hints from a previous pack that had onboarding
+        const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
+        svc.resetOnboarding();
+      }
+      // Also refresh keybindings when loading the pack (for current bindings)
+      {
         const { inputActionService: inputSvc } = await import('./input_action_service.svelte.ts');
         inputSvc.refreshBindings();
       }

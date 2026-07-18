@@ -122,6 +122,15 @@ export default defineConfig({
           );
         });
         await page.waitForTimeout(500);
+
+        // Assert reduced-motion actually disables animation (AC-5)
+        const hintElement = page.locator('.onboarding-hint');
+        if (await hintElement.isVisible()) {
+          const animName = await hintElement.evaluate((el) =>
+            window.getComputedStyle(el).animationName,
+          );
+          expect(animName).toBe('none');
+        }
       },
       afterSnapshot: async (page) => {
         // Reset to default

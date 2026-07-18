@@ -94,7 +94,16 @@ export const loadKeybindings = (): KeybindingMap => {
   try {
     const stored = localStorage.getItem(KEYBINDING_STORAGE_KEY);
     if (stored) {
-      return { ...DEFAULT_KEYBINDINGS, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      // Validate persisted entries — only retain values that are strings
+      // so malformed data (null, numbers) never reaches buildKeyToAction.
+      const valid: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string') {
+          valid[k] = v;
+        }
+      }
+      return { ...DEFAULT_KEYBINDINGS, ...valid };
     }
   } catch {
     // Invalid data — use defaults

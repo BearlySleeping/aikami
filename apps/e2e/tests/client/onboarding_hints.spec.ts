@@ -15,11 +15,12 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Onboarding Hints (C-327 AC-3, AC-4)', () => {
   test('should navigate to game page without errors', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-
+    // Install pageerror listener BEFORE navigation
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
 
     expect(errors.length).toBe(0);
   });

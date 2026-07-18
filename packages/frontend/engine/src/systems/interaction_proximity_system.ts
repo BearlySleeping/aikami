@@ -68,6 +68,14 @@ export const updateInteractionProximity = (options: {
 
   const playerPos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
   if (!playerPos) {
+    // Emit undefined target transition before returning — clears stale prompt (C-327)
+    if (currentTarget) {
+      currentTarget = undefined;
+      bridge.emit({
+        type: 'INTERACTION_TARGET_CHANGED',
+        targetEntityId: undefined,
+      });
+    }
     return;
   }
 

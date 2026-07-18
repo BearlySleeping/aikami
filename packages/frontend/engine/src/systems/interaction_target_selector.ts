@@ -93,9 +93,9 @@ export const selectInteractionTarget = (options: {
     }
   }
 
-  // ── NPCs ──
+  // ── NPCs — only consider if no item target has been selected (items-before-NPCs) ──
 
-  for (const eid of query(world, NPC_QUERY_TERMS)) {
+  if (closestEid < 0) {
     const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
     if (!npcDialog) {
       continue;

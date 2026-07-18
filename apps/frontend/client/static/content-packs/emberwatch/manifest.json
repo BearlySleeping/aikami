@@ -290,7 +290,7 @@
       {
         "id": "hint_interact",
         "action": "interact",
-        "text": "Press {key} to talk to Elder Thalia",
+        "text": "Press {key} to interact with people and objects",
         "trigger": "near_interactable"
       },
       {

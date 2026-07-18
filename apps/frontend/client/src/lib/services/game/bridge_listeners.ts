@@ -186,14 +186,22 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('INTERACTION_TARGET_CHANGED', (event) => {
     if (event.targetEntityId !== undefined && event.targetName && event.targetType) {
+      // Store target metadata so the display label can react to device/binding changes.
+      // The prompt ViewModel/GUI derives the label from inputActionService.actionDisplayLabel()
+      // whenever the prompt is rendered or device/bindings change.
       const verb = event.targetType === 'npc' ? 'Talk to' : 'Pick up';
       const keyLabel = inputActionService.actionDisplayLabel('interact');
       gameOverlayService.setInteractionPrompt({
         label: `${keyLabel} — ${verb} ${event.targetName}`,
         visible: true,
+        targetMetadata: { verb, targetName: event.targetName },
       });
     } else {
-      gameOverlayService.setInteractionPrompt({ label: '', visible: false });
+      gameOverlayService.setInteractionPrompt({
+        label: '',
+        visible: false,
+        targetMetadata: { verb: '', targetName: '' },
+      });
     }
 
     // Forward target changes to the onboarding service for near_interactable hints

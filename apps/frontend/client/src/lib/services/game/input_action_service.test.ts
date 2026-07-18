@@ -66,14 +66,23 @@ describe('InputActionService', () => {
     (globalThis as Record<string, unknown>).navigator = {
       getGamepads: () => [] as (Gamepad | null)[],
     };
+    // Mock performance.now for debounce
+    (globalThis as Record<string, unknown>).performance = {
+      now: () => 1000,
+    };
 
     // Reset localStorage to defaults so every test starts clean
     localStorage.clear();
     localStorage.setItem('aikami:settings:keybindings', JSON.stringify(DEFAULTS));
 
+    // Re-import the module to get a fresh singleton state
     const mod = await import('./input_action_service.svelte.ts');
     service = mod.inputActionService;
     service.refreshBindings();
+
+    // Reset device tracking state that may have been mutated by other tests
+    (service as unknown as Record<string, unknown>).device = 'keyboard';
+    (service as unknown as Record<string, unknown>).isGamepadActive = false;
   });
 
   afterEach(() => {
@@ -136,9 +145,33 @@ describe('InputActionService', () => {
   // ── Display labels — gamepad glyphs (AC-5) ──
 
   test('actionDisplayLabel: should prefer standard gamepad Unicode labels after device switch', () => {
-    // We need to simulate a gamepad — cannot switch device without actual gamepad input,
-    // but we can verify the gamepad path doesn't throw.
-    // Service uses keyToDisplayLabel/gamepadActionLabel from @aikami/constants (DRY fix).
+    // Simulate a gamepad with A button pressed
+    const mockGamepad = {
+      buttons: [{ pressed: true }],
+      axes: [0, 0],
+    };
+    (globalThis as Record<string, unknown>).navigator = {
+      getGamepads: () => [mockGamepad as unknown as Gamepad],
+    };
+
+    // Bypass debounce: advance the fake clock past the 250ms threshold
+    let fakeNow = 1000;
+    (globalThis as Record<string, unknown>).performance = {
+      now: () => (fakeNow += 300),
+    };
+
+    // Poll gamepad to trigger device switch
+    service.pollGamepad();
+
+    // After gamepad activity, device should be 'gamepad'
+    expect(service.device).toBe('gamepad');
+    expect(service.isGamepadActive).toBe(true);
+    expect(service.actionDisplayLabel('interact')).toBe('Ⓐ');
+
+    // Reset navigator for subsequent tests
+    (globalThis as Record<string, unknown>).navigator = {
+      getGamepads: () => [] as (Gamepad | null)[],
+    };
   });
 
   // ── Device tracking (AC-5) ──

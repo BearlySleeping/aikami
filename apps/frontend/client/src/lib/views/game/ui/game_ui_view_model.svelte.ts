@@ -148,6 +148,8 @@ class GameUIViewModel
   /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
   reducedMotion = $state<boolean>(false);
 
+  private _reducedMotionQuery: MediaQueryList | undefined;
+
   // ── Service-proxied state ──
 
   get activeOverlay(): GameOverlayType {
@@ -353,13 +355,11 @@ class GameUIViewModel
     });
 
     // Detect prefers-reduced-motion (C-327 AC-5)
-    this.reducedMotion =
-      globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    globalThis
-      .matchMedia?.('(prefers-reduced-motion: reduce)')
-      .addEventListener('change', (event: MediaQueryListEvent) => {
-        this.reducedMotion = event.matches;
-      });
+    this._reducedMotionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (this._reducedMotionQuery) {
+      this.reducedMotion = this._reducedMotionQuery.matches;
+      this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
+    }
 
     await gameOverlayService.initialize();
     await super.initialize();
@@ -394,6 +394,19 @@ class GameUIViewModel
   /** Dismisses the current onboarding hint (C-327 AC-3). */
   dismissOnboardingHint(): void {
     onboardingHintService.dismissCurrentHint();
+  }
+
+  // ── Media query cleanup (C-327 AC-5) ──
+
+  private readonly _onReducedMotionChange = (event: MediaQueryListEvent): void => {
+    this.reducedMotion = event.matches;
+  };
+
+  async dispose(): Promise<void> {
+    if (this._reducedMotionQuery) {
+      this._reducedMotionQuery.removeEventListener('change', this._onReducedMotionChange);
+    }
+    await super.dispose();
   }
 }
 

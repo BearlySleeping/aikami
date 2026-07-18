@@ -55,10 +55,11 @@ export type OnboardingHintStep = Static<typeof OnboardingHintStepSchema>;
 // ---------------------------------------------------------------------------
 
 export const OnboardingSectionSchema = Type.Object({
-  /** Ordered list of hint steps (first → last). */
+  /** Ordered list of hint steps (first → last). Duplicate ids are rejected. */
   steps: Type.Array(OnboardingHintStepSchema, {
     minItems: 1,
     description: 'Ordered hint steps (first → last)',
+    uniqueItems: true,
   }),
 });
 

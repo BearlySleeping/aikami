@@ -15,12 +15,12 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Interaction UX (C-327 AC-2)', () => {
   test('should navigate to game page without errors', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-
-    // No fatal errors on page load
+    // Install pageerror listener BEFORE navigation
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
+
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
 
     // Allow a tick for async errors to surface
     await page.waitForTimeout(300);

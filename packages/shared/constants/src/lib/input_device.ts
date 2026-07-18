@@ -81,9 +81,8 @@ const GAMEPAD_ACTION_LABELS: Record<string, string> = {
   move_left: '←',
   move_right: '→',
   interact: 'Ⓐ',
-  open_inventory: 'Ⓨ',
+  open_inventory: '▤',
   open_quest_log: 'Ⓧ',
-  open_character: 'Ⓧ',
   open_menu: 'Ⓢ',
 };
 
@@ -114,6 +113,8 @@ export const gamepadActionLabel = (actionId: string): string => {
 export const GAMEPAD_BUTTON_TO_ACTION: Record<number, string> = {
   0: 'interact', // A / Cross (south)
   1: 'open_menu', // B / Circle (east) — secondary menu
+  2: 'open_character', // X / Square (west)
+  3: 'open_quest_log', // Y / Triangle (north)
   8: 'open_inventory', // Select / Share — inventory
   9: 'open_menu', // Start / Options — pause
 };

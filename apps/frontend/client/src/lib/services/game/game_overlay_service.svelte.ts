@@ -140,7 +140,11 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   /** Whether the interaction prompt is visible (C-327 AC-2). */
   readonly interactionPromptVisible: boolean;
   /** Sets the interaction prompt state (called by bridge_listeners). */
-  setInteractionPrompt(options: { label: string; visible: boolean }): void;
+  setInteractionPrompt(options: {
+    label: string;
+    visible: boolean;
+    targetMetadata?: { verb: string; targetName: string };
+  }): void;
 };
 
 export type GameOverlayServiceOptions = BaseFrontendClassOptions;
@@ -240,7 +244,11 @@ export class GameOverlayService
   interactionPromptVisible = $state<boolean>(false);
 
   /** Sets the interaction prompt label and visibility (called by bridge_listeners). */
-  setInteractionPrompt(options: { label: string; visible: boolean }): void {
+  setInteractionPrompt(options: {
+    label: string;
+    visible: boolean;
+    targetMetadata?: { verb: string; targetName: string };
+  }): void {
     this.interactionPromptLabel = options.label;
     this.interactionPromptVisible = options.visible;
   }
@@ -313,14 +321,10 @@ export class GameOverlayService
     const actionId = inputActionService.keyToAction(event.key);
     inputActionService.onKeyDown();
 
-    // Notify onboarding service of any recognized action (C-327 AC-3)
-    if (actionId) {
-      onboardingHintService.onActionPerformed(actionId);
-    }
-
     // ── Overlay close/escape handling (binding-aware — open_menu defaults to Escape) ──
     if (actionId === 'open_menu') {
       event.preventDefault();
+      onboardingHintService.onActionPerformed('open_menu');
       if (this.activeOverlay === 'DIALOGUE') {
         this.endDialogue();
         return;
@@ -354,11 +358,13 @@ export class GameOverlayService
       if (this.activeOverlay === 'INVENTORY') {
         event.preventDefault();
         this.closeInventory();
+        onboardingHintService.onActionPerformed('open_inventory');
         return;
       }
       if (this.activeOverlay === 'NONE') {
         event.preventDefault();
         this.openInventory();
+        onboardingHintService.onActionPerformed('open_inventory');
         return;
       }
       return;
@@ -391,6 +397,12 @@ export class GameOverlayService
         this.openCharacterDashboard();
         return;
       }
+    }
+
+    // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
+    // Non-overlay actions (interact, move_*) pass through to the engine here.
+    if (actionId) {
+      onboardingHintService.onActionPerformed(actionId);
     }
   }
 
