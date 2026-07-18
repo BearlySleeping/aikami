@@ -462,6 +462,73 @@ export type GameEvent =
       windVelocity: number;
       /** Rain intensity (0.0 to 1.0). */
       rainIntensity: number;
+    }
+  | {
+      /**
+       * Emitted when a quest is accepted by the player.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'QUEST_ACCEPTED';
+      questId: string;
+      questName: string;
+    }
+  | {
+      /**
+       * Emitted when a quest objective progresses.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'QUEST_PROGRESSED';
+      questId: string;
+      objectiveIndex: number;
+      current: number;
+      max: number;
+    }
+  | {
+      /**
+       * Emitted when a quest is completed.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'QUEST_COMPLETED';
+      questId: string;
+      endingId?: string;
+    }
+  | {
+      /**
+       * Emitted when quest rewards are delivered to the player.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'QUEST_REWARD_GRANTED';
+      questId: string;
+      rewards: Array<{ type: 'item' | 'gold' | 'xp'; itemId?: string; amount?: number }>;
+    }
+  | {
+      /**
+       * Emitted when the player enters a new map.
+       * The QuestStateService listens for this to advance map-enter objectives.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'MAP_ENTERED';
+      /** The map URL that was loaded (resolved via content pack loader). */
+      mapUrl: string;
+    }
+  | {
+      /**
+       * Emitted when an encounter completes (combat victory or non-combat resolution).
+       * The QuestStateService listens for this to advance encounter-complete objectives.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'ENCOUNTER_COMPLETED';
+      encounterId: string;
+      victory: boolean;
+    }
+  | {
+      /**
+       * Emitted when the player picks up an item from the world.
+       * The QuestStateService listens for this to advance item-pickup objectives.
+       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       */
+      type: 'ITEM_PICKED_UP';
+      itemId: string;
     };
 
 // ---------------------------------------------------------------------------
@@ -478,13 +545,17 @@ export type QuestObjectiveData = {
 /** Quest status values emitted by the ECS. */
 export type QuestStatus = 'active' | 'completed' | 'failed';
 
-/** Quest data emitted from ECS to UI via QUESTS_UPDATED. */
+/** Quest data emitted from QuestStateService to UI via QUESTS_UPDATED. */
 export type QuestData = {
   readonly id: string;
   readonly title: string;
   readonly description: string;
   status: QuestStatus;
   objectives: QuestObjectiveData[];
+  /** Ending-specific narration (set when quest completes with an ending). */
+  readonly endingNarration?: string;
+  /** Rewards granted for this quest (for journal display). */
+  readonly rewards?: Array<{ type: string; label: string }>;
 };
 
 // ---------------------------------------------------------------------------

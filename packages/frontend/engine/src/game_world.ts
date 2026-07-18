@@ -1500,6 +1500,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // the fade-to-black overlay can be dismissed.
       this._bridge.emit({ type: 'MAP_LOADED' });
 
+      // Emit MAP_ENTERED so the QuestStateService can evaluate map-enter objectives.
+      this._bridge.emit({ type: 'MAP_ENTERED', mapUrl });
+
       this.debug('loadMap:complete');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

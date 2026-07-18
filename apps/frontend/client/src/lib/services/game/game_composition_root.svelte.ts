@@ -29,6 +29,8 @@ import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte'
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
+import type { QuestStateServiceInterface } from './quest_state_service.svelte';
+import { questStateService } from './quest_state_service.svelte';
 import type { SessionServiceInterface } from './session_service.svelte';
 import { sessionService } from './session_service.svelte';
 import type { WorldStateServiceInterface } from './world_state_service.svelte';
@@ -47,6 +49,7 @@ export type GameCompositionRootInterface = BaseFrontendClassInterface & {
   readonly campaignService: CampaignServiceInterface;
   readonly playerStateService: PlayerStateServiceInterface;
   readonly worldStateService: WorldStateServiceInterface;
+  readonly questStateService: QuestStateServiceInterface;
   readonly inventoryService: InventoryServiceInterface;
   readonly equipmentService: EquipmentServiceInterface;
   readonly gameModeService: GameModeServiceInterface;
@@ -80,6 +83,7 @@ export class GameCompositionRoot
   private _gameEngineService: GameEngineServiceInterface | undefined;
   private _gameOverlayService: GameOverlayServiceInterface | undefined;
   private _sessionService: SessionServiceInterface | undefined;
+  private _questStateService: QuestStateServiceInterface | undefined;
   private _npcDialogueService: NpcDialogueServiceInterface | undefined;
 
   get isInitialized(): boolean {
@@ -105,6 +109,13 @@ export class GameCompositionRoot
       throw new Error('GameCompositionRoot not initialised');
     }
     return this._worldStateService;
+  }
+
+  get questStateService(): QuestStateServiceInterface {
+    if (!this._questStateService) {
+      throw new Error('GameCompositionRoot not initialised');
+    }
+    return this._questStateService;
   }
 
   get inventoryService(): InventoryServiceInterface {
@@ -190,6 +201,7 @@ export class GameCompositionRoot
     this._inventoryService = inventoryService;
     this._playerStateService = playerStateService;
     this._worldStateService = worldStateService;
+    this._questStateService = questStateService;
     this._sessionService = sessionService;
 
     // Phase 4: Equipment (depends on PlayerStateService + InventoryService)
@@ -279,9 +291,14 @@ export class GameCompositionRoot
           return true;
         },
         offerQuest: (_opts) => {
-          // C-329 will consume this envelope; for now, open quest log
-          // with the offered quest info (deferred to C-329 proper)
-          return true;
+          const accepted = questStateService.acceptQuest({
+            questId: _opts.questId,
+            npcId: _opts.npcId,
+          });
+          if (accepted) {
+            gameOverlayService.openQuestLog();
+          }
+          return accepted;
         },
         skillCheck: (_opts) => {
           // Dice flow handled by the dialogue ViewModel; the orchestrator
@@ -301,10 +318,14 @@ export class GameCompositionRoot
       },
     });
 
+    // Phase 5d: Configure quest state service with content pack
+    questStateService.configure({ contentPackLoader: contentPack });
+
     // Phase 6: Start ECS bridge listeners for state services
     await playerStateService.startListening();
     await worldStateService.startListening();
     await inventoryService.startListening();
+    await questStateService.startListening();
 
     this._initialized = true;
 
@@ -326,6 +347,7 @@ export class GameCompositionRoot
     // Reset all state services
     this._playerStateService?.reset();
     this._worldStateService?.reset();
+    this._questStateService?.reset();
     this._inventoryService?.reset();
     this._equipmentService?.reset();
     this._gameModeService?.reset();
@@ -334,6 +356,7 @@ export class GameCompositionRoot
     this._campaignService = undefined;
     this._playerStateService = undefined;
     this._worldStateService = undefined;
+    this._questStateService = undefined;
     this._inventoryService = undefined;
     this._equipmentService = undefined;
     this._gameModeService = undefined;
