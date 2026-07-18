@@ -63,8 +63,8 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         dialog: event.dialog,
         personaId: event.personaId,
       },
-      setOverlay: (type) => {
-        gameOverlayService.setActive(type);
+      setOverlay: (type: string) => {
+        gameOverlayService.setActive(type as 'DIALOGUE');
       },
       pauseEngine: () => gameEngineService.pauseEngine(),
     });

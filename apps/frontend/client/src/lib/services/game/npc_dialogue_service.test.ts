@@ -9,7 +9,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { npcDialogueService } from './npc_dialogue_service.svelte';
+import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,8 +116,14 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Reset executed commands
-  npcDialogueService.markCommandExecuted('__reset__', 'trade'); // noop, just helper
+  // Reconfigure with fresh state to prevent test bleed
+  const contentProvider = makeContentProvider();
+  const textGenerator = makeTextGenerator();
+  npcDialogueService.configure({
+    contentProvider,
+    textGenerator,
+    executors: makeExecutors(),
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -233,6 +239,16 @@ describe('AC-2: Malformed output rejection', () => {
   });
 
   test('giveItem with item NPC does not possess — rejected by precondition', async () => {
+    // Use a vendor whose inventory excludes legendarySword
+    const contentProvider = makeContentProvider({
+      npcs: {
+        small_merchant: {
+          name: 'Peddler',
+          isVendor: true,
+          vendorInventory: 'apple, bread',
+        },
+      },
+    });
     const textGenerator = makeTextGenerator({
       text: 'Take this legendary sword.',
       structured: {
@@ -242,20 +258,20 @@ describe('AC-2: Malformed output rejection', () => {
       },
     });
     npcDialogueService.configure({
-      contentProvider: makeContentProvider(),
+      contentProvider,
       textGenerator,
       executors: makeExecutors(),
     });
 
     const controller = new AbortController();
     const turn = await npcDialogueService.generateTurn({
-      npcId: 'village_elder', // not a vendor, no inventory
-      npcName: 'Elder Thalia',
+      npcId: 'small_merchant',
+      npcName: 'Peddler',
       messages: [],
       signal: controller.signal,
     });
 
-    // Command should be dropped since village_elder is not a vendor
+    // Command should be dropped — legendarySword is NOT in small_merchant's inventory
     expect(turn.command).toBeUndefined();
   });
 
@@ -344,10 +360,12 @@ describe('AC-3: Precondition whitelist and command dispatch', () => {
         command: { kind: 'trade' },
       },
     });
+    const contentProvider = makeContentProvider();
+    const executors = makeExecutors();
     npcDialogueService.configure({
-      contentProvider: makeContentProvider(),
+      contentProvider,
       textGenerator,
-      executors: makeExecutors(),
+      executors,
     });
 
     const controller = new AbortController();
@@ -360,6 +378,19 @@ describe('AC-3: Precondition whitelist and command dispatch', () => {
 
     expect(turn.command?.kind).toBe('trade');
     expect(turn.narrative.length).toBeGreaterThan(0);
+
+    // Verify executor dispatch: executeCommand routes through _executors
+    expect(turn.command).toBeDefined();
+    if (turn.command) {
+      const executed = npcDialogueService.executeCommand({
+        kind: 'trade',
+        npcId: 'traveling_merchant',
+        npcName: 'Keth',
+        command: turn.command,
+      });
+      expect(executed).toBe(true);
+      expect(execLog).toContain('trade');
+    }
   });
 
   test('trade rejected on non-vendor NPC', async () => {
@@ -556,26 +587,52 @@ describe('AC-5: Cancellation and regenerate safety', () => {
 // ---------------------------------------------------------------------------
 
 describe('Edge cases', () => {
-  test('choices capped at 4', () => {
-    const _projection = npcDialogueService.buildContext({
+  test('choices capped at 4', async () => {
+    const textGenerator = makeTextGenerator({
+      text: 'Here are many options.',
+      structured: {
+        narrative: 'Here are many options.',
+        choices: [
+          { id: 'a', label: 'Option A' },
+          { id: 'b', label: 'Option B' },
+          { id: 'c', label: 'Option C' },
+          { id: 'd', label: 'Option D' },
+          { id: 'e', label: 'Option E' },
+          { id: 'f', label: 'Option F' },
+        ],
+      },
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    const turn = await npcDialogueService.generateTurn({
       npcId: 'village_elder',
       npcName: 'Elder Thalia',
       messages: [],
+      signal: controller.signal,
     });
 
-    // The buildContext doesn't return choices — but a generated turn always caps
-    // Validate indirectly via generateTurn
+    // Choices should be capped at 4 even when 6 are provided
+    expect(turn.choices.length).toBeLessThanOrEqual(4);
+    expect(turn.narrative).toBe('Here are many options.');
   });
 
-  test('configure must be called before generateTurn (guard assertion)', () => {
-    // The singleton is configured in beforeEach. This test verifies
-    // the contract that configure + generateTurn are available methods.
-    // The guard _assertConfigured is tested indirectly — any call
-    // without configure would throw, but since beforeEach configures,
-    // we verify the interface contract:
-    expect(typeof npcDialogueService.configure).toBe('function');
-    expect(typeof npcDialogueService.generateTurn).toBe('function');
-    expect(typeof npcDialogueService.deriveAllowedCommands).toBe('function');
-    expect(typeof npcDialogueService.buildContext).toBe('function');
+  test('configure must be called before generateTurn (throws on unconfigured)', () => {
+    // Create a fresh, unconfigured instance
+    const freshService = NpcDialogueService.create({ className: 'NpcDialogueServiceTest' });
+
+    const controller = new AbortController();
+    expect(async () =>
+      freshService.generateTurn({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [],
+        signal: controller.signal,
+      }),
+    ).toThrow('not configured');
   });
 });

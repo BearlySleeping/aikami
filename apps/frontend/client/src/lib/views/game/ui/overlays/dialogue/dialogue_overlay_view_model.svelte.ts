@@ -13,7 +13,6 @@ import {
   diceService,
   draftStore,
   gameModeService,
-  gameOverlayService,
   messageBranchStore,
   SentenceBoundaryChunker,
   ttsService,
@@ -714,7 +713,11 @@ class DialogueOverlayViewModel
   // ── Private: Command dispatch to existing executors ──────────────────
 
   /**
-   * Dispatches a validated dialogue command to the appropriate executor.
+   * Dispatches a validated dialogue command through the orchestrator's
+   * executor boundary. UI concerns (combat transition message, delay)
+   * remain in the ViewModel; the actual service dispatch is delegated
+   * to npcDialogueService.executeCommand().
+   *
    * Guards: command already validated by the orchestrator; re-execution
    * prevented by markCommandExecuted in _delegateGenerateResponse.
    */
@@ -728,28 +731,40 @@ class DialogueOverlayViewModel
     this.debug('dispatchCommand', { kind });
 
     switch (kind) {
-      case 'trade': {
-        gameOverlayService?.openVendor?.({
-          vendorId: this._npcData.npcId,
-          vendorName: this._npcData.npcName,
-          vendorInventory: '',
-        });
-        break;
-      }
       case 'startCombat': {
+        // UI transition message before executing
         this._appendNpcMessage(`*${this._npcData.npcName} reaches for a weapon — combat begins!*`);
         await new Promise<void>((resolve) => setTimeout(resolve, 1200));
         this._onEndChat();
+
+        // Delegate combat start to the orchestrator
+        this._npcDialogueService.executeCommand({
+          kind,
+          npcId: this._npcData.npcId,
+          npcName: this._npcData.npcName,
+          command: command as unknown as Parameters<
+            NpcDialogueServiceInterface['executeCommand']
+          >[0]['command'],
+        });
+
         if (this._onStartCombat) {
           this._onStartCombat(this._npcData);
         }
         break;
       }
       default: {
-        this.debug('dispatchCommand:deferred', {
+        // Route all other commands through the orchestrator executor boundary
+        const executed = this._npcDialogueService.executeCommand({
           kind,
-          note: 'executor not yet wired for this command',
+          npcId: this._npcData.npcId,
+          npcName: this._npcData.npcName,
+          command: command as unknown as Parameters<
+            NpcDialogueServiceInterface['executeCommand']
+          >[0]['command'],
         });
+        if (!executed) {
+          this.debug('dispatchCommand:denied', { kind });
+        }
         break;
       }
     }

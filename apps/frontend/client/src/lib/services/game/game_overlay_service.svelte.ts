@@ -44,7 +44,7 @@ export type GameOverlayType =
 export type DialogueNpcData = {
   npcId: string;
   npcName: string;
-  dialog: string;
+  dialog?: string;
   personaId?: string;
 };
 

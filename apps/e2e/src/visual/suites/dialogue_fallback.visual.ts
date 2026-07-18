@@ -14,7 +14,11 @@ import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
 const DialogueFallbackSchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  score: Type.Number({
+    description: '0-100 score of visual correctness',
+    minimum: 0,
+    maximum: 100,
+  }),
   dialogueVisible: Type.Boolean({
     description: 'Whether the dialogue overlay is visible with NPC name and reply',
   }),
