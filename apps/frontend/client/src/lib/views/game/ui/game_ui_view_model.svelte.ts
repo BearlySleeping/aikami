@@ -5,7 +5,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   type AutoSaveStatus,
   chatService,
@@ -211,7 +210,7 @@ class GameUIViewModel
           className: 'DialogueOverlayViewModel',
           npcData: npc,
           onEndChat: () => gameOverlayService.endDialogue(),
-          ollamaClient: gameOverlayService.useOllama ? new OllamaClient() : undefined,
+          npcDialogueService: npcDialogueService,
           onStartCombat: (combatNpcData) => {
             gameOverlayService.startCombat({ enemyName: combatNpcData.npcName });
           },

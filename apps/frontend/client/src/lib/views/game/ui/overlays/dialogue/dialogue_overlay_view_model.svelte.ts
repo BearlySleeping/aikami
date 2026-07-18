@@ -6,44 +6,28 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
-import {
-  DIALOG_ACTION_SYSTEM_PROMPT,
-  type DialogActionIntent,
-  DialogActionSchema,
-} from '$lib/data/ai_prompts/dialog_action_schema';
-import {
-  FALLBACK_AVATAR_URL,
-  FALLBACK_PERSONA_ID,
-  PERSONA_PROMPTS,
-} from '$lib/data/dialogue_personas';
-import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
+import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
+import type { NpcDialogueServiceInterface } from '$lib/services/game/npc_dialogue_service.svelte';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
   draftStore,
   gameModeService,
-  gmPromptService,
+  gameOverlayService,
   messageBranchStore,
-  playerStateService,
   SentenceBoundaryChunker,
-  type TextChatMessage,
-  textGenerationService,
   ttsService,
 } from '$services';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
-// DialogueOverlayViewModel — orchestrates AI chat with an NPC
+// DialogueOverlayViewModel — orchestrates AI NPC dialogue via orchestrator
 //
-// Manages the conversation history, AI text streaming, and player input
-// for the in-game dialogue overlay. Injected with NPC data from the
-// GameUIViewModel when the player interacts with an NPC.
+// Manages conversation history, choice rendering, and player input for the
+// in-game dialogue overlay. All AI streaming and authored fallback is
+// delegated to NpcDialogueService (orchestrator).
 //
-// Supports two streaming backends:
-// 1. OllamaClient.streamChat() — direct local streaming via Ollama's /api/generate
-// 2. textGenerationService.streamChat() — OpenRouter cloud streaming fallback
-//
-// Contract: C-128 (origin), C-129 (polish)
+// Contract: C-128 (origin), C-129 (polish), C-328 (orchestrator refactor)
 // ---------------------------------------------------------------------------
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
@@ -52,11 +36,10 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   /** Called when the player ends the conversation. */
   onEndChat: () => void;
   /**
-   * Optional OllamaClient instance for direct local streaming.
-   * When provided, streamChat() uses Ollama's /api/generate directly
-   * instead of routing through textGenerationService (OpenRouter).
+   * NPC dialogue orchestrator — handles AI streaming and authored fallback.
+   * Injected by the composition root for production; mocked in sandbox.
    */
-  ollamaClient?: OllamaClient;
+  npcDialogueService: NpcDialogueServiceInterface;
   /**
    * Whether image generation (ComfyUI or Cloud) is available.
    * When false, ComfyUI requests are skipped and fallback NPC
@@ -81,6 +64,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** URL for the NPC's avatar image (LPC spritesheet or generated portrait). */
   readonly npcAvatarUrl: string;
+
+  /** Active choices from the most recent NPC turn. */
+  readonly activeChoices: readonly { id: string; label: string }[];
 
   /** Whether the image generation provider is available. */
   readonly imageProviderAvailable: boolean;
@@ -332,7 +318,7 @@ class DialogueOverlayViewModel
 
   private readonly _onStartCombat?: (npcData: DialogueNpcData) => void;
 
-  private readonly _ollamaClient?: OllamaClient;
+  private readonly _npcDialogueService: NpcDialogueServiceInterface;
 
   private readonly _imageProviderAvailable: boolean;
 
@@ -345,7 +331,7 @@ class DialogueOverlayViewModel
     this._npcData = options.npcData;
     this._onEndChat = options.onEndChat;
     this._onStartCombat = options.onStartCombat;
-    this._ollamaClient = options.ollamaClient;
+    this._npcDialogueService = options.npcDialogueService;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
 
     // Restore per-chat input draft from IndexedDB (fire-and-forget)
@@ -564,14 +550,8 @@ class DialogueOverlayViewModel
     };
     this.messages = [...this.messages, playerMessage];
 
-    // Detect risky actions for structured skill check extraction.
-    // Casual conversation uses the standard streaming path.
-    if (this._isRiskyAction(content)) {
-      await this._executeStructuredIntent({ playerContent: content });
-    } else {
-      // Generate AI response via appropriate backend (existing flow)
-      await this._generateAiResponse();
-    }
+    // Delegate to the NPC dialogue orchestrator (handles AI + fallback)
+    await this._delegateGenerateResponse();
   }
 
   /** @inheritdoc */
@@ -646,61 +626,14 @@ class DialogueOverlayViewModel
     }
   }
 
-  // ── Private: AI response generation ──────────────────────────────────
+  // ── Orchestrator delegation ──────────────────────────────────────────
 
   /**
-   * Builds the system prompt that defines the NPC's personality and
-   * response style. Uses the GM Prompt Service for world/state context
-   * and overlays NPC-specific personality on top.
+   * Delegates NPC response generation to the NPC dialogue orchestrator.
+   * Handles both AI streaming and authored fallback paths via
+   * NpcDialogueService.generateTurn.
    */
-  private _buildSystemPrompt(): string {
-    const { npcName, dialog, personaId } = this._npcData;
-
-    // Start with the GM prompt assembler for world/state context
-    const basePrompt = gmPromptService.assemblePrompt({ mode: 'scene' });
-
-    // Overlay NPC-specific personality
-    const personaPrompt =
-      PERSONA_PROMPTS[personaId ?? FALLBACK_PERSONA_ID] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
-
-    const lines = [
-      basePrompt,
-      '',
-      '[NPC CONTEXT]',
-      personaPrompt,
-      `Your name is ${npcName}.`,
-      `Stay in character at all times. Respond as ${npcName} would.`,
-    ];
-
-    if (dialog) {
-      lines.push(`Your initial greeting to the player was: "${dialog}"`);
-    }
-
-    lines.push(
-      'Keep responses concise — 1 to 3 sentences. Be immersive and natural.',
-      'Do not break character. Do not mention being an AI.',
-    );
-
-    // Inject character sheet summary for AI context awareness
-    const sheetSummary = playerStateService.characterSheetSummary;
-    if (sheetSummary) {
-      lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Sends the conversation history to the AI and streams the response
-   * token by token into the last message.
-   *
-   * When an OllamaClient is available, uses direct /api/generate streaming.
-   * Falls back to textGenerationService (OpenRouter SSE) otherwise.
-   *
-   * Image generation (ComfyUI) requests are skipped entirely when
-   * imageProviderAvailable is false — see C-133 graceful degradation.
-   */
-  private async _generateAiResponse(): Promise<void> {
+  private async _delegateGenerateResponse(): Promise<void> {
     this.isStreaming = true;
     this.streamError = null;
 
@@ -715,11 +648,38 @@ class DialogueOverlayViewModel
       },
     ];
 
+    const controller = new AbortController();
+
     try {
-      if (this._ollamaClient) {
-        await this._streamViaOllama({ npcMessageId });
-      } else {
-        await this._streamViaTextGenerationService({ npcMessageId });
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
+        .filter((m) => m.id !== npcMessageId) // exclude placeholder
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+      const turn = await this._npcDialogueService.generateTurn({
+        npcId: this._npcData.npcId,
+        npcName: this._npcData.npcName,
+        messages,
+        signal: controller.signal,
+      });
+
+      // Update the NPC message with the full response
+      this.messages = this.messages.map((m) =>
+        m.id === npcMessageId ? { ...m, content: turn.narrative } : m,
+      );
+
+      // Append the follow-up choices as actionable buttons
+      if (turn.choices.length > 0) {
+        // Store choices on the NPC message for the View to render
+        this._setMessageChoices(npcMessageId, turn);
+      }
+
+      // Execute any command from the turn, guarding against re-execution
+      if (turn.command && !this._npcDialogueService.wasCommandExecuted(npcMessageId)) {
+        this._npcDialogueService.markCommandExecuted(npcMessageId, turn.command.kind);
+        await this._dispatchCommand({ command: turn.command, npcMessageId });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -734,388 +694,64 @@ class DialogueOverlayViewModel
     }
   }
 
-  /**
-   * Streams NPC response directly from Ollama's /api/generate endpoint.
-   * Formats the conversation into a prompt string for Ollama's completion API.
-   */
-  private async _streamViaOllama(options: { npcMessageId: string }): Promise<void> {
-    const { npcMessageId } = options;
-
-    const systemPrompt = this._buildSystemPrompt();
-
-    // Build context array for Ollama's generate endpoint
-    const context: Array<{ role: string; content: string }> = [
-      { role: 'system', content: systemPrompt },
-      ...this.messages
-        .filter((m) => m.id !== npcMessageId)
-        .map((m) => ({
-          role: m.role === 'player' ? 'user' : 'assistant',
-          content: m.content,
-        })),
-    ];
-
-    // Build a plain-text prompt from the context for Ollama's generate API
-    const prompt = `${context
-      .filter((c) => c.content.trim().length > 0)
-      .map(
-        (c) =>
-          `${c.role === 'system' ? 'System' : c.role === 'user' ? 'Player' : this._npcData.npcName}: ${c.content}`,
-      )
-      .join('\n')}\n${this._npcData.npcName}:`;
-
-    let accumulated = '';
-
-    const client = this._ollamaClient;
-    if (!client) {
-      return; // Should not happen — caller checks this._ollamaClient
-    }
-    const stream = client.streamChat(prompt);
-
-    for await (const chunk of stream) {
-      accumulated += chunk;
-      this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, content: accumulated } : m,
-      );
-      this._chunker.feed(chunk);
-    }
-
-    // Flush any remaining text at end of stream
-    this._chunker.close();
-
-    // Ensure final text is set (in case stream yielded nothing)
-    if (accumulated) {
-      this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, content: accumulated } : m,
-      );
-    }
+  /** Stores turn choices as message-level state for the View to render. */
+  private _setMessageChoices(_npcMessageId: string, _turn: unknown): void {
+    // Implementation note: choices are threaded through the turn object.
+    // For now, the View can access the most recent NPC turn's choices
+    // through a dedicated $state field.
+    const turn = _turn as { choices: Array<{ id: string; label: string }> };
+    this._activeChoices = turn.choices;
   }
 
-  /**
-   * Streams NPC response via textGenerationService (OpenRouter SSE).
-   * Used as fallback when no OllamaClient is available.
-   */
-  private async _streamViaTextGenerationService(options: { npcMessageId: string }): Promise<void> {
-    const { npcMessageId } = options;
+  /** Active choices from the most recent NPC turn (rendered as buttons). */
+  private _activeChoices = $state<Array<{ id: string; label: string }>>([]);
 
-    const llmMessages: TextChatMessage[] = [
-      { role: 'system', content: this._buildSystemPrompt() },
-      ...this.messages
-        .filter((m) => m.id !== npcMessageId) // exclude empty placeholder
-        .map((m) => ({
-          role: m.role === 'player' ? ('user' as const) : ('assistant' as const),
-          content: m.content,
-        })),
-    ];
-
-    let accumulated = '';
-
-    await textGenerationService.streamChat({
-      messages: llmMessages,
-      onChunk: (text: string) => {
-        accumulated += text;
-        this.messages = this.messages.map((m) =>
-          m.id === npcMessageId ? { ...m, content: accumulated } : m,
-        );
-        this._chunker.feed(text);
-      },
-    });
-
-    // Flush any remaining text at end of stream
-    this._chunker.close();
-
-    if (accumulated) {
-      this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, content: accumulated } : m,
-      );
-    }
+  /** @inheritdoc */
+  get activeChoices(): readonly { id: string; label: string }[] {
+    return this._activeChoices;
   }
 
-  // ── Private: Skill Check Flow (C-157) ───────────────────────────────
+  // ── Private: Command dispatch to existing executors ──────────────────
 
   /**
-   * Keyword-based detection of risky player actions that may require
-   * a skill check (Persuasion, Intimidation, Sleight of Hand).
-   *
-   * Casual conversation passes through normal streaming; risky actions
-   * are routed through structured extraction for skill check detection.
+   * Dispatches a validated dialogue command to the appropriate executor.
+   * Guards: command already validated by the orchestrator; re-execution
+   * prevented by markCommandExecuted in _delegateGenerateResponse.
    */
-  private _isRiskyAction(content: string): boolean {
-    const riskyPatterns = [
-      /\b(threaten|intimidate|scare|warn|bully)\b/i,
-      /\b(steal|pickpocket|palm|swipe|snatch|slip|grab)\b/i,
-      /\b(persuade|convince|charm|bribe|negotiate|haggle|bargain)\b/i,
-      /\b(lie|deceive|bluff|trick|mislead)\b/i,
-      /\b(attack|punch|stab|shove|tackle|draw .* sword|draw .* weapon)\b/i,
-      /\b(force|demand|order|command)\b/i,
-    ];
-
-    return riskyPatterns.some((pattern) => pattern.test(content));
-  }
-
-  /**
-   * Executes the structured skill check flow for a risky player action.
-   *
-   * 1. Extracts structured intent via the LLM (DialogActionSchema).
-   * 2. If a skill check is required, performs the d20 roll with animation.
-   * 3. Feeds the roll result back to the LLM for narrative resolution.
-   * 4. Handles any state mutations (trigger_combat, give_item).
-   *
-   * On failure, falls back to streaming chat with an error message.
-   */
-  private async _executeStructuredIntent(options: { playerContent: string }): Promise<void> {
-    const { playerContent } = options;
-    this.isResolvingSkillCheck = true;
-    this.streamError = null;
-
-    try {
-      // Build the conversation context for the LLM
-      const conversationContext = this.messages
-        .filter((m) => m.content.trim().length > 0)
-        .slice(0, -1) // exclude the just-added player message
-        .map((m) =>
-          m.role === 'player' ? `Player: ${m.content}` : `${this._npcData.npcName}: ${m.content}`,
-        )
-        .join('\n');
-
-      const contextualPrompt = [
-        `NPC Name: ${this._npcData.npcName}`,
-        `NPC Personality: ${PERSONA_PROMPTS[this._npcData.personaId ?? FALLBACK_PERSONA_ID]}`,
-        conversationContext ? `\nConversation history:\n${conversationContext}` : '',
-        `\nPlayer's latest action: "${playerContent}"`,
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-      this.debug('_executeStructuredIntent:calling-extractStructure', {
-        playerContent: playerContent.slice(0, 60),
-        contextLength: contextualPrompt.length,
-      });
-
-      const intent = (await textGenerationService.extractStructure({
-        schema: DialogActionSchema as unknown as Record<string, unknown>,
-        schemaName: 'DialogActionIntent',
-        prompt: contextualPrompt,
-        systemPrompt: DIALOG_ACTION_SYSTEM_PROMPT,
-      })) as DialogActionIntent;
-
-      this.debug('_executeStructuredIntent:LLM-response', {
-        hasCheck: !!intent.requiredCheck,
-        checkType: intent.requiredCheck,
-        dc: intent.difficultyClass,
-        stateMutation: intent.stateMutation,
-        itemId: intent.itemId,
-        narrativeLength: intent.narrative.length,
-      });
-
-      // Always show the NPC's initial reaction narrative
-      this._appendNpcMessage(intent.narrative);
-
-      // If a skill check is required, perform the d20 roll
-      if (intent.requiredCheck && intent.difficultyClass !== undefined) {
-        await this._performSkillCheck({
-          checkType: intent.requiredCheck,
-          difficultyClass: intent.difficultyClass,
-        });
-
-        // Feed the roll result back to the LLM for final resolution
-        await this._resolveSkillCheck({
-          checkType: intent.requiredCheck,
-          difficultyClass: intent.difficultyClass,
-          playerContent,
-          intent,
-        });
-
-        // Keep the dice result visible briefly then clear
-        await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-        this.skillCheckState = null;
-      }
-
-      // Handle state mutations after resolution
-      await this._handleStateMutation({ intent });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.warn('_executeStructuredIntent:failed', { message });
-      this.streamError = `Skill check failed: ${message}`;
-    } finally {
-      this.isResolvingSkillCheck = false;
-    }
-  }
-
-  /**
-   * Performs the d20 skill check with animated dice UI.
-   *
-   * Rolls a d20 using the diceService, shows the rolling animation
-   * for ~1.5 seconds, then reveals the result (success or failure).
-   *
-   * The result is stored in {@link skillCheckState} for the View to render.
-   */
-  private async _performSkillCheck(options: {
-    checkType: string;
-    difficultyClass: number;
-  }): Promise<{ rollValue: number; isSuccess: boolean }> {
-    const { checkType, difficultyClass } = options;
-
-    // Roll the d20
-    const { natural: rollValue, total } = diceService.rollD20(0);
-    const isSuccess = total >= difficultyClass;
-
-    this.debug('_performSkillCheck', { checkType, difficultyClass, rollValue, total, isSuccess });
-
-    // Show the rolling animation
-    this.skillCheckState = {
-      checkType,
-      difficultyClass,
-      rollValue: null,
-      phase: 'rolling',
-      isSuccess: null,
-    };
-
-    // Wait for the dice animation (~1.5s)
-    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-
-    // Reveal the result — state stays visible for _resolveSkillCheck to read
-    this.skillCheckState = {
-      checkType,
-      difficultyClass,
-      rollValue,
-      phase: 'revealed',
-      isSuccess,
-    };
-
-    return { rollValue, isSuccess };
-  }
-
-  /**
-   * Feeds the d20 roll result back to the LLM for narrative resolution.
-   *
-   * The LLM is told whether the skill check passed or failed and
-   * provides a narrative resolution — success or failure dialogue
-   * from the NPC.
-   */
-  private async _resolveSkillCheck(options: {
-    checkType: string;
-    difficultyClass: number;
-    playerContent: string;
-    intent: DialogActionIntent;
+  private async _dispatchCommand(options: {
+    command: { kind: string } & Record<string, unknown>;
+    npcMessageId: string;
   }): Promise<void> {
-    const { checkType, difficultyClass, playerContent, intent } = options;
-    const skillCheckState = this.skillCheckState;
-    if (!skillCheckState || skillCheckState.rollValue === null) {
-      return;
-    }
+    const { command } = options;
+    const kind = command.kind;
 
-    const { rollValue, isSuccess } = skillCheckState;
+    this.debug('dispatchCommand', { kind });
 
-    const resolutionPrompt = [
-      `The player attempted: "${playerContent}"`,
-      `Skill check: ${checkType} (DC ${difficultyClass})`,
-      `Result: Rolled ${rollValue} — ${isSuccess ? 'SUCCESS' : 'FAILURE'}`,
-      `\nThe NPC's initial reaction was: "${intent.narrative}"`,
-      `\nNow provide the NPC's final response to the ${isSuccess ? 'SUCCESSFUL' : 'FAILED'} skill check.`,
-      isSuccess
-        ? 'The player succeeded — the NPC should react accordingly (give information, hand over the item, show fear, etc.).'
-        : 'The player failed — the NPC should react accordingly (get angry, refuse, raise alarm, mock the attempt).',
-      `\nRespond as ${this._npcData.npcName} in 1–3 sentences. Stay in character.`,
-    ].join('\n');
-
-    this.debug('_resolveSkillCheck:sending', {
-      checkType,
-      rollValue,
-      isSuccess,
-      promptLength: resolutionPrompt.length,
-    });
-
-    try {
-      const messages: TextChatMessage[] = [
-        { role: 'system', content: this._buildSystemPrompt() },
-        { role: 'user', content: resolutionPrompt },
-      ];
-
-      if (this._ollamaClient) {
-        // Ollama direct streaming
-        const prompt = `System: ${this._buildSystemPrompt()}\nUser: ${resolutionPrompt}\n${this._npcData.npcName}:`;
-        let accumulated = '';
-        const npcMessageId = crypto.randomUUID();
-        this.messages = [...this.messages, { id: npcMessageId, content: '', role: 'npc' as const }];
-
-        const client = this._ollamaClient;
-        if (!client) {
-          return;
-        }
-        const stream = client.streamChat(prompt);
-
-        for await (const chunk of stream) {
-          accumulated += chunk;
-          this.messages = this.messages.map((m) =>
-            m.id === npcMessageId ? { ...m, content: accumulated } : m,
-          );
-          this._chunker.feed(chunk);
-        }
-        this._chunker.close();
-      } else {
-        // OpenRouter streaming
-        const npcMessageId = crypto.randomUUID();
-        this.messages = [...this.messages, { id: npcMessageId, content: '', role: 'npc' as const }];
-
-        let accumulated = '';
-        await textGenerationService.streamChat({
-          messages,
-          onChunk: (text: string) => {
-            accumulated += text;
-            this.messages = this.messages.map((m) =>
-              m.id === npcMessageId ? { ...m, content: accumulated } : m,
-            );
-            this._chunker.feed(text);
-          },
+    switch (kind) {
+      case 'trade': {
+        gameOverlayService?.openVendor?.({
+          vendorId: this._npcData.npcId,
+          vendorName: this._npcData.npcName,
+          vendorInventory: '',
         });
-        this._chunker.close();
+        break;
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.warn('_resolveSkillCheck:failed', { message });
-      this._appendNpcMessage(isSuccess ? '*The attempt succeeded.*' : '*The attempt failed.*');
-    }
-  }
-
-  /**
-   * Handles state mutations returned by the LLM.
-   *
-   * - `trigger_combat`: Closes the dialogue and notifies the parent
-   *   to transition to the COMBAT overlay against the current NPC.
-   * - `give_item`: Appends a narrative message confirming the item.
-   *
-   * Item granting is a narrative note for MVP — actual inventory
-   * mutations are future work.
-   */
-  private async _handleStateMutation(options: { intent: DialogActionIntent }): Promise<void> {
-    const { intent } = options;
-
-    if (intent.stateMutation === 'trigger_combat') {
-      this.debug('_handleStateMutation:trigger_combat', {
-        npcName: this._npcData.npcName,
-        npcId: this._npcData.npcId,
-      });
-
-      // Append a combat transition message
-      this._appendNpcMessage(`*${this._npcData.npcName} reaches for a weapon — combat begins!*`);
-
-      // Brief delay so the player can read the transition message
-      await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-
-      // End the dialogue
-      this._onEndChat();
-
-      // Notify parent to start combat
-      if (this._onStartCombat) {
-        this._onStartCombat(this._npcData);
+      case 'startCombat': {
+        this._appendNpcMessage(`*${this._npcData.npcName} reaches for a weapon — combat begins!*`);
+        await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+        this._onEndChat();
+        if (this._onStartCombat) {
+          this._onStartCombat(this._npcData);
+        }
+        break;
       }
-
-      return;
-    }
-
-    if (intent.stateMutation === 'give_item' && intent.itemId) {
-      this.debug('_handleStateMutation:give_item', { itemId: intent.itemId });
-      this._appendNpcMessage(`*Received: ${intent.itemId}*`);
+      default: {
+        this.debug('dispatchCommand:deferred', {
+          kind,
+          note: 'executor not yet wired for this command',
+        });
+        break;
+      }
     }
   }
 
@@ -1132,7 +768,7 @@ class DialogueOverlayViewModel
   private _getDifficultyClass(_skill: string): number {
     const hardPersonas = ['guard', 'bandit', 'guildMaster'] as const;
     const softPersonas = ['innkeeper', 'healer', 'merchant'] as const;
-    const personaId = this._npcData.personaId ?? FALLBACK_PERSONA_ID;
+    const personaId = this._npcData.personaId ?? 'default';
 
     if (hardPersonas.includes(personaId as (typeof hardPersonas)[number])) {
       return 14;
@@ -1195,52 +831,44 @@ class DialogueOverlayViewModel
     this.streamError = null;
 
     try {
-      // Build the conversation context for the LLM
-      const conversationContext = this.messages
-        .filter((m) => m.content.trim().length > 0)
-        .map((m) =>
-          m.role === 'player' ? `Player: ${m.content}` : `${this._npcData.npcName}: ${m.content}`,
-        )
-        .join('\n');
+      // Delegate to the NPC dialogue orchestrator with the dice result
+      // as part of the conversation so the model can respond contextually.
+      const diceOutcome = `[Dice result: Skill=${skill}, DC=${difficultyClass}, Roll=${rollValue}, ${isSuccess ? 'SUCCESS' : 'FAILURE'}]`;
+      const playerMessage = `\${this._npcData.npcName}, I attempt a ${skill} check. ${diceOutcome}`;
 
-      const contextualPrompt = [
-        `NPC Name: ${this._npcData.npcName}`,
-        `NPC Personality: ${PERSONA_PROMPTS[this._npcData.personaId ?? FALLBACK_PERSONA_ID]}`,
-        conversationContext ? `\nConversation history:\n${conversationContext}` : '',
-        `\nThe player is attempting a **${skill}** skill check.`,
-        `Dice result: Rolled **${rollValue}** vs DC ${difficultyClass} — **${isSuccess ? 'SUCCESS' : 'FAILURE'}**`,
-        isSuccess
-          ? 'The player succeeded on the skill check. Provide the NPC narrative response and any state mutations.'
-          : 'The player failed the skill check. Provide the NPC narrative response and any state mutations.',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const npcMessageId = crypto.randomUUID();
+      this.messages = [...this.messages, { id: npcMessageId, content: '', role: 'npc' as const }];
 
-      this.debug('_executeSkillCheckAction:calling-extractStructure', {
-        skill,
-        rollValue,
-        isSuccess,
-        contextLength: contextualPrompt.length,
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
+        .filter((m) => m.id !== npcMessageId)
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+      // Add the virtual player message with dice result
+      messages.push({ role: 'player', content: playerMessage });
+
+      const controller = new AbortController();
+
+      const turn = await this._npcDialogueService.generateTurn({
+        npcId: this._npcData.npcId,
+        npcName: this._npcData.npcName,
+        messages,
+        signal: controller.signal,
       });
 
-      const intent = (await textGenerationService.extractStructure({
-        schema: DialogActionSchema as unknown as Record<string, unknown>,
-        schemaName: 'DialogActionIntent',
-        prompt: contextualPrompt,
-        systemPrompt: DIALOG_ACTION_SYSTEM_PROMPT,
-      })) as DialogActionIntent;
+      // Remove the virtual player message
+      this.messages = this.messages.filter((m) => m.id !== npcMessageId);
 
-      this.debug('_executeSkillCheckAction:LLM-response', {
-        hasCheck: !!intent.requiredCheck,
-        stateMutation: intent.stateMutation,
-        narrativeLength: intent.narrative.length,
-      });
+      // Append the NPC's narrative response
+      this._appendNpcMessage(turn.narrative);
 
-      // Append the NPC's narrative response (structural extraction result)
-      this._appendNpcMessage(intent.narrative);
-
-      // Handle any state mutations returned by the LLM
-      await this._handleStateMutation({ intent });
+      // Execute any command
+      if (turn.command && !this._npcDialogueService.wasCommandExecuted(npcMessageId)) {
+        this._npcDialogueService.markCommandExecuted(npcMessageId, turn.command.kind);
+        await this._dispatchCommand({ command: turn.command, npcMessageId });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.warn('_executeSkillCheckAction:failed', { message });
