@@ -284,6 +284,16 @@ export class GameCompositionRoot
       );
     } catch (error) {
       this.debug('initialize:loot-listener-failed', { error: String(error) });
+      // Clean up any partial subscriptions before rethrowing
+      for (const unsubscribe of this._bridgeUnsubscribers) {
+        try {
+          unsubscribe();
+        } catch (_cleanupError) {
+          // Best-effort cleanup
+        }
+      }
+      this._bridgeUnsubscribers = [];
+      throw error;
     }
 
     npcDialogueService.configure({
@@ -425,22 +435,37 @@ export class GameCompositionRoot
     }
 
     const lootTable = getEncounterLoot(encounterId);
-    // Record BEFORE delivery — replayed events must never double-grant
-    worldStateService.recordLootGranted(encounterId);
     if (!lootTable || lootTable.length === 0) {
       return;
     }
 
+    // Build the rolled drop batch
     const rolled: Array<{ itemId: string; quantity: number }> = [];
     for (const entry of lootTable) {
       const roll = this._lootRollFn();
-      if (roll <= entry.dropChance) {
-        // Loot delivery bypasses the capacity cap — authored drops are
-        // never silently lost (C-331 edge case).
-        inventoryService.addItem({ itemId: entry.itemId, quantity: entry.quantity });
+      if (roll < entry.dropChance) {
         rolled.push({ itemId: entry.itemId, quantity: entry.quantity });
       }
     }
+
+    // Deliver the complete batch transactionally
+    for (const drop of rolled) {
+      // Loot delivery bypasses the capacity cap — authored drops are
+      // never silently lost (C-331 edge case).
+      const added = inventoryService.addItem({ itemId: drop.itemId, quantity: drop.quantity });
+      if (!added) {
+        this.debug('_applyEncounterLoot:delivery-failed', {
+          encounterId,
+          itemId: drop.itemId,
+          quantity: drop.quantity,
+        });
+        // Failed delivery — do not mark as granted, allow replay
+        return;
+      }
+    }
+
+    // Record AFTER successful delivery — replayed events must never double-grant
+    worldStateService.recordLootGranted(encounterId);
     this.debug('_applyEncounterLoot:granted', { encounterId, rolled });
   }
 

@@ -85,10 +85,16 @@ describe('VendorService', () => {
   });
 
   test('sellItem rejects item with zero basePrice', () => {
-    // healthPotion basePrice = 10 > 0, so it sells
+    // wardPendant has basePrice = 0, add it to inventory
+    inventoryService.addItem({ itemId: 'wardPendant', quantity: 1 });
     const goldBefore = inventoryService.gold;
-    vendorService.sellItem('healthPotion');
-    expect(inventoryService.gold).toBe(goldBefore); // vendor doesn't have healthPotion
+    const wardPendantBefore = inventoryService.inventory.find((e) => e.itemId === 'wardPendant');
+    expect(wardPendantBefore).toBeDefined();
+
+    vendorService.sellItem('wardPendant');
+    expect(inventoryService.gold).toBe(goldBefore); // unchanged
+    const wardPendantAfter = inventoryService.inventory.find((e) => e.itemId === 'wardPendant');
+    expect(wardPendantAfter!.quantity).toBe(1); // unchanged
   });
 
   test('sellItem rejects item not owned', () => {
@@ -116,15 +122,29 @@ describe('VendorService', () => {
   // ── Authored fallback (AC-3) ──────────────────────────────────────
 
   test('configureFallback provides authored line on haggle failure', async () => {
+    // Configure fallback line
     vendorService.configureFallback({
       getVendorLine: (vendorId) =>
         vendorId === 'traveling_merchant' ? 'Welcome, traveler!' : undefined,
     });
-    // Trigger a fast failure by setting isHaggling externally (simulates
-    // AI unavailable; the real haggle method catches the error gracefully).
-    // We verify the fallback line is resolved correctly in the private helper.
-    expect(vendorService.refusesToSell).toBe(false);
-    expect(vendorService.vendorName).toBe('Keth');
+
+    // Mock the text generator to reject
+    const originalHaggle = vendorService.haggle.bind(vendorService);
+    let fallbackTriggered = false;
+    vendorService.haggle = async (message: string) => {
+      // Force an error to trigger fallback
+      const mockGenerator = async () => {
+        throw new Error('AI unavailable');
+      };
+      vendorService['_textGenerator'] = mockGenerator;
+      await originalHaggle(message);
+      fallbackTriggered = true;
+    };
+
+    await vendorService.haggle('Can you lower the price?');
+    expect(fallbackTriggered).toBe(true);
+    const lastMessage = vendorService.messages[vendorService.messages.length - 1];
+    expect(lastMessage.content).toBe('Welcome, traveler!');
   });
 
   // ── Player gold getter ─────────────────────────────────────────────

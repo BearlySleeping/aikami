@@ -102,24 +102,48 @@ export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
 // Re-exported from database/item.ts — single source of truth (C-331).
 export { type ItemType, ItemTypeSchema } from '../database/item.ts';
 
-export const ContentPackItemEntrySchema = Type.Object({
+const BaseContentPackItemSchema = Type.Object({
   /** Display name */
   name: Type.String({ description: 'Item display name' }),
-  /** Item type */
-  type: ItemTypeSchema,
   /** Optional attack bonus */
   attackBonus: Type.Optional(Type.Number({ description: 'Attack bonus value' })),
   /** Optional defense bonus */
   defenseBonus: Type.Optional(Type.Number({ description: 'Defense bonus value' })),
   /** Optional reference to an equipment slot (weapon | armor) */
   equipmentSlot: Type.Optional(EquipmentSlotSchema),
-  /** Optional deterministic vendor base price in gold (0 = not sold) — C-331 */
+  /** Optional deterministic vendor base price in gold (0 = unsellable, or >= 2) — C-331 */
   basePrice: Type.Optional(
-    Type.Number({ minimum: 0, description: 'Vendor base price in gold (0 = unsold)' }),
+    Type.Union(
+      [Type.Literal(0), Type.Number({ minimum: 2 })],
+      { description: 'Vendor base price in gold (0 = unsellable, or >= 2)' },
+    ),
   ),
-  /** Optional consumable effect (heal) — C-331 */
-  effect: Type.Optional(ConsumableEffectSchema),
 });
+
+const ConsumableContentPackItemSchema = Type.Intersect([
+  BaseContentPackItemSchema,
+  Type.Object({
+    type: Type.Literal('consumable'),
+    effect: ConsumableEffectSchema,
+  }),
+]);
+
+const NonConsumableContentPackItemSchema = Type.Intersect([
+  BaseContentPackItemSchema,
+  Type.Object({
+    type: Type.Union([
+      Type.Literal('weapon'),
+      Type.Literal('armor'),
+      Type.Literal('key'),
+      Type.Literal('misc'),
+    ]),
+  }),
+]);
+
+export const ContentPackItemEntrySchema = Type.Union([
+  ConsumableContentPackItemSchema,
+  NonConsumableContentPackItemSchema,
+]);
 
 export type ContentPackItemEntry = Static<typeof ContentPackItemEntrySchema>;
 

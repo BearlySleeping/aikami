@@ -104,7 +104,11 @@
     "manaPotion": {
       "name": "Mana Potion",
       "type": "consumable",
-      "basePrice": 15
+      "basePrice": 15,
+      "effect": {
+        "kind": "heal",
+        "amount": 20
+      }
     },
     "ironArmor": {
       "name": "Iron Armor",

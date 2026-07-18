@@ -253,6 +253,7 @@ class EquipmentService
     this.equippedWeapon = data.equippedWeapon;
     this.equippedArmor = data.equippedArmor;
     this.debug('hydrate', { weapon: this.equippedWeapon, armor: this.equippedArmor });
+    this._emitAppearanceUpdate();
   }
 
   /** @inheritdoc */

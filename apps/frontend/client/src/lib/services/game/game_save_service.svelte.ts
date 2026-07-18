@@ -261,9 +261,7 @@ class GameSaveService
 
   /** @inheritdoc */
   async getSavePayload(slotId: string): Promise<string> {
-    const payload = await this.getRawSavePayload(slotId);
-    const { ecsSnapshot } = this._parsePayload(payload);
-    return ecsSnapshot;
+    return await this.getRawSavePayload(slotId);
   }
 
   /** @inheritdoc */

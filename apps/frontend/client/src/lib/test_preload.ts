@@ -271,8 +271,7 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
 // mock to all subsequent test files. Provide a comprehensive stub barrel
 // here so every test sees a consistent set of functional stubs.
 
-const _LOCAL_SVC_PATH =
-  '.pi/workspaces/run-mrqs14ig-c-331/apps/frontend/client/src/lib/services/index.ts';
+const _LOCAL_SVC_PATH = '$lib/services/index.ts';
 
 const _createServiceStub = () => {
   const handler: ProxyHandler<Record<string, unknown>> = {

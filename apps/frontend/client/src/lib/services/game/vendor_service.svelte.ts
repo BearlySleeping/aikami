@@ -114,19 +114,19 @@ class VendorService
   }
 
   /**
-   * Player-owned items the vendor will buy back (basePrice > 0).
+   * Player-owned items the vendor will buy back (computed sell price > 0).
    * Equipped items never appear — the equipment service removes them from
    * the inventory array on equip (C-331 AC-3 watch point).
    */
   get sellableItems(): readonly VendorSellEntry[] {
     return inventoryService.inventory
-      .filter((entry) => getItemDefinition(entry.itemId).basePrice > 0)
       .map((entry) => ({
         itemId: entry.itemId,
         label: getItemDefinition(entry.itemId).label,
         quantity: entry.quantity,
         sellPrice: this.getSellPrice(entry.itemId),
-      }));
+      }))
+      .filter((entry) => entry.sellPrice > 0);
   }
 
   /** @inheritdoc */

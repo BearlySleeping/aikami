@@ -34,7 +34,7 @@ export type ItemType = Type.Static<typeof ItemTypeSchema>;
 
 export const ConsumableEffectSchema = Type.Object(
   {
-    kind: Type.Literal('heal', { description: 'Effect kind — heal restores HP' }),
+    kind: Type.Literal('heal'),
     amount: Type.Number({ minimum: 1, description: 'Effect magnitude (HP restored)' }),
   },
   { description: 'Consumable item effect — present only for itemType "consumable"' },
@@ -44,19 +44,41 @@ export type ConsumableEffect = Type.Static<typeof ConsumableEffectSchema>;
 
 // ── Item Definition ─────────────────────────────────────────────────────
 
-export const ItemDefinitionSchema = Type.Object(
-  {
-    label: Type.String({ description: 'Display label shown in the UI' }),
-    itemType: ItemTypeSchema,
-    attackBonus: Type.Number({ description: 'Attack bonus when equipped (0 for non-weapons)' }),
-    defenseBonus: Type.Number({ description: 'Defense bonus when equipped (0 for non-armor)' }),
-    equippable: Type.Boolean({ description: 'Whether the item can be equipped at all' }),
-    slot: Type.Optional(EquipmentSlotSchema),
-    /** Deterministic vendor base price in gold. 0 = not sold by vendors. */
-    basePrice: Type.Number({ minimum: 0, description: 'Vendor base price in gold (0 = unsold)' }),
-    /** Consumable effect — present only for itemType 'consumable'. */
-    effect: Type.Optional(ConsumableEffectSchema),
-  },
+const BaseItemSchema = Type.Object({
+  label: Type.String({ description: 'Display label shown in the UI' }),
+  attackBonus: Type.Number({ description: 'Attack bonus when equipped (0 for non-weapons)' }),
+  defenseBonus: Type.Number({ description: 'Defense bonus when equipped (0 for non-armor)' }),
+  equippable: Type.Boolean({ description: 'Whether the item can be equipped at all' }),
+  slot: Type.Optional(EquipmentSlotSchema),
+  /** Deterministic vendor base price in gold. 0 = unsellable, or >= 2 to avoid zero-gold sales. */
+  basePrice: Type.Union(
+    [Type.Literal(0), Type.Number({ minimum: 2 })],
+    { description: 'Vendor base price in gold (0 = unsellable, or >= 2)' },
+  ),
+});
+
+const ConsumableItemSchema = Type.Intersect([
+  BaseItemSchema,
+  Type.Object({
+    itemType: Type.Literal('consumable'),
+    effect: ConsumableEffectSchema,
+  }),
+]);
+
+const NonConsumableItemSchema = Type.Intersect([
+  BaseItemSchema,
+  Type.Object({
+    itemType: Type.Union([
+      Type.Literal('weapon'),
+      Type.Literal('armor'),
+      Type.Literal('key'),
+      Type.Literal('misc'),
+    ]),
+  }),
+]);
+
+export const ItemDefinitionSchema = Type.Union(
+  [ConsumableItemSchema, NonConsumableItemSchema],
   { description: 'Definition for a single item type in the game' },
 );
 
@@ -68,7 +90,7 @@ export type ItemDefinition = Type.Static<typeof ItemDefinitionSchema>;
 export const InventoryItemSchema = Type.Object(
   {
     itemId: Type.String({ description: 'Unique item identifier' }),
-    quantity: Type.Integer({ description: 'Stack quantity' }),
+    quantity: Type.Integer({ minimum: 1, description: 'Stack quantity' }),
   },
   { description: 'A single inventory item entry' },
 );

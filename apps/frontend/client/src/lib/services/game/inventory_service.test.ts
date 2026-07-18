@@ -20,11 +20,13 @@ describe('InventoryService', () => {
 
   test('getItemDefinition returns hardcoded fallback for known items', () => {
     const { getItemDefinition } = require('./inventory_service.svelte');
-    // Use dynamic require to access module-level function
-    // (the static import is fine in tests, just keeping it explicit here)
+    const wardPendant = getItemDefinition('wardPendant');
+    expect(wardPendant.label).toBe('Ward Pendant');
+    expect(wardPendant.basePrice).toBe(0);
   });
 
   test('configureCatalog replaces the active catalog', () => {
+    const { getItemDefinition } = require('./inventory_service.svelte');
     inventoryService.configureCatalog({
       items: {
         customSword: {
@@ -38,9 +40,9 @@ describe('InventoryService', () => {
         },
       },
     });
-    // Verify the catalog took effect: getting a known hardcoded item
-    // still works, and the custom item is also accessible.
-    // (getItemDefinition is module-level; we just verify addItem works)
+    const customSword = getItemDefinition('customSword');
+    expect(customSword.label).toBe('Custom Sword');
+    expect(customSword.basePrice).toBe(100);
   });
 
   // ── Stacking (AC-2) ────────────────────────────────────────────────

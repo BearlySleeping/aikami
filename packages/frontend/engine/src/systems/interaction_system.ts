@@ -117,7 +117,23 @@ const _handleItemPickup = (options: {
 
   const { itemId, quantity, spawnId } = interactable;
 
-  // ── Add to player inventory (find first empty slot) ──
+  // ── Emit delta without allocating ECS slot for goldCoin or stackable items ──
+  // The client-side inventory service resolves gold conversion and stacking.
+
+  if (itemId === 'goldCoin') {
+    // goldCoin never occupies an ECS slot — emit and destroy
+    incrementEntityGeneration(itemEid);
+    removeEntity(world, itemEid);
+    bridge.emit({
+      type: 'ITEM_PICKED_UP',
+      itemId,
+      quantity,
+      ...(spawnId ? { spawnId } : {}),
+    });
+    return;
+  }
+
+  // ── Add to player inventory (find first empty slot for non-gold items) ──
 
   const playerItemIds = Inventory.itemIds[playerEntityId];
   const playerQuantities = Inventory.quantities[playerEntityId];
