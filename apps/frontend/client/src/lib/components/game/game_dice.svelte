@@ -6,6 +6,18 @@
 //
 // Contract: C-148 Combat Immersion, C-162 Interactive Dice
 
+/** Check info for dice overlay (dialogue skill checks). */
+export type DiceCheckInfo = {
+  type: string;
+  dc: number;
+  /** Stat modifier label (e.g. "CHA") — C-330 declared-DC. */
+  modLabel?: string;
+  /** Stat modifier value (e.g. +2) — C-330 declared-DC. */
+  modValue?: number;
+  /** Target number on d20 (DC - modValue) — C-330 declared-DC. */
+  target?: number;
+};
+
 /** Unified dice state used by dialogue and combat ViewModels. */
 export type DiceState = {
   /** Current visual phase. */
@@ -15,7 +27,7 @@ export type DiceState = {
   /** Whether the roll succeeded (controls green/red coloring). */
   isSuccess: boolean | null;
   /** Optional: skill check type + DC label (dialogue only). */
-  checkInfo?: { type: string; dc: number };
+  checkInfo?: DiceCheckInfo;
   /** Optional: custom result labels. Defaults to SUCCESS!/FAILURE. */
   labels?: { success: string; failure: string };
   /** Called when the player clicks an interactive dice. */
@@ -43,7 +55,18 @@ const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
           {dice.checkInfo.type}
           Check
         </span>
-        <span class="text-sm text-base-content/70">DC {dice.checkInfo.dc}</span>
+        {#if dice.checkInfo.modLabel && dice.checkInfo.modValue !== undefined}
+          <span class="text-sm text-base-content/70">
+            DC {dice.checkInfo.dc} —
+            <span class="font-semibold text-info"
+              >+{dice.checkInfo.modValue} {dice.checkInfo.modLabel}</span
+            >
+            → need {dice.checkInfo.target ?? dice.checkInfo.dc - dice.checkInfo.modValue} or higher
+            on d20
+          </span>
+        {:else}
+          <span class="text-sm text-base-content/70">DC {dice.checkInfo.dc}</span>
+        {/if}
       {/if}
 
       <!-- d20 die -->

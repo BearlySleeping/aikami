@@ -17,7 +17,9 @@ import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.
 import { MockEngineBridge } from '../engine_bridge.ts';
 import {
   advanceTurn,
+  createSeedableRng,
   endCombat,
+  getCombatSeed,
   handleCombatAction,
   initCombat,
   resetTurnTracking,
@@ -1177,6 +1179,218 @@ describe('handleCombatAction', () => {
 
     const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
     expect(enemyStats.health).toBe(61); // 80 - 19 = 61
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-1: Seedable RNG — Deterministic Combat Replay
+// ---------------------------------------------------------------------------
+
+describe('AC-1: Seedable RNG — Deterministic Combat Replay', () => {
+  afterEach(() => {
+    resetTurnTracking();
+  });
+
+  it('produces identical outcomes with the same seed and command sequence', () => {
+    // Helper: run a full encounter and capture HP totals + logs
+    const runEncounter = (seed: number): Array<{ entityId: number; health: number }> => {
+      resetTurnTracking(); // clean module-level state between runs
+
+      const w = createCombatWorld();
+      const b = new MockEngineBridge();
+
+      const playerEid = createStatParticipant(w, {
+        health: 100,
+        maxHealth: 100,
+        initiative: 15,
+        attack: 5,
+        defense: 12,
+        accuracy: 4,
+        evasion: 12,
+      });
+      const enemyEid = createStatParticipant(w, {
+        health: 50,
+        maxHealth: 50,
+        initiative: 10,
+        attack: 3,
+        defense: 10,
+        accuracy: 2,
+        evasion: 10,
+      });
+
+      initCombat(w, b, seed);
+
+      // Execute the same sequence of actions: 3 attacks
+      handleCombatAction({
+        world: w,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        targetId: enemyEid,
+        bridge: b,
+      });
+      handleCombatAction({
+        world: w,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        targetId: enemyEid,
+        bridge: b,
+      });
+      handleCombatAction({
+        world: w,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        targetId: enemyEid,
+        bridge: b,
+      });
+
+      // Capture final HP state
+      const results: Array<{ entityId: number; health: number }> = [];
+      const playerStats = getComponent(w, playerEid, CombatStats) as CombatStatsData;
+      results.push({ entityId: playerEid, health: playerStats.health });
+
+      // Enemy might be dead (removed from world) — check by trying to get stats
+      const enemyStats = getComponent(w, enemyEid, CombatStats) as CombatStatsData | undefined;
+      results.push({ entityId: enemyEid, health: enemyStats?.health ?? 0 });
+
+      return results;
+    };
+
+    const run1 = runEncounter(42);
+    const run2 = runEncounter(42);
+
+    // Both runs must produce identical final HP states
+    expect(run1).toHaveLength(run2.length);
+    for (let i = 0; i < run1.length; i++) {
+      expect(run1[i].health).toBe(run2[i].health);
+    }
+
+    // Different seed should produce different results
+    const run3 = runEncounter(99);
+    // At least one result should differ (probabilistically near-certain)
+    const anyDiffer = run1.some((r, i) => r.health !== run3[i]?.health);
+    expect(anyDiffer).toBe(true);
+  });
+
+  it('captures COMBAT_LOG messages identically across replays', () => {
+    const runEncounterWithLogs = (seed: number): string[] => {
+      resetTurnTracking(); // clean module-level state between runs
+
+      const w = createCombatWorld();
+      const b = new MockEngineBridge();
+
+      const playerEid = createStatParticipant(w, {
+        health: 100,
+        maxHealth: 100,
+        initiative: 15,
+        attack: 5,
+        defense: 12,
+        accuracy: 4,
+        evasion: 12,
+      });
+      const enemyEid = createStatParticipant(w, {
+        health: 50,
+        maxHealth: 50,
+        initiative: 10,
+        attack: 3,
+        defense: 10,
+        accuracy: 2,
+        evasion: 10,
+      });
+
+      initCombat(w, b, seed);
+
+      const logs: string[] = [];
+      b.on('COMBAT_LOG', (event) => {
+        logs.push(event.message);
+      });
+
+      handleCombatAction({
+        world: w,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        targetId: enemyEid,
+        bridge: b,
+      });
+      handleCombatAction({
+        world: w,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        targetId: enemyEid,
+        bridge: b,
+      });
+
+      return logs;
+    };
+
+    const logs1 = runEncounterWithLogs(42);
+    const logs2 = runEncounterWithLogs(42);
+
+    expect(logs1).toEqual(logs2);
+  });
+
+  it('initiative sorting uses entity ID as tiebreaker for deterministic order', () => {
+    const w = createCombatWorld();
+    const b = new MockEngineBridge();
+
+    // Same initiative values — entity IDs should break the tie consistently
+    createParticipant(w, { health: 100, maxHealth: 100, initiative: 10 });
+    createParticipant(w, { health: 100, maxHealth: 100, initiative: 10 });
+    createParticipant(w, { health: 100, maxHealth: 100, initiative: 10 });
+
+    const events: Array<{ participantIds: number[] }> = [];
+    b.on('COMBAT_STARTED', (event) => {
+      events.push(event);
+    });
+
+    initCombat(w, b, 42);
+
+    // Clean up and run again with same seed, same entities
+    resetTurnTracking();
+
+    const w2 = createCombatWorld();
+    const b2 = new MockEngineBridge();
+    createParticipant(w2, { health: 100, maxHealth: 100, initiative: 10 });
+    createParticipant(w2, { health: 100, maxHealth: 100, initiative: 10 });
+    createParticipant(w2, { health: 100, maxHealth: 100, initiative: 10 });
+
+    const events2: Array<{ participantIds: number[] }> = [];
+    b2.on('COMBAT_STARTED', (event) => {
+      events2.push(event);
+    });
+
+    initCombat(w2, b2, 42);
+
+    // Participant order must be identical
+    expect(events[0]?.participantIds).toEqual(events2[0]?.participantIds);
+  });
+
+  it('seed is preserved after multiple initCombat calls (retry scenario)', () => {
+    const w = createCombatWorld();
+    const b = new MockEngineBridge();
+
+    createParticipant(w, { health: 100, maxHealth: 100, initiative: 10 });
+    createParticipant(w, { health: 50, maxHealth: 50, initiative: 5 });
+
+    initCombat(w, b, 42);
+
+    // Capture the seed state after first init
+    const seedAfterInit = getCombatSeed();
+    expect(seedAfterInit).not.toBeNull();
+    expect(seedAfterInit?.seed).toBe(42);
+
+    // Clear and re-initialize with same seed (simulates retry)
+    resetTurnTracking();
+    initCombat(w, b, 42);
+
+    const seedAfterRetry = getCombatSeed();
+    expect(seedAfterRetry).not.toBeNull();
+    expect(seedAfterRetry?.seed).toBe(42);
+
+    // The RNG should restart from the seed — first dice roll should be identical
+    const rng1 = createSeedableRng(42);
+    const rng2 = createSeedableRng(42);
+    expect(rng1.dice(20)).toBe(rng2.dice(20));
+    expect(rng1.dice(6)).toBe(rng2.dice(6));
   });
 });
 

@@ -305,6 +305,20 @@ export type GameEvent =
       enemyHp?: number;
       /** Maximum hit points of the enemy that triggered the encounter. */
       enemyMaxHp?: number;
+      /** Combat seed for deterministic replay (C-330 AC-1). */
+      combatSeed?: number;
+      /** Content pack encounter ID (null for ad-hoc encounters). */
+      encounterId?: string | null;
+      /** Whether non-combat resolution is available. */
+      allowNonCombatResolution?: boolean;
+      /** Non-combat skill check definition (if allowNonCombatResolution). */
+      nonCombatSkillCheck?: {
+        skill: string;
+        dc: number;
+        statModifier: 'strength' | 'dexterity' | 'intelligence' | 'charisma' | 'wisdom';
+        successDialogueKey: string;
+        failureDialogueKey: string;
+      };
     }
   | {
       /**

@@ -10,6 +10,7 @@ import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
 import type { NpcDialogueServiceInterface } from '$lib/services/game/npc_dialogue_service.svelte';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
+  combatService,
   diceService,
   draftStore,
   gameModeService,
@@ -102,19 +103,26 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * Skill check UI state for the animated d20 component.
    * `null` when no skill check is in progress or recently completed.
    *
-   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC
    */
   readonly skillCheckState: {
     readonly checkType: string;
     readonly difficultyClass: number;
+    /** The stat modifier label (e.g. "CHA"). */
+    readonly statModifier: string;
+    /** The numeric value of the stat modifier (e.g. +2). */
+    readonly statModifierValue: number;
+    /** DC - statModifierValue = the number the player needs on the d20. */
+    readonly targetNumber: number;
     readonly rollValue: number | null;
     /**
      * Interactive dice phase:
+     * - `declared`: DC, modifier, and target shown; dice not yet interactive (C-330).
      * - `awaiting_click`: Dice visible, waiting for player click (C-162).
-     * - `rolling`: Spin animation playing (same as old `isRolling`).
-     * - `revealed`: Result shown (same as old `!isRolling` with value).
+     * - `rolling`: Spin animation playing.
+     * - `revealed`: Result shown.
      */
-    readonly phase: 'awaiting_click' | 'rolling' | 'revealed';
+    readonly phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
     readonly isSuccess: boolean | null;
   } | null;
 
@@ -163,6 +171,16 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   selectAction(actionId: string): Promise<void>;
 
   /**
+   * Acknowledges the DC declaration and transitions to the interactive dice phase.
+   *
+   * Only valid when `skillCheckState.phase === 'declared'`.
+   * After this, the dice becomes clickable.
+   *
+   * Contract: C-330 Declared-DC
+   */
+  acknowledgeDeclaration(): void;
+
+  /**
    * Rolls the interactive d20 after the player clicks it.
    *
    * Only valid when `skillCheckState.phase === 'awaiting_click'`.
@@ -172,6 +190,15 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * Contract: C-162 Interactive Latency Masking
    */
   rollDice(): Promise<void>;
+
+  /**
+   * Attempts non-combat resolution of the current encounter (C-330 AC-4).
+   *
+   * Only valid when the encounter has `allowNonCombatResolution`.
+   * Performs the mechanical skill check (d20 + modifier vs DC),
+   * resolves the outcome, and triggers success/failure dialogue.
+   */
+  tryNonCombatResolution(): Promise<void>;
 
   /**
    * Sends the given text (or current input) as a player message
@@ -260,13 +287,16 @@ class DialogueOverlayViewModel
 
   /**
    * Skill check dice roll UI state — null when idle.
-   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC
    */
   skillCheckState: {
     checkType: string;
     difficultyClass: number;
+    statModifier: string;
+    statModifierValue: number;
+    targetNumber: number;
     rollValue: number | null;
-    phase: 'awaiting_click' | 'rolling' | 'revealed';
+    phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
     isSuccess: boolean | null;
   } | null = $state(null);
 
@@ -280,13 +310,26 @@ class DialogueOverlayViewModel
       return null;
     }
     return {
-      phase: s.phase === 'awaiting_click' ? 'interactive' : s.phase,
+      phase: s.phase === 'awaiting_click' || s.phase === 'declared' ? 'interactive' : s.phase,
       value: s.rollValue,
       isSuccess: s.isSuccess,
-      checkInfo: { type: s.checkType, dc: s.difficultyClass },
-      onRoll: () => {
-        void this.rollDice();
+      checkInfo: {
+        type: s.checkType,
+        dc: s.difficultyClass,
+        modLabel: s.statModifier,
+        modValue: s.statModifierValue,
+        target: s.targetNumber,
       },
+      onRoll:
+        s.phase === 'awaiting_click'
+          ? () => {
+              void this.rollDice();
+            }
+          : s.phase === 'declared'
+            ? () => {
+                this.acknowledgeDeclaration();
+              }
+            : undefined,
     };
   }
 
@@ -471,14 +514,134 @@ class DialogueOverlayViewModel
     // Determine the difficulty class based on the NPC's persona difficulty
     const difficultyClass = this._getDifficultyClass(option.skill);
 
-    // Set up interactive dice — player must click to roll
+    // Compute the player's stat modifier for this skill
+    const { statModifier, statModifierValue } = this._getStatModifier(option.skill);
+    const targetNumber = Math.max(1, difficultyClass - statModifierValue);
+
+    // Set up declared-DC phase first (C-330: DC committed before RNG)
     this.skillCheckState = {
       checkType: option.label,
       difficultyClass,
+      statModifier,
+      statModifierValue,
+      targetNumber,
       rollValue: null,
-      phase: 'awaiting_click',
+      phase: 'declared',
       isSuccess: null,
     };
+  }
+
+  /** @inheritdoc */
+  acknowledgeDeclaration(): void {
+    const state = this.skillCheckState;
+    if (state?.phase !== 'declared') {
+      this.debug('acknowledgeDeclaration:invalid-phase', { phase: state?.phase });
+      return;
+    }
+
+    // Transition to interactive dice — DC has been committed and acknowledged
+    this.skillCheckState = { ...state, phase: 'awaiting_click' };
+  }
+
+  /** @inheritdoc */
+  async tryNonCombatResolution(): Promise<void> {
+    const encounterOpts = combatService.lastCombatOptions;
+    if (!encounterOpts?.allowNonCombatResolution) {
+      this.debug('tryNonCombatResolution:not-available');
+      return;
+    }
+
+    this.debug('tryNonCombatResolution', { encounterId: encounterOpts.encounterId });
+
+    // Use a default skill check — persuasion vs DC 12
+    const difficultyClass = 12;
+    const { statModifier, statModifierValue } = this._getStatModifier('persuasion');
+    const targetNumber = Math.max(1, difficultyClass - statModifierValue);
+
+    // Show the declared DC before rolling
+    this.skillCheckState = {
+      checkType: 'Negotiate',
+      difficultyClass,
+      statModifier,
+      statModifierValue,
+      targetNumber,
+      rollValue: null,
+      phase: 'declared',
+      isSuccess: null,
+    };
+    this.dialoguePhase = 'DICE';
+
+    // Auto-acknowledge and roll after brief delay
+    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+    this.acknowledgeDeclaration();
+    await new Promise<void>((resolve) => setTimeout(resolve, 400));
+
+    // Roll the d20
+    const { natural: rollValue, total } = diceService.rollD20(statModifierValue);
+    const isSuccess = total >= difficultyClass;
+
+    const rollingState = this.skillCheckState;
+    if (!rollingState) {
+      return;
+    }
+
+    this.skillCheckState = {
+      ...rollingState,
+      rollValue,
+      phase: 'rolling',
+      isSuccess: null,
+    };
+    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+
+    const revealState = this.skillCheckState;
+    if (!revealState) {
+      return;
+    }
+
+    this.skillCheckState = {
+      ...revealState,
+      phase: 'revealed',
+      isSuccess,
+    };
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+
+    this.skillCheckState = null;
+    this.dialoguePhase = 'MENU';
+
+    if (isSuccess) {
+      // Non-combat resolution succeeded — avoid combat, mark encounter resolved
+      this._appendNpcMessage(
+        `*${this._npcData.npcName} lowers their guard — perhaps talking it out worked.*`,
+      );
+      // Emit encounter completed event for quest state (C-329)
+      if (encounterOpts.encounterId) {
+        this._emitEncounterCompleted(encounterOpts.encounterId, true);
+      }
+      this._onEndChat();
+    } else {
+      // Non-combat resolution failed — transition to combat
+      this._appendNpcMessage(
+        `*${this._npcData.npcName} is not convinced — words have failed. Combat begins!*`,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+      this._onEndChat();
+      if (this._onStartCombat) {
+        this._onStartCombat(this._npcData);
+      }
+    }
+  }
+
+  /**
+   * Emits an ENCOUNTER_COMPLETED event via a standalone engine bridge (C-330 AC-4).
+   * Uses the same pattern as quest_state_service for bridge event emission.
+   */
+  private _emitEncounterCompleted(encounterId: string, victory: boolean): void {
+    this.debug('_emitEncounterCompleted', { encounterId, victory });
+    void import('@aikami/frontend/engine').then(({ createEngineBridge }) => {
+      const bridge = createEngineBridge();
+      bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory });
+    });
   }
 
   /** @inheritdoc */
@@ -489,8 +652,8 @@ class DialogueOverlayViewModel
       return;
     }
 
-    // Roll the d20
-    const { natural: rollValue, total } = diceService.rollD20(0);
+    // Roll the d20 with the player's stat modifier
+    const { natural: rollValue, total } = diceService.rollD20(state.statModifierValue);
     const isSuccess = total >= state.difficultyClass;
 
     this.debug('rollDice', {
@@ -792,6 +955,46 @@ class DialogueOverlayViewModel
       return 10;
     }
     return 12;
+  }
+
+  /**
+   * Returns the player's stat modifier for the given skill.
+   *
+   * Maps skills to stat abbreviations and provides default modifier values
+   * for the demo. In a full implementation, this would read from the
+   * player's character sheet.
+   *
+   * Contract: C-330 Declared-DC — modifier must be shown before RNG
+   */
+  private _getStatModifier(skill: string): {
+    statModifier: string;
+    statModifierValue: number;
+  } {
+    const SkillStatMap: Record<string, { label: string; value: number }> = {
+      persuasion: { label: 'CHA', value: 2 },
+      intimidation: { label: 'STR', value: 1 },
+      // biome-ignore lint/style/useNamingConvention: content pack skill key convention
+      sleight_of_hand: { label: 'DEX', value: 1 },
+      stealth: { label: 'DEX', value: 1 },
+      insight: { label: 'WIS', value: 1 },
+      investigation: { label: 'INT', value: 0 },
+      arcana: { label: 'INT', value: 0 },
+      religion: { label: 'INT', value: 0 },
+      nature: { label: 'WIS', value: 1 },
+      medicine: { label: 'WIS', value: 1 },
+      survival: { label: 'WIS', value: 1 },
+      performance: { label: 'CHA', value: 1 },
+      deception: { label: 'CHA', value: 2 },
+      acrobatics: { label: 'DEX', value: 1 },
+      athletics: { label: 'STR', value: 2 },
+    };
+
+    const entry = SkillStatMap[skill];
+    if (entry) {
+      return { statModifier: entry.label, statModifierValue: entry.value };
+    }
+    // Default: no modifier
+    return { statModifier: '—', statModifierValue: 0 };
   }
 
   /**

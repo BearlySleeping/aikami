@@ -314,10 +314,17 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.skillCheckState).toBeNull();
   });
 
-  test('rollDice transitions through awaiting_click → rolling → revealed → MENU', async () => {
+  test('rollDice transitions through declared → awaiting_click → rolling → revealed → MENU', async () => {
     const vm = createViewModel();
     await vm.selectAction('persuasion');
 
+    // AC-3: selectAction now produces 'declared' phase (DC committed before RNG)
+    expect(vm.skillCheckState?.phase).toBe('declared');
+    expect(vm.skillCheckState?.statModifier).toBe('CHA');
+    expect(vm.skillCheckState?.targetNumber).toBeGreaterThan(0);
+
+    // Acknowledge the declaration to make the dice interactive
+    vm.acknowledgeDeclaration();
     expect(vm.skillCheckState?.phase).toBe('awaiting_click');
 
     const rollPromise = vm.rollDice();

@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/systems/encounter_system.ts
 import type { World } from 'bitecs';
-import { addComponent, getComponent, query, set } from 'bitecs';
+import { addComponent, addEntity, getComponent, query, set } from 'bitecs';
 import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
@@ -8,6 +8,7 @@ import { Enemy } from '../components/enemy.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
+import { TurnOrder } from '../components/turn_order.ts';
 import { Velocity } from '../components/velocity.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { checkLineOfSight } from '../math/bresenham.ts';
@@ -169,10 +170,16 @@ const _triggerEncounter = (params: EncounterTriggerParams): void => {
   const enemyHp = stats?.health ?? 0;
   const enemyMaxHp = stats?.maxHealth ?? 0;
 
-  // 4. Switch engine mode to COMBAT (gates movement)
+  // 4. Read encounter ID from the Enemy component (C-330 AC-2)
+  const encounterId = Enemy.encounterId[enemyEid] || null;
+
+  // 5. Switch engine mode to COMBAT (gates movement)
   setEngineGameMode('COMBAT');
 
-  // 5. Emit COMBAT_STARTED with enemy metadata
+  // 6. Generate a combat seed for deterministic replay (AC-1)
+  const combatSeed = (Date.now() & 0x7fffffff) >>> 0;
+
+  // 7. Emit COMBAT_STARTED with enemy metadata and seed
   bridge.emit({
     type: 'COMBAT_STARTED',
     participantIds: [playerEntityId, enemyEid],
@@ -180,5 +187,113 @@ const _triggerEncounter = (params: EncounterTriggerParams): void => {
     enemyId: enemyEid,
     enemyHp,
     enemyMaxHp,
+    combatSeed,
+    encounterId,
+    allowNonCombatResolution: false,
   });
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Content pack encounter spawn (C-330 AC-2)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Stats for spawning an enemy entity from a content pack encounter.
+ */
+export type EncounterEnemySpawnData = {
+  /** Content pack encounter ID. */
+  encounterId: string;
+  /** NPC name for display. */
+  npcName: string;
+  /** World X position. */
+  x: number;
+  /** World Y position. */
+  y: number;
+  /** Max HP. */
+  hitPoints: number;
+  /** Attack bonus added to d20 hit check. */
+  attackBonus: number;
+  /** Armor class (evasion threshold). */
+  armorClass: number;
+  /** Initiative bonus. */
+  initiative: number;
+};
+
+/**
+ * Spawns an enemy ECS entity from content pack encounter data.
+ *
+ * Creates an entity with Enemy, CombatStats, TurnOrder, and Position
+ * components. The entity is immediately visible to the encounter system
+ * which will trigger combat on spatial overlap.
+ *
+ * Contract: C-330 AC-2 — Content pack encounter → ECS entity spawn
+ *
+ * @param options.world - The bitECS world.
+ * @param options.data - Spawn data from the content pack encounter.
+ * @returns The new entity ID, or 0 on failure.
+ */
+export const spawnEncounterEnemy = (options: {
+  world: World;
+  data: EncounterEnemySpawnData;
+}): number => {
+  const { world, data } = options;
+
+  if (!world) {
+    return 0;
+  }
+
+  const eid = addEntity(world);
+
+  // Enemy tag — marks this entity for the encounter system
+  addComponent(world, eid, Enemy);
+  addComponent(
+    world,
+    eid,
+    set(Enemy, {
+      isActive: true,
+      spawnId: `${data.encounterId}:${data.npcName}`,
+      encounterId: data.encounterId,
+    }),
+  );
+
+  // Position at spawn location
+  addComponent(world, eid, Position);
+  addComponent(
+    world,
+    eid,
+    set(Position, {
+      x: data.x,
+      y: data.y,
+    }),
+  );
+
+  // Combat stats from the encounter NPC definition
+  addComponent(world, eid, CombatStats);
+  addComponent(
+    world,
+    eid,
+    set(CombatStats, {
+      health: data.hitPoints,
+      maxHealth: data.hitPoints,
+      initiative: data.initiative,
+      attack: data.attackBonus,
+      defense: data.armorClass,
+      accuracy: 2, // default enemy accuracy
+      evasion: data.armorClass,
+    }),
+  );
+
+  // Turn order for initiative-based combat sequencing
+  addComponent(world, eid, TurnOrder);
+  addComponent(
+    world,
+    eid,
+    set(TurnOrder, {
+      currentTurn: false,
+      initiativeValue: data.initiative,
+      isActive: true,
+    }),
+  );
+
+  return eid;
 };

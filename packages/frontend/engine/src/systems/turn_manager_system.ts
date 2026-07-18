@@ -60,10 +60,23 @@ let currentTurnIndex = -1;
  *
  * @param world - The bitECS world.
  * @param bridge - The EngineBridge for emitting events.
+ * @param seed - Optional 32-bit seed for deterministic dice (AC-1).
+ *   When provided, all combat dice rolls use a mulberry32 PRNG instead of
+ *   crypto.getRandomValues. Use the same seed + command sequence to
+ *   replay an encounter with identical results.
  */
-const initCombat = (world: World, bridge: EngineBridge): void => {
+const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => {
   if (!world || !bridge) {
     return;
+  }
+
+  // Set the combat seed if provided (AC-1: deterministic replay)
+  // Always apply seed — even if idempotent return (seed may have changed for retry)
+  if (seed !== undefined) {
+    setCombatSeed(seed);
+  } else if (turnOrderList.length === 0) {
+    // Only clear seed on fresh init without seed — preserve on idempotent calls
+    setCombatSeed(null);
   }
 
   if (turnOrderList.length > 0) {
@@ -84,11 +97,16 @@ const initCombat = (world: World, bridge: EngineBridge): void => {
     return;
   }
 
-  // Sort by initiative — highest first
+  // Sort by initiative — highest first, entity ID as tiebreaker (AC-1 determinism)
   const sorted = [...participantIds].sort((a, b) => {
     const aData = getComponent(world, a, TurnOrder) as TurnOrderData | undefined;
     const bData = getComponent(world, b, TurnOrder) as TurnOrderData | undefined;
-    return (bData?.initiativeValue ?? 0) - (aData?.initiativeValue ?? 0);
+    const initDiff = (bData?.initiativeValue ?? 0) - (aData?.initiativeValue ?? 0);
+    if (initDiff !== 0) {
+      return initDiff;
+    }
+    // Tiebreaker: lower entity ID first (stable, deterministic)
+    return a - b;
   });
 
   turnOrderList = sorted;
@@ -243,20 +261,96 @@ const getActiveParticipantIds = (world: World): number[] => {
 };
 
 // ---------------------------------------------------------------------------
-// Dice RNG
+// Seedable RNG (mulberry32)
 // ---------------------------------------------------------------------------
 
 /**
- * Cryptographically-strong dice roller.
+ * A seedable 32-bit PRNG returning values in [0, 1). Uses mulberry32.
  *
- * Returns an integer in [1, sides] inclusive (e.g., `rollDice(20)` → 1–20).
+ * Deterministic — given the same seed, produces the same sequence.
+ * Exposed for serialization and deterministic replay (AC-1).
+ */
+export type SeedableRng = {
+  /** Advance the PRNG and return a float in [0, 1). */
+  next(): number;
+  /** Return an integer in [1, sides] inclusive. */
+  dice(sides: number): number;
+  /** The current seed value (for serialization). */
+  readonly seed: number;
+};
+
+/**
+ * Creates a seedable PRNG using the mulberry32 algorithm.
  *
- * @param sides - Number of faces on the die.
- * @returns A random integer between 1 and sides.
+ * Given the same seed, the sequence of values returned by `next()` and
+ * `dice()` is identical — enabling deterministic combat replay.
+ *
+ * @param seed - A 32-bit integer seed.
+ * @returns A {@link SeedableRng} instance.
+ */
+const createSeedableRng = (seed: number): SeedableRng => {
+  // mulberry32: a simple 32-bit PRNG with good distribution
+  let state = seed | 0;
+
+  const next = (): number => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const dice = (sides: number): number => {
+    if (sides < 1) {
+      return 0;
+    }
+    return Math.floor(next() * sides) + 1;
+  };
+
+  return { next, dice, seed };
+};
+
+// ---------------------------------------------------------------------------
+// Module-level seed state
+// ---------------------------------------------------------------------------
+
+/** Active seedable RNG for the current combat encounter, or null if unseeded. */
+let _activeRng: SeedableRng | null = null;
+
+/**
+ * Sets the combat seed for deterministic RNG.
+ *
+ * Creates a new {@link SeedableRng} from the given seed and stores it as
+ * the active RNG. All subsequent dice rolls in combat will use this PRNG
+ * instead of {@link crypto.getRandomValues}.
+ *
+ * Call before {@link initCombat} to seed the encounter. Call with `null`
+ * to clear (revert to crypto RNG).
+ *
+ * @param seed - A 32-bit integer seed, or null to clear.
+ */
+const setCombatSeed = (seed: number | null): void => {
+  if (seed === null) {
+    _activeRng = null;
+    return;
+  }
+  _activeRng = createSeedableRng(seed);
+};
+
+/** Returns the active seedable RNG, or null if unseeded. */
+const getCombatSeed = (): SeedableRng | null => {
+  return _activeRng;
+};
+
+/**
+ * Default dice roller — prefers the seeded RNG if active;
+ * falls back to {@link crypto.getRandomValues} otherwise.
  */
 const rollDice = (sides: number): number => {
   if (sides < 1) {
     return 0;
+  }
+  if (_activeRng) {
+    return _activeRng.dice(sides);
   }
   // Use crypto.getRandomValues for uniform distribution
   const array = new Uint32Array(1);
@@ -1054,4 +1148,13 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
   });
 };
 
-export { advanceTurn, endCombat, handleCombatAction, initCombat, resetTurnTracking };
+export {
+  advanceTurn,
+  createSeedableRng,
+  endCombat,
+  getCombatSeed,
+  handleCombatAction,
+  initCombat,
+  resetTurnTracking,
+  setCombatSeed,
+};
