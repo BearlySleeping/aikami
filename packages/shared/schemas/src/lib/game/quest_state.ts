@@ -9,11 +9,11 @@ import Type from 'typebox';
 // ── Objective progress (minimal — labels derived from content pack on hydrate) ──
 
 export const QuestObjectiveProgressSchema = Type.Object({
-  objectiveIndex: Type.Number({
+  objectiveIndex: Type.Integer({
     minimum: 0,
     description: 'Index into content pack objectives array',
   }),
-  current: Type.Number({ minimum: 0, description: 'Current progress count' }),
+  current: Type.Integer({ minimum: 0, description: 'Current progress count' }),
 });
 
 // ── Per-quest progress ──
@@ -38,7 +38,12 @@ export const QuestProgressSchema = Type.Object({
 
 export const ActiveQuestStateSchema = Type.Object({
   activeQuests: Type.Array(QuestProgressSchema, { description: 'Currently tracked quests' }),
-  completedQuestIds: Type.Array(Type.String(), { description: 'Quest IDs completed (for dedup)' }),
+  completedQuestIds: Type.Array(Type.String(), {
+    description: 'Quest IDs completed (for dedup) — legacy, prefer completedQuests',
+  }),
+  completedQuests: Type.Array(QuestProgressSchema, {
+    description: 'Completed quest progress records with metadata (C-329 code review fix)',
+  }),
   failedQuestIds: Type.Array(Type.String(), { description: 'Quest IDs failed (for dedup)' }),
   declinedQuestIds: Type.Array(Type.String(), {
     description: 'Quest IDs declined by the player (dedup guard)',

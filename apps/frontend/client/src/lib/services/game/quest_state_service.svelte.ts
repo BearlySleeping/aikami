@@ -92,9 +92,11 @@ class QuestStateService
   private _contentPackLoader: ContentPackLoaderInterface | undefined;
   private _progress = $state<QuestProgress[]>([]);
   private _completedQuestIds = $state<string[]>([]);
+  private _completedProgress = $state<QuestProgress[]>([]);
   private _failedQuestIds = $state<string[]>([]);
   private _declinedQuestIds = $state<string[]>([]);
   private _listening = false;
+  private _unsubscribers: Array<() => void> = [];
 
   // ── Configuration ──
 
@@ -263,6 +265,7 @@ class QuestStateService
     return {
       activeQuests: this._progress,
       completedQuestIds: this._completedQuestIds,
+      completedQuests: this._completedProgress,
       failedQuestIds: this._failedQuestIds,
       declinedQuestIds: this._declinedQuestIds,
       worldStateFlags: this.worldStateFlags,
@@ -276,6 +279,7 @@ class QuestStateService
     }
     this._progress = state.activeQuests ?? [];
     this._completedQuestIds = state.completedQuestIds ?? [];
+    this._completedProgress = state.completedQuests ?? [];
     this._failedQuestIds = state.failedQuestIds ?? [];
     this._declinedQuestIds = state.declinedQuestIds ?? [];
     this.worldStateFlags = state.worldStateFlags ?? {};
@@ -288,8 +292,19 @@ class QuestStateService
 
   /** @inheritdoc */
   reset(): void {
+    // Unsubscribe all bridge listeners
+    for (const unsubscribe of this._unsubscribers) {
+      try {
+        unsubscribe();
+      } catch (_error) {
+        // Best-effort cleanup
+      }
+    }
+    this._unsubscribers = [];
+
     this._progress = [];
     this._completedQuestIds = [];
+    this._completedProgress = [];
     this._failedQuestIds = [];
     this._declinedQuestIds = [];
     this.worldStateFlags = {};
@@ -311,28 +326,38 @@ class QuestStateService
       const { createEngineBridge } = await import('@aikami/frontend/engine');
       const bridge = createEngineBridge();
 
-      bridge.on('MAP_ENTERED', (event) => {
-        this.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: event.mapUrl });
-      });
+      this._unsubscribers.push(
+        bridge.on('MAP_ENTERED', (event) => {
+          this.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: event.mapUrl });
+        }),
+      );
 
-      bridge.on('ENCOUNTER_COMPLETED', (event) => {
-        this.evaluateTriggers({
-          type: 'ENCOUNTER_COMPLETED',
-          encounterId: event.encounterId,
-          victory: event.victory,
-        });
-      });
+      this._unsubscribers.push(
+        bridge.on('ENCOUNTER_COMPLETED', (event) => {
+          this.evaluateTriggers({
+            type: 'ENCOUNTER_COMPLETED',
+            encounterId: event.encounterId,
+            victory: event.victory,
+          });
+        }),
+      );
 
-      bridge.on('ITEM_PICKED_UP', (event) => {
-        this.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: event.itemId });
-      });
+      this._unsubscribers.push(
+        bridge.on('ITEM_PICKED_UP', (event) => {
+          this.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: event.itemId });
+        }),
+      );
 
       // NPC_INTERACTED is already handled by the dialogue system.
       // We wire it here as a pass-through for quest evaluation.
-      bridge.on('NPC_DIALOG_START', (event) => {
-        this.evaluateTriggers({ type: 'NPC_INTERACTED', npcId: event.npcId });
-      });
+      this._unsubscribers.push(
+        bridge.on('NPC_DIALOG_START', (event) => {
+          this.evaluateTriggers({ type: 'NPC_INTERACTED', npcId: event.npcId });
+        }),
+      );
     } catch (error) {
+      // Bridge unavailable; reset listening flag so retry is possible
+      this._listening = false;
       this.debug('startListening:failed', { error: String(error) });
     }
   }
@@ -435,6 +460,13 @@ class QuestStateService
     }
 
     this.quests = result;
+
+    // Emit QUESTS_UPDATED so the engine bridge (and any listeners like
+    // worldStateService) receive the updated quest state.
+    this._emitQuestEvent({
+      type: 'QUESTS_UPDATED',
+      quests: result,
+    });
   }
 
   // ── Private: quest completion ──
@@ -470,8 +502,9 @@ class QuestStateService
     // Deliver rewards (idempotent)
     this._deliverRewards(progress);
 
-    // Move to completed list
+    // Move to completed list (preserve full progress record)
     this._completedQuestIds = [...this._completedQuestIds, progress.questId];
+    this._completedProgress = [...this._completedProgress, { ...progress }];
     this._progress = this._progress.filter((p) => p.questId !== progress.questId);
 
     // Emit completion event
@@ -498,6 +531,7 @@ class QuestStateService
     }
 
     const rewards: Array<{ type: 'item' | 'gold' | 'xp'; itemId?: string; amount?: number }> = [];
+    let anyRewardFailed = false;
 
     for (const reward of definition.rewards) {
       try {
@@ -533,6 +567,7 @@ class QuestStateService
           }
         }
       } catch (error) {
+        anyRewardFailed = true;
         this.debug('_deliverRewards:error', {
           questId: progress.questId,
           rewardType: reward.type,
@@ -553,7 +588,10 @@ class QuestStateService
       }
     }
 
-    progress.rewardsGranted = true;
+    // Only mark rewardsGranted if every reward was delivered successfully
+    if (!anyRewardFailed) {
+      progress.rewardsGranted = true;
+    }
 
     // Emit reward event
     this._emitQuestEvent({
@@ -579,7 +617,14 @@ class QuestStateService
   private async _emitQuestEvent(
     event: Extract<
       import('@aikami/frontend/engine').GameEvent,
-      { type: 'QUEST_ACCEPTED' | 'QUEST_PROGRESSED' | 'QUEST_COMPLETED' | 'QUEST_REWARD_GRANTED' }
+      {
+        type:
+          | 'QUEST_ACCEPTED'
+          | 'QUEST_PROGRESSED'
+          | 'QUEST_COMPLETED'
+          | 'QUEST_REWARD_GRANTED'
+          | 'QUESTS_UPDATED';
+      }
     >,
   ): Promise<void> {
     try {

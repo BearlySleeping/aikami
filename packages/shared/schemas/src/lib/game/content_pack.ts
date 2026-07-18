@@ -225,6 +225,10 @@ export const ContentPackQuestEntrySchema = Type.Object({
   declineDialogueKey: Type.Optional(
     Type.String({ description: 'Dialogue key when quest is declined' }),
   ),
+  /** Optional NPC ID that offers this quest. When set, only this NPC can offer it. */
+  offeredByNpcId: Type.Optional(
+    Type.String({ description: 'NPC ID that offers this quest (filters dialogue choices)' }),
+  ),
   /** Ending variations keyed by ending ID */
   endings: Type.Record(Type.String(), ContentPackQuestEndingSchema, {
     description: 'Ending variations keyed by ending ID',

@@ -8,6 +8,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine';
 import type { ContentPackQuestEntry } from '@aikami/types';
+import { inventoryService } from './inventory_service.svelte';
+import { playerStateService } from './player_state_service.svelte';
 
 // ── Mock content pack quest data ──
 
@@ -90,7 +92,9 @@ const createMockContentPackLoader = (): ContentPackLoaderInterface => {
         // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         emberwatch_village: { file: 'maps/emberwatch_village.json' },
       })) {
-        if (mapUrl.endsWith(map.file)) {
+        // Boundary-safe match: require path to end with "/<mapFile>"
+        const normalized = mapUrl.startsWith('/') ? mapUrl : `/${mapUrl}`;
+        if (normalized.endsWith(`/${map.file}`)) {
           return id;
         }
       }
@@ -318,6 +322,17 @@ describe('QuestStateService', () => {
 
       // Verify world state flag was set
       expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
+
+      // Verify reward side effects: item, gold, XP delivered
+      const inventoryItem = inventoryService.inventory.find((e) => e.itemId === 'wardAmulet');
+      expect(inventoryItem).toBeDefined();
+      expect(inventoryItem?.quantity).toBe(1);
+      expect(inventoryService.gold).toBe(200);
+      expect(playerStateService.playerXp).toBe(500);
+
+      // Quest should be in completed list, not active
+      const serialized = service.serialize();
+      expect(serialized.activeQuests.filter((q) => q.questId === 'fading_ward').length).toBe(0);
     });
 
     test('only delivers rewards once (idempotency)', () => {
@@ -343,6 +358,10 @@ describe('QuestStateService', () => {
       // State should remain stable
       const serialized = service.serialize();
       expect(serialized.activeQuests.filter((q) => q.questId === 'fading_ward').length).toBe(0);
+
+      // Rewards delivered exactly once: gold is 200, not 400
+      expect(inventoryService.gold).toBe(200);
+      expect(playerStateService.playerXp).toBe(500);
     });
   });
 

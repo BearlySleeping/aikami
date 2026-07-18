@@ -430,6 +430,7 @@ const _localServicesMock = () => ({
     inventory: [],
     gold: 100,
     isOpen: false,
+    addItem: _createCallableStub(),
     addGold: _createCallableStub(),
     removeGold: _createCallableStub(),
     open: _createCallableStub(),
