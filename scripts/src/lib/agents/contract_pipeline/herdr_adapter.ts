@@ -549,7 +549,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       '--workspace',
       this._workspaceId,
       '--cwd',
-      this._repoRoot,
+      options.yolo && this._workspacePath ? this._workspacePath : this._repoRoot,
       '--label',
       'review',
       '--no-focus',
