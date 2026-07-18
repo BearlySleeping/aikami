@@ -159,6 +159,7 @@ export type ContractHerdrAdapterInterface = {
     prompt: string;
     contractPath: string;
     reviewDecisionPath: string;
+    yolo?: boolean;
   }): Promise<string>;
   sendReviewMessage(options: { paneId: string; message: string }): Promise<void>;
 };
@@ -533,6 +534,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     prompt: string;
     contractPath: string;
     reviewDecisionPath: string;
+    yolo?: boolean;
   }): Promise<string> {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
@@ -599,7 +601,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runPaneCommand({ paneId, command });
     await this._sendTaskText({
       paneId,
-      text: `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
+      text: options.yolo
+        ? `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`
+        : `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
     });
     return paneId;
   }

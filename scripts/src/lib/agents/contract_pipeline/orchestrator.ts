@@ -874,6 +874,7 @@ export const runContractPipeline = async (options: {
             prompt,
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
+            yolo: options.yolo,
           });
           writeManifest({ manifest, cwd: options.repoRoot });
         }
