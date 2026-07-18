@@ -41,6 +41,7 @@ export * from './lib/game/macro.ts';
 export * from './lib/game/npc_dialogue_command.ts';
 export * from './lib/game/npc_schedule.ts';
 export * from './lib/game/onboarding_hints.ts';
+export * from './lib/game/quest_state.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/media/image_generation.ts';
