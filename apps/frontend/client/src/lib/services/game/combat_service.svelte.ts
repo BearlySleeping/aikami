@@ -21,6 +21,7 @@ export type CombatState = {
   firstTurnEntityId: number;
   combatSeed?: number;
   encounterId?: string | null;
+  lastCombatOptions?: CombatServiceInterface['lastCombatOptions'];
 };
 
 export type CombatServiceInterface = BaseFrontendClassInterface & {
@@ -166,6 +167,7 @@ class CombatService
       firstTurnEntityId: this._firstTurnEntityId,
       combatSeed: this._combatSeed,
       encounterId: this._encounterId,
+      lastCombatOptions: this._lastCombatOptions ? { ...this._lastCombatOptions } : undefined,
     };
   }
 
@@ -177,6 +179,10 @@ class CombatService
     this._firstTurnEntityId = data.firstTurnEntityId;
     this._combatSeed = data.combatSeed;
     this._encounterId = data.encounterId;
+    // Restore retry options for save/load support (CR finding)
+    if (data.lastCombatOptions) {
+      this._lastCombatOptions = { ...data.lastCombatOptions };
+    }
   }
 }
 

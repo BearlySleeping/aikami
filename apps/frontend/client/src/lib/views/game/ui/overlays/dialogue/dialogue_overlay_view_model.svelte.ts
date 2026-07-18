@@ -633,18 +633,15 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * Emits an ENCOUNTER_COMPLETED event via the engine bridge (C-330 AC-4).
-   * Uses the game engine service to send the event through the bridge.
+   * Emits an ENCOUNTER_COMPLETED event via a standalone engine bridge (C-330 AC-4).
+   * Uses the same pattern as quest_state_service for bridge event emission.
    */
   private _emitEncounterCompleted(encounterId: string, victory: boolean): void {
-    // Import dynamically to avoid circular dependency with game engine service
-    void import('$services').then(({ gameEngineService }) => {
-      gameEngineService.sendCommand?.({
-        type: 'COMBAT_ACTION',
-        action: 'FLEE',
-      } as never);
-    });
     this.debug('_emitEncounterCompleted', { encounterId, victory });
+    void import('@aikami/frontend/engine').then(({ createEngineBridge }) => {
+      const bridge = createEngineBridge();
+      bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory });
+    });
   }
 
   /** @inheritdoc */
