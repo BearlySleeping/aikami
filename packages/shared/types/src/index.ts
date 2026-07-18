@@ -54,6 +54,7 @@ export * from './lib/game/game_assets.ts';
 export * from './lib/game/macro.ts';
 export * from './lib/game/npc_dialogue_command.ts';
 export * from './lib/game/npc_schedule.ts';
+export * from './lib/game/quest_state.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/world_gen.ts';
 export * from './lib/media/image_style_profile.ts';

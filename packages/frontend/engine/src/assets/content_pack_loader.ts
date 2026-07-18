@@ -35,6 +35,12 @@ export type ContentPackLoaderInterface = {
   /** Resolves the absolute URL for a map file within this pack */
   resolveMapUrl(mapId: string): string;
 
+  /**
+   * Resolves a map URL back to its map ID, or undefined if no match.
+   * Uses suffix matching against each map entry's `.file` path.
+   */
+  resolveMapId(mapUrl: string): string | undefined;
+
   /** Looks up a dialogue fallback string by key */
   getDialogue(dialogueKey: string): string | undefined;
 
@@ -118,6 +124,21 @@ class ContentPackLoader implements ContentPackLoaderInterface {
     }
 
     return resolved;
+  }
+
+  /** @inheritdoc */
+  resolveMapId(mapUrl: string): string | undefined {
+    this._assertNotDisposed();
+
+    // Suffix match: check if the URL ends with any map entry's file path.
+    // This handles both absolute URLs (e.g. `/content-packs/emberwatch/maps/old_road.json`)
+    // and relative paths (e.g. `maps/old_road.json`).
+    for (const [mapId, entry] of Object.entries(this.manifest.maps)) {
+      if (mapUrl.endsWith(entry.file)) {
+        return mapId;
+      }
+    }
+    return undefined;
   }
 
   /** @inheritdoc */

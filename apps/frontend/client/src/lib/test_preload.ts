@@ -376,6 +376,25 @@ const _localServicesMock = () => ({
   }),
   GameStateService: class {},
   // C-314: Split services
+  questStateService: Object.assign(_createServiceStub(), {
+    quests: [],
+    worldStateFlags: {},
+    acceptQuest: _createCallableStub(),
+    declineQuest: _createCallableStub(),
+    canAcceptQuest: () => true,
+    evaluateTriggers: _createCallableStub(),
+    serialize: () => ({
+      activeQuests: [],
+      completedQuestIds: [],
+      failedQuestIds: [],
+      declinedQuestIds: [],
+      worldStateFlags: {},
+    }),
+    hydrate: _createCallableStub(),
+    configure: _createCallableStub(),
+    reset: _createCallableStub(),
+    startListening: _createCallableStub(),
+  }),
   playerStateService: Object.assign(_createServiceStub(), {
     playerLevel: 1,
     playerXp: 0,

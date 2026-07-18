@@ -221,6 +221,10 @@ export const ContentPackQuestEntrySchema = Type.Object({
   progressDialogueKey: Type.String({ description: 'Dialogue key while quest is active' }),
   /** Completion rewards */
   rewards: Type.Array(ContentPackQuestRewardSchema, { description: 'Completion rewards' }),
+  /** Optional dialogue key when quest is declined */
+  declineDialogueKey: Type.Optional(
+    Type.String({ description: 'Dialogue key when quest is declined' }),
+  ),
   /** Ending variations keyed by ending ID */
   endings: Type.Record(Type.String(), ContentPackQuestEndingSchema, {
     description: 'Ending variations keyed by ending ID',

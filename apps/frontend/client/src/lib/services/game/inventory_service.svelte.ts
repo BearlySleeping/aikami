@@ -139,6 +139,11 @@ export type InventoryServiceInterface = BaseFrontendClassInterface & {
   readonly gold: number;
   readonly isOpen: boolean;
 
+  /**
+   * Adds an item to the player's inventory.
+   * If the item already exists, increments quantity.
+   */
+  addItem(options: { itemId: string; quantity?: number }): void;
   addGold(options: { amount: number }): void;
   removeGold(options: { amount: number }): void;
 
@@ -180,6 +185,21 @@ class InventoryService
 
   toggle(): void {
     this._isOpen = !this._isOpen;
+  }
+
+  /** @inheritdoc */
+  addItem(options: { itemId: string; quantity?: number }): void {
+    const { itemId, quantity = 1 } = options;
+    if (quantity <= 0) {
+      return;
+    }
+    const existing = this.inventory.find((entry) => entry.itemId === itemId);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      this.inventory = [...this.inventory, { itemId, quantity }];
+    }
+    this.debug('addItem', { itemId, quantity });
   }
 
   /** @inheritdoc */

@@ -28,6 +28,7 @@ import type {
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
+import { questStateService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
@@ -933,12 +934,13 @@ export class NpcDialogueService
     // 1. Quest offers (if NPC has associated quest)
     const quests = this._contentProvider!.getAllQuests();
     if (quests.length > 0 && allowedCommands.includes('offerQuest')) {
-      const quest = quests[0]; // first available quest
-      if (quest) {
+      // Filter to only offerable quests (not already active, completed, failed, or declined)
+      const offerableQuest = quests.find((q) => q && questStateService.canAcceptQuest(q.id));
+      if (offerableQuest) {
         choices.push({
           id: 'quest',
-          label: `Ask about "${quest.name}"`,
-          command: { kind: 'offerQuest', questId: quest.id },
+          label: `Ask about "${offerableQuest.name}"`,
+          command: { kind: 'offerQuest', questId: offerableQuest.id },
         });
       }
     }

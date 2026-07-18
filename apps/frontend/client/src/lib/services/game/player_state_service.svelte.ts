@@ -33,6 +33,11 @@ export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
   readonly characterSheetSummary: string;
 
   /**
+   * Adds XP to the player. Does not handle level-up logic (ECS owns that).
+   */
+  addXp(options: { amount: number }): void;
+
+  /**
    * Starts listening for ECS bridge events (PLAYER_LEVELED_UP, COMBAT_STATE_UPDATE).
    * Must be called after the game engine is ready.
    */
@@ -74,6 +79,16 @@ class PlayerStateService
       narrativeTraits: this.narrativeTraits,
     };
     return serializeForAi(sheet);
+  }
+
+  /** @inheritdoc */
+  addXp(options: { amount: number }): void {
+    const { amount } = options;
+    if (amount <= 0) {
+      return;
+    }
+    this.playerXp += amount;
+    this.debug('addXp', { amount, newXp: this.playerXp });
   }
 
   /** @inheritdoc */
