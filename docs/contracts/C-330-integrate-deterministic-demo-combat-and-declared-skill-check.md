@@ -8,7 +8,7 @@
 | **Target** | Production combat overlay wiring, seedable RNG in ECS combat engine, encounter trigger pipeline from content pack, declared-DC skill check enforcement, defeat/retry UX |
 | **Priority** | P0 — D&D feel requires visible uncertainty and fair mechanical consequences, not AI-authored success |
 | **Dependencies** | C-316 (content pack), C-326 (`/game` boot), C-328 (dialogue overlay); pre-existing engine subsystems (turn manager C-145, enemy AI C-197, dice service, combat UI) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | None (internal mechanical integration — docs updated only if combat UX deviates from existing patterns) |
 | **Contract version** | 2.0.0 |
