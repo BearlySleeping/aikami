@@ -159,9 +159,8 @@ describe('Replay Fixture — Deterministic Round-Trip (C-336 AC-5)', () => {
       seed: SESSION_SEED,
     });
 
-    // Most commands produce 1 event, but rollDamage produces 0 (just advances RNG)
-    // SESSION_COMMANDS has 2 rollDamage commands out of 15 total
-    expect(result.allEvents).toHaveLength(SESSION_COMMANDS.length - 2);
+    // Each command produces one entry in allEvents (rollDamage entries carry an empty events array)
+    expect(result.allEvents).toHaveLength(SESSION_COMMANDS.length);
     expect(result.commandLog).toHaveLength(SESSION_COMMANDS.length);
   });
 

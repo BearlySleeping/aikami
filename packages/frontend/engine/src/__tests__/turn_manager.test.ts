@@ -643,9 +643,9 @@ describe('handleCombatAction', () => {
     // Player attacks first, enemy counter-attacks with massive damage
     const roller = createDeterministicRoller([20, 6, 20, 6]);
 
-    const endEvents: Array<{ victory: boolean }> = [];
-    bridge.on('COMBAT_ENDED', (event) => {
-      endEvents.push(event);
+    const downedEvents: Array<{ entityId: number }> = [];
+    bridge.on('ENTITY_DOWNED', (event) => {
+      downedEvents.push(event);
     });
 
     handleCombatAction({
@@ -656,13 +656,13 @@ describe('handleCombatAction', () => {
       diceRoller: roller,
     });
 
-    // Player HP should be exactly 0, not negative
+    // Player HP should be exactly 0, not negative (C-338: downed state)
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
     expect(playerStats.health).toBe(0);
 
-    // COMBAT_ENDED with defeat emitted
-    expect(endEvents.length).toBe(1);
-    expect(endEvents[0].victory).toBe(false);
+    // ENTITY_DOWNED emitted (C-338: downed state replaces instant COMBAT_ENDED)
+    expect(downedEvents.length).toBe(1);
+    expect(downedEvents[0].entityId).toBe(playerEid);
   });
 
   // ── FLEE ──
@@ -1557,17 +1557,17 @@ describe('C-147: Experience & Leveling', () => {
     const levelUp = levelUpEvents[0];
     if (levelUp) {
       expect(levelUp.newLevel).toBe(2);
-      expect(levelUp.maxHp).toBe(120); // 100 + 20
+      expect(levelUp.maxHp).toBe(106); // 100 + 6 (fighter hpPerLevel)
       expect(levelUp.attack).toBe(52); // 50 + 2
       expect(levelUp.defense).toBe(14); // 12 + 2
-      expect(levelUp.xpToNextLevel).toBe(150); // 100 * 1.5 = 150
+      expect(levelUp.xpToNextLevel).toBe(900); // XP_THRESHOLDS[3] = 900
     }
 
     // Player stats should reflect level-up
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
     expect(playerStats.level).toBe(2);
-    expect(playerStats.maxHealth).toBe(120);
-    expect(playerStats.health).toBe(120); // full heal
+    expect(playerStats.maxHealth).toBe(106); // 100 + 6 (fighter hpPerLevel)
+    expect(playerStats.health).toBe(106); // full heal
     expect(playerStats.xp).toBe(5); // carryover: 80+25=105, 105-100=5
   });
 
@@ -1705,7 +1705,7 @@ describe('C-147: Experience & Leveling', () => {
 
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
     expect(playerStats.health).toBe(playerStats.maxHealth);
-    expect(playerStats.maxHealth).toBe(120); // 100 + 20
+    expect(playerStats.maxHealth).toBe(106); // 100 + 6 (fighter hpPerLevel)
   });
 
   // ── Multiple level-ups (big XP) ──

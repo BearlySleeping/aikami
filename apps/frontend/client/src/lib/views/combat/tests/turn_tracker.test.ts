@@ -15,15 +15,15 @@ const createTurnState = (overrides?: Partial<TurnState>): TurnState => ({
   currentEntityId: 1,
   currentEntityName: 'Player',
   isPlayerTurn: true,
-  actionEconomy: { action: false, bonusAction: false, reaction: false },
+  actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
   turnNumber: 1,
   ...overrides,
 });
 
 const createActionEconomy = (overrides?: Partial<ActionEconomy>): ActionEconomy => ({
-  action: false,
-  bonusAction: false,
-  reaction: false,
+  actionAvailable: true,
+  bonusActionAvailable: true,
+  reactionAvailable: true,
   ...overrides,
 });
 
@@ -37,9 +37,9 @@ describe('TurnState', () => {
     expect(state.currentEntityName).toBe('Player');
     expect(state.isPlayerTurn).toBe(true);
     expect(state.turnNumber).toBe(1);
-    expect(state.actionEconomy.action).toBe(false);
-    expect(state.actionEconomy.bonusAction).toBe(false);
-    expect(state.actionEconomy.reaction).toBe(false);
+    expect(state.actionEconomy.actionAvailable).toBe(true);
+    expect(state.actionEconomy.bonusActionAvailable).toBe(true);
+    expect(state.actionEconomy.reactionAvailable).toBe(true);
   });
 
   test('should represent enemy turn', () => {
@@ -66,41 +66,45 @@ describe('TurnState', () => {
     const state2: TurnState = {
       ...state1,
       isPlayerTurn: false,
-      actionEconomy: { action: true, bonusAction: true, reaction: false },
+      actionEconomy: {
+        actionAvailable: false,
+        bonusActionAvailable: false,
+        reactionAvailable: true,
+      },
       turnNumber: 2,
     };
 
     // Original unchanged
     expect(state1.isPlayerTurn).toBe(true);
-    expect(state1.actionEconomy.action).toBe(false);
+    expect(state1.actionEconomy.actionAvailable).toBe(true);
     expect(state1.turnNumber).toBe(1);
 
     // New has updates
     expect(state2.isPlayerTurn).toBe(false);
-    expect(state2.actionEconomy.action).toBe(true);
+    expect(state2.actionEconomy.actionAvailable).toBe(false);
     expect(state2.turnNumber).toBe(2);
   });
 
   test('should update action economy dots independently', () => {
     const state = createTurnState();
 
-    // Use action
+    // Use action (consume it — available becomes false)
     const afterAction: TurnState = {
       ...state,
-      actionEconomy: { ...state.actionEconomy, action: true },
+      actionEconomy: { ...state.actionEconomy, actionAvailable: false },
     };
-    expect(afterAction.actionEconomy.action).toBe(true);
-    expect(afterAction.actionEconomy.bonusAction).toBe(false);
-    expect(afterAction.actionEconomy.reaction).toBe(false);
+    expect(afterAction.actionEconomy.actionAvailable).toBe(false);
+    expect(afterAction.actionEconomy.bonusActionAvailable).toBe(true);
+    expect(afterAction.actionEconomy.reactionAvailable).toBe(true);
 
     // Use bonus action
     const afterBonus: TurnState = {
       ...afterAction,
-      actionEconomy: { ...afterAction.actionEconomy, bonusAction: true },
+      actionEconomy: { ...afterAction.actionEconomy, bonusActionAvailable: false },
     };
-    expect(afterBonus.actionEconomy.action).toBe(true);
-    expect(afterBonus.actionEconomy.bonusAction).toBe(true);
-    expect(afterBonus.actionEconomy.reaction).toBe(false);
+    expect(afterBonus.actionEconomy.actionAvailable).toBe(false);
+    expect(afterBonus.actionEconomy.bonusActionAvailable).toBe(false);
+    expect(afterBonus.actionEconomy.reactionAvailable).toBe(true);
   });
 });
 
@@ -108,34 +112,46 @@ describe('ActionEconomy', () => {
   test('should start with all actions available', () => {
     const economy = createActionEconomy();
 
-    expect(economy.action).toBe(false); // available
-    expect(economy.bonusAction).toBe(false);
-    expect(economy.reaction).toBe(false);
+    expect(economy.actionAvailable).toBe(true); // available
+    expect(economy.bonusActionAvailable).toBe(true);
+    expect(economy.reactionAvailable).toBe(true);
   });
 
   test('should track consumed actions', () => {
-    const economy = createActionEconomy({ action: true, bonusAction: false, reaction: false });
+    const economy = createActionEconomy({
+      actionAvailable: false,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
 
-    expect(economy.action).toBe(true); // consumed
-    expect(economy.bonusAction).toBe(false);
-    expect(economy.reaction).toBe(false);
+    expect(economy.actionAvailable).toBe(false); // consumed
+    expect(economy.bonusActionAvailable).toBe(true);
+    expect(economy.reactionAvailable).toBe(true);
   });
 
   test('should track all actions consumed', () => {
-    const economy = createActionEconomy({ action: true, bonusAction: true, reaction: true });
+    const economy = createActionEconomy({
+      actionAvailable: false,
+      bonusActionAvailable: false,
+      reactionAvailable: false,
+    });
 
-    expect(economy.action).toBe(true);
-    expect(economy.bonusAction).toBe(true);
-    expect(economy.reaction).toBe(true);
+    expect(economy.actionAvailable).toBe(false);
+    expect(economy.bonusActionAvailable).toBe(false);
+    expect(economy.reactionAvailable).toBe(false);
   });
 
   test('should be reset on new turn', () => {
     // New turn — all actions reset to available
-    const newTurn = createActionEconomy({ action: false, bonusAction: false, reaction: false });
+    const newTurn = createActionEconomy({
+      actionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
 
-    expect(newTurn.action).toBe(false);
-    expect(newTurn.bonusAction).toBe(false);
-    expect(newTurn.reaction).toBe(false);
+    expect(newTurn.actionAvailable).toBe(true);
+    expect(newTurn.bonusActionAvailable).toBe(true);
+    expect(newTurn.reactionAvailable).toBe(true);
   });
 });
 
