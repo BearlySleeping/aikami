@@ -21,4 +21,6 @@ export * from './lib/form/validation.ts';
 export * from './lib/project.ts';
 // export * from './lib/repository/base-repository-backend-class.ts';
 export * from './lib/repository/base_repository_class.ts';
+export * from './lib/rng/seedable_rng.ts';
+export * from './lib/rules/rules_kernel.ts';
 export * from './lib/transform.ts';

@@ -261,53 +261,17 @@ const getActiveParticipantIds = (world: World): number[] => {
 };
 
 // ---------------------------------------------------------------------------
-// Seedable RNG (mulberry32)
+// Seedable RNG (mulberry32) — extracted to @aikami/utils
 // ---------------------------------------------------------------------------
+// The SeedableRng type and createSeedableRng factory now live in
+// packages/shared/utils/src/lib/rng/seedable_rng.ts (C-336 AC-1).
+// Re-exported here for backward compatibility with engine tests and
+// upstream consumers that reference the engine directly.
 
-/**
- * A seedable 32-bit PRNG returning values in [0, 1). Uses mulberry32.
- *
- * Deterministic — given the same seed, produces the same sequence.
- * Exposed for serialization and deterministic replay (AC-1).
- */
-export type SeedableRng = {
-  /** Advance the PRNG and return a float in [0, 1). */
-  next(): number;
-  /** Return an integer in [1, sides] inclusive. */
-  dice(sides: number): number;
-  /** The current seed value (for serialization). */
-  readonly seed: number;
-};
+import { createSeedableRng as _sharedCreateSeedableRng, type SeedableRng } from '@aikami/utils';
 
-/**
- * Creates a seedable PRNG using the mulberry32 algorithm.
- *
- * Given the same seed, the sequence of values returned by `next()` and
- * `dice()` is identical — enabling deterministic combat replay.
- *
- * @param seed - A 32-bit integer seed.
- * @returns A {@link SeedableRng} instance.
- */
-const createSeedableRng = (seed: number): SeedableRng => {
-  // mulberry32: a simple 32-bit PRNG with good distribution
-  let state = seed | 0;
-
-  const next = (): number => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-
-  const dice = (sides: number): number => {
-    if (sides < 1) {
-      return 0;
-    }
-    return Math.floor(next() * sides) + 1;
-  };
-
-  return { next, dice, seed };
-};
+/** Re-exported from @aikami/utils for backward compatibility. */
+export { _sharedCreateSeedableRng as createSeedableRng, type SeedableRng };
 
 // ---------------------------------------------------------------------------
 // Module-level seed state
@@ -333,7 +297,7 @@ const setCombatSeed = (seed: number | null): void => {
     _activeRng = null;
     return;
   }
-  _activeRng = createSeedableRng(seed);
+  _activeRng = _sharedCreateSeedableRng(seed);
 };
 
 /** Returns the active seedable RNG, or null if unseeded. */
@@ -1142,7 +1106,6 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
 
 export {
   advanceTurn,
-  createSeedableRng,
   endCombat,
   getCombatSeed,
   handleCombatAction,
