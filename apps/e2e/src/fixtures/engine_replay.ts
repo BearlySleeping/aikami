@@ -57,27 +57,38 @@ export class EngineReplayRecorder {
 
   /** Begin recording. Exposes a command collector on the page. */
   async startRecording(): Promise<void> {
-    // Expose a command collector on the page
-    await this._page.evaluate(() => {
+    // Clear any previous commands
+    this._commands.length = 0;
+
+    // Expose a function to forward commands from browser to Node context
+    await this._page.exposeFunction('__ENGINE_RECORD_COMMAND__', (cmd: EngineCommand) => {
+      this._commands.push(cmd);
+    });
+
+    // Install recording proxy on every page load (survives reloads)
+    await this._page.addInitScript(() => {
       // @ts-expect-error — window augmentation for engine commands
       window.__ENGINE_COMMANDS__ = [];
+      // Override push to forward to Node-side collector
+      const originalPush = window.__ENGINE_COMMANDS__.push;
       // @ts-expect-error — window augmentation
-      window.__ENGINE_RECORD_COMMAND__ = (cmd: EngineCommand) => {
-        // @ts-expect-error — window augmentation
-        window.__ENGINE_COMMANDS__.push(cmd);
+      window.__ENGINE_COMMANDS__.push = function (...cmds: EngineCommand[]) {
+        for (const cmd of cmds) {
+          // @ts-expect-error — window augmentation (exposed function)
+          if (typeof window.__ENGINE_RECORD_COMMAND__ === 'function') {
+            // @ts-expect-error — window augmentation
+            window.__ENGINE_RECORD_COMMAND__(cmd);
+          }
+        }
+        return originalPush.apply(this, cmds);
       };
     });
-    this._commands.length = 0;
   }
 
   /** Stop recording and return the snapshot. */
   async stopRecording(): Promise<EngineReplaySnapshot> {
-    const recordedCommands = await this._page.evaluate(() => {
-      // @ts-expect-error — window augmentation
-      return window.__ENGINE_COMMANDS__ || [];
-    });
-
-    this._commands.push(...recordedCommands);
+    // Commands are already in this._commands via exposeFunction
+    // No need to extract from page context
 
     // Extract seed from campaign state
     const seed = await this._page.evaluate(() => {

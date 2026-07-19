@@ -478,10 +478,11 @@ test.describe('Release Gate', () => {
 
       // Open inventory and check items (if loaded)
       await game.toggleInventory();
-      const inventoryItemsBefore = await page
-        .locator('[data-testid^="inventory-item-"]')
-        .count()
-        .catch(() => 0);
+      const inventoryItemsBefore = await page.locator('[data-testid^="inventory-item-"]').count();
+
+      // AC-6b precondition: Inventory must contain items to test preservation
+      expect(inventoryItemsBefore).toBeGreaterThan(0);
+
       await game.closePauseMenu();
 
       // Save game manually
@@ -500,14 +501,10 @@ test.describe('Release Gate', () => {
 
       // AC-6b: Inventory items preserved (same count)
       await game.toggleInventory();
-      const inventoryItemsAfter = await page
-        .locator('[data-testid^="inventory-item-"]')
-        .count()
-        .catch(() => 0);
+      const inventoryItemsAfter = await page.locator('[data-testid^="inventory-item-"]').count();
       await game.expectInventoryClosed();
 
-      // Items should be preserved — if inventory was empty, stays empty
-      // If items were present, they survive reload
+      // Items should be preserved — the count must match
       expect(inventoryItemsAfter).toBe(inventoryItemsBefore);
 
       // AC-6c: HUD is functional after reload

@@ -134,7 +134,42 @@ export default defineConfig({
           state: 'attached',
           timeout: 30_000,
         });
+        // Wait for HUD to appear (engine ready)
+        await page.waitForSelector('.bg-base-200\\/80', {
+          state: 'visible',
+          timeout: 30_000,
+        });
         await page.waitForTimeout(2000);
+
+        // Drive game into combat encounter using movement and enemy engagement
+        // Move toward enemy spawn area (typically south-east)
+        for (let i = 0; i < 8; i++) {
+          await page.keyboard.press('ArrowRight');
+          await page.waitForTimeout(100);
+        }
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(100);
+        }
+
+        // Interact with NPC/enemy to trigger dialogue/combat
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1000);
+
+        // Skip through any dialogue to reach combat
+        for (let i = 0; i < 5; i++) {
+          const dialogueOverlay = page.locator('[data-testid="dialogue-overlay"], .dialogue-overlay');
+          if (await dialogueOverlay.isVisible({ timeout: 1000 }).catch(() => false)) {
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(500);
+          }
+        }
+
+        // Wait for combat UI to appear
+        await page.waitForSelector('[data-testid="combat-attack-btn"]', {
+          state: 'visible',
+          timeout: 15_000,
+        });
       },
     },
   ],

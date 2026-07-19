@@ -311,15 +311,15 @@ export class GamePage {
     // Either a victory/defeat banner or the combat sidebar is gone
     const banner = this.page.locator('text=/Victory|Defeat/');
     const attackBtn = this.page.locator('[data-testid="combat-attack-btn"]');
-    await expect(banner.or(attackBtn)).toBeAttached({ timeout: 15_000 });
 
-    const bannerVisible = await banner.isVisible({ timeout: 2000 }).catch(() => false);
-    const attackHidden = await attackBtn.isHidden({ timeout: 2000 }).catch(() => false);
+    // Poll the combined combat-ended conditions with toPass
+    await expect(async () => {
+      const bannerVisible = await banner.isVisible({ timeout: 1000 }).catch(() => false);
+      const attackHidden = await attackBtn.isHidden({ timeout: 1000 }).catch(() => false);
 
-    if (!bannerVisible && !attackHidden) {
-      // Combat may still be active — throw a clear assertion error
-      await expect(banner).toBeVisible({ timeout: 5000 });
-    }
+      // Assert that either victory/defeat banner is visible OR attack button is hidden
+      expect(bannerVisible || attackHidden).toBe(true);
+    }).toPass({ timeout: 15_000 });
   }
 
   // ── Quest Tracker ─────────────────────────────────────────
