@@ -184,6 +184,7 @@ export class CombatDevViewModel extends CombatViewModel {
         maxHp: this.playerMaxHp,
         isCurrentTurn: playerInit >= enemyInit,
         isDefeated: false,
+        statusEffectIds: [],
       },
       {
         entityId: 2002,
@@ -193,6 +194,7 @@ export class CombatDevViewModel extends CombatViewModel {
         maxHp: this.enemyMaxHp,
         isCurrentTurn: enemyInit > playerInit,
         isDefeated: false,
+        statusEffectIds: [],
       },
     ];
 
@@ -202,7 +204,7 @@ export class CombatDevViewModel extends CombatViewModel {
       currentEntityId: firstIsPlayer ? 1001 : 2002,
       currentEntityName: firstIsPlayer ? this.playerName : this.enemyName,
       isPlayerTurn: firstIsPlayer,
-      actionEconomy: { action: false, bonusAction: false, reaction: false },
+      actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
       turnNumber: 1,
     };
 
@@ -510,7 +512,11 @@ export class CombatDevViewModel extends CombatViewModel {
         currentEntityId: 1,
         currentEntityName: this.playerName,
         isPlayerTurn: true,
-        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        actionEconomy: {
+          actionAvailable: true,
+          bonusActionAvailable: true,
+          reactionAvailable: true,
+        },
         turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
       };
       this.initiativeEntries = this.initiativeEntries.map((e) => ({

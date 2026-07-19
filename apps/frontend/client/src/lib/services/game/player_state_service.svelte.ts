@@ -6,6 +6,7 @@
 //
 // Extracted from game_state_service (C-314 service split).
 
+import { CLASS_REGISTRY } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -14,7 +15,6 @@ import {
 import { serializeForAi } from '$lib/data/character_sheet_helpers';
 import type { NarrativeTraits } from '$lib/data/character_sheet_types';
 import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
-import { CLASS_REGISTRY } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,7 +126,9 @@ class PlayerStateService
 
     // Retroactively grant all features from level 1 through current level
     const existingFeatures = new Set(this.classFeatures);
-    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string }[]> }>)[classId];
+    const classDef = (
+      CLASS_REGISTRY as Record<string, { features: Record<string, { id: string }[]> }>
+    )[classId];
 
     if (classDef) {
       for (let level = 1; level <= this.playerLevel; level++) {

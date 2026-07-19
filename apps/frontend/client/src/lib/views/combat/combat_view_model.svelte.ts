@@ -25,9 +25,11 @@ import {
 } from '$services';
 import type { ExpressionId } from '$types/expression';
 import type {
+  DeathSaveState,
   DiceNotation,
   InitiativeEntry,
   QueuedRoll,
+  StatusEffectDisplay,
   TurnState,
 } from './types/combat_enhancements.ts';
 
@@ -477,6 +479,18 @@ export class CombatViewModel
   /** C-234: Current turn state. */
   turnState: TurnState | null = $state(null);
 
+  /** C-338: Active status effects on the player entity, keyed by effect ID. */
+  playerStatusEffects: StatusEffectDisplay[] = $state([]);
+
+  /** C-338: Active status effects on enemy entities, keyed by entity ID. */
+  enemyStatusEffects: Record<number, StatusEffectDisplay[]> = $state({});
+
+  /** C-338: Death save state for the player (null when not downed). */
+  deathSaveState: DeathSaveState | null = $state(null);
+
+  /** C-338: Whether any entity is currently downed. */
+  isAnyEntityDowned: boolean = $state(false);
+
   /** Timeout handle for clearing the active dice roll after animation. */
   private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -605,9 +619,15 @@ export class CombatViewModel
         currentEntityId: event.currentEntityId,
         currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: isPlayerEntity,
-        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        actionEconomy: {
+          actionAvailable: true,
+          bonusActionAvailable: true,
+          reactionAvailable: true,
+        },
         turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
       };
+      // C-338: Track turn number for log entries
+      this._turnCounter = this.turnState?.turnNumber ?? 0;
     });
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
@@ -645,6 +665,7 @@ export class CombatViewModel
           maxHp: this.playerMaxHp,
           isCurrentTurn: event.firstTurnEntityId === 1,
           isDefeated: false,
+          statusEffectIds: [],
         },
         ...event.participantIds
           .filter((id: number) => id !== 1)
@@ -656,6 +677,7 @@ export class CombatViewModel
             maxHp: index === 0 ? this.enemyMaxHp : 50,
             isCurrentTurn: event.firstTurnEntityId === id,
             isDefeated: false,
+            statusEffectIds: [],
           })),
       ] as InitiativeEntry[];
 
@@ -665,9 +687,19 @@ export class CombatViewModel
         currentEntityName:
           event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: event.firstTurnEntityId === 1,
-        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        actionEconomy: {
+          actionAvailable: true,
+          bonusActionAvailable: true,
+          reactionAvailable: true,
+        },
         turnNumber: 1,
       };
+
+      // C-338: Reset status effects + death saves on combat start
+      this.playerStatusEffects = [];
+      this.enemyStatusEffects = {};
+      this.deathSaveState = null;
+      this.isAnyEntityDowned = false;
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
@@ -781,12 +813,96 @@ export class CombatViewModel
       }
     });
 
+    // ── C-338: New bridge events ──
+
+    const removeStatusApplied = bridge.on('STATUS_APPLIED', (event) => {
+      this.debug('STATUS_APPLIED', { effectId: event.effectId, targetId: event.targetId });
+      const display: StatusEffectDisplay = {
+        effectId: event.effectId,
+        name: event.effectId,
+        tag: 'neutral',
+        remainingDuration: event.duration,
+        sourceEntityId: event.sourceId,
+      };
+      if (event.targetId === 1) {
+        this.playerStatusEffects = [...this.playerStatusEffects, display];
+      } else {
+        const existing = this.enemyStatusEffects[event.targetId] ?? [];
+        this.enemyStatusEffects = {
+          ...this.enemyStatusEffects,
+          [event.targetId]: [...existing, display],
+        };
+      }
+    });
+
+    const removeStatusExpired = bridge.on('STATUS_EXPIRED', (event) => {
+      this.debug('STATUS_EXPIRED', { effectId: event.effectId, targetId: event.targetId });
+      if (event.targetId === 1) {
+        this.playerStatusEffects = this.playerStatusEffects.filter(
+          (e) => e.effectId !== event.effectId,
+        );
+      } else {
+        const existing = this.enemyStatusEffects[event.targetId] ?? [];
+        this.enemyStatusEffects = {
+          ...this.enemyStatusEffects,
+          [event.targetId]: existing.filter((e) => e.effectId !== event.effectId),
+        };
+      }
+    });
+
+    const removeStatusTick = bridge.on('STATUS_TICK', (_event) => {
+      // Status tick is handled by COMBAT_LOG entries; no additional UI state needed
+    });
+
+    const removeActionEconomyChanged = bridge.on('ACTION_ECONOMY_CHANGED', (event) => {
+      this.debug('ACTION_ECONOMY_CHANGED', event);
+      if (this.turnState && event.entityId === this.turnState.currentEntityId) {
+        this.turnState = {
+          ...this.turnState,
+          actionEconomy: {
+            actionAvailable: event.actionAvailable,
+            bonusActionAvailable: event.bonusActionAvailable,
+            reactionAvailable: event.reactionAvailable,
+          },
+        };
+      }
+    });
+
+    const removeEntityDowned = bridge.on('ENTITY_DOWNED', (event) => {
+      this.debug('ENTITY_DOWNED', { entityId: event.entityId });
+      this.isAnyEntityDowned = true;
+      if (event.entityId === 1) {
+        this.deathSaveState = { successes: 0, failures: 0 };
+      }
+    });
+
+    const removeDeathSaveRolled = bridge.on('DEATH_SAVE_ROLLED', (event) => {
+      this.debug('DEATH_SAVE_ROLLED', event);
+      this.deathSaveState = {
+        successes: event.cumulativeSuccesses,
+        failures: event.cumulativeFailures,
+      };
+    });
+
+    const removeEntityRevived = bridge.on('ENTITY_REVIVED', (event) => {
+      this.debug('ENTITY_REVIVED', event);
+      this.isAnyEntityDowned = false;
+      this.deathSaveState = null;
+    });
+
     this._disposeListeners.push(
       removeTurnChanged,
       removeCombatStarted,
       removeCombatEnded,
       removeCombatLog,
       removeCombatStateUpdate,
+      removeStatusApplied,
+      removeStatusExpired,
+      removeStatusTick,
+      removeActionEconomyChanged,
+      removeEntityDowned,
+      removeDeathSaveRolled,
+      removeEntityRevived,
     );
   }
 
@@ -837,6 +953,10 @@ export class CombatViewModel
     this.queuedRolls = [];
     this.initiativeEntries = [];
     this.turnState = null;
+    this.playerStatusEffects = [];
+    this.enemyStatusEffects = {};
+    this.deathSaveState = null;
+    this.isAnyEntityDowned = false;
     this._logEntryCounter = 0;
     this._turnCounter = 0;
 
@@ -1198,7 +1318,11 @@ export class CombatViewModel
         currentEntityId: nextId,
         currentEntityName: nextId === 1 ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: nextId === 1,
-        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        actionEconomy: {
+          actionAvailable: true,
+          bonusActionAvailable: true,
+          reactionAvailable: true,
+        },
         turnNumber: this.turnState.turnNumber + 1,
       };
     }

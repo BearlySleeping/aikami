@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/types/combat_enhancements.ts
 // C-234 Combat Enhancement: Dice & Initiative — type definitions
+// C-338 Deepen Turn-Based Combat — extended with status effects, damage types, downed state
 
 // ---------------------------------------------------------------------------
 // Dice Notation
@@ -53,20 +54,29 @@ export type InitiativeEntry = {
   readonly isCurrentTurn: boolean;
   /** Whether this entity has been defeated (HP ≤ 0). */
   readonly isDefeated: boolean;
+  /** Whether this entity is downed (HP = 0, making death saves). C-338. */
+  readonly isDowned?: boolean;
+  /** Active status effect IDs on this entity. C-338. */
+  readonly statusEffectIds: string[];
+  /** Combat role for enemy entities. C-338. */
+  readonly combatRole?: CombatRoleLabel;
 };
 
 // ---------------------------------------------------------------------------
-// Turn State
+// Turn State — C-338: action economy is now engine-driven via events
 // ---------------------------------------------------------------------------
 
 /**
  * Track which action types the current entity has consumed this turn.
  * Standard D&D: one Action, one Bonus Action, one Reaction per turn.
+ *
+ * C-338: `true` = still available, `false` = consumed. Engine emits
+ * ACTION_ECONOMY_CHANGED to update this reactively.
  */
 export type ActionEconomy = {
-  readonly action: boolean;
-  readonly bonusAction: boolean;
-  readonly reaction: boolean;
+  readonly actionAvailable: boolean;
+  readonly bonusActionAvailable: boolean;
+  readonly reactionAvailable: boolean;
 };
 
 /**
@@ -79,10 +89,60 @@ export type TurnState = {
   readonly currentEntityName: string;
   /** Whether it's the player's turn. */
   readonly isPlayerTurn: boolean;
-  /** Action economy dots consumed this turn. */
+  /** Action economy available this turn. C-338: engine-driven. */
   readonly actionEconomy: ActionEconomy;
   /** Turn number (monotonically increasing). */
   readonly turnNumber: number;
+};
+
+// ---------------------------------------------------------------------------
+// C-338: Status effect display types
+// ---------------------------------------------------------------------------
+
+/**
+ * Display model for an active status effect on a combatant.
+ */
+export type StatusEffectDisplay = {
+  /** The effect definition ID (e.g. "poisoned"). */
+  effectId: string;
+  /** Display name. */
+  name: string;
+  /** Classification: harmful, beneficial, or neutral. */
+  tag: 'harmful' | 'beneficial' | 'neutral';
+  /** Turns remaining. */
+  remainingDuration: number;
+  /** Source entity ID that applied this effect. */
+  sourceEntityId: number;
+};
+
+// ---------------------------------------------------------------------------
+// C-338: Combat role labels for UI
+// ---------------------------------------------------------------------------
+
+/** Combat role labels mirrored from the engine for UI display. */
+export type CombatRoleLabel = 'rusher' | 'sniper' | 'support' | 'boss' | 'generic';
+
+/**
+ * Human-readable labels for combat roles.
+ */
+export const COMBAT_ROLE_LABELS: Record<CombatRoleLabel, string> = {
+  rusher: 'Rusher',
+  sniper: 'Sniper',
+  support: 'Support',
+  boss: 'Boss',
+  generic: 'Combatant',
+};
+
+// ---------------------------------------------------------------------------
+// C-338: Death save state
+// ---------------------------------------------------------------------------
+
+/**
+ * Death save tracking for a downed entity.
+ */
+export type DeathSaveState = {
+  successes: number;
+  failures: number;
 };
 
 // ---------------------------------------------------------------------------

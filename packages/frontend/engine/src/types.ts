@@ -109,20 +109,34 @@ export type GameCommand =
     }
   | {
       /**
-       * Combat action from the UI (Attack, Flee, Defend).
+       * Combat action from the UI (Attack, Flee, Defend, Ability, Support, Revive).
        * Routed to the turn_manager_system in the ECS worker.
        *
        * Contract: C-145 Turn-Based Combat Loop
        * Contract: C-146 Freeform AI Combat Actions
+       * Contract: C-338 Deepen Turn-Based Combat
        */
       type: 'COMBAT_ACTION';
-      action: 'ATTACK' | 'FLEE' | 'DEFEND';
-      /** Target entity ID (defaults to the first enemy if omitted). */
+      /** Action discriminator — expanded for C-338 action economy. */
+      action: 'ATTACK' | 'FLEE' | 'DEFEND' | 'ABILITY' | 'SUPPORT' | 'REVIVE';
+      /** Target entity ID (single-target actions). */
       targetId?: number;
+      /** Target entity IDs (multi-target abilities). */
+      targetIds?: number[];
       /** When true, roll 2d20 and take the higher for the hit check (C-146). */
       advantage?: boolean;
       /** Extra damage added to the final damage roll (0–5, C-146). */
       bonusDamage?: number;
+      /** Damage type key for resistance checks (C-338). Default: 'slashing'. */
+      damageType?: string;
+      /** For ABILITY actions: the ability ID being used. */
+      abilityId?: string;
+      /** For SUPPORT actions: 'heal' or 'buff'. */
+      supportKind?: 'heal' | 'buff';
+      /** For SUPPORT heal: the amount to heal. */
+      healAmount?: number;
+      /** For SUPPORT buff: the status effect ID to apply. */
+      buffEffectId?: string;
     }
   | {
       type: 'COMBAT_ACTION_ANIMATE';
@@ -384,6 +398,7 @@ export type GameEvent =
        * The CombatViewModel listens for this to populate the scrolling battle log.
        *
        * Contract: C-145 Turn-Based Combat Loop
+       * Contract: C-338 Deepen Turn-Based Combat
        */
       type: 'COMBAT_LOG';
       /** Human-readable log entry (e.g. "Player rolls 14 to hit. Hits for 4 damage!"). */
@@ -396,6 +411,12 @@ export type GameEvent =
       targetRemainingHp: number;
       /** Maximum HP of the target. */
       targetMaxHp: number;
+      /** Status effect ID if this log is about a status effect (C-338). */
+      statusEffectId?: string;
+      /** Damage type used in this action (C-338). */
+      damageType?: string;
+      /** Whether this action targeted multiple entities (C-338). */
+      isMultiTarget?: boolean;
     }
   | {
       /**
@@ -418,6 +439,70 @@ export type GameEvent =
       entityScreenY?: Record<number, number>;
       /** Which entity currently has the active turn. */
       activeTurnEntity?: number;
+    }
+  | {
+      /**
+       * Emitted when a status effect is applied to a combat participant (C-338 AC-2).
+       */
+      type: 'STATUS_APPLIED';
+      effectId: string;
+      targetId: number;
+      sourceId: number;
+      duration: number;
+      turnNumber: number;
+    }
+  | {
+      /**
+       * Emitted when a status effect expires from a combat participant (C-338 AC-2).
+       */
+      type: 'STATUS_EXPIRED';
+      effectId: string;
+      targetId: number;
+    }
+  | {
+      /**
+       * Emitted when a status effect ticks (damage/heal applied, C-338 AC-2).
+       */
+      type: 'STATUS_TICK';
+      effectId: string;
+      targetId: number;
+      amount: number;
+      isDamage: boolean;
+    }
+  | {
+      /**
+       * Emitted when the action economy changes for an entity (C-338 AC-1).
+       */
+      type: 'ACTION_ECONOMY_CHANGED';
+      entityId: number;
+      actionAvailable: boolean;
+      bonusActionAvailable: boolean;
+      reactionAvailable: boolean;
+    }
+  | {
+      /**
+       * Emitted when an entity enters the downed state (C-338 AC-5).
+       */
+      type: 'ENTITY_DOWNED';
+      entityId: number;
+    }
+  | {
+      /**
+       * Emitted when a death save is rolled for a downed entity (C-338 AC-5).
+       */
+      type: 'DEATH_SAVE_ROLLED';
+      entityId: number;
+      roll: number;
+      cumulativeSuccesses: number;
+      cumulativeFailures: number;
+    }
+  | {
+      /**
+       * Emitted when a downed entity is revived (C-338 AC-5).
+       */
+      type: 'ENTITY_REVIVED';
+      entityId: number;
+      revivedByEntityId: number;
     }
   | {
       /**
@@ -477,6 +562,7 @@ export type GameEvent =
        * The UI uses this to spawn floating damage text and screen shake.
        *
        * Contract: C-163 Visceral Feedback Juice
+       * Contract: C-338 Deepen Turn-Based Combat
        */
       type: 'DAMAGE_DEALT';
       /** Entity ID that took the damage. */
@@ -489,6 +575,8 @@ export type GameEvent =
       screenX: number;
       /** Screen-space Y coordinate for floating text placement. */
       screenY: number;
+      /** Damage type used (C-338). */
+      damageType?: string;
     }
   | {
       /**

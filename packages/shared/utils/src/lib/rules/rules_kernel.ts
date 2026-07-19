@@ -115,7 +115,7 @@ const resolveDamage = (
   command: Extract<RulesCommand, { kind: 'rollDamage' }>,
   rng: SeedableRng,
 ): { events: RulesEvent[] } => {
-  const { count, sides, bonus } = parseDamageDice(command.damageDice);
+  const { count, sides } = parseDamageDice(command.damageDice);
 
   // Critical hits double the dice count
   const diceCount = command.isCritical ? count * 2 : count;
@@ -124,8 +124,6 @@ const resolveDamage = (
   for (let i = 0; i < diceCount; i++) {
     naturalDamage += rng.dice(sides);
   }
-
-  const totalDamage = naturalDamage + bonus;
 
   // rollDamage only computes dice outcome; no event emitted here.
   // The damageResolved event is emitted by applyDamage with actual HP state.

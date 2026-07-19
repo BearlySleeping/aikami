@@ -7,12 +7,13 @@
 //
 // Contract: C-232 Character Sheet & Traits System
 
+import { CLASS_REGISTRY } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
+import type { ClassFeature, EquipmentSlot, ItemDefinition } from '@aikami/types';
 import {
   computeModifier,
   computeProficiencyBonus,
@@ -38,8 +39,6 @@ import {
   type Skill,
 } from '$lib/data/character_sheet_types';
 import { equipmentService, getItemDefinition, playerStateService } from '$services';
-import { CLASS_REGISTRY } from '@aikami/constants';
-import type { ClassFeature } from '@aikami/types';
 
 export type { EquipmentSlot, ItemDefinition };
 
@@ -333,7 +332,24 @@ class CharacterSheetViewModel
   /** Resolved features for the current class: all known features with earned status. */
   get classFeatures(): ResolvedFeature[] {
     const earnedIds = new Set(playerStateService.classFeatures);
-    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }[]> }>)[this.classId];
+    const classDef = (
+      CLASS_REGISTRY as Record<
+        string,
+        {
+          features: Record<
+            string,
+            {
+              id: string;
+              name: string;
+              description: string;
+              level: number;
+              kind: string;
+              activation?: ClassFeature['activation'];
+            }[]
+          >;
+        }
+      >
+    )[this.classId];
     if (!classDef) {
       return [];
     }
@@ -353,7 +369,7 @@ class CharacterSheetViewModel
             name: feat.name,
             description: feat.description,
             level: feat.level,
-            kind: (feat.kind as 'active' | 'passive'),
+            kind: feat.kind as 'active' | 'passive',
             earned: earnedIds.has(feat.id),
             activation: feat.activation,
           });
@@ -369,7 +385,24 @@ class CharacterSheetViewModel
     if (nextLevel > 5) {
       return [];
     }
-    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }[]> }>)[this.classId];
+    const classDef = (
+      CLASS_REGISTRY as Record<
+        string,
+        {
+          features: Record<
+            string,
+            {
+              id: string;
+              name: string;
+              description: string;
+              level: number;
+              kind: string;
+              activation?: ClassFeature['activation'];
+            }[]
+          >;
+        }
+      >
+    )[this.classId];
     if (!classDef) {
       return [];
     }
@@ -377,15 +410,24 @@ class CharacterSheetViewModel
     if (!levelFeatures) {
       return [];
     }
-    return levelFeatures.map((feat: { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }) => ({
-      id: feat.id,
-      name: feat.name,
-      description: feat.description,
-      level: feat.level,
-      kind: (feat.kind === 'passive' ? 'passive' : 'active'),
-      earned: false,
-      activation: feat.activation,
-    }));
+    return levelFeatures.map(
+      (feat: {
+        id: string;
+        name: string;
+        description: string;
+        level: number;
+        kind: string;
+        activation?: ClassFeature['activation'];
+      }) => ({
+        id: feat.id,
+        name: feat.name,
+        description: feat.description,
+        level: feat.level,
+        kind: feat.kind === 'passive' ? 'passive' : 'active',
+        earned: false,
+        activation: feat.activation,
+      }),
+    );
   }
 
   get isMaxLevel(): boolean {

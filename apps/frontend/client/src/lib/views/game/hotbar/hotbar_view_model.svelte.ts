@@ -5,14 +5,14 @@
 //
 // Contract: C-337 Complete Character Progression, Classes, Abilities, Skills, and Spells
 
+import { CLASS_REGISTRY } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { playerStateService } from '$services';
-import { CLASS_REGISTRY } from '@aikami/constants';
 import type { ClassFeature } from '@aikami/types';
+import { playerStateService } from '$services';
 
 // ── Hotbar Slot ──
 

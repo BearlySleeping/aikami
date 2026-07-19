@@ -1,11 +1,30 @@
 // packages/frontend/engine/src/systems/turn_manager_system.ts
+//
+// TurnManagerSystem — turn-based combat sequencing + dice combat math
+// + action economy + status effects + damage types + downed state
+//
+// Contracts: C-145 Turn-Based Combat Loop
+//            C-338 Deepen Turn-Based Combat (AC-1 through AC-5)
+// ---------------------------------------------------------------------------
+
+import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
+import type { ActiveStatusEffect, DamageTypeKey } from '@aikami/types';
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
-import { CombatTactics } from '../components/combat_tactics.ts';
+import { CombatTactics, combatRoleFromIndex } from '../components/combat_tactics.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Position, type PositionData } from '../components/position.ts';
+import { getResistanceFactor } from '../components/resistances.ts';
+import {
+  addStatusEffect,
+  clearStatusEffects,
+  getActiveEffects,
+  recomputeStatusFlags,
+  removeStatusEffect,
+  StatusEffects,
+} from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
@@ -15,68 +34,89 @@ import { getCombatantScreenStates } from './combat_stage_system.ts';
 import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
 import { grantXp } from './progression_system.ts';
 
-// ---------------------------------------------------------------------------
-// TurnManagerSystem — turn-based combat sequencing + dice combat math
-//
-// Manages turn progression for combat encounters. Sorts participants by
-// initiative, advances turns on demand, resolves combat actions (attack,
-// flee, defend) with d20-style dice RNG, and emits COMBAT_LOG /
-// COMBAT_STATE_UPDATE / COMBAT_ENDED events through the EngineBridge.
-//
-// Designed to run in the Web Worker alongside other game systems. Uses
-// direct SoA array mutation for performance — no observer overhead per frame.
-//
-// Contract: C-145 Turn-Based Combat Loop
-// ---------------------------------------------------------------------------
-
 /** Cached query terms for active combat participants. */
 const COMBAT_QUERY_TERMS = [CombatStats, TurnOrder];
 
-/**
- * Ordered list of entity IDs sorted by initiative (highest first).
- * Populated during initCombat and maintained across turn advances.
- * Package-private — exposed only for test resets.
- */
+// ---------------------------------------------------------------------------
+// Module-level state
+// ---------------------------------------------------------------------------
+
 let turnOrderList: number[] = [];
+let currentTurnIndex = -1;
+
+// ---------------------------------------------------------------------------
+// C-338 AC-1: Action economy tracking (per-entity, reset each turn advance)
+// ---------------------------------------------------------------------------
+
+type ActionEconomyState = {
+  entityId: number;
+  actionConsumed: boolean;
+  bonusActionConsumed: boolean;
+  reactionConsumed: boolean;
+};
 
 /**
- * Index into turnOrderList pointing at the current active entity.
- * Package-private — exposed only for test resets.
+ * Per-entity action economy state, indexed by entity ID.
+ * Reset when advanceTurn() sets the new active entity.
  */
-let currentTurnIndex = -1;
+const _actionEconomy: Record<number, ActionEconomyState> = {};
+
+const _getActionEconomy = (eid: number): ActionEconomyState => {
+  if (!_actionEconomy[eid]) {
+    _actionEconomy[eid] = {
+      entityId: eid,
+      actionConsumed: false,
+      bonusActionConsumed: false,
+      reactionConsumed: false,
+    };
+  }
+  return _actionEconomy[eid];
+};
+
+const _resetActionEconomy = (eid: number): void => {
+  _actionEconomy[eid] = {
+    entityId: eid,
+    actionConsumed: false,
+    bonusActionConsumed: false,
+    reactionConsumed: false,
+  };
+};
+
+const _emitActionEconomy = (bridge: EngineBridge, eid: number): void => {
+  const ae = _getActionEconomy(eid);
+  bridge.emit({
+    type: 'ACTION_ECONOMY_CHANGED',
+    entityId: eid,
+    actionAvailable: !ae.actionConsumed,
+    bonusActionAvailable: !ae.bonusActionConsumed,
+    reactionAvailable: !ae.reactionConsumed,
+  });
+};
+
+// ---------------------------------------------------------------------------
+// C-338 AC-5: Downed state and death saves
+// ---------------------------------------------------------------------------
+
+const _deathSaveSuccesses: Record<number, number> = {};
+const _deathSaveFailures: Record<number, number> = {};
+
+const _resetDeathSaves = (eid: number): void => {
+  delete _deathSaveSuccesses[eid];
+  delete _deathSaveFailures[eid];
+};
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Initializes a combat encounter.
- *
- * Sorts all entities that have both CombatStats and TurnOrder components
- * by initiative (highest first), marks the first entity as having the
- * current turn, and emits COMBAT_STARTED through the bridge.
- *
- * Idempotent — if combat is already initialized (turnOrderList is non-empty),
- * this is a no-op.
- *
- * @param world - The bitECS world.
- * @param bridge - The EngineBridge for emitting events.
- * @param seed - Optional 32-bit seed for deterministic dice (AC-1).
- *   When provided, all combat dice rolls use a mulberry32 PRNG instead of
- *   crypto.getRandomValues. Use the same seed + command sequence to
- *   replay an encounter with identical results.
- */
 const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => {
   if (!world || !bridge) {
     return;
   }
 
-  // Set the combat seed if provided (AC-1: deterministic replay)
-  // Always apply seed — even if idempotent return (seed may have changed for retry)
   if (seed !== undefined) {
     setCombatSeed(seed);
   } else if (turnOrderList.length === 0) {
-    // Only clear seed on fresh init without seed — preserve on idempotent calls
     setCombatSeed(null);
   }
 
@@ -84,7 +124,7 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
     return;
   }
 
-  // Gather all combat-capable entities
+  // C-338: support multiple enemies — gather ALL combat-capable entities
   const participantIds: number[] = [];
   for (const eid of query(world, COMBAT_QUERY_TERMS)) {
     const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
@@ -98,7 +138,6 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
     return;
   }
 
-  // Sort by initiative — highest first, entity ID as tiebreaker (AC-1 determinism)
   const sorted = [...participantIds].sort((a, b) => {
     const aData = getComponent(world, a, TurnOrder) as TurnOrderData | undefined;
     const bData = getComponent(world, b, TurnOrder) as TurnOrderData | undefined;
@@ -106,17 +145,17 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
     if (initDiff !== 0) {
       return initDiff;
     }
-    // Tiebreaker: lower entity ID first (stable, deterministic)
     return a - b;
   });
 
   turnOrderList = sorted;
   currentTurnIndex = 0;
 
-  // Mark the first entity as having the current turn
   const firstId = turnOrderList[0];
   if (firstId !== undefined && firstId > 0) {
     TurnOrder.currentTurn[firstId] = true;
+    _resetActionEconomy(firstId);
+    _emitActionEconomy(bridge, firstId);
   }
 
   bridge.emit({
@@ -126,22 +165,6 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
   });
 };
 
-/**
- * Advances the turn to the next active combat participant.
- *
- * Clears the current turn flag on the current entity, finds the next
- * active (alive) entity in initiative order, and marks it as the current
- * turn. Emits TURN_CHANGED through the bridge.
- *
- * If no more active entities remain (all dead), emits COMBAT_ENDED with
- * victory = false and resets tracking state.
- *
- * Must be called after initCombat. Safe to call when combat is not
- * initialized — returns silently.
- *
- * @param world - The bitECS world.
- * @param bridge - The EngineBridge for emitting events.
- */
 const advanceTurn = (world: World, bridge: EngineBridge): void => {
   if (!world || !bridge) {
     return;
@@ -151,15 +174,15 @@ const advanceTurn = (world: World, bridge: EngineBridge): void => {
     return;
   }
 
-  // Clear current turn on the outgoing entity
   const outgoingId = turnOrderList[currentTurnIndex];
   if (outgoingId !== undefined && outgoingId > 0) {
     TurnOrder.currentTurn[outgoingId] = false;
   }
 
-  // Find next active entity — wrap around if needed
   const startIndex = currentTurnIndex;
   let found = false;
+  let foundId = 0;
+
   for (let attempt = 0; attempt < turnOrderList.length; attempt++) {
     currentTurnIndex = (currentTurnIndex + 1) % turnOrderList.length;
     const candidateId = turnOrderList[currentTurnIndex];
@@ -167,54 +190,72 @@ const advanceTurn = (world: World, bridge: EngineBridge): void => {
       continue;
     }
 
-    // Check if this entity is still alive (health > 0)
     const stats = getComponent(world, candidateId, CombatStats) as CombatStatsData | undefined;
     if (stats && stats.health > 0) {
-      TurnOrder.currentTurn[candidateId] = true;
+      foundId = candidateId;
       found = true;
       break;
     }
 
-    // If we've wrapped around to where we started and found nothing,
-    // all entities are dead.
     if (currentTurnIndex === startIndex) {
       break;
     }
   }
 
   if (!found) {
-    // All entities are dead — combat ends
     bridge.emit({ type: 'COMBAT_ENDED', victory: false });
     turnOrderList = [];
     currentTurnIndex = -1;
     return;
   }
 
-  // Emit the turn change event
+  TurnOrder.currentTurn[foundId] = true;
+  _resetActionEconomy(foundId);
+
+  // C-338 AC-2: Process status ticks at start of turn
+  _processStatusTicks(world, bridge, foundId, outgoingId);
+
+  // C-338 AC-1: Check for stun — auto-skip if stunned
+  const isStunned = (StatusEffects.isStunned[foundId] ?? 0) === 1;
+  if (isStunned) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, foundId)} is stunned and cannot act!`,
+      sourceId: foundId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    _emitActionEconomy(bridge, foundId);
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  // C-338 AC-5: Auto-roll death save for downed entities
+  const downedEid = _getDownedPlayerEid(foundId);
+  if (downedEid > 0) {
+    const roller = rollDice;
+    _processDeathSave(world, bridge, foundId, roller);
+    _emitActionEconomy(bridge, foundId);
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  _emitActionEconomy(bridge, foundId);
+
   const activeIds = getActiveParticipantIds(world);
-  const currentId = turnOrderList[currentTurnIndex];
   bridge.emit({
     type: 'TURN_CHANGED',
-    currentEntityId: currentId ?? 0,
+    currentEntityId: foundId,
     activeEntities: activeIds,
   });
 };
 
-/**
- * Ends the current combat encounter.
- *
- * Clears all turn state and emits COMBAT_ENDED through the bridge.
- * Safe to call when no combat is active — returns silently.
- *
- * @param bridge - The EngineBridge for emitting events.
- * @param victory - Whether the player's party won (default: false).
- */
 const endCombat = (bridge: EngineBridge, victory: boolean = false): void => {
   if (!bridge) {
     return;
   }
 
-  // Clear current turn flag on the active entity
   if (currentTurnIndex >= 0 && currentTurnIndex < turnOrderList.length) {
     const currentId = turnOrderList[currentTurnIndex];
     if (currentId !== undefined && currentId > 0) {
@@ -222,17 +263,17 @@ const endCombat = (bridge: EngineBridge, victory: boolean = false): void => {
     }
   }
 
+  // C-338: Clear status effects on combat ended
+  for (const eid of turnOrderList) {
+    clearStatusEffects(eid);
+    _resetDeathSaves(eid);
+  }
+
   bridge.emit({ type: 'COMBAT_ENDED', victory });
   turnOrderList = [];
   currentTurnIndex = -1;
 };
 
-/**
- * Resets all module-level turn tracking state.
- *
- * Use in test teardown (afterEach) to ensure clean state between tests.
- * Does NOT emit any bridge events — purely resets internal tracking arrays.
- */
 const resetTurnTracking = (): void => {
   turnOrderList = [];
   currentTurnIndex = -1;
@@ -242,14 +283,6 @@ const resetTurnTracking = (): void => {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Returns the list of entity IDs currently alive and participating in combat.
- *
- * Filters the full turnOrderList to only entities with health > 0.
- *
- * @param world - The bitECS world.
- * @returns Array of active entity IDs.
- */
 const getActiveParticipantIds = (world: World): number[] => {
   const active: number[] = [];
   for (const eid of turnOrderList) {
@@ -262,37 +295,15 @@ const getActiveParticipantIds = (world: World): number[] => {
 };
 
 // ---------------------------------------------------------------------------
-// Seedable RNG (mulberry32) — extracted to @aikami/utils
+// Seedable RNG
 // ---------------------------------------------------------------------------
-// The SeedableRng type and createSeedableRng factory now live in
-// packages/shared/utils/src/lib/rng/seedable_rng.ts (C-336 AC-1).
-// Re-exported here for backward compatibility with engine tests and
-// upstream consumers that reference the engine directly.
 
 import { createSeedableRng as _sharedCreateSeedableRng, type SeedableRng } from '@aikami/utils';
 
-/** Re-exported from @aikami/utils for backward compatibility. */
 export { _sharedCreateSeedableRng as createSeedableRng, type SeedableRng };
 
-// ---------------------------------------------------------------------------
-// Module-level seed state
-// ---------------------------------------------------------------------------
-
-/** Active seedable RNG for the current combat encounter, or null if unseeded. */
 let _activeRng: SeedableRng | null = null;
 
-/**
- * Sets the combat seed for deterministic RNG.
- *
- * Creates a new {@link SeedableRng} from the given seed and stores it as
- * the active RNG. All subsequent dice rolls in combat will use this PRNG
- * instead of {@link crypto.getRandomValues}.
- *
- * Call before {@link initCombat} to seed the encounter. Call with `null`
- * to clear (revert to crypto RNG).
- *
- * @param seed - A 32-bit integer seed, or null to clear.
- */
 const setCombatSeed = (seed: number | null): void => {
   if (seed === null) {
     _activeRng = null;
@@ -301,15 +312,10 @@ const setCombatSeed = (seed: number | null): void => {
   _activeRng = _sharedCreateSeedableRng(seed);
 };
 
-/** Returns the active seedable RNG, or null if unseeded. */
 const getCombatSeed = (): SeedableRng | null => {
   return _activeRng;
 };
 
-/**
- * Default dice roller — prefers the seeded RNG if active;
- * falls back to {@link crypto.getRandomValues} otherwise.
- */
 const rollDice = (sides: number): number => {
   if (sides < 1) {
     return 0;
@@ -317,64 +323,109 @@ const rollDice = (sides: number): number => {
   if (_activeRng) {
     return _activeRng.dice(sides);
   }
-  // Use crypto.getRandomValues for uniform distribution
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
   return (array[0] % sides) + 1;
 };
 
 // ---------------------------------------------------------------------------
-// Combat action handling (C-145)
+// Combat action handling — expanded for C-338
 // ---------------------------------------------------------------------------
 
-/**
- * Parameters for {@link handleCombatAction}.
- */
 type CombatActionParams = {
   world: World;
-  /** Player entity ID for damage application and death checks. */
   playerEntityId: number;
-  /** The combat action to execute. */
-  action: 'ATTACK' | 'FLEE' | 'DEFEND';
-  /** Target entity ID (defaults to first non-player enemy participant). */
+  /** The combat action to execute (C-338: expanded with ABILITY, SUPPORT, REVIVE). */
+  action: 'ATTACK' | 'FLEE' | 'DEFEND' | 'ABILITY' | 'SUPPORT' | 'REVIVE';
   targetId?: number;
+  targetIds?: number[];
   bridge: EngineBridge;
-  /**
-   * Override the dice roller for deterministic testing.
-   * When omitted, {@link rollDice} is used (crypto.getRandomValues).
-   */
   diceRoller?: (sides: number) => number;
-  /** When true, roll 2d20 and take the higher for the hit check (C-146). */
   advantage?: boolean;
-  /** Extra damage added to the final damage calculation (C-146). */
   bonusDamage?: number;
+  /** C-338: damage type for resistance checks. Default: 'slashing'. */
+  damageType?: string;
+  /** C-338: ABILITY actions are routed through ABILITY case. */
+  abilityId?: string;
+
+  /** C-338: SUPPORT kind — 'heal' or 'buff'. */
+  supportKind?: 'heal' | 'buff';
+  /** C-338: heal amount for SUPPORT heal. */
+  healAmount?: number;
+  /** C-338: buff effect ID for SUPPORT buff. */
+  buffEffectId?: string;
 };
 
-/**
- * Processes a COMBAT_ACTION command from the UI.
- *
- * Called by the worker's message handler. Routes ATTACK (hit check →
- * damage roll → enemy turn), FLEE (ends combat), and DEFEND (future:
- * apply defense buff). Emits COMBAT_LOG and COMBAT_STATE_UPDATE through
- * the bridge.
- */
 const handleCombatAction = (params: CombatActionParams): void => {
-  const { world, playerEntityId, action, targetId, bridge, diceRoller, advantage, bonusDamage } =
-    params;
+  const {
+    world,
+    playerEntityId,
+    action,
+    targetId,
+    targetIds,
+    bridge,
+    diceRoller,
+    advantage,
+    bonusDamage,
+    damageType,
+    abilityId: _ablId,
+    supportKind,
+    healAmount,
+    buffEffectId,
+  } = params;
 
   if (!world || !bridge) {
     return;
   }
 
-  // Combat must be initialized
   if (turnOrderList.length === 0) {
     return;
   }
 
   const roller = diceRoller ?? rollDice;
 
+  // C-338 AC-1: Action economy — validate before executing
+  const currentEid = _getCurrentTurnEntity();
+  if (currentEid <= 0) {
+    return;
+  }
+
+  // C-338: FLEE and DEFEND are standard actions
+  if (action === 'FLEE' || action === 'DEFEND') {
+    const ae = _getActionEconomy(currentEid);
+    if (ae.actionConsumed) {
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: 'No standard action remaining!',
+        sourceId: currentEid,
+        targetId: 0,
+        targetRemainingHp: 0,
+        targetMaxHp: 0,
+      });
+      return;
+    }
+    ae.actionConsumed = true;
+    _emitActionEconomy(bridge, currentEid);
+  }
+
   switch (action) {
     case 'ATTACK': {
+      // C-338 AC-1: ATTACK is a standard action
+      const ae = _getActionEconomy(currentEid);
+      if (ae.actionConsumed) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No standard action remaining!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      ae.actionConsumed = true;
+      _emitActionEconomy(bridge, currentEid);
+
       _processPlayerAttack({
         world,
         playerEntityId,
@@ -383,7 +434,108 @@ const handleCombatAction = (params: CombatActionParams): void => {
         roller,
         advantage,
         bonusDamage,
+        damageType: (damageType ?? 'slashing') as DamageTypeKey,
       });
+      break;
+    }
+    case 'ABILITY': {
+      // C-338 AC-1: ABILITY can be standard or bonus action
+      const ae = _getActionEconomy(currentEid);
+      // For now, ABILITY consumes standard action
+      if (ae.actionConsumed) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No standard action remaining!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      ae.actionConsumed = true;
+      _emitActionEconomy(bridge, currentEid);
+
+      // C-338 AC-4: Multi-target resolution
+      const targets =
+        targetIds && targetIds.length > 0 ? targetIds : targetId && targetId > 0 ? [targetId] : [];
+      if (targets.length === 0) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No valid targets for ability!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      _resolveMultiTargetAction({
+        world,
+        playerEntityId,
+        targetIds: targets,
+        bridge,
+        roller,
+        damageType: (damageType ?? 'slashing') as DamageTypeKey,
+        bonusDamage,
+      });
+      break;
+    }
+    case 'SUPPORT': {
+      // C-338 AC-4: Support actions — heal or buff
+      const ae = _getActionEconomy(currentEid);
+      if (ae.actionConsumed) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No standard action remaining!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      ae.actionConsumed = true;
+      _emitActionEconomy(bridge, currentEid);
+
+      const supportTarget = targetId && targetId > 0 ? targetId : currentEid;
+      if (supportKind === 'heal') {
+        _processHealAction(world, bridge, supportTarget, currentEid, healAmount ?? 0);
+      } else if (supportKind === 'buff' && buffEffectId) {
+        _applyStatusEffect(world, bridge, supportTarget, currentEid, buffEffectId);
+      }
+      break;
+    }
+    case 'REVIVE': {
+      // C-338 AC-5: Revive action
+      const ae = _getActionEconomy(currentEid);
+      if (ae.actionConsumed) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No standard action remaining!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      ae.actionConsumed = true;
+      _emitActionEconomy(bridge, currentEid);
+
+      const reviveTarget = targetId && targetId > 0 ? targetId : 0;
+      if (reviveTarget <= 0) {
+        bridge.emit({
+          type: 'COMBAT_LOG',
+          message: 'No valid target to revive!',
+          sourceId: currentEid,
+          targetId: 0,
+          targetRemainingHp: 0,
+          targetMaxHp: 0,
+        });
+        return;
+      }
+      _processReviveAction(world, bridge, reviveTarget, currentEid, roller);
       break;
     }
     case 'FLEE': {
@@ -391,9 +543,6 @@ const handleCombatAction = (params: CombatActionParams): void => {
       break;
     }
     case 'DEFEND': {
-      // DEFEND is a defensive stance — future implementation may apply a
-      // temporary evasion buff. For now, emit a log entry and end the
-      // player's action so the enemy can take its turn.
       bridge.emit({
         type: 'COMBAT_LOG',
         message: 'Player takes a defensive stance!',
@@ -413,37 +562,56 @@ const handleCombatAction = (params: CombatActionParams): void => {
 };
 
 // ---------------------------------------------------------------------------
-// Internal — player attack
+// C-338 AC-3: Damage type resistance modifier
 // ---------------------------------------------------------------------------
 
 /**
- * Parameters for the private player attack processor.
+ * Applies resistance factor to raw damage.
+ *
+ * @returns The actual damage after resistance (minimum 1 unless immune).
  */
+const _applyResistance = (rawDamage: number, resistanceFactor: number): number => {
+  if (resistanceFactor <= 0) {
+    return 0; // immune
+  }
+  const result = Math.max(1, Math.floor(rawDamage * resistanceFactor));
+  return result;
+};
+
+/**
+ * Gets a human-readable resistance label for combat log.
+ */
+const _resistanceLabel = (factor: number): string => {
+  if (factor <= 0) {
+    return 'Immune';
+  }
+  if (factor < 1.0) {
+    return 'Resists';
+  }
+  if (factor > 1.0) {
+    return 'Vulnerable';
+  }
+  return '';
+};
+
+// ---------------------------------------------------------------------------
+// Internal — player attack (C-338: extended with damage type + resistance)
+// ---------------------------------------------------------------------------
+
 type ProcessPlayerAttackParams = {
   world: World;
   playerEntityId: number;
   targetId: number | undefined;
   bridge: EngineBridge;
   roller: (sides: number) => number;
-  /** When true, roll 2d20 and take the higher for the hit check (C-146). */
   advantage?: boolean;
-  /** Extra damage to add to the final damage calculation (C-146). */
   bonusDamage?: number;
+  damageType?: DamageTypeKey;
 };
 
-/**
- * Processes a player ATTACK action.
- *
- * 1. Finds the target enemy (from targetId or first enemy participant).
- * 2. d20 + player accuracy vs enemy evasion for hit check (with optional advantage).
- * 3. d6 + player attack - enemy defense + bonusDamage for damage.
- * 4. Applies damage, emits COMBAT_LOG.
- * 5. If enemy survives, processes enemy counter-attack.
- * 6. If enemy dies, destroys entity + grants loot + emits COMBAT_ENDED.
- */
 const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
-  const { world, playerEntityId, targetId, bridge, roller, advantage, bonusDamage } = params;
-  // Find the target enemy — the first non-player combat participant
+  const { world, playerEntityId, targetId, bridge, roller, advantage, bonusDamage, damageType } =
+    params;
   const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(playerEntityId);
 
   if (enemyId <= 0) {
@@ -467,8 +635,11 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     return;
   }
 
-  // ── Hit check: d20 + player accuracy vs enemy evasion ──
-  // Advantage (C-146): roll two d20s, take the higher
+  // Apply status effect modifiers to attack roll
+  const statusAccBonus = _getStatusAccuracyModifier(playerEntityId);
+  const statusAttBonus = _getStatusAttackModifier(playerEntityId);
+
+  // Hit check
   let attackRoll: number;
   if (advantage) {
     const roll1 = roller(20);
@@ -477,16 +648,14 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
   } else {
     attackRoll = roller(20);
   }
-  const hitTotal = attackRoll + (playerStats.accuracy ?? 0);
+  const hitTotal = attackRoll + (playerStats.accuracy ?? 0) + statusAccBonus;
   const hitThreshold = enemyStats.evasion ?? 0;
-
   const advantageLabel = advantage ? ' [ADV]' : '';
 
   if (hitTotal < hitThreshold) {
-    // Miss!
     bridge.emit({
       type: 'COMBAT_LOG',
-      message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0}${statusAccBonus !== 0 ? ` ${statusAccBonus >= 0 ? '+' : ''}${statusAccBonus}` : ''} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
       sourceId: playerEntityId,
       targetId: enemyId,
       targetRemainingHp: enemyStats.health,
@@ -497,25 +666,38 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     return;
   }
 
-  // ── Damage roll: d6 + player attack - enemy defense + bonusDamage ──
+  // Damage roll with status modifiers
   const damageRoll = roller(6);
-  const rawDamage = damageRoll + (playerStats.attack ?? 0) + (bonusDamage ?? 0);
-  const damage = Math.max(1, rawDamage - (enemyStats.defense ?? 0)); // minimum 1 damage
+  const rawDamage =
+    damageRoll + Math.max(0, (playerStats.attack ?? 0) + statusAttBonus) + (bonusDamage ?? 0);
+  let damage = Math.max(1, rawDamage - (enemyStats.defense ?? 0));
 
-  // Apply damage
+  // C-338 AC-3: Resistance check
+  const dt = damageType ?? 'slashing';
+  const resistFactor = getResistanceFactor(enemyId, dt);
+  damage = _applyResistance(damage, resistFactor);
+
+  // Apply status-based damage multiplier
+  const dmgMult = _getStatusDamageMultiplier(playerEntityId);
+  damage = Math.max(1, Math.floor(damage * dmgMult));
+
   CombatStats.health[enemyId] = Math.max(0, enemyStats.health - damage);
   const remainingHp = CombatStats.health[enemyId];
 
+  const resistMsg = _resistanceLabel(resistFactor);
+  const typeSuffix = damageType ? ` [${damageType}]` : '';
+  const resistSuffix = resistMsg ? ` — ${resistMsg}${damageType ? ` ${damageType}` : ''}!` : '';
+
   bridge.emit({
     type: 'COMBAT_LOG',
-    message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Hits for ${damage} damage! (Enemy HP: ${remainingHp}/${enemyStats.maxHealth})`,
+    message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Hits for ${damage} damage${typeSuffix}!${resistSuffix} (Enemy HP: ${remainingHp}/${enemyStats.maxHealth})`,
     sourceId: playerEntityId,
     targetId: enemyId,
     targetRemainingHp: remainingHp,
     targetMaxHp: enemyStats.maxHealth,
+    damageType: dt,
   });
 
-  // ── Visceral feedback: floating damage text (C-163) ──
   const enemyScreenX = Position.x[enemyId] ?? 0;
   const enemyScreenY = Position.y[enemyId] ?? 0;
   bridge.emit({
@@ -525,63 +707,622 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     isCritical: false,
     screenX: enemyScreenX,
     screenY: enemyScreenY,
+    damageType: dt,
   });
 
   _emitCombatStateUpdate(world, bridge);
 
-  // ── Check if enemy is defeated ──
+  // C-338 AC-5: Check for downed state for player-target attacks
+  // Enemies die at 0 HP (no death saves)
   if (remainingHp <= 0) {
     _handleEnemyDefeated(world, enemyId, bridge, playerEntityId);
     return;
   }
 
-  // Enemy counter-attacks
   _processEnemyTurn(world, playerEntityId, bridge, roller);
 };
 
 // ---------------------------------------------------------------------------
-// Internal — enemy turn
+// C-338 AC-4: Multi-target action resolution
+// ---------------------------------------------------------------------------
+
+type ResolveMultiTargetParams = {
+  world: World;
+  playerEntityId: number;
+  targetIds: number[];
+  bridge: EngineBridge;
+  roller: (sides: number) => number;
+  damageType?: DamageTypeKey;
+  bonusDamage?: number;
+};
+
+const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
+  const { world, playerEntityId, targetIds, bridge, roller, damageType, bonusDamage } = params;
+
+  const playerStats = getComponent(world, playerEntityId, CombatStats) as
+    | CombatStatsData
+    | undefined;
+  if (!playerStats) {
+    return;
+  }
+
+  // C-338: Filter out dead/downed targets
+  const validTargets = targetIds.filter((tid) => {
+    const stats = getComponent(world, tid, CombatStats) as CombatStatsData | undefined;
+    return stats && stats.health > 0;
+  });
+
+  if (validTargets.length === 0) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: 'No valid targets in range!',
+      sourceId: playerEntityId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    return;
+  }
+
+  const dt = damageType ?? 'slashing';
+  const isMulti = validTargets.length > 1;
+
+  for (const tid of validTargets) {
+    const targetStats = getComponent(world, tid, CombatStats) as CombatStatsData | undefined;
+    if (!targetStats) {
+      continue;
+    }
+
+    // Independent hit check per target
+    const attackRoll = roller(20);
+    const hitTotal = attackRoll + (playerStats.accuracy ?? 0);
+    const hitThreshold = targetStats.evasion ?? 0;
+
+    if (hitTotal < hitThreshold) {
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: `Ability vs ${_getEntityName(world, tid)}: rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+        sourceId: playerEntityId,
+        targetId: tid,
+        targetRemainingHp: targetStats.health,
+        targetMaxHp: targetStats.maxHealth,
+        damageType: dt,
+        isMultiTarget: isMulti,
+      });
+      continue;
+    }
+
+    // Independent damage roll per target
+    const damageRoll = roller(6);
+    const rawDamage = damageRoll + (playerStats.attack ?? 0) + (bonusDamage ?? 0);
+    let damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
+
+    const resistFactor = getResistanceFactor(tid, dt);
+    damage = _applyResistance(damage, resistFactor);
+
+    CombatStats.health[tid] = Math.max(0, targetStats.health - damage);
+    const remainingHp = CombatStats.health[tid];
+
+    const resistMsg = _resistanceLabel(resistFactor);
+    const resistSuffix = resistMsg ? ` — ${resistMsg} ${dt}!` : '';
+
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Ability vs ${_getEntityName(world, tid)}: rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Deals ${damage} damage${resistSuffix}! (HP: ${remainingHp}/${targetStats.maxHealth})`,
+      sourceId: playerEntityId,
+      targetId: tid,
+      targetRemainingHp: remainingHp,
+      targetMaxHp: targetStats.maxHealth,
+      damageType: dt,
+      isMultiTarget: isMulti,
+    });
+
+    bridge.emit({
+      type: 'DAMAGE_DEALT',
+      entityId: tid,
+      amount: damage,
+      isCritical: false,
+      screenX: Position.x[tid] ?? 0,
+      screenY: Position.y[tid] ?? 0,
+      damageType: dt,
+    });
+
+    // Check defeat — enemies die at 0 HP
+    if (remainingHp <= 0) {
+      _handleEnemyDefeated(world, tid, bridge, playerEntityId);
+      // If combat ended during multi-target (victory), stop processing remaining targets
+      if (turnOrderList.length === 0) {
+        break;
+      }
+    }
+  }
+
+  _emitCombatStateUpdate(world, bridge);
+
+  // Process enemy turns if combat still active
+  if (turnOrderList.length > 0) {
+    _processEnemyTurn(world, playerEntityId, bridge, roller);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// C-338 AC-4: Support actions — heal and buff
+// ---------------------------------------------------------------------------
+
+const _processHealAction = (
+  world: World,
+  bridge: EngineBridge,
+  targetId: number,
+  sourceId: number,
+  amount: number,
+): void => {
+  const targetStats = getComponent(world, targetId, CombatStats) as CombatStatsData | undefined;
+  if (!targetStats) {
+    return;
+  }
+
+  const oldHp = targetStats.health;
+  const newHp = Math.min(targetStats.maxHealth, oldHp + amount);
+  CombatStats.health[targetId] = newHp;
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, targetId)} healed for ${newHp - oldHp} HP! (HP: ${newHp}/${targetStats.maxHealth})`,
+    sourceId,
+    targetId,
+    targetRemainingHp: newHp,
+    targetMaxHp: targetStats.maxHealth,
+  });
+
+  _emitCombatStateUpdate(world, bridge);
+};
+
+const _applyStatusEffect = (
+  world: World,
+  bridge: EngineBridge,
+  targetId: number,
+  sourceId: number,
+  effectId: string,
+): void => {
+  const def = STATUS_EFFECT_REGISTRY[effectId];
+  if (!def) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Unknown status effect: ${effectId}`,
+      sourceId,
+      targetId,
+      targetRemainingHp: _getHp(world, targetId),
+      targetMaxHp: _getMaxHp(world, targetId),
+    });
+    return;
+  }
+
+  // Check for existing effect of the same type — no stacking, longer duration wins
+  const existing = getActiveEffects(targetId);
+  const existingIdx = existing.findIndex((e) => e.effectId === effectId);
+  if (existingIdx >= 0 && existing[existingIdx]) {
+    if (existing[existingIdx].remainingDuration >= def.defaultDuration) {
+      // Existing has longer or equal duration — no-op
+      return;
+    }
+    // Remove existing, will re-apply with longer duration
+    removeStatusEffect(targetId, existingIdx);
+  }
+
+  const active: ActiveStatusEffect = {
+    effectId,
+    sourceEntityId: sourceId,
+    remainingDuration: def.defaultDuration,
+    appliedOnTurn: currentTurnIndex,
+  };
+
+  addStatusEffect(targetId, active);
+  recomputeStatusFlags(targetId, STATUS_EFFECT_REGISTRY);
+
+  bridge.emit({
+    type: 'STATUS_APPLIED',
+    effectId,
+    targetId,
+    sourceId,
+    duration: def.defaultDuration,
+    turnNumber: currentTurnIndex,
+  });
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, targetId)} is now ${def.name}!`,
+    sourceId,
+    targetId,
+    targetRemainingHp: _getHp(world, targetId),
+    targetMaxHp: _getMaxHp(world, targetId),
+    statusEffectId: effectId,
+  });
+
+  _emitCombatStateUpdate(world, bridge);
+};
+
+// ---------------------------------------------------------------------------
+// C-338 AC-5: Revive action
+// ---------------------------------------------------------------------------
+
+const _processReviveAction = (
+  world: World,
+  bridge: EngineBridge,
+  targetId: number,
+  sourceId: number,
+  roller: (sides: number) => number,
+): void => {
+  const targetStats = getComponent(world, targetId, CombatStats) as CombatStatsData | undefined;
+  if (!targetStats) {
+    return;
+  }
+
+  // Only works on downed entities (HP === 0 but has death saves)
+  if (targetStats.health > 0) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, targetId)} is not downed!`,
+      sourceId,
+      targetId,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    return;
+  }
+
+  // DC 12 medicine check (d20, no modifier for now)
+  const medicineRoll = roller(20);
+  if (medicineRoll >= 12) {
+    CombatStats.health[targetId] = 1;
+    _resetDeathSaves(targetId);
+    bridge.emit({
+      type: 'ENTITY_REVIVED',
+      entityId: targetId,
+      revivedByEntityId: sourceId,
+    });
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, targetId)} has been revived! (HP: 1/${targetStats.maxHealth})`,
+      sourceId,
+      targetId,
+      targetRemainingHp: 1,
+      targetMaxHp: targetStats.maxHealth,
+    });
+  } else {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Revive attempt fails! (DC 12, rolled ${medicineRoll})`,
+      sourceId,
+      targetId,
+      targetRemainingHp: 0,
+      targetMaxHp: targetStats.maxHealth,
+    });
+  }
+
+  _emitCombatStateUpdate(world, bridge);
+};
+
+// ---------------------------------------------------------------------------
+// C-338 AC-2: Status effect tick processing
+// ---------------------------------------------------------------------------
+
+const _processStatusTicks = (
+  world: World,
+  bridge: EngineBridge,
+  currentEid: number,
+  _outgoingEid: number,
+): void => {
+  const effects = getActiveEffects(currentEid);
+  let changed = false;
+
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const effect = effects[i];
+    if (!effect) {
+      continue;
+    }
+
+    const def = STATUS_EFFECT_REGISTRY[effect.effectId];
+    if (!def) {
+      continue;
+    }
+
+    // Process tick damage/heal
+    if (def.modifier.damagePerTick && def.modifier.damagePerTick > 0) {
+      const tickType = def.modifier.tickDamageType ?? 'poison';
+      const resistFactor = getResistanceFactor(currentEid, tickType);
+      const tickDamage = _applyResistance(def.modifier.damagePerTick, resistFactor);
+
+      const currentHp = CombatStats.health[currentEid] ?? 0;
+      const newHp = Math.max(0, currentHp - tickDamage);
+      CombatStats.health[currentEid] = newHp;
+
+      bridge.emit({
+        type: 'STATUS_TICK',
+        effectId: effect.effectId,
+        targetId: currentEid,
+        amount: tickDamage,
+        isDamage: true,
+      });
+
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: `${_getEntityName(world, currentEid)} takes ${tickDamage} ${def.name} damage! (HP: ${newHp}/${_getMaxHp(world, currentEid)})`,
+        sourceId: currentEid,
+        targetId: currentEid,
+        targetRemainingHp: newHp,
+        targetMaxHp: _getMaxHp(world, currentEid),
+        statusEffectId: effect.effectId,
+      });
+
+      changed = true;
+
+      // C-338 AC-5: If tick damage kills, check for downed state
+      if (newHp <= 0 && currentEid === 1) {
+        _handlePlayerDowned(world, bridge, currentEid);
+        return; // Stop processing other ticks
+      }
+    }
+
+    if (def.modifier.healPerTick && def.modifier.healPerTick > 0) {
+      const currentHp = CombatStats.health[currentEid] ?? 0;
+      const maxHp = CombatStats.health[currentEid] ?? _getMaxHp(world, currentEid);
+      const newHp = Math.min(maxHp, currentHp + def.modifier.healPerTick);
+      CombatStats.health[currentEid] = newHp;
+
+      bridge.emit({
+        type: 'STATUS_TICK',
+        effectId: effect.effectId,
+        targetId: currentEid,
+        amount: def.modifier.healPerTick,
+        isDamage: false,
+      });
+
+      changed = true;
+    }
+
+    // Decrement duration
+    effect.remainingDuration -= 1;
+    if (effect.remainingDuration <= 0) {
+      removeStatusEffect(currentEid, i);
+      bridge.emit({
+        type: 'STATUS_EXPIRED',
+        effectId: effect.effectId,
+        targetId: currentEid,
+      });
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: `${_getEntityName(world, currentEid)}'s ${def.name} has expired.`,
+        sourceId: currentEid,
+        targetId: currentEid,
+        targetRemainingHp: _getHp(world, currentEid),
+        targetMaxHp: _getMaxHp(world, currentEid),
+        statusEffectId: effect.effectId,
+      });
+    } else {
+      // Update the remaining duration in the SoA
+      removeStatusEffect(currentEid, i);
+      addStatusEffect(currentEid, { ...effect, remainingDuration: effect.remainingDuration - 1 });
+    }
+
+    changed = true;
+  }
+
+  if (changed) {
+    recomputeStatusFlags(currentEid, STATUS_EFFECT_REGISTRY);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// C-338 AC-5: Downed state and death saves
 // ---------------------------------------------------------------------------
 
 /**
- * Processes the enemy's turn using tactical AI (C-197).
- *
- * Instead of a fixed counter-attack, the enemy evaluates all valid targets
- * via {@link resolveTacticalAction}, determines whether to attack, move
- * toward the target, retreat, or hold position. Attacks use the same d20
- * hit check + d6 damage roll. Repositioning skips the attack phase and
- * simulates the enemy closing distance.
- *
- * Emits COMBAT_LOG and COMBAT_STATE_UPDATE.
+ * Handles the player entering the downed state at 0 HP.
  */
+const _handlePlayerDowned = (world: World, bridge: EngineBridge, eid: number): void => {
+  CombatStats.health[eid] = 0;
+  _deathSaveSuccesses[eid] = 0;
+  _deathSaveFailures[eid] = 0;
+
+  bridge.emit({
+    type: 'ENTITY_DOWNED',
+    entityId: eid,
+  });
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, eid)} has been downed!`,
+    sourceId: eid,
+    targetId: eid,
+    targetRemainingHp: 0,
+    targetMaxHp: _getMaxHp(world, eid),
+  });
+};
+
+/**
+ * Processes a death save for a downed entity.
+ */
+const _processDeathSave = (
+  world: World,
+  bridge: EngineBridge,
+  eid: number,
+  roller: (sides: number) => number,
+): void => {
+  const roll = roller(20);
+  let successes = _deathSaveSuccesses[eid] ?? 0;
+  let failures = _deathSaveFailures[eid] ?? 0;
+
+  if (roll === 20) {
+    // Natural 20 — revive at 1 HP
+    CombatStats.health[eid] = 1;
+    _resetDeathSaves(eid);
+    bridge.emit({
+      type: 'DEATH_SAVE_ROLLED',
+      entityId: eid,
+      roll,
+      cumulativeSuccesses: 0,
+      cumulativeFailures: 0,
+    });
+    bridge.emit({
+      type: 'ENTITY_REVIVED',
+      entityId: eid,
+      revivedByEntityId: 0,
+    });
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, eid)} rolls a natural 20 on a death save and springs back to life! (HP: 1)`,
+      sourceId: eid,
+      targetId: eid,
+      targetRemainingHp: 1,
+      targetMaxHp: _getMaxHp(world, eid),
+    });
+    return;
+  }
+  if (roll === 1) {
+    // Natural 1 — two failures
+    failures += 2;
+  } else if (roll >= 10) {
+    successes += 1;
+  } else {
+    failures += 1;
+  }
+
+  _deathSaveSuccesses[eid] = successes;
+  _deathSaveFailures[eid] = failures;
+
+  bridge.emit({
+    type: 'DEATH_SAVE_ROLLED',
+    entityId: eid,
+    roll,
+    cumulativeSuccesses: successes,
+    cumulativeFailures: failures,
+  });
+
+  if (successes >= 3) {
+    // Stable — HP stays at 0, no more death saves
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, eid)} has stabilized! (Death saves: ${successes} successes, ${failures} failures)`,
+      sourceId: eid,
+      targetId: eid,
+      targetRemainingHp: 0,
+      targetMaxHp: _getMaxHp(world, eid),
+    });
+    return;
+  }
+
+  if (failures >= 3) {
+    // Dead — remove from combat
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, eid)} has died! (Death saves: ${successes} successes, ${failures} failures)`,
+      sourceId: eid,
+      targetId: eid,
+      targetRemainingHp: 0,
+      targetMaxHp: _getMaxHp(world, eid),
+    });
+    _resetDeathSaves(eid);
+    clearStatusEffects(eid);
+
+    // Check if all player-controlled entities are dead → defeat
+    if (_allPlayersDeadOrDowned(world, eid)) {
+      bridge.emit({ type: 'COMBAT_ENDED', victory: false });
+      turnOrderList = [];
+      currentTurnIndex = -1;
+    }
+    return;
+  }
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, eid)} death save: ${roll} (${successes} successes, ${failures} failures)`,
+    sourceId: eid,
+    targetId: eid,
+    targetRemainingHp: 0,
+    targetMaxHp: _getMaxHp(world, eid),
+  });
+};
+
+/**
+ * Checks if the given eid is a downed player entity (HP === 0, not yet stable/dead).
+ */
+const _getDownedPlayerEid = (eid: number): number => {
+  // Only player entity (eid === 1) gets death saves
+  if (eid !== 1) {
+    return 0;
+  }
+  const successes = _deathSaveSuccesses[eid] ?? 0;
+  const failures = _deathSaveFailures[eid] ?? 0;
+  // If stable (3+ successes) or dead (3+ failures), no more saves
+  if (successes >= 3 || failures >= 3) {
+    return 0;
+  }
+  // If has death save tracking and HP is 0, they're downed
+  if (_deathSaveSuccesses[eid] !== undefined || _deathSaveFailures[eid] !== undefined) {
+    return eid;
+  }
+  return 0;
+};
+
+const _allPlayersDeadOrDowned = (world: World, _deadEid: number): boolean => {
+  // Only player entity (eid === 1) matters for defeat
+  const playerStats = getComponent(world, 1, CombatStats) as CombatStatsData | undefined;
+  if (!playerStats) {
+    return true;
+  }
+  return playerStats.health <= 0;
+};
+
+// ---------------------------------------------------------------------------
+// Internal — enemy turn (C-338: extended with combat roles + damage types)
+// ---------------------------------------------------------------------------
+
 const _processEnemyTurn = (
   world: World,
   playerEntityId: number,
   bridge: EngineBridge,
   roller: (sides: number) => number,
 ): void => {
-  const enemyId = _findFirstEnemyParticipant(playerEntityId);
-  if (enemyId <= 0) {
-    return;
+  // C-338: support multiple enemies — process all enemy participants
+  const enemies = _findAllEnemyParticipants(playerEntityId);
+  for (const enemyId of enemies) {
+    _processSingleEnemyTurn(world, enemyId, playerEntityId, bridge, roller);
+    if (turnOrderList.length === 0) {
+      return; // combat ended
+    }
   }
+};
 
+const _processSingleEnemyTurn = (
+  world: World,
+  enemyId: number,
+  playerEntityId: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+): void => {
   const enemyStats = getComponent(world, enemyId, CombatStats) as CombatStatsData | undefined;
-  if (!enemyStats) {
+  if (!enemyStats || enemyStats.health <= 0) {
     return;
   }
 
-  // ── C-197 AC-1: Resolve tactical target and action ──
-  //
-  // If positions are available (world-space coordinates), use the full
-  // tactical AI pipeline: target scoring, range checking, repositioning.
-  // When positions are absent (unit tests, legacy combat), fall back to
-  // the classic counter-attack against the player.
+  // C-338: Process enemy status ticks
+  _processStatusTicks(world, bridge, enemyId, 0);
+
   const enemyPos = getComponent(world, enemyId, Position) as PositionData | undefined;
   const playerPos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
 
   if (!enemyPos || !playerPos) {
-    // ── Legacy fallback: direct counter-attack against the player ──
     _processLegacyEnemyAttack(world, enemyId, playerEntityId, bridge, roller, enemyStats);
+    return;
+  }
+
+  // C-338: Read combat role for AI behavior
+  const roleIdx = CombatTactics.combatRole[enemyId] ?? 4;
+  const role = combatRoleFromIndex[roleIdx] ?? 'generic';
+
+  // Support role — heal most damaged ally
+  if (role === 'support') {
+    _processSupportEnemyTurn(world, enemyId, bridge, roller);
     return;
   }
 
@@ -609,14 +1350,15 @@ const _processEnemyTurn = (
     return;
   }
 
-  // ── Distance check ──
+  // Distance check — role-specific preferred range
   const estimatedDistance = _estimateGridDist(world, enemyId, selectedTarget);
   const prefRange = _getPreferredRange(enemyId);
   const isInRange = estimatedDistance <= prefRange;
 
-  // ── Low health → retreat (C-197 AC-2) ──
+  // Rushers and bosses don't retreat
+  const skipRetreat = role === 'rusher' || role === 'boss';
   const enemyHpRatio = enemyStats.maxHealth > 0 ? enemyStats.health / enemyStats.maxHealth : 0;
-  if (enemyHpRatio <= 0.25) {
+  if (!skipRetreat && enemyHpRatio <= 0.25) {
     bridge.emit({
       type: 'COMBAT_LOG',
       message: `Enemy is critically wounded and retreats! (HP: ${enemyStats.health}/${enemyStats.maxHealth})`,
@@ -631,114 +1373,71 @@ const _processEnemyTurn = (
     return;
   }
 
-  if (!isInRange) {
-    // ── Reposition: move toward target ──
-    const enemyPos = getComponent(world, enemyId, Position) as PositionData | undefined;
-    const targetPos = getComponent(world, selectedTarget, Position) as PositionData | undefined;
+  if (!isInRange && role !== 'rusher') {
+    // Snipers and generic maintain range, rushers always close
+    _repositionEnemy(
+      world,
+      enemyId,
+      selectedTarget,
+      estimatedDistance,
+      prefRange,
+      bridge,
+      targetStats,
+    );
+    return;
+  }
 
-    let moveMsg = `Enemy advances toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
-    if (enemyPos && targetPos) {
-      const dx = targetPos.x - enemyPos.x;
-      const dy = targetPos.y - enemyPos.y;
-      const dir =
-        Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : dy > 0 ? 'south' : 'north';
-      moveMsg = `Enemy advances ${dir} toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
-      const step = 32;
-      const norm = Math.sqrt(dx * dx + dy * dy) || 1;
-      Position.x[enemyId] = enemyPos.x + (dx / norm) * step;
-      Position.y[enemyId] = enemyPos.y + (dy / norm) * step;
+  // Attack (with role-specific damage type)
+  const enemyDt: DamageTypeKey = role === 'sniper' ? 'piercing' : 'slashing';
+  _executeEnemyAttack(
+    world,
+    enemyId,
+    selectedTarget,
+    bridge,
+    roller,
+    enemyStats,
+    targetStats,
+    playerEntityId,
+    enemyDt,
+  );
+};
+
+const _processSupportEnemyTurn = (
+  world: World,
+  enemyId: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+): void => {
+  // Find the most damaged ally (lowest HP ratio)
+  const allies = _findAllEnemyParticipants(enemyId);
+  let bestAlly = 0;
+  let lowestRatio = 1.0;
+
+  for (const allyId of allies) {
+    const allyStats = getComponent(world, allyId, CombatStats) as CombatStatsData | undefined;
+    if (!allyStats || allyStats.health <= 0) {
+      continue;
     }
-
-    bridge.emit({
-      type: 'COMBAT_LOG',
-      message: moveMsg,
-      sourceId: enemyId,
-      targetId: selectedTarget,
-      targetRemainingHp: targetStats.health,
-      targetMaxHp: targetStats.maxHealth,
-    });
-    _emitCombatStateUpdate(world, bridge);
-    return;
+    const ratio = allyStats.maxHealth > 0 ? allyStats.health / allyStats.maxHealth : 0;
+    if (ratio < lowestRatio) {
+      lowestRatio = ratio;
+      bestAlly = allyId;
+    }
   }
 
-  // ── In range: attack ──
-  const attackRoll = roller(20);
-  const hitTotal = attackRoll + (enemyStats.accuracy ?? 0);
-  const hitThreshold = targetStats.evasion ?? 0;
-
-  if (hitTotal < hitThreshold) {
-    bridge.emit({
-      type: 'COMBAT_LOG',
-      message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
-      sourceId: enemyId,
-      targetId: selectedTarget,
-      targetRemainingHp: targetStats.health,
-      targetMaxHp: targetStats.maxHealth,
-    });
-    _emitCombatStateUpdate(world, bridge);
-    return;
+  if (bestAlly > 0) {
+    // Heal the most damaged ally for d6 + 1 HP
+    const healAmount = roller(6) + 1;
+    _processHealAction(world, bridge, bestAlly, enemyId, healAmount);
   }
-
-  // ── Damage roll ──
-  const damageRoll = roller(6);
-  const rawDamage = damageRoll + (enemyStats.attack ?? 0);
-  const damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
-
-  CombatStats.health[selectedTarget] = Math.max(0, targetStats.health - damage);
-  const remainingHp = CombatStats.health[selectedTarget];
-
-  bridge.emit({
-    type: 'COMBAT_LOG',
-    message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) to hit ${_getEntityName(world, selectedTarget)}. Deals ${damage} damage! (${_getEntityName(world, selectedTarget)} HP: ${remainingHp}/${targetStats.maxHealth})`,
-    sourceId: enemyId,
-    targetId: selectedTarget,
-    targetRemainingHp: remainingHp,
-    targetMaxHp: targetStats.maxHealth,
-  });
-
-  // ── Visceral feedback ──
-  const targetScreenX = Position.x[selectedTarget] ?? 0;
-  const targetScreenY = Position.y[selectedTarget] ?? 0;
-  bridge.emit({
-    type: 'DAMAGE_DEALT',
-    entityId: selectedTarget,
-    amount: damage,
-    isCritical: false,
-    screenX: targetScreenX,
-    screenY: targetScreenY,
-  });
 
   _emitCombatStateUpdate(world, bridge);
-
-  // ── Check if target is defeated ──
-  if (remainingHp <= 0) {
-    if (selectedTarget === playerEntityId) {
-      bridge.emit({ type: 'COMBAT_ENDED', victory: false });
-      turnOrderList = [];
-      currentTurnIndex = -1;
-    } else {
-      bridge.emit({
-        type: 'COMBAT_LOG',
-        message: `${_getEntityName(world, selectedTarget)} has fallen!`,
-        sourceId: enemyId,
-        targetId: selectedTarget,
-        targetRemainingHp: 0,
-        targetMaxHp: targetStats.maxHealth,
-      });
-    }
-    return;
-  }
 };
 
 // ---------------------------------------------------------------------------
-// Internal — legacy enemy attack (counter-attack, pre C-197)
+// Internal — legacy + enemy attack helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Legacy enemy attack: direct counter-attack against the player.
- * Used as fallback when Position components are not available (unit
- * tests and situations where spatial awareness is not needed).
- */
 const _processLegacyEnemyAttack = (
   world: World,
   enemyId: number,
@@ -750,12 +1449,10 @@ const _processLegacyEnemyAttack = (
   const playerStats = getComponent(world, playerEntityId, CombatStats) as
     | CombatStatsData
     | undefined;
-
   if (!playerStats) {
     return;
   }
 
-  // ── Hit check: d20 + enemy accuracy vs player evasion ──
   const attackRoll = roller(20);
   const hitTotal = attackRoll + (enemyStats.accuracy ?? 0);
   const hitThreshold = playerStats.evasion ?? 0;
@@ -773,69 +1470,169 @@ const _processLegacyEnemyAttack = (
     return;
   }
 
-  // ── Damage roll: d6 + enemy attack - player defense ──
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Hits!`,
+    sourceId: enemyId,
+    targetId: playerEntityId,
+    targetRemainingHp: playerStats.health,
+    targetMaxHp: playerStats.maxHealth,
+  });
+
   const damageRoll = roller(6);
   const rawDamage = damageRoll + (enemyStats.attack ?? 0);
   const damage = Math.max(1, rawDamage - (playerStats.defense ?? 0));
 
-  CombatStats.health[playerEntityId] = Math.max(0, playerStats.health - damage);
-  const remainingHp = CombatStats.health[playerEntityId];
+  _applyDamageToTarget(world, playerEntityId, damage, bridge, enemyId, 'slashing');
+
+  // C-338 AC-5: Check for downed state after player damage
+  if (playerEntityId > 0) {
+    const remainingHp = CombatStats.health[playerEntityId] ?? 0;
+    if (remainingHp <= 0) {
+      _handlePlayerDowned(world, bridge, playerEntityId);
+    }
+  }
+};
+
+const _repositionEnemy = (
+  world: World,
+  enemyId: number,
+  selectedTarget: number,
+  estimatedDistance: number,
+  prefRange: number,
+  bridge: EngineBridge,
+  targetStats: CombatStatsData,
+): void => {
+  const enemyPos = getComponent(world, enemyId, Position) as PositionData | undefined;
+  const targetPos = getComponent(world, selectedTarget, Position) as PositionData | undefined;
+
+  let moveMsg = `Enemy advances toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
+  if (enemyPos && targetPos) {
+    const dx = targetPos.x - enemyPos.x;
+    const dy = targetPos.y - enemyPos.y;
+    const dir =
+      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : dy > 0 ? 'south' : 'north';
+    moveMsg = `Enemy advances ${dir} toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
+    const step = 32;
+    const norm = Math.sqrt(dx * dx + dy * dy) || 1;
+    Position.x[enemyId] = enemyPos.x + (dx / norm) * step;
+    Position.y[enemyId] = enemyPos.y + (dy / norm) * step;
+  }
 
   bridge.emit({
     type: 'COMBAT_LOG',
-    message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) to hit. Deals ${damage} damage! (Player HP: ${remainingHp}/${playerStats.maxHealth})`,
+    message: moveMsg,
     sourceId: enemyId,
-    targetId: playerEntityId,
+    targetId: selectedTarget,
+    targetRemainingHp: targetStats.health,
+    targetMaxHp: targetStats.maxHealth,
+  });
+  _emitCombatStateUpdate(world, bridge);
+};
+
+const _executeEnemyAttack = (
+  world: World,
+  enemyId: number,
+  selectedTarget: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+  enemyStats: CombatStatsData,
+  targetStats: CombatStatsData,
+  playerEntityId: number,
+  damageTypeOverride?: DamageTypeKey,
+): void => {
+  const attackRoll = roller(20);
+  const hitTotal = attackRoll + (enemyStats.accuracy ?? 0);
+  const hitThreshold = targetStats.evasion ?? 0;
+
+  if (hitTotal < hitThreshold) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      sourceId: enemyId,
+      targetId: selectedTarget,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  const damageRoll = roller(6);
+  const rawDamage = damageRoll + (enemyStats.attack ?? 0);
+  const damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
+  const dt = damageTypeOverride ?? 'slashing';
+
+  _applyDamageToTarget(world, selectedTarget, damage, bridge, enemyId, dt);
+
+  // Check if target was the player and is now downed/dead
+  if (playerEntityId === selectedTarget) {
+    const remainingHp = CombatStats.health[selectedTarget] ?? 0;
+    if (remainingHp <= 0) {
+      _handlePlayerDowned(world, bridge, selectedTarget);
+    }
+  }
+};
+
+/**
+ * Applies damage to a target with resistance checks.
+ * C-338 AC-3: integrated into damage application.
+ */
+const _applyDamageToTarget = (
+  world: World,
+  targetId: number,
+  rawDamage: number,
+  bridge: EngineBridge,
+  sourceId: number,
+  damageType: DamageTypeKey,
+): void => {
+  const targetStats = getComponent(world, targetId, CombatStats) as CombatStatsData | undefined;
+  if (!targetStats) {
+    return;
+  }
+
+  const resistFactor = getResistanceFactor(targetId, damageType);
+  const actualDamage = _applyResistance(rawDamage, resistFactor);
+
+  CombatStats.health[targetId] = Math.max(0, targetStats.health - actualDamage);
+  const remainingHp = CombatStats.health[targetId];
+
+  const resistMsg = _resistanceLabel(resistFactor);
+  const resistSuffix = resistMsg ? ` — ${resistMsg} ${damageType}!` : '';
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `Enemy deals ${actualDamage} damage to ${_getEntityName(world, targetId)}!${resistSuffix} (HP: ${remainingHp}/${targetStats.maxHealth})`,
+    sourceId,
+    targetId,
     targetRemainingHp: remainingHp,
-    targetMaxHp: playerStats.maxHealth,
+    targetMaxHp: targetStats.maxHealth,
+    damageType,
   });
 
-  // ── Visceral feedback ──
-  const playerScreenX = Position.x[playerEntityId] ?? 0;
-  const playerScreenY = Position.y[playerEntityId] ?? 0;
   bridge.emit({
     type: 'DAMAGE_DEALT',
-    entityId: playerEntityId,
-    amount: damage,
+    entityId: targetId,
+    amount: actualDamage,
     isCritical: false,
-    screenX: playerScreenX,
-    screenY: playerScreenY,
+    screenX: Position.x[targetId] ?? 0,
+    screenY: Position.y[targetId] ?? 0,
+    damageType,
   });
 
   _emitCombatStateUpdate(world, bridge);
-
-  // ── Check if player is defeated ──
-  if (remainingHp <= 0) {
-    bridge.emit({ type: 'COMBAT_ENDED', victory: false });
-    turnOrderList = [];
-    currentTurnIndex = -1;
-  }
 };
 
 // ---------------------------------------------------------------------------
 // Internal — defeat + loot
 // ---------------------------------------------------------------------------
 
-/**
- * Handles enemy defeat: grants XP, destroys the entity, and emits
- * COMBAT_ENDED with victory = true.
- *
- * Loot resolution is owned by the client (content-pack loot tables applied
- * on ENCOUNTER_COMPLETED) — the legacy `loot_<eid>` placeholder emit was
- * removed in C-331.
- *
- * Contract: C-147 Progression & Persistence — XP grant + level-up check
- * Contract: C-331 — no placeholder INVENTORY_UPDATED loot emit
- *
- * @param playerEntityId - The player entity ID for XP granting.
- */
 const _handleEnemyDefeated = (
   world: World,
   enemyId: number,
   bridge: EngineBridge,
   playerEntityId: number,
 ): void => {
-  // Grant XP to the player for this victory
   if (playerEntityId > 0) {
     const playerStats = getComponent(world, playerEntityId, CombatStats) as
       | CombatStatsData
@@ -844,14 +1641,13 @@ const _handleEnemyDefeated = (
     grantXp(world, playerEntityId, 25, bridge, playerClassId);
   }
 
-  // Read the spawn point ID from the Enemy component for persistence tracking
   const spawnId = Enemy.spawnId[enemyId] ?? '';
 
-  // Remove the entity from the world
+  clearStatusEffects(enemyId);
+  _resetDeathSaves(enemyId);
   incrementEntityGeneration(enemyId);
   removeEntity(world, enemyId);
 
-  // End combat with victory, including the spawn ID for persistence
   bridge.emit({
     type: 'COMBAT_ENDED',
     victory: true,
@@ -865,12 +1661,6 @@ const _handleEnemyDefeated = (
 // Internal — helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Finds the first enemy participant in the turn order list.
- *
- * @param playerEntityId - The player's entity ID (excluded from results).
- * @returns The entity ID of the first enemy, or 0 if none found.
- */
 const _findFirstEnemyParticipant = (playerEntityId: number): number => {
   for (const eid of turnOrderList) {
     if (eid !== playerEntityId && eid > 0) {
@@ -880,40 +1670,40 @@ const _findFirstEnemyParticipant = (playerEntityId: number): number => {
   return 0;
 };
 
-// ---------------------------------------------------------------------------
-// Internal — experience and leveling (C-147, C-337)
-//
-// Delegated to progression_system.ts for class-aware level-up resolution.
-// ---------------------------------------------------------------------------
+const _findAllEnemyParticipants = (playerEntityId: number): number[] => {
+  const enemies: number[] = [];
+  for (const eid of turnOrderList) {
+    if (eid !== playerEntityId && eid > 0) {
+      const stats = CombatStats.health[eid];
+      if (stats !== undefined && stats > 0) {
+        enemies.push(eid);
+      }
+    }
+  }
+  return enemies;
+};
 
-/**
- * Reads the current HP of an entity from the CombatStats SoA.
- */
+const _getCurrentTurnEntity = (): number => {
+  if (currentTurnIndex < 0 || currentTurnIndex >= turnOrderList.length) {
+    return 0;
+  }
+  return turnOrderList[currentTurnIndex] ?? 0;
+};
+
 const _getHp = (world: World, eid: number): number => {
   const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
   return stats?.health ?? 0;
 };
 
-/**
- * Reads the max HP of an entity from the CombatStats SoA.
- */
 const _getMaxHp = (world: World, eid: number): number => {
   const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
   return stats?.maxHealth ?? 0;
 };
 
-/**
- * Gets the preferred combat range for an entity (default: 3 cells).
- * Reads from CombatTactics component if available, with a fallback default.
- */
 const _getPreferredRange = (eid: number): number => {
   return CombatTactics.preferredRange[eid] ?? 3;
 };
 
-/**
- * Estimates grid distance between two entities in tile cells (C-197 AC-2).
- * Uses taxicab distance with obstacle penalty for obstructed paths.
- */
 const _estimateGridDist = (world: World, fromEid: number, toEid: number): number => {
   const fromPos = getComponent(world, fromEid, Position) as PositionData | undefined;
   const toPos = getComponent(world, toEid, Position) as PositionData | undefined;
@@ -932,7 +1722,6 @@ const _estimateGridDist = (world: World, fromEid: number, toEid: number): number
   const dy = Math.abs(ty - fy);
   let dist = dx + dy;
 
-  // Obstruction penalty: midpoint check
   const midX = Math.floor((fx + tx) / 2) * tileSize + tileSize / 2;
   const midY = Math.floor((fy + ty) / 2) * tileSize + tileSize / 2;
   if (!_checkWalkable(midX, midY)) {
@@ -942,16 +1731,10 @@ const _estimateGridDist = (world: World, fromEid: number, toEid: number): number
   return dist;
 };
 
-/**
- * Checks if a pixel position is walkable using the collision system.
- */
 const _checkWalkable = (x: number, y: number): boolean => {
   return isWalkable(x, y);
 };
 
-/**
- * Gets a human-readable name for an entity (for combat log messages).
- */
 const _getEntityName = (_world: World, eid: number): string => {
   if (eid === 1) {
     return 'Player';
@@ -959,10 +1742,6 @@ const _getEntityName = (_world: World, eid: number): string => {
   return `Entity #${eid}`;
 };
 
-/**
- * Gets all alive target entities for the given attacker.
- * Filters dead entities and excludes the attacker itself.
- */
 const _getAliveTargets = (world: World, attackerEid: number): number[] => {
   const alive: number[] = [];
   for (const eid of turnOrderList) {
@@ -974,7 +1753,6 @@ const _getAliveTargets = (world: World, attackerEid: number): number[] => {
       alive.push(eid);
     }
   }
-  // Also include any entity in the world with CombatStats
   const statsCount = CombatStats.health.length;
   for (let eid = 0; eid < statsCount; eid++) {
     if (eid === attackerEid || alive.includes(eid)) {
@@ -988,11 +1766,50 @@ const _getAliveTargets = (world: World, attackerEid: number): number[] => {
   return alive;
 };
 
-/**
- * Emits a COMBAT_STATE_UPDATE event with current HP totals for all
- * combat participants. Called after every action (player attack, enemy
- * counter-attack) so the UI can reactively update HP bars.
- */
+// ---------------------------------------------------------------------------
+// C-338: Status effect stat modifier helpers
+// ---------------------------------------------------------------------------
+
+const _getStatusAccuracyModifier = (eid: number): number => {
+  let bonus = 0;
+  const effects = getActiveEffects(eid);
+  for (const effect of effects) {
+    const def = STATUS_EFFECT_REGISTRY[effect.effectId];
+    if (def?.modifier.accuracyModifier) {
+      bonus += def.modifier.accuracyModifier;
+    }
+  }
+  return bonus;
+};
+
+const _getStatusAttackModifier = (eid: number): number => {
+  let bonus = 0;
+  const effects = getActiveEffects(eid);
+  for (const effect of effects) {
+    const def = STATUS_EFFECT_REGISTRY[effect.effectId];
+    if (def?.modifier.attackModifier) {
+      bonus += def.modifier.attackModifier;
+    }
+  }
+  return bonus;
+};
+
+const _getStatusDamageMultiplier = (eid: number): number => {
+  let mult = 1.0;
+  const effects = getActiveEffects(eid);
+  for (const effect of effects) {
+    const def = STATUS_EFFECT_REGISTRY[effect.effectId];
+    if (def?.modifier.damageDealtMultiplier) {
+      mult *= def.modifier.damageDealtMultiplier;
+    }
+  }
+  return mult;
+};
+
+// ---------------------------------------------------------------------------
+// Emit helpers
+// ---------------------------------------------------------------------------
+
 const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
   const hpMap: Record<number, number> = {};
   const maxHpMap: Record<number, number> = {};
@@ -1005,7 +1822,6 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
     }
   }
 
-  // Compute screen-space positions for diegetic HP bars (C-166)
   const screenStates = getCombatantScreenStates(world);
   const screenX: Record<number, number> = {};
   const screenY: Record<number, number> = {};
