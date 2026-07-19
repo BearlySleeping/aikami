@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-19)
 
-**164 active (32 without contract file), 119 archived, 1 duplicates**
+**164 active (30 without contract file), 119 archived, 2 duplicates**
 
 ### Active Contracts
 
@@ -140,8 +140,8 @@
 | C-335 | Enforce The Playable Demo Release Gate | 👍 approved | — | v2 |
 | C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 👍 approved | — | v2 |
 | C-337 | Complete Character Progression Classes Abilities Skills And | 👍 approved | — | v2 |
-| C-338 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | — | — |
-| C-339 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | — | — |
+| C-338 | Deepen Turn Based Combat With Action Economy Statuses And Ta | 👍 approved | — | v2 |
+| C-339 | Complete Quest Graph Journal Objectives And Reward Pipelines | 🛠️ implemented | — | v2 |
 | C-340 | Build Party and Companion Gameplay | ⏳ not_started (no contract file) | — | — |
 | C-341 | Add Relationships, Factions, Reputation, and Persistent Consequences | ⏳ not_started (no contract file) | — | — |
 | C-342 | Add World Interactables, Dungeons, Puzzles, and Loot Tables | ⏳ not_started (no contract file) | — | — |
@@ -211,5 +211,6 @@ C-024, C-025, C-026, C-027, C-028, C-029, C-030, C-032, C-033, C-034, C-035, C-0
 </details>
 
 ## ⚠️ Duplicate IDs
+- `C-338` — resolve before next sync
 - `C-035` — resolve before next sync
 
