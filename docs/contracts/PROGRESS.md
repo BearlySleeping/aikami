@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-19)
 
-**164 active (33 without contract file), 119 archived, 1 duplicates**
+**164 active (32 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -138,8 +138,8 @@
 | C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | — | v1 |
 | C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | — | v2 |
 | C-335 | Enforce The Playable Demo Release Gate | 👍 approved | — | v2 |
-| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 📝 draft | — | v2 |
-| C-337 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | — | — |
+| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 👍 approved | — | v2 |
+| C-337 | Complete Character Progression Classes Abilities Skills And | 👍 approved | — | v2 |
 | C-338 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | — | — |
 | C-339 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | — | — |
 | C-340 | Build Party and Companion Gameplay | ⏳ not_started (no contract file) | — | — |
