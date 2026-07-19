@@ -78,6 +78,35 @@ export const runStage = async (options: {
     console.log(`♻️  Adopting completed ${role} result from prior run (${orphaned.status}).`);
     return { result: orphaned, paneId: 'recovered' };
   }
+
+  // 🔴 RETRY SAFEGUARD: check previous attempt's result file too.
+  // If the worker finished after the orchestrator timed out, the previous
+  // attempt's result file will be valid. Adopt it and skip re-work.
+  if (options.attempt > 1) {
+    const prevPath = join(
+      options.runDirectory,
+      'stages',
+      `${options.stage}-${options.attempt - 1}.json`,
+    );
+    const prevResult = readStageResult({
+      resultPath: prevPath,
+      runId: options.runId,
+      role,
+      attempt: options.attempt - 1,
+    });
+    if (prevResult && prevResult.status === 'passed') {
+      console.log(
+        `♻️  Adopting previous attempt's passed result for ${role} (attempt ${options.attempt - 1} → ${options.attempt}).`,
+      );
+      // Write it as the current attempt's result too.
+      writeStageResult({
+        resultPath,
+        result: { ...prevResult, attempt: options.attempt },
+      });
+      return { result: { ...prevResult, attempt: options.attempt }, paneId: 'recovered-prev' };
+    }
+  }
+
   if (existsSync(resultPath)) {
     unlinkSync(resultPath);
   }
@@ -154,7 +183,35 @@ export const runStage = async (options: {
     }
   }
 
-  // Final re-read — close race between last poll and blocked write.
+  // ── Idle timeout fired — keep polling for late result ──
+  // The worker may still be working (agent_status can report 'idle'
+  // between LLM turns even though pi is still running). Instead of
+  // giving up, switch to slow polling and wait for the result file
+  // up to the hard timeout.
+  //
+  // 🔴 OVERRIDE: if the worker eventually writes a valid result,
+  // it overrides the idle timeout. Only the hard wall-clock cap
+  // is terminal.
+  const slowPollMs = 30_000;
+  console.warn(
+    `⚠️  ${role} idle timeout reached. Switching to recovery polling (every ${slowPollMs / 1000}s) until hard timeout...`,
+  );
+
+  while (Date.now() - startedAt < options.hardTimeoutMs) {
+    const recovered = readStageResult({
+      resultPath,
+      runId: options.runId,
+      role,
+      attempt: options.attempt,
+    });
+    if (recovered) {
+      console.log(`✅ Recovered ${role} result after idle timeout: ${recovered.status}`);
+      return { result: recovered, paneId };
+    }
+    await sleep(slowPollMs);
+  }
+
+  // ── Hard timeout — truly terminal ───────────────────────
   const lastChance = readStageResult({
     resultPath,
     runId: options.runId,
@@ -170,8 +227,8 @@ export const runStage = async (options: {
     stage: role,
     attempt: options.attempt,
     status: 'blocked',
-    summary: `Worker went idle for ${Math.round(options.idleTimeoutMs / 60_000)} min after ${nudgesSent} nudge(s) without a schema-valid completion artifact.`,
-    findings: ['No exact contract_stage_complete result was produced before timeout.'],
+    summary: `Worker unresponsive for ${Math.round(options.hardTimeoutMs / 60_000)} min — hard timeout reached.`,
+    findings: ['No valid contract_stage_complete result was produced before hard timeout.'],
     filesTouched: [],
     evidence: [],
     contractHash: '',

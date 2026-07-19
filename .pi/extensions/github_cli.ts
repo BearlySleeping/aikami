@@ -39,6 +39,20 @@ const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
 let _repoRoot: string | undefined;
 const repoRoot = (): string => {
   if (!_repoRoot) {
+    // When running inside a contract pipeline worktree, gh commands must run
+    // from the main repo root — not the worktree.  Running gh from a worktree
+    // triggers Git "already used by worktree" errors when gh tries to resolve
+    // the target branch (e.g. `main`) for merge operations.
+    const wsPath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    if (wsPath) {
+      // Worktree paths are `.pi/workspaces/run-xxx`. Walk up to find the
+      // parent of `.pi/` — that's the main repo root.
+      const piIdx = wsPath.indexOf('/.pi/');
+      if (piIdx !== -1) {
+        _repoRoot = wsPath.slice(0, piIdx);
+        return _repoRoot;
+      }
+    }
     _repoRoot = process.cwd();
   }
   return _repoRoot;
