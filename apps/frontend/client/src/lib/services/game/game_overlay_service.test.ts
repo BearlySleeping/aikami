@@ -231,4 +231,135 @@ describe('GameOverlayService', () => {
 
     expect(service.activeOverlay).toBe('NONE');
   });
+
+  // ── Overlay Stack (C-332 AC-2) ──
+
+  test('should push overlay onto stack', () => {
+    service.pushOverlay('PAUSE_MENU');
+
+    expect(service.activeOverlay).toBe('PAUSE_MENU');
+    expect(service.stackDepth).toBe(1);
+  });
+
+  test('should pop overlay from stack', () => {
+    service.pushOverlay('PAUSE_MENU');
+    expect(service.stackDepth).toBe(1);
+
+    service.popOverlay();
+
+    expect(service.activeOverlay).toBe('NONE');
+    expect(service.stackDepth).toBe(0);
+  });
+
+  test('should push inventory over pause menu (stack depth 2)', () => {
+    service.pushOverlay('PAUSE_MENU');
+    service.pushOverlay('INVENTORY');
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(service.stackDepth).toBe(2);
+  });
+
+  test('should pop back to pause menu from inventory', () => {
+    service.pushOverlay('PAUSE_MENU');
+    service.pushOverlay('INVENTORY');
+    service.popOverlay();
+
+    expect(service.activeOverlay).toBe('PAUSE_MENU');
+    expect(service.stackDepth).toBe(1);
+  });
+
+  test('should not allow duplicate overlay pushes', () => {
+    service.pushOverlay('PAUSE_MENU');
+    service.pushOverlay('PAUSE_MENU');
+
+    expect(service.stackDepth).toBe(1);
+  });
+
+  test('should be no-op to pop empty stack', () => {
+    expect(() => service.popOverlay()).not.toThrow();
+    expect(service.activeOverlay).toBe('NONE');
+    expect(service.stackDepth).toBe(0);
+  });
+
+  test('should clear entire stack', () => {
+    service.pushOverlay('PAUSE_MENU');
+    service.pushOverlay('INVENTORY');
+    expect(service.stackDepth).toBe(2);
+
+    service.clearStack();
+
+    expect(service.activeOverlay).toBe('NONE');
+    expect(service.stackDepth).toBe(0);
+  });
+
+  test('should replace overlay on stack', () => {
+    service.pushOverlay('PAUSE_MENU');
+    service.replaceOverlay('INVENTORY');
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(service.stackDepth).toBe(1);
+  });
+
+  test('should block inventory during combat', () => {
+    // Push combat first
+    service.pushOverlay('COMBAT');
+    expect(service.activeOverlay).toBe('COMBAT');
+
+    // Inventory should be blocked
+    expect(service.canOpenOverlay('INVENTORY')).toBe(false);
+    service.openInventory();
+    // Active overlay should still be COMBAT (push blocked)
+    expect(service.activeOverlay).toBe('COMBAT');
+  });
+
+  test('should block vendor during combat', () => {
+    service.pushOverlay('COMBAT');
+    expect(service.canOpenOverlay('VENDOR')).toBe(false);
+  });
+
+  test('should block quest log during combat', () => {
+    service.pushOverlay('COMBAT');
+    expect(service.canOpenOverlay('QUEST_LOG')).toBe(false);
+  });
+
+  test('should allow pause menu over inventory', () => {
+    service.pushOverlay('PAUSE_MENU');
+    expect(service.canOpenOverlay('INVENTORY')).toBe(true);
+  });
+
+  test('should clear stack on dialogue close', () => {
+    service.activeOverlay = 'DIALOGUE';
+    service.dialogueNpc = { npcId: 'npc-1', npcName: 'Test NPC' };
+
+    service.endDialogue();
+
+    expect(service.activeOverlay).toBe('NONE');
+    expect(service.stackDepth).toBe(0);
+  });
+
+  test('should push NONE as no-op', () => {
+    service.pushOverlay('NONE' as import('./game_overlay_service.svelte.ts').GameOverlayType);
+    expect(service.stackDepth).toBe(0);
+  });
+
+  // ── Autosave indicator (C-332 AC-3) ──
+
+  test('should have idle autosave status initially', () => {
+    expect(service.autoSaveStatus).toBe('idle');
+  });
+
+  test('should expose overlay stack as readonly', () => {
+    service.pushOverlay('PAUSE_MENU');
+    const stack = service.overlayStack;
+    expect(stack.length).toBe(1);
+    expect(stack[0].type).toBe('PAUSE_MENU');
+  });
+
+  // ── Focus restore tracking (C-332 AC-4) ──
+
+  test('should store undefined previous focus when no element focused', () => {
+    service.pushOverlay('PAUSE_MENU');
+    const stack = service.overlayStack;
+    expect(stack[0].previousFocus).toBeUndefined();
+  });
 });

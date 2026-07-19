@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts
+/** biome-ignore-all lint/style/useNamingConvention: GameOverlayType enum-like keys use SCREAMING_SNAKE_CASE */
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
@@ -26,7 +27,10 @@ import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
-// GameOverlayService — overlay router for the game UI layer
+// GameOverlayService — overlay router for the game UI layer.
+//
+// C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
+// Pressing Escape always pops the top overlay — exactly one layer at a time.
 // ---------------------------------------------------------------------------
 
 export type GameOverlayType =
@@ -49,6 +53,68 @@ export type DialogueNpcData = {
 };
 
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+/** Entry in the overlay stack. 'NONE' is never pushed — an empty stack means no overlay. */
+export type OverlayStackEntry = {
+  type: GameOverlayType;
+  /** Element that had focus before this overlay opened (for restore on pop). */
+  previousFocus: HTMLElement | undefined;
+};
+
+/**
+ * Overlay compatibility matrix — which overlay types can be pushed over
+ * the current active overlay.
+ *
+ * Row = current active overlay, Column = overlay being opened.
+ * 'allow'  = allowed
+ * 'block'  = silently ignored
+ * 'clear'  = clear stack first, then push (e.g. combat wipes non-combat overlays)
+ */
+type OverlayCompatibility = 'allow' | 'block' | 'clear';
+
+const OVERLAY_COMPATIBILITY: Record<
+  GameOverlayType,
+  Partial<Record<GameOverlayType, OverlayCompatibility>>
+> = {
+  NONE: {
+    PAUSE_MENU: 'allow',
+    DIALOGUE: 'allow',
+    COMBAT: 'allow',
+    INVENTORY: 'allow',
+    QUEST_LOG: 'allow',
+    GAME_OVER: 'allow',
+    CHARACTER_DASHBOARD: 'allow',
+    VENDOR: 'allow',
+    END_SESSION: 'allow',
+  },
+  PAUSE_MENU: {
+    INVENTORY: 'allow',
+    QUEST_LOG: 'allow',
+    CHARACTER_DASHBOARD: 'allow',
+    END_SESSION: 'allow',
+  },
+  DIALOGUE: {
+    COMBAT: 'clear',
+    GAME_OVER: 'clear',
+  },
+  COMBAT: {
+    GAME_OVER: 'clear',
+  },
+  INVENTORY: {
+    PAUSE_MENU: 'allow',
+  },
+  QUEST_LOG: {
+    PAUSE_MENU: 'allow',
+  },
+  CHARACTER_DASHBOARD: {
+    PAUSE_MENU: 'allow',
+  },
+  VENDOR: {
+    PAUSE_MENU: 'allow',
+  },
+  GAME_OVER: {},
+  END_SESSION: {},
+};
 
 export type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;
@@ -74,6 +140,8 @@ export type OverlayEventHandlers = {
 
 export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly activeOverlay: GameOverlayType;
+  readonly overlayStack: readonly OverlayStackEntry[];
+  readonly stackDepth: number;
   readonly dialogueNpc: DialogueNpcData | undefined;
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
@@ -123,6 +191,19 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   setBridge(bridge: EngineBridge): void;
   setActive(type: GameOverlayType): void;
   clearActive(): void;
+
+  // ── Overlay Stack (C-332) ──
+
+  /** Push an overlay onto the stack. Respects the compatibility matrix. */
+  pushOverlay(type: GameOverlayType): void;
+  /** Pop the top overlay. Restores focus to the element that had focus before. */
+  popOverlay(): void;
+  /** Replace the top overlay (pop then push). */
+  replaceOverlay(type: GameOverlayType): void;
+  /** Clear the entire overlay stack (terminal state — combat, game over). */
+  clearStack(): void;
+  /** Check if a given overlay type can be opened over the current state. */
+  canOpenOverlay(type: GameOverlayType): boolean;
   setTransitioning(value: boolean): void;
   getDefeatedEnemies(): string[];
   /** Returns the collected item pickup spawn IDs for map-load suppression (C-331). */
@@ -155,8 +236,29 @@ export class GameOverlayService
   extends BaseFrontendClass<GameOverlayServiceOptions>
   implements GameOverlayServiceInterface
 {
-  activeOverlay = $state<GameOverlayType>('NONE');
+  /** Overlay stack — the top entry is the active overlay. Empty stack = no overlay. */
+  overlayStack = $state<OverlayStackEntry[]>([]);
   dialogueNpc = $state<DialogueNpcData | undefined>(undefined);
+
+  /** Derived — top of the stack, or NONE if empty. */
+  get activeOverlay(): GameOverlayType {
+    return this.overlayStack.length > 0
+      ? this.overlayStack[this.overlayStack.length - 1].type
+      : 'NONE';
+  }
+
+  /** Readable alias for backward compat — setter routes through pushOverlay/popOverlay. */
+  set activeOverlay(type: GameOverlayType) {
+    if (type === 'NONE') {
+      this.clearStack();
+      return;
+    }
+    this.pushOverlay(type);
+  }
+
+  get stackDepth(): number {
+    return this.overlayStack.length;
+  }
   isSaving = $state<boolean>(false);
   saveMessage = $state<string | undefined>(undefined);
   isTransitioning = $state<boolean>(false);
@@ -212,12 +314,111 @@ export class GameOverlayService
 
   /** Intent-driven overlay activation — called by bridge listeners only. */
   setActive(type: GameOverlayType): void {
-    this.activeOverlay = type;
+    if (type === 'NONE') {
+      this.clearStack();
+      return;
+    }
+    this.pushOverlay(type);
   }
 
   /** Resets overlay to NONE. */
   clearActive(): void {
-    this.activeOverlay = 'NONE';
+    this.clearStack();
+  }
+
+  // ── Overlay Stack Operations (C-332) ─────────────────────────────
+
+  /** @inheritdoc */
+  pushOverlay(type: GameOverlayType): void {
+    if (type === 'NONE') {
+      return;
+    }
+
+    // Guard: check compatibility matrix
+    const current = this.activeOverlay;
+    const compat = OVERLAY_COMPATIBILITY[current]?.[type];
+
+    if (compat === 'block') {
+      this.debug('overlay:push:blocked', { type, current });
+      return;
+    }
+
+    if (compat === 'clear') {
+      this.debug('overlay:push:clear', { type, current });
+      this.clearStack();
+      // Fall through to push after clear
+    }
+
+    // Guard: no duplicates — pushing the same type that's already on top is a no-op
+    if (this.activeOverlay === type) {
+      this.debug('overlay:push:duplicate', { type });
+      return;
+    }
+
+    // Capture focus before opening overlay
+    const previousFocus = document.activeElement as HTMLElement | undefined;
+
+    this.overlayStack.push({ type, previousFocus });
+    this.debug('overlay:push', { type, stackDepth: this.stackDepth });
+  }
+
+  /** @inheritdoc */
+  popOverlay(): void {
+    if (this.overlayStack.length === 0) {
+      this.debug('overlay:pop:empty');
+      return;
+    }
+
+    const entry = this.overlayStack[this.overlayStack.length - 1];
+    this.overlayStack.pop();
+    this.debug('overlay:pop', { type: entry.type, stackDepth: this.stackDepth });
+
+    // Restore focus to the element that was focused before this overlay opened
+    this._restoreFocus(entry.previousFocus);
+  }
+
+  /** @inheritdoc */
+  replaceOverlay(type: GameOverlayType): void {
+    if (this.overlayStack.length > 0) {
+      this.overlayStack.pop();
+    }
+    this.pushOverlay(type);
+  }
+
+  /** @inheritdoc */
+  clearStack(): void {
+    if (this.overlayStack.length === 0) {
+      return;
+    }
+    this.debug('overlay:clearStack', { previousDepth: this.stackDepth });
+    // Restore focus to the element from the bottom-most entry
+    const bottomEntry = this.overlayStack[0];
+    this.overlayStack = [];
+    this._restoreFocus(bottomEntry.previousFocus);
+  }
+
+  /** @inheritdoc */
+  canOpenOverlay(type: GameOverlayType): boolean {
+    if (type === 'NONE') {
+      return false;
+    }
+    const current = this.activeOverlay;
+    const compat = OVERLAY_COMPATIBILITY[current]?.[type];
+    return compat === 'allow' || compat === 'clear';
+  }
+
+  /**
+   * Restores keyboard focus to a previously-focused element.
+   * Falls back to the game canvas container if no element is stored.
+   */
+  private _restoreFocus(previousFocus: HTMLElement | undefined): void {
+    // Schedule on microtask so DOM is updated after overlay removal
+    queueMicrotask(() => {
+      const target = previousFocus ?? document.getElementById('game-canvas-container');
+      if (target instanceof HTMLElement) {
+        target.focus();
+      }
+    });
   }
 
   /** Intent-driven transition state. */
@@ -328,47 +529,51 @@ export class GameOverlayService
     const actionId = inputActionService.keyToAction(event.key);
     inputActionService.onKeyDown();
 
-    // ── Overlay close/escape handling (binding-aware — open_menu defaults to Escape) ──
+    // ── Escape: always pops exactly one layer (C-332 AC-2) ──
     if (actionId === 'open_menu') {
       event.preventDefault();
       onboardingHintService.onActionPerformed('open_menu');
+
+      // Game Over is terminal — Escape does nothing; overlay has its own controls
+      if (this.activeOverlay === 'GAME_OVER') {
+        return;
+      }
+
+      // Dialogue is always a leaf — close to NONE, not a prior overlay
       if (this.activeOverlay === 'DIALOGUE') {
         this.endDialogue();
         return;
       }
+
+      // If nothing is open, open pause menu
+      if (this.activeOverlay === 'NONE') {
+        this._togglePauseMenu();
+        return;
+      }
+
+      // Otherwise, pop exactly one layer
+      // END_SESSION → PAUSE_MENU (not NONE) handled by closeEndSession
       if (this.activeOverlay === 'END_SESSION') {
         this.closeEndSession();
         return;
       }
-      if (this.activeOverlay === 'INVENTORY') {
-        this.closeInventory();
-        return;
-      }
-      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
-        this.closeCharacterDashboard();
-        return;
-      }
-      if (this.activeOverlay === 'VENDOR') {
-        this.closeVendor();
-        return;
-      }
-      if (this.activeOverlay === 'QUEST_LOG') {
-        this.closeQuestLog();
-        return;
-      }
-      this._togglePauseMenu();
+
+      this.popOverlay();
       return;
     }
 
     // ── Overlay toggle: open_inventory ──
     if (actionId === 'open_inventory') {
+      if (!this.canOpenOverlay('INVENTORY')) {
+        return;
+      }
       if (this.activeOverlay === 'INVENTORY') {
         event.preventDefault();
         this.closeInventory();
         onboardingHintService.onActionPerformed('open_inventory');
         return;
       }
-      if (this.activeOverlay === 'NONE') {
+      if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
         event.preventDefault();
         this.openInventory();
         onboardingHintService.onActionPerformed('open_inventory');
@@ -379,12 +584,15 @@ export class GameOverlayService
 
     // ── Overlay toggle: open_quest_log ──
     if (actionId === 'open_quest_log') {
+      if (!this.canOpenOverlay('QUEST_LOG')) {
+        return;
+      }
       if (this.activeOverlay === 'QUEST_LOG') {
         event.preventDefault();
         this.closeQuestLog();
         return;
       }
-      if (this.activeOverlay === 'NONE') {
+      if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
         event.preventDefault();
         this.openQuestLog();
         return;
@@ -394,12 +602,15 @@ export class GameOverlayService
 
     // ── Overlay toggle: open_character ──
     if (actionId === 'open_character') {
+      if (!this.canOpenOverlay('CHARACTER_DASHBOARD')) {
+        return;
+      }
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         event.preventDefault();
         this.closeCharacterDashboard();
         return;
       }
-      if (this.activeOverlay === 'NONE') {
+      if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
         event.preventDefault();
         this.openCharacterDashboard();
         return;
@@ -407,14 +618,13 @@ export class GameOverlayService
     }
 
     // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
-    // Non-overlay actions (interact, move_*) pass through to the engine here.
     if (actionId) {
       onboardingHintService.onActionPerformed(actionId);
     }
   }
 
   resumeGame(): void {
-    this.activeOverlay = 'NONE';
+    this.clearStack();
     gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
   }
@@ -431,7 +641,7 @@ export class GameOverlayService
   }
 
   endDialogue(): void {
-    this.activeOverlay = 'NONE';
+    this.clearStack();
     this.dialogueNpc = undefined;
     gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
@@ -483,58 +693,66 @@ export class GameOverlayService
   }
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
-    this.activeOverlay = 'VENDOR';
+    this.pushOverlay('VENDOR');
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this.vendorSessionOptions = options;
   }
 
   closeVendor(): void {
-    this.activeOverlay = 'NONE';
-    gameModeService.setMode('EXPLORE');
-    this._engineService?.resumeEngine();
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
     this._handlers?.onVendorClose();
   }
 
   openInventory(): void {
-    this.activeOverlay = 'INVENTORY';
+    this.pushOverlay('INVENTORY');
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onInventoryOpen();
   }
 
   closeInventory(): void {
-    this.activeOverlay = 'NONE';
-    gameModeService.setMode('EXPLORE');
-    this._engineService?.resumeEngine();
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
     this._handlers?.onInventoryClose();
   }
 
   openQuestLog(): void {
-    this.activeOverlay = 'QUEST_LOG';
+    this.pushOverlay('QUEST_LOG');
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onQuestLogOpen();
   }
 
   closeQuestLog(): void {
-    this.activeOverlay = 'NONE';
-    gameModeService.setMode('EXPLORE');
-    this._engineService?.resumeEngine();
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
     this._handlers?.onQuestLogClose();
   }
 
   openCharacterDashboard(): void {
-    this.activeOverlay = 'CHARACTER_DASHBOARD';
+    this.pushOverlay('CHARACTER_DASHBOARD');
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onDashboardOpen();
   }
 
   closeCharacterDashboard(): void {
-    this.activeOverlay = 'NONE';
-    gameModeService.setMode('EXPLORE');
-    this._engineService?.resumeEngine();
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
     this._handlers?.onDashboardClose();
   }
 
@@ -555,14 +773,15 @@ export class GameOverlayService
 
   /** @inheritdoc */
   openEndSession(): void {
-    this.activeOverlay = 'END_SESSION';
+    this.pushOverlay('END_SESSION');
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
   }
 
   /** @inheritdoc */
   closeEndSession(): void {
-    this.activeOverlay = 'PAUSE_MENU';
+    // Pop END_SESSION to return to PAUSE_MENU
+    this.popOverlay();
   }
 
   /** @inheritdoc */
@@ -574,7 +793,7 @@ export class GameOverlayService
   async startNewSession(): Promise<void> {
     const gameId = worldStateService.worldGenOutput?.worldName ?? 'default';
     await sessionService.startNewSession({ gameId });
-    this.activeOverlay = 'NONE';
+    this.clearStack();
     gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
   }
@@ -588,7 +807,7 @@ export class GameOverlayService
     if (this.activeOverlay === 'PAUSE_MENU') {
       this.resumeGame();
     } else if (this.activeOverlay === 'NONE') {
-      this.activeOverlay = 'PAUSE_MENU';
+      this.pushOverlay('PAUSE_MENU');
       gameModeService.setMode('MENU');
       this._engineService?.pauseEngine();
     }

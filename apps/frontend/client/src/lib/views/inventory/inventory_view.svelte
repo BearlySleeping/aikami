@@ -13,10 +13,28 @@ const { viewModel }: Props = $props();
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
   role="dialog"
   aria-modal="true"
-  aria-label="Close inventory"
+  aria-label="Inventory"
   tabindex="-1"
   onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeInventory(); } }}
-  onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeInventory()}
+  onkeydown={(e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      viewModel.closeInventory();
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+      const direction = e.shiftKey ? -1 : 1;
+      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+      focusable[nextIndex].focus();
+    }
+  }}
 >
   <div class="card w-full max-w-md bg-base-100 shadow-xl">
     <div class="card-body p-6 gap-4">
