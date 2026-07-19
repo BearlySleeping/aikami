@@ -767,6 +767,11 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
   const dt = damageType ?? 'slashing';
   const isMulti = validTargets.length > 1;
 
+  // Apply status effect modifiers to attack roll (same as _processPlayerAttack)
+  const statusAccBonus = _getStatusAccuracyModifier(playerEntityId);
+  const statusAttBonus = _getStatusAttackModifier(playerEntityId);
+  const dmgMult = _getStatusDamageMultiplier(playerEntityId);
+
   for (const tid of validTargets) {
     const targetStats = getComponent(world, tid, CombatStats) as CombatStatsData | undefined;
     if (!targetStats) {
@@ -775,13 +780,13 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
 
     // Independent hit check per target
     const attackRoll = roller(20);
-    const hitTotal = attackRoll + (playerStats.accuracy ?? 0);
+    const hitTotal = attackRoll + (playerStats.accuracy ?? 0) + statusAccBonus;
     const hitThreshold = targetStats.evasion ?? 0;
 
     if (hitTotal < hitThreshold) {
       bridge.emit({
         type: 'COMBAT_LOG',
-        message: `Ability vs ${_getEntityName(world, tid)}: rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+        message: `Ability vs ${_getEntityName(world, tid)}: rolls ${attackRoll} (+${playerStats.accuracy ?? 0}${statusAccBonus !== 0 ? ` ${statusAccBonus >= 0 ? '+' : ''}${statusAccBonus}` : ''} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
         sourceId: playerEntityId,
         targetId: tid,
         targetRemainingHp: targetStats.health,
@@ -794,11 +799,14 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
 
     // Independent damage roll per target
     const damageRoll = roller(6);
-    const rawDamage = damageRoll + (playerStats.attack ?? 0) + (bonusDamage ?? 0);
+    const rawDamage = damageRoll + Math.max(0, (playerStats.attack ?? 0) + statusAttBonus) + (bonusDamage ?? 0);
     let damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
 
     const resistFactor = getResistanceFactor(tid, dt);
     damage = _applyResistance(damage, resistFactor);
+
+    // Apply status-based damage multiplier
+    damage = Math.max(1, Math.floor(damage * dmgMult));
 
     CombatStats.health[tid] = Math.max(0, targetStats.health - damage);
     const remainingHp = CombatStats.health[tid];
@@ -1065,7 +1073,7 @@ const _processStatusTicks = (
 
     if (def.modifier.healPerTick && def.modifier.healPerTick > 0) {
       const currentHp = CombatStats.health[currentEid] ?? 0;
-      const maxHp = CombatStats.health[currentEid] ?? _getMaxHp(world, currentEid);
+      const maxHp = _getMaxHp(world, currentEid);
       const newHp = Math.min(maxHp, currentHp + def.modifier.healPerTick);
       CombatStats.health[currentEid] = newHp;
 
@@ -1099,9 +1107,9 @@ const _processStatusTicks = (
         statusEffectId: effect.effectId,
       });
     } else {
-      // Update the remaining duration in the SoA
+      // Update the remaining duration in the SoA using already-decremented value
       removeStatusEffect(currentEid, i);
-      addStatusEffect(currentEid, { ...effect, remainingDuration: effect.remainingDuration - 1 });
+      addStatusEffect(currentEid, { ...effect, remainingDuration: effect.remainingDuration });
     }
 
     changed = true;

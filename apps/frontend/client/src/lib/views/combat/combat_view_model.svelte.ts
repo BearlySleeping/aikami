@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
+import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import { dataConnect, getTracksByMood } from '@aikami/frontend/dataconnect';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
@@ -817,10 +818,16 @@ export class CombatViewModel
 
     const removeStatusApplied = bridge.on('STATUS_APPLIED', (event) => {
       this.debug('STATUS_APPLIED', { effectId: event.effectId, targetId: event.targetId });
+
+      // Resolve effect definition from registry
+      const effectDef = STATUS_EFFECT_REGISTRY[event.effectId];
+      const effectName = effectDef?.name ?? event.effectId;
+      const effectTag = effectDef?.tag ?? 'neutral';
+
       const display: StatusEffectDisplay = {
         effectId: event.effectId,
-        name: event.effectId,
-        tag: 'neutral',
+        name: effectName,
+        tag: effectTag,
         remainingDuration: event.duration,
         sourceEntityId: event.sourceId,
       };

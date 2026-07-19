@@ -54,16 +54,16 @@ const labelClass = (available: boolean): string =>
       <!-- Action economy dots -->
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-1">
-          <span class={dotClass(!actionEconomy.actionAvailable, 'bg-success')}></span>
-          <span class={labelClass(!actionEconomy.actionAvailable)}>Action</span>
+          <span class={dotClass(actionEconomy.actionAvailable, 'bg-success')}></span>
+          <span class={labelClass(actionEconomy.actionAvailable)}>Action</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class={dotClass(!actionEconomy.bonusActionAvailable, 'bg-warning')}></span>
-          <span class={labelClass(!actionEconomy.bonusActionAvailable)}>Bonus</span>
+          <span class={dotClass(actionEconomy.bonusActionAvailable, 'bg-warning')}></span>
+          <span class={labelClass(actionEconomy.bonusActionAvailable)}>Bonus</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class={dotClass(!actionEconomy.reactionAvailable, 'bg-info')}></span>
-          <span class={labelClass(!actionEconomy.reactionAvailable)}>Reaction</span>
+          <span class={dotClass(actionEconomy.reactionAvailable, 'bg-info')}></span>
+          <span class={labelClass(actionEconomy.reactionAvailable)}>Reaction</span>
         </div>
       </div>
 
