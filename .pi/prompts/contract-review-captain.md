@@ -56,8 +56,8 @@ tries to finalize the merge.
 You are the merge authority. The orchestrator only records your decision —
 you execute the merge yourself.
 
-1. Call `gh_merge_pr` with the PR URL:
-   `gh_merge_pr({ pr: "<url>", method: "squash", deleteBranch: true })`
+1. Call `gh_merge_pr` with the PR URL (squash, no deleteBranch — orchestrator handles cleanup):
+   `gh_merge_pr({ pr: "<url>", method: "squash" })`
    🔴 If merge fails with "worktree" error, run gh from the main repo:
    `cd /path/to/main/repo && gh pr merge <num> --squash --delete-branch`
 2. Verify the merge succeeded (check the return value / output).
@@ -193,7 +193,10 @@ git push origin HEAD
 - **Do not re-run tests** if the verifier passed. Trust the verifier's evidence.
 - **If you modify source files**, warn the user that re-verification is needed.
 - **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`.
-- 🔴 **NEVER call gh_merge_pr, gh_promote_pr, or gh_cancel_pr yourself.** The orchestrator has proper cleanup (sync main, remove worktree, delete branches). Manual gh calls skip cleanup and leave stale worktrees.
+- **The orchestrator handles merge/promote/close** — in READY mode, you only call `contract_review_decision`. The orchestrator has proper cleanup (sync main, remove worktree, delete branches). Manual gh calls skip cleanup and leave stale worktrees.
+- 🔴 **In YOLO mode: YOU are the merge authority.** Call `gh_merge_pr` directly (no deleteBranch — the orchestrator cleans up the branch). Call `contract_review_decision` as the final signal.
+- 🔴 **In READY mode: NEVER call gh_merge_pr, gh_promote_pr, or gh_cancel_pr yourself.** The orchestrator handles these.
 - **No `gh_create_pr` after Phase 2** — the PR already exists.
-- 🔴 **YOLO mode: NEVER edit code or run tests.** All fixes go through `code_rabbit_autofix` which delegates to `@coderabbitai autofix`. Your only tools are `gh_create_pr`, `code_rabbit_autofix`, `git fetch/reset` (sync), and `contract_review_decision`.
+- 🔴 **YOLO mode: NEVER edit code or run tests.** All fixes go through `code_rabbit_autofix` which delegates to `@coderabbitai autofix`. Your only tools are `gh_create_pr`, `code_rabbit_autofix`, `code_rabbit_findings`, `git fetch/reset` (sync), `gh_merge_pr` (squash, no deleteBranch), and `contract_review_decision`.
+- 🔴 **If autofix can't resolve findings**, call `code_rabbit_findings` to inspect them. Decide whether the remaining findings are blocking before merging. Do NOT blindly merge through real bugs.
 - 🔴 **Always restart services before testing**: `herdr_session restart client firebase voice image text`. Worktrees have different code than main.
