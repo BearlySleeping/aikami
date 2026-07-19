@@ -322,11 +322,26 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       }
 
       // No autofix commit — either skipped (clean) or approved mid-wait.
-      if (params.merge && reviewState.includes('APPROVED')) {
+      // Check if CodeRabbit left actionable comments that autofix couldn't handle.
+      const commentsBody = gh(
+        `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
+      );
+      const hasActionable = commentsBody.includes('Actionable comments posted:');
+
+      if (params.merge && reviewState.includes('APPROVED') && !hasActionable) {
         console.log('🚀 No autofix needed — merging...');
         const result = gh(`pr merge ${num} --squash --delete-branch`);
         console.log(result ? `✅ Merged PR #${num}` : '❌ Merge failed.');
       }
+
+      const findingsWarning = hasActionable
+        ? [
+            '',
+            '⚠️  **CodeRabbit found actionable comments that autofix could not resolve.**',
+            'Call `code_rabbit_findings` to inspect them. The Captain should decide',
+            'whether these are blocking before merging.',
+          ].join('\n')
+        : '';
 
       return {
         content: [
@@ -334,7 +349,10 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             type: 'text',
             text: [
               `✅ CodeRabbit review complete on PR #${num}: ${reviewState}.`,
-              'No autofix changes were needed (clean review or autofix skipped).',
+              hasActionable
+                ? `⚠️  ${commentsBody.match(/Actionable comments posted: (\d+)/)?.[1] ?? '?'} actionable comments — autofix could not resolve them.`
+                : 'No autofix changes were needed (clean review).',
+              findingsWarning,
             ].join('\n'),
           },
         ],
@@ -344,6 +362,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           baselineCommit,
           autofixCommit: null,
           reviewState,
+          hasActionableFindings: hasActionable,
         },
       };
     },
@@ -367,16 +386,19 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       const num = prNumber(params.pr);
 
       // Fetch PR metadata (owner/repo from gh)
-      const prData = ghJson<{ repository: { owner: { login: string }; name: string } }>(
-        `pr view ${num} --json repository --jq '.repository | {owner: {login: .owner.login}, name: .name}'`,
+      const prData = ghJson<{
+        headRepositoryOwner: { login: string };
+        headRepository: { name: string };
+      }>(
+        `pr view ${num} --json headRepositoryOwner,headRepository --jq '{headRepositoryOwner: .headRepositoryOwner, headRepository: .headRepository}'`,
       );
       if (!prData) {
         return {
           content: [{ type: 'text', text: `❌ Could not read PR #${num}.` }],
         };
       }
-      const owner = prData.repository.owner.login;
-      const repo = prData.repository.name;
+      const owner = prData.headRepositoryOwner.login;
+      const repo = prData.headRepository.name;
 
       // Fetch review state
       const reviewState = getReviewState(num);

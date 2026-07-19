@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-19)
 
-**164 active (37 without contract file), 119 archived, 1 duplicates**
+**164 active (35 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -135,8 +135,8 @@
 | C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | — | v2 |
 | C-331 | Integrate Inventory Equipment Loot And Vendor Into The Demo | 👍 approved | ❓ `integrated` — inventory, vendor, and character-dashboard overlays are already mounted on the production `/game` journey (`game_ui_view.svelte`); this contract hardens them in place. Dev sandboxes `/dev/inventory` and `/dev/vendor` are updated alongside. | v2 |
 | C-332 | Redesign The Minimal Game Hud And Overlay Navigation | 👍 approved | ❓ `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. | v2 |
-| C-333 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | — | — |
-| C-334 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | — | — |
+| C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | — | v1 |
+| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | — | v2 |
 | C-335 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | — | — |
 | C-336 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | — | — |
 | C-337 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | — | — |

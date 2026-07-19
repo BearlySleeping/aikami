@@ -146,8 +146,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | v2 |
 | C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | v2 |
 | C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | v2 |
-| C-333 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | v1 |
-| C-334 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | v1 |
+| C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | v1 |
+| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | v2 |
 | C-335 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | v1 |
 | C-336 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | v1 |
 | C-337 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | v1 |
