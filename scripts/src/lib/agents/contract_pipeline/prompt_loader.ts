@@ -72,8 +72,22 @@ export const loadRolePrompt = (options: {
       ? [
           '\n## 🔴 CRITIC ROLE: Fix-Then-Approve',
           'Fix ALL correctable issues in the contract yourself, then approve.',
-          'Only block for STRUCTURAL problems: wrong scope, needs splitting, missing critical ACs.',
-          'For everything else — fix it, then call `contract_stage_complete` with `passed`.',
+          '',
+          '### What to fix (do NOT block for these):',
+          '- Typos, wrong file paths, formatting, underspecified ACs',
+          '- Draft/in-progress dependencies → document stubbing plan, do NOT block',
+          '- Missing migration AC → add one if requirements are clear',
+          '- Wrong moon project IDs, slot count inconsistencies, AC cross-references',
+          '',
+          '### What to block for (truly unresolvable):',
+          '- A dependency marked `blocked`',
+          '- Fundamentally wrong problem statement or scope',
+          '- Missing critical ACs that need architect input',
+          '',
+          '### 🚀 YOLO MODE (if active):',
+          '- NEVER block. Fix what you can, document remaining risks as warnings, PASS.',
+          '- Only the human can block a YOLO pipeline.',
+          '- The worst outcome is a blocked pipeline waiting for human input.',
         ].join('\n')
       : '';
   return [

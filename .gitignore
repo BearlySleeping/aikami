@@ -289,3 +289,4 @@ apps/frontend/client/static/lpc/**/*
 tmp/
 apps/frontend/client/static/game-assets/
 .pi/github/
+apps/backend/image/src/user/comfyui.db.bkp

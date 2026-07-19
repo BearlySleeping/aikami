@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-19
-> Files: 290 across 14 categories
+> Files: 291 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -280,6 +280,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-334: Make Local Save, Continue, Autosave, and Recovery Reliable](contracts/C-334-make-local-save-continue-autosave-and-recovery-reliable.md)
 - [Contract C-335: Enforce the Playable Demo Release Gate](contracts/C-335-enforce-the-playable-demo-release-gate.md)
 - [Contract C-336: Extract a Deterministic Rules Kernel and Typed Game Command Protocol](contracts/C-336-extract-a-deterministic-rules-kernel-and-typed-game-command.md)
+- [Contract C-337: Complete Character Progression, Classes, Abilities, Skills, and Spells](contracts/C-337-complete-character-progression-classes-abilities-skills-and.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)

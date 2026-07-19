@@ -403,6 +403,39 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
   return [basePrompt, FALLBACK_RECOVERY_PROMPT_HEADER, summary].join('\n');
 };
 
+// ── Sound effects ──────────────────────────────────────────
+
+const SOUNDS_DIR = join(process.cwd(), '.pi/sounds');
+
+const playSound = (name: string): void => {
+  const path = join(SOUNDS_DIR, `${name}.wav`);
+  if (!existsSync(path)) {
+    return;
+  }
+  // Check file size — skip if still a placeholder (0 bytes).
+  try {
+    const stat = readFileSync(path);
+    if (stat.length === 0) {
+      return;
+    }
+  } catch {
+    return;
+  }
+  // Try common Linux audio players.
+  for (const cmd of ['aplay', 'paplay', 'ffplay -nodisp -autoexit', 'play']) {
+    try {
+      execSync(`${cmd} ${path}`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      });
+      return;
+    } catch {
+      // Try next player.
+    }
+  }
+};
+
 // ── Merge helpers ────────────────────────────────────────────
 
 const syncMainOnMerge = (repoRoot: string): void => {
@@ -821,11 +854,45 @@ export const runContractPipeline = async (options: {
           result.status === 'changes_requested' &&
           next.verifyLoops >= MAX_VERIFY_LOOPS;
         manifest.verifyLoops = next.verifyLoops;
-        manifest = transition({ manifest, next: next.next });
-        if (exhausted) {
-          manifest.blockedReason = result.summary;
-        } else if (manifest.currentStage === 'blocked') {
-          manifest.blockedReason = result.summary;
+
+        // 🔴 YOLO OVERRIDE: when verifier loop is exhausted in YOLO mode,
+        // force-reconcile (push branch) and treat as review, not blocked.
+        // The YOLO captain creates a PR and lets CodeRabbit handle the findings.
+        // Never block a YOLO pipeline — the captain decides.
+        if (exhausted && options.yolo) {
+          // Force reconciliation: commit + push the branch so a PR can be created.
+          if (!manifest.reconciliation?.headBranch) {
+            try {
+              manifest.reconciliation = reconcileWorkspace({
+                manifest,
+                repoRoot: options.repoRoot,
+                baseBranch: PIPELINE_BASE_BRANCH,
+              });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `YOLO: branch pushed despite verifier loop exhaustion: ${manifest.reconciliation.headBranch}`,
+              });
+              console.log(
+                `\n🚀 YOLO: Branch pushed (verifier findings will be handled by CodeRabbit).\n`,
+              );
+            } catch (e: unknown) {
+              const m = e instanceof Error ? e.message : String(e);
+              manifest.blockedReason = `YOLO reconciliation failed: ${m.slice(0, 400)}.`;
+              manifest = transition({ manifest, next: 'blocked' });
+              writeManifest({ manifest, cwd: options.repoRoot });
+              continue;
+            }
+          }
+          // Don't set blockedReason — YOLO review proceeds normally.
+          manifest = transition({ manifest, next: 'review' });
+        } else {
+          manifest = transition({ manifest, next: next.next });
+          if (exhausted) {
+            manifest.blockedReason = result.summary;
+          } else if (manifest.currentStage === 'blocked') {
+            manifest.blockedReason = result.summary;
+          }
         }
         writeManifest({ manifest, cwd: options.repoRoot });
         pipelineLog({
@@ -890,6 +957,9 @@ export const runContractPipeline = async (options: {
             reviewDecisionPath: reviewPath,
             yolo: options.yolo,
           });
+          if (!options.yolo) {
+            playSound('pipeline-needs-input');
+          }
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
@@ -1127,6 +1197,31 @@ export const runContractPipeline = async (options: {
       const s = formatBlockedSummary(manifest);
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
+      playSound('pipeline-blocked');
+    } else if (manifest.currentStage === 'merged' || manifest.currentStage === 'pr_created') {
+      playSound('pipeline-complete');
+    }
+
+    // Clean up worktree + branch on any terminal exit (merged, blocked, pr_created).
+    // cleanupAfterMerge handles the happy path. This handles blocked/rejected exits.
+    if (manifest.currentStage !== 'merged') {
+      const wsPath = adapter.getWorkspacePath();
+      const branchName = manifest.reconciliation?.headBranch;
+      if (wsPath) {
+        try {
+          removeWorktree({
+            workspacePath: wsPath,
+            repoRoot: options.repoRoot,
+            branchName,
+            deleteRemoteBranch: true,
+          });
+          console.log(`\n🧹 Worktree + branch cleaned: ${branchName ?? 'unknown'}\n`);
+        } catch (e: unknown) {
+          console.warn(
+            `⚠️  Cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+          );
+        }
+      }
     }
 
     // Stop the contract-scoped herdr session on pipeline exit.
