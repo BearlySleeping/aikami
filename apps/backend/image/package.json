@@ -12,7 +12,8 @@
     "test:image": "bun run scripts/check_health.ts",
     "download:model": "bun run scripts/download_model.ts",
     "models:download": "bun run scripts/download_models.ts",
-    "generate:avatar": "bun run scripts/generate_avatar.ts"
+    "generate:avatar": "bun run scripts/generate_avatar.ts",
+    "update": "bun run scripts/update.ts"
   },
   "dependencies": {},
   "devDependencies": {}

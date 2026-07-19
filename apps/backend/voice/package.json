@@ -9,7 +9,8 @@
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
     "test": "echo 'no tests — container-only'",
-    "test:speech": "bun run scripts/synthesize.ts"
+    "test:speech": "bun run scripts/synthesize.ts",
+    "update": "bun run scripts/update.ts"
   },
   "dependencies": {},
   "devDependencies": {}

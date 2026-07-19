@@ -56,7 +56,8 @@
     "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts",
     "validate:wgsl": "bun run scripts/src/lib/ops/validate_wgsl.ts",
     "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",
-    "validate:shaders": "bun run validate:wgsl && bun run validate:gql"
+    "validate:shaders": "bun run validate:wgsl && bun run validate:gql",
+    "update:ai": "bun run scripts/src/lib/ops/update_ai.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4",

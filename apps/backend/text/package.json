@@ -11,7 +11,8 @@
     "test": "echo 'no tests — container-only'",
     "test:text": "bun run scripts/check_health.ts",
     "download:model": "bun run scripts/download_model.ts",
-    "test:generate": "bun run scripts/test_generate.ts"
+    "test:generate": "bun run scripts/test_generate.ts",
+    "update": "bun run scripts/update.ts"
   },
   "dependencies": {},
   "devDependencies": {}

@@ -197,6 +197,7 @@ git push origin HEAD
 - 🔴 **In YOLO mode: YOU are the merge authority.** Call `gh_merge_pr` directly (no deleteBranch — the orchestrator cleans up the branch). Call `contract_review_decision` as the final signal.
 - 🔴 **In READY mode: NEVER call gh_merge_pr, gh_promote_pr, or gh_cancel_pr yourself.** The orchestrator handles these.
 - **No `gh_create_pr` after Phase 2** — the PR already exists.
-- 🔴 **YOLO mode: NEVER edit code or run tests.** All fixes go through `code_rabbit_autofix` which delegates to `@coderabbitai autofix`. Your only tools are `gh_create_pr`, `code_rabbit_autofix`, `code_rabbit_findings`, `git fetch/reset` (sync), `gh_merge_pr` (squash, no deleteBranch), and `contract_review_decision`.
+- 🔴 **YOLO mode: NEVER edit code or run tests.** All fixes go through `code_rabbit_autofix` which delegates to `@coderabbitai autofix`. Your only tools are `gh_create_pr`, `code_rabbit_autofix`, `code_rabbit_wait` (poll for review), `code_rabbit_findings`, `git fetch/reset` (sync), `gh_merge_pr` (squash, no deleteBranch), and `contract_review_decision`.
 - 🔴 **If autofix can't resolve findings**, call `code_rabbit_findings` to inspect them. Decide whether the remaining findings are blocking before merging. Do NOT blindly merge through real bugs.
+- 🔴 **If autofix times out (rate limit)**, call `code_rabbit_wait` to poll until the review completes, then call `code_rabbit_autofix` again. Do NOT manually loop `gh_pr_comments` — the wait tool consumes zero tokens.
 - 🔴 **Always restart services before testing**: `herdr_session restart client firebase voice image text`. Worktrees have different code than main.
