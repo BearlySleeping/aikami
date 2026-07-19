@@ -542,8 +542,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runPaneCommand({ paneId, command: startCommand });
 
     if (!this._headless) {
+      // 🔴 Always point to the task message file — never embed long feedback
+      // inline. Herdr's pane send-text drops long payloads, and verifier
+      // findings can be hundreds of lines. The file always has the full content.
       const taskText = isRetry
-        ? `${parts[0]} ${options.request.userMessage ? `\n\n${options.request.userMessage}\n\n` : ''}Your full task brief is in the system prompt. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
+        ? `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
         : `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
       await this._sendTaskText({ paneId, text: taskText });
     }

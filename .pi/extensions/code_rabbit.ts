@@ -50,7 +50,23 @@ const prNumber = (pr: string): string => {
   return m?.[1] ?? pr;
 };
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** Sleep that throws if the signal is aborted (user pressed Esc/Ctrl+C). */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => {
+  if (signal?.aborted) {
+    throw new Error('Aborted');
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new Error('Aborted'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+};
+
+/** Module-level abort signal set at tool entry. Checked by ensureReview + pollForAutofixCommit. */
+let _signal: AbortSignal | undefined;
 
 type PrViewResult = {
   headRefOid: string;
@@ -108,14 +124,14 @@ const ensureReview = async (num: string): Promise<string | undefined> => {
     const waitMins = parseRateLimitMinutes(num);
     if (waitMins) {
       console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-      await sleep(waitMins * 60_000);
+      await abortableSleep(waitMins * 60_000, _signal);
       gh(`pr comment ${num} --body "@coderabbitai review"`);
       deadline = Date.now() + MAX_WAIT_MS;
       continue;
     }
 
     console.log('  ⏳ Waiting for review...');
-    await sleep(POLL_INTERVAL);
+    await abortableSleep(POLL_INTERVAL, _signal);
   }
 
   return undefined;
@@ -138,9 +154,75 @@ const getAutofixStatus = (num: string): string | undefined => {
   if (comments.includes('Autofix skipped') || comments.includes('autofix skipped')) {
     return 'skipped';
   }
-  if (comments.includes('Autofix applied') || comments.includes('autofix applied')) {
+  // CodeRabbit uses multiple phrasings: "Autofix applied", "Fixes Applied Successfully",
+  // or contains an autofix-run-id. All indicate completion.
+  if (
+    comments.includes('Autofix applied') ||
+    comments.includes('autofix applied') ||
+    comments.includes('Fixes Applied') ||
+    comments.includes('fixes applied') ||
+    comments.includes('autofix-run-id')
+  ) {
     return 'completed';
   }
+  return undefined;
+};
+
+/**
+ * Phase 2: Trigger autofix (review anchors it now)
+ * Phase 3: Poll for autofix commit
+ * Returns the new commit SHA or undefined.
+ */
+const pollForAutofixCommit = async (num: string, baseline: string): Promise<string | undefined> => {
+  console.log('⏳ Waiting for CodeRabbit autofix commit...');
+  let deadline = Date.now() + MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    // Check for a new commit on the branch (autofix push)
+    const currentHead = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
+    if (currentHead && currentHead !== baseline) {
+      console.log(`✅ Autofix commit detected: ${currentHead.slice(0, 7)}`);
+      return currentHead;
+    }
+
+    // Check autofix status in comments
+    const status = getAutofixStatus(num);
+    if (status === 'skipped') {
+      console.log('📋 Autofix skipped — no fixable findings (clean).');
+      return undefined;
+    }
+    if (status === 'completed') {
+      // Autofix claims completed — check if commit landed.
+      const recheck = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
+      if (recheck && recheck !== baseline) {
+        console.log(`✅ Autofix commit detected (late): ${recheck.slice(0, 7)}`);
+        return recheck;
+      }
+      console.log('  No autofix commit after completion — clean.');
+      return undefined;
+    }
+
+    // Handle rate limits
+    const waitMins = parseRateLimitMinutes(num);
+    if (waitMins) {
+      console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
+      await abortableSleep(waitMins * 60_000, _signal);
+      gh(`pr comment ${num} --body "@coderabbitai autofix"`);
+      deadline = Date.now() + MAX_WAIT_MS;
+      continue;
+    }
+
+    // Re-check review state
+    const currentReview = getReviewState(num);
+    if (currentReview.includes('APPROVED')) {
+      console.log('✅ Review approved during autofix wait.');
+      return undefined;
+    }
+
+    console.log('  ⏳ Waiting for autofix...');
+    await abortableSleep(POLL_INTERVAL, _signal);
+  }
+
   return undefined;
 };
 
@@ -159,7 +241,8 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       ),
     }),
     // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
-    async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx): Promise<any> {
+    async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
+      _signal = signal;
       const num = prNumber(params.pr);
 
       // ── Capture baseline ────────────────────────────────
@@ -172,6 +255,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       const baselineCommit = prInfo.headRefOid;
       const headRefName = prInfo.headRefName;
       console.log(`📌 Baseline commit: ${baselineCommit.slice(0, 7)} (${headRefName})`);
+      let autofixCommit: string | undefined;
 
       // ── Phase 1: Ensure review exists ───────────────────
       const reviewState = await ensureReview(num);
@@ -216,61 +300,27 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       console.log(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
       gh(`pr comment ${num} --body "@coderabbitai autofix"`);
 
-      // ── Phase 3: Poll for autofix commit ────────────────
-      console.log('⏳ Waiting for CodeRabbit autofix commit...');
-      let deadline = Date.now() + MAX_WAIT_MS;
-      let autofixCommit: string | undefined;
-
-      while (Date.now() < deadline) {
-        // Check for a new commit on the branch (autofix push)
-        const currentHead = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
-        if (currentHead && currentHead !== baselineCommit) {
-          autofixCommit = currentHead;
-          console.log(`✅ Autofix commit detected: ${autofixCommit.slice(0, 7)}`);
-          break;
-        }
-
-        // Check autofix status in comments
-        const autofixStatus = getAutofixStatus(num);
-        if (autofixStatus === 'skipped') {
-          // Autofix skipped — no fixable findings. This is a clean outcome.
-          console.log('📋 Autofix skipped — no fixable findings (clean).');
-          break;
-        }
-        if (autofixStatus === 'completed' && !autofixCommit) {
-          // Autofix claims completed but no commit detected yet — give it a moment.
-          console.log('  Autofix completed, waiting for commit push...');
-          await sleep(5_000);
-          const recheck = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
-          if (recheck && recheck !== baselineCommit) {
-            autofixCommit = recheck;
-            console.log(`✅ Autofix commit detected (late): ${autofixCommit.slice(0, 7)}`);
-            break;
-          }
-          // No commit after "completed" — treat as clean.
-          console.log('  No autofix commit after completion — clean.');
-          break;
-        }
-
-        // Handle rate limits
-        const waitMins = parseRateLimitMinutes(num);
-        if (waitMins) {
-          console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-          await sleep(waitMins * 60_000);
-          gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-          deadline = Date.now() + MAX_WAIT_MS;
-          continue;
-        }
-
-        // Re-check review state — if it transitioned to APPROVED, we're done.
-        const currentReview = getReviewState(num);
-        if (currentReview.includes('APPROVED')) {
-          console.log('✅ Review approved during autofix wait.');
-          break;
-        }
-
-        console.log('  ⏳ Waiting for autofix...');
-        await sleep(POLL_INTERVAL);
+      // 🔴 Re-capture baseline AFTER posting autofix. If autofix already
+      // ran (from a previous session or manual trigger), the head commit
+      // may have already advanced. We need the post-trigger baseline to
+      // correctly detect the NEXT autofix commit.
+      await abortableSleep(2000, _signal);
+      const postTriggerHead = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
+      if (postTriggerHead && postTriggerHead !== baselineCommit) {
+        // Autofix already completed before our trigger — adopt the existing commit.
+        autofixCommit = postTriggerHead;
+        console.log(`✅ Autofix already completed: ${autofixCommit.slice(0, 7)}`);
+      } else if (getAutofixStatus(num) === 'completed') {
+        // Autofix completed but the commit didn't change from baseline —
+        // the tool was called after autofix already ran. Adopt the existing head.
+        autofixCommit = postTriggerHead || baselineCommit;
+        console.log(
+          `✅ Autofix completed (commit already on branch): ${autofixCommit.slice(0, 7)}`,
+        );
+      } else {
+        // Use the post-trigger head as the new baseline for polling.
+        const activeBaseline = postTriggerHead || baselineCommit;
+        autofixCommit = await pollForAutofixCommit(num, activeBaseline);
       }
 
       if (!autofixCommit && !getAutofixStatus(num) && !getReviewState(num).includes('APPROVED')) {
@@ -384,7 +434,8 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       pr: Type.String({ description: 'PR number' }),
     }),
     // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
-    async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx): Promise<any> {
+    async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
+      _signal = signal;
       const num = prNumber(params.pr);
 
       // Fetch PR metadata (owner/repo from gh)
@@ -523,7 +574,8 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       ),
     }),
     // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx): Promise<any> {
+    async execute(_toolCallId, params, signal, _onUpdate, _ctx): Promise<any> {
+      _signal = signal;
       const num = prNumber(params.pr);
       const maxWaitMs = params.maxWaitMs ?? 30 * 60 * 1000;
       const intervalMs = params.intervalMs ?? 15_000;
@@ -585,12 +637,12 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         const waitMins = parseRateLimitMinutes(num);
         if (waitMins) {
           console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-          await sleep(waitMins * 60_000);
+          await abortableSleep(waitMins * 60_000, _signal);
           continue;
         }
 
         console.log(`  ⏳ Waiting... (${Math.round((deadline - Date.now()) / 1000)}s remaining)`);
-        await sleep(intervalMs);
+        await abortableSleep(intervalMs, _signal);
       }
 
       return {

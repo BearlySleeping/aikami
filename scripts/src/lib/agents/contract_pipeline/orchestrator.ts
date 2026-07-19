@@ -855,42 +855,38 @@ export const runContractPipeline = async (options: {
           next.verifyLoops >= MAX_VERIFY_LOOPS;
         manifest.verifyLoops = next.verifyLoops;
 
-        // 🔴 YOLO OVERRIDE: when verifier loop is exhausted in YOLO mode,
-        // force-reconcile (push branch) and treat as review, not blocked.
-        // The YOLO captain creates a PR and lets CodeRabbit handle the findings.
-        // Never block a YOLO pipeline — the captain decides.
-        if (exhausted && options.yolo) {
-          // Force reconciliation: commit + push the branch so a PR can be created.
-          if (!manifest.reconciliation?.headBranch) {
-            try {
-              manifest.reconciliation = reconcileWorkspace({
-                manifest,
-                repoRoot: options.repoRoot,
-                baseBranch: PIPELINE_BASE_BRANCH,
-              });
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: `YOLO: branch pushed despite verifier loop exhaustion: ${manifest.reconciliation.headBranch}`,
-              });
-              console.log(
-                `\n🚀 YOLO: Branch pushed (verifier findings will be handled by CodeRabbit).\n`,
-              );
-            } catch (e: unknown) {
-              const m = e instanceof Error ? e.message : String(e);
-              manifest.blockedReason = `YOLO reconciliation failed: ${m.slice(0, 400)}.`;
-              manifest = transition({ manifest, next: 'blocked' });
-              writeManifest({ manifest, cwd: options.repoRoot });
-              continue;
+        // 🔴 When verifier loop is exhausted, always go to review — never block.
+        // - YOLO: force reconcile + YOLO review (Captain creates PR, autofix, merges).
+        // - Non-YOLO: review with blockedReason (Captain sees findings, can fix easy
+        //   issues, create draft PR, or ask the user).
+        if (exhausted) {
+          if (options.yolo) {
+            // Force reconciliation: commit + push the branch so a PR can be created.
+            if (!manifest.reconciliation?.headBranch) {
+              try {
+                manifest.reconciliation = reconcileWorkspace({
+                  manifest,
+                  repoRoot: options.repoRoot,
+                  baseBranch: PIPELINE_BASE_BRANCH,
+                });
+                console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
+              } catch (e: unknown) {
+                const m = e instanceof Error ? e.message : String(e);
+                manifest.blockedReason = `YOLO reconciliation failed: ${m.slice(0, 400)}.`;
+                manifest = transition({ manifest, next: 'blocked' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
+              }
             }
+            // YOLO: no blockedReason — captain operates normally.
+          } else {
+            // Non-YOLO: set blockedReason so captain gets the verifier findings.
+            manifest.blockedReason = result.summary;
           }
-          // Don't set blockedReason — YOLO review proceeds normally.
           manifest = transition({ manifest, next: 'review' });
         } else {
           manifest = transition({ manifest, next: next.next });
-          if (exhausted) {
-            manifest.blockedReason = result.summary;
-          } else if (manifest.currentStage === 'blocked') {
+          if (manifest.currentStage === 'blocked') {
             manifest.blockedReason = result.summary;
           }
         }
