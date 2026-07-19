@@ -95,6 +95,7 @@ export type NpcDialogueExecutors = {
   skillCheck(options: { skill: string; difficultyClass: number }): boolean;
   giveItem(options: { itemId: string; quantity: number }): boolean;
   startCombat(options: { npcId: string; npcName: string; encounterId?: string }): boolean;
+  recruit(options: { npcId: string; npcName: string }): boolean;
 };
 
 /** Context facts projected into the AI system prompt. */
@@ -465,6 +466,11 @@ export class NpcDialogueService
           npcName,
           encounterId: (command as { encounterId?: string }).encounterId,
         });
+      case 'recruit':
+        return this._executors!.recruit({
+          npcId,
+          npcName: npc?.name ?? 'Unknown',
+        });
       default:
         this.warn('executeCommand:unknown-kind', { kind });
         return false;
@@ -788,6 +794,11 @@ export class NpcDialogueService
 
     if (npc?.combatStats) {
       allowed.push('startCombat');
+    }
+
+    // recruit: only when NPC is a recruitable companion (C-340)
+    if ((npc as Record<string, unknown> | undefined)?.isCompanion) {
+      allowed.push('recruit');
     }
 
     return allowed;
