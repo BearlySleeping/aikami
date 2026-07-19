@@ -294,6 +294,7 @@ export const BaseCharacterSheetSchema = Type.Object(
     hotbarSlots: Type.Optional(
       Type.Array(Type.String(), {
         description: 'Active abilities currently slotted on the hotbar (feature IDs, max 6)',
+        maxItems: 6,
       }),
     ),
     abilityUses: Type.Optional(

@@ -807,6 +807,21 @@ export class GameOverlayService
       }
     }
 
+    // ── Hotbar activation: keys 1-6 ──
+    if (this.activeOverlay === 'NONE') {
+      const key = event.key;
+      if (key >= '1' && key <= '6') {
+        event.preventDefault();
+        const slotIndex = Number.parseInt(key, 10) - 1; // Convert to zero-based index (key "1" -> index 0)
+        const featureId = playerStateService.hotbarSlots[slotIndex];
+        if (featureId) {
+          playerStateService.useAbility(featureId);
+          this.debug('hotbar:activate', { slotIndex, featureId });
+        }
+        return;
+      }
+    }
+
     // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
     if (actionId) {
       onboardingHintService.onActionPerformed(actionId);

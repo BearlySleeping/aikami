@@ -837,7 +837,11 @@ const _handleEnemyDefeated = (
 ): void => {
   // Grant XP to the player for this victory
   if (playerEntityId > 0) {
-    grantXp(world, playerEntityId, 25, bridge);
+    const playerStats = getComponent(world, playerEntityId, CombatStats) as
+      | CombatStatsData
+      | undefined;
+    const playerClassId = playerStats?.classId || 'fighter';
+    grantXp(world, playerEntityId, 25, bridge, playerClassId);
   }
 
   // Read the spawn point ID from the Enemy component for persistence tracking

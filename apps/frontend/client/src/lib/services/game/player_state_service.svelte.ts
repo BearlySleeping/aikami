@@ -14,6 +14,7 @@ import {
 import { serializeForAi } from '$lib/data/character_sheet_helpers';
 import type { NarrativeTraits } from '$lib/data/character_sheet_types';
 import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
+import { CLASS_REGISTRY } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,7 +123,24 @@ class PlayerStateService
   /** Sets the class ID and retroactively grants features for the current level. */
   setClassId(classId: string): void {
     this.classId = classId;
-    this.debug('setClassId', { classId });
+
+    // Retroactively grant all features from level 1 through current level
+    const existingFeatures = new Set(this.classFeatures);
+    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string }[]> }>)[classId];
+
+    if (classDef) {
+      for (let level = 1; level <= this.playerLevel; level++) {
+        const levelFeatures = classDef.features[String(level)];
+        if (levelFeatures) {
+          for (const feature of levelFeatures) {
+            existingFeatures.add(feature.id);
+          }
+        }
+      }
+      this.classFeatures = [...existingFeatures];
+    }
+
+    this.debug('setClassId', { classId, featuresGranted: this.classFeatures.length });
   }
 
   /** Sets a hotbar slot to a feature ID. Auto-clears the slot if it was already assigned elsewhere. */

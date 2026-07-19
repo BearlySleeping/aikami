@@ -286,7 +286,7 @@ const { viewModel }: Props = $props();
                         {#if feature.activation}
                           <div class="flex gap-2 mt-1">
                             <span class="text-[10px] text-base-content/40">
-                              Cost: {feature.activation.cost.replace('_', ' ')}
+                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
                             </span>
                             {#if feature.activation.effectDice}
                               <span class="text-[10px] text-warning">
@@ -332,7 +332,7 @@ const { viewModel }: Props = $props();
                         {#if feature.activation}
                           <div class="flex gap-2 mt-1">
                             <span class="text-[10px] text-base-content/40">
-                              Cost: {feature.activation.cost.replace('_', ' ')}
+                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
                             </span>
                           </div>
                         {/if}
