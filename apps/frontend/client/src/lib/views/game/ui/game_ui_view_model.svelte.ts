@@ -98,6 +98,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly showQuestTracker: boolean;
   /** Whether to show the autosave indicator (hidden during pause menu, game over, end session). */
   readonly showAutosaveIndicator: boolean;
+  /** Whether to show the hotbar (C-337) — visible during exploration, hidden during overlays/combat. */
+  readonly showHotbar: boolean;
 
   // ── Overlay ViewModels (created on demand by initialize) ──
 
@@ -272,6 +274,12 @@ class GameUIViewModel
       overlay !== 'COMBAT' &&
       overlay !== 'DIALOGUE'
     );
+  }
+
+  /** Hotbar: visible during exploration (NONE), hidden during all overlays and combat (C-337). */
+  get showHotbar(): boolean {
+    const overlay = gameOverlayService.activeOverlay;
+    return overlay === 'NONE';
   }
 
   // ── Lifecycle ──

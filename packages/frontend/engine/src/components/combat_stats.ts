@@ -25,6 +25,8 @@ export const CombatStats = {
   level: [] as number[],
   /** XP threshold required to reach the next level. */
   xpToNextLevel: [] as number[],
+  /** Class ID for class-aware progression (e.g., 'fighter', 'wizard'). */
+  classId: [] as string[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -39,6 +41,7 @@ export type CombatStatsData = {
   xp: number;
   level: number;
   xpToNextLevel: number;
+  classId?: string;
 };
 
 /**
@@ -59,6 +62,9 @@ export const registerCombatStatsObservers = (world: World): void => {
     CombatStats.xp[eid] = params.xp;
     CombatStats.level[eid] = params.level;
     CombatStats.xpToNextLevel[eid] = params.xpToNextLevel;
+    if (params.classId !== undefined) {
+      CombatStats.classId[eid] = params.classId;
+    }
   });
 
   observe(
@@ -75,6 +81,7 @@ export const registerCombatStatsObservers = (world: World): void => {
       xp: CombatStats.xp[eid],
       level: CombatStats.level[eid],
       xpToNextLevel: CombatStats.xpToNextLevel[eid],
+      classId: CombatStats.classId[eid],
     }),
   );
 };
