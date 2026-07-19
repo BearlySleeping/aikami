@@ -9,7 +9,8 @@ import { defineConfig } from '$visual/core/config';
 const SettingsBasicSchema = Type.Object({
   score: Type.Number({ description: '0-100 score of visual correctness' }),
   basicSectionsVisible: Type.Boolean({
-    description: 'Whether the 5 basic section tabs are visible (Controls, Audio, Display, Gameplay, AI & Privacy)',
+    description:
+      'Whether the 5 basic section tabs are visible (Controls, Audio, Display, Gameplay, AI & Privacy)',
   }),
   noAdvancedSectionsVisible: Type.Boolean({
     description: 'Whether no advanced sections (AI Engine, Agents, etc.) are visible',

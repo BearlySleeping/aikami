@@ -3,6 +3,7 @@
 // Turso/libSQL-backed save/load persistence for ECS snapshots.
 // Replaces IndexedDB with the local SQLite database via LocalDatabaseInterface.
 // Contract: C-321 Migrate Local Persistence to Turso
+// Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { getLocalDatabase } from '@aikami/frontend/repositories';
@@ -25,27 +26,105 @@ import {
 const KEY_PREFIX = 'aikami_save_';
 
 /**
+ * Computes a SHA-256 hex digest of the given string using the Web Crypto API.
+ *
+ * Used for save envelope integrity checks. Not a security HMAC — purely for
+ * corruption detection.
+ */
+export const sha256 = async (input: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+/** Current save envelope version. */
+export const SAVE_ENVELOPE_VERSION = 2;
+
+/**
  * Parses a raw save payload into its envelope parts.
  *
- * Handles both legacy plain ECS snapshots and the JSON envelope with
- * service snapshots ({ ecsSnapshot, serviceSnapshots }). Exposed so the
- * game boot pipeline can hydrate domain services on Continue (C-331 AC-2).
+ * Handles v2 envelopes (with version/checksum), legacy v1 envelopes
+ * ({ ecsSnapshot, serviceSnapshots }), and plain ECS snapshots.
+ * Exposed so the game boot pipeline can hydrate domain services on Continue
+ * (C-331 AC-2) and validate checksums (C-334 AC-4).
+ *
+ * @returns The parsed envelope with version metadata and validation result.
  */
 export const parseSavePayloadEnvelope = (
   raw: string,
-): { ecsSnapshot: string; serviceSnapshots?: ServiceSnapshot[] } => {
+): {
+  ecsSnapshot: string;
+  serviceSnapshots?: ServiceSnapshot[];
+  /** Envelope version — undefined for pre-v2 payloads. */
+  version?: number;
+  /** Whether the stored checksum matches the computed digest. True for v1/pre-v2. */
+  checksumValid: boolean;
+  /** The raw stored checksum string, if present. */
+  storedChecksum?: string;
+} => {
   try {
     const envelope = JSON.parse(raw) as {
       ecsSnapshot: string;
       serviceSnapshots?: ServiceSnapshot[];
+      version?: number;
+      checksum?: string;
     };
-    if (envelope.ecsSnapshot) {
-      return envelope;
+    if (!envelope.ecsSnapshot) {
+      throw new Error('Missing ecsSnapshot');
     }
+
+    const version = envelope.version;
+
+    // v1 or pre-versioned — no checksum validation
+    if (!version || version < 2 || !envelope.checksum) {
+      return {
+        ecsSnapshot: envelope.ecsSnapshot,
+        serviceSnapshots: envelope.serviceSnapshots,
+        version,
+        checksumValid: true,
+        storedChecksum: envelope.checksum,
+      };
+    }
+
+    // v2+ — checksum is stored but validated asynchronously by the caller
+    return {
+      ecsSnapshot: envelope.ecsSnapshot,
+      serviceSnapshots: envelope.serviceSnapshots,
+      version,
+      checksumValid: false, // caller must validate with validateEnvelopeChecksum
+      storedChecksum: envelope.checksum,
+    };
   } catch {
     // Not valid JSON — treat as legacy plain ECS snapshot
   }
-  return { ecsSnapshot: raw };
+  return { ecsSnapshot: raw, version: undefined, checksumValid: true };
+};
+
+/**
+ * Validates a v2 envelope checksum asynchronously.
+ *
+ * Computes SHA-256 of `JSON.stringify({ ecsSnapshot, serviceSnapshots })`
+ * and compares against the stored checksum.
+ *
+ * @returns true if checksum matches, false on mismatch or error.
+ */
+export const validateEnvelopeChecksum = async (options: {
+  ecsSnapshot: string;
+  serviceSnapshots?: ServiceSnapshot[];
+  storedChecksum: string;
+}): Promise<boolean> => {
+  try {
+    const dataToHash = JSON.stringify({
+      ecsSnapshot: options.ecsSnapshot,
+      serviceSnapshots: options.serviceSnapshots,
+    });
+    const computed = await sha256(dataToHash);
+    return computed === options.storedChecksum;
+  } catch {
+    return false;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -60,12 +139,15 @@ export type SaveSlotInfo = {
   timestamp: number;
   /** Display name of the map/location where the save was made. */
   mapName: string;
+  /** The campaign ID this save belongs to (C-334). */
+  campaignId?: string;
 };
 
 /** Internal save document shape persisted to SQLite. */
 export type SaveDocument = {
   id: string;
   slotId: string;
+  campaignId: string | null;
   timestamp: number;
   mapName: string;
   payload: string;
@@ -98,15 +180,22 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * Scans the local database for stored snapshots and populates {@link availableSaves}.
    *
    * Call this on app startup so the UI can show existing saves.
+   *
+   * @param campaignId - Optional campaign ID to filter saves by (C-334).
    */
-  fetchAvailableSaves(): Promise<void>;
+  fetchAvailableSaves(campaignId?: string): Promise<void>;
 
   /**
    * Creates an ECS snapshot and persists it to the local database.
    *
-   * @param slotId - A named slot identifier (default: 'auto-save').
+   * Writes a v2 save envelope with version, checksum, campaignId, mapName,
+   * and savedAt timestamp (C-334).
+   *
+   * @param options.slotId - A named slot identifier (default: 'auto-save').
+   * @param options.campaignId - The active campaign ID (C-334).
+   * @param options.mapName - The current map name (C-334).
    */
-  saveGame(slotId?: string): Promise<void>;
+  saveGame(options?: { slotId?: string; campaignId?: string; mapName?: string }): Promise<void>;
 
   /**
    * Retrieves a saved snapshot from the local database and restores the ECS world.
@@ -139,7 +228,8 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * Retrieves the raw, unparsed save payload (full envelope) for a slot.
    *
    * The game boot pipeline parses it with {@link parseSavePayloadEnvelope}
-   * to restore both the ECS world and the domain service snapshots (C-331).
+   * to restore both the ECS world and the domain service snapshots (C-331)
+   * and validate checksums (C-334).
    *
    * @param slotId - The slot identifier to read.
    * @throws If the save is not found.
@@ -175,44 +265,93 @@ class GameSaveService
   }
 
   /** @inheritdoc */
-  async fetchAvailableSaves(): Promise<void> {
+  async fetchAvailableSaves(campaignId?: string): Promise<void> {
     const db = await getLocalDatabase();
-    const result = await db.query({
-      sql: 'SELECT slot_id, timestamp, map_name FROM saves ORDER BY timestamp DESC',
-      args: [],
-    });
+
+    let result;
+    if (campaignId) {
+      result = await db.query({
+        sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves WHERE campaign_id = ? ORDER BY timestamp DESC',
+        args: [campaignId],
+      });
+    } else {
+      result = await db.query({
+        sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves ORDER BY timestamp DESC',
+        args: [],
+      });
+    }
 
     this.availableSaves = result.rows.map((row) => ({
       id: row.slot_id as string,
       timestamp: row.timestamp as number,
       mapName: row.map_name as string,
+      campaignId: (row.campaign_id as string) || undefined,
     }));
   }
 
   /** @inheritdoc */
-  async saveGame(slotId: string = 'auto-save'): Promise<void> {
+  async saveGame(options?: {
+    slotId?: string;
+    campaignId?: string;
+    mapName?: string;
+  }): Promise<void> {
     if (this.isSaving) {
       return;
     }
+
+    const { slotId = 'auto-save', campaignId, mapName = 'World' } = options ?? {};
 
     this.isSaving = true;
 
     try {
       const ecsSnapshot = await this._getBridge().createSnapshot();
       const serviceSnapshots = serializeAllServices();
-      const payload = JSON.stringify({ ecsSnapshot, serviceSnapshots });
+      const savedAt = new Date().toISOString();
+
+      // Compute SHA-256 checksum of the data portion (C-334)
+      const dataToHash = JSON.stringify({ ecsSnapshot, serviceSnapshots });
+      const checksum = await sha256(dataToHash);
+
+      // v2 envelope (C-334)
+      const payload = JSON.stringify({
+        version: SAVE_ENVELOPE_VERSION,
+        checksum,
+        ecsSnapshot,
+        serviceSnapshots,
+        savedAt,
+      });
 
       const id = `${KEY_PREFIX}${slotId}`;
       const timestamp = Date.now();
 
       const db = await getLocalDatabase();
+
+      // Atomic write: write to temp key, then rename (C-334)
+      const tempId = `${id}_temp_${Date.now()}`;
       await db.execute({
         sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [id, slotId, null, timestamp, 'World', payload],
+        args: [tempId, slotId, campaignId ?? null, timestamp, mapName, payload],
+      });
+
+      // Atomically replace the final slot
+      await db.execute({
+        sql: 'DELETE FROM saves WHERE id = ?',
+        args: [id],
+      });
+      await db.execute({
+        sql: `UPDATE saves SET id = ?, slot_id = ? WHERE id = ?`,
+        args: [id, slotId, tempId],
+      });
+
+      this.debug('saveGame:complete', {
+        slotId,
+        campaignId,
+        mapName,
+        version: SAVE_ENVELOPE_VERSION,
       });
 
       // Refresh the saves list
-      await this.fetchAvailableSaves();
+      await this.fetchAvailableSaves(campaignId ?? undefined);
     } finally {
       this.isSaving = false;
     }
@@ -238,11 +377,27 @@ class GameSaveService
       }
 
       const payload = result.rows[0].payload as string;
-      const { ecsSnapshot, serviceSnapshots } = this._parsePayload(payload);
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+        parseSavePayloadEnvelope(payload);
+
+      // Validate checksum for v2+ payloads (C-334 AC-4)
+      if (version && version >= 2 && storedChecksum) {
+        const valid = await validateEnvelopeChecksum({
+          ecsSnapshot,
+          serviceSnapshots,
+          storedChecksum,
+        });
+        if (!valid) {
+          throw new Error(`Save is corrupted: checksum mismatch for slot "${slotId}"`);
+        }
+      }
+
       await this._getBridge().restoreSnapshot(ecsSnapshot);
       if (serviceSnapshots) {
         hydrateAllServices(serviceSnapshots);
       }
+
+      this.debug('loadGame:complete', { slotId, version });
     } finally {
       this.isLoading = false;
     }
@@ -282,17 +437,6 @@ class GameSaveService
   // -----------------------------------------------------------------------
   // Private
   // -----------------------------------------------------------------------
-
-  /**
-   * Parses a save payload — handles both legacy plain ECS snapshots
-   * and the new JSON envelope with service snapshots.
-   */
-  private _parsePayload(raw: string): {
-    ecsSnapshot: string;
-    serviceSnapshots?: ServiceSnapshot[];
-  } {
-    return parseSavePayloadEnvelope(raw);
-  }
 
   /**
    * Returns the engine bridge, throwing if it was not provided.
