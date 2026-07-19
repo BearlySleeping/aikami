@@ -42,7 +42,9 @@ test.describe('Settings — Progressive Disclosure (C-333)', () => {
     await expect(advancedBtn).toBeVisible();
   });
 
-  test('AC-1: AI & Privacy section shows loading/not-configured state gracefully', async ({ page }) => {
+  test('AC-1: AI & Privacy section shows loading/not-configured state gracefully', async ({
+    page,
+  }) => {
     // Navigate to AI & Privacy tab
     const aiTab = page.locator('.tabs-boxed button.tab:has-text("AI & Privacy")');
     await aiTab.click();

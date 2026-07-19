@@ -4,12 +4,14 @@
 // RouterService (SPA navigation), and Tauri window API (desktop quit).
 // Supports optional Google Sign-In — the game is fully functional without it.
 // Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-3)
+// Contract: C-334 Crash Detection Recovery (AC-5)
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { GameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
 import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import type { SaveSlotInfo } from '$services';
 import {
@@ -53,6 +55,15 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Available save slots from IndexedDB (sorted newest first). */
   readonly availableSaves: readonly SaveSlotInfo[];
 
+  /** C-334 AC-5: Whether a crash recovery prompt should be shown. */
+  readonly showRecoveryPrompt: boolean;
+
+  /** C-334 AC-5: The campaign ID from the stale session marker. */
+  readonly recoveryCampaignId: string | undefined;
+
+  /** C-334 AC-5: Whether a recovery action is in progress. */
+  readonly isRecovering: boolean;
+
   /** Start a New Game — resets state and routes to character creation. */
   startNewGame(): Promise<void>;
 
@@ -82,6 +93,12 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Quits the desktop app (Tauri only). */
   quitApp(): Promise<void>;
+
+  /** C-334 AC-5: Accepts recovery — loads the last save for the crashed campaign. */
+  acceptRecovery(): Promise<void>;
+
+  /** C-334 AC-5: Declines recovery — clears the session marker silently. */
+  declineRecovery(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -180,6 +197,18 @@ class StartViewModel
 
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
+
+  /** C-334 AC-5: Whether a crash recovery prompt should be shown. */
+  showRecoveryPrompt = $state(false);
+
+  /** C-334 AC-5: The campaign ID recovered from the stale session marker. */
+  recoveryCampaignId = $state<string | undefined>(undefined);
+
+  /** C-334 AC-5: Whether a recovery operation is in progress. */
+  isRecovering = $state(false);
+
+  /** C-334 AC-5: Whether recovery was accepted (vs declined). */
+  private _recoveryAccepted = false;
 
   /** @inheritdoc */
   get isLoggedIn(): boolean {
@@ -301,9 +330,13 @@ class StartViewModel
 
     // Load the most recent save (sorted newest first)
     const latestSave = this.availableSaves[0];
+    const campaignId = latestSave.campaignId;
 
     try {
-      await campaignService.loadCampaign({ campaignId: latestSave.id });
+      if (campaignId) {
+        // C-334 AC-3: Load the campaign first, then the boot pipeline handles the save
+        await campaignService.loadCampaign({ campaignId });
+      }
 
       await routerService.goToRoute('game', {
         queryParameters: undefined,
@@ -323,6 +356,18 @@ class StartViewModel
   /** @inheritdoc */
   override async initialize(): Promise<void> {
     this.debug('initialize');
+
+    // C-334 AC-5: Check for stale session marker (crash recovery)
+    try {
+      const campaignId = await GameOverlayService.checkSessionMarker();
+      if (campaignId) {
+        this.recoveryCampaignId = campaignId;
+        this.showRecoveryPrompt = true;
+        this.debug('initialize:recovery-prompt', { campaignId });
+      }
+    } catch (error) {
+      this.debug('initialize:recovery-check-failed', { error: String(error) });
+    }
 
     // Check IndexedDB for existing game saves
     try {
@@ -445,6 +490,59 @@ class StartViewModel
     } catch (error) {
       this.debug('quitApp:error', { error: String(error) });
     }
+  }
+
+  /** @inheritdoc */
+  async acceptRecovery(): Promise<void> {
+    if (this.isRecovering || !this.recoveryCampaignId) {
+      return;
+    }
+
+    this.isRecovering = true;
+    this._recoveryAccepted = true;
+
+    try {
+      // Find the most recent save for the crashed campaign
+      await gameSaveService.fetchAvailableSaves(this.recoveryCampaignId);
+      const saves = gameSaveService.availableSaves;
+
+      if (saves.length === 0) {
+        // No saves — just clear the marker and show start screen
+        await GameOverlayService.clearSessionMarker();
+        this.showRecoveryPrompt = false;
+        this.debug('acceptRecovery:no-saves-for-campaign');
+        return;
+      }
+
+      const latestSave = saves[0];
+      this.debug('acceptRecovery', { slotId: latestSave.id, mapName: latestSave.mapName });
+
+      // Clear the session marker before navigating
+      await GameOverlayService.clearSessionMarker();
+
+      // Dismiss the recovery prompt before navigating
+      this.showRecoveryPrompt = false;
+
+      // Navigate to /game with the campaign from the save
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('acceptRecovery:failed', { error: String(error) });
+      this.errorMessage = 'Failed to recover session. Try starting a new game.';
+    } finally {
+      this.isRecovering = false;
+    }
+  }
+
+  /** @inheritdoc */
+  async declineRecovery(): Promise<void> {
+    // C-334 AC-5: Clear the session marker silently
+    await GameOverlayService.clearSessionMarker();
+    this.showRecoveryPrompt = false;
+    this.recoveryCampaignId = undefined;
+    this.debug('declineRecovery');
   }
 }
 

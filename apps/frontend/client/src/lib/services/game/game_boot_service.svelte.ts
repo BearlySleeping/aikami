@@ -378,9 +378,31 @@ class GameBootService
   private async _stageValidateSave(input: GameBootInput): Promise<void> {
     const t0 = performance.now();
 
-    // If a payload is already provided (e.g., from main menu), trust it
+    // If a payload is already provided (e.g., from main menu), validate it
     if (input.pendingSavePayload) {
       this.debug('stage:validating_save:payload-provided');
+
+      // C-334 AC-4: Validate checksum for v2+ payloads
+      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
+        './game_save_service.svelte.ts'
+      );
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } = parseSavePayloadEnvelope(
+        input.pendingSavePayload,
+      );
+
+      if (version && version >= 2 && storedChecksum) {
+        const valid = await validateEnvelopeChecksum({
+          ecsSnapshot,
+          serviceSnapshots,
+          storedChecksum,
+        });
+        if (!valid) {
+          // C-334 AC-4: Distinct corruption error (not "Save not found")
+          throw new Error(`Save is corrupted: checksum mismatch`);
+        }
+        this.debug('stage:validating_save:checksum-valid', { version });
+      }
+
       const elapsed = performance.now() - t0;
       this.debug('stage:validating_save:complete', { elapsedMs: elapsed });
       return;
@@ -397,9 +419,46 @@ class GameBootService
     // Fetch the payload to validate it exists and is parseable
     const slotId = this._campaign.lastSaveSlotId;
     try {
-      const { gameSaveService } = await import('./game_save_service.svelte.ts');
+      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
+        './game_save_service.svelte.ts'
+      );
       // Raw envelope — hydration stage splits it into ECS + service snapshots (C-331)
       const payload = await gameSaveService.getRawSavePayload(slotId);
+
+      // C-334 AC-4: Validate checksum for v2+ payloads
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+        parseSavePayloadEnvelope(payload);
+
+      if (version && version >= 2 && storedChecksum) {
+        const valid = await validateEnvelopeChecksum({
+          ecsSnapshot,
+          serviceSnapshots,
+          storedChecksum,
+        });
+        if (!valid) {
+          // Attempt recovery: find previous valid save for this campaign
+          const recoverySlotId = await this._findRecoverySave();
+          if (recoverySlotId) {
+            this.warn('stage:validating_save:corrupt-recovered', {
+              corruptSlot: slotId,
+              recoverySlot: recoverySlotId,
+            });
+            const recoveryPayload = await gameSaveService.getRawSavePayload(recoverySlotId);
+            input.pendingSavePayload = recoveryPayload;
+            this._input = input;
+
+            const elapsed = performance.now() - t0;
+            this.debug('stage:validating_save:complete', { elapsedMs: elapsed });
+            return;
+          }
+
+          throw new Error(
+            `Save is corrupted: checksum mismatch for slot "${slotId}". No recovery save available.`,
+          );
+        }
+        this.debug('stage:validating_save:checksum-valid', { version });
+      }
+
       // Validation passed — store payload for hydration stage
       input.pendingSavePayload = payload;
       this._input = input;
@@ -834,6 +893,58 @@ class GameBootService
   }
 
   // ── Teardown ──
+
+  /**
+   * Finds the most recent valid save for the current campaign,
+   * excluding a corrupt slot. Used for recovery (C-334 AC-4).
+   *
+   * @returns The slot ID of the recovery save, or undefined if none found.
+   */
+  private async _findRecoverySave(): Promise<string | undefined> {
+    if (!this._campaign?.id) {
+      return undefined;
+    }
+
+    try {
+      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
+        './game_save_service.svelte.ts'
+      );
+
+      // Fetch all saves for this campaign, sorted newest first
+      await gameSaveService.fetchAvailableSaves(this._campaign.id);
+      const saves = gameSaveService.availableSaves;
+
+      // Find the first valid save (skip corrupt ones)
+      for (const save of saves) {
+        try {
+          const payload = await gameSaveService.getRawSavePayload(save.id);
+          const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+            parseSavePayloadEnvelope(payload);
+
+          if (version && version >= 2 && storedChecksum) {
+            const valid = await validateEnvelopeChecksum({
+              ecsSnapshot,
+              serviceSnapshots,
+              storedChecksum,
+            });
+            if (!valid) {
+              continue; // skip this corrupt save, try next
+            }
+          }
+          this.debug('_findRecoverySave:found', { slotId: save.id });
+          return save.id;
+        } catch {
+          // Skip saves that can't be read
+        }
+      }
+
+      this.warn('_findRecoverySave:no-valid-saves');
+      return undefined;
+    } catch (error) {
+      this.warn('_findRecoverySave:failed', { error: String(error) });
+      return undefined;
+    }
+  }
 
   /** Destroys engine resources (bridge, world, resize handler). */
   private _teardownEngineResources(): void {

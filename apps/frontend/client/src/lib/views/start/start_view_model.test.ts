@@ -35,14 +35,16 @@ mock.module('$app/state', () => ({
 // ---------------------------------------------------------------------------
 
 let resetCalls = 0;
-let fetchSavesResult: Array<{ id: string; timestamp: number; mapName: string }> = [];
-let getSavePayloadResult: string | undefined;
-let getSavePayloadError: Error | undefined;
+let fetchSavesResult: Array<{
+  id: string;
+  timestamp: number;
+  mapName: string;
+  campaignId?: string;
+}> = [];
 let routeCalls: Array<{
   route: string;
   options?: { queryParameters?: Record<string, string>; pathParameters?: unknown };
 }> = [];
-let pendingPayload: string | undefined;
 
 // ---------------------------------------------------------------------------
 // Import the stub barrel (preloaded mock) so we can mutate service methods.
@@ -50,6 +52,23 @@ let pendingPayload: string | undefined;
 // ---------------------------------------------------------------------------
 
 import * as _svcStubs from '$services';
+
+// ---------------------------------------------------------------------------
+// Mock GameOverlayService to break ecs_worker dependency chain
+// ---------------------------------------------------------------------------
+
+let mockSessionMarkerCampaignId: string | undefined;
+
+const mockCheckSessionMarker = mock(async () => mockSessionMarkerCampaignId);
+const mockClearSessionMarker = mock(async () => {});
+
+mock.module('$lib/services/game/game_overlay_service.svelte', () => ({
+  GameOverlayService: {
+    checkSessionMarker: mockCheckSessionMarker,
+    clearSessionMarker: mockClearSessionMarker,
+  },
+  gameOverlayService: {},
+}));
 
 const _setupServiceOverrides = (): void => {
   // ── gameStateService.reset ────────────────────────────────────────────
@@ -61,7 +80,7 @@ const _setupServiceOverrides = (): void => {
   // fetchAvailableSaves populates the availableSaves getter
   (_svcStubs.gameSaveService as Record<string, unknown>).fetchAvailableSaves = mock(async () => {
     // The getter below returns fetchSavesResult — the real service
-    // would populate this from IndexedDB; we simulate it inline.
+    // would populate this from local DB; we simulate it inline.
   });
 
   Object.defineProperty(_svcStubs.gameSaveService, 'availableSaves', {
@@ -69,14 +88,11 @@ const _setupServiceOverrides = (): void => {
     configurable: true,
   });
 
-  (_svcStubs.gameSaveService as Record<string, unknown>).getSavePayload = mock(
-    async (_slotId: string) => {
-      if (getSavePayloadError) {
-        throw getSavePayloadError;
-      }
-      return getSavePayloadResult ?? '';
-    },
-  );
+  // ── campaignService ──────────────────────────────────────────────────
+  (_svcStubs.campaignService as Record<string, unknown>).loadCampaign = mock(async () => ({
+    id: 'camp-1',
+    state: 'playing',
+  }));
 
   // ── routerService ─────────────────────────────────────────────────────
   (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(
@@ -85,13 +101,6 @@ const _setupServiceOverrides = (): void => {
       options?: { queryParameters?: Record<string, string>; pathParameters?: unknown },
     ) => {
       routeCalls.push({ route, options });
-    },
-  );
-
-  // ── setPendingGameLoad ───────────────────────────────────────────────
-  (_svcStubs.setPendingGameLoad as unknown as { fn: (...args: never) => unknown }).fn = mock(
-    (payload: string) => {
-      pendingPayload = payload;
     },
   );
 
@@ -131,11 +140,16 @@ const createViewModel = () => {
   const vm = getStartViewModel({ className: 'StartViewModel' });
   return vm as unknown as {
     hasSaves: boolean;
-    availableSaves: Array<{ id: string; timestamp: number; mapName: string }>;
+    availableSaves: Array<{ id: string; timestamp: number; mapName: string; campaignId?: string }>;
     errorMessage: string | undefined;
+    showRecoveryPrompt: boolean;
+    recoveryCampaignId: string | undefined;
+    isRecovering: boolean;
     initialize(): Promise<void>;
     startNewGame(): Promise<void>;
     continueGame(): Promise<void>;
+    acceptRecovery(): Promise<void>;
+    declineRecovery(): Promise<void>;
   };
 };
 
@@ -147,10 +161,7 @@ describe('StartViewModel', () => {
   beforeEach(() => {
     resetCalls = 0;
     fetchSavesResult = [];
-    getSavePayloadResult = undefined;
-    getSavePayloadError = undefined;
     routeCalls = [];
-    pendingPayload = undefined;
     _setupServiceOverrides();
   });
 
@@ -181,28 +192,26 @@ describe('StartViewModel', () => {
     test('loads the most recent save and routes to /game', async () => {
       const vm = createViewModel();
       vm.availableSaves = [
-        { id: 'manual-1', timestamp: 2000, mapName: 'Plains' },
-        { id: 'auto-save', timestamp: 1000, mapName: 'Town' },
+        { id: 'manual-1', timestamp: 2000, mapName: 'Plains', campaignId: 'camp-1' },
+        { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
       ];
       vm.hasSaves = true;
-      getSavePayloadResult = '{"entities":[],"components":{}}';
 
       await vm.continueGame();
 
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
-      expect(pendingPayload).toBe('{"entities":[],"components":{}}');
     });
 
-    test('sets pending game load payload before navigating', async () => {
+    test('navigates to /game with most recent save campaign', async () => {
       const vm = createViewModel();
-      vm.availableSaves = [{ id: 'auto-save', timestamp: 1000, mapName: 'Town' }];
+      vm.availableSaves = [
+        { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
+      ];
       vm.hasSaves = true;
-      getSavePayloadResult = 'snapshot-data';
 
       await vm.continueGame();
 
-      expect(pendingPayload).toBe('snapshot-data');
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
     });
@@ -215,14 +224,19 @@ describe('StartViewModel', () => {
       await vm.continueGame();
 
       expect(routeCalls).toHaveLength(0);
-      expect(pendingPayload).toBeUndefined();
     });
 
-    test('sets error message when getSavePayload throws', async () => {
+    test('sets error message when campaignService.loadCampaign throws', async () => {
       const vm = createViewModel();
-      vm.availableSaves = [{ id: 'corrupt-save', timestamp: 1000, mapName: 'Void' }];
+      vm.availableSaves = [
+        { id: 'corrupt-save', timestamp: 1000, mapName: 'Void', campaignId: 'camp-1' },
+      ];
       vm.hasSaves = true;
-      getSavePayloadError = new Error('IndexedDB not available');
+
+      // Override campaignService.loadCampaign to throw
+      (_svcStubs.campaignService as Record<string, unknown>).loadCampaign = mock(async () => {
+        throw new Error('Campaign not found');
+      });
 
       await vm.continueGame();
 
@@ -250,7 +264,9 @@ describe('StartViewModel', () => {
 
   test('continueGame routes to /capability when gateway resolveMode fails', async () => {
     const vm = createViewModel();
-    vm.availableSaves = [{ id: 'auto-save', timestamp: 1000, mapName: 'Town' }];
+    vm.availableSaves = [
+      { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
+    ];
     vm.hasSaves = true;
 
     // Make gateway resolution fail
@@ -282,11 +298,81 @@ describe('StartViewModel', () => {
     expect(routeCalls[0].route).toBe('setup');
   });
 
+  // ── AC-5: Crash Recovery ────────────────────────────────────────────
+
+  describe('AC-5 Crash Recovery', () => {
+    test('initialize() shows recovery prompt when session marker exists', async () => {
+      mockSessionMarkerCampaignId = 'camp-crash-1';
+      const vm = createViewModel();
+
+      await vm.initialize();
+
+      expect(vm.showRecoveryPrompt).toBe(true);
+      expect(vm.recoveryCampaignId).toBe('camp-crash-1');
+    });
+
+    test('initialize() does not show recovery prompt when no session marker', async () => {
+      mockSessionMarkerCampaignId = undefined;
+      const vm = createViewModel();
+
+      await vm.initialize();
+
+      expect(vm.showRecoveryPrompt).toBe(false);
+      expect(vm.recoveryCampaignId).toBeUndefined();
+    });
+
+    test('acceptRecovery() loads latest save and routes to /game', async () => {
+      mockSessionMarkerCampaignId = 'camp-crash-1';
+      fetchSavesResult = [
+        { id: 'auto-save', timestamp: Date.now(), mapName: 'CrashMap', campaignId: 'camp-crash-1' },
+      ];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.showRecoveryPrompt).toBe(true);
+      await vm.acceptRecovery();
+
+      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('game');
+      expect(vm.showRecoveryPrompt).toBe(false);
+    });
+
+    test('acceptRecovery() handles no saves gracefully', async () => {
+      mockSessionMarkerCampaignId = 'camp-crash-empty';
+      fetchSavesResult = [];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.acceptRecovery();
+
+      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(routeCalls).toHaveLength(0);
+      expect(vm.showRecoveryPrompt).toBe(false);
+    });
+
+    test('declineRecovery() clears session marker silently', async () => {
+      mockSessionMarkerCampaignId = 'camp-crash-1';
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.showRecoveryPrompt).toBe(true);
+
+      await vm.declineRecovery();
+
+      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(vm.showRecoveryPrompt).toBe(false);
+      expect(vm.recoveryCampaignId).toBeUndefined();
+    });
+  });
+
   // ── AC-1/3: initialize() checks for existing saves ────────────────────
 
   describe('initialize()', () => {
     test('sets hasSaves=true when saves are found', async () => {
-      fetchSavesResult = [{ id: 'auto-save', timestamp: Date.now(), mapName: 'Town' }];
+      fetchSavesResult = [
+        { id: 'auto-save', timestamp: Date.now(), mapName: 'Town', campaignId: 'camp-1' },
+      ];
       const vm = createViewModel();
 
       await vm.initialize();
