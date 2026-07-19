@@ -148,8 +148,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | v2 |
 | C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | v1 |
 | C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | v2 |
-| C-335 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | v1 |
-| C-336 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | v1 |
+| C-335 | Enforce The Playable Demo Release Gate | 👍 approved | v2 |
+| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 📝 draft | v2 |
 | C-337 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | v1 |
 | C-338 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | v1 |
 | C-339 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | v1 |

@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-19)
 
-**164 active (35 without contract file), 119 archived, 1 duplicates**
+**164 active (33 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -137,8 +137,8 @@
 | C-332 | Redesign The Minimal Game Hud And Overlay Navigation | 👍 approved | ❓ `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. | v2 |
 | C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | — | v1 |
 | C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | — | v2 |
-| C-335 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | — | — |
-| C-336 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | — | — |
+| C-335 | Enforce The Playable Demo Release Gate | 👍 approved | — | v2 |
+| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 📝 draft | — | v2 |
 | C-337 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | — | — |
 | C-338 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | — | — |
 | C-339 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | — | — |

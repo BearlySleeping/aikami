@@ -324,7 +324,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return false;
   }
 
-  /** Send once — never retry (retries produce duplicate messages). */
+  /**
+   * Send task text to a pane, with retry if the prompt is not acknowledged.
+   * Herdr's pane send-text can silently fail (just creates a newline) if pi
+   * hasn't fully initialized its input handler. Retry up to MAX_SEND_ATTEMPTS.
+   */
   private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
     const ready = await this._waitForAgentStatus({
       paneId: options.paneId,
@@ -337,24 +341,44 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
       return;
     }
-    // Clear overlays, then send text directly to the PTY (not as shell command).
-    await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
-    await sleep(1000);
-    await runHerdr(['pane', 'send-text', options.paneId, options.text]);
-    await sleep(300);
-    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-    const accepted = await this._waitForAgentStatus({
-      paneId: options.paneId,
-      statuses: ['working', 'done'],
-      timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
-    });
-    if (accepted) {
-      return;
+
+    for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+      // Send text directly to the PTY (not as shell command).
+      // 🔴 No Escape before send-text — Escape triggers app.interrupt in pi,
+      // which can swallow the first character and cause submit failures.
+      // We already verified agent_status is idle/blocked (no overlays to dismiss).
+      // 🔴 Herdr bug: pane send-text drops the first character — prepend
+      // a space to absorb it.
+      await sleep(2000);
+      await runHerdr(['pane', 'send-text', options.paneId, ` ${options.text}`]);
+      await sleep(100);
+      // 🔴 Must use send-keys Enter (keypress event), not \n (character).
+      // Pi only submits on the Enter keypress, not on a newline in the text buffer.
+      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+
+      const accepted = await this._waitForAgentStatus({
+        paneId: options.paneId,
+        statuses: ['working', 'done'],
+        timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
+      });
+      if (accepted) {
+        return;
+      }
+      if (await isCommandRunning(options.paneId).catch(() => false)) {
+        return;
+      }
+
+      if (attempt < MAX_SEND_ATTEMPTS) {
+        console.warn(
+          `⚠️  Prompt to ${options.paneId} unacked (attempt ${attempt}/${MAX_SEND_ATTEMPTS}) — retrying after ${attempt}s...`,
+        );
+        await sleep(attempt * 1000);
+      }
     }
-    if (await isCommandRunning(options.paneId).catch(() => false)) {
-      return;
-    }
-    console.warn(`⚠️  Prompt to ${options.paneId} unacked — pane may be dead`);
+
+    console.warn(
+      `⚠️  Prompt to ${options.paneId} unacked after ${MAX_SEND_ATTEMPTS} attempts — pane may be dead`,
+    );
   }
 
   private _buildWorkerCommand(
@@ -661,9 +685,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
   async nudgeWorker(options: { paneId: string; message: string }): Promise<void> {
     try {
-      await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
-      await sleep(300);
-      await runHerdr(['pane', 'send-text', options.paneId, options.message]);
+      await sleep(2000);
+      await runHerdr(['pane', 'send-text', options.paneId, ` ${options.message}`]);
       await sleep(100);
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     } catch {}
