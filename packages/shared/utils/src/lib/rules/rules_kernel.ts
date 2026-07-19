@@ -127,17 +127,10 @@ const resolveDamage = (
 
   const totalDamage = naturalDamage + bonus;
 
+  // rollDamage only computes dice outcome; no event emitted here.
+  // The damageResolved event is emitted by applyDamage with actual HP state.
   return {
-    events: [
-      {
-        kind: 'damageResolved',
-        naturalDamage,
-        totalDamage,
-        // targetHpAfter and isDefeated set by caller (applyDamage)
-        targetHpAfter: 0,
-        isDefeated: false,
-      },
-    ],
+    events: [],
   };
 };
 

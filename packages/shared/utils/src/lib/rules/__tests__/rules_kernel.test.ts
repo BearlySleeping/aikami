@@ -121,14 +121,12 @@ describe('resolveCommand determinism', () => {
   it('RNG advances by correct number of dice rolls per command', () => {
     // rollSkillCheck: 1 d20 (no advantage) = 1 dice call
     const rng1 = createSeedableRng(42);
-    const stateBefore1 = serializeRng(rng1).state;
     resolveCommand({
       snapshot: emptySnapshot(),
       command: cmd({ kind: 'rollSkillCheck' }),
       rng: rng1,
     });
     const stateAfter1 = serializeRng(rng1).state;
-    expect(stateBefore1).not.toBe(stateAfter1);
 
     // rollSkillCheck with advantage: 2 d20 = 2 dice calls
     const rng2 = createSeedableRng(42);
@@ -139,8 +137,18 @@ describe('resolveCommand determinism', () => {
     });
     const stateAfterAdv = serializeRng(rng2).state;
 
-    // State after advantage should differ from state after normal (different # of rolls)
-    expect(stateAfter1).not.toBe(stateAfterAdv);
+    // Advance a fresh RNG by one roll and verify it matches stateAfter1
+    const rng3 = createSeedableRng(42);
+    rng3.dice(20);
+    const expectedAfter1 = serializeRng(rng3).state;
+    expect(stateAfter1).toBe(expectedAfter1);
+
+    // Advance a fresh RNG by two rolls and verify it matches stateAfterAdv
+    const rng4 = createSeedableRng(42);
+    rng4.dice(20);
+    rng4.dice(20);
+    const expectedAfterAdv = serializeRng(rng4).state;
+    expect(stateAfterAdv).toBe(expectedAfterAdv);
   });
 });
 
@@ -199,8 +207,12 @@ describe('rollSkillCheck', () => {
   });
 
   it('with advantage, rolls 2d20 and takes higher', () => {
-    // Verify deterministically: same seed, advantage vs no advantage
-    // The total should differ because advantage rolls twice
+    // Use seeded RNG to determine expected outcome
+    const rng1 = createSeedableRng(42);
+    const roll1 = rng1.dice(20);
+    const roll2 = rng1.dice(20);
+    const expected = Math.max(roll1, roll2);
+
     const rng = createSeedableRng(42);
     const result = resolveCommand({
       snapshot: emptySnapshot(),
@@ -208,8 +220,7 @@ describe('rollSkillCheck', () => {
       rng,
     });
     const event = result.events[0] as { naturalRoll: number; totalRoll: number };
-    expect(event.naturalRoll).toBeGreaterThanOrEqual(1);
-    expect(event.naturalRoll).toBeLessThanOrEqual(20);
+    expect(event.naturalRoll).toBe(expected);
   });
 
   it('totalRoll = naturalRoll + abilityModifier + proficiencyBonus', () => {
@@ -276,7 +287,7 @@ describe('rollAttack', () => {
 });
 
 describe('rollDamage', () => {
-  it('parses damage dice notation and rolls correct count', () => {
+  it('parses damage dice notation and rolls dice (no event)', () => {
     const rng = createSeedableRng(42);
     const result = resolveCommand({
       snapshot: emptySnapshot(),
@@ -284,29 +295,31 @@ describe('rollDamage', () => {
       rng,
     });
 
-    const event = result.events[0];
-    expect(event.kind).toBe('damageResolved');
+    // rollDamage only computes the dice roll; no event emitted
+    expect(result.events).toHaveLength(0);
   });
 
-  it('critical hits double the dice count', () => {
-    const resultNormal = resolveCommand({
+  it('critical hits double the dice count (advances RNG correctly)', () => {
+    // Normal: 1d6 = 1 dice call
+    const rng1 = createSeedableRng(42);
+    resolveCommand({
       snapshot: emptySnapshot(),
       command: cmd({ kind: 'rollDamage', damageDice: '1d6+2', isCritical: false }),
-      rng: createSeedableRng(42),
+      rng: rng1,
     });
+    const stateAfterNormal = serializeRng(rng1).state;
 
-    const resultCrit = resolveCommand({
+    // Critical: 2d6 = 2 dice calls
+    const rng2 = createSeedableRng(42);
+    resolveCommand({
       snapshot: emptySnapshot(),
       command: cmd({ kind: 'rollDamage', damageDice: '1d6+2', isCritical: true }),
-      rng: createSeedableRng(42),
+      rng: rng2,
     });
+    const stateAfterCrit = serializeRng(rng2).state;
 
-    // Critical should have different damage due to double dice
-    const normalDamage = (resultNormal.events[0] as { totalDamage: number }).totalDamage;
-    const critDamage = (resultCrit.events[0] as { totalDamage: number }).totalDamage;
-    // They might be the same by chance, but the RNG state will be different
-    expect(normalDamage).toBeGreaterThanOrEqual(3); // min 1d6+2
-    expect(critDamage).toBeGreaterThanOrEqual(4); // min 2d6+2
+    // Different number of rolls means different RNG states
+    expect(stateAfterNormal).not.toBe(stateAfterCrit);
   });
 });
 
@@ -642,7 +655,8 @@ describe('replayCommandLog', () => {
     ];
 
     const result = replayCommandLog({ snapshot: emptySnapshot(), commandLog: commands, seed: 42 });
-    expect(result.allEvents).toHaveLength(3);
+    // rollDamage produces no event (just advances RNG), so 2 events from 3 commands
+    expect(result.allEvents).toHaveLength(2);
     expect(result.commandLog).toHaveLength(3);
   });
 

@@ -159,8 +159,9 @@ describe('Replay Fixture — Deterministic Round-Trip (C-336 AC-5)', () => {
       seed: SESSION_SEED,
     });
 
-    // Each command produces 1 event
-    expect(result.allEvents).toHaveLength(SESSION_COMMANDS.length);
+    // Most commands produce 1 event, but rollDamage produces 0 (just advances RNG)
+    // SESSION_COMMANDS has 2 rollDamage commands out of 15 total
+    expect(result.allEvents).toHaveLength(SESSION_COMMANDS.length - 2);
     expect(result.commandLog).toHaveLength(SESSION_COMMANDS.length);
   });
 
@@ -232,14 +233,10 @@ describe('Replay Fixture — Deterministic Round-Trip (C-336 AC-5)', () => {
       seed: 42,
     });
 
-    // Verify the result is deterministic
-    const result2 = replayCommandLog({
-      snapshot: combatSnapshot,
-      commandLog: combatCommands,
-      seed: 42,
-    });
-
-    expect(JSON.stringify(result)).toBe(JSON.stringify(result2));
+    // Assert expected combat and progression keys exist with expected values
+    expect(result.finalSnapshot.targetHpAfter).toBe(13);
+    expect(result.finalSnapshot.isDefeated).toBe(false);
+    expect(result.finalSnapshot.xpAfter).toBe(50);
   });
 
   it('empty command log produces original snapshot unchanged', () => {

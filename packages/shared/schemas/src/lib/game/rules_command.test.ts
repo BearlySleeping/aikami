@@ -109,6 +109,15 @@ describe('RulesCommandSchema', () => {
     expect(result).toBe(false);
   });
 
+  it('accepts rollAttack command with both advantage and disadvantage true', () => {
+    const cmd = {
+      ...makeValidAttack(),
+      advantage: true,
+      disadvantage: true,
+    };
+    expect(Value.Check(RulesCommandSchema, cmd)).toBe(true);
+  });
+
   it('rejects additional properties on command objects', () => {
     const cmd = {
       ...makeValidSkillCheck(),
@@ -351,5 +360,24 @@ describe('MechanicalSnapshotSchema', () => {
       finalState: {},
     };
     expect(Value.Check(MechanicalSnapshotSchema, snapshot)).toBe(true);
+  });
+
+  it('rejects snapshot with unknown top-level property', () => {
+    const snapshot = {
+      version: 1,
+      seed: 42,
+      commandLog: [
+        { index: 0, commandKind: 'rollAttack' },
+        { index: 1, commandKind: 'rollDamage' },
+        { index: 2, commandKind: 'applyDamage' },
+      ],
+      finalState: {
+        playerHp: 22,
+        enemyHp: 0,
+        xp: 75,
+      },
+      unknownField: 'should be rejected',
+    };
+    expect(Value.Check(MechanicalSnapshotSchema, snapshot)).toBe(false);
   });
 });

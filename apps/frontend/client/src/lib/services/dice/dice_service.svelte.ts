@@ -142,6 +142,9 @@ class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceS
    * falls back to non-deterministic {@link Math.random} otherwise.
    */
   private _rollInternal(sides: number): number {
+    if (sides < 1) {
+      return 0;
+    }
     if (this._activeRng) {
       return this._activeRng.dice(sides);
     }

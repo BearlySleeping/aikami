@@ -25,6 +25,30 @@ describe('DiceService', () => {
     expect(diceService.history.length).toBe(20);
   });
 
+  test('roll(0) returns 0 in non-deterministic mode', () => {
+    diceService.setSeed(null);
+    const result = diceService.roll(0);
+    expect(result).toBe(0);
+  });
+
+  test('roll(-1) returns 0 in non-deterministic mode', () => {
+    diceService.setSeed(null);
+    const result = diceService.roll(-1);
+    expect(result).toBe(0);
+  });
+
+  test('roll(0) returns 0 in deterministic mode', () => {
+    diceService.setSeed(42);
+    const result = diceService.roll(0);
+    expect(result).toBe(0);
+  });
+
+  test('roll(-1) returns 0 in deterministic mode', () => {
+    diceService.setSeed(42);
+    const result = diceService.roll(-1);
+    expect(result).toBe(0);
+  });
+
   test('rollD20 should return correct structure and calculate total', () => {
     const result = diceService.rollD20(5);
     expect(result).toHaveProperty('natural');
