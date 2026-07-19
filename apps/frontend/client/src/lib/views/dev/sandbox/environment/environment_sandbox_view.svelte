@@ -61,13 +61,15 @@ $effect(() => {
 
   <!-- Clock HUD overlay -->
   {#if viewModel.engineReady}
-    <ClockHud
-      gameHour={viewModel.gameHour}
-      gameMinute={viewModel.gameMinute}
-      windVelocity={viewModel.windVelocity}
-      rainIntensity={viewModel.rainIntensity}
-      showWeather={true}
-    />
+    <div class="absolute top-3 right-3 z-50">
+      <ClockHud
+        gameHour={viewModel.gameHour}
+        gameMinute={viewModel.gameMinute}
+        windVelocity={viewModel.windVelocity}
+        rainIntensity={viewModel.rainIntensity}
+        showWeather={true}
+      />
+    </div>
   {/if}
 
   <!-- Dev Control Panel — floating bottom-center -->

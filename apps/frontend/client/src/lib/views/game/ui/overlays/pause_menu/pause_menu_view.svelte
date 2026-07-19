@@ -15,16 +15,37 @@ const { viewModel }: Props = $props();
   aria-modal="true"
   aria-label="Pause Menu"
   tabindex="-1"
-  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.resumeGame(); } }}
+  onkeydown={(e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      viewModel.resumeGame();
+      return;
+    }
+    // Focus trap — Tab/Shift+Tab cycle within the dialog
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+      const direction = e.shiftKey ? -1 : 1;
+      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+      focusable[nextIndex].focus();
+    }
+  }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
     <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
     <div class="mt-6 space-y-3">
+      <!-- svelte-ignore a11y_autofocus — intentional for modal dialog focus (C-332 AC-4) -->
       <button
         type="button"
         class="btn btn-primary btn-block"
         onclick={() => viewModel.resumeGame()}
+        autofocus
       >
         Resume Game
       </button>

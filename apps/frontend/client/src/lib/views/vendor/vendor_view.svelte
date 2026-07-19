@@ -118,6 +118,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
     void submitHaggle();
+    return;
   }
   if (event.key === 'Escape') {
     event.preventDefault();
@@ -126,6 +127,22 @@ const handleKeyDown = (event: KeyboardEvent) => {
     } else {
       viewModel.closeVendor();
     }
+    return;
+  }
+  // Focus trap — Tab/Shift+Tab cycle within the dialog
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    const dialog = event.currentTarget as HTMLElement;
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]',
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = event.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex].focus();
   }
 };
 

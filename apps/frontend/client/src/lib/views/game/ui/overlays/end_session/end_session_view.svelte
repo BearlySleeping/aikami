@@ -7,12 +7,40 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Focus action: focuses the element when it mounts. */
+function focusOnMount(node: HTMLElement): { destroy: () => void } {
+  node.focus();
+  return { destroy: () => {} };
+}
 </script>
 
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-base-300/80 backdrop-blur-sm"
   role="dialog"
+  aria-modal="true"
   aria-label="End Session"
+  tabindex="-1"
+  onkeydown={(e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      viewModel.cancel();
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]'
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+      const direction = e.shiftKey ? -1 : 1;
+      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+      focusable[nextIndex].focus();
+    }
+  }}
+  use:focusOnMount
 >
   <div class="w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
     <!-- Phase: Confirm -->

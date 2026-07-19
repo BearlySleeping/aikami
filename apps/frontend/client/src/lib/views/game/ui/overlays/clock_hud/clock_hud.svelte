@@ -97,7 +97,7 @@ const weatherIcon = $derived.by(() => {
 });
 </script>
 
-<div class="clock-hud pointer-events-none absolute top-3 right-3 z-50 flex items-center gap-3">
+<div class="clock-hud pointer-events-none flex items-center gap-2">
   <!-- Main time pill -->
   <div
     class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 text-sm backdrop-blur-sm shadow-md border border-base-300/50"
