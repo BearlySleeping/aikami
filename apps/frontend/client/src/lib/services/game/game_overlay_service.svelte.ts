@@ -9,11 +9,11 @@ import {
   routerService,
 } from '@aikami/frontend/services';
 import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
-import { logger } from '$logger';
 import {
   audioService,
-  GameSaveService,
+  campaignService,
   gameModeService,
+  gameSaveService,
   sessionService,
   worldStateService,
 } from '$services';
@@ -21,6 +21,7 @@ import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
+import { GameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
@@ -175,6 +176,15 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   openCharacterDashboard(): void;
   closeCharacterDashboard(): void;
   startCombat(options: { enemyName: string }): void;
+
+  // ── Auto-Save Scheduling (C-334) ──
+
+  /** Starts the auto-save interval timer. Called after engine init. */
+  startAutoSaveScheduler(): void;
+  /** Stops and clears the auto-save interval timer. */
+  stopAutoSaveScheduler(): void;
+  /** Whether the auto-save scheduler is currently running. */
+  readonly autoSaveSchedulerActive: boolean;
 
   // ── Session Management (C-240) ──
 
@@ -471,6 +481,90 @@ export class GameOverlayService
     this.isTransitioning = value;
   }
 
+  // ── Auto-Save Scheduler (C-334) ───────────────────────────────────
+
+  /** Default auto-save interval in milliseconds (2 minutes). */
+  private static readonly _AUTOSAVE_INTERVAL_MS = 2 * 60 * 1000;
+
+  /** Interval timer handle. */
+  private _autoSaveTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** Whether the auto-save scheduler is running. */
+  autoSaveSchedulerActive = $state(false);
+
+  /** @inheritdoc */
+  startAutoSaveScheduler(): void {
+    if (this._autoSaveTimer) {
+      return;
+    }
+    this.debug('autoSave:scheduler:start', {
+      intervalMs: GameOverlayService._AUTOSAVE_INTERVAL_MS,
+    });
+    this._autoSaveTimer = setInterval(() => {
+      void this._autoSaveTick();
+    }, GameOverlayService._AUTOSAVE_INTERVAL_MS);
+    this.autoSaveSchedulerActive = true;
+  }
+
+  /** @inheritdoc */
+  stopAutoSaveScheduler(): void {
+    if (this._autoSaveTimer) {
+      clearInterval(this._autoSaveTimer);
+      this._autoSaveTimer = undefined;
+    }
+    this.autoSaveSchedulerActive = false;
+    this.debug('autoSave:scheduler:stop');
+  }
+
+  /**
+   * Called on each interval tick. Gates on safe state before triggering.
+   */
+  private async _autoSaveTick(): Promise<void> {
+    // Gate: autosave must be enabled in settings
+    if (!this._isAutosaveEnabled()) {
+      this.debug('autoSave:tick:disabled');
+      return;
+    }
+
+    // Gate: must be in EXPLORE mode (not combat, not dialogue, not menu)
+    if (this.activeOverlay !== 'NONE') {
+      this.debug('autoSave:tick:unsafe-overlay', { overlay: this.activeOverlay });
+      return;
+    }
+
+    // Gate: must not be transitioning
+    if (this.isTransitioning) {
+      this.debug('autoSave:tick:transitioning');
+      return;
+    }
+
+    // Gate: must not already be saving
+    if (this.isSaving) {
+      this.debug('autoSave:tick:already-saving');
+      return;
+    }
+
+    await this._triggerAutoSave();
+  }
+
+  /**
+   * Reads the autosave toggle from localStorage (set by GameplayViewModel).
+   */
+  private _isAutosaveEnabled(): boolean {
+    try {
+      const stored = localStorage.getItem('aikami_gameplay_settings');
+      if (stored) {
+        const parsed = JSON.parse(stored) as { autosave?: boolean };
+        if (typeof parsed.autosave === 'boolean') {
+          return parsed.autosave;
+        }
+      }
+    } catch {
+      // localStorage unavailable — default to enabled
+    }
+    return true;
+  }
+
   /** Returns the current defeated enemies list. */
   getDefeatedEnemies(): string[] {
     return [...worldStateService.defeatedEnemies];
@@ -516,9 +610,26 @@ export class GameOverlayService
 
   /** Called by bridge_listeners when a map has finished loading. */
   onMapLoaded(): void {
-    if (this._firstMapLoaded) {
-      void this._triggerAutoSave();
+    // Start auto-save scheduler on first map load (C-334)
+    if (!this._firstMapLoaded) {
+      this.startAutoSaveScheduler();
     }
+
+    // Debounce auto-save after map transitions: clear any pending timer
+    if (this._mapTransitionDebounce) {
+      clearTimeout(this._mapTransitionDebounce);
+    }
+
+    // Trigger auto-save 1s after the LAST map transition (debounced)
+    this._mapTransitionDebounce = setTimeout(() => {
+      if (this._firstMapLoaded) {
+        // Only trigger after the very first map load — subsequent auto-saves
+        // are handled by the interval scheduler
+        void this._triggerAutoSave();
+      }
+      this._mapTransitionDebounce = undefined;
+    }, 1000);
+
     this._firstMapLoaded = true;
   }
 
@@ -527,21 +638,25 @@ export class GameOverlayService
   _cameraZoomNpcScreenX: number | undefined;
   _cameraZoomNpcScreenY: number | undefined;
   private _firstMapLoaded = false;
+  private _mapTransitionDebounce: ReturnType<typeof setTimeout> | undefined;
 
   private async _triggerAutoSave(): Promise<void> {
     this.autoSaveStatus = 'saving';
     try {
-      if (!this._saveService) {
-        if (!this._bridge) {
-          this.autoSaveStatus = 'error';
-          return;
-        }
-        this._saveService = new GameSaveService({
-          className: 'GameSaveService',
-          bridge: this._bridge,
-        });
+      const saveService = this._getOrCreateSaveService();
+      if (!saveService) {
+        this.autoSaveStatus = 'error';
+        return;
       }
-      await this._saveService.saveGame('auto-save');
+
+      const campaignId = campaignService.activeCampaign?.id;
+      const mapName = worldStateService.currentLocation?.name ?? 'World';
+
+      await saveService.saveGame({
+        slotId: 'auto-save',
+        campaignId,
+        mapName,
+      });
       this.autoSaveStatus = 'saved';
       this.showSnackbar({ text: 'Auto-saved', type: 'success' });
       setTimeout(() => {
@@ -717,6 +832,9 @@ export class GameOverlayService
   }
 
   async quitToMainMenu(): Promise<void> {
+    // Clear auto-save scheduler and crash-detection marker (C-334)
+    this.stopAutoSaveScheduler();
+    await this._clearSessionMarker();
     await routerService.navigateToApp();
   }
 
@@ -735,19 +853,22 @@ export class GameOverlayService
     this.isSaving = true;
     this.saveMessage = undefined;
     try {
-      if (!this._saveService) {
-        if (!this._bridge) {
-          throw new Error('Engine bridge not available for save');
-        }
-        this._saveService = new GameSaveService({
-          className: 'GameSaveService',
-          bridge: this._bridge,
-        });
+      const saveService = this._getOrCreateSaveService();
+      if (!saveService) {
+        throw new Error('Engine bridge not available for save');
       }
-      await this._saveService.saveGame('manual-1');
+
+      const campaignId = campaignService.activeCampaign?.id;
+      const mapName = worldStateService.currentLocation?.name ?? 'World';
+
+      await saveService.saveGame({
+        slotId: 'manual-1',
+        campaignId,
+        mapName,
+      });
       this.saveMessage = 'Game Saved!';
     } catch (error) {
-      logger.debug('GameOverlayService:saveGame:error', { error: String(error) });
+      this.warn('saveGame:error', { error: String(error) });
       this.saveMessage = 'Save failed';
     } finally {
       this.isSaving = false;
@@ -769,7 +890,45 @@ export class GameOverlayService
   }
 
   async loadLastSave(): Promise<void> {
-    await routerService.navigateToApp();
+    // C-334: Actually reload the last save for the active campaign
+    try {
+      const campaignId = campaignService.activeCampaign?.id;
+      if (!campaignId) {
+        this.warn('loadLastSave:no-campaign');
+        await routerService.navigateToApp();
+        return;
+      }
+
+      // Fetch most recent save for this campaign
+      await gameSaveService.fetchAvailableSaves(campaignId);
+      const saves = gameSaveService.availableSaves;
+
+      if (saves.length === 0) {
+        this.warn('loadLastSave:no-saves');
+        await routerService.navigateToApp();
+        return;
+      }
+
+      // Load the most recent save
+      const saveService = this._getOrCreateSaveService();
+      if (!saveService) {
+        this.warn('loadLastSave:no-bridge');
+        return;
+      }
+
+      const latestSave = saves[0];
+      this.debug('loadLastSave', { slotId: latestSave.id, mapName: latestSave.mapName });
+      await saveService.loadGame(latestSave.id);
+
+      // Navigate to the game
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('loadLastSave:failed', { error: String(error) });
+      await routerService.navigateToApp();
+    }
   }
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
@@ -922,6 +1081,103 @@ export class GameOverlayService
       // Settings not available — keep defaults
     }
     this._settingsLoaded = true;
+  }
+
+  // ── Crash Detection Session Marker (C-334 AC-5) ────────────────────
+
+  /**
+   * Returns the save service instance, creating it if necessary.
+   * Returns undefined if the engine bridge is not available.
+   */
+  private _getOrCreateSaveService(): GameSaveServiceInterface | undefined {
+    if (!this._saveService) {
+      if (!this._bridge) {
+        return undefined;
+      }
+      this._saveService = GameSaveService.create({
+        className: 'GameSaveService',
+        bridge: this._bridge,
+      });
+    }
+    return this._saveService;
+  }
+
+  /**
+   * Writes a session_active marker to the meta table on game boot.
+   * Called by bridge_listeners after engine initialization.
+   */
+  async writeSessionMarker(): Promise<void> {
+    try {
+      const campaignId = campaignService.activeCampaign?.id;
+      if (!campaignId) {
+        return;
+      }
+      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const db = await getLocalDatabase();
+      await db.execute({
+        sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
+        args: ['session_active', campaignId],
+      });
+      this.debug('sessionMarker:written', { campaignId });
+    } catch (error) {
+      this.warn('sessionMarker:write-failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Clears the session_active marker from the meta table on clean shutdown.
+   */
+  private async _clearSessionMarker(): Promise<void> {
+    try {
+      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const db = await getLocalDatabase();
+      await db.execute({
+        sql: 'DELETE FROM meta WHERE key = ?',
+        args: ['session_active'],
+      });
+      this.debug('sessionMarker:cleared');
+    } catch (error) {
+      this.warn('sessionMarker:clear-failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Checks for a stale session_active marker (crash detection).
+   *
+   * Returns the campaign ID that was active when the crash occurred,
+   * or undefined if no marker exists.
+   */
+  static async checkSessionMarker(): Promise<string | undefined> {
+    try {
+      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const db = await getLocalDatabase();
+      const result = await db.query({
+        sql: 'SELECT value FROM meta WHERE key = ?',
+        args: ['session_active'],
+      });
+      if (result.rows.length > 0) {
+        return result.rows[0].value as string;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Clears the session_active marker (static — usable from start menu).
+   */
+  static async clearSessionMarker(): Promise<void> {
+    try {
+      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const db = await getLocalDatabase();
+      await db.execute({
+        sql: 'DELETE FROM meta WHERE key = ?',
+        args: ['session_active'],
+      });
+    } catch {
+      // Best effort
+    }
   }
 }
 
