@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-07-18
+> Auto-generated: 2026-07-19
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 

@@ -56,7 +56,10 @@ tries to finalize the merge.
 You are the merge authority. The orchestrator only records your decision —
 you execute the merge yourself.
 
-1. Call `gh_merge_pr` with the PR URL (squash merge, delete branch).
+1. Call `gh_merge_pr` with the PR URL:
+   `gh_merge_pr({ pr: "<url>", method: "squash", deleteBranch: true })`
+   🔴 If merge fails with "worktree" error, run gh from the main repo:
+   `cd /path/to/main/repo && gh pr merge <num> --squash --delete-branch`
 2. Verify the merge succeeded (check the return value / output).
 3. If merge fails (pre-commit hooks, conflicts, auth): fix the issue and
    retry. You have `bash` for `git` ops and `gh` CLI.

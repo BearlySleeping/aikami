@@ -480,7 +480,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const parts: string[] = [];
     parts.push(
       isRetry
-        ? `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}). You are resuming in the same session — build on your previous work.`
+        ? [
+            `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
+            '',
+            '🔴 RETRY CHECK: Before doing any work, verify whether you already completed this stage:',
+            '1. Check if the result file exists at the path in CONTRACT_PIPELINE_RESULT_PATH',
+            '2. If it already has a valid status (passed/changes_requested/blocked), just call',
+            '   `contract_stage_complete` with that same status. Do NOT redo work.',
+            '3. Only do new work if no valid result exists yet.',
+          ].join('\n')
         : `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`,
     );
     if (options.request.userMessage) {
@@ -625,7 +633,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       if (pane.agent_status === 'working') {
         return true;
       }
-      if (pane.agent_status === undefined) {
+      // Between LLM turns agent_status is 'idle' but the pi process is
+      // still running. Fall back to isCommandRunning for ANY non-working
+      // status — if a foreground process is active, the worker is alive.
+      if (pane.agent_status !== 'working') {
         return isCommandRunning(paneId).catch(() => false);
       }
       return false;

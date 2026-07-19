@@ -440,7 +440,7 @@ const cleanupAfterMerge = (options: {
       workspacePath: options.workspacePath,
       repoRoot: options.repoRoot,
       branchName: options.branchName,
-      deleteRemoteBranch: false,
+      deleteRemoteBranch: true,
     });
     console.log(`\n🧹 Worktree cleaned: ${options.branchName}\n`);
   } catch (e: unknown) {
