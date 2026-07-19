@@ -215,5 +215,100 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+
+    // ── Release Gate: Offline Profile ─────────────────────
+    // C-335 AC-2: Runs the full production journey with network
+    // throttled to offline using a pre-cached local AI model.
+    {
+      name: 'client-offline',
+      testDir: './tests/client',
+      testMatch: /release_gate\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: CLIENT_BASE_URL,
+        storageState: AUTH_STATE_FILE,
+        // Network: offline with localhost passthrough for dev server
+        contextOptions: {
+          offline: false, // We handle offline via route interception
+        },
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=gl',
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            '--disable-lcd-text',
+            '--font-render-hinting=none',
+            '--disable-font-subpixel-positioning',
+            '--force-color-profile=srgb',
+            '--disable-gpu-rasterization',
+            '--disable-accelerated-2d-canvas',
+          ],
+        },
+      },
+      dependencies: ['setup'],
+    },
+
+    // ── Release Gate: Keyboard-Only Profile ────────────────
+    // C-335 AC-3: Runs the full production journey using only
+    // keyboard inputs (Tab, Enter, Escape, I, arrow keys, Space).
+    // No page.mouse or page.touch calls allowed.
+    {
+      name: 'client-keyboard',
+      testDir: './tests/client',
+      testMatch: /release_gate\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: CLIENT_BASE_URL,
+        storageState: AUTH_STATE_FILE,
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=gl',
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            '--disable-lcd-text',
+            '--font-render-hinting=none',
+            '--disable-font-subpixel-positioning',
+            '--force-color-profile=srgb',
+            '--disable-gpu-rasterization',
+            '--disable-accelerated-2d-canvas',
+          ],
+        },
+      },
+      dependencies: ['setup'],
+    },
+
+    // ── Release Gate: WebGPU Profile (Manual Opt-In) ───────
+    // C-335: WebGPU coverage is a manual test on hardware with
+    // a real GPU. Not run by default in CI.
+    // Conditionally included only when TEST_WEBGPU=true
+    ...(process.env.TEST_WEBGPU === 'true'
+      ? [
+          {
+            name: 'client-webgpu',
+            testDir: './tests/client',
+            testMatch: /release_gate\.spec\.ts/,
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: CLIENT_BASE_URL,
+              storageState: AUTH_STATE_FILE,
+              launchOptions: {
+                args: [
+                  '--enable-webgpu',
+                  '--enable-unsafe-webgpu',
+                  '--enable-features=Vulkan,UseSkiaRenderer',
+                  '--ignore-gpu-blocklist',
+                  '--disable-lcd-text',
+                  '--font-render-hinting=none',
+                  '--disable-font-subpixel-positioning',
+                  '--force-color-profile=srgb',
+                ],
+              },
+            },
+            dependencies: ['setup'],
+          },
+        ]
+      : []),
   ],
 } satisfies PlaywrightTestConfig);

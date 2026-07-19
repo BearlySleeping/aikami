@@ -5,7 +5,7 @@
 // various game states (initial, log-filled, low-hp, victory, defeat)
 // using the /dev/combat sandbox with ?state= query params.
 //
-// Contract: C-166, C-164, C-145
+// Contract: C-166, C-164, C-145, C-335 (production-route cases)
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -111,6 +111,66 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.defeat].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+    },
+    // ── Production Route Case (C-335 AC-7) ────────────────
+    {
+      name: 'Combat — Production Route',
+      searchParams: { bypassTextAi: 'true' },
+      prompt: [
+        COMBAT_PROMPT,
+        '',
+        'Production /game route — combat should be triggered via gameplay.',
+        'The combat UI must render with HP bars, action buttons, and combat log.',
+      ].join('\n'),
+      schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      setupHook: async (page) => {
+        // Navigate to production route
+        await page.goto('http://localhost:5274/game?bypassTextAi=true', {
+          waitUntil: 'domcontentloaded',
+        });
+        // Wait for game to boot
+        await page.waitForSelector('#game-canvas-container canvas', {
+          state: 'attached',
+          timeout: 30_000,
+        });
+        // Wait for HUD to appear (engine ready)
+        await page.waitForSelector('.bg-base-200\\/80', {
+          state: 'visible',
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(2000);
+
+        // Drive game into combat encounter using movement and enemy engagement
+        // Move toward enemy spawn area (typically south-east)
+        for (let i = 0; i < 8; i++) {
+          await page.keyboard.press('ArrowRight');
+          await page.waitForTimeout(100);
+        }
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(100);
+        }
+
+        // Interact with NPC/enemy to trigger dialogue/combat
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1000);
+
+        // Skip through any dialogue to reach combat
+        for (let i = 0; i < 5; i++) {
+          const dialogueOverlay = page.locator('[data-testid="dialogue-overlay"], .dialogue-overlay');
+          if (await dialogueOverlay.isVisible({ timeout: 1000 }).catch(() => false)) {
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(500);
+          }
+        }
+
+        // Wait for combat UI to appear
+        await page.waitForSelector('[data-testid="combat-attack-btn"]', {
+          state: 'visible',
+          timeout: 15_000,
+        });
+      },
     },
   ],
 });
