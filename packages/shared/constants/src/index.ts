@@ -12,6 +12,7 @@ export * from './lib/development_ports.ts';
 export * from './lib/emulator.ts';
 export * from './lib/export.ts';
 export * from './lib/feature_flags.ts';
+export * from './lib/game/classes.ts';
 export * from './lib/game_assets.ts';
 export * from './lib/game_economy.ts';
 export * from './lib/image_style_profiles.ts';

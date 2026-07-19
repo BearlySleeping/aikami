@@ -13,6 +13,7 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { isWalkable } from './collision_system.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
 import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
+import { grantXp } from './progression_system.ts';
 
 // ---------------------------------------------------------------------------
 // TurnManagerSystem — turn-based combat sequencing + dice combat math
@@ -836,7 +837,7 @@ const _handleEnemyDefeated = (
 ): void => {
   // Grant XP to the player for this victory
   if (playerEntityId > 0) {
-    _grantXp(world, playerEntityId, 25, bridge);
+    grantXp(world, playerEntityId, 25, bridge);
   }
 
   // Read the spawn point ID from the Enemy component for persistence tracking
@@ -876,91 +877,10 @@ const _findFirstEnemyParticipant = (playerEntityId: number): number => {
 };
 
 // ---------------------------------------------------------------------------
-// Internal — experience and leveling (C-147)
+// Internal — experience and leveling (C-147, C-337)
+//
+// Delegated to progression_system.ts for class-aware level-up resolution.
 // ---------------------------------------------------------------------------
-
-/**
- * Grants XP to the player entity and checks for level-up.
- *
- * Awards the given amount of XP, then checks if the player's total XP
- * meets or exceeds the threshold to reach the next level. If so,
- * triggers a level-up that increases max HP, fully restores HP,
- * boosts base attack and defense, and scales the next XP threshold.
- *
- * Emits {@link PLAYER_LEVELED_UP} through the bridge when a level-up occurs.
- *
- * Contract: C-147 Progression & Persistence
- *
- * @param world - The bitECS world.
- * @param playerEid - The player entity ID to grant XP to.
- * @param amount - Amount of XP to award.
- * @param bridge - The EngineBridge for emitting level-up events.
- */
-const _grantXp = (world: World, playerEid: number, amount: number, bridge: EngineBridge): void => {
-  const stats = getComponent(world, playerEid, CombatStats) as CombatStatsData | undefined;
-  if (!stats) {
-    return;
-  }
-
-  // Add XP
-  const currentXp = (stats.xp ?? 0) + amount;
-  CombatStats.xp[playerEid] = currentXp;
-
-  // Check for level-up
-  const xpThreshold = stats.xpToNextLevel ?? 100;
-  if (currentXp >= xpThreshold) {
-    _triggerLevelUp(world, playerEid, currentXp, xpThreshold, bridge);
-  }
-};
-
-/**
- * Triggers a level-up for the player entity.
- *
- * Resets XP (carrying over remainder), increments level, increases max HP
- * by 20, fully restores HP, boosts attack by 2 and defense by 2, and
- * scales the next XP threshold by 1.5×.
- *
- * Emits {@link PLAYER_LEVELED_UP} so the UI can display a level-up notification.
- */
-const _triggerLevelUp = (
-  world: World,
-  playerEid: number,
-  currentXp: number,
-  oldThreshold: number,
-  bridge: EngineBridge,
-): void => {
-  const stats = getComponent(world, playerEid, CombatStats) as CombatStatsData | undefined;
-  if (!stats) {
-    return;
-  }
-
-  // Calculate new values
-  const newLevel = (stats.level ?? 1) + 1;
-  const nextThreshold = Math.floor(oldThreshold * 1.5);
-  const remainingXp = currentXp - oldThreshold;
-  const newMaxHp = (stats.maxHealth ?? 100) + 20;
-  const newAttack = (stats.attack ?? 5) + 2;
-  const newDefense = (stats.defense ?? 12) + 2;
-
-  // Apply the level-up stat changes
-  CombatStats.level[playerEid] = newLevel;
-  CombatStats.xpToNextLevel[playerEid] = nextThreshold;
-  CombatStats.xp[playerEid] = remainingXp;
-  CombatStats.maxHealth[playerEid] = newMaxHp;
-  CombatStats.health[playerEid] = newMaxHp; // full heal on level-up
-  CombatStats.attack[playerEid] = newAttack;
-  CombatStats.defense[playerEid] = newDefense;
-
-  // Emit the level-up event to the UI
-  bridge.emit({
-    type: 'PLAYER_LEVELED_UP',
-    newLevel,
-    maxHp: newMaxHp,
-    attack: newAttack,
-    defense: newDefense,
-    xpToNextLevel: nextThreshold,
-  });
-};
 
 /**
  * Reads the current HP of an entity from the CombatStats SoA.

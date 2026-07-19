@@ -112,6 +112,15 @@ export type CharacterSheet = {
   maxHp: number;
   attack: number;
   defense: number;
+
+  // ── Class Progression (C-337) ──
+
+  /** Class definition ID ("fighter", "wizard", etc.) */
+  classId?: string;
+  /** Feature IDs the character has unlocked */
+  classFeatures?: string[];
+  /** Feature IDs currently slotted on the hotbar (max 6) */
+  hotbarSlots?: string[];
 };
 
 // ── Defaults ────────────────────────────────────────────

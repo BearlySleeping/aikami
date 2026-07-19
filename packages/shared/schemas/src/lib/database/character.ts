@@ -273,6 +273,34 @@ export const BaseCharacterSheetSchema = Type.Object(
     notes: NotesSchema,
 
     narrativeTraits: NarrativeTraitsSchema,
+
+    // ── Class Progression (C-337) ──
+
+    classId: Type.Optional(
+      Type.String({ description: 'Class definition ID — "fighter", "wizard", "rogue", "cleric"' }),
+    ),
+    classFeatures: Type.Optional(
+      Type.Array(
+        Type.Object({
+          featureId: Type.String({ minLength: 1 }),
+          source: Type.Object({
+            classId: Type.String({ minLength: 1 }),
+            level: Type.Integer({ minimum: 1 }),
+          }),
+        }),
+        { description: 'Features the character has unlocked' },
+      ),
+    ),
+    hotbarSlots: Type.Optional(
+      Type.Array(Type.String(), {
+        description: 'Active abilities currently slotted on the hotbar (feature IDs, max 6)',
+      }),
+    ),
+    abilityUses: Type.Optional(
+      Type.Record(Type.String(), Type.Integer({ minimum: 0 }), {
+        description: 'Usage tracking for limited-use abilities (featureId → uses remaining)',
+      }),
+    ),
   },
   { description: 'D&D Character Sheet' },
 );

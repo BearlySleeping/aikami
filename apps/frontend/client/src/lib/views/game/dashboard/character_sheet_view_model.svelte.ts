@@ -38,17 +38,32 @@ import {
   type Skill,
 } from '$lib/data/character_sheet_types';
 import { equipmentService, getItemDefinition, playerStateService } from '$services';
+import { CLASS_REGISTRY } from '@aikami/constants';
+import type { ClassFeature } from '@aikami/types';
 
 export type { EquipmentSlot, ItemDefinition };
 
+// ── Resolved Feature (C-337) ──
+
+export type ResolvedFeature = {
+  id: string;
+  name: string;
+  description: string;
+  level: number;
+  kind: 'active' | 'passive';
+  earned: boolean;
+  activation?: ClassFeature['activation'];
+};
+
 // ── Tabs ──────────────────────────────────────────────────
 
-export type CharacterSheetTab = 'abilities' | 'skills' | 'traits';
+export type CharacterSheetTab = 'abilities' | 'skills' | 'traits' | 'features';
 
 export const CHARACTER_SHEET_TABS: readonly CharacterSheetTab[] = [
   'abilities',
   'skills',
   'traits',
+  'features',
 ] as const;
 
 // ── Interface ─────────────────────────────────────────────
@@ -95,6 +110,22 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   readonly modifierColor: (modifier: number) => string;
   readonly modifierSign: (modifier: number) => string;
   readonly skillsByAbility: Record<AbilityKey, Skill[]>;
+
+  // ── Class Features (C-337) ──
+
+  readonly classId: string;
+  readonly className: string;
+  readonly classFeatures: readonly ResolvedFeature[];
+  readonly nextLevelFeatures: readonly ResolvedFeature[];
+  readonly isMaxLevel: boolean;
+  readonly hotbarSlots: readonly string[];
+
+  /** Assign a feature to a hotbar slot. */
+  setHotbarSlot(slotIndex: number, featureId: string): void;
+  /** Clear a hotbar slot. */
+  clearHotbarSlot(slotIndex: number): void;
+  /** Activate an ability (pulse animation callback). */
+  activateAbility(featureId: string): void;
 
   // ── Mutations ──
 
@@ -286,6 +317,96 @@ class CharacterSheetViewModel
       groups[key] = this.skills.filter((s) => s.ability === key);
     }
     return groups;
+  }
+
+  // ── Class Features (C-337) ──
+
+  get classId(): string {
+    return playerStateService.classId;
+  }
+
+  get className(): string {
+    const def = (CLASS_REGISTRY as Record<string, { name?: string }>)[this.classId];
+    return def?.name ?? this.classId;
+  }
+
+  /** Resolved features for the current class: all known features with earned status. */
+  get classFeatures(): ResolvedFeature[] {
+    const earnedIds = new Set(playerStateService.classFeatures);
+    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }[]> }>)[this.classId];
+    if (!classDef) {
+      return [];
+    }
+    const features: ResolvedFeature[] = [];
+    const seen = new Set<string>();
+    // Collect from all levels up to max
+    for (let lvl = 1; lvl <= 5; lvl++) {
+      const levelFeatures = classDef.features[String(lvl)];
+      if (levelFeatures) {
+        for (const feat of levelFeatures) {
+          if (seen.has(feat.id)) {
+            continue;
+          }
+          seen.add(feat.id);
+          features.push({
+            id: feat.id,
+            name: feat.name,
+            description: feat.description,
+            level: feat.level,
+            kind: (feat.kind as 'active' | 'passive'),
+            earned: earnedIds.has(feat.id),
+            activation: feat.activation,
+          });
+        }
+      }
+    }
+    return features.sort((a, b) => a.level - b.level);
+  }
+
+  /** Features to be granted at the next level (projection). */
+  get nextLevelFeatures(): ResolvedFeature[] {
+    const nextLevel = this.level + 1;
+    if (nextLevel > 5) {
+      return [];
+    }
+    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }[]> }>)[this.classId];
+    if (!classDef) {
+      return [];
+    }
+    const levelFeatures = classDef.features[String(nextLevel)];
+    if (!levelFeatures) {
+      return [];
+    }
+    return levelFeatures.map((feat: { id: string; name: string; description: string; level: number; kind: string; activation?: ClassFeature['activation'] }) => ({
+      id: feat.id,
+      name: feat.name,
+      description: feat.description,
+      level: feat.level,
+      kind: (feat.kind === 'passive' ? 'passive' : 'active'),
+      earned: false,
+      activation: feat.activation,
+    }));
+  }
+
+  get isMaxLevel(): boolean {
+    return this.level >= 5;
+  }
+
+  get hotbarSlots(): readonly string[] {
+    return playerStateService.hotbarSlots;
+  }
+
+  setHotbarSlot(slotIndex: number, featureId: string): void {
+    playerStateService.setHotbarSlot({ slotIndex, featureId });
+  }
+
+  clearHotbarSlot(slotIndex: number): void {
+    playerStateService.clearHotbarSlot(slotIndex);
+  }
+
+  activateAbility(featureId: string): void {
+    this.debug('activateAbility', { featureId });
+    playerStateService.useAbility(featureId);
   }
 
   // ── Mutations ──

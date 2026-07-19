@@ -33,6 +33,7 @@ export * from './lib/database/voice.ts';
 export * from './lib/database/world.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/game/campaign.ts';
+export * from './lib/game/class_definition.ts';
 export * from './lib/game/content_pack.ts';
 export * from './lib/game/cyoa.ts';
 export * from './lib/game/ecs_snapshot.ts';
