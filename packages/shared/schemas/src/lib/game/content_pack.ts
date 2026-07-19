@@ -147,8 +147,43 @@ export const ContentPackItemEntrySchema = Type.Union([
 export type ContentPackItemEntry = Static<typeof ContentPackItemEntrySchema>;
 
 // ---------------------------------------------------------------------------
-// ContentPackQuestObjective — a single quest objective (C-316)
+// ContentPackQuestObjective — a single quest objective (C-316, extended C-339)
 // ---------------------------------------------------------------------------
+
+/** Failure condition for an objective. */
+export const QuestObjectiveFailureConditionSchema = Type.Union([
+  Type.Object({
+    kind: Type.Literal('onTrigger'),
+    triggerType: Type.Union([
+      Type.Literal('MAP_ENTERED'),
+      Type.Literal('NPC_INTERACTED'),
+      Type.Literal('ENCOUNTER_COMPLETED'),
+    ]),
+    triggerId: Type.String({ minLength: 1 }),
+  }),
+  Type.Object({
+    kind: Type.Literal('onQuestFlag'),
+    flagKey: Type.String({ minLength: 1 }),
+    flagValue: Type.Boolean(),
+  }),
+  Type.Object({
+    kind: Type.Literal('onTimeout'),
+    timeoutSeconds: Type.Integer({ minimum: 1 }),
+  }),
+]);
+
+export type QuestObjectiveFailureCondition = Static<typeof QuestObjectiveFailureConditionSchema>;
+
+/** Reveal trigger for hidden objectives. */
+export const QuestObjectiveRevealOnSchema = Type.Object({
+  type: Type.Union([
+    Type.Literal('MAP_ENTERED'),
+    Type.Literal('NPC_INTERACTED'),
+    Type.Literal('ENCOUNTER_COMPLETED'),
+    Type.Literal('ITEM_PICKED_UP'),
+  ]),
+  id: Type.String({ minLength: 1 }),
+});
 
 export const ContentPackQuestObjectiveSchema = Type.Object({
   /** Display text for the objective */
@@ -168,6 +203,40 @@ export const ContentPackQuestObjectiveSchema = Type.Object({
   /** Item ID that completes this objective on pickup */
   completeOnItemPickup: Type.Optional(
     Type.String({ description: 'Item ID that completes this objective on pickup' }),
+  ),
+  /** Prerequisite objective indices — this objective only becomes active after all listed are complete or skipped. Empty = available immediately. (C-339) */
+  prerequisiteIndices: Type.Optional(
+    Type.Array(Type.Integer({ minimum: 0 }), {
+      description: 'Indices of objectives that must be complete/skipped before this becomes active',
+    }),
+  ),
+  /** If true, this objective is not shown in the journal until a reveal trigger fires. (C-339) */
+  hidden: Type.Optional(
+    Type.Boolean({ description: 'Hidden until revealed via revealOn trigger' }),
+  ),
+  /** Trigger that reveals a hidden objective. (C-339) */
+  revealOn: Type.Optional(QuestObjectiveRevealOnSchema),
+  /** If true, completing this objective is NOT required for quest completion. (C-339) */
+  optional: Type.Optional(
+    Type.Boolean({ description: 'Optional — not required to complete quest' }),
+  ),
+  /** How many must be completed for counter objectives. Defaults to maxCount if not specified. (C-339) */
+  requiredCount: Type.Optional(
+    Type.Integer({ minimum: 1, description: 'How many must be completed (counter objectives)' }),
+  ),
+  /** Maximum progress count. >1 for counter objectives ("kill 5 goblins"). Default 1. (C-339) */
+  maxCount: Type.Optional(
+    Type.Integer({ minimum: 1, description: 'Maximum progress count (default 1)' }),
+  ),
+  /** If set, this objective fails if the timer expires. Wall-clock seconds from when it becomes active. (C-339) */
+  timeLimitSeconds: Type.Optional(
+    Type.Integer({ minimum: 1, description: 'Wall-clock seconds before objective expires' }),
+  ),
+  /** How this objective can fail. (C-339) */
+  failureConditions: Type.Optional(
+    Type.Array(QuestObjectiveFailureConditionSchema, {
+      description: 'Conditions that fail this objective',
+    }),
   ),
 });
 
@@ -223,7 +292,7 @@ export const ContentPackQuestEndingSchema = Type.Object({
 export type ContentPackQuestEnding = Static<typeof ContentPackQuestEndingSchema>;
 
 // ---------------------------------------------------------------------------
-// ContentPackQuestEntry — a quest definition (C-316)
+// ContentPackQuestEntry — a quest definition (C-316, extended C-339)
 // ---------------------------------------------------------------------------
 
 export const ContentPackQuestEntrySchema = Type.Object({
@@ -256,6 +325,24 @@ export const ContentPackQuestEntrySchema = Type.Object({
   endings: Type.Record(Type.String(), ContentPackQuestEndingSchema, {
     description: 'Ending variations keyed by ending ID',
   }),
+  /** Quest IDs that must be completed before this quest can be offered. (C-339) */
+  prerequisiteQuestIds: Type.Optional(
+    Type.Array(Type.String(), { description: 'Quest IDs that must be completed first' }),
+  ),
+  /** If true, the quest can be re-offered after completion. (C-339) */
+  repeatable: Type.Optional(Type.Boolean({ description: 'Can be re-offered after completion' })),
+  /** Minimum days between completions for repeatable quests. (C-339) */
+  repeatCooldownDays: Type.Optional(
+    Type.Number({ minimum: 0, description: 'Minimum days between completions' }),
+  ),
+  /** Optional chain grouping ID — quests in the same chain are displayed together. (C-339) */
+  questChainId: Type.Optional(
+    Type.String({ description: 'Chain grouping ID for journal display' }),
+  ),
+  /** Order within the chain for journal display. (C-339) */
+  chainOrder: Type.Optional(
+    Type.Integer({ minimum: 0, description: 'Display order within chain' }),
+  ),
 });
 
 export type ContentPackQuestEntry = Static<typeof ContentPackQuestEntrySchema>;
