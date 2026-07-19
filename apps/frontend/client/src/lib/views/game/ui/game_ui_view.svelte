@@ -14,6 +14,7 @@ import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
+import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
 import QuestTrackerView from './quest_tracker_view.svelte';
 
@@ -144,6 +145,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     <VendorView viewModel={viewModel.vendorViewModel} />
   {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
     <EndSessionView viewModel={viewModel.endSessionViewModel} />
+  {:else if viewModel.activeOverlay === 'SETTINGS' && viewModel.settingsOverlayViewModel}
+    <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
   {/if}
 
   <TransitionOverlay {viewModel} />

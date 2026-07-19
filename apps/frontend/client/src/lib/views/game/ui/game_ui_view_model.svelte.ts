@@ -44,6 +44,10 @@ import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import {
+  getSettingsOverlayViewModel,
+  type SettingsOverlayViewModelInterface,
+} from './overlays/settings/settings_overlay_view_model.svelte';
+import {
   getQuestTrackerViewModel,
   type QuestTrackerViewModelInterface,
 } from './quest_tracker_view_model.svelte';
@@ -106,6 +110,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
+  readonly settingsOverlayViewModel: SettingsOverlayViewModelInterface | undefined;
 
   // ── Interaction HUD (C-327) ──
 
@@ -144,6 +149,7 @@ class GameUIViewModel
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
+  settingsOverlayViewModel = $state<SettingsOverlayViewModelInterface | undefined>(undefined);
 
   /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
   questTrackerViewModel = $state<QuestTrackerViewModelInterface>(
@@ -401,6 +407,19 @@ class GameUIViewModel
 
         return () => {
           this.endSessionViewModel = undefined;
+        };
+      });
+
+      // ── Settings Overlay (C-333 AC-4) ──
+      $effect(() => {
+        if (gameOverlayService.activeOverlay !== 'SETTINGS') {
+          return;
+        }
+        const vm = getSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
+        this.settingsOverlayViewModel = vm;
+
+        return () => {
+          this.settingsOverlayViewModel = undefined;
         };
       });
 
