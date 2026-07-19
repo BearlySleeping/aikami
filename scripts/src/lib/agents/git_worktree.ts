@@ -345,6 +345,19 @@ export const removeWorktree = (options: {
     }
   }
 
+  // Force-delete the local branch. git worktree remove prunes the branch
+  // when it succeeds, but if the worktree was already deleted manually or
+  // the remove failed, the local branch lingers. This is the safety net.
+  if (options.branchName) {
+    try {
+      runGit(`branch -D ${options.branchName}`, {
+        cwd: options.repoRoot,
+      });
+    } catch {
+      // Branch may already be deleted.
+    }
+  }
+
   // Clean up the local branch reference (worktree remove may leave it).
   if (options.branchName) {
     try {
