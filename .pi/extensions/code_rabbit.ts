@@ -71,7 +71,9 @@ const parseRateLimitMinutes = (num: string): number | undefined => {
   const comments = gh(
     `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
   );
-  const m = comments.match(/available in:?\s*(\d+)/);
+  // CodeRabbit formats: "Next review available in: **4 minutes**"
+  // or "available in: 15 minutes". Match flexibly around markdown.
+  const m = comments.match(/available in[\s\S]*?(\d+)\s*min/);
   return m?.[1] ? Number.parseInt(m[1], 10) + 1 : undefined;
 };
 
@@ -496,6 +498,109 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           criticalCount,
           findings,
         },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────
+  // Tool 3: code_rabbit_wait — poll for new comments
+  // ─────────────────────────────────────────────────────────
+  pi.registerTool({
+    name: 'code_rabbit_wait',
+    label: 'CodeRabbit Wait for Review',
+    description:
+      'Poll for CodeRabbit review completion on a PR. Waits up to maxWaitMs ' +
+      '(default 30min), polling every intervalMs (default 30s). Returns when ' +
+      'a terminal review state is reached or new actionable comments appear. ' +
+      'Handles rate limits automatically.',
+    parameters: Type.Object({
+      pr: Type.String({ description: 'PR number' }),
+      maxWaitMs: Type.Optional(
+        Type.Number({ default: 30 * 60 * 1000, description: 'Max wait time in ms' }),
+      ),
+      intervalMs: Type.Optional(
+        Type.Number({ default: 15_000, description: 'Poll interval in ms' }),
+      ),
+    }),
+    // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx): Promise<any> {
+      const num = prNumber(params.pr);
+      const maxWaitMs = params.maxWaitMs ?? 30 * 60 * 1000;
+      const intervalMs = params.intervalMs ?? 15_000;
+      const deadline = Date.now() + maxWaitMs;
+      let lastCommentCount = -1;
+
+      // Get initial comment count as baseline.
+      const initialComments = gh(`pr view ${num} --json comments --jq '.comments | length'`).trim();
+      lastCommentCount = initialComments ? Number.parseInt(initialComments, 10) : 0;
+      console.log(`📊 Baseline: ${lastCommentCount} comments on PR #${num}`);
+
+      while (Date.now() < deadline) {
+        // Check review state
+        const state = getReviewState(num);
+        if (state && TERMINAL_REVIEW_STATES.some((s) => state.includes(s))) {
+          console.log(`✅ Review complete: ${state}`);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `✅ CodeRabbit review complete on PR #${num}: ${state}.`,
+              },
+            ],
+            details: { pr: num, reviewState: state, newComments: false },
+          };
+        }
+
+        // Check for new comments
+        const currentComments = gh(
+          `pr view ${num} --json comments --jq '.comments | length'`,
+        ).trim();
+        const currentCount = currentComments ? Number.parseInt(currentComments, 10) : 0;
+        if (currentCount > lastCommentCount) {
+          console.log(
+            `📊 New comments: ${currentCount - lastCommentCount} (total: ${currentCount})`,
+          );
+          lastCommentCount = currentCount;
+          // Fetch the new comments
+          const newComments = gh(
+            `pr view ${num} --json comments --jq '[.comments[${lastCommentCount - (currentCount - lastCommentCount)}:] | .[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join("\\n---\\n")'`,
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `📊 ${currentCount - (lastCommentCount - (currentCount - lastCommentCount))} new comments on PR #${num}.`,
+                  newComments
+                    ? `\n### Latest CodeRabbit comment:\n${newComments.slice(0, 800)}`
+                    : '',
+                ].join('\n'),
+              },
+            ],
+            details: { pr: num, newComments: true, totalComments: currentCount },
+          };
+        }
+
+        // Handle rate limits
+        const waitMins = parseRateLimitMinutes(num);
+        if (waitMins) {
+          console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
+          await sleep(waitMins * 60_000);
+          continue;
+        }
+
+        console.log(`  ⏳ Waiting... (${Math.round((deadline - Date.now()) / 1000)}s remaining)`);
+        await sleep(intervalMs);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏰ Timed out waiting for CodeRabbit on PR #${num} after ${Math.round(maxWaitMs / 60_000)} min.`,
+          },
+        ],
+        details: { pr: num, timedOut: true },
       };
     },
   });

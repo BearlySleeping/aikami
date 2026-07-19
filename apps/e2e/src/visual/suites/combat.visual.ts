@@ -158,7 +158,9 @@ export default defineConfig({
 
         // Skip through any dialogue to reach combat
         for (let i = 0; i < 5; i++) {
-          const dialogueOverlay = page.locator('[data-testid="dialogue-overlay"], .dialogue-overlay');
+          const dialogueOverlay = page.locator(
+            '[data-testid="dialogue-overlay"], .dialogue-overlay',
+          );
           if (await dialogueOverlay.isVisible({ timeout: 1000 }).catch(() => false)) {
             await page.keyboard.press('Enter');
             await page.waitForTimeout(500);
