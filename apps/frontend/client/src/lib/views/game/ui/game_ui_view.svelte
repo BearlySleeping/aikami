@@ -4,6 +4,7 @@ import InventoryView from '../../inventory/inventory_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
 import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
+import HotbarView from '../hotbar/hotbar_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import AutosaveIndicator from './hud/autosave_indicator.svelte';
 import HpBar from './hud/hp_bar.svelte';
@@ -17,7 +18,6 @@ import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
 import QuestTrackerView from './quest_tracker_view.svelte';
-import HotbarView from '../hotbar/hotbar_view.svelte';
 
 type Props = {
   viewModel: GameUIViewModelInterface;

@@ -256,7 +256,8 @@ const { viewModel }: Props = $props();
 
             <!-- Class Description -->
             <p class="text-xs text-base-content/70">
-              <span class="font-semibold">Class Features</span> — Abilities and passives granted by your class.
+              <span class="font-semibold">Class Features</span>
+              — Abilities and passives granted by your class.
             </p>
 
             <!-- Earned Features -->
@@ -311,7 +312,9 @@ const { viewModel }: Props = $props();
                 {viewModel.isMaxLevel ? 'Maximum Level Reached' : 'Next Level Features'}
               </h4>
               {#if viewModel.isMaxLevel}
-                <p class="text-xs text-base-content/40 italic">You have reached the maximum level (5).</p>
+                <p class="text-xs text-base-content/40 italic">
+                  You have reached the maximum level (5).
+                </p>
               {:else if viewModel.nextLevelFeatures.length > 0}
                 <div class="flex flex-col gap-2">
                   {#each viewModel.nextLevelFeatures as feature}

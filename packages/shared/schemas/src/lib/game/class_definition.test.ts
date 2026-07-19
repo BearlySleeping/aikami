@@ -208,7 +208,7 @@ describe('ClassDefinitionSchema', () => {
   });
 
   it('allows dead levels (empty feature array)', () => {
-    const levelKey = '2';
+    const _levelKey = '2';
     const result = Value.Check(ClassDefinitionSchema, {
       id: 'test_class',
       name: 'Test Class',

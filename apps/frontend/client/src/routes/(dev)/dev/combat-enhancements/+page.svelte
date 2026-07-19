@@ -40,6 +40,7 @@ let initiativeEntries: InitiativeEntry[] = $state([
     maxHp: 100,
     isCurrentTurn: true,
     isDefeated: false,
+    statusEffectIds: [],
   },
   {
     entityId: 2,
@@ -49,6 +50,7 @@ let initiativeEntries: InitiativeEntry[] = $state([
     maxHp: 80,
     isCurrentTurn: false,
     isDefeated: false,
+    statusEffectIds: [],
   },
   {
     entityId: 3,
@@ -58,6 +60,7 @@ let initiativeEntries: InitiativeEntry[] = $state([
     maxHp: 50,
     isCurrentTurn: false,
     isDefeated: true,
+    statusEffectIds: [],
   },
 ]);
 
@@ -65,12 +68,16 @@ let turnState: TurnState | null = $state({
   currentEntityId: 1,
   currentEntityName: 'Player',
   isPlayerTurn: true,
-  actionEconomy: { action: false, bonusAction: false, reaction: false },
+  actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
   turnNumber: 3,
 });
 
 let actionEconomy = $derived(
-  turnState?.actionEconomy ?? { action: false, bonusAction: false, reaction: false },
+  turnState?.actionEconomy ?? {
+    actionAvailable: true,
+    bonusActionAvailable: true,
+    reactionAvailable: true,
+  },
 );
 
 let testLogText = $state('Player rolls 18 (+5 = 23) to hit for 12 slashing damage');
@@ -124,7 +131,7 @@ const cycleTurn = (): void => {
     currentEntityId: nextId,
     currentEntityName: nextId === 1 ? 'Player' : 'Goblin',
     isPlayerTurn: nextId === 1,
-    actionEconomy: { action: false, bonusAction: false, reaction: false },
+    actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
     turnNumber: turnState.turnNumber + 1,
   };
   initiativeEntries = initiativeEntries.map((e) => ({
@@ -142,7 +149,9 @@ const toggleDefeated = (): void => {
   });
 };
 
-const toggleActionEconomy = (type: 'action' | 'bonusAction' | 'reaction'): void => {
+const toggleActionEconomy = (
+  type: 'actionAvailable' | 'bonusActionAvailable' | 'reactionAvailable',
+): void => {
   if (!turnState) {
     return;
   }
@@ -199,21 +208,21 @@ onMount(() => {
         <button
           type="button"
           class="btn btn-outline btn-xs"
-          onclick={() => toggleActionEconomy('action')}
+          onclick={() => toggleActionEconomy('actionAvailable')}
         >
           Toggle Action
         </button>
         <button
           type="button"
           class="btn btn-outline btn-xs"
-          onclick={() => toggleActionEconomy('bonusAction')}
+          onclick={() => toggleActionEconomy('bonusActionAvailable')}
         >
           Toggle Bonus
         </button>
         <button
           type="button"
           class="btn btn-outline btn-xs"
-          onclick={() => toggleActionEconomy('reaction')}
+          onclick={() => toggleActionEconomy('reactionAvailable')}
         >
           Toggle Reaction
         </button>
