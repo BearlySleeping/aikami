@@ -7,6 +7,12 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Focus action: focuses the element when it mounts. */
+function focusOnMount(node: HTMLElement): { destroy: () => void } {
+  node.focus();
+  return { destroy: () => {} };
+}
 </script>
 
 <div
@@ -34,6 +40,7 @@ const { viewModel }: Props = $props();
       focusable[nextIndex].focus();
     }
   }}
+  use:focusOnMount
 >
   <div class="w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
     <!-- Phase: Confirm -->

@@ -194,8 +194,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
 
   // ── Overlay Stack (C-332) ──
 
-  /** Push an overlay onto the stack. Respects the compatibility matrix. */
-  pushOverlay(type: GameOverlayType): void;
+  /** Push an overlay onto the stack. Respects the compatibility matrix. Returns true if pushed successfully. */
+  pushOverlay(type: GameOverlayType): boolean;
   /** Pop the top overlay. Restores focus to the element that had focus before. */
   popOverlay(): void;
   /** Replace the top overlay (pop then push). */
@@ -329,9 +329,9 @@ export class GameOverlayService
   // ── Overlay Stack Operations (C-332) ─────────────────────────────
 
   /** @inheritdoc */
-  pushOverlay(type: GameOverlayType): void {
+  pushOverlay(type: GameOverlayType): boolean {
     if (type === 'NONE') {
-      return;
+      return false;
     }
 
     // Guard: check compatibility matrix
@@ -340,7 +340,13 @@ export class GameOverlayService
 
     if (compat === 'block') {
       this.debug('overlay:push:blocked', { type, current });
-      return;
+      return false;
+    }
+
+    // Explicit 'undefined' means not in compatibility matrix — reject unless explicitly allowed
+    if (compat === undefined) {
+      this.debug('overlay:push:rejected', { type, current });
+      return false;
     }
 
     if (compat === 'clear') {
@@ -352,7 +358,7 @@ export class GameOverlayService
     // Guard: no duplicates — pushing the same type that's already on top is a no-op
     if (this.activeOverlay === type) {
       this.debug('overlay:push:duplicate', { type });
-      return;
+      return false;
     }
 
     // Capture focus before opening overlay
@@ -360,6 +366,7 @@ export class GameOverlayService
 
     this.overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
+    return true;
   }
 
   /** @inheritdoc */
@@ -379,10 +386,45 @@ export class GameOverlayService
 
   /** @inheritdoc */
   replaceOverlay(type: GameOverlayType): void {
+    let previousFocusToRetain: HTMLElement | undefined;
+
     if (this.overlayStack.length > 0) {
-      this.overlayStack.pop();
+      const removed = this.overlayStack.pop();
+      previousFocusToRetain = removed?.previousFocus;
     }
-    this.pushOverlay(type);
+
+    // If we have a previousFocus from the removed overlay, temporarily override
+    if (type !== 'NONE' && previousFocusToRetain !== undefined) {
+      // Push with the retained previousFocus instead of capturing current focus
+      const current = this.activeOverlay;
+      const compat = OVERLAY_COMPATIBILITY[current]?.[type];
+
+      if (compat === 'block') {
+        this.debug('overlay:push:blocked', { type, current });
+        return;
+      }
+
+      if (compat === undefined) {
+        this.debug('overlay:push:rejected', { type, current });
+        return;
+      }
+
+      if (compat === 'clear') {
+        this.debug('overlay:push:clear', { type, current });
+        this.clearStack();
+      }
+
+      if (this.activeOverlay === type) {
+        this.debug('overlay:push:duplicate', { type });
+        return;
+      }
+
+      this.overlayStack.push({ type, previousFocus: previousFocusToRetain });
+      this.debug('overlay:replace', { type, stackDepth: this.stackDepth });
+    } else {
+      // Normal flow when stack was empty or no focus to retain
+      this.pushOverlay(type);
+    }
   }
 
   /** @inheritdoc */
@@ -551,26 +593,51 @@ export class GameOverlayService
         return;
       }
 
-      // Otherwise, pop exactly one layer
-      // END_SESSION → PAUSE_MENU (not NONE) handled by closeEndSession
+      // Dispatch through close methods to ensure proper cleanup and resume behavior
       if (this.activeOverlay === 'END_SESSION') {
         this.closeEndSession();
         return;
       }
 
+      if (this.activeOverlay === 'PAUSE_MENU') {
+        this.resumeGame();
+        return;
+      }
+
+      if (this.activeOverlay === 'INVENTORY') {
+        this.closeInventory();
+        return;
+      }
+
+      if (this.activeOverlay === 'QUEST_LOG') {
+        this.closeQuestLog();
+        return;
+      }
+
+      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        this.closeCharacterDashboard();
+        return;
+      }
+
+      if (this.activeOverlay === 'VENDOR') {
+        this.closeVendor();
+        return;
+      }
+
+      // Fallback: pop overlay directly for any other types
       this.popOverlay();
       return;
     }
 
     // ── Overlay toggle: open_inventory ──
     if (actionId === 'open_inventory') {
-      if (!this.canOpenOverlay('INVENTORY')) {
-        return;
-      }
       if (this.activeOverlay === 'INVENTORY') {
         event.preventDefault();
         this.closeInventory();
         onboardingHintService.onActionPerformed('open_inventory');
+        return;
+      }
+      if (!this.canOpenOverlay('INVENTORY')) {
         return;
       }
       if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
@@ -584,12 +651,12 @@ export class GameOverlayService
 
     // ── Overlay toggle: open_quest_log ──
     if (actionId === 'open_quest_log') {
-      if (!this.canOpenOverlay('QUEST_LOG')) {
-        return;
-      }
       if (this.activeOverlay === 'QUEST_LOG') {
         event.preventDefault();
         this.closeQuestLog();
+        return;
+      }
+      if (!this.canOpenOverlay('QUEST_LOG')) {
         return;
       }
       if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
@@ -602,12 +669,12 @@ export class GameOverlayService
 
     // ── Overlay toggle: open_character ──
     if (actionId === 'open_character') {
-      if (!this.canOpenOverlay('CHARACTER_DASHBOARD')) {
-        return;
-      }
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         event.preventDefault();
         this.closeCharacterDashboard();
+        return;
+      }
+      if (!this.canOpenOverlay('CHARACTER_DASHBOARD')) {
         return;
       }
       if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
@@ -693,7 +760,10 @@ export class GameOverlayService
   }
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
-    this.pushOverlay('VENDOR');
+    const success = this.pushOverlay('VENDOR');
+    if (!success) {
+      return;
+    }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this.vendorSessionOptions = options;
@@ -709,7 +779,10 @@ export class GameOverlayService
   }
 
   openInventory(): void {
-    this.pushOverlay('INVENTORY');
+    const success = this.pushOverlay('INVENTORY');
+    if (!success) {
+      return;
+    }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onInventoryOpen();
@@ -725,7 +798,10 @@ export class GameOverlayService
   }
 
   openQuestLog(): void {
-    this.pushOverlay('QUEST_LOG');
+    const success = this.pushOverlay('QUEST_LOG');
+    if (!success) {
+      return;
+    }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onQuestLogOpen();
@@ -741,7 +817,10 @@ export class GameOverlayService
   }
 
   openCharacterDashboard(): void {
-    this.pushOverlay('CHARACTER_DASHBOARD');
+    const success = this.pushOverlay('CHARACTER_DASHBOARD');
+    if (!success) {
+      return;
+    }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onDashboardOpen();
@@ -773,7 +852,10 @@ export class GameOverlayService
 
   /** @inheritdoc */
   openEndSession(): void {
-    this.pushOverlay('END_SESSION');
+    const success = this.pushOverlay('END_SESSION');
+    if (!success) {
+      return;
+    }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
   }
@@ -807,7 +889,10 @@ export class GameOverlayService
     if (this.activeOverlay === 'PAUSE_MENU') {
       this.resumeGame();
     } else if (this.activeOverlay === 'NONE') {
-      this.pushOverlay('PAUSE_MENU');
+      const success = this.pushOverlay('PAUSE_MENU');
+      if (!success) {
+        return;
+      }
       gameModeService.setMode('MENU');
       this._engineService?.pauseEngine();
     }

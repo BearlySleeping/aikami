@@ -7,6 +7,12 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Focus action: focuses the element when it mounts. */
+function focusOnMount(node: HTMLElement): { destroy: () => void } {
+  node.focus();
+  return { destroy: () => {} };
+}
 </script>
 
 <div
@@ -35,6 +41,7 @@ const { viewModel }: Props = $props();
       focusable[nextIndex].focus();
     }
   }}
+  use:focusOnMount
 >
   <div class="card w-full max-w-md bg-base-100 shadow-xl">
     <div class="card-body p-6 gap-4">

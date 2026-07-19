@@ -22,6 +22,12 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Focus action: focuses the element when it mounts. */
+function focusOnMount(node: HTMLElement): { destroy: () => void } {
+  node.focus();
+  return { destroy: () => {} };
+}
 </script>
 
 <!--
@@ -126,6 +132,7 @@ const { viewModel }: Props = $props();
           focusable[nextIndex].focus();
         }
       }}
+      use:focusOnMount
     >
       <div class="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl">
         <QuestView viewModel={viewModel.questViewModel} />

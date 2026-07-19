@@ -54,13 +54,20 @@ test.describe('Game Page (Separated Architecture)', () => {
     // Wait for engine to be ready
     await page.waitForSelector('[role="progressbar"]', { state: 'attached', timeout: 15000 });
 
-    const hpBar = page.locator('[role="progressbar"]');
-    await expect(hpBar).toBeAttached();
+    const hpBar = page.getByRole('progressbar', { name: 'Player HP' });
+    await expect(hpBar).toBeVisible();
 
-    // Check ARIA attributes
-    await expect(hpBar).toHaveAttribute('aria-valuenow');
-    await expect(hpBar).toHaveAttribute('aria-valuemin');
-    await expect(hpBar).toHaveAttribute('aria-valuemax');
+    // Check ARIA attributes contain numeric values
+    const ariaValueNow = await hpBar.getAttribute('aria-valuenow');
+    const ariaValueMin = await hpBar.getAttribute('aria-valuemin');
+    const ariaValueMax = await hpBar.getAttribute('aria-valuemax');
+
+    expect(ariaValueNow).toBeTruthy();
+    expect(ariaValueMin).toBeTruthy();
+    expect(ariaValueMax).toBeTruthy();
+    expect(Number(ariaValueNow)).toBeGreaterThanOrEqual(0);
+    expect(Number(ariaValueMin)).toBe(0);
+    expect(Number(ariaValueMax)).toBeGreaterThan(0);
   });
 
   // ── C-332 AC-4: Focus Trap in Overlays ──
@@ -74,13 +81,20 @@ test.describe('Game Page (Separated Architecture)', () => {
     const resumeButton = page.getByText('Resume Game');
     await expect(resumeButton).toBeVisible({ timeout: 5000 });
 
-    // Tab through all focusable elements — focus should stay within dialog
-    // Count how many times we can tab before cycling back to first element
+    // Locate the pause dialog
+    const pauseDialog = page.locator('[role="dialog"][aria-label="Pause Menu"]');
+    await expect(pauseDialog).toBeVisible();
+
+    // Tab through focusable elements — verify focus stays within the pause dialog
     for (let i = 0; i < 15; i++) {
       await page.keyboard.press('Tab');
-      // Focus should not have moved to the page body
-      const focused = page.locator(':focus');
-      await expect(focused).not.toHaveAttribute('id', 'game-canvas-container');
+      // Verify document.activeElement is contained within the pause dialog
+      const isContained = await page.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"][aria-label="Pause Menu"]');
+        const activeEl = document.activeElement;
+        return dialog?.contains(activeEl) ?? false;
+      });
+      expect(isContained).toBe(true);
     }
   });
 

@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { OverlayStackEntry } from './game_overlay_service.svelte.ts';
 
 // $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
 
@@ -353,6 +354,20 @@ describe('GameOverlayService', () => {
     const stack = service.overlayStack;
     expect(stack.length).toBe(1);
     expect(stack[0].type).toBe('PAUSE_MENU');
+
+    // Verify runtime immutability: attempting to mutate should not affect the service's internal state
+    const originalLength = service.stackDepth;
+    try {
+      // Attempt to modify the returned stack
+      (stack as unknown as OverlayStackEntry[]).push({
+        type: 'INVENTORY',
+        previousFocus: undefined,
+      });
+    } catch {
+      // If it throws due to readonly, that's good
+    }
+    // Verify the service's internal stack was not affected
+    expect(service.stackDepth).toBe(originalLength);
   });
 
   // ── Focus restore tracking (C-332 AC-4) ──
