@@ -44,6 +44,10 @@ export const QuestObjectiveProgressV1Schema = Type.Object({
   activeSince: Type.Optional(
     Type.Number({ description: 'Timestamp when objective became active (ms)' }),
   ),
+  /** Timestamp when a hidden objective was revealed to the player. */
+  revealedAt: Type.Optional(
+    Type.Number({ description: 'Timestamp when hidden objective was revealed (ms)' }),
+  ),
 });
 
 // ── Journal entry schemas (C-339) ──

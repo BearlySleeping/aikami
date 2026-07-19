@@ -12,12 +12,14 @@ const { viewModel }: Props = $props();
     <!-- Header with Tabs -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">Quest Log</h1>
-      <div class="tabs tabs-boxed bg-base-200">
+      <div class="tabs tabs-box bg-base-200" role="tablist">
         <button
           type="button"
           class="tab tab-sm"
           class:tab-active={viewModel.activeTab === 'quests'}
           onclick={() => viewModel.setActiveTab('quests')}
+          role="tab"
+          aria-selected={viewModel.activeTab === 'quests'}
         >
           Quests ({viewModel.questCount})
         </button>
@@ -26,6 +28,8 @@ const { viewModel }: Props = $props();
           class="tab tab-sm"
           class:tab-active={viewModel.activeTab === 'journal'}
           onclick={() => viewModel.setActiveTab('journal')}
+          role="tab"
+          aria-selected={viewModel.activeTab === 'journal'}
         >
           Journal ({viewModel.journalEntries.length})
         </button>
@@ -60,9 +64,12 @@ const { viewModel }: Props = $props();
                             <span class="flex-1">{objective.label}</span>
                             {#if objective.status === 'locked'}
                               <span class="badge badge-sm badge-ghost">Locked</span>
-                            {:else if objective.optional}
+                            {:else if objective.optional && objective.status === 'active' && objective.current === 0}
                               <span class="badge badge-sm badge-ghost">Optional</span>
                             {:else}
+                              {#if objective.optional}
+                                <span class="badge badge-sm badge-ghost">Optional</span>
+                              {/if}
                               <span class="text-xs text-base-content/50"
                                 >{objective.current}
                                 / {objective.max}</span

@@ -150,27 +150,16 @@ export type ContentPackItemEntry = Static<typeof ContentPackItemEntrySchema>;
 // ContentPackQuestObjective — a single quest objective (C-316, extended C-339)
 // ---------------------------------------------------------------------------
 
-/** Failure condition for an objective. */
-export const QuestObjectiveFailureConditionSchema = Type.Union([
-  Type.Object({
-    kind: Type.Literal('onTrigger'),
-    triggerType: Type.Union([
-      Type.Literal('MAP_ENTERED'),
-      Type.Literal('NPC_INTERACTED'),
-      Type.Literal('ENCOUNTER_COMPLETED'),
-    ]),
-    triggerId: Type.String({ minLength: 1 }),
-  }),
-  Type.Object({
-    kind: Type.Literal('onQuestFlag'),
-    flagKey: Type.String({ minLength: 1 }),
-    flagValue: Type.Boolean(),
-  }),
-  Type.Object({
-    kind: Type.Literal('onTimeout'),
-    timeoutSeconds: Type.Integer({ minimum: 1 }),
-  }),
-]);
+/** Failure condition for an objective (only onTrigger is supported). */
+export const QuestObjectiveFailureConditionSchema = Type.Object({
+  kind: Type.Literal('onTrigger'),
+  triggerType: Type.Union([
+    Type.Literal('MAP_ENTERED'),
+    Type.Literal('NPC_INTERACTED'),
+    Type.Literal('ENCOUNTER_COMPLETED'),
+  ]),
+  triggerId: Type.String({ minLength: 1 }),
+});
 
 export type QuestObjectiveFailureCondition = Static<typeof QuestObjectiveFailureConditionSchema>;
 

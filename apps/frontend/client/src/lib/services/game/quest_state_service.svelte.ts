@@ -999,6 +999,7 @@ class QuestStateService
       return;
     }
     progressEntry.hiddenRevealed = true;
+    progressEntry.revealedAt = Date.now();
     this.debug('_revealObjective', {
       questId: progress.questId,
       objectiveIndex,
@@ -1067,6 +1068,7 @@ class QuestStateService
 
   /**
    * Checks if a trigger matches a failure condition.
+   * Only onTrigger failure conditions are supported.
    */
   private _matchesFailureCondition(
     trigger: QuestTriggerEvent,
@@ -1093,7 +1095,6 @@ class QuestStateService
           return false;
       }
     }
-    // onQuestFlag and onTimeout are handled elsewhere
     return false;
   }
 
@@ -1112,7 +1113,7 @@ class QuestStateService
       return {
         label: def.text,
         status: entry?.status ?? 'skipped',
-        revealedAt: entry?.hiddenRevealed && def.hidden ? entry.activeSince : undefined,
+        revealedAt: entry?.hiddenRevealed && def.hidden ? entry.revealedAt : undefined,
       };
     });
 
