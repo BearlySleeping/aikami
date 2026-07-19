@@ -5,7 +5,7 @@
 // Verifies item cards render without overflow, scrolling works,
 // and the sticky header/close button remain accessible.
 //
-// Contract: C-218 — E2E Logic and UI Bug Resolution
+// Contract: C-218 — E2E Logic and UI Bug Resolution, C-335 (production-route cases)
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -137,6 +137,33 @@ export default defineConfig({
       prompt: MOBILE_PROMPT,
       schema: InventorySchema,
       setupHook: setupMobileViewport,
+    },
+    // ── Production Route Case (C-335 AC-7) ────────────────
+    {
+      name: 'Inventory — Production Route',
+      searchParams: { bypassTextAi: 'true' },
+      prompt: [
+        INVENTORY_PROMPT,
+        '',
+        'Production /game route — inventory should be opened via keyboard shortcut.',
+        'Item cards must render without overflow on the production game overlay.',
+      ].join('\n'),
+      schema: InventorySchema,
+      setupHook: async (page) => {
+        // Navigate to production route
+        await page.goto('http://localhost:5274/game?bypassTextAi=true', {
+          waitUntil: 'domcontentloaded',
+        });
+        // Wait for engine and HUD
+        await page.waitForSelector('#game-canvas-container canvas', {
+          state: 'attached',
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(3000);
+        // Open inventory via 'I' key
+        await page.keyboard.press('KeyI');
+        await page.waitForTimeout(1000);
+      },
     },
   ],
 });

@@ -51,6 +51,13 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
+  release-gate:
+    command: 'bun run test:release-gate'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+      - 'src/error_allowlist.ts'
+      - 'src/fixtures/engine_replay.ts'
   run-visual-tests:
     command: 'bun run src/visual/runner.ts'
     inputs:

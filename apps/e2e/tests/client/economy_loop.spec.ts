@@ -53,12 +53,14 @@ test('AC-3: buy/sell updates gold and inventory list', async ({ page }) => {
   // Buy the Iron Sword (50 gold)
   const goldBefore = Number.parseInt(
     (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ?? '0',
+    10,
   );
   await page.locator('text=Iron Sword').locator('..').locator('button:has-text("Buy")').click();
 
   // Assert gold decreased
   const goldAfterBuy = Number.parseInt(
     (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ?? '0',
+    10,
   );
   expect(goldAfterBuy).toBeLessThan(goldBefore);
 
@@ -87,6 +89,7 @@ test('AC-3: buy/sell updates gold and inventory list', async ({ page }) => {
     const goldAfterSell = Number.parseInt(
       (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ??
         '0',
+      10,
     );
     expect(goldAfterSell).toBeGreaterThan(goldAfterBuy);
 
