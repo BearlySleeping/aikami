@@ -45,7 +45,9 @@ export type GameOverlayType =
   | 'CHARACTER_DASHBOARD'
   | 'VENDOR'
   | 'END_SESSION'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'PARTY_ROSTER'
+  | 'TALK_TO_PARTY';
 
 export type DialogueNpcData = {
   npcId: string;
@@ -88,6 +90,7 @@ const OVERLAY_COMPATIBILITY: Record<
     CHARACTER_DASHBOARD: 'allow',
     VENDOR: 'allow',
     END_SESSION: 'allow',
+    PARTY_ROSTER: 'allow',
   },
   PAUSE_MENU: {
     INVENTORY: 'allow',
@@ -118,6 +121,10 @@ const OVERLAY_COMPATIBILITY: Record<
   GAME_OVER: {},
   END_SESSION: {},
   SETTINGS: {},
+  PARTY_ROSTER: {
+    PAUSE_MENU: 'allow',
+  },
+  TALK_TO_PARTY: {},
 };
 
 export type OverlayEventHandlers = {
@@ -175,6 +182,11 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   closeQuestLog(): void;
   openCharacterDashboard(): void;
   closeCharacterDashboard(): void;
+
+  // ── Party Roster (C-340) ──
+  openPartyRoster(): void;
+  closePartyRoster(): void;
+
   startCombat(options: { enemyName: string }): void;
 
   // ── Auto-Save Scheduling (C-334) ──
@@ -747,6 +759,12 @@ export class GameOverlayService
         return;
       }
 
+      if (this.activeOverlay === 'PARTY_ROSTER') {
+        this.closePartyRoster();
+        return;
+      }
+      }
+
       // Fallback: pop overlay directly for any other types
       this.popOverlay();
       return;
@@ -803,6 +821,23 @@ export class GameOverlayService
       if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
         event.preventDefault();
         this.openCharacterDashboard();
+        return;
+      }
+    }
+
+    // ── Overlay toggle: open_party_roster (C-340) — P key ──
+    if (actionId === 'open_party_roster') {
+      if (this.activeOverlay === 'PARTY_ROSTER') {
+        event.preventDefault();
+        this.closePartyRoster();
+        return;
+      }
+      if (!this.canOpenOverlay('PARTY_ROSTER')) {
+        return;
+      }
+      if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
+        event.preventDefault();
+        this.openPartyRoster();
         return;
       }
     }
@@ -1020,6 +1055,25 @@ export class GameOverlayService
       this._engineService?.resumeEngine();
     }
     this._handlers?.onDashboardClose();
+  }
+
+  // ── Party Roster (C-340) ──
+
+  openPartyRoster(): void {
+    const success = this.pushOverlay('PARTY_ROSTER');
+    if (!success) {
+      return;
+    }
+    gameModeService.setMode('MENU');
+    this._engineService?.pauseEngine();
+  }
+
+  closePartyRoster(): void {
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
   }
 
   startCombat(options: { enemyName: string }): void {
