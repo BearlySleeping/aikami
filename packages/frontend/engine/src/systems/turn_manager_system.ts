@@ -799,7 +799,8 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
 
     // Independent damage roll per target
     const damageRoll = roller(6);
-    const rawDamage = damageRoll + Math.max(0, (playerStats.attack ?? 0) + statusAttBonus) + (bonusDamage ?? 0);
+    const rawDamage =
+      damageRoll + Math.max(0, (playerStats.attack ?? 0) + statusAttBonus) + (bonusDamage ?? 0);
     let damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
 
     const resistFactor = getResistanceFactor(tid, dt);

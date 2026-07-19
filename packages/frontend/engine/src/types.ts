@@ -691,6 +691,18 @@ export type QuestObjectiveData = {
   readonly label: string;
   current: number;
   readonly max: number;
+  /** Per-objective status (C-339). */
+  readonly status?: 'locked' | 'active' | 'completed' | 'failed' | 'skipped' | 'expired';
+  /** Whether the objective is hidden until revealed (C-339). */
+  readonly hidden?: boolean;
+  /** Whether the objective has been revealed (C-339). */
+  readonly hiddenRevealed?: boolean;
+  /** Whether the objective is optional (C-339). */
+  readonly optional?: boolean;
+  /** Wall-clock timestamp when objective became active (for timed objectives) (C-339). */
+  readonly activeSince?: number;
+  /** Wall-clock seconds until expiry (for timed objectives) (C-339). */
+  readonly timeLimitSeconds?: number;
 };
 
 /** Quest status values emitted by the ECS. */
@@ -707,6 +719,45 @@ export type QuestData = {
   readonly endingNarration?: string;
   /** Rewards granted for this quest (for journal display). */
   readonly rewards?: Array<{ type: string; label: string }>;
+  /** Whether the quest is repeatable (C-339). */
+  readonly repeatable?: boolean;
+  /** Quest chain ID for journal grouping (C-339). */
+  readonly questChainId?: string;
+  /** Display order within the chain (C-339). */
+  readonly chainOrder?: number;
+};
+
+/**
+ * A journal entry for a completed or failed quest.
+ * Used by QuestJournalService to maintain a persistent narrative record.
+ * Contract: C-339
+ */
+export type QuestJournalEntry = {
+  /** Quest ID from content pack. */
+  questId: string;
+  /** Quest display name (cached from content pack). */
+  title: string;
+  /** Final status — completed or failed. */
+  status: 'completed' | 'failed';
+  /** Timestamp of completion/failure. */
+  timestamp: number;
+  /** Ending ID chosen (if applicable). */
+  endingId?: string;
+  /** Ending title (if applicable). */
+  endingTitle?: string;
+  /** Authored narration text from the ending. */
+  narration: string;
+  /** Objectives with their final status for the journal record. */
+  objectiveResults: Array<{
+    label: string;
+    status: 'locked' | 'active' | 'completed' | 'failed' | 'skipped' | 'expired';
+    /** If hidden, when it was revealed. */
+    revealedAt?: number;
+  }>;
+  /** Rewards received. */
+  rewards: Array<{ type: string; label: string }>;
+  /** World-state flags set by this quest completion. */
+  worldStateFlags: string[];
 };
 
 // ---------------------------------------------------------------------------

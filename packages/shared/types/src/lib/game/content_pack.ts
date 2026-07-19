@@ -25,6 +25,7 @@ import type {
   ItemTypeSchema,
   OnboardingHintStepSchema,
   OnboardingSectionSchema,
+  QuestObjectiveFailureConditionSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 
@@ -43,8 +44,11 @@ export type ItemType = Static<typeof ItemTypeSchema>;
 /** An item definition in a content pack manifest. */
 export type ContentPackItemEntry = Static<typeof ContentPackItemEntrySchema>;
 
-/** A single quest objective (C-316). */
+/** A single quest objective (C-316, extended C-339). */
 export type ContentPackQuestObjective = Static<typeof ContentPackQuestObjectiveSchema>;
+
+/** Failure condition for a quest objective (C-339). */
+export type QuestObjectiveFailureCondition = Static<typeof QuestObjectiveFailureConditionSchema>;
 
 /** Quest reward categories (C-316). */
 export type ContentPackQuestRewardType = Static<typeof ContentPackQuestRewardTypeSchema>;
