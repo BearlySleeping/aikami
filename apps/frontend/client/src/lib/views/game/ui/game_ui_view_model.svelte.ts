@@ -16,6 +16,7 @@ import {
   inputActionService,
   npcDialogueService,
   onboardingHintService,
+  playerStateService,
   sessionService,
   timeService,
 } from '$services';
@@ -42,6 +43,10 @@ import type { GameOverViewModelInterface } from './overlays/game_over/game_over_
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_view_model.svelte';
+import {
+  getQuestTrackerViewModel,
+  type QuestTrackerViewModelInterface,
+} from './quest_tracker_view_model.svelte';
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
@@ -57,7 +62,9 @@ export type GameUIViewModelOptions = BaseViewModelOptions;
 
 export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly activeOverlay: GameOverlayType;
+  readonly overlayStack: readonly import('$lib/services/game/game_overlay_service.svelte.ts').OverlayStackEntry[];
   readonly isTransitioning: boolean;
+  readonly isCombat: boolean;
   readonly autoSaveStatus: AutoSaveStatus;
   readonly gameHour: number;
   readonly gameMinute: number;
@@ -67,8 +74,26 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   /** Whether the chat is locked (read-only) — session has ended. */
   readonly chatLocked: boolean;
 
-  /** Whether to show the clock HUD (hidden during pause menu and game over). */
+  // ── Player HP (C-332 AC-1) ──
+
+  readonly playerHp: number;
+  readonly playerMaxHp: number;
+  readonly hpPercent: number;
+
+  // ── Quest Tracker (C-332 AC-1) ──
+
+  readonly questTrackerViewModel: QuestTrackerViewModelInterface;
+
+  // ── HUD Visibility (C-332 AC-1, AC-5) ──
+
+  /** Whether to show the clock HUD (hidden during pause menu, game over, end session). */
   readonly showClockHud: boolean;
+  /** Whether to show the HP bar (explore only, hidden during combat, pause, game over). */
+  readonly showHpBar: boolean;
+  /** Whether to show the quest tracker (explore only). */
+  readonly showQuestTracker: boolean;
+  /** Whether to show the autosave indicator (hidden during pause menu, game over, end session). */
+  readonly showAutosaveIndicator: boolean;
 
   // ── Overlay ViewModels (created on demand by initialize) ──
 
@@ -120,6 +145,11 @@ class GameUIViewModel
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
 
+  /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
+  questTrackerViewModel = $state<QuestTrackerViewModelInterface>(
+    getQuestTrackerViewModel({ className: 'QuestTrackerViewModel' }),
+  );
+
   // ── Interaction HUD state (C-327) ──
 
   get interactionPromptLabel(): string {
@@ -155,8 +185,17 @@ class GameUIViewModel
     return gameOverlayService.activeOverlay;
   }
 
+  get overlayStack(): readonly import('$lib/services/game/game_overlay_service.svelte.ts').OverlayStackEntry[] {
+    return gameOverlayService.overlayStack;
+  }
+
   get isTransitioning(): boolean {
     return gameOverlayService.isTransitioning;
+  }
+
+  /** Reads combat state from engine service (C-332 AC-5). */
+  get isCombat(): boolean {
+    return gameOverlayService.activeOverlay === 'COMBAT';
   }
 
   get autoSaveStatus(): AutoSaveStatus {
@@ -186,6 +225,47 @@ class GameUIViewModel
   get showClockHud(): boolean {
     const overlay = gameOverlayService.activeOverlay;
     return overlay !== 'PAUSE_MENU' && overlay !== 'GAME_OVER' && overlay !== 'END_SESSION';
+  }
+
+  // ── Player HP (C-332 AC-1) ──
+
+  get playerHp(): number {
+    return playerStateService.playerHp;
+  }
+
+  get playerMaxHp(): number {
+    return playerStateService.playerMaxHp;
+  }
+
+  get hpPercent(): number {
+    const max = this.playerMaxHp;
+    return max > 0 ? Math.max(0, Math.min(100, (this.playerHp / max) * 100)) : 0;
+  }
+
+  // ── HUD Visibility Rules (C-332 AC-1, AC-5) ──
+
+  /** HP bar: visible during EXPLORE, hidden during COMBAT, PAUSE_MENU, GAME_OVER, END_SESSION. */
+  get showHpBar(): boolean {
+    const overlay = gameOverlayService.activeOverlay;
+    return overlay === 'NONE';
+  }
+
+  /** Quest tracker: visible during EXPLORE, hidden during all overlays. */
+  get showQuestTracker(): boolean {
+    const overlay = gameOverlayService.activeOverlay;
+    return overlay === 'NONE';
+  }
+
+  /** Autosave indicator: visible during EXPLORE, hidden during PAUSE_MENU, GAME_OVER, END_SESSION. */
+  get showAutosaveIndicator(): boolean {
+    const overlay = gameOverlayService.activeOverlay;
+    return (
+      overlay !== 'PAUSE_MENU' &&
+      overlay !== 'GAME_OVER' &&
+      overlay !== 'END_SESSION' &&
+      overlay !== 'COMBAT' &&
+      overlay !== 'DIALOGUE'
+    );
   }
 
   // ── Lifecycle ──
