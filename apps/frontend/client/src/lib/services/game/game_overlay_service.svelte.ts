@@ -763,7 +763,6 @@ export class GameOverlayService
         this.closePartyRoster();
         return;
       }
-      }
 
       // Fallback: pop overlay directly for any other types
       this.popOverlay();
