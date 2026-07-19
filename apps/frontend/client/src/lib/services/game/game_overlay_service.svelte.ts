@@ -43,7 +43,8 @@ export type GameOverlayType =
   | 'GAME_OVER'
   | 'CHARACTER_DASHBOARD'
   | 'VENDOR'
-  | 'END_SESSION';
+  | 'END_SESSION'
+  | 'SETTINGS';
 
 export type DialogueNpcData = {
   npcId: string;
@@ -92,6 +93,7 @@ const OVERLAY_COMPATIBILITY: Record<
     QUEST_LOG: 'allow',
     CHARACTER_DASHBOARD: 'allow',
     END_SESSION: 'allow',
+    SETTINGS: 'allow',
   },
   DIALOGUE: {
     COMBAT: 'clear',
@@ -114,6 +116,7 @@ const OVERLAY_COMPATIBILITY: Record<
   },
   GAME_OVER: {},
   END_SESSION: {},
+  SETTINGS: {},
 };
 
 export type OverlayEventHandlers = {
@@ -624,6 +627,11 @@ export class GameOverlayService
         return;
       }
 
+      if (this.activeOverlay === 'SETTINGS') {
+        this.popOverlay();
+        return;
+      }
+
       // Fallback: pop overlay directly for any other types
       this.popOverlay();
       return;
@@ -697,10 +705,15 @@ export class GameOverlayService
   }
 
   async goToSettings(): Promise<void> {
-    await routerService.goToRoute('settings', {
-      queryParameters: { from: 'game' },
-      pathParameters: undefined,
-    });
+    // Push SETTINGS overlay on top of pause menu (C-333 AC-4)
+    const success = this.pushOverlay('SETTINGS');
+    if (!success) {
+      // Fallback: navigate to full settings page
+      await routerService.goToRoute('settings', {
+        queryParameters: { from: 'game' },
+        pathParameters: undefined,
+      });
+    }
   }
 
   async quitToMainMenu(): Promise<void> {

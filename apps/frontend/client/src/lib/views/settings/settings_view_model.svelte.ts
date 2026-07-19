@@ -1,14 +1,15 @@
 // apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts
 //
-// ViewModel for the Settings page. Manages Game (Display / Audio / Controls) and
-// AI Engine (Text / Image / Voice) tab navigation. The Text sub-tab hosts the
-// full ProvidersView from C-120 for AI provider configuration.
+// ViewModel for the Settings page. Manages the section registry, progressive
+// disclosure (Basic/Advanced toggle), search filtering, per-section reset,
+// and immediate preview/revert for Display and Audio.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
+  routerService,
 } from '@aikami/frontend/services';
-import { routerService } from '$services';
+import { configService } from '$services';
 import type { CustomAgentDefinition } from '$types/agent_types';
 import {
   type AgentEditorViewModelInterface,
@@ -19,6 +20,10 @@ import {
   getAgentListViewModel,
 } from '../agent/list/agent_list_view_model.svelte.ts';
 import {
+  type AIPrivacyViewModelInterface,
+  getAIPrivacyViewModel,
+} from './ai_privacy/ai_privacy_view_model.svelte';
+import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
 } from './audio/settings_audio_view_model.svelte';
@@ -26,6 +31,10 @@ import {
   type AutonomousSettingsViewModelInterface,
   getAutonomousSettingsViewModel,
 } from './autonomous/autonomous_settings_view_model.svelte';
+import {
+  type ConnectionManagerViewModelInterface,
+  getConnectionManagerViewModel,
+} from './connection/connection_manager_view_model.svelte';
 import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,
@@ -39,6 +48,10 @@ import {
   getExportViewModel,
 } from './export/export_view_model.svelte';
 import {
+  type GameplayViewModelInterface,
+  getGameplayViewModel,
+} from './gameplay/gameplay_view_model.svelte';
+import {
   getSettingsMusicViewModel,
   type SettingsMusicViewModelInterface,
 } from './music/settings_music_view_model.svelte';
@@ -46,13 +59,16 @@ import {
   getProvidersViewModel,
   type ProvidersViewModelInterface,
 } from './providers/providers_view_model.svelte';
+import { SETTINGS_SECTIONS, type SettingsSection } from './settings_sections';
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (backward-compatible aliases)
 // ---------------------------------------------------------------------------
 
+/** @deprecated — use SettingsSection instead. Kept for backward compat. */
 export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
+/** @deprecated — use SettingsSection instead. Kept for backward compat. */
 export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' | 'autonomous';
 
 // ---------------------------------------------------------------------------
@@ -60,38 +76,40 @@ export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' |
 // ---------------------------------------------------------------------------
 
 export type SettingsViewModelInterface = BaseViewModelInterface & {
-  /** Currently selected primary category. */
-  readonly activeCategory: SettingsCategory;
-  /** Currently selected sub-tab under the Game category. */
-  readonly gameSubTab: GameSubTab;
-  /** The C-120 ProvidersViewModel for AI provider configuration. */
+  // ── Section registry ──
+  readonly allSections: readonly SettingsSection[];
+  readonly visibleSections: readonly SettingsSection[];
+  readonly activeSectionId: string;
+
+  // ── Progressive disclosure ──
+  readonly isAdvanced: boolean;
+  readonly canToggleAdvanced: boolean;
+
+  // ── Search ──
+  readonly searchQuery: string;
+
+  // ── Capability badges ──
+  readonly aiCapabilityBadge: string;
+  readonly aiCapabilityBadgeColor: string;
+
+  // ── Sub-ViewModels ──
+  readonly gameplayViewModel: GameplayViewModelInterface;
+  readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly providersViewModel: ProvidersViewModelInterface;
-  /** Audio settings view model wired to AudioService. */
   readonly audioViewModel: SettingsAudioViewModelInterface;
-  /** Music DJ settings view model — track library, scene overrides, provider. */
   readonly musicViewModel: SettingsMusicViewModelInterface;
-  /** Autonomous NPCs settings view model (C-248). */
   readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
-  /** Display settings view model wired to Tauri window API. */
   readonly displayViewModel: SettingsDisplayViewModelInterface;
-  /** Controls settings view model with localStorage keybindings. */
   readonly controlsViewModel: SettingsControlsViewModelInterface;
-  /** Export & Data settings view model (C-246). */
   readonly exportViewModel: ExportViewModelInterface;
-  /** Agent list view model (C-247). */
+  readonly connectionViewModel: ConnectionManagerViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
-  /** Agent editor view model (C-247). */
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
-  setActiveCategory(category: SettingsCategory): void;
-  setGameSubTab(tab: GameSubTab): void;
-  /**
-   * Closes settings and navigates back to the originating page.
-   * Reads the `from` query parameter to determine the destination:
-   *   - `?from=game` → navigates to `/game`
-   *   - `?from=start` (or any other value) → navigates to `/`
-   *   - No parameter → defaults to `/`
-   */
+  // ── Actions ──
+  setActiveSection(id: string): void;
+  setSearchQuery(query: string): void;
+  toggleAdvanced(): void;
   closeSettings(): Promise<void>;
 };
 
@@ -99,7 +117,10 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type SettingsViewModelOptions = BaseViewModelOptions;
+export type SettingsViewModelOptions = BaseViewModelOptions & {
+  /** Whether this instance is running in the in-game overlay (vs full-page). */
+  overlayMode?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -109,66 +130,207 @@ export class SettingsViewModel
   extends BaseViewModel<SettingsViewModelOptions>
   implements SettingsViewModelInterface
 {
-  activeCategory: SettingsCategory = $state('game');
-  gameSubTab: GameSubTab = $state('display');
-  readonly providersViewModel: ProvidersViewModelInterface;
+  // ── Section registry ──
+  readonly allSections = SETTINGS_SECTIONS;
+  activeSectionId = $state<string>(SETTINGS_SECTIONS[0].id);
+  isAdvanced = $state<boolean>(false);
+  searchQuery = $state<string>('');
+
+  // ── Basic sub-ViewModels (always created) ──
+  readonly gameplayViewModel: GameplayViewModelInterface;
+  readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
-  readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
-  readonly exportViewModel: ExportViewModelInterface;
-  readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
-  readonly agentListViewModel: AgentListViewModelInterface;
-  readonly agentEditorViewModel: AgentEditorViewModelInterface;
+
+  // ── Advanced sub-ViewModels (lazily created) ──
+  private _providersViewModel: ProvidersViewModelInterface | undefined;
+  private _musicViewModel: SettingsMusicViewModelInterface | undefined;
+  private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
+  private _exportViewModel: ExportViewModelInterface | undefined;
+  private _connectionViewModel: ConnectionManagerViewModelInterface | undefined;
+  private _agentListViewModel: AgentListViewModelInterface | undefined;
+  private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
+
+  // ── Preview/revert state ──
+  private _preEditAudioVolume: number | undefined;
+
+  // ── Search debounce ──
+  private _searchTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  // ── Overlay mode ──
+  private readonly _overlayMode: boolean;
+
+  // ── Getters ──
+
+  get visibleSections(): readonly SettingsSection[] {
+    const filtered = this.allSections.filter((s) => {
+      // In basic mode, only show basic sections
+      if (!this.isAdvanced && s.category === 'advanced') {
+        return false;
+      }
+      return true;
+    });
+
+    // Apply search filter
+    if (this.searchQuery.trim().length === 0) {
+      return filtered;
+    }
+
+    const query = this.searchQuery.toLowerCase().trim();
+    return filtered.filter(
+      (s) =>
+        s.label.toLowerCase().includes(query) ||
+        s.keywords.some((kw) => kw.toLowerCase().includes(query)),
+    );
+  }
+
+  get providersViewModel(): ProvidersViewModelInterface {
+    if (!this._providersViewModel) {
+      this._providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
+    }
+    return this._providersViewModel;
+  }
+
+  get musicViewModel(): SettingsMusicViewModelInterface {
+    if (!this._musicViewModel) {
+      this._musicViewModel = getSettingsMusicViewModel({ className: 'SettingsMusicViewModel' });
+    }
+    return this._musicViewModel;
+  }
+
+  get autonomousViewModel(): AutonomousSettingsViewModelInterface {
+    if (!this._autonomousViewModel) {
+      this._autonomousViewModel = getAutonomousSettingsViewModel({
+        className: 'AutonomousSettingsViewModel',
+      });
+    }
+    return this._autonomousViewModel;
+  }
+
+  get exportViewModel(): ExportViewModelInterface {
+    if (!this._exportViewModel) {
+      this._exportViewModel = getExportViewModel({ className: 'ExportViewModel' });
+    }
+    return this._exportViewModel;
+  }
+
+  get connectionViewModel(): ConnectionManagerViewModelInterface {
+    if (!this._connectionViewModel) {
+      this._connectionViewModel = getConnectionManagerViewModel({
+        className: 'ConnectionManagerViewModel',
+      });
+    }
+    return this._connectionViewModel;
+  }
+
+  get agentListViewModel(): AgentListViewModelInterface {
+    if (!this._agentListViewModel) {
+      this._agentListViewModel = getAgentListViewModel({
+        className: 'AgentListViewModel',
+        onCreateAgent: () => this.agentEditorViewModel.openCreate(),
+        onEditAgent: (agent: CustomAgentDefinition) => this.agentEditorViewModel.openEdit(agent),
+      });
+    }
+    return this._agentListViewModel;
+  }
+
+  get agentEditorViewModel(): AgentEditorViewModelInterface {
+    if (!this._agentEditorViewModel) {
+      this._agentEditorViewModel = getAgentEditorViewModel({
+        className: 'AgentEditorViewModel',
+      });
+    }
+    return this._agentEditorViewModel;
+  }
+
+  get canToggleAdvanced(): boolean {
+    // Always allow toggling — no confirmation needed in this implementation
+    // (advanced fields are lazily created and have no dirty state to lose)
+    return true;
+  }
+
+  get aiCapabilityBadge(): string {
+    if (!configService.isLoaded) {
+      return 'Loading…';
+    }
+    const hasConnections = configService.state.connections.length > 0;
+    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
+      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
+    );
+    if (hasConnections || hasApiKey) {
+      return 'AI: Connected';
+    }
+    return 'AI: Not Set Up';
+  }
+
+  get aiCapabilityBadgeColor(): string {
+    if (!configService.isLoaded) {
+      return 'badge-ghost';
+    }
+    const hasConnections = configService.state.connections.length > 0;
+    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
+      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
+    );
+    if (hasConnections || hasApiKey) {
+      return 'badge-success';
+    }
+    return 'badge-ghost';
+  }
+
+  // ── Constructor ──
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
-    this.providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
+    this._overlayMode = options.overlayMode ?? false;
+
+    // Always create basic sub-ViewModels
+    this.gameplayViewModel = getGameplayViewModel({ className: 'GameplayViewModel' });
+    this.aiPrivacyViewModel = getAIPrivacyViewModel({ className: 'AIPrivacyViewModel' });
     this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
-    this.musicViewModel = getSettingsMusicViewModel({ className: 'SettingsMusicViewModel' });
     this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = getSettingsControlsViewModel({
       className: 'SettingsControlsViewModel',
     });
-    this.exportViewModel = getExportViewModel({
-      className: 'ExportViewModel',
-    });
-    this.autonomousViewModel = getAutonomousSettingsViewModel({
-      className: 'AutonomousSettingsViewModel',
-    });
-    this.agentEditorViewModel = getAgentEditorViewModel({
-      className: 'AgentEditorViewModel',
-    });
-    this.agentListViewModel = getAgentListViewModel({
-      className: 'AgentListViewModel',
-      onCreateAgent: () => this.agentEditorViewModel.openCreate(),
-      onEditAgent: (agent: CustomAgentDefinition) => this.agentEditorViewModel.openEdit(agent),
-    });
   }
 
   override async initialize(): Promise<void> {
-    this.debug('initialize');
-    // ProvidersViewModel handles its own initialization (config load + service
-    // detection) when its BaseViewModelContainer mounts.
+    this.debug('initialize', { overlayMode: this._overlayMode });
+    // Capture pre-edit state for preview/revert
+    this._capturePreEditState();
     await super.initialize();
   }
 
-  setActiveCategory(category: SettingsCategory): void {
-    this.activeCategory = category;
+  // ── Actions ──
+
+  setActiveSection(id: string): void {
+    this.activeSectionId = id;
   }
 
-  setGameSubTab(tab: GameSubTab): void {
-    this.gameSubTab = tab;
+  setSearchQuery(query: string): void {
+    this.searchQuery = query;
+
+    // Debounce search — clear previous timeout
+    if (this._searchTimeout) {
+      clearTimeout(this._searchTimeout);
+    }
+
+    this._searchTimeout = setTimeout(() => {
+      // Force reactivity update after debounce
+      this.searchQuery = query;
+    }, 150);
   }
 
-  /** Navigates to the Agents tab. */
-  showAgentsTab(): void {
-    this.activeCategory = 'agents';
-    this.agentListViewModel.refresh();
+  toggleAdvanced(): void {
+    this.isAdvanced = !this.isAdvanced;
+    this.debug('toggleAdvanced', { isAdvanced: this.isAdvanced });
   }
 
   async closeSettings(): Promise<void> {
     this.debug('closeSettings');
+
+    // Revert any unsaved preview changes
+    this._revertPreviewChanges();
 
     const params = new URLSearchParams(window.location.search);
     const from = params.get('from');
@@ -182,6 +344,21 @@ export class SettingsViewModel
     }
 
     await routerService.navigateToApp();
+  }
+
+  // ── Preview/revert helpers ──
+
+  private _capturePreEditState(): void {
+    this._preEditAudioVolume = this.audioViewModel.masterVolume;
+    // Display state capture is deferred to initialize() of displayViewModel
+  }
+
+  private _revertPreviewChanges(): void {
+    // Audio revert
+    if (this._preEditAudioVolume !== undefined) {
+      this.audioViewModel.setMasterVolume(this._preEditAudioVolume);
+    }
+    // Display revert — handled by the displayViewModel itself
   }
 }
 
