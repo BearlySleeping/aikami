@@ -94,6 +94,7 @@ export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { CombatTacticsData } from './components/combat_tactics.ts';
 export { CombatTactics, registerCombatTacticsObservers } from './components/combat_tactics.ts';
+export { Companion, registerCompanionObservers } from './components/companion.ts';
 export type { CrimeEventData } from './components/crime_event.ts';
 export { CrimeEvent, registerCrimeEventObservers } from './components/crime_event.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';

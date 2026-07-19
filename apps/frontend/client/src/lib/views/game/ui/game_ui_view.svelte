@@ -16,6 +16,8 @@ import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
+import PartyRosterView from './overlays/party_roster/party_roster_view.svelte';
+import PartyHud from './party_hud.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
 import QuestTrackerView from './quest_tracker_view.svelte';
 
@@ -45,6 +47,11 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
 >
   <!-- ── HUD Bar — Top-Left: HP Bar (C-332 AC-1) ── -->
   <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
+
+  <!-- ── Party HUD (C-340) ── -->
+  <div class="absolute top-16 left-4 z-50 pointer-events-auto">
+    <PartyHud visible={viewModel.showHpBar} />
+  </div>
 
   <!-- ── HUD Bar — Top-Right: Clock + Autosave Indicator (C-332 AC-3) ── -->
   <div class="absolute top-3 right-3 z-50 flex items-center gap-2 pointer-events-none">
@@ -153,6 +160,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     <EndSessionView viewModel={viewModel.endSessionViewModel} />
   {:else if viewModel.activeOverlay === 'SETTINGS' && viewModel.settingsOverlayViewModel}
     <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
+  {:else if viewModel.activeOverlay === 'PARTY_ROSTER' && viewModel.partyRosterViewModel}
+    <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
   {/if}
 
   <TransitionOverlay {viewModel} />

@@ -48,6 +48,10 @@ import {
   type SettingsOverlayViewModelInterface,
 } from './overlays/settings/settings_overlay_view_model.svelte';
 import {
+  getPartyRosterViewModel,
+  type PartyRosterViewModelInterface,
+} from './overlays/party_roster/party_roster_view_model.svelte';
+import {
   getQuestTrackerViewModel,
   type QuestTrackerViewModelInterface,
 } from './quest_tracker_view_model.svelte';
@@ -114,6 +118,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
   readonly settingsOverlayViewModel: SettingsOverlayViewModelInterface | undefined;
 
+  // ── Party Roster (C-340) ──
+  readonly partyRosterViewModel: PartyRosterViewModelInterface | undefined;
+
   // ── Interaction HUD (C-327) ──
 
   /** Current interaction prompt label (e.g. "E — Talk to Elder Thalia"). */
@@ -152,6 +159,9 @@ class GameUIViewModel
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
   settingsOverlayViewModel = $state<SettingsOverlayViewModelInterface | undefined>(undefined);
+
+  // ── Party Roster (C-340) ──
+  partyRosterViewModel = $state<PartyRosterViewModelInterface | undefined>(undefined);
 
   /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
   questTrackerViewModel = $state<QuestTrackerViewModelInterface>(
@@ -428,6 +438,19 @@ class GameUIViewModel
 
         return () => {
           this.settingsOverlayViewModel = undefined;
+        };
+      });
+
+      // ── Party Roster (C-340) ──
+      $effect(() => {
+        if (gameOverlayService.activeOverlay !== 'PARTY_ROSTER') {
+          return;
+        }
+        const vm = getPartyRosterViewModel({ className: 'PartyRosterViewModel' });
+        this.partyRosterViewModel = vm;
+
+        return () => {
+          this.partyRosterViewModel = undefined;
         };
       });
 

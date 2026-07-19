@@ -12,6 +12,7 @@ import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { djb2Hash } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
@@ -71,6 +72,9 @@ const DEFAULT_INTERACTION_RADIUS = 50;
 
 /** Default NPC dialog text if no dialogueKey property is set. */
 const DEFAULT_DIALOG = 'Hello, traveler!';
+
+/** Default companion approval score at spawn time. */
+const DEFAULT_COMPANION_APPROVAL = 0;
 
 /** Default tint for props (white = no tint). */
 const PROP_TINT = 0xffffff;
@@ -280,6 +284,69 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
       vendorInventory,
     }),
   );
+
+  // ── Companion attachment (C-340) ──
+  const isCompanion = _getBoolProperty(spawnPoint.properties, 'isCompanion', false);
+  const companionClassId = _getStringProperty(spawnPoint.properties, 'companionClassId', '');
+  const initialApproval = _getNumberProperty(
+    spawnPoint.properties,
+    'initialApproval',
+    DEFAULT_COMPANION_APPROVAL,
+  );
+
+  if (isCompanion) {
+    addComponent(world, eid, Companion);
+    addComponent(
+      world,
+      eid,
+      set(Companion, {
+        npcId,
+        approval: initialApproval,
+        recruited: false,
+      }),
+    );
+
+    // Attach CombatStats for companions so they can participate in combat
+    if (companionClassId) {
+      addComponent(world, eid, CombatStats);
+      addComponent(
+        world,
+        eid,
+        set(CombatStats, {
+          health: 30,
+          maxHealth: 30,
+          initiative: 12,
+          attack: 4,
+          defense: 12,
+          accuracy: 2,
+          evasion: 11,
+          xp: 0,
+          level: 1,
+          xpToNextLevel: 100,
+          classId: companionClassId,
+        }),
+      );
+
+      addComponent(world, eid, TurnOrder);
+      addComponent(
+        world,
+        eid,
+        set(TurnOrder, {
+          currentTurn: false,
+          initiativeValue: 12,
+          isActive: false, // inactive until recruited
+        }),
+      );
+    }
+
+    logger.debug('[entity_spawner] Spawned COMPANION NPC:', {
+      eid,
+      npcId,
+      npcName,
+      companionClassId,
+      initialApproval,
+    });
+  }
 
   if (isVendor) {
     logger.debug('[entity_spawner] Spawned VENDOR NPC:', {

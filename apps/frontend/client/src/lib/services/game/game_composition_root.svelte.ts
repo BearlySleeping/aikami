@@ -30,6 +30,8 @@ import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
+import type { PartyRosterServiceInterface } from './party_roster_service.svelte.ts';
+import { partyRosterService } from './party_roster_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
 import type { QuestStateServiceInterface } from './quest_state_service.svelte';
@@ -397,6 +399,17 @@ export class GameCompositionRoot
         startCombat: (opts) => {
           gameOverlayService.startCombat({ enemyName: opts.npcName });
           return true;
+        },
+        recruit: (opts) => {
+          // Use partyRosterService to recruit the companion (C-340)
+          const member = partyRosterService.recruit({
+            npcId: opts.npcId,
+            name: opts.npcName,
+            classId: 'fighter', // TODO: read from content pack companionClassId
+            level: 1,
+            initialApproval: 0,
+          });
+          return !!member;
         },
       },
     });
