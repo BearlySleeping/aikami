@@ -5,7 +5,7 @@
 // various game states (initial, log-filled, low-hp, victory, defeat)
 // using the /dev/combat sandbox with ?state= query params.
 //
-// Contract: C-166, C-164, C-145
+// Contract: C-166, C-164, C-145, C-335 (production-route cases)
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -111,6 +111,31 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.defeat].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+    },
+    // ── Production Route Case (C-335 AC-7) ────────────────
+    {
+      name: 'Combat — Production Route',
+      searchParams: { bypassTextAi: 'true' },
+      prompt: [
+        COMBAT_PROMPT,
+        '',
+        'Production /game route — combat should be triggered via gameplay.',
+        'The combat UI must render with HP bars, action buttons, and combat log.',
+      ].join('\n'),
+      schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      setupHook: async (page) => {
+        // Navigate to production route
+        await page.goto('http://localhost:5274/game?bypassTextAi=true', {
+          waitUntil: 'domcontentloaded',
+        });
+        // Wait for game to boot
+        await page.waitForSelector('#game-canvas-container canvas', {
+          state: 'attached',
+          timeout: 30_000,
+        });
+        await page.waitForTimeout(2000);
+      },
     },
   ],
 });

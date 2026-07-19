@@ -9,6 +9,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 //   AC-1: Authored fallback — dialogue never dead-ends
 //   AC-4: Context projection via orchestrator
+//   C-335 AC-7 — production-route case
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -64,6 +65,44 @@ export default defineConfig({
       searchParams: { forceOffline: '1' },
       prompt: FALLBACK_PROMPT,
       schema: DialogueFallbackSchema,
+    },
+    // ── Production Route Case (C-335 AC-7) ────────────────
+    {
+      name: 'authored-fallback-production',
+      searchParams: { forceOffline: '1' },
+      prompt: [
+        FALLBACK_PROMPT,
+        '',
+        'Production /game route — dialogue fallback must render on the real game page.',
+        'NPC name, authored reply, and 2-4 choices must be visible.',
+        'No raw error strings or blank dialogue areas.',
+      ].join('\n'),
+      schema: DialogueFallbackSchema,
+      setupHook: async (page) => {
+        // Navigate to production route
+        await page.goto('http://localhost:5274/game?forceOffline=1', {
+          waitUntil: 'domcontentloaded',
+        });
+        // Wait for engine and approach NPC
+        await page.waitForSelector('#game-canvas-container canvas', {
+          state: 'attached',
+          timeout: 30_000,
+        });
+
+        // Walk toward NPC spawn
+        for (let i = 0; i < 8; i++) {
+          await page.keyboard.press('ArrowRight');
+          await page.waitForTimeout(100);
+        }
+        for (let i = 0; i < 4; i++) {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(100);
+        }
+
+        // Interact
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(2000);
+      },
     },
   ],
 });
