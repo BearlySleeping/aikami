@@ -87,12 +87,14 @@ export const isAllowedPageError = (message: string): boolean => {
  * collector.assertNoErrors(); // throws if any non-allowlisted errors
  * ```
  */
-export const setupErrorCollection = (page: import('@playwright/test').Page) => {
+import type { ConsoleMessage, Page, Request } from '@playwright/test';
+
+export const setupErrorCollection = (page: Page) => {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   const failedRequests: string[] = [];
 
-  const consoleHandler = (msg: import('playwright').ConsoleMessage) => {
+  const consoleHandler = (msg: ConsoleMessage) => {
     // Only track errors and warnings that matter
     if (msg.type() === 'error') {
       const text = msg.text();
@@ -108,7 +110,7 @@ export const setupErrorCollection = (page: import('@playwright/test').Page) => {
     }
   };
 
-  const requestFailedHandler = (request: import('playwright').Request) => {
+  const requestFailedHandler = (request: Request) => {
     const url = request.url();
     // Skip localhost, data: URLs, and blob: URLs
     if (/^(data:|blob:|chrome-extension:)/.test(url)) {

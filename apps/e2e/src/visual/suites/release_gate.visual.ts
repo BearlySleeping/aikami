@@ -6,7 +6,7 @@
 //
 // Contract: C-335 AC-7 — Visual Checkpoint Snapshots on Production Routes
 
-import { Type } from 'typebox';
+import { type Static, Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
 // ── Schema ───────────────────────────────────────────────────
@@ -34,7 +34,7 @@ const ReleaseGateSchema = Type.Object({
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
-export type ReleaseGateResult = import('typebox').Static<typeof ReleaseGateSchema>;
+export type ReleaseGateResult = Static<typeof ReleaseGateSchema>;
 
 // ── Prompts ──────────────────────────────────────────────────
 
