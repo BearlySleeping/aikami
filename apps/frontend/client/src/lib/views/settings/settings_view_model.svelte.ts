@@ -157,6 +157,7 @@ export class SettingsViewModel
 
   // ── Search debounce ──
   private _searchTimeout: ReturnType<typeof setTimeout> | undefined;
+  private _pendingSearchQuery = $state<string>('');
 
   // ── Overlay mode ──
   private readonly _overlayMode: boolean;
@@ -251,28 +252,22 @@ export class SettingsViewModel
   }
 
   get aiCapabilityBadge(): string {
-    if (!configService.isLoaded) {
+    const status = this.aiPrivacyViewModel.aiConnectionStatus;
+    if (status === 'loading') {
       return 'Loading…';
     }
-    const hasConnections = configService.state.connections.length > 0;
-    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
-      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
-    );
-    if (hasConnections || hasApiKey) {
+    if (status === 'connected') {
       return 'AI: Connected';
     }
     return 'AI: Not Set Up';
   }
 
   get aiCapabilityBadgeColor(): string {
-    if (!configService.isLoaded) {
+    const status = this.aiPrivacyViewModel.aiConnectionStatus;
+    if (status === 'loading') {
       return 'badge-ghost';
     }
-    const hasConnections = configService.state.connections.length > 0;
-    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
-      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
-    );
-    if (hasConnections || hasApiKey) {
+    if (status === 'connected') {
       return 'badge-success';
     }
     return 'badge-ghost';
@@ -308,22 +303,35 @@ export class SettingsViewModel
   }
 
   setSearchQuery(query: string): void {
-    this.searchQuery = query;
+    // Store incoming query as pending input
+    this._pendingSearchQuery = query;
 
-    // Debounce search — clear previous timeout
+    // Clear and replace existing timeout
     if (this._searchTimeout) {
       clearTimeout(this._searchTimeout);
     }
 
+    // Assign searchQuery only after debounce
     this._searchTimeout = setTimeout(() => {
-      // Force reactivity update after debounce
-      this.searchQuery = query;
+      this.searchQuery = this._pendingSearchQuery;
     }, 150);
   }
 
   toggleAdvanced(): void {
     this.isAdvanced = !this.isAdvanced;
     this.debug('toggleAdvanced', { isAdvanced: this.isAdvanced });
+
+    // When disabling Advanced mode, check if current section is advanced
+    if (!this.isAdvanced) {
+      const currentSection = this.allSections.find((s) => s.id === this.activeSectionId);
+      if (currentSection?.category === 'advanced') {
+        // Switch to the first basic section
+        const firstBasicSection = this.allSections.find((s) => s.category === 'basic');
+        if (firstBasicSection) {
+          this.activeSectionId = firstBasicSection.id;
+        }
+      }
+    }
   }
 
   async closeSettings(): Promise<void> {

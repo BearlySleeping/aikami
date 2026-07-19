@@ -46,6 +46,12 @@ export type AIPrivacyViewModelInterface = BaseViewModelInterface & {
 export type AIPrivacyViewModelOptions = BaseViewModelOptions;
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = 'aikami_ai_privacy_settings';
+
+// ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
@@ -55,6 +61,11 @@ class AIPrivacyViewModel
 {
   offlineMode = $state<boolean>(false);
   telemetryOptOut = $state<boolean>(false);
+
+  override async initialize(): Promise<void> {
+    this._loadFromStorage();
+    await super.initialize();
+  }
 
   get aiConnectionStatus(): AIConnectionStatus {
     if (!configService.isLoaded) {
@@ -70,6 +81,8 @@ class AIPrivacyViewModel
       return 'not_configured';
     }
 
+    // Credentials are configured — return 'connected' to indicate readiness
+    // (actual runtime connectivity is not checked here; offline status is handled separately)
     return 'connected';
   }
 
@@ -94,12 +107,45 @@ class AIPrivacyViewModel
 
   toggleOfflineMode(): void {
     this.offlineMode = !this.offlineMode;
+    this._persist();
     this.debug('toggleOfflineMode', { offlineMode: this.offlineMode });
   }
 
   toggleTelemetry(): void {
     this.telemetryOptOut = !this.telemetryOptOut;
+    this._persist();
     this.debug('toggleTelemetry', { telemetryOptOut: this.telemetryOptOut });
+  }
+
+  private _persist(): void {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          offlineMode: this.offlineMode,
+          telemetryOptOut: this.telemetryOptOut,
+        }),
+      );
+    } catch {
+      // localStorage may be unavailable
+    }
+  }
+
+  private _loadFromStorage(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.offlineMode === 'boolean') {
+          this.offlineMode = parsed.offlineMode;
+        }
+        if (typeof parsed.telemetryOptOut === 'boolean') {
+          this.telemetryOptOut = parsed.telemetryOptOut;
+        }
+      }
+    } catch {
+      // Invalid stored data — keep defaults
+    }
   }
 }
 

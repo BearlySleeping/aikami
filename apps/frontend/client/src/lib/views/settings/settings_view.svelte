@@ -9,6 +9,7 @@ import AgentListView from '../agent/list/agent_list_view.svelte';
 import AIPrivacyView from './ai_privacy/ai_privacy_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
+import ConnectionsListView from './connection/connections_list_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
@@ -209,8 +210,7 @@ function focusOnMount(node: HTMLInputElement): { destroy: () => void } {
     {:else if viewModel.activeSectionId === 'providers'}
       <ProvidersView viewModel={viewModel.providersViewModel} />
     {:else if viewModel.activeSectionId === 'connections'}
-      <!-- Connections are managed within the Providers view; this section is a placeholder for future standalone usage -->
-      <ProvidersView viewModel={viewModel.providersViewModel} />
+      <ConnectionsListView viewModel={viewModel.connectionViewModel} />
     {:else if viewModel.activeSectionId === 'agents'}
       <AgentListView viewModel={viewModel.agentListViewModel} />
     {:else if viewModel.activeSectionId === 'autonomous'}

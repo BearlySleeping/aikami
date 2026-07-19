@@ -54,6 +54,7 @@ const { viewModel }: Props = $props();
           class="join-item btn btn-sm"
           class:btn-primary={viewModel.difficulty === option.id}
           class:btn-ghost={viewModel.difficulty !== option.id}
+          aria-pressed={viewModel.difficulty === option.id}
           onclick={() => viewModel.setDifficulty(option.id)}
         >
           {option.label}

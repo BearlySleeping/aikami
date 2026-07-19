@@ -20,17 +20,7 @@ const TABS: readonly { id: string; label: string }[] = [
   { id: 'display', label: 'Display' },
   { id: 'controls', label: 'Controls' },
 ] as const;
-
-/** Handles Escape key to close the overlay. */
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    viewModel.close();
-  }
-};
 </script>
-
-<svelte:window onkeydown={handleKeyDown} />
 
 <!-- Overlay backdrop — semi-transparent, game world visible behind -->
 <div
@@ -41,11 +31,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
   tabindex="-1"
   onclick={(e: MouseEvent) => {
     if (e.target === e.currentTarget) {
-      viewModel.close();
-    }
-  }}
-  onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
       viewModel.close();
     }
   }}

@@ -80,6 +80,12 @@ class GameplayViewModel
   }
 
   setDifficulty(id: string): void {
+    // Validate that the ID exists in DIFFICULTY_OPTIONS
+    const isValid = DIFFICULTY_OPTIONS.some((opt) => opt.id === id);
+    if (!isValid) {
+      this.debug('setDifficulty: invalid ID, ignoring', { id });
+      return;
+    }
     this.difficulty = id;
     this._persist();
     this.debug('setDifficulty', { difficulty: this.difficulty });
@@ -120,7 +126,14 @@ class GameplayViewModel
           this.autosave = parsed.autosave;
         }
         if (typeof parsed.difficulty === 'string') {
-          this.difficulty = parsed.difficulty;
+          // Validate difficulty ID before assigning
+          const isValid = DIFFICULTY_OPTIONS.some((opt) => opt.id === parsed.difficulty);
+          if (isValid) {
+            this.difficulty = parsed.difficulty;
+          } else {
+            // Reset to normal if persisted value is invalid
+            this.difficulty = 'normal';
+          }
         }
       }
     } catch {

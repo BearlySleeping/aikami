@@ -77,11 +77,15 @@ class SettingsOverlayViewModel
   }
 
   close(): void {
+    gameOverlayService.popOverlay();
+  }
+
+  override async dispose(): Promise<void> {
     // Revert audio changes that weren't explicitly saved
     if (this._preEditAudioVolume !== undefined) {
       this.audioViewModel.setMasterVolume(this._preEditAudioVolume);
     }
-    gameOverlayService.popOverlay();
+    await super.dispose();
   }
 }
 
