@@ -79,6 +79,14 @@ export const NpcDialogueStartCombatCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+/** Recruits the NPC as a companion. Requires NPC to have isCompanion flag (C-340). */
+export const NpcDialogueRecruitCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('recruit'),
+  },
+  { additionalProperties: false },
+);
+
 /**
  * Discriminated union of every state-changing dialogue command.
  * Unknown `kind` values and extra fields fail validation.
@@ -89,6 +97,7 @@ export const NpcDialogueCommandSchema = Type.Union([
   NpcDialogueSkillCheckCommandSchema,
   NpcDialogueGiveItemCommandSchema,
   NpcDialogueStartCombatCommandSchema,
+  NpcDialogueRecruitCommandSchema,
 ]);
 
 export type NpcDialogueCommand = Static<typeof NpcDialogueCommandSchema>;

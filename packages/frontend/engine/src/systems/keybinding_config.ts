@@ -80,6 +80,8 @@ export const DEFAULT_KEYBINDINGS: KeybindingMap = {
   open_character: 'c',
   // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
   open_menu: 'Escape',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants (C-340)
+  open_party_roster: 'p',
 };
 
 // ---------------------------------------------------------------------------

@@ -91,6 +91,21 @@ export const ContentPackNpcEntrySchema = Type.Object({
   ),
   /** Combat stats for enemy NPCs (C-316) */
   combatStats: Type.Optional(ContentPackCombatStatsSchema),
+  // ── Companion fields (C-340) ──
+  /** Whether this NPC can be recruited as a companion. */
+  isCompanion: Type.Optional(Type.Boolean({ default: false })),
+  /** Dialogue key that triggers the recruit offer. */
+  recruitDialogueKey: Type.Optional(Type.String()),
+  /** Dialogue key for dismiss conversation. */
+  dismissDialogueKey: Type.Optional(Type.String()),
+  /** Class ID from the class registry (C-337). e.g. 'cleric', 'fighter'. */
+  companionClassId: Type.Optional(Type.String()),
+  /** Optional personal quest ID (references a quest in the manifest). */
+  personalQuestId: Type.Optional(Type.String()),
+  /** Initial approval score (-100 to 100). */
+  initialApproval: Type.Optional(Type.Integer({ minimum: -100, maximum: 100, default: 0 })),
+  /** Pool of banter dialogue keys for inter-party chatter. */
+  banterPool: Type.Optional(Type.Array(Type.String(), { default: [] })),
 });
 
 export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;

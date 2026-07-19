@@ -21,6 +21,7 @@ import {
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCollisionDataObservers } from '../components/collision_data.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import {
   createEngineStateEntity,
@@ -595,6 +596,7 @@ const initializeEngine = (
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
   registerEnemyObservers(world);
+  registerCompanionObservers(world);
   registerResistancesObservers(world);
   registerStatusEffectsObservers(world);
   registerInventoryObservers(world);
