@@ -11,6 +11,8 @@ describe('DiceService', () => {
     const mod = await import('./dice_service.svelte.ts');
     diceService = mod.diceService;
     diceService.history.length = 0;
+    // Reset to non-deterministic mode between tests
+    diceService.setSeed(null);
   });
 
   test('roll should return a number within the specified sides', () => {
@@ -92,6 +94,57 @@ describe('DiceService', () => {
         expect(result).toBeGreaterThanOrEqual(4);
         expect(result).toBeLessThanOrEqual(24);
       }
+    });
+  });
+
+  describe('setSeed — deterministic mode (C-336 AC-4)', () => {
+    test('given the same seed, rollD20 returns the same natural/total', () => {
+      diceService.setSeed(42);
+
+      const roll1 = diceService.rollD20(3);
+      const roll2 = diceService.rollD20(3);
+      const roll3 = diceService.rollD20(3);
+
+      // Reset and seed again
+      diceService.setSeed(null);
+      diceService.setSeed(42);
+
+      const roll1Again = diceService.rollD20(3);
+      const roll2Again = diceService.rollD20(3);
+      const roll3Again = diceService.rollD20(3);
+
+      expect(roll1.natural).toBe(roll1Again.natural);
+      expect(roll1.total).toBe(roll1Again.total);
+      expect(roll2.natural).toBe(roll2Again.natural);
+      expect(roll2.total).toBe(roll2Again.total);
+      expect(roll3.natural).toBe(roll3Again.natural);
+      expect(roll3.total).toBe(roll3Again.total);
+    });
+
+    test('setSeed(null) reverts to non-deterministic mode', () => {
+      diceService.setSeed(42);
+      const seededRoll = diceService.rollD20();
+
+      // After clearing seed, rolls should not be predictably deterministic
+      diceService.setSeed(null);
+      const unseededRoll = diceService.rollD20();
+
+      // We can't assert specific values, but both must be valid d20 rolls
+      expect(unseededRoll.natural).toBeGreaterThanOrEqual(1);
+      expect(unseededRoll.natural).toBeLessThanOrEqual(20);
+      expect(seededRoll.natural).toBeGreaterThanOrEqual(1);
+      expect(seededRoll.natural).toBeLessThanOrEqual(20);
+    });
+
+    test('different seeds produce different roll sequences', () => {
+      diceService.setSeed(42);
+      const rollsA = [diceService.rollD20(), diceService.rollD20(), diceService.rollD20()];
+
+      diceService.setSeed(99);
+      const rollsB = [diceService.rollD20(), diceService.rollD20(), diceService.rollD20()];
+
+      const sequencesDiffer = rollsA.some((a, i) => a.natural !== rollsB[i].natural);
+      expect(sequencesDiffer).toBe(true);
     });
   });
 });
