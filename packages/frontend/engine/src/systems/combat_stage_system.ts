@@ -21,6 +21,8 @@ import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { Companion } from '../components/companion.ts';
+import { Enemy } from '../components/enemy.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { TurnOrder } from '../components/turn_order.ts';
@@ -116,7 +118,39 @@ export const setupCombatStage = (
   const playerStageX = camera.x - halfW + (stageScreenWidth * 0.2) / stageWorldScale;
   const enemyStageX = camera.x - halfW + (stageScreenWidth * 0.8) / stageWorldScale;
 
-  // Reposition combatants
+  // Categorize combatants: player (eid 1), companions (have Companion component, no Enemy), enemies (have Enemy, no Companion)
+  const playerEids: number[] = [];
+  const companionEids: number[] = [];
+  const enemyEids: number[] = [];
+
+  for (const eid of entities) {
+    if (eid === 1) {
+      playerEids.push(eid);
+    } else if (Companion.recruited[eid] && !Enemy.isActive[eid]) {
+      companionEids.push(eid);
+    } else {
+      enemyEids.push(eid);
+    }
+  }
+
+  // Position companions behind the player in a vertical stack
+  if (companionEids.length > 0) {
+    const companionSpacing = 40; // px in world coords between companions
+    const startOffsetY = -(companionSpacing * (companionEids.length - 1)) / 2;
+    const companionStageX = playerStageX - 30; // slightly behind player
+
+    for (let i = 0; i < companionEids.length; i++) {
+      const eid = companionEids[i];
+      const pos = getComponent(world, eid, Position) as PositionData | undefined;
+      if (!pos) {
+        continue;
+      }
+      pos.x = companionStageX;
+      pos.y = stageY + startOffsetY + i * companionSpacing;
+    }
+  }
+
+  // Reposition player and enemies
   for (const eid of entities) {
     const pos = getComponent(world, eid, Position) as PositionData | undefined;
     if (!pos) {
@@ -127,11 +161,12 @@ export const setupCombatStage = (
       // Player — left side, face right
       pos.x = playerStageX;
       pos.y = stageY;
-    } else {
+    } else if (!Companion.recruited[eid] || Enemy.isActive[eid]) {
       // Enemy — right side, face left
       pos.x = enemyStageX;
       pos.y = stageY;
     }
+    // Companions already positioned above
   }
 
   stageActive = true;
