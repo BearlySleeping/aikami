@@ -49,6 +49,7 @@ export * from './lib/game/bridge_tags.ts';
 export * from './lib/game/campaign.ts';
 export * from './lib/game/class_definition.ts';
 export * from './lib/game/content_pack.ts';
+export * from './lib/game/party.ts';
 export * from './lib/game/cyoa.ts';
 export * from './lib/game/damage_type.ts';
 export * from './lib/game/ecs_snapshot.ts';
