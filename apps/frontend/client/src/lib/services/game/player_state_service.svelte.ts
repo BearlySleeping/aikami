@@ -14,6 +14,7 @@ import {
 import { serializeForAi } from '$lib/data/character_sheet_helpers';
 import type { NarrativeTraits } from '$lib/data/character_sheet_types';
 import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
+import { CLASS_REGISTRY } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +32,15 @@ export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
   readonly playerBaseDefense: number;
   readonly narrativeTraits: NarrativeTraits;
   readonly characterSheetSummary: string;
+
+  /** Class definition ID — "fighter", "wizard", etc. (C-337) */
+  readonly classId: string;
+  /** Feature IDs the character has unlocked (C-337) */
+  readonly classFeatures: readonly string[];
+  /** Feature IDs currently slotted on the hotbar, max 6 (C-337) */
+  readonly hotbarSlots: readonly string[];
+  /** Usage tracking: featureId → uses remaining (C-337) */
+  readonly abilityUses: Record<string, number>;
 
   /**
    * Adds XP to the player. Does not handle level-up logic (ECS owns that).
@@ -54,6 +64,17 @@ export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
 
   /** Resets all player stats to defaults. */
   reset(): void;
+
+  /** Sets the class ID for class-aware progression (C-337). */
+  setClassId(classId: string): void;
+  /** Sets a hotbar slot to a feature ID (C-337). */
+  setHotbarSlot(options: { slotIndex: number; featureId: string }): void;
+  /** Clears a hotbar slot (C-337). */
+  clearHotbarSlot(slotIndex: number): void;
+  /** Resets ability uses (called on rest/encounter end) (C-337). */
+  resetAbilityUses(uses: Record<string, number>): void;
+  /** Decrements an ability use (C-337). */
+  useAbility(featureId: string): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -73,6 +94,12 @@ class PlayerStateService
   playerBaseDefense = $state<number>(12);
   narrativeTraits = $state<NarrativeTraits>({ likes: [], temptations: [], keys: [] });
 
+  // ── Class Progression (C-337) ──
+  classId = $state<string>('fighter');
+  classFeatures = $state<string[]>([]);
+  hotbarSlots = $state<string[]>([]);
+  abilityUses = $state<Record<string, number>>({});
+
   private _listening = false;
 
   /** Compact AI-ready character sheet summary for prompt injection (C-232). */
@@ -86,8 +113,78 @@ class PlayerStateService
       attack: this.playerBaseAttack,
       defense: this.playerBaseDefense,
       narrativeTraits: this.narrativeTraits,
+      classId: this.classId,
+      classFeatures: this.classFeatures,
+      hotbarSlots: this.hotbarSlots,
     };
     return serializeForAi(sheet);
+  }
+
+  /** Sets the class ID and retroactively grants features for the current level. */
+  setClassId(classId: string): void {
+    this.classId = classId;
+
+    // Retroactively grant all features from level 1 through current level
+    const existingFeatures = new Set(this.classFeatures);
+    const classDef = (CLASS_REGISTRY as Record<string, { features: Record<string, { id: string }[]> }>)[classId];
+
+    if (classDef) {
+      for (let level = 1; level <= this.playerLevel; level++) {
+        const levelFeatures = classDef.features[String(level)];
+        if (levelFeatures) {
+          for (const feature of levelFeatures) {
+            existingFeatures.add(feature.id);
+          }
+        }
+      }
+      this.classFeatures = [...existingFeatures];
+    }
+
+    this.debug('setClassId', { classId, featuresGranted: this.classFeatures.length });
+  }
+
+  /** Sets a hotbar slot to a feature ID. Auto-clears the slot if it was already assigned elsewhere. */
+  setHotbarSlot(options: { slotIndex: number; featureId: string }): void {
+    const { slotIndex, featureId } = options;
+    if (slotIndex < 0 || slotIndex >= 6) {
+      return;
+    }
+    const slots = [...this.hotbarSlots];
+    // Remove featureId from any other slot
+    for (let i = 0; i < slots.length; i++) {
+      if (slots[i] === featureId) {
+        slots[i] = '';
+      }
+    }
+    slots[slotIndex] = featureId;
+    this.hotbarSlots = slots;
+    this.debug('setHotbarSlot', { slotIndex, featureId });
+  }
+
+  /** Clears a hotbar slot. */
+  clearHotbarSlot(slotIndex: number): void {
+    if (slotIndex < 0 || slotIndex >= 6) {
+      return;
+    }
+    const slots = [...this.hotbarSlots];
+    slots[slotIndex] = '';
+    this.hotbarSlots = slots;
+    this.debug('clearHotbarSlot', { slotIndex });
+  }
+
+  /** Resets ability uses to maxUses (called on rest/encounter end). */
+  resetAbilityUses(uses: Record<string, number>): void {
+    this.abilityUses = { ...uses };
+    this.debug('resetAbilityUses', { count: Object.keys(uses).length });
+  }
+
+  /** Decrements a single ability use. */
+  useAbility(featureId: string): void {
+    const current = this.abilityUses[featureId] ?? 0;
+    if (current > 0) {
+      this.abilityUses = { ...this.abilityUses, [featureId]: current - 1 };
+    }
+    this.debug('useAbility', { featureId, remaining: this.abilityUses[featureId] });
   }
 
   /** @inheritdoc */
@@ -126,6 +223,10 @@ class PlayerStateService
     this.playerMaxHp = 100;
     this.playerBaseAttack = 5;
     this.playerBaseDefense = 12;
+    this.classId = 'fighter';
+    this.classFeatures = [];
+    this.hotbarSlots = [];
+    this.abilityUses = {};
     this.debug('reset:cleared');
   }
 
@@ -149,10 +250,19 @@ class PlayerStateService
         this.playerBaseAttack = event.attack;
         this.playerBaseDefense = event.defense;
         this.playerXpToNext = event.xpToNextLevel;
+        // Add unlocked features (C-337)
+        if (event.featuresUnlocked && event.featuresUnlocked.length > 0) {
+          const existing = new Set(this.classFeatures);
+          for (const featureId of event.featuresUnlocked) {
+            existing.add(featureId);
+          }
+          this.classFeatures = [...existing];
+        }
         this.debug('leveledUp', {
           level: event.newLevel,
           attack: event.attack,
           defense: event.defense,
+          featuresUnlocked: event.featuresUnlocked,
         });
       });
 

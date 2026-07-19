@@ -130,10 +130,16 @@ const formatAbility = (key: AbilityKey, score: { value: number; modifier: number
 export const serializeForAi = (sheet: CharacterSheet): string => {
   const lines: string[] = ['[CHARACTER SHEET]'];
 
-  // Header line: Level / HP / ATK / DEF
-  lines.push(
-    `Level ${sheet.level} | HP ${sheet.hp}/${sheet.maxHp} | ATK +${sheet.attack} | DEF ${sheet.defense}`,
-  );
+  // Header line: Level / Class / HP / ATK / DEF
+  const classLabel = sheet.classId
+    ? sheet.classId.charAt(0).toUpperCase() + sheet.classId.slice(1)
+    : '';
+  const headerParts = [`Level ${sheet.level}`];
+  if (classLabel) {
+    headerParts.push(classLabel);
+  }
+  headerParts.push(`HP ${sheet.hp}/${sheet.maxHp}`, `ATK +${sheet.attack}`, `DEF ${sheet.defense}`);
+  lines.push(headerParts.join(' | '));
 
   // Ability scores
   const abilityStr = ABILITY_KEYS.map((k) => formatAbility(k, sheet.abilities[k])).join(' ');
@@ -154,6 +160,11 @@ export const serializeForAi = (sheet: CharacterSheet): string => {
     });
   if (proficientSaves.length > 0) {
     lines.push(`Saves: ${proficientSaves.join(', ')}`);
+  }
+
+  // Class Features (C-337) — names only to save tokens
+  if (sheet.classFeatures && sheet.classFeatures.length > 0) {
+    lines.push(`Features: ${sheet.classFeatures.join(', ')}`);
   }
 
   // Traits (only include non-empty)

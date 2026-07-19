@@ -17,6 +17,7 @@ import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
 import QuestTrackerView from './quest_tracker_view.svelte';
+import HotbarView from '../hotbar/hotbar_view.svelte';
 
 type Props = {
   viewModel: GameUIViewModelInterface;
@@ -67,6 +68,11 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
   {#if viewModel.showQuestTracker}
     <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+  {/if}
+
+  <!-- ── Hotbar — Bottom-Center: 6-slot ability bar (C-337) ── -->
+  {#if viewModel.showHotbar}
+    <HotbarView />
   {/if}
 
   <!-- ── C-327 AC-2: Interaction prompt HUD ── -->

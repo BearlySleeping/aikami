@@ -432,9 +432,10 @@ export type GameEvent =
   | {
       /**
        * Emitted when the player levels up after gaining enough XP.
-       * Carries the new level, stat gains, and updated XP progress.
+       * Carries the new level, stat gains, unlocked features, and updated XP progress.
        *
        * Contract: C-147 Progression & Persistence
+       * Contract: C-337 Class Progression — featuresUnlocked added
        */
       type: 'PLAYER_LEVELED_UP';
       /** The level the player just reached. */
@@ -447,6 +448,8 @@ export type GameEvent =
       defense: number;
       /** XP threshold for the next level (scaled up). */
       xpToNextLevel: number;
+      /** Feature IDs unlocked at this level (C-337). */
+      featuresUnlocked: string[];
     }
   | {
       /**

@@ -148,6 +148,14 @@ const { viewModel }: Props = $props();
           >
             Traits
           </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab tab-sm {viewModel.activeTab === 'features' ? 'tab-active' : ''}"
+            onclick={() => viewModel.setActiveTab('features')}
+          >
+            Features
+          </button>
         </div>
 
         <!-- ── Tab Content ── -->
@@ -236,6 +244,106 @@ const { viewModel }: Props = $props();
                 {/each}
               {/if}
             {/each}
+          </div>
+        {:else if viewModel.activeTab === 'features'}
+          <!-- Features Tab (C-337) -->
+          <div class="flex flex-col gap-3">
+            <!-- Class & Level Header -->
+            <div class="flex items-center gap-2 mb-1">
+              <span class="badge badge-primary badge-sm">{viewModel.className}</span>
+              <span class="text-xs text-base-content/50">Level {viewModel.level}</span>
+            </div>
+
+            <!-- Class Description -->
+            <p class="text-xs text-base-content/70">
+              <span class="font-semibold">Class Features</span> — Abilities and passives granted by your class.
+            </p>
+
+            <!-- Earned Features -->
+            <div>
+              <h4 class="text-xs font-semibold text-base-content/70 mb-1">Known Features</h4>
+              <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                {#each viewModel.classFeatures as feature}
+                  {#if feature.earned}
+                    <div class="flex items-start gap-2 bg-base-200 rounded-lg p-2">
+                      <div class="mt-0.5">
+                        {#if feature.kind === 'active'}
+                          <span class="text-success text-sm">✓</span>
+                        {:else}
+                          <span class="text-info text-sm">✓</span>
+                        {/if}
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1">
+                          <span class="text-xs font-semibold">{feature.name}</span>
+                          {#if feature.kind === 'active'}
+                            <span class="badge badge-ghost badge-xs">Active</span>
+                          {:else}
+                            <span class="badge badge-ghost badge-xs">Passive</span>
+                          {/if}
+                        </div>
+                        <p class="text-[10px] text-base-content/60 mt-0.5">{feature.description}</p>
+                        {#if feature.activation}
+                          <div class="flex gap-2 mt-1">
+                            <span class="text-[10px] text-base-content/40">
+                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
+                            </span>
+                            {#if feature.activation.effectDice}
+                              <span class="text-[10px] text-warning">
+                                {feature.activation.effectDice}
+                              </span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/if}
+                {/each}
+                {#if viewModel.classFeatures.filter(f => f.earned).length === 0}
+                  <p class="text-xs text-base-content/40 italic">No features unlocked yet.</p>
+                {/if}
+              </div>
+            </div>
+
+            <!-- Next Level Projection -->
+            <div>
+              <h4 class="text-xs font-semibold text-base-content/70 mb-1">
+                {viewModel.isMaxLevel ? 'Maximum Level Reached' : 'Next Level Features'}
+              </h4>
+              {#if viewModel.isMaxLevel}
+                <p class="text-xs text-base-content/40 italic">You have reached the maximum level (5).</p>
+              {:else if viewModel.nextLevelFeatures.length > 0}
+                <div class="flex flex-col gap-2">
+                  {#each viewModel.nextLevelFeatures as feature}
+                    <div class="flex items-start gap-2 bg-base-200 rounded-lg p-2 opacity-70">
+                      <div class="mt-0.5">
+                        <span class="text-base-content/30 text-sm">🔒</span>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-1">
+                          <span class="text-xs font-semibold">{feature.name}</span>
+                          {#if feature.kind === 'active'}
+                            <span class="badge badge-ghost badge-xs">Active</span>
+                          {:else}
+                            <span class="badge badge-ghost badge-xs">Passive</span>
+                          {/if}
+                        </div>
+                        <p class="text-[10px] text-base-content/60 mt-0.5">{feature.description}</p>
+                        {#if feature.activation}
+                          <div class="flex gap-2 mt-1">
+                            <span class="text-[10px] text-base-content/40">
+                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
+                            </span>
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="text-xs text-base-content/40 italic">No features at next level.</p>
+              {/if}
+            </div>
           </div>
         {:else if viewModel.activeTab === 'traits'}
           <!-- Traits Tab -->

@@ -419,6 +419,18 @@ export const ContentPackManifestSchema = Type.Object({
   credits: Type.Optional(ContentPackCreditsSchema),
   /** Optional: onboarding/tutorial hints (C-327) */
   onboarding: Type.Optional(OnboardingSectionSchema),
+  /** Optional: class definitions (C-337) */
+  classes: Type.Optional(
+    Type.Record(Type.String(), Type.Unknown(), {
+      description: 'Class definitions keyed by class ID',
+    }),
+  ),
+  /** Optional: ability definitions (C-337) */
+  abilities: Type.Optional(
+    Type.Record(Type.String(), Type.Unknown(), {
+      description: 'Ability definitions keyed by feature ID',
+    }),
+  ),
 });
 
 export type ContentPackManifest = Static<typeof ContentPackManifestSchema>;
