@@ -8,7 +8,7 @@
 | **Target** | Production dialogue overlay (`apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/`), message interaction primitives (action bars, alternatives/swiping, drafts, cancel, streaming TTS, CYOA integration, edit/branch UX) |
 | **Priority** | P1 — keep Marinara-level conversation quality without turning the game into a chat configuration app |
 | **Dependencies** | C-231 (Rich Chat Streaming — COMPLETED: message branching, drafts, action bar types, streaming TTS chunker), C-241 (Chat Modes & Address System — COMPLETED: impersonation, Scene/Party/GM toggle), C-245 (CYOA Choices — COMPLETED: choice buttons, impersonation integration, choice history store), C-328 (Integrate Bounded AI NPC Dialogue — implemented: production dialogue loop, orchestrator, authored fallback), C-340 (Party and Companion Gameplay — not_started: party address mode depends on party roster) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) |
 | **Docs Impact** | none — internal developer-facing UX promotion, no new player-facing docs |
 | **Contract version** | 2.0.0 |
@@ -27,10 +27,10 @@
 
 - **Current behavior**:
   - The production dialogue overlay (`dialogue_overlay.svelte` + `dialogue_overlay_view_model.svelte.ts`, ~590 lines) renders streaming AI NPC dialogue with a basic text input and C-162 action context menu. Messages are plain DaisyUI `chat-bubble` divs in a scrollable container — **no per-message action bar, no swipe/alternative UI, no inline editing, no cancel button during streaming, no CYOA choice rendering**.
-  - C-231 Rich Chat Streaming features (`messageBranchStore`, `draftStore`, `SentenceBoundaryChunker`, `AutoResizeTextarea`, `EnhancedMessage`/`MessageAction` types) are **completed and available** — the dialogue overlay already imports and partially uses them: `swipeAlternative()`, `copyMessage()`, `branchFromMessage()` (placeholder), `showToast()`, `toggleStreamingTts()`, `streamingTtsEnabled` all exist on the ViewModel interface. However, the **View (`dialogue_overlay.svelte`) does not render the corresponding UI**: no swipe arrows/alternative counter on messages, no hover-visible action bar, no `AutoResizeTextarea` component, no cancel button during streaming.
+  - C-231 Rich Chat Streaming features (`messageBranchStore`, `draftStore`, `SentenceBoundaryChunker`, `AutoResizeTextarea`, `EnhancedMessage`/`MessageAction` types) are **completed and available** — the dialogue overlay already imports and uses them: `swipeAlternative()`, `copyMessage()`, `branchFromMessage()` (placeholder), `showToast()`, `toggleStreamingTts()`, `streamingTtsEnabled` all exist on the ViewModel interface, and `AutoResizeTextarea` is already used in the View. However, the **View does not render the remaining UI**: no swipe arrows/alternative counter on messages, no hover-visible action bar, no cancel button during streaming.
   - Per-message alternatives are tracked in `messageBranchStore` (an in-memory `Map<string, MessageAlternatives>`), but the dialogue ViewModel's `_delegateGenerateResponse()` does not call `messageBranchStore.addAlternative()` when the NPC generates a response. Swiping is wired but has no data.
   - The draft store (`draftStore`) saves and restores input text per chat ID, but there is **no draft recovery UX** — if the player closes and reopens dialogue, the restored draft text silently appears in the input field with no visual indicator that it was recovered.
-  - Streaming TTS is wired (toggle + `SentenceBoundaryChunker` + `ttsService`) but the dialogue overlay uses a standard `<textarea>` instead of `AutoResizeTextarea`, and no visual TTS indicator (speaker pulse, sentence-highlight) is shown during playback.
+  - Streaming TTS is wired (toggle + `SentenceBoundaryChunker` + `ttsService`) but no visual TTS indicator (speaker pulse, sentence-highlight) is shown during playback.
   - CYOA choices (C-245) and address modes (C-241) exist in the standalone chat sandbox (`/dev/chat-enhancements`, `/dev/chat-modes`, `/dev/cyoa`) but are **completely absent from the production dialogue overlay**.
   - Cancellation during streaming: The ViewModel creates an `AbortController` in `_delegateGenerateResponse()` but never exposes a cancel method or renders a cancel button.
 
@@ -39,7 +39,7 @@
   2. Start a campaign → walk to any Emberwatch NPC → press E
   3. Send a message → observe streaming response in plain chat bubbles
   4. **Observe**: no action bar on hover, no swipe arrows, no cancel button during generation, no draft recovery indicator, no CYOA choices, no address mode toggle
-  5. Regenerate an NPC response via the chat sandbox at `/dev/chat-enhancements` → observe the richer UX (swipe arrows, action bar, auto-resize textarea) that does NOT exist in production dialogue
+  5. Regenerate an NPC response via the chat sandbox at `/dev/chat-enhancements` → observe the richer UX (swipe arrows, action bar) that does NOT exist in production dialogue
 
 - **Existing implementation to reuse**: see Existing System & Reuse Map.
 
@@ -49,7 +49,7 @@
   3. `_delegateGenerateResponse()` never calls `messageBranchStore.addAlternative()`, so regeneration produces no stored alternatives to swipe through.
   4. No cancel/abort button is rendered during streaming; the `AbortController` exists but is unreachable from the UI.
   5. Draft recovery is silent — restored text appears in the input with no visual confirmation.
-  6. `AutoResizeTextarea` (C-231) is not used in the dialogue overlay — a plain `<textarea>` is used instead.
+  6. ~~`AutoResizeTextarea` (C-231) is not used in the dialogue overlay — a plain `<textarea>` is used instead.~~ **Resolved**: `AutoResizeTextarea` is already in use as of C-328 integration (imported and used in both `CUSTOM_INPUT` and default input phases).
   7. CYOA choice buttons (`ChoiceButtonsView`, C-245) are not rendered in the dialogue overlay.
   8. Address mode toggle (`AddressModeToggleView`, C-241) is not rendered in the dialogue overlay.
   9. `branchFromMessage()` is a placeholder that only shows a toast — no actual conversation fork is created.
@@ -79,13 +79,13 @@ After this contract, a **player** in dialogue with any NPC can: see a hover-visi
 | Message branching + alternatives store | `apps/frontend/client/src/lib/services/chat/message_branch_store.svelte.ts` (C-231) | **Reuse** — already imported by dialogue ViewModel; add `addAlternative()` call in `_delegateGenerateResponse()` and expose store data to View |
 | Per-chat input draft persistence | `apps/frontend/client/src/lib/services/chat/draft_store.ts` (C-231) | **Reuse** — already imported by dialogue ViewModel; add draft recovery indicator in View |
 | Message action bar types (`MessageAction`) | `apps/frontend/client/src/lib/types/rich_chat.ts` (C-231) | **Reuse** — type system for action bar already defined; dialogue ViewModel already has `copyMessage()`, `swipeAlternative()` |
-| Auto-resize textarea component | `apps/frontend/client/src/lib/components/chat/auto_resize_textarea.svelte` (C-231) | **Reuse** — replace plain `<textarea>` in `dialogue_overlay.svelte` with this component |
+| Auto-resize textarea component | `apps/frontend/client/src/lib/components/chat/auto_resize_textarea.svelte` (C-231) | **Reuse** — already imported and used in `dialogue_overlay.svelte` (C-328); verify it still behaves correctly with new streaming cancel flow |
 | Streaming TTS + sentence chunker | `SentenceBoundaryChunker` (imported from `$services`), `ttsService` (C-231) | **Reuse** — already wired in dialogue ViewModel; add visual playback indicator in View |
 | CYOA choice buttons ViewModel + View | `apps/frontend/client/src/lib/views/chat/choice_buttons_view_model.svelte.ts` + `choice_buttons_view.svelte` (C-245) | **Reuse** — import into dialogue ViewModel; wire CYOA extraction from NPC dialogue orchestrator response; render below latest NPC message |
 | Address mode toggle | `apps/frontend/client/src/lib/views/gm/address_mode_toggle_view.svelte` + `_view_model.svelte.ts` (C-241) | **Reuse** — import toggle into dialogue overlay; Scene and GM modes only (Party deferred to C-340) |
 | NPC dialogue orchestrator | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` (C-328) | **Modify** — extend `generateTurn()` result to optionally include CYOA choices extracted from the AI response |
 | Dialogue overlay ViewModel | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` (C-328) | **Modify** — add alternative tracking during regeneration, cancel exposure, edit message flow, branch creation, CYOA extraction, address mode state |
-| Dialogue overlay View | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` (C-328) | **Modify** — add message action bars, swipe controls, cancel button, AutoResizeTextarea, CYOA buttons, address mode toggle, draft recovery indicator |
+| Dialogue overlay View | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` (C-328) | **Modify** — add message action bars, swipe controls, cancel button, CYOA buttons, address mode toggle, draft recovery indicator (`AutoResizeTextarea` already in use, no change needed) |
 | Chat enhancements sandbox | `apps/frontend/client/src/routes/(dev)/dev/chat-enhancements/+page.svelte` (C-231 AC-6) | **Reference** — UI patterns to promote (NOT copy — the sandbox uses a full `ChatView` component; dialogue overlay uses a simpler embedded chat within the game overlay) |
 
 ## Overview
@@ -108,8 +108,8 @@ This contract modifies the production dialogue overlay — a UI component alread
 
 | Concern | Placement |
 |---|---|
-| Message action bar component (hover-visible copy/retry/edit/delete/branch) | New: `apps/frontend/client/src/lib/components/chat/message_action_bar.svelte` — a reusable DaisyUI-styled action bar rendered inside each chat bubble on hover |
-| Alternative swipe controls (left/right arrows + counter label) | New: `apps/frontend/client/src/lib/components/chat/swipe_controls.svelte` — rendered inside AI message bubbles when alternatives > 1 |
+| Message action bar component (hover-visible copy/retry/edit/delete/branch) | **Reuse** `apps/frontend/client/src/lib/components/chat/message_action_bar.svelte` (exists from C-231) — import and render inside dialogue chat bubbles on hover |
+| Alternative swipe controls (left/right arrows + counter label) | **Reuse** `apps/frontend/client/src/lib/components/chat/message_swipe_controls.svelte` (exists from C-231) — import and render inside AI message bubbles when alternatives > 1 |
 | Draft recovery indicator | Inline in `dialogue_overlay.svelte` — a small DaisyUI `badge` or `tooltip` below the textarea when a draft was restored |
 | Cancel button during streaming | Inline in `dialogue_overlay.svelte` — replaces the Send button with a Cancel button while `isStreaming === true` |
 | CYOA choice buttons in dialogue | Reuse `ChoiceButtonsView` from C-245; instantiate a `ChoiceButtonsViewModel` in the dialogue ViewModel, feed it extracted choices from the orchestrator response |
@@ -202,7 +202,6 @@ N/A — no persistent state changes. The `DialogueMessage` type gains new option
   - Wiring `messageBranchStore.addAlternative()` into `_delegateGenerateResponse()` so regeneration produces swipeable alternatives
   - Cancel/abort button during AI streaming, wired to the existing `AbortController`
   - Draft recovery indicator (visual badge when input text was restored from IndexedDB)
-  - Replacing plain `<textarea>` with `AutoResizeTextarea` component in dialogue overlay
   - Streaming TTS visual indicator (subtle speaker pulse or sentence highlight during TTS playback)
   - CYOA choice buttons rendered below the latest NPC message when the CYOA agent extracts choices
   - Address mode toggle (Scene / GM) in the dialogue header; GM mode routes prompts through `gmPromptService` via the orchestrator
@@ -268,7 +267,7 @@ And the action bar is keyboard-navigable: Tab focuses the message, Enter opens t
 **Then** the Send button is replaced by a Cancel button (DaisyUI `btn-error btn-sm`).
 And clicking Cancel calls `AbortController.abort()` on the active stream, the placeholder NPC message is replaced with "[Generation cancelled]", and the player's input is restored.
 And when the dialogue overlay opens and a previous draft exists in `draftStore`, a DaisyUI `badge` with the text "Draft restored" appears below the textarea for 3 seconds before fading out.
-And the text input uses `AutoResizeTextarea` (from C-231) instead of a plain `<textarea>`, clamping between 1 and 8 rows.
+And the text input continues to use `AutoResizeTextarea` (already imported and wired as of C-328), clamping between 1 and 8 rows.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -371,7 +370,7 @@ And when the player clicks "Branch" on any message from the action bar, a new `C
 
 2. **Phase 2 (ViewModel)**: Wire `messageBranchStore.addAlternative()` into `_delegateGenerateResponse()`. Add `cancelStreaming()`, `regenerateResponse()`, `editMessage()`, `deleteMessage()`, `createBranch()`, `switchBranch()` methods. Add `$state` fields: `showDraftRecovery`, `addressMode`, `branches`, `activeBranchId`. Instantiate `ChoiceButtonsViewModel` and feed it extracted CYOA choices. Wire address mode state (`'scene' | 'gm'`).
 
-3. **Phase 3 (View)**: Create `message_action_bar.svelte` and `swipe_controls.svelte` components. Integrate them into `dialogue_overlay.svelte` message bubbles. Replace plain `<textarea>` with `AutoResizeTextarea`. Add Cancel button during streaming, draft recovery badge, TTS pulse indicator. Render `ChoiceButtonsView` below latest NPC message. Render `AddressModeToggleView` in dialogue header. Add inline edit textarea, delete confirmation modal, and branch selector.
+3. **Phase 3 (View)**: Import and integrate existing `message_action_bar.svelte` and `message_swipe_controls.svelte` (both from C-231) into `dialogue_overlay.svelte` message bubbles. Add Cancel button during streaming, draft recovery badge, TTS pulse indicator. Render `ChoiceButtonsView` below latest NPC message. Render `AddressModeToggleView` in dialogue header. Add inline edit textarea, delete confirmation modal, and branch selector. (`AutoResizeTextarea` is already in use — verify it still behaves correctly with the new streaming cancel flow.)
 
 4. **Phase 4 (Integration)**: Extend `NpcDialogueService.generateTurn()` to return `cyoaChoices`. Update `game_ui_view_model.svelte.ts` if needed for address mode routing. Update dev sandbox (`/dev/sandbox/dialogue`) to reflect new features.
 
