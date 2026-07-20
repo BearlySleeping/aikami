@@ -20,7 +20,7 @@
       "defaultDialogueKey": "orin_greeting",
       "appearanceLayers": [1, 3, 7, 14],
       "isVendor": true,
-      "vendorInventoryItems": "crystal_shard, cave_map"
+      "vendorInventory": "crystal_shard,cave_map"
     },
     "cave_shade": {
       "name": "Whispering Shade",
@@ -68,22 +68,28 @@
       "id": "whispers_of_darkness",
       "name": "Whispers of Darkness",
       "description": "Orin the Hermit needs three shadow essences from the shades haunting the caves to reinforce the ancient ward.",
-      "startDialogueKey": "orin_quest_start",
-      "completeDialogueKey": "orin_quest_complete",
-      "incompleteDialogueKey": "orin_quest_incomplete",
+      "offerDialogueKey": "orin_quest_start",
+      "progressDialogueKey": "orin_quest_incomplete",
       "objectives": [
         {
-          "id": "collect_essences",
-          "description": "Collect 3 Shadow Essences from Whispering Shades",
-          "type": "collect",
-          "targetId": "shadow_essence",
-          "requiredCount": 3
+          "text": "Collect 3 Shadow Essences from Whispering Shades",
+          "completeOnItemPickup": "shadow_essence",
+          "requiredCount": 3,
+          "maxCount": 3
         }
       ],
       "rewards": [
-        { "type": "item", "itemId": "crystal_shard", "quantity": 2 },
+        { "type": "item", "itemId": "crystal_shard", "amount": 2 },
         { "type": "xp", "amount": 50 }
-      ]
+      ],
+      "endings": {
+        "ward_restored": {
+          "title": "Ward Restored",
+          "narration": "Orin channels the shadow essences into the ancient altar, sealing the cracks in the containment glyph. The whispers fade, and the caves grow still and silent once more.",
+          "reactionDialogueKey": "orin_quest_complete",
+          "worldStateFlag": "whispering_caves.ward_restored"
+        }
+      }
     }
   },
   "encounters": {
@@ -95,7 +101,7 @@
       "allowNonCombatResolution": false,
       "startDialogueKey": "shade_hiss",
       "victoryDialogueKey": "orin_quest_incomplete",
-      "loot": [{ "itemId": "shadow_essence", "probability": 0.8 }]
+      "loot": [{ "itemId": "shadow_essence", "quantity": 1, "dropChance": 0.8 }]
     }
   },
   "credits": {

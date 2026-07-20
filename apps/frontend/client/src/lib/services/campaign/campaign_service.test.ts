@@ -307,4 +307,19 @@ describe('CampaignService', () => {
     expect(getSvc().campaigns.find((c) => c.id === campaign1.id)).toBeDefined();
     expect(getSvc().campaigns.find((c) => c.id === campaign2.id)).toBeDefined();
   });
+
+  // ── C-345 contentPackId ───────────────────────────────────────────────
+
+  test('startNewCampaign defaults to emberwatch when no contentPackId provided', async () => {
+    const campaign = await getSvc().startNewCampaign();
+    expect(campaign.contentPackId).toBe('emberwatch');
+  });
+
+  test('startNewCampaign accepts custom contentPackId', async () => {
+    const campaign = await getSvc().startNewCampaign({ contentPackId: 'whispering-caves' });
+    expect(campaign.contentPackId).toBe('whispering-caves');
+  });
+
+  test.todo('startNewCampaign rejects unknown contentPackId (not in registry)');
+  test.todo('loadCampaign preserves contentPackId from stored campaign');
 });

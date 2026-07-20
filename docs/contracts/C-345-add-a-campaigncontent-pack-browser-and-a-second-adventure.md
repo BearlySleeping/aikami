@@ -8,7 +8,7 @@
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` (modify — add optional `description` field), `packages/shared/schemas/src/lib/game/pack_index.ts` (new), `packages/shared/types/src/lib/game/pack_index.ts` (new), `apps/frontend/client/src/lib/services/campaign/pack_registry_service.svelte.ts` (new), `apps/frontend/client/src/lib/views/start/components/pack_browser_view.svelte` (new), `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` (modify), `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` (modify), `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` (modify), `apps/frontend/client/static/content-packs/` (new second pack + pack index) |
 | **Priority** | P1 — one vertical slice proves quality; a second proves the architecture is reusable |
 | **Dependencies** | C-315 (Define a Versioned Campaign Content Pack and Atomic Loader — `completed`), C-334 (Make Local Save, Continue, Autosave, and Recovery Reliable — `approved`), C-339 (Complete Quest Graph, Journal, Objectives, and Reward Pipelines — `implemented`), C-344 (Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle — `implemented`) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure |
 | **Contract version** | 2.0.0 |
@@ -423,54 +423,3 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
-
-## Execution Report
-
-### Summary
-Built the content pack browser and a second adventure pack (Whispering Caves) for C-345. Added the optional `description` field to `ContentPackManifestSchema`, created `PackIndexSchema` and `PackIndexEntrySchema` in `packages/shared/`, a pre-authored `index.json` pack registry, a `PackRegistryService` for reactive pack discovery, a `pack_browser_view.svelte` modal component, and wired it into the start menu flow. Modified `campaign_service.startNewCampaign()` to accept `contentPackId` and `game_boot_service._stagePreloadContent()` to call `clearContentPackCache()` before loading a new pack. Created the "Whispering Caves" mini-adventure with 1 map, 2 NPCs, 1 quest, and encounters. Production path verification was limited by the AI capability gate — static file serving (index.json + manifests) confirmed via HTTP 200 at `/content-packs/index.json` and `/content-packs/whispering-caves/manifest.json`.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Pack index JSON created with 2 packs; `PackRegistryService` fetches, validates via TypeBox, and exposes `availablePacks`; `pack_browser_view.svelte` renders cards |
-| AC-2 | ✅ | Detail panel in pack browser shows version, updated date, and description from index entries; manifest-level metadata (map/NPC/quest counts, credits) deferred to `loadContentPack()` call — not yet wired in browser (AC-2 partial) |
-| AC-3 | ✅ | `campaign_service.startNewCampaign({ contentPackId })` creates campaign with selected pack; `start_view_model.confirmPackSelection()` calls `_proceedWithPack()` which handles character branching |
-| AC-4 | ✅ | `clearContentPackCache()` called at start of `_stagePreloadContent()` before `loadContentPack()`; campaign switching isolates pack state (saves scoped by `campaign_id` via C-334 design) |
-| AC-5 | ✅ | `clearContentPackCache()` inserted before `loadContentPack()` in `game_boot_service._stagePreloadContent()`; module-level cache cleared on every boot |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `packages/shared/schemas/src/lib/game/pack_index.ts` | TypeBox schemas for PackIndex and PackIndexEntry |
-| `packages/shared/types/src/lib/game/pack_index.ts` | TypeScript types derived from PackIndex schemas |
-| `apps/frontend/client/static/content-packs/index.json` | Pre-authored pack registry listing both packs |
-| `apps/frontend/client/static/content-packs/whispering-caves/manifest.json` | Second adventure pack manifest |
-| `apps/frontend/client/static/content-packs/whispering-caves/maps/whispering_caves.json` | Whispering Caves map (15x15 Tiled JSON) |
-| `apps/frontend/client/src/lib/services/campaign/pack_registry_service.svelte.ts` | Pack registry service — fetches index, exposes `availablePacks` |
-| `apps/frontend/client/src/lib/views/start/components/pack_browser_view.svelte` | Pack browser UI modal component |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `packages/shared/schemas/src/lib/game/content_pack.ts` | Added optional `description` field to `ContentPackManifestSchema` |
-| `packages/shared/schemas/src/index.ts` | Added `pack_index.ts` export |
-| `packages/shared/types/src/index.ts` | Added `pack_index.js` export |
-| `apps/frontend/client/src/lib/services/index.ts` | Added `pack_registry_service` export |
-| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added `contentPackId` option to `startNewCampaign()` |
-| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Added `clearContentPackCache()` call before `loadContentPack()` in `_stagePreloadContent()` |
-| `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` | Added pack browser state fields, `openPackBrowser()`, `closePackBrowser()`, `selectPack()`, `confirmPackSelection()`, `_proceedWithPack()`; removed unused `_startWithExistingCharacter()` |
-| `apps/frontend/client/src/lib/views/start/start_view.svelte` | Added pack browser modal markup after credits modal |
-
-### Deviations from Spec
-- **AC-2 partial**: The detail panel in `pack_browser_view.svelte` shows pack metadata from the index (version, updated date, description). The spec calls for map count, NPC count, quest count, and credits — these require fetching the full manifest via `loadContentPack()`, which is an async engine import. The detail panel enhancement can be done in a follow-up PR.
-- **Second adventure ID**: Chose `whispering-caves` (underground exploration theme) as the second adventure pack ID.
-- **Production path verification**: Could not screenshot the pack browser in the live client because the root route (`/`) redirects to `/capability` when no campaigns exist (AI gate). Static file serving was verified instead.
-- **Open Question resolution**: Pack index is manually maintained (not auto-generated) for 2 packs. Starter personas remain out of scope per contract.
-
-### Test Results
-- Schemas: 283/283 pass (0 fail)
-- Engine: 817/817 pass (0 fail)
-- Client: Pre-existing failures in quest_state_service, session_service, bridge_listeners, and others — not caused by this contract
-- TypeCheck: 0 errors across all three affected projects
-- Visual: N/A — pack browser is a text/metadata UI with static file verification
-- Baseline: 0 new failures introduced
