@@ -126,7 +126,7 @@ const { viewModel }: Props = $props();
                     class="btn btn-ghost btn-xs px-1"
                     title="Speak"
                     aria-label="Speak"
-                    onclick={() => viewModel.copyMessage(message.content)}
+                    onclick={() => viewModel.speakMessage(message.content)}
                   >
                     🔊
                   </button>
@@ -287,7 +287,7 @@ const { viewModel }: Props = $props();
               type="button"
               class="btn btn-xs"
               class:btn-active={viewModel.activeBranchId === null}
-              onclick={() => viewModel.switchBranch(viewModel.activeBranchId ?? '')}
+              onclick={() => viewModel.switchBranch(null)}
             >
               Main
             </button>

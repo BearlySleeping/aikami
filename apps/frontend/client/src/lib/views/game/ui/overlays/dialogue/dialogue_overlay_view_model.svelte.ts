@@ -274,8 +274,11 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Creates a new conversation branch starting from the given message. */
   createBranch(options: { parentMessageId: string; label?: string }): void;
 
-  /** Switches to an existing conversation branch. */
-  switchBranch(branchId: string): void;
+  /** Switches to an existing conversation branch. Pass null to restore the main (base) conversation. */
+  switchBranch(branchId: string | null): void;
+
+  /** Speaks the given NPC message text via TTS. */
+  speakMessage(text: string): void;
 
   /** Whether a draft was restored from IndexedDB on open. */
   readonly showDraftRecovery: boolean;
@@ -449,6 +452,9 @@ class DialogueOverlayViewModel
 
   /** The currently active branch ID, or null if on the main branch. */
   activeBranchId = $state<string | null>(null);
+
+  /** Snapshot of the base (main) conversation — preserved for branch restore. */
+  private _baseMessages: DialogueMessage[] = [];
 
   /** The ID of the message currently being edited, or null. */
   editingMessageId = $state<string | null>(null);
@@ -949,6 +955,14 @@ class DialogueOverlayViewModel
   }
 
   /** @inheritdoc */
+  speakMessage(text: string): void {
+    if (!text || ttsService.status !== 'ready') {
+      return;
+    }
+    void ttsService.synthesize({ text, voice: 'af_bella' });
+  }
+
+  /** @inheritdoc */
   regenerateResponse(messageId: string): void {
     this.debug('regenerateResponse', { messageId });
 
@@ -960,19 +974,23 @@ class DialogueOverlayViewModel
 
     const currentText = this.messages[messageIndex].content;
 
+    // Generate replacement message ID before removing the old message
+    // so the alternative is stored under the same key that _delegateGenerateResponse will use
+    const replacementMessageId = crypto.randomUUID();
+
     // Remove this NPC message and everything after it, then regenerate
     const truncatedMessages = this.messages.slice(0, messageIndex);
     this.messages = truncatedMessages;
 
-    // Store the current text as an alternative via messageBranchStore
+    // Store the current text as an alternative under the replacement ID
     messageBranchStore.addAlternative({
-      messageId,
+      messageId: replacementMessageId,
       currentText,
       newText: '', // placeholder — will be replaced when new response arrives
     });
 
-    // Trigger re-generation
-    void this._delegateGenerateResponse();
+    // Trigger re-generation with the replacement ID
+    void this._delegateGenerateResponse({ npcMessageId: replacementMessageId });
   }
 
   /** @inheritdoc */
@@ -1067,20 +1085,35 @@ class DialogueOverlayViewModel
       label: label ?? `Branch ${this.branches.length + 1}`,
     };
 
+    // Save base conversation snapshot before first branch so Main is restorable
+    if (this.activeBranchId === null && this._baseMessages.length === 0) {
+      this._baseMessages = [...this.messages];
+    }
+
     this.branches = [...this.branches, branch];
     this.activeBranchId = branchId;
     this.showToast(`Branch "${branch.label ?? ''}" created!`);
   }
 
   /** @inheritdoc */
-  switchBranch(branchId: string): void {
+  switchBranch(branchId: string | null): void {
     this.debug('switchBranch', { branchId });
 
-    // Save current messages to the active branch
+    // Save current messages to the active branch before switching away
     if (this.activeBranchId) {
       this.branches = this.branches.map((b) =>
         b.branchId === this.activeBranchId ? { ...b, messages: [...this.messages] } : b,
       );
+    } else if (branchId !== null) {
+      // Switching from Main to a branch — save current messages as base
+      this._baseMessages = [...this.messages];
+    }
+
+    // Restore main branch (null target)
+    if (branchId === null) {
+      this.messages = this._baseMessages.length > 0 ? [...this._baseMessages] : this.messages;
+      this.activeBranchId = null;
+      return;
     }
 
     const branch = this.branches.find((b) => b.branchId === branchId);
@@ -1130,12 +1163,12 @@ class DialogueOverlayViewModel
    * Handles both AI streaming and authored fallback paths via
    * NpcDialogueService.generateTurn.
    */
-  private async _delegateGenerateResponse(): Promise<void> {
+  private async _delegateGenerateResponse(options?: { npcMessageId?: string }): Promise<void> {
     this.isStreaming = true;
     this.streamError = null;
 
     // Create a placeholder NPC message that accumulates streamed tokens
-    const npcMessageId = crypto.randomUUID();
+    const npcMessageId = options?.npcMessageId ?? crypto.randomUUID();
     this.messages = [
       ...this.messages,
       {
