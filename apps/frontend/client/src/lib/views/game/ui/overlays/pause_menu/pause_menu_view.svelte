@@ -92,6 +92,14 @@ const { viewModel }: Props = $props();
       <button
         type="button"
         class="btn btn-ghost btn-block"
+        onclick={() => viewModel.openReputation()}
+      >
+        Reputation
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-ghost btn-block"
         onclick={() => viewModel.replayOnboarding()}
       >
         Replay Tutorial

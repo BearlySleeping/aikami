@@ -62,6 +62,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       npcName: 'Elder Thrain',
       memory: [],
       gameStateFacts: [],
+      relationshipFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
     }),
     executeCommand: () => true,

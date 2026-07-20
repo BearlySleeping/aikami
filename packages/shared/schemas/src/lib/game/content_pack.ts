@@ -9,6 +9,7 @@
 
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../database/item.ts';
+import { FactionDefinitionSchema } from './faction_standing.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
@@ -520,6 +521,12 @@ export const ContentPackManifestSchema = Type.Object({
   abilities: Type.Optional(
     Type.Record(Type.String(), Type.Unknown(), {
       description: 'Ability definitions keyed by feature ID',
+    }),
+  ),
+  /** Optional: faction definitions keyed by faction ID (C-341) */
+  factions: Type.Optional(
+    Type.Record(Type.String(), FactionDefinitionSchema, {
+      description: 'Faction definitions keyed by faction ID',
     }),
   ),
 });

@@ -332,5 +332,46 @@
         "trigger": "after_previous"
       }
     ]
+  },
+  "factions": {
+    "town_guard": {
+      "id": "town_guard",
+      "name": "Town Guard",
+      "description": "The protectors of Emberwatch village. Stoic, disciplined, and loyal to the elder council.",
+      "defaultStanding": 0,
+      "standingTiers": [
+        { "threshold": -100, "tier": "hostile", "label": "Hostile" },
+        { "threshold": -60, "tier": "unfriendly", "label": "Unfriendly" },
+        { "threshold": -20, "tier": "neutral", "label": "Neutral" },
+        { "threshold": 20, "tier": "friendly", "label": "Friendly" },
+        { "threshold": 60, "tier": "honored", "label": "Honored" }
+      ]
+    },
+    "emberwatch_citizens": {
+      "id": "emberwatch_citizens",
+      "name": "Emberwatch Citizens",
+      "description": "The common folk of Emberwatch — farmers, craftsmen, and merchants who call this village home.",
+      "defaultStanding": 10,
+      "standingTiers": [
+        { "threshold": -100, "tier": "hostile", "label": "Hostile" },
+        { "threshold": -60, "tier": "unfriendly", "label": "Unfriendly" },
+        { "threshold": -20, "tier": "neutral", "label": "Neutral" },
+        { "threshold": 20, "tier": "friendly", "label": "Friendly" },
+        { "threshold": 60, "tier": "honored", "label": "Honored" }
+      ]
+    },
+    "crimson_covenant": {
+      "id": "crimson_covenant",
+      "name": "Crimson Covenant",
+      "description": "A shadowy order of rogue mages who seek to seize the ward's power for themselves.",
+      "defaultStanding": -30,
+      "standingTiers": [
+        { "threshold": -100, "tier": "hostile", "label": "Hostile" },
+        { "threshold": -60, "tier": "unfriendly", "label": "Unfriendly" },
+        { "threshold": -20, "tier": "neutral", "label": "Neutral" },
+        { "threshold": 20, "tier": "friendly", "label": "Friendly" },
+        { "threshold": 60, "tier": "honored", "label": "Honored" }
+      ]
+    }
   }
 }

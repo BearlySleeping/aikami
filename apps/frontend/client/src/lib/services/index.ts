@@ -82,6 +82,7 @@ export * from './game/pixi_texture_injector';
 export * from './game/player_state_service.svelte.ts';
 export * from './game/quest_service.svelte';
 export * from './game/quest_state_service.svelte';
+export * from './game/relationship_service.svelte.ts';
 export * from './game/serializable_service';
 export * from './game/session_service.svelte';
 export * from './game/time_service.svelte';
