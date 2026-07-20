@@ -8,7 +8,7 @@
 | **Target** | `SessionService` (Turso-aligned persistence), `SessionCheckpoint` CRUD, checkpoint browser, player journal, context compaction, fork/rollback flow |
 | **Priority** | P1 — long campaigns need explicit continuity boundaries |
 | **Dependencies** | C-240 (Session Management — completed: `SessionService`, `SessionSummaryService`, end/new session flows, session browser), C-334 (Save/Load Reliability — approved: Turso save envelope v2, auto-save, corruption detection, crash recovery), C-343 (Rich Chat UX — approved: message actions, CYOA, address modes) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — none |
 | **Contract version** | 2.0.0 |
@@ -482,6 +482,57 @@ CREATE INDEX IF NOT EXISTS idx_compacted_campaign ON compacted_summaries(campaig
 ## Open Questions
 
 None — all design decisions are resolved by existing codebase patterns and dependency contracts.
+
+## Execution Report
+
+### Summary
+Implemented C-344's five core features: editable session recaps (AC-1), session checkpoints with fork (AC-2), player journal CRUD (AC-3), context compaction (AC-4), and session browser fork/continue (AC-5). Migrated SessionService from IndexedDB to Turso (`sessions` table) with backward-compatible one-time migration. Added `journal_entries`, `session_checkpoints`, and `compacted_summaries` tables to the Turso schema. Created `PlayerJournalService` with serialization support. Extended `EndSessionViewModel` with an editing phase, `SessionBrowserViewModel` with checkpoint listing and fork confirmation, and created `PlayerJournalViewModel`. All services register as `SerializableService`. Lint and typecheck pass clean (0 errors).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Editing phase added to EndSessionViewModel; updateSessionRecap persists to Turso; editedSynopsis used for recap generation |
+| AC-2 | ✅ | Checkpoint CRUD in SessionService; Turso save slots with `checkpoint-{uuid}`; forkFromCheckpoint copies save and navigates |
+| AC-3 | ✅ | PlayerJournalService with full CRUD; journal view with editor modal; tags support; validation (1-100 char title, 1-10000 char content) |
+| AC-4 | ✅ | _compactSessionsIfNeeded triggers at 5 sessions; AI compaction with truncation fallback; idempotent (skips already-compacted sessions) |
+| AC-5 | ✅ | SessionBrowserViewModel extended with loadCheckpoints, forkFromCheckpoint, continueFromSession; fork confirmation dialog; checkpoint listing nested under sessions |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/types/session_checkpoint.ts` | SessionCheckpoint type definition |
+| `apps/frontend/client/src/lib/types/player_journal_entry.ts` | PlayerJournalEntry type definition |
+| `apps/frontend/client/src/lib/types/compacted_campaign_summary.ts` | CompactedCampaignSummary type definition |
+| `apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts` | Player journal CRUD service with Turso persistence |
+| `apps/frontend/client/src/lib/views/journal/player_journal_view_model.svelte.ts` | ViewModel for player journal UI |
+| `apps/frontend/client/src/lib/views/journal/player_journal_view.svelte` | Player journal view with list + editor |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/repositories/src/lib/storage_adapter.ts` | Added DDL for `sessions`, `session_checkpoints`, `journal_entries`, `compacted_summaries` tables + indexes |
+| `apps/frontend/client/src/lib/types/index.ts` | Added type re-exports for new C-344 types |
+| `apps/frontend/client/src/lib/services/index.ts` | Added playerJournalService barrel export |
+| `apps/frontend/client/src/lib/services/game/session_service.svelte.ts` | Major rewrite: IndexedDB→Turso migration, GameSession extended with recapReviewed/editedSynopsis/checkpointIds, checkpoint CRUD, context compaction, SerializableService, recap editing |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view_model.svelte.ts` | Added `editing` phase, recap editing enter/save/cancel |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view.svelte` | Added Edit Recap button + textarea editing UI |
+| `apps/frontend/client/src/lib/views/session/session_browser_view_model.svelte.ts` | Added checkpoint listing, fork confirm/execute, campaignId/gameId options |
+| `apps/frontend/client/src/lib/views/session/session_browser_view.svelte` | Added checkpoint listing nested under sessions, fork confirmation dialog, continue/resume buttons |
+| `apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts` | Added recapReviewed/checkpointIds fields to mock sessions |
+| `apps/frontend/client/src/lib/services/game/session_service.test.ts` | Fixed test isolation with unique gameIds per test |
+
+### Deviations from Spec
+- The contract specifies a `checkpoints` table; implemented as `session_checkpoints` to disambiguate from potential future map checkpoints.
+- The contract suggests a recapping `editing` phase between `summarizing` and `preview`; implemented as a parallel phase reachable from `preview` (player enters editing from preview, saves, returns to preview). This is more natural for the UI flow.
+- Journal view is a standalone page component (`player_journal_view.svelte`) rather than integrated into the pause menu overlay — integration into the pause menu will require updates to `GameOverlayType` in a follow-up.
+- Continue from session still uses `routerService.navigateToApp()` (original stub) — full save-state restoration is blocked by C-334 (Turso v2 envelope not yet deployed). The fork flow copies the checkpoint save to `manual-1` slot for the boot pipeline to consume.
+
+### Test Results
+- Unit: 83 PASS / 2 pre-existing FAIL (QuestStateService reward delivery — unrelated to C-344)
+- Session + Save tests: 12 PASS, 0 FAIL
+- Lint: 0 errors after fix
+- Typecheck: 0 errors, 2 pre-existing warnings (vendor view a11y)
+- Baseline: 2 pre-existing failures, 0 new failures
 
 ## Amendments
 
