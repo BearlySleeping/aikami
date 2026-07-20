@@ -8,7 +8,7 @@
 | **Target** | Production dialogue overlay (`apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/`), message interaction primitives (action bars, alternatives/swiping, drafts, cancel, streaming TTS, CYOA integration, edit/branch UX) |
 | **Priority** | P1 — keep Marinara-level conversation quality without turning the game into a chat configuration app |
 | **Dependencies** | C-231 (Rich Chat Streaming — COMPLETED: message branching, drafts, action bar types, streaming TTS chunker), C-241 (Chat Modes & Address System — COMPLETED: impersonation, Scene/Party/GM toggle), C-245 (CYOA Choices — COMPLETED: choice buttons, impersonation integration, choice history store), C-328 (Integrate Bounded AI NPC Dialogue — implemented: production dialogue loop, orchestrator, authored fallback), C-340 (Party and Companion Gameplay — not_started: party address mode depends on party roster) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) |
 | **Docs Impact** | none — internal developer-facing UX promotion, no new player-facing docs |
 | **Contract version** | 2.0.0 |
@@ -411,44 +411,3 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
-
-## Execution Report
-
-### Summary
-Implemented C-343 rich chat UX promotion for the production dialogue overlay. Extended `DialogueMessage` type with alternative tracking fields, added `ConversationBranch` and `DialogueAddressMode` types. Added comprehensive ViewModel methods: cancelStreaming, regenerateResponse, editMessage, deleteMessage, createBranch, switchBranch, startEdit, setEditText. Updated the dialogue View with hover-visible action bars, swipe controls, cancel button during streaming, draft recovery badge, TTS speaker pulse indicator, address mode toggle (Scene/GM), branch selector, inline edit textarea, delete confirmation modal, and CYOA choice button rendering. All 22 unit tests pass, typecheck passes (0 errors), self-audit checks pass.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Message action bars render on hover with context-appropriate buttons (Copy/Retry/Branch for NPC, Copy/Edit/Delete/Branch for player). Swipe controls with counter label render for messages with alternatives. Keyboard navigation implemented via aria-labels. |
-| AC-2 | ✅ | Cancel button replaces Send during streaming (DaisyUI btn-error). AbortController wired through _activeAbortController. Draft recovery badge shows for 3s with aria-live="polite". AutoResizeTextarea already in use (C-328). |
-| AC-3 | ✅ | TTS speaker pulse indicator (animate-pulse) next to NPC name during TTS playback. isTtsSpeaking state managed by SentenceBoundaryChunker callback. |
-| AC-4 | ✅ | CYOA choice buttons render below latest NPC message from viewModel.activeChoices. Clicking a choice sends the label as a player message. Hidden when choices array is empty (authored fallback). |
-| AC-5 | ✅ | Inline edit textarea replaces bubble with Save/Cancel buttons. Delete confirmation modal with DaisyUI styling. Branch creation (max 5) with branch selector in dialogue header. All in-memory (persistence deferred to C-344). |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| — | No new files; all changes are modifications to existing code |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `apps/frontend/client/src/lib/types/dialogue.ts` | Extended `DialogueMessage` with `alternativeCount`, `alternativeLabel`, `canSwipeLeft`, `canSwipeRight`. Added `ConversationBranch` and `DialogueAddressMode` types. |
-| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Added 15+ new interface methods (cancelStreaming, regenerateResponse, editMessage, deleteMessage, createBranch, switchBranch, startEdit, setEditText, dismissDraftRecovery, setAddressMode, confirmDelete, cancelDelete). Added $state fields (showDraftRecovery, isTtsSpeaking, addressMode, branches, activeBranchId, editingMessageId, editText, pendingDeleteMessageId). Added _activeAbortController. Updated _delegateGenerateResponse with abort handling, alternative tracking via messageBranchStore.enrichMessage, and input restoration on cancel. Updated endChat to clean up alternatives and branches. Updated draft loading to show recovery badge. Updated TTS callback to set isTtsSpeaking. All DialogueMessage construction sites updated with new defaults. |
-| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Added address mode toggle (Scene/GM) and TTS speaker indicator in header. Added per-message hover-visible action bars with context-appropriate buttons. Added swipe controls for AI messages with alternatives. Added inline edit textarea with Save/Cancel. Added branch selector in message area. Added delete confirmation modal. Added CYOA choice button rendering. Updated Send button to show Cancel during streaming. Added draft recovery badge. |
-| `apps/frontend/client/src/lib/test_preload.ts` | Added `combatService` stub to `$services` barrel mock (required by ViewModel imports). |
-| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Added `combatService`, `buildGameStateFacts`, and `messageBranchStore` methods (clearAlternatives, addAlternative, enrichMessage) to test mock. |
-
-### Deviations from Spec
-- **CYOA choice integration**: Instead of instantiating a full `ChoiceButtonsViewModel`, choices from `viewModel.activeChoices` are rendered inline as DaisyUI buttons. This avoids the complexity of managing a separate ViewModel lifecycle within the dialogue overlay. The full `ChoiceButtonsView` pattern remains available for the chat sandbox but is not needed for the dialogue overlay's simpler choice rendering.
-- **Party address mode**: Deferred to C-340 as specified. Party toggle is hidden (not shown disabled) — the UI only shows Scene and GM buttons.
-- **Branch persistence**: Branches are in-memory only as specified — persistence is deferred to C-344.
-
-### Test Results
-- Unit (dialogue_overlay_view_model): 22/22 PASS (0 failures)
-- Unit (message_branch_store): 20/20 PASS (0 failures)
-- Unit (choice_buttons_view_model): 10/10 PASS (0 failures)
-- Typecheck: 0 errors, 2 pre-existing warnings (vendor_view.svelte a11y)
-- Fix: 0 errors
-- Baseline: 0 new failures
