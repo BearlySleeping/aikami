@@ -11,6 +11,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { PackIndexEntry } from '@aikami/types';
 import { GameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
 import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import type { SaveSlotInfo } from '$services';
@@ -22,6 +23,7 @@ import {
   gameModeService,
   gameSaveService,
   inventoryService,
+  packRegistryService,
   playerStateService,
   routerService,
   worldStateService,
@@ -99,6 +101,29 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-334 AC-5: Declines recovery — clears the session marker silently. */
   declineRecovery(): Promise<void>;
+
+  // ── Pack Browser (C-345) ──
+
+  /** Whether the pack browser modal is currently visible. */
+  readonly showPackBrowser: boolean;
+
+  /** All installed content packs from the registry. */
+  readonly availablePacks: readonly PackIndexEntry[];
+
+  /** The currently selected pack ID in the pack browser. */
+  readonly selectedPackId: string | undefined;
+
+  /** Opens the pack browser modal and loads available packs. */
+  openPackBrowser(): Promise<void>;
+
+  /** Closes the pack browser modal without starting a campaign. */
+  closePackBrowser(): void;
+
+  /** Selects a pack in the browser. */
+  selectPack(packId: string): void;
+
+  /** Confirms pack selection and starts a new campaign with the selected pack. */
+  confirmPackSelection(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +232,17 @@ class StartViewModel
   /** C-334 AC-5: Whether a recovery operation is in progress. */
   isRecovering = $state(false);
 
+  // ── Pack Browser (C-345) ──
+
+  /** Whether the pack browser modal is visible. */
+  showPackBrowser = $state(false);
+
+  /** Installed content packs from the registry. */
+  availablePacks: PackIndexEntry[] = $state([]);
+
+  /** The currently selected pack ID. */
+  selectedPackId = $state<string | undefined>(undefined);
+
   /** @inheritdoc */
   get isLoggedIn(): boolean {
     return authService.isLoggedIn;
@@ -238,75 +274,8 @@ class StartViewModel
       return;
     }
 
-    // Check for existing characters from previous sessions
-    const characterCount = this._getCharacterCount();
-
-    if (characterCount === 1) {
-      // One character — load it directly into /game
-      await this._startWithExistingCharacter();
-      return;
-    }
-
-    if (characterCount > 1) {
-      // Multiple characters — let the user choose
-      await routerService.goToRoute('characters', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-      return;
-    }
-
-    // Zero characters — go to character creation
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await routerService.goToRoute('setup', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
-  }
-
-  /**
-   * Loads the single existing character as the active persona and navigates
-   * to /game. Called when exactly one saved character exists.
-   */
-  private async _startWithExistingCharacter(): Promise<void> {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return;
-      }
-      const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-      if (characters.length === 0) {
-        return;
-      }
-
-      const characterId = characters[0].persona.id;
-
-      // Set as active persona if logged in, so the game can find it
-      try {
-        await personaService.setActivePersona(characterId);
-      } catch {
-        // Non-critical — GameViewModel falls back to localStorage
-      }
-    } catch (error) {
-      this.warn('_startWithExistingCharacter:persona-set-failed', error);
-    }
-
-    // Clear any stale state from a previous play session
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await routerService.goToRoute('game', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
+    // C-345: Load pack registry and show pack browser if multiple packs available
+    await this.openPackBrowser();
   }
 
   /** @inheritdoc */
@@ -539,6 +508,126 @@ class StartViewModel
     this.showRecoveryPrompt = false;
     this.recoveryCampaignId = undefined;
     this.debug('declineRecovery');
+  }
+
+  // ── Pack Browser Methods (C-345) ──
+
+  /** @inheritdoc */
+  async openPackBrowser(): Promise<void> {
+    try {
+      // Load the pack registry
+      await packRegistryService.refresh();
+
+      this.availablePacks = [...packRegistryService.availablePacks];
+
+      if (this.availablePacks.length <= 1) {
+        // Single pack or empty — skip browser, proceed directly
+        const packId = this.availablePacks.length === 1 ? this.availablePacks[0].id : 'emberwatch';
+        await this._proceedWithPack(packId);
+        return;
+      }
+
+      // Multiple packs — show browser
+      this.selectedPackId = this.availablePacks[0].id;
+      this.showPackBrowser = true;
+    } catch (error) {
+      this.error('openPackBrowser:failed', error);
+      this.errorMessage = 'Failed to load content packs. Try starting a new game.';
+    }
+  }
+
+  /** @inheritdoc */
+  closePackBrowser(): void {
+    this.showPackBrowser = false;
+    this.selectedPackId = undefined;
+  }
+
+  /** @inheritdoc */
+  selectPack(packId: string): void {
+    this.selectedPackId = packId;
+  }
+
+  /** @inheritdoc */
+  async confirmPackSelection(): Promise<void> {
+    if (!this.selectedPackId) {
+      return;
+    }
+
+    const packId = this.selectedPackId;
+    this.showPackBrowser = false;
+    this.selectedPackId = undefined;
+
+    await this._proceedWithPack(packId);
+  }
+
+  /**
+   * Proceeds with campaign creation using the given pack ID.
+   * Handles existing-character branching from the original startNewGame logic.
+   */
+  private async _proceedWithPack(packId: string): Promise<void> {
+    try {
+      // Check for existing characters from previous sessions
+      const characterCount = this._getCharacterCount();
+
+      if (characterCount === 1) {
+        // One character — load it directly into /game with this pack
+        inventoryService.reset();
+        worldStateService.reset();
+        playerStateService.reset();
+        equipmentService.reset();
+        gameModeService.reset();
+
+        try {
+          const stored = localStorage.getItem('aikami-characters');
+          if (stored) {
+            const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
+            if (characters.length > 0) {
+              try {
+                await personaService.setActivePersona(characters[0].persona.id);
+              } catch {
+                // Non-critical
+              }
+            }
+          }
+        } catch (error) {
+          this.warn('_proceedWithPack:persona-set-failed', error);
+        }
+
+        await campaignService.startNewCampaign({ contentPackId: packId });
+        await routerService.goToRoute('game', {
+          queryParameters: undefined,
+          pathParameters: undefined,
+        });
+        return;
+      }
+
+      if (characterCount > 1) {
+        // Multiple characters — create campaign, let user choose character
+        await campaignService.startNewCampaign({ contentPackId: packId });
+        await routerService.goToRoute('characters', {
+          queryParameters: undefined,
+          pathParameters: undefined,
+        });
+        return;
+      }
+
+      // Zero characters — go to character creation with pack selected
+      inventoryService.reset();
+      worldStateService.reset();
+      playerStateService.reset();
+      equipmentService.reset();
+      gameModeService.reset();
+
+      await campaignService.startNewCampaign({ contentPackId: packId });
+
+      await routerService.goToRoute('setup', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('_proceedWithPack:failed', error);
+      this.errorMessage = 'Failed to start campaign. Try starting a new game.';
+    }
   }
 }
 
