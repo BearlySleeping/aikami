@@ -48,7 +48,8 @@ export type GameOverlayType =
   | 'END_SESSION'
   | 'SETTINGS'
   | 'PARTY_ROSTER'
-  | 'TALK_TO_PARTY';
+  | 'TALK_TO_PARTY'
+  | 'REPUTATION';
 
 export type DialogueNpcData = {
   npcId: string;
@@ -92,6 +93,7 @@ const OVERLAY_COMPATIBILITY: Record<
     VENDOR: 'allow',
     END_SESSION: 'allow',
     PARTY_ROSTER: 'allow',
+    REPUTATION: 'allow',
   },
   PAUSE_MENU: {
     INVENTORY: 'allow',
@@ -99,6 +101,7 @@ const OVERLAY_COMPATIBILITY: Record<
     CHARACTER_DASHBOARD: 'allow',
     END_SESSION: 'allow',
     SETTINGS: 'allow',
+    REPUTATION: 'allow',
   },
   DIALOGUE: {
     COMBAT: 'clear',
@@ -126,6 +129,9 @@ const OVERLAY_COMPATIBILITY: Record<
     PAUSE_MENU: 'allow',
   },
   TALK_TO_PARTY: {},
+  REPUTATION: {
+    PAUSE_MENU: 'allow',
+  },
 };
 
 export type OverlayEventHandlers = {
@@ -187,6 +193,10 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   // ── Party Roster (C-340) ──
   openPartyRoster(): void;
   closePartyRoster(): void;
+
+  // ── Reputation (C-341) ──
+  openReputation(): void;
+  closeReputation(): void;
 
   startCombat(options: { enemyName: string }): void;
 
@@ -1069,6 +1079,24 @@ export class GameOverlayService
   }
 
   closePartyRoster(): void {
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
+  }
+
+  // ── Reputation (C-341) ──
+
+  /** @inheritdoc */
+  openReputation(): void {
+    this.pushOverlay('REPUTATION');
+    gameModeService.setMode('MENU');
+    this._engineService?.pauseEngine();
+  }
+
+  /** @inheritdoc */
+  closeReputation(): void {
     this.popOverlay();
     if (this.activeOverlay === 'NONE') {
       gameModeService.setMode('EXPLORE');

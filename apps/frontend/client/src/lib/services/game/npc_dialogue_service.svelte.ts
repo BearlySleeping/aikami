@@ -104,6 +104,7 @@ export type DialogueContextProjection = {
   npcName: string;
   memory: string[];
   gameStateFacts: string[];
+  relationshipFacts: string[];
   allowedCommands: NpcDialogueCommandKind[];
 };
 
@@ -725,6 +726,7 @@ export class NpcDialogueService
       npcName,
       memory,
       gameStateFacts,
+      relationshipFacts: [],
       allowedCommands,
     };
   }
@@ -743,6 +745,10 @@ export class NpcDialogueService
 
     if (projection.gameStateFacts.length > 0) {
       lines.push('', '[GAME STATE]', ...projection.gameStateFacts);
+    }
+
+    if (projection.relationshipFacts && projection.relationshipFacts.length > 0) {
+      lines.push('', '[RELATIONSHIPS]', ...projection.relationshipFacts);
     }
 
     if (projection.memory.length > 0) {

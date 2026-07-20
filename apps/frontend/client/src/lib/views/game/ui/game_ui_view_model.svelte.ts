@@ -48,6 +48,10 @@ import {
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import {
+  getReputationViewModel,
+  type ReputationViewModelInterface,
+} from './overlays/reputation/reputation_view_model.svelte';
+import {
   getSettingsOverlayViewModel,
   type SettingsOverlayViewModelInterface,
 } from './overlays/settings/settings_overlay_view_model.svelte';
@@ -125,6 +129,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   // ── Party Roster (C-340) ──
   readonly partyRosterViewModel: PartyRosterViewModelInterface | undefined;
 
+  // ── Reputation (C-341) ──
+  readonly reputationViewModel: ReputationViewModelInterface | undefined;
+
   // ── Talk to Party (C-340) ──
   readonly talkToPartyViewModel: TalkToPartyViewModelInterface | undefined;
 
@@ -169,6 +176,9 @@ class GameUIViewModel
 
   // ── Party Roster (C-340) ──
   partyRosterViewModel = $state<PartyRosterViewModelInterface | undefined>(undefined);
+
+  // ── Reputation (C-341) ──
+  reputationViewModel = $state<ReputationViewModelInterface | undefined>(undefined);
 
   // ── Talk to Party (C-340) ──
   talkToPartyViewModel = $state<TalkToPartyViewModelInterface | undefined>(undefined);
@@ -461,6 +471,19 @@ class GameUIViewModel
 
         return () => {
           this.partyRosterViewModel = undefined;
+        };
+      });
+
+      // ── Reputation (C-341) ──
+      $effect(() => {
+        if (gameOverlayService.activeOverlay !== 'REPUTATION') {
+          return;
+        }
+        const vm = getReputationViewModel({ className: 'ReputationViewModel' });
+        this.reputationViewModel = vm;
+
+        return () => {
+          this.reputationViewModel = undefined;
         };
       });
 

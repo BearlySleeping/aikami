@@ -16,6 +16,7 @@ import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
 import PartyRosterView from './overlays/party_roster/party_roster_view.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
+import ReputationView from './overlays/reputation/reputation_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
 import TalkToPartyView from './overlays/talk_to_party/talk_to_party_view.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
@@ -165,6 +166,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
   {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
     <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
+  {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
+    <ReputationView viewModel={viewModel.reputationViewModel} />
   {/if}
 
   <TransitionOverlay {viewModel} />
