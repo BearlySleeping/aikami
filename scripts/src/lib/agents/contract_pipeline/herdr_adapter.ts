@@ -326,34 +326,36 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
   /**
    * Send task text to a pane, with retry if the prompt is not acknowledged.
-   * Herdr's pane send-text can silently fail (just creates a newline) if pi
-   * hasn't fully initialized its input handler. Retry up to MAX_SEND_ATTEMPTS.
+   * Text is sent ONCE (never re-sent — duplicates would fill the input buffer).
+   * Only Enter is retried with exponential backoff.
    */
   private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
-    const ready = await this._waitForAgentStatus({
-      paneId: options.paneId,
-      statuses: ['idle', 'blocked'],
-      timeoutMs: AGENT_READY_TIMEOUT_MS,
-    });
-    if (!ready) {
-      // Pi isn't running or context-mode hasn't booted. Sending text to
-      // a shell pane would produce garbage (truncated text, shell errors).
-      console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
-      return;
+    // Double-idle check: two consecutive idle observations are much stronger
+    // evidence that pi's input handler is truly ready.
+    for (const delay of [0, 500]) {
+      await sleep(delay);
+      const ready = await this._waitForAgentStatus({
+        paneId: options.paneId,
+        statuses: ['idle', 'blocked'],
+        timeoutMs: AGENT_READY_TIMEOUT_MS,
+      });
+      if (!ready) {
+        console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
+        return;
+      }
     }
 
-    for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
-      // Send text directly to the PTY (not as shell command).
-      // 🔴 No Escape before send-text — Escape triggers app.interrupt in pi,
-      // which can swallow the first character and cause submit failures.
-      // We already verified agent_status is idle/blocked (no overlays to dismiss).
-      // 🔴 Herdr bug: pane send-text drops the first character — prepend
-      // a space to absorb it.
-      await sleep(2000);
-      await runHerdr(['pane', 'send-text', options.paneId, ` ${options.text}`]);
-      await sleep(100);
-      // 🔴 Must use send-keys Enter (keypress event), not \n (character).
-      // Pi only submits on the Enter keypress, not on a newline in the text buffer.
+    // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
+    await runHerdr(['pane', 'send-text', options.paneId, ` ${options.text}`]);
+
+    // Dynamic buffer delay: proportional to text length, 500ms min, 2000ms max.
+    const bufferWaitMs = Math.min(Math.max(500, options.text.length * 2), 2000);
+    await sleep(bufferWaitMs);
+
+    // Send Enter — then retry ONLY Enter (never re-send text).
+    // Text is idempotent in the buffer; additional Enter presses are harmless.
+    const enterDelays = [500, 1000, 2000, 4000, 8000];
+    for (const delay of enterDelays) {
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
 
       const accepted = await this._waitForAgentStatus({
@@ -368,17 +370,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         return;
       }
 
-      if (attempt < MAX_SEND_ATTEMPTS) {
-        console.warn(
-          `⚠️  Prompt to ${options.paneId} unacked (attempt ${attempt}/${MAX_SEND_ATTEMPTS}) — retrying after ${attempt}s...`,
-        );
-        await sleep(attempt * 1000);
+      if (delay < 8000) {
+        await sleep(delay);
       }
     }
 
-    console.warn(
-      `⚠️  Prompt to ${options.paneId} unacked after ${MAX_SEND_ATTEMPTS} attempts — pane may be dead`,
-    );
+    console.warn(`⚠️  Prompt to ${options.paneId} unacked after Enter retries — pane may be dead`);
   }
 
   private _buildWorkerCommand(
@@ -415,6 +412,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       '--thinking',
       getContractThinkingForRole(request.role),
     ];
+    // 🔴 Always use JSON mode for pipeline workers — PTY keystroke injection
+    // (send-text + send-keys Enter) is fundamentally unreliable. The prompt
+    // is passed via -p and the task message via $(cat ...).
+    // Only use TUI mode when CONTRACT_PIPELINE_HEADLESS=0 is explicitly set
+    // (for manual debugging).
     if (this._headless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return [
@@ -432,6 +434,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         `"${cf}"`,
       ].join(' ');
     }
+    // TUI mode — no -p, prompt is sent via _sendTaskText to the PTY.
     return [
       env,
       'pi',
@@ -542,9 +545,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runPaneCommand({ paneId, command: startCommand });
 
     if (!this._headless) {
-      // 🔴 Always point to the task message file — never embed long feedback
-      // inline. Herdr's pane send-text drops long payloads, and verifier
-      // findings can be hundreds of lines. The file always has the full content.
+      // TUI mode — send task text via PTY.
       const taskText = isRetry
         ? `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
         : `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
@@ -616,6 +617,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       .filter(Boolean)
       .join(' ');
 
+    // Review captain runs in TUI mode — needs interactivity to inspect
+    // findings, interrupt if needed, and manually intervene. JSON mode
+    // is for automated workers only.
     const command = [
       environment,
       'pi',
@@ -690,7 +694,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     try {
       await sleep(2000);
       await runHerdr(['pane', 'send-text', options.paneId, ` ${options.message}`]);
-      await sleep(100);
+      await sleep(500);
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     } catch {}
   }
