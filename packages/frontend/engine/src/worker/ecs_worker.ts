@@ -31,6 +31,7 @@ import {
 } from '../components/engine_state.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
+import { registerInteractableStateObservers } from '../components/interactable_state.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
 import { registerMoveIntentObservers } from '../components/move_intent.ts';
@@ -100,6 +101,7 @@ import {
   startMacroSimulation,
 } from '../systems/macro_simulation_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
+import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
   LpcBatchManager,
@@ -601,6 +603,7 @@ const initializeEngine = (
   registerStatusEffectsObservers(world);
   registerInventoryObservers(world);
   registerInteractableObservers(world);
+  registerInteractableStateObservers(world);
   registerTurnOrderObservers(world);
   registerCameraFocusObservers(world);
   registerTransitionObservers(world);
@@ -822,6 +825,13 @@ const tickLoop = (): void => {
   // Evaluates the nearest interactable and emits INTERACTION_TARGET_CHANGED
   // only when the target changes (dirty-checked).
   updateInteractionProximity({
+    world,
+    playerEntityId,
+    bridge: workerBridge,
+  });
+
+  // ── C-342 AC-3: Pressure plate per-tick overlap detection ──
+  updatePressurePlates({
     world,
     playerEntityId,
     bridge: workerBridge,
@@ -1397,6 +1407,7 @@ self.onmessage = (event: MessageEvent): void => {
             targetSpawnHash,
             defeatedEnemies,
             collectedPickups,
+            interactableStates,
             spawnPointEntities,
             disableClamping,
           } = message;
@@ -1441,11 +1452,24 @@ self.onmessage = (event: MessageEvent): void => {
           // 3. Spawn new NPC and prop entities from the new map.
           //    Pass defeatedEnemies + collectedPickups so previously-defeated
           //    enemies and already-collected items are filtered (C-147, C-331).
+          //    Pass interactableStates for door/chest/lever persistence (C-342).
           const results = spawnEntities({
             world,
             spawnPoints,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
             collectedPickups: collectedPickups as string[] | undefined,
+            interactableStates: interactableStates as
+              | Record<
+                  string,
+                  {
+                    isOpen?: boolean;
+                    isLocked?: boolean;
+                    isLooted?: boolean;
+                    isToggled?: boolean;
+                    isTriggered?: boolean;
+                  }
+                >
+              | undefined,
           });
 
           // 4. Spawn transition zone trigger entities

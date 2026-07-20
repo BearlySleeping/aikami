@@ -405,6 +405,153 @@ export const ContentPackLootEntrySchema = Type.Object({
 export type ContentPackLootEntry = Static<typeof ContentPackLootEntrySchema>;
 
 // ---------------------------------------------------------------------------
+// ContentPackInteractableEntry — world interactable definitions (C-342)
+// ---------------------------------------------------------------------------
+
+const BaseContentPackInteractableSchema = Type.Object({
+  /** Unique spawn identifier for state persistence across map revisits. */
+  spawnId: Type.String({ minLength: 1, description: 'Unique spawn identifier' }),
+  /** Map ID where this interactable lives. */
+  mapId: Type.String({ minLength: 1, description: 'Map ID where this interactable lives' }),
+});
+
+const ContentPackInteractableDoorSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('door'),
+    lockedByDefault: Type.Boolean({ description: 'Whether the door starts locked' }),
+    requiredItemId: Type.Optional(
+      Type.String({ description: 'Item ID required to unlock (e.g., rustyKey)' }),
+    ),
+    startsOpen: Type.Boolean({ description: 'Whether the door starts open' }),
+    activatedBySpawnIds: Type.Array(Type.String(), {
+      description: 'Spawn IDs of interactables that activate (open) this door when toggled',
+    }),
+  }),
+]);
+
+const ContentPackInteractableChestSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('chest'),
+    lockedByDefault: Type.Boolean({ description: 'Whether the chest starts locked' }),
+    requiredItemId: Type.Optional(
+      Type.String({ description: 'Item ID required to unlock (e.g., rustyKey)' }),
+    ),
+    lootTableKey: Type.String({
+      minLength: 1,
+      description: 'Key into the manifest lootTables record',
+    }),
+    respawns: Type.Boolean({ description: 'Whether the chest respawns loot after being looted' }),
+  }),
+]);
+
+const ContentPackInteractableLeverSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('lever'),
+    startsToggled: Type.Boolean({
+      description: 'Whether the lever starts in the toggled position',
+    }),
+    activatesSpawnIds: Type.Array(Type.String(), {
+      description: 'Spawn IDs of interactables that activate when this lever is toggled',
+    }),
+    staysToggled: Type.Boolean({
+      description: 'If true, lever stays toggled after use. If false, springs back.',
+    }),
+  }),
+]);
+
+const ContentPackInteractablePressurePlateSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('pressure_plate'),
+    activatesSpawnIds: Type.Array(Type.String(), {
+      description: 'Spawn IDs activated while the plate is pressed',
+    }),
+    deactivatesOnReleaseSpawnIds: Type.Array(Type.String(), {
+      description: 'Spawn IDs deactivated when the plate is released',
+    }),
+  }),
+]);
+
+const ContentPackInteractableContainerSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('container'),
+    lootTableKey: Type.String({
+      minLength: 1,
+      description: 'Key into the manifest lootTables record',
+    }),
+    respawns: Type.Boolean({
+      description: 'Whether the container respawns loot after being looted',
+    }),
+  }),
+]);
+
+const ContentPackInteractableReadableSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('readable'),
+    textDialogueKey: Type.String({
+      minLength: 1,
+      description: 'Dialogue key for text displayed on inspect',
+    }),
+  }),
+]);
+
+const ContentPackInteractableTrapSchema = Type.Intersect([
+  BaseContentPackInteractableSchema,
+  Type.Object({
+    kind: Type.Literal('trap'),
+    damageDice: Type.String({
+      pattern: '^\\d+d\\d+(\\+\\d+)?$',
+      description: 'Damage dice (e.g., 2d6) dealt when triggered',
+    }),
+    disarmDc: Type.Number({
+      minimum: 0,
+      description: 'DC for disarm skill check. 0 = no disarm possible.',
+    }),
+    visible: Type.Boolean({ description: 'Whether the trap is visible before triggering' }),
+    reArms: Type.Boolean({ description: 'Whether the trap re-arms after triggering' }),
+  }),
+]);
+
+export const ContentPackInteractableEntrySchema = Type.Union([
+  ContentPackInteractableDoorSchema,
+  ContentPackInteractableChestSchema,
+  ContentPackInteractableLeverSchema,
+  ContentPackInteractablePressurePlateSchema,
+  ContentPackInteractableContainerSchema,
+  ContentPackInteractableReadableSchema,
+  ContentPackInteractableTrapSchema,
+]);
+
+export type ContentPackInteractableEntry = Static<typeof ContentPackInteractableEntrySchema>;
+
+// ---------------------------------------------------------------------------
+// ContentPackPuzzle — puzzle DAG definition (C-342)
+// ---------------------------------------------------------------------------
+
+export const ContentPackPuzzleSchema = Type.Object({
+  /** Unique puzzle ID for journal/quest tracking. */
+  puzzleId: Type.String({ minLength: 1, description: 'Unique puzzle identifier' }),
+  /** Human-readable name. */
+  name: Type.String({ minLength: 1, description: 'Puzzle display name' }),
+  /** Map ID where this puzzle lives. */
+  mapId: Type.String({ minLength: 1, description: 'Map ID where this puzzle lives' }),
+  /** Spawn IDs that participate in this puzzle. */
+  interactableSpawnIds: Type.Array(Type.String(), {
+    minItems: 2,
+    description: 'Spawn IDs that participate in this puzzle (at least 2)',
+  }),
+  /** Dialogue key shown when the puzzle is solved. */
+  solvedDialogueKey: Type.String({ description: 'Dialogue key shown when the puzzle is solved' }),
+});
+
+export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
+
+// ---------------------------------------------------------------------------
 // ContentPackEncounterEntry — a combat encounter definition (C-316)
 // ---------------------------------------------------------------------------
 
@@ -527,6 +674,24 @@ export const ContentPackManifestSchema = Type.Object({
   factions: Type.Optional(
     Type.Record(Type.String(), FactionDefinitionSchema, {
       description: 'Faction definitions keyed by faction ID',
+    }),
+  ),
+  /** Optional: world interactable definitions keyed by spawn ID (C-342) */
+  interactables: Type.Optional(
+    Type.Record(Type.String(), ContentPackInteractableEntrySchema, {
+      description: 'World interactable definitions keyed by spawn ID',
+    }),
+  ),
+  /** Optional: puzzle definitions keyed by puzzle ID (C-342) */
+  puzzles: Type.Optional(
+    Type.Record(Type.String(), ContentPackPuzzleSchema, {
+      description: 'Puzzle definitions keyed by puzzle ID',
+    }),
+  ),
+  /** Optional: loot tables keyed by table key (C-342). Each table is an array of loot entries. */
+  lootTables: Type.Optional(
+    Type.Record(Type.String(), Type.Array(ContentPackLootEntrySchema), {
+      description: 'Loot tables keyed by table key',
     }),
   ),
 });

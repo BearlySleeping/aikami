@@ -13,6 +13,7 @@ import {
 } from '@aikami/frontend/services';
 import type {
   ActiveSessionData,
+  InteractableStateEntry,
   WorldEvent,
   WorldGenOutput,
   WorldLocation,
@@ -43,6 +44,14 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
   readonly collectedPickups: readonly string[];
   /** Encounter IDs whose loot was already granted (C-331 AC-5). */
   readonly lootGrantedEncounters: readonly string[];
+  /** Per-spawnId interactable state for persistence (C-342). */
+  readonly interactableStates: Record<string, InteractableStateEntry>;
+
+  /** Returns the saved state for a given spawn ID, or undefined if not saved. */
+  getInteractableState(spawnId: string): InteractableStateEntry | undefined;
+
+  /** Updates the saved state for a given spawn ID (merges partial state). */
+  markInteractableState(spawnId: string, changes: Partial<InteractableStateEntry>): void;
 
   /** Returns true when the given item spawn point was already collected. */
   isPickupCollected(spawnId: string): boolean;
@@ -56,11 +65,16 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
   /** Records an encounter's loot as granted (idempotent). */
   recordLootGranted(encounterId: string): void;
 
-  /** Serializes world persistence flags for the save envelope (C-331). */
+  /** Serializes world persistence flags for the save envelope (C-331, C-342). */
   serialize(): WorldPickupState & { defeatedEnemies: string[] };
 
   /** Restores world persistence flags from a save envelope snapshot. */
-  hydrate(data: WorldPickupState & { defeatedEnemies?: string[] }): void;
+  hydrate(
+    data: WorldPickupState & {
+      defeatedEnemies?: string[];
+      interactableStates?: Record<string, InteractableStateEntry>;
+    },
+  ): void;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -109,6 +123,7 @@ class WorldStateService
   defeatedEnemies = $state<string[]>([]);
   collectedPickups = $state<string[]>([]);
   lootGrantedEncounters = $state<string[]>([]);
+  interactableStates: Record<string, InteractableStateEntry> = $state({});
 
   private _worldGenOutput = $state<WorldGenOutput | undefined>(undefined);
 
@@ -449,11 +464,27 @@ class WorldStateService
   }
 
   /** @inheritdoc */
+  getInteractableState(spawnId: string): InteractableStateEntry | undefined {
+    return this.interactableStates[spawnId];
+  }
+
+  /** @inheritdoc */
+  markInteractableState(spawnId: string, changes: Partial<InteractableStateEntry>): void {
+    const current = this.interactableStates[spawnId] ?? {};
+    this.interactableStates = {
+      ...this.interactableStates,
+      [spawnId]: { ...current, ...changes },
+    };
+    this.debug('markInteractableState', { spawnId, changes });
+  }
+
+  /** @inheritdoc */
   serialize(): WorldPickupState & { defeatedEnemies: string[] } {
     return {
       defeatedEnemies: [...this.defeatedEnemies],
       collectedPickups: [...this.collectedPickups],
       lootGrantedEncounters: [...this.lootGrantedEncounters],
+      interactableStates: { ...this.interactableStates },
     };
   }
 
@@ -465,10 +496,12 @@ class WorldStateService
     this.defeatedEnemies = [...(data.defeatedEnemies ?? [])];
     this.collectedPickups = [...(data.collectedPickups ?? [])];
     this.lootGrantedEncounters = [...(data.lootGrantedEncounters ?? [])];
+    this.interactableStates = { ...(data.interactableStates ?? {}) };
     this.debug('hydrate', {
       defeated: this.defeatedEnemies.length,
       collected: this.collectedPickups.length,
       lootGranted: this.lootGrantedEncounters.length,
+      interactableStates: Object.keys(this.interactableStates).length,
     });
   }
 
@@ -478,6 +511,7 @@ class WorldStateService
     this.defeatedEnemies = [];
     this.collectedPickups = [];
     this.lootGrantedEncounters = [];
+    this.interactableStates = {};
     this._worldGenOutput = undefined;
     this.debug('reset:cleared');
   }
