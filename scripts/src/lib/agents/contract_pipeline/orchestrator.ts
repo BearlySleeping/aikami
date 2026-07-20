@@ -686,14 +686,20 @@ export const runContractPipeline = async (options: {
           }
         }
 
-        const pc = validatePostconditions({
-          role,
-          contractPath: manifest.contractPath,
-          repoRoot: options.repoRoot,
-          workspacePath: wPath,
-          before,
-          after,
-        });
+        // Postcondition validation — catches agents crossing role boundaries.
+        // Set CONTRACT_SKIP_POSTCONDITIONS=1 to bypass (e.g. uncommitted local changes
+        // in main repo falsely attributed to writer/critic agents).
+        const skipPc = process.env.CONTRACT_SKIP_POSTCONDITIONS === '1';
+        const pc = skipPc
+          ? { passed: true, unauthorizedPaths: [] as string[] }
+          : validatePostconditions({
+              role,
+              contractPath: manifest.contractPath,
+              repoRoot: options.repoRoot,
+              workspacePath: wPath,
+              before,
+              after,
+            });
         let result = pc.passed
           ? outcome.result
           : resultForPostconditionFailure({

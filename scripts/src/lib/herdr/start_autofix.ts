@@ -81,7 +81,7 @@ const doJoin = args.includes('--join') || args.includes('-j');
 const doAll = args.includes('--all');
 const model = parseOpt(['--model', '-m']) ?? DEFAULT_MODEL;
 const thinking = parseOpt(['--thinking']) ?? DEFAULT_THINKING;
-const scope: ScopeMode = parseOpt(['--scope', '-s']) ?? 'git';
+const scope: ScopeMode = (parseOpt(['--scope', '-s']) as ScopeMode | undefined) ?? 'git';
 const isGitScoped = scope === 'git';
 
 // Collect --only values (supports repeated flags, comma, and space separation)
@@ -135,8 +135,12 @@ function dedupe<T>(arr: T[]): T[] {
 /** Extract test mode from --only values. Defaults to 'unit'. */
 function parseTestMode(values: string[]): TestMode {
   for (const v of values) {
-    if (v === 'test:e2e') return 'e2e';
-    if (v === 'test:all') return 'all';
+    if (v === 'test:e2e') {
+      return 'e2e';
+    }
+    if (v === 'test:all') {
+      return 'all';
+    }
   }
   return 'unit';
 }
@@ -166,7 +170,9 @@ const waitForClientReady = async (port: number, timeoutSec: number): Promise<boo
       const res = await fetch(`http://localhost:${port}/`, {
         signal: AbortSignal.timeout(3000),
       });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        continue;
+      }
       const text = await res.text();
       if (text.length > 500) {
         ok(`client ready (port ${port}, ${text.length}B response)`);
@@ -364,7 +370,6 @@ const buildSystemPrompt = async (): Promise<string> => {
 
 const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
   const lines: string[] = [];
-  const gitFiles = isGitScoped ? await getGitScopedFiles() : [];
   const fbRunning = needsFirebase ? ' Firebase emulators and' : '';
 
   lines.push(`## STEP ${stepNum}: \`bun run test\``);
