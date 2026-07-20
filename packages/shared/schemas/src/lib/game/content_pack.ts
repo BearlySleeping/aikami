@@ -632,6 +632,8 @@ export const ContentPackManifestSchema = Type.Object({
   }),
   /** ISO 8601 timestamp of last modification */
   updatedAt: Type.String({ description: 'ISO 8601 last modification timestamp' }),
+  /** Optional short description of the adventure (shown in pack browser detail panel) */
+  description: Type.Optional(Type.String({ description: 'Short adventure description' })),
   /** Map ID of the entry point — first map loaded on campaign start */
   startingMapId: Type.String({ minLength: 1, description: 'Starting map ID' }),
   /** All maps in this pack, keyed by map ID */

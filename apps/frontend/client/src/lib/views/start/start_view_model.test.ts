@@ -402,4 +402,17 @@ describe('StartViewModel', () => {
       expect(vm.errorMessage).toBeUndefined(); // graceful degradation
     });
   });
+
+  // ── C-345 Pack Browser ────────────────────────────────────────────────
+
+  describe('pack browser', () => {
+    test.todo('openPackBrowser loads packs and shows browser when multiple packs available');
+    test.todo('openPackBrowser skips browser when only one pack available');
+    test.todo('closePackBrowser hides the browser and clears selection');
+    test.todo('selectPack updates selectedPackId');
+    test.todo('confirmPackSelection hides browser and proceeds with selected pack');
+    test.todo('confirmPackSelection with 1 character routes directly to /game');
+    test.todo('confirmPackSelection with 0 characters routes to /setup');
+    test.todo('confirmPackSelection with 2+ characters routes to /characters');
+  });
 });

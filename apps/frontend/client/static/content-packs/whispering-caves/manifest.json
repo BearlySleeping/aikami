@@ -1,0 +1,114 @@
+{
+  "id": "whispering-caves",
+  "name": "Whispering Caves",
+  "version": "1.0.0",
+  "updatedAt": "2026-07-20T00:00:00.000Z",
+  "description": "Deep beneath the foothills, an ancient network of caves hums with crystalline energy. A reclusive hermit warns of stirring shadows, and a forgotten altar holds the key to the caves' whispered secrets.",
+  "startingMapId": "whispering_caves",
+  "maps": {
+    "whispering_caves": {
+      "file": "maps/whispering_caves.json",
+      "name": "Whispering Caves",
+      "defaultSpawnId": "cave_entrance",
+      "defaultX": 224,
+      "defaultY": 416
+    }
+  },
+  "npcs": {
+    "cave_hermit": {
+      "name": "Orin the Hermit",
+      "defaultDialogueKey": "orin_greeting",
+      "appearanceLayers": [1, 3, 7, 14],
+      "isVendor": true,
+      "vendorInventory": "crystal_shard,cave_map"
+    },
+    "cave_shade": {
+      "name": "Whispering Shade",
+      "defaultDialogueKey": "shade_hiss",
+      "appearanceLayers": [8, 9, 11, 13],
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 12,
+        "armorClass": 11,
+        "attackBonus": 3,
+        "damage": "1d4+1",
+        "xpValue": 25
+      }
+    }
+  },
+  "items": {
+    "crystal_shard": {
+      "name": "Glowing Crystal Shard",
+      "type": "misc",
+      "description": "A warm, faintly humming crystal shard. It pulses with a soft blue light.",
+      "sellPrice": 15
+    },
+    "cave_map": {
+      "name": "Faded Cave Map",
+      "type": "misc",
+      "description": "A crumbling parchment marked with Orin's annotations of the cave network.",
+      "sellPrice": 5
+    },
+    "shadow_essence": {
+      "name": "Shadow Essence",
+      "type": "misc",
+      "description": "A wisp of cold darkness left behind by a defeated shade.",
+      "sellPrice": 20
+    }
+  },
+  "dialogues": {
+    "orin_greeting": "Ah, another wanderer drawn by the whispers. I am Orin — I've studied these caves for decades. The crystals are growing restless, and something ancient stirs in the depths. If you're brave enough to help, I may have supplies.",
+    "shade_hiss": "SSssss... the light... it BURNSSS... leave this place, surface-dweller, or be CONSUMED.",
+    "orin_quest_start": "The altar at the heart of this cavern once held back the darkness. Now the shadows leak through — I've seen them, wisps of cold malice. Bring me three shadow essences from the shades that roam these tunnels, and I may be able to reinforce the ward.",
+    "orin_quest_complete": "Three essences! You've done it. With these, I can re-weave the containment glyph. The caves will sleep peacefully for another century. You have my gratitude — and a few items from my stores.",
+    "orin_quest_incomplete": "Not yet — the shades still roam. Three essences, that's what I need. Be careful — they drain warmth from the living."
+  },
+  "quests": {
+    "whispers_of_darkness": {
+      "id": "whispers_of_darkness",
+      "name": "Whispers of Darkness",
+      "description": "Orin the Hermit needs three shadow essences from the shades haunting the caves to reinforce the ancient ward.",
+      "offerDialogueKey": "orin_quest_start",
+      "progressDialogueKey": "orin_quest_incomplete",
+      "objectives": [
+        {
+          "text": "Collect 3 Shadow Essences from Whispering Shades",
+          "completeOnItemPickup": "shadow_essence",
+          "requiredCount": 3,
+          "maxCount": 3
+        }
+      ],
+      "rewards": [
+        { "type": "item", "itemId": "crystal_shard", "amount": 2 },
+        { "type": "xp", "amount": 50 }
+      ],
+      "endings": {
+        "ward_restored": {
+          "title": "Ward Restored",
+          "narration": "Orin channels the shadow essences into the ancient altar, sealing the cracks in the containment glyph. The whispers fade, and the caves grow still and silent once more.",
+          "reactionDialogueKey": "orin_quest_complete",
+          "worldStateFlag": "whispering_caves.ward_restored"
+        }
+      }
+    }
+  },
+  "encounters": {
+    "shade_ambush": {
+      "id": "shade_ambush",
+      "mapId": "whispering_caves",
+      "name": "Shade Ambush",
+      "enemyNpcIds": ["cave_shade", "cave_shade"],
+      "allowNonCombatResolution": false,
+      "startDialogueKey": "shade_hiss",
+      "victoryDialogueKey": "orin_quest_incomplete",
+      "loot": [{ "itemId": "shadow_essence", "quantity": 1, "dropChance": 0.8 }]
+    }
+  },
+  "credits": {
+    "design": ["Aikami Content Team"],
+    "writing": ["Aikami Content Team"],
+    "art": ["Debug Tileset (placeholder)"],
+    "music": [],
+    "thanks": []
+  }
+}

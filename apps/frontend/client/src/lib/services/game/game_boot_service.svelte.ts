@@ -479,6 +479,11 @@ class GameBootService
     const t0 = performance.now();
 
     const { loadContentPack, clearContentPackCache } = await import('@aikami/frontend/engine');
+
+    // AC-5: Clear stale pack cache before loading a new pack to prevent
+    // asset/state leakage when switching between campaigns with different packs.
+    clearContentPackCache();
+
     const pack = await loadContentPack({ packId: input.contentPackId });
     this._clearContentPackCache = clearContentPackCache;
 

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "emberwatch",
+      "name": "Emberwatch: The Fading Ward",
+      "version": "2.1.0",
+      "updatedAt": "2026-07-13T00:00:00.000Z",
+      "description": "The wardstone that protects Emberwatch Village is failing. Strange creatures prowl the Old Road, and the ruined shrine holds secrets that could save the village — or doom it forever."
+    },
+    {
+      "id": "whispering-caves",
+      "name": "Whispering Caves",
+      "version": "1.0.0",
+      "updatedAt": "2026-07-20T00:00:00.000Z",
+      "description": "Deep beneath the foothills, an ancient network of caves hums with crystalline energy. A reclusive hermit warns of stirring shadows, and a forgotten altar holds the key to the caves' whispered secrets."
+    }
+  ]
+}

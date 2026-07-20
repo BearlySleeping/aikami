@@ -33,6 +33,8 @@ export type CampaignServiceInterface = BaseFrontendClassInterface & {
   startNewCampaign(options?: {
     personaId?: string;
     capabilityProfile?: CapabilityProfile;
+    /** Content pack ID for this campaign. Defaults to 'emberwatch'. */
+    contentPackId?: string;
   }): Promise<Campaign>;
   /** Loads an existing campaign (idle/creating/failed → loading → playing). */
   loadCampaign(options: { campaignId: string }): Promise<Campaign>;
@@ -134,6 +136,7 @@ class CampaignService
   async startNewCampaign(options?: {
     personaId?: string;
     capabilityProfile?: CapabilityProfile;
+    contentPackId?: string;
   }): Promise<Campaign> {
     if (this.isBusy) {
       throw new Error('Campaign operation already in progress');
@@ -164,7 +167,7 @@ class CampaignService
         name: 'New Adventure',
         state,
         personaId: options?.personaId,
-        contentPackId: 'emberwatch',
+        contentPackId: options?.contentPackId ?? 'emberwatch',
         seed: generateSeed(),
         createdAt: now,
         updatedAt: now,
