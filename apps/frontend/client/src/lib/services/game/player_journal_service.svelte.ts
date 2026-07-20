@@ -188,25 +188,34 @@ class PlayerJournalService
     const now = new Date().toISOString();
     const db = await getLocalDatabase();
 
-    // Update only the provided fields
+    // Build atomic UPDATE with only supplied fields
+    const setClauses: string[] = [];
+    const args: (string | number)[] = [];
+
     if (trimmedTitle !== undefined) {
-      await db.execute({
-        sql: 'UPDATE journal_entries SET title = ?, updated_at = ? WHERE id = ?',
-        args: [trimmedTitle, now, id],
-      });
+      setClauses.push('title = ?');
+      args.push(trimmedTitle);
     }
     if (trimmedContent !== undefined) {
-      await db.execute({
-        sql: 'UPDATE journal_entries SET content = ?, updated_at = ? WHERE id = ?',
-        args: [trimmedContent, now, id],
-      });
+      setClauses.push('content = ?');
+      args.push(trimmedContent);
     }
     if (tags !== undefined) {
-      await db.execute({
-        sql: 'UPDATE journal_entries SET tags_json = ?, updated_at = ? WHERE id = ?',
-        args: [JSON.stringify(tags), now, id],
-      });
+      setClauses.push('tags_json = ?');
+      args.push(JSON.stringify(tags));
     }
+
+    // Always update updated_at
+    setClauses.push('updated_at = ?');
+    args.push(now);
+
+    // Add id for WHERE clause
+    args.push(id);
+
+    await db.execute({
+      sql: `UPDATE journal_entries SET ${setClauses.join(', ')} WHERE id = ?`,
+      args,
+    });
 
     // Update in-memory
     const idx = this.entries.findIndex((e) => e.id === id);

@@ -5,13 +5,20 @@
 //
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
+import { onMount } from 'svelte';
 import type { PlayerJournalViewModelInterface } from './player_journal_view_model.svelte';
 
 type Props = {
   viewModel: PlayerJournalViewModelInterface;
+  campaignId: string;
+  sessionNumber: number;
 };
 
-const { viewModel }: Props = $props();
+const { viewModel, campaignId, sessionNumber }: Props = $props();
+
+onMount(() => {
+  viewModel.loadEntries({ campaignId });
+});
 </script>
 
 <div class="flex min-h-screen flex-col bg-base-200">
@@ -24,7 +31,7 @@ const { viewModel }: Props = $props();
     <button
       type="button"
       class="btn btn-primary btn-sm"
-      onclick={() => viewModel.openNewEntry({ campaignId: '', sessionNumber: 0 })}
+      onclick={() => viewModel.openNewEntry({ campaignId, sessionNumber })}
     >
       + New Entry
     </button>

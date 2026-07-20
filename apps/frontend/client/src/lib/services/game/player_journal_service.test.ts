@@ -152,14 +152,46 @@ describe('PlayerJournalService', () => {
     expect(service.entries.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('should serialize and hydrate', () => {
-    // Serialization is tested via SerializableService integration
+  test('should serialize and hydrate', async () => {
+    // Create some entries to test round-trip
+    const campaignId = `test-serialize-${crypto.randomUUID()}`;
+    await service.createEntry({
+      campaignId,
+      sessionNumber: 1,
+      title: 'Test Entry 1',
+      content: 'First test entry.',
+      tags: ['test', 'serialize'],
+    });
+    await service.createEntry({
+      campaignId,
+      sessionNumber: 2,
+      title: 'Test Entry 2',
+      content: 'Second test entry.',
+    });
+
     const journalService = service as unknown as {
       serialize(): { entries: unknown[] };
       hydrate(data: { entries: unknown[] }): void;
     };
+
+    // Serialize
     const snapshot = journalService.serialize();
     expect(snapshot).toHaveProperty('entries');
     expect(Array.isArray(snapshot.entries)).toBe(true);
+    expect(snapshot.entries.length).toBe(2);
+
+    // Store original entries
+    const originalEntries = [...service.entries];
+
+    // Clear and hydrate
+    service.reset();
+    expect(service.entries.length).toBe(0);
+
+    journalService.hydrate(snapshot);
+
+    // Verify restored entries match original
+    expect(service.entries.length).toBe(originalEntries.length);
+    expect(service.entries[0].title).toBe(originalEntries[0].title);
+    expect(service.entries[1].title).toBe(originalEntries[1].title);
   });
 });

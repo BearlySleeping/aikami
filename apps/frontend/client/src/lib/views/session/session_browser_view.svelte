@@ -174,6 +174,12 @@ const { viewModel }: Props = $props();
           modified. A new session will start with the checkpoint's game state.
         </p>
 
+        {#if viewModel.forkError}
+          <div class="mt-3 text-xs text-error">
+            {viewModel.forkError}
+          </div>
+        {/if}
+
         <div class="mt-6 flex gap-3">
           <button
             type="button"

@@ -32,6 +32,8 @@ export type EndSessionViewModelInterface = BaseViewModelInterface & {
   readonly editedSynopsis: string;
   /** Whether saving the edited recap is in progress (C-344). */
   readonly isSavingRecap: boolean;
+  /** Save error message, or null (C-344). */
+  readonly saveError: string | null;
 
   /** Confirms the end session and triggers summarization. */
   confirmEndSession(): Promise<void>;
@@ -57,6 +59,7 @@ class EndSessionViewModel
   isStartingNew = $state(false);
   isSavingRecap = $state(false);
   editedSynopsis = $state('');
+  saveError = $state<string | null>(null);
 
   get isSummarizing(): boolean {
     return this.phase === 'summarizing';
@@ -115,8 +118,9 @@ class EndSessionViewModel
 
   /** @inheritdoc */
   enterEditMode(): void {
-    // Initialize editable text with the current synopsis
-    this.editedSynopsis = this.summarySynopsis ?? '';
+    // Initialize editable text with saved edit if available, otherwise current synopsis
+    this.editedSynopsis =
+      sessionService.activeSession?.editedSynopsis ?? this.summarySynopsis ?? '';
     this.phase = 'editing';
   }
 
@@ -139,6 +143,7 @@ class EndSessionViewModel
       return;
     }
 
+    this.saveError = null;
     this.isSavingRecap = true;
 
     try {
@@ -149,6 +154,7 @@ class EndSessionViewModel
       this.phase = 'preview';
       this.debug('saveRecap:complete');
     } catch (error) {
+      this.saveError = String(error);
       this.debug('saveRecap:failed', { error: String(error) });
     } finally {
       this.isSavingRecap = false;

@@ -168,6 +168,12 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
         ></textarea>
       </div>
 
+      {#if viewModel.saveError}
+        <div class="mt-3 text-xs text-error">
+          {viewModel.saveError}
+        </div>
+      {/if}
+
       <div class="mt-4 flex gap-3">
         <button type="button" class="btn btn-ghost flex-1" onclick={() => viewModel.cancelEdit()}>
           Cancel

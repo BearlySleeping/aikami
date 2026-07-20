@@ -195,17 +195,58 @@ describe('SessionService', () => {
 
   test('should compact sessions when threshold reached', async () => {
     const gameId = `test-compact-${crypto.randomUUID()}`;
-    const campaignId = 'test-campaign-compact';
+    const campaignId = `test-campaign-compact-${crypto.randomUUID()}`;
 
-    // Create 5+ sessions
-    for (let i = 0; i < 6; i++) {
-      await service.startSession({ gameId });
-      await service.endSession({ playtimeMinutes: 10, campaignId });
+    const { chatService } = await import('../chat/chat.svelte');
+    const { sessionSummaryService } = await import('../gm/session_summary_service.svelte');
+
+    // Mock sessionSummaryService.generateSummary to return a summary
+    const originalGenerateSummary = sessionSummaryService.generateSummary;
+    sessionSummaryService.generateSummary = async () => ({
+      id: crypto.randomUUID(),
+      synopsis: 'Test session summary for compaction.',
+      keyEvents: ['Event 1', 'Event 2'],
+      questsStarted: [],
+      questsCompleted: [],
+      partyComposition: [],
+    });
+
+    // Seed enough chat messages to trigger summary generation
+    for (let i = 0; i < 15; i++) {
+      chatService.addMessage({
+        id: crypto.randomUUID(),
+        text: `Test message ${i}`,
+        sender: 'user',
+        timestamp: new Date(),
+      });
     }
 
-    // Compaction runs on the 5th+ session end
-    // Verify sessions loaded
-    await service.loadSessions({ gameId });
-    expect(service.sessions.length).toBe(6);
+    try {
+      // Create 5+ sessions with summaries
+      for (let i = 0; i < 6; i++) {
+        await service.startSession({ gameId, campaignId });
+        await service.endSession({ playtimeMinutes: 10, campaignId });
+      }
+
+      // Wait for async compaction work
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Verify compacted_summaries row exists
+      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const db = await getLocalDatabase();
+      const result = await db.query({
+        sql: 'SELECT id FROM compacted_summaries WHERE campaign_id = ?',
+        args: [campaignId],
+      });
+
+      expect(result.rows.length).toBeGreaterThan(0);
+
+      // Verify sessions loaded
+      await service.loadSessions({ gameId });
+      expect(service.sessions.length).toBe(6);
+    } finally {
+      // Restore original
+      sessionSummaryService.generateSummary = originalGenerateSummary;
+    }
   });
 });

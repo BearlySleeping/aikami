@@ -9,6 +9,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
+  dialogService,
 } from '@aikami/frontend/services';
 import { playerJournalService } from '$services/game/player_journal_service.svelte';
 import type { PlayerJournalEntry } from '$types/player_journal_entry';
@@ -203,7 +204,19 @@ class PlayerJournalViewModel
 
   /** @inheritdoc */
   async deleteEntry(options: { id: string }): Promise<void> {
-    await playerJournalService.deleteEntry({ id: options.id });
+    const confirmed = await dialogService.open({
+      type: 'confirm',
+      props: {
+        title: 'Delete Entry?',
+        message: 'This journal entry will be permanently deleted. This action cannot be undone.',
+        agreeLabel: 'Delete',
+        disagreeLabel: 'Cancel',
+      },
+    });
+
+    if (confirmed) {
+      await playerJournalService.deleteEntry({ id: options.id });
+    }
   }
 
   /** Clears validation error when fields change. */

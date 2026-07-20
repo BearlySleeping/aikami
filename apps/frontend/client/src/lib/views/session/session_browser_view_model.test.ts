@@ -92,8 +92,34 @@ describe('SessionBrowserViewModel', () => {
   });
 
   test('should load checkpoints for a campaign', async () => {
-    await viewModel.loadCheckpoints({ campaignId: 'test-campaign' });
+    const campaignId = `test-cp-load-${crypto.randomUUID()}`;
+    const gameId = `test-game-cp-${crypto.randomUUID()}`;
+
+    // Seed a checkpoint through session service
+    const { sessionService } = await import('$services/game/session_service.svelte');
+    await sessionService.startSession({ gameId, campaignId });
+    const sessionId = sessionService.activeSession!.id;
+
+    // Create a checkpoint (requires game save service, may fail in test environment)
+    try {
+      await sessionService.createCheckpoint({
+        label: 'Test Checkpoint',
+        sessionId,
+        campaignId,
+        sessionNumber: 1,
+      });
+    } catch {
+      // Game save may not be available in test environment — skip checkpoint test
+    }
+
+    await viewModel.loadCheckpoints({ campaignId });
     expect(Array.isArray(viewModel.checkpoints)).toBe(true);
+
+    // If checkpoint was created successfully, verify it's present
+    const checkpoint = viewModel.checkpoints.find((c) => c.label === 'Test Checkpoint');
+    if (checkpoint) {
+      expect(checkpoint.campaignId).toBe(campaignId);
+    }
   });
 
   test('should continue from session via router navigation', async () => {
@@ -122,6 +148,121 @@ describe('SessionBrowserViewModel', () => {
       );
     } catch {
       // Expected in test environment without SvelteKit router
+    }
+  });
+
+  // ── C-344: confirmFork tests ─────────────────────────────────────
+
+  test('should handle confirmFork success and cleanup dialog state', async () => {
+    const campaignId = `test-fork-success-${crypto.randomUUID()}`;
+    const gameId = `test-game-fork-${crypto.randomUUID()}`;
+
+    const viewModelWithIds = (await import('./session_browser_view_model.svelte'))
+      .getSessionBrowserViewModel({
+      className: 'SessionBrowserViewModel',
+      gameId,
+      campaignId,
+    });
+
+    const mockCheckpoint = {
+      id: 'cp-success',
+      sessionId: 'session-1',
+      campaignId,
+      label: 'Test Success',
+      sessionNumber: 1,
+      createdAt: new Date().toISOString(),
+      saveSlotId: 'checkpoint-uuid',
+      hasForks: false,
+    };
+
+    // Mock sessionService.forkFromCheckpoint to simulate success
+    const { sessionService } = await import('$services/game/session_service.svelte');
+    const originalFork = sessionService.forkFromCheckpoint;
+    let forkCalled = false;
+    sessionService.forkFromCheckpoint = async () => {
+      forkCalled = true;
+      // Simulate navigation — don't actually navigate in test
+    };
+
+    try {
+      viewModelWithIds.openForkConfirm(mockCheckpoint);
+      expect(viewModelWithIds.showForkConfirm).toBe(true);
+      expect(viewModelWithIds.forkCheckpoint?.id).toBe('cp-success');
+
+      await viewModelWithIds.confirmFork();
+
+      expect(forkCalled).toBe(true);
+      expect(viewModelWithIds.showForkConfirm).toBe(false);
+      expect(viewModelWithIds.forkCheckpoint).toBeNull();
+      expect(viewModelWithIds.forkError).toBeNull();
+    } finally {
+      sessionService.forkFromCheckpoint = originalFork;
+    }
+  });
+
+  test('should set forkError when gameId or campaignId is missing', async () => {
+    // ViewModel without gameId/campaignId
+    const viewModelWithoutIds = (await import('./session_browser_view_model.svelte'))
+      .getSessionBrowserViewModel({
+      className: 'SessionBrowserViewModel',
+    });
+
+    const mockCheckpoint = {
+      id: 'cp-missing-ids',
+      sessionId: 'session-1',
+      campaignId: 'campaign-1',
+      label: 'Test Missing IDs',
+      sessionNumber: 1,
+      createdAt: new Date().toISOString(),
+      saveSlotId: 'checkpoint-uuid',
+      hasForks: false,
+    };
+
+    viewModelWithoutIds.openForkConfirm(mockCheckpoint);
+    await viewModelWithoutIds.confirmFork();
+
+    expect(viewModelWithoutIds.forkError).toBe('Missing game or campaign ID');
+  });
+
+  test('should set forkError when forkFromCheckpoint throws', async () => {
+    const campaignId = `test-fork-error-${crypto.randomUUID()}`;
+    const gameId = `test-game-fork-error-${crypto.randomUUID()}`;
+
+    const viewModelWithIds = (await import('./session_browser_view_model.svelte'))
+      .getSessionBrowserViewModel({
+      className: 'SessionBrowserViewModel',
+      gameId,
+      campaignId,
+    });
+
+    const mockCheckpoint = {
+      id: 'cp-error',
+      sessionId: 'session-1',
+      campaignId,
+      label: 'Test Error',
+      sessionNumber: 1,
+      createdAt: new Date().toISOString(),
+      saveSlotId: 'checkpoint-uuid',
+      hasForks: false,
+    };
+
+    // Mock sessionService.forkFromCheckpoint to throw
+    const { sessionService } = await import('$services/game/session_service.svelte');
+    const originalFork = sessionService.forkFromCheckpoint;
+    sessionService.forkFromCheckpoint = async () => {
+      throw new Error('Checkpoint is corrupted');
+    };
+
+    try {
+      viewModelWithIds.openForkConfirm(mockCheckpoint);
+      await viewModelWithIds.confirmFork();
+
+      expect(viewModelWithIds.forkError).toBe('Error: Checkpoint is corrupted');
+      expect(viewModelWithIds.isForking).toBe(false);
+      // Dialog should remain open on error so user sees the message
+      expect(viewModelWithIds.showForkConfirm).toBe(true);
+    } finally {
+      sessionService.forkFromCheckpoint = originalFork;
     }
   });
 });

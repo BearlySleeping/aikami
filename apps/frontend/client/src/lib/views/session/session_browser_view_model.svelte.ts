@@ -33,6 +33,8 @@ export type SessionBrowserViewModelInterface = BaseViewModelInterface & {
   readonly showForkConfirm: boolean;
   /** The checkpoint being forked. */
   readonly forkCheckpoint: SessionCheckpoint | null;
+  /** Fork error message, or null (C-344). */
+  readonly forkError: string | null;
 
   /** Loads sessions for the given game ID. */
   loadSessions(options: { gameId: string }): Promise<void>;
@@ -69,6 +71,7 @@ class SessionBrowserViewModel
   isForking = $state(false);
   showForkConfirm = $state(false);
   forkCheckpoint = $state<SessionCheckpoint | null>(null);
+  forkError = $state<string | null>(null);
 
   get sessions(): GameSession[] {
     return sessionService.sessions;
@@ -141,10 +144,12 @@ class SessionBrowserViewModel
     const campaignId = this._options.campaignId;
 
     if (!gameId || !campaignId) {
+      this.forkError = 'Missing game or campaign ID';
       this.debug('confirmFork:missing-ids');
       return;
     }
 
+    this.forkError = null;
     this.isForking = true;
 
     try {
@@ -155,7 +160,9 @@ class SessionBrowserViewModel
       });
       this.showForkConfirm = false;
       this.forkCheckpoint = null;
+      this.forkError = null;
     } catch (error) {
+      this.forkError = String(error);
       this.debug('confirmFork:failed', { error: String(error) });
     } finally {
       this.isForking = false;

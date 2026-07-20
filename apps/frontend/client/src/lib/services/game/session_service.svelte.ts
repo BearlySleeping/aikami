@@ -479,6 +479,7 @@ class SessionService
   }): Promise<SessionCheckpoint> {
     const { label, description, sessionId, campaignId, sessionNumber } = options;
 
+    const trimmedLabel = label.trim();
     const checkpointId = crypto.randomUUID();
     const saveSlotId = `checkpoint-${checkpointId}`;
     const now = new Date().toISOString();
@@ -492,7 +493,7 @@ class SessionService
         checkpointId,
         sessionId,
         campaignId,
-        label,
+        trimmedLabel,
         description ?? null,
         sessionNumber,
         now,
@@ -519,7 +520,7 @@ class SessionService
       id: checkpointId,
       sessionId,
       campaignId,
-      label: label.trim(),
+      label: trimmedLabel,
       description,
       sessionNumber,
       createdAt: now,
@@ -528,7 +529,7 @@ class SessionService
     };
 
     this.checkpoints = [checkpoint, ...this.checkpoints];
-    this.debug('checkpoint:created', { id: checkpointId, label });
+    this.debug('checkpoint:created', { id: checkpointId, label: trimmedLabel });
 
     return checkpoint;
   }
@@ -622,8 +623,8 @@ class SessionService
     }
 
     // Start a new session with the checkpoint's state
-    // Copy the checkpoint save to a new save slot for the new session
-    const newSlotId = 'manual-1';
+    // Copy the checkpoint save to a dedicated fork slot to avoid overwriting manual saves
+    const newSlotId = `fork-${crypto.randomUUID()}`;
     const envelope = JSON.parse(rawPayload) as Record<string, unknown>;
 
     // Preserve the envelope data for the forked session
