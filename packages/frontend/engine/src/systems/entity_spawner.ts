@@ -15,6 +15,7 @@ import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
+import { InteractableState } from '../components/interactable_state.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
@@ -61,6 +62,22 @@ export type SpawnEntitiesOptions = {
    * Contract: C-331 AC-2 — collected-pickup respawn suppression
    */
   collectedPickups?: string[];
+  /**
+   * Per-spawnId interactable state for persistence across map revisits.
+   * Maps spawnId → { isOpen?, isLocked?, isLooted?, isToggled?, isTriggered? }.
+   *
+   * Contract: C-342 — interactable state persistence
+   */
+  interactableStates?: Record<
+    string,
+    {
+      isOpen?: boolean;
+      isLocked?: boolean;
+      isLooted?: boolean;
+      isToggled?: boolean;
+      isTriggered?: boolean;
+    }
+  >;
 };
 
 // ---------------------------------------------------------------------------
@@ -103,10 +120,11 @@ const NPC_APPEARANCE_LAYERS: readonly number[] = [10, 11, 14, 12, 15, 13];
  * @returns Array of results with entity IDs and metadata.
  */
 export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
-  const { world, spawnPoints, defeatedEnemies, collectedPickups } = options;
+  const { world, spawnPoints, defeatedEnemies, collectedPickups, interactableStates } = options;
   const results: SpawnResult[] = [];
   const defeatedSet = new Set(defeatedEnemies ?? []);
   const collectedSet = new Set(collectedPickups ?? []);
+  const stateMap = interactableStates ?? {};
 
   for (const spawnPoint of spawnPoints) {
     // Skip enemies that have already been defeated (C-147)
@@ -117,6 +135,24 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     // Skip item pickups that have already been collected (C-331)
     if (spawnPoint.type === 'item' && collectedSet.has(spawnPoint.id)) {
       continue;
+    }
+
+    // Skip looted chests and containers if they don't respawn (C-342)
+    const savedState = stateMap[spawnPoint.id];
+    if ((spawnPoint.type === 'chest' || spawnPoint.type === 'container') && savedState?.isLooted) {
+      // Check if respawns — stored in properties
+      const respawns = _getBoolProperty(spawnPoint.properties, 'respawns', false);
+      if (!respawns) {
+        continue;
+      }
+    }
+
+    // Skip triggered traps that don't re-arm
+    if (spawnPoint.type === 'trap' && savedState?.isTriggered) {
+      const reArms = _getBoolProperty(spawnPoint.properties, 'reArms', false);
+      if (!reArms) {
+        continue;
+      }
     }
 
     if (spawnPoint.type === 'npc') {
@@ -131,6 +167,17 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     } else if (spawnPoint.type === 'enemy') {
       const eid = _spawnEnemy(world, spawnPoint);
       results.push({ type: 'enemy', eid, spawnPoint });
+    } else if (
+      spawnPoint.type === 'door' ||
+      spawnPoint.type === 'chest' ||
+      spawnPoint.type === 'lever' ||
+      spawnPoint.type === 'pressure_plate' ||
+      spawnPoint.type === 'container' ||
+      spawnPoint.type === 'readable' ||
+      spawnPoint.type === 'trap'
+    ) {
+      const eid = _spawnInteractable(world, spawnPoint, savedState);
+      results.push({ type: spawnPoint.type, eid, spawnPoint });
     }
     // Unknown types are silently skipped — they carry no spawn logic
   }
@@ -488,6 +535,112 @@ const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
       visible: 1,
     }),
   );
+
+  return eid;
+};
+
+/**
+ * Creates an interactable entity (door, chest, lever, pressure_plate, container,
+ * readable, trap) from a spawn point. Uses the saved state for persistence.
+ *
+ * Contract: C-342
+ */
+const _spawnInteractable = (
+  world: World,
+  spawnPoint: SpawnPoint,
+  savedState?: {
+    isOpen?: boolean;
+    isLocked?: boolean;
+    isLooted?: boolean;
+    isToggled?: boolean;
+    isTriggered?: boolean;
+  },
+): number => {
+  const eid = addEntity(world);
+
+  const spawnType = spawnPoint.type;
+
+  addComponent(world, eid, Position);
+  addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
+
+  addComponent(world, eid, InteractableState);
+
+  // Resolve AssetAlias and set default state based on type
+  let assetIndex: number;
+  const isOpen = savedState?.isOpen ?? false;
+  const isLocked =
+    savedState?.isLocked ?? _getBoolProperty(spawnPoint.properties, 'lockedByDefault', false);
+  const isLooted = savedState?.isLooted ?? false;
+  const isToggled =
+    savedState?.isToggled ?? _getBoolProperty(spawnPoint.properties, 'startsToggled', false);
+  const isTriggered = savedState?.isTriggered ?? false;
+  const lootTableKey = _getStringProperty(spawnPoint.properties, 'lootTableKey', '');
+
+  switch (spawnType) {
+    case 'door':
+      assetIndex = isOpen ? AssetAlias.PROP_DOOR_OPEN : AssetAlias.PROP_DOOR_CLOSED;
+      break;
+    case 'chest':
+      assetIndex = AssetAlias.PROP_CHEST;
+      break;
+    case 'lever':
+      assetIndex = isToggled ? AssetAlias.PROP_LEVER_ON : AssetAlias.PROP_LEVER_OFF;
+      break;
+    case 'pressure_plate':
+      assetIndex = AssetAlias.PROP_PRESSURE_PLATE;
+      break;
+    case 'container':
+      assetIndex = AssetAlias.PROP_CONTAINER;
+      break;
+    case 'readable':
+      assetIndex = AssetAlias.PROP_READABLE;
+      break;
+    case 'trap':
+      assetIndex = AssetAlias.PROP_TRAP;
+      break;
+    default:
+      assetIndex = AssetAlias.PLACEHOLDER;
+      break;
+  }
+
+  addComponent(world, eid, Visual);
+  addComponent(
+    world,
+    eid,
+    set(Visual, {
+      assetIndex,
+      tint: PROP_TINT,
+      visible: 1,
+    }),
+  );
+
+  // Build Interactable data with puzzle fields
+  const requiredItemId = _getStringProperty(spawnPoint.properties, 'requiredItemId', '');
+  const activatedBySpawnIds = _getStringProperty(spawnPoint.properties, 'activatedBySpawnIds', '');
+  const textDialogueKey = _getStringProperty(spawnPoint.properties, 'textDialogueKey', '');
+  const damageDice = _getStringProperty(spawnPoint.properties, 'damageDice', '1d6');
+
+  addComponent(world, eid, Interactable);
+  addComponent(
+    world,
+    eid,
+    set(Interactable, {
+      type: spawnType,
+      itemId: spawnType === 'readable' ? textDialogueKey : spawnType === 'trap' ? '' : lootTableKey,
+      quantity: 0,
+      spawnId: spawnPoint.id,
+      requiredItemId: spawnType === 'trap' ? damageDice : requiredItemId,
+      activatesOnSpawnIds: activatedBySpawnIds,
+    }),
+  );
+
+  // Set saved state on InteractableState
+  InteractableState.isOpen[eid] = isOpen ? 1 : 0;
+  InteractableState.isLocked[eid] = isLocked ? 1 : 0;
+  InteractableState.isLooted[eid] = isLooted ? 1 : 0;
+  InteractableState.isToggled[eid] = isToggled ? 1 : 0;
+  InteractableState.isTriggered[eid] = isTriggered ? 1 : 0;
+  InteractableState.lootTableKey[eid] = 0; // Resolved by content pack loader
 
   return eid;
 };

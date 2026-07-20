@@ -1393,6 +1393,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
+    interactableStates?: Record<
+      string,
+      {
+        isOpen?: boolean;
+        isLocked?: boolean;
+        isLooted?: boolean;
+        isToggled?: boolean;
+        isTriggered?: boolean;
+      }
+    >;
     targetSpawnHash?: number;
     disableClamping?: boolean;
     /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
@@ -1404,6 +1414,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       targetY,
       defeatedEnemies,
       collectedPickups,
+      interactableStates,
       targetSpawnHash,
       disableClamping,
       waterGids,
@@ -1493,6 +1504,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         targetY,
         defeatedEnemies,
         collectedPickups,
+        interactableStates,
         targetSpawnHash,
         spawnPointEntities,
         disableClamping,
@@ -1539,6 +1551,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
+    interactableStates?: Record<
+      string,
+      {
+        isOpen?: boolean;
+        isLocked?: boolean;
+        isLooted?: boolean;
+        isToggled?: boolean;
+        isTriggered?: boolean;
+      }
+    >;
     targetSpawnHash?: number;
     spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
     disableClamping?: boolean;
@@ -1593,6 +1615,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         targetY: options.targetY,
         defeatedEnemies: options.defeatedEnemies,
         collectedPickups: options.collectedPickups,
+        interactableStates: options.interactableStates,
         targetSpawnHash: options.targetSpawnHash,
         spawnPointEntities: options.spawnPointEntities,
         disableClamping: options.disableClamping,

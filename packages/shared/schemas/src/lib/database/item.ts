@@ -128,8 +128,25 @@ export const WorldPickupStateSchema = Type.Object(
     lootGrantedEncounters: Type.Array(Type.String(), {
       description: 'Encounter IDs with loot already granted',
     }),
+    /** Per-spawnId interactable state for persistence across map revisits (C-342). */
+    interactableStates: Type.Optional(
+      Type.Record(
+        Type.String(),
+        Type.Object(
+          {
+            isOpen: Type.Optional(Type.Boolean()),
+            isLocked: Type.Optional(Type.Boolean()),
+            isLooted: Type.Optional(Type.Boolean()),
+            isToggled: Type.Optional(Type.Boolean()),
+            isTriggered: Type.Optional(Type.Boolean()),
+          },
+          { additionalProperties: false },
+        ),
+        { description: 'Interactable state keyed by spawn ID' },
+      ),
+    ),
   },
-  { description: 'World pickup/loot persistence state (C-331)' },
+  { description: 'World pickup/loot persistence state (C-331, C-342)' },
 );
 
 export type WorldPickupState = Type.Static<typeof WorldPickupStateSchema>;
