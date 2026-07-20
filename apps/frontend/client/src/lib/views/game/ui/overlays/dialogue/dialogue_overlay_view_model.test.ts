@@ -44,6 +44,13 @@ const mockNpcDialogueService = {
 // ---------------------------------------------------------------------------
 
 mock.module('$services', () => ({
+  buildGameStateFacts: () => ['Location: Village of Oakvale', 'Time: Midday'],
+  combatService: {
+    lastCombatOptions: undefined,
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  },
   diceService: {
     rollD20: (_modifier: number) => ({ natural: 14, total: 14 }),
   },
@@ -61,6 +68,18 @@ mock.module('$services', () => ({
   },
   messageBranchStore: {
     swipeAlternative: mock(() => {}),
+    clearAlternatives: mock(() => {}),
+    addAlternative: mock(() => {}),
+    enrichMessage: mock(
+      (options: { id: string; text: string; sender: string; timestamp: Date }) => ({
+        ...options,
+        alternativeCount: 1,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+        showActions: true,
+      }),
+    ),
   },
   playerStateService: {
     characterSheetSummary: undefined,

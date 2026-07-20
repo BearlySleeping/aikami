@@ -256,6 +256,74 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Executes the recruit action for the current NPC (C-340 AC-1). */
   recruitCompanion(): void;
+
+  // ── C-343 Rich Chat UX Promotion ───────────────────────────────
+
+  /** Cancels the active AI streaming request. */
+  cancelStreaming(): void;
+
+  /** Regenerates the NPC response for the given message (stores current as alternative). */
+  regenerateResponse(messageId: string): void;
+
+  /** Replaces a user message's text and re-generates NPC responses from that point. */
+  editMessage(options: { messageId: string; newText: string }): void;
+
+  /** Deletes a user message and all subsequent messages. */
+  deleteMessage(messageId: string): void;
+
+  /** Creates a new conversation branch starting from the given message. */
+  createBranch(options: { parentMessageId: string; label?: string }): void;
+
+  /** Switches to an existing conversation branch. Pass null to restore the main (base) conversation. */
+  switchBranch(branchId: string | null): void;
+
+  /** Speaks the given NPC message text via TTS. */
+  speakMessage(text: string): void;
+
+  /** Whether a draft was restored from IndexedDB on open. */
+  readonly showDraftRecovery: boolean;
+
+  /** Dismisses the draft recovery badge. */
+  dismissDraftRecovery(): void;
+
+  /** Whether TTS is actively speaking (for pulse animation). */
+  readonly isTtsSpeaking: boolean;
+
+  /** Current address mode for dialogue prompt routing. */
+  readonly addressMode: import('$lib/types/dialogue').DialogueAddressMode;
+
+  /** Sets the address mode (Scene or GM only; Party deferred to C-340). */
+  setAddressMode(mode: import('$lib/types/dialogue').DialogueAddressMode): void;
+
+  /** Available conversation branches. */
+  readonly branches: readonly import('$lib/types/dialogue').ConversationBranch[];
+
+  /** The currently active branch ID, or null if on the main branch. */
+  readonly activeBranchId: string | null;
+
+  /** The ID of the message currently being edited, or null. */
+  readonly editingMessageId: string | null;
+
+  /** The current edit text for the message being edited inline. */
+  readonly editText: string;
+
+  /** Updates the edit text as the user types. */
+  setEditText(text: string): void;
+
+  /** Begins inline editing of a user message. */
+  startEdit(messageId: string): void;
+
+  /** Cancels inline editing of a user message. */
+  cancelEdit(): void;
+
+  /** The message ID pending deletion confirmation, or null. */
+  readonly pendingDeleteMessageId: string | null;
+
+  /** Confirms deletion of the pending message. */
+  confirmDelete(): void;
+
+  /** Cancels the pending deletion. */
+  cancelDelete(): void;
 };
 
 class DialogueOverlayViewModel
@@ -368,6 +436,38 @@ class DialogueOverlayViewModel
   /** Whether streaming TTS is enabled for this conversation. */
   streamingTtsEnabled = $state(false);
 
+  // ── C-343 Rich Chat UX Promotion ───────────────────────────────
+
+  /** Whether a draft was restored from IndexedDB on open. */
+  showDraftRecovery = $state(false);
+
+  /** Whether TTS is actively speaking (for pulse animation). */
+  isTtsSpeaking = $state(false);
+
+  /** Current address mode for dialogue prompt routing. */
+  addressMode = $state<import('$lib/types/dialogue').DialogueAddressMode>('scene');
+
+  /** Available conversation branches (in-memory). */
+  branches = $state<import('$lib/types/dialogue').ConversationBranch[]>([]);
+
+  /** The currently active branch ID, or null if on the main branch. */
+  activeBranchId = $state<string | null>(null);
+
+  /** Snapshot of the base (main) conversation — preserved for branch restore. */
+  private _baseMessages: DialogueMessage[] = [];
+
+  /** The ID of the message currently being edited, or null. */
+  editingMessageId = $state<string | null>(null);
+
+  /** The current edit text for the message being edited inline. */
+  editText = $state('');
+
+  /** The message ID pending deletion confirmation, or null. */
+  pendingDeleteMessageId = $state<string | null>(null);
+
+  /** The active AbortController for the current streaming request. */
+  private _activeAbortController: AbortController | null = null;
+
   private readonly _npcData: DialogueNpcData;
 
   private readonly _onEndChat: () => void;
@@ -396,6 +496,12 @@ class DialogueOverlayViewModel
       void draftPromise.then((draft: string) => {
         if (draft) {
           this.inputText = draft;
+          this.showDraftRecovery = true;
+          this.debug('draftRecovery', { chatId: this._npcData.npcId });
+          // Auto-dismiss the badge after 3 seconds
+          setTimeout(() => {
+            this.showDraftRecovery = false;
+          }, 3000);
         }
       });
     }
@@ -409,6 +515,10 @@ class DialogueOverlayViewModel
           id: crypto.randomUUID(),
           content: this._npcData.dialog,
           role: 'npc' as const,
+          alternativeCount: 0,
+          alternativeLabel: '',
+          canSwipeLeft: false,
+          canSwipeRight: false,
         },
       ];
     }
@@ -472,10 +582,15 @@ class DialogueOverlayViewModel
       this._ttsInitialized = true;
       this._chunker.onSentence(({ sentence }) => {
         if (this.streamingTtsEnabled) {
+          this.isTtsSpeaking = true;
           ttsService.synthesize({
             text: sentence,
             voice: ttsService.selectedVoice,
           });
+          // Reset TTS speaking indicator after a brief delay
+          setTimeout(() => {
+            this.isTtsSpeaking = false;
+          }, 2000);
         }
       });
 
@@ -733,6 +848,10 @@ class DialogueOverlayViewModel
       id: crypto.randomUUID(),
       content,
       role: 'player',
+      alternativeCount: 0,
+      alternativeLabel: '',
+      canSwipeLeft: false,
+      canSwipeRight: false,
     };
     this.messages = [...this.messages, playerMessage];
 
@@ -744,6 +863,17 @@ class DialogueOverlayViewModel
   endChat(): void {
     // Flush any remaining buffered text as a final sentence
     this._chunker.close();
+    // C-343: Clean up message alternatives and branches on close
+    for (const message of this.messages) {
+      messageBranchStore.clearAlternatives(message.id);
+    }
+    this.branches = [];
+    this.activeBranchId = null;
+    this.showDraftRecovery = false;
+    if (this._activeAbortController) {
+      this._activeAbortController.abort();
+      this._activeAbortController = null;
+    }
     this._onEndChat();
   }
 
@@ -809,7 +939,221 @@ class DialogueOverlayViewModel
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
       ttsService.stop();
+      this.isTtsSpeaking = false;
     }
+  }
+
+  // ── C-343: Rich Chat UX Promotion ────────────────────────────────────
+
+  /** @inheritdoc */
+  cancelStreaming(): void {
+    this.debug('cancelStreaming');
+    if (this._activeAbortController) {
+      this._activeAbortController.abort();
+      this._activeAbortController = null;
+    }
+  }
+
+  /** @inheritdoc */
+  speakMessage(text: string): void {
+    if (!text || ttsService.status !== 'ready') {
+      return;
+    }
+    void ttsService.synthesize({ text, voice: 'af_bella' });
+  }
+
+  /** @inheritdoc */
+  regenerateResponse(messageId: string): void {
+    this.debug('regenerateResponse', { messageId });
+
+    // Find the NPC message in the array
+    const messageIndex = this.messages.findIndex((m) => m.id === messageId);
+    if (messageIndex === -1 || this.messages[messageIndex].role !== 'npc') {
+      return;
+    }
+
+    const currentText = this.messages[messageIndex].content;
+
+    // Generate replacement message ID before removing the old message
+    // so the alternative is stored under the same key that _delegateGenerateResponse will use
+    const replacementMessageId = crypto.randomUUID();
+
+    // Remove this NPC message and everything after it, then regenerate
+    const truncatedMessages = this.messages.slice(0, messageIndex);
+    this.messages = truncatedMessages;
+
+    // Store the current text as an alternative under the replacement ID
+    messageBranchStore.addAlternative({
+      messageId: replacementMessageId,
+      currentText,
+      newText: '', // placeholder — will be replaced when new response arrives
+    });
+
+    // Trigger re-generation with the replacement ID
+    void this._delegateGenerateResponse({ npcMessageId: replacementMessageId });
+  }
+
+  /** @inheritdoc */
+  editMessage(options: { messageId: string; newText: string }): void {
+    const { messageId, newText } = options;
+    this.debug('editMessage', { messageId });
+
+    const messageIndex = this.messages.findIndex((m) => m.id === messageId);
+    if (messageIndex === -1 || this.messages[messageIndex].role !== 'player') {
+      return;
+    }
+
+    // Update the message text
+    this.messages = this.messages.map((m, i) =>
+      i === messageIndex ? { ...m, content: newText } : m,
+    );
+
+    // Remove all subsequent messages and regenerate
+    this.messages = this.messages.slice(0, messageIndex + 1);
+    this.editingMessageId = null;
+
+    // Restore input draft to the edited text
+    this.inputText = newText;
+
+    void this._delegateGenerateResponse();
+  }
+
+  /** @inheritdoc */
+  deleteMessage(messageId: string): void {
+    this.debug('deleteMessage', { messageId });
+    this.pendingDeleteMessageId = messageId;
+  }
+
+  /** @inheritdoc */
+  confirmDelete(): void {
+    const messageId = this.pendingDeleteMessageId;
+    if (!messageId) {
+      return;
+    }
+
+    const messageIndex = this.messages.findIndex((m) => m.id === messageId);
+    if (messageIndex === -1) {
+      this.pendingDeleteMessageId = null;
+      return;
+    }
+
+    // Remove this message and all subsequent messages
+    this.messages = this.messages.slice(0, messageIndex);
+
+    // If no messages remain, restore the NPC greeting
+    if (this.messages.length === 0 && this._npcData.dialog) {
+      this.messages = [
+        {
+          id: crypto.randomUUID(),
+          content: this._npcData.dialog,
+          role: 'npc' as const,
+          alternativeCount: 0,
+          alternativeLabel: '',
+          canSwipeLeft: false,
+          canSwipeRight: false,
+        },
+      ];
+    }
+
+    // Clear alternatives for the deleted message
+    messageBranchStore.clearAlternatives(messageId);
+    this.pendingDeleteMessageId = null;
+  }
+
+  /** @inheritdoc */
+  cancelDelete(): void {
+    this.pendingDeleteMessageId = null;
+  }
+
+  /** @inheritdoc */
+  createBranch(options: { parentMessageId: string; label?: string }): void {
+    const { parentMessageId, label } = options;
+    this.debug('createBranch', { parentMessageId });
+
+    // Cap at 5 branches
+    if (this.branches.length >= 5) {
+      this.showToast('Branch limit reached (max 5)');
+      return;
+    }
+
+    const branchId = crypto.randomUUID();
+    const branch: import('$lib/types/dialogue').ConversationBranch = {
+      branchId,
+      parentMessageId,
+      messages: [...this.messages],
+      createdAt: Date.now(),
+      label: label ?? `Branch ${this.branches.length + 1}`,
+    };
+
+    // Save base conversation snapshot before first branch so Main is restorable
+    if (this.activeBranchId === null && this._baseMessages.length === 0) {
+      this._baseMessages = [...this.messages];
+    }
+
+    this.branches = [...this.branches, branch];
+    this.activeBranchId = branchId;
+    this.showToast(`Branch "${branch.label ?? ''}" created!`);
+  }
+
+  /** @inheritdoc */
+  switchBranch(branchId: string | null): void {
+    this.debug('switchBranch', { branchId });
+
+    // Save current messages to the active branch before switching away
+    if (this.activeBranchId) {
+      this.branches = this.branches.map((b) =>
+        b.branchId === this.activeBranchId ? { ...b, messages: [...this.messages] } : b,
+      );
+    } else if (branchId !== null) {
+      // Switching from Main to a branch — save current messages as base
+      this._baseMessages = [...this.messages];
+    }
+
+    // Restore main branch (null target)
+    if (branchId === null) {
+      this.messages = this._baseMessages.length > 0 ? [...this._baseMessages] : this.messages;
+      this.activeBranchId = null;
+      return;
+    }
+
+    const branch = this.branches.find((b) => b.branchId === branchId);
+    if (!branch) {
+      return;
+    }
+
+    this.messages = [...branch.messages];
+    this.activeBranchId = branchId;
+  }
+
+  /** @inheritdoc */
+  dismissDraftRecovery(): void {
+    this.showDraftRecovery = false;
+  }
+
+  /** @inheritdoc */
+  setAddressMode(mode: import('$lib/types/dialogue').DialogueAddressMode): void {
+    this.debug('setAddressMode', { mode });
+    this.addressMode = mode;
+  }
+
+  /** @inheritdoc */
+  startEdit(messageId: string): void {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (message && message.role === 'player') {
+      this.editingMessageId = messageId;
+      this.editText = message.content;
+    }
+  }
+
+  /** @inheritdoc */
+  setEditText(text: string): void {
+    this.editText = text;
+  }
+
+  /** @inheritdoc */
+  cancelEdit(): void {
+    this.editingMessageId = null;
+    this.editText = '';
   }
 
   // ── Orchestrator delegation ──────────────────────────────────────────
@@ -819,22 +1163,27 @@ class DialogueOverlayViewModel
    * Handles both AI streaming and authored fallback paths via
    * NpcDialogueService.generateTurn.
    */
-  private async _delegateGenerateResponse(): Promise<void> {
+  private async _delegateGenerateResponse(options?: { npcMessageId?: string }): Promise<void> {
     this.isStreaming = true;
     this.streamError = null;
 
     // Create a placeholder NPC message that accumulates streamed tokens
-    const npcMessageId = crypto.randomUUID();
+    const npcMessageId = options?.npcMessageId ?? crypto.randomUUID();
     this.messages = [
       ...this.messages,
       {
         id: npcMessageId,
         content: '',
         role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
       },
     ];
 
     const controller = new AbortController();
+    this._activeAbortController = controller;
 
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
@@ -853,9 +1202,26 @@ class DialogueOverlayViewModel
       });
 
       // Update the NPC message with the full response
-      this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, content: turn.narrative } : m,
-      );
+      this.messages = this.messages.map((m) => {
+        if (m.id !== npcMessageId) {
+          return m;
+        }
+        // Update alternative tracking from messageBranchStore
+        const enriched = messageBranchStore.enrichMessage({
+          id: m.id,
+          text: turn.narrative,
+          sender: 'ai',
+          timestamp: new Date(),
+        });
+        return {
+          ...m,
+          content: turn.narrative,
+          alternativeCount: enriched.alternativeCount,
+          alternativeLabel: enriched.alternativeLabel,
+          canSwipeLeft: enriched.canSwipeLeft,
+          canSwipeRight: enriched.canSwipeRight,
+        };
+      });
 
       // Append the follow-up choices as actionable buttons
       if (turn.choices.length > 0) {
@@ -875,12 +1241,24 @@ class DialogueOverlayViewModel
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.streamError = message;
 
-      // Replace the empty NPC message with an error placeholder
-      this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, content: '*...*' } : m,
-      );
+      if (message.includes('abort') || message.includes('AbortError')) {
+        // C-343: Handle cancellation — replace placeholder with cancelled notice
+        this.messages = this.messages.map((m) =>
+          m.id === npcMessageId ? { ...m, content: '[Generation cancelled]' } : m,
+        );
+        // Restore the player's input from the last player message
+        const lastPlayer = [...this.messages].reverse().find((m) => m.role === 'player');
+        if (lastPlayer) {
+          this.inputText = lastPlayer.content;
+        }
+      } else {
+        this.streamError = message;
+        // Replace the empty NPC message with an error placeholder
+        this.messages = this.messages.map((m) =>
+          m.id === npcMessageId ? { ...m, content: '*...*' } : m,
+        );
+      }
     } finally {
       this.isStreaming = false;
     }
@@ -1100,7 +1478,18 @@ class DialogueOverlayViewModel
       const playerMessage = `\${this._npcData.npcName}, I attempt a ${skill} check. ${diceOutcome}`;
 
       const npcMessageId = crypto.randomUUID();
-      this.messages = [...this.messages, { id: npcMessageId, content: '', role: 'npc' as const }];
+      this.messages = [
+        ...this.messages,
+        {
+          id: npcMessageId,
+          content: '',
+          role: 'npc' as const,
+          alternativeCount: 0,
+          alternativeLabel: '',
+          canSwipeLeft: false,
+          canSwipeRight: false,
+        },
+      ];
 
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
         .filter((m) => m.id !== npcMessageId)
@@ -1154,6 +1543,10 @@ class DialogueOverlayViewModel
         id: crypto.randomUUID(),
         content,
         role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
       },
     ];
   }
