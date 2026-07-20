@@ -14,11 +14,12 @@ import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
+import PartyRosterView from './overlays/party_roster/party_roster_view.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
-import PartyRosterView from './overlays/party_roster/party_roster_view.svelte';
-import PartyHud from './party_hud.svelte';
+import TalkToPartyView from './overlays/talk_to_party/talk_to_party_view.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
+import PartyHud from './party_hud.svelte';
 import QuestTrackerView from './quest_tracker_view.svelte';
 
 type Props = {
@@ -162,6 +163,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
   {:else if viewModel.activeOverlay === 'PARTY_ROSTER' && viewModel.partyRosterViewModel}
     <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
+  {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
+    <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
   {/if}
 
   <TransitionOverlay {viewModel} />

@@ -120,9 +120,9 @@ const resolveDamage = (
   // Critical hits double the dice count
   const diceCount = command.isCritical ? count * 2 : count;
 
-  let naturalDamage = 0;
+  let _naturalDamage = 0;
   for (let i = 0; i < diceCount; i++) {
-    naturalDamage += rng.dice(sides);
+    _naturalDamage += rng.dice(sides);
   }
 
   // rollDamage only computes dice outcome; no event emitted here.

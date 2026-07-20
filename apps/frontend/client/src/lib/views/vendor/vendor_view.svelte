@@ -539,7 +539,12 @@ const _itemIcon = (itemId: string): string => {
                 </button>
               </div>
             </div>
-            <form method="dialog" class="modal-backdrop" onclick={cancelSellWithDialog}>
+            <form
+              method="dialog"
+              class="modal-backdrop"
+              onclick={cancelSellWithDialog}
+              onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { cancelSellWithDialog(); } }}
+            >
               <button type="button">close</button>
             </form>
           </dialog>

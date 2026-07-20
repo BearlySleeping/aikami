@@ -108,6 +108,7 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     equippable: false,
     slot: undefined,
     basePrice: 15,
+    effect: { kind: 'heal', amount: 30 },
   },
   goldCoin: {
     label: 'Gold Coin',

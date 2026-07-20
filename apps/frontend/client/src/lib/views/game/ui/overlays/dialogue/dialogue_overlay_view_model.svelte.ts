@@ -250,6 +250,12 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Toggles streaming TTS on/off for this chat. */
   toggleStreamingTts(): void;
+
+  /** Whether the current turn offers a recruit action (C-340 AC-1). */
+  readonly recruitAvailable: boolean;
+
+  /** Executes the recruit action for the current NPC (C-340 AC-1). */
+  recruitCompanion(): void;
 };
 
 class DialogueOverlayViewModel
@@ -859,8 +865,13 @@ class DialogueOverlayViewModel
 
       // Execute any command from the turn, guarding against re-execution
       if (turn.command && !this._npcDialogueService.wasCommandExecuted(npcMessageId)) {
-        this._npcDialogueService.markCommandExecuted(npcMessageId, turn.command.kind);
-        await this._dispatchCommand({ command: turn.command, npcMessageId });
+        // C-340: Show recruit button instead of auto-executing
+        if (turn.command.kind === 'recruit') {
+          this.recruitAvailable = true;
+        } else {
+          this._npcDialogueService.markCommandExecuted(npcMessageId, turn.command.kind);
+          await this._dispatchCommand({ command: turn.command, npcMessageId });
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -890,6 +901,21 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   get activeChoices(): readonly { id: string; label: string }[] {
     return this._activeChoices;
+  }
+
+  /** Whether the current turn offers a recruit action (C-340 AC-1). */
+  recruitAvailable = $state<boolean>(false);
+
+  /** Executes the recruit action for the current NPC. */
+  recruitCompanion(): void {
+    this._npcDialogueService.executeCommand({
+      kind: 'recruit',
+      npcId: this._npcData.npcId,
+      npcName: this._npcData.npcName,
+      command: { kind: 'recruit' },
+    });
+    this.recruitAvailable = false;
+    this._appendNpcMessage(`*${this._npcData.npcName} has joined your party!*`);
   }
 
   // ── Private: Command dispatch to existing executors ──────────────────

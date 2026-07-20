@@ -268,20 +268,17 @@ class GameSaveService
   async fetchAvailableSaves(campaignId?: string): Promise<void> {
     const db = await getLocalDatabase();
 
-    let result;
-    if (campaignId) {
-      result = await db.query({
-        sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves WHERE campaign_id = ? ORDER BY timestamp DESC',
-        args: [campaignId],
-      });
-    } else {
-      result = await db.query({
-        sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves ORDER BY timestamp DESC',
-        args: [],
-      });
-    }
+    const dbResult = campaignId
+      ? await db.query({
+          sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves WHERE campaign_id = ? ORDER BY timestamp DESC',
+          args: [campaignId],
+        })
+      : await db.query({
+          sql: 'SELECT slot_id, timestamp, map_name, campaign_id FROM saves ORDER BY timestamp DESC',
+          args: [],
+        });
 
-    this.availableSaves = result.rows.map((row) => ({
+    this.availableSaves = dbResult.rows.map((row: Record<string, unknown>) => ({
       id: row.slot_id as string,
       timestamp: row.timestamp as number,
       mapName: row.map_name as string,

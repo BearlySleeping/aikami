@@ -207,9 +207,6 @@ class StartViewModel
   /** C-334 AC-5: Whether a recovery operation is in progress. */
   isRecovering = $state(false);
 
-  /** C-334 AC-5: Whether recovery was accepted (vs declined). */
-  private _recoveryAccepted = false;
-
   /** @inheritdoc */
   get isLoggedIn(): boolean {
     return authService.isLoggedIn;
@@ -499,7 +496,6 @@ class StartViewModel
     }
 
     this.isRecovering = true;
-    this._recoveryAccepted = true;
 
     try {
       // Find the most recent save for the crashed campaign

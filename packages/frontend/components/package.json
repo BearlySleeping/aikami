@@ -21,18 +21,18 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "devDependencies": {
-    "@storybook/addon-a11y": "10.5.1",
+    "@storybook/addon-a11y": "10.5.2",
     "@storybook/addon-essentials": "^8.6.18",
     "@storybook/addon-interactions": "^8.6.18",
     "@storybook/addon-svelte-csf": "5.1.2",
-    "@storybook/svelte": "10.5.1",
-    "@storybook/svelte-vite": "10.5.1",
+    "@storybook/svelte": "10.5.2",
+    "@storybook/svelte-vite": "10.5.2",
     "@storybook/test-runner": "0.24.4",
     "@sveltejs/vite-plugin-svelte": "7.2.0",
     "autoprefixer": "10.5.4",
     "postcss": "8.5.19",
-    "storybook": "10.5.1",
-    "svelte": "5.56.5",
+    "storybook": "10.5.2",
+    "svelte": "5.56.6",
     "tailwindcss": "4.3.3",
     "vite": "8.1.5"
   }

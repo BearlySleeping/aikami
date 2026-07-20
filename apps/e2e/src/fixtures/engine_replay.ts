@@ -70,6 +70,7 @@ export class EngineReplayRecorder {
       // @ts-expect-error — window augmentation for engine commands
       window.__ENGINE_COMMANDS__ = [];
       // Override push to forward to Node-side collector
+      // @ts-expect-error — window augmentation for engine commands
       const originalPush = window.__ENGINE_COMMANDS__.push;
       // @ts-expect-error — window augmentation
       window.__ENGINE_COMMANDS__.push = function (...cmds: EngineCommand[]) {

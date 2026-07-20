@@ -25,6 +25,7 @@ import { GameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import { playerStateService } from './player_state_service.svelte';
 import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -1162,10 +1163,11 @@ export class GameOverlayService
       if (!this._bridge) {
         return undefined;
       }
+      // @ts-expect-error — Generic inference mismatch in BaseClass.create
       this._saveService = GameSaveService.create({
         className: 'GameSaveService',
         bridge: this._bridge,
-      });
+      }) as unknown as GameSaveServiceInterface;
     }
     return this._saveService;
   }

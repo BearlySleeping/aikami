@@ -30,7 +30,6 @@ import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
-import type { PartyRosterServiceInterface } from './party_roster_service.svelte.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';

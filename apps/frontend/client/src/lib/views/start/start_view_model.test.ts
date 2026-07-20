@@ -63,6 +63,7 @@ const mockCheckSessionMarker = mock(async () => mockSessionMarkerCampaignId);
 const mockClearSessionMarker = mock(async () => {});
 
 mock.module('$lib/services/game/game_overlay_service.svelte', () => ({
+  // biome-ignore lint/style/useNamingConvention: must match module export name
   GameOverlayService: {
     checkSessionMarker: mockCheckSessionMarker,
     clearSessionMarker: mockClearSessionMarker,

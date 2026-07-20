@@ -23,7 +23,7 @@ export const buildItemCatalogFromPack = (options: {
 
   const catalog: Record<string, ItemDefinition> = {};
   for (const [itemId, entry] of Object.entries(options.items)) {
-    catalog[itemId] = {
+    const def: Record<string, unknown> = {
       label: entry.name,
       itemType: entry.type,
       attackBonus: entry.attackBonus ?? 0,
@@ -31,8 +31,11 @@ export const buildItemCatalogFromPack = (options: {
       equippable: entry.equipmentSlot !== undefined,
       slot: entry.equipmentSlot,
       basePrice: entry.basePrice ?? 0,
-      effect: entry.effect,
     };
+    if (entry.type === 'consumable') {
+      def.effect = entry.effect;
+    }
+    catalog[itemId] = def as unknown as ItemDefinition;
   }
   return catalog;
 };

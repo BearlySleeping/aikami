@@ -701,7 +701,7 @@ class QuestStateService
       }
 
       const progressEntry = progress.objectives.find((o) => o.objectiveIndex === i);
-      if (!progressEntry || progressEntry.status !== 'completed') {
+      if (progressEntry?.status !== 'completed') {
         continue;
       }
 
@@ -1026,7 +1026,7 @@ class QuestStateService
         continue;
       }
       const entryDef = definition.objectives[entry.objectiveIndex];
-      if (entryDef?.prerequisiteIndices && entryDef.prerequisiteIndices.includes(objectiveIndex)) {
+      if (entryDef?.prerequisiteIndices?.includes(objectiveIndex)) {
         entry.status = 'skipped';
         this.debug('_failObjective:cascadeSkipped', {
           questId: progress.questId,
@@ -1198,7 +1198,7 @@ class QuestStateService
           endingId: completedProgress.chosenEndingId,
           endingTitle: ending?.title,
           narration: ending?.narration ?? questDef.description,
-          objectiveResults: questDef.objectives.map((objDef, index) => ({
+          objectiveResults: questDef.objectives.map((objDef, _index) => ({
             label: objDef.text,
             status: 'completed' as const,
           })),

@@ -145,7 +145,7 @@ const { viewModel }: Props = $props();
           </p>
         {:else}
           <div class="space-y-3">
-            {#each [...viewModel.journalEntries].reverse() as entry (entry.questId + '-' + entry.timestamp)}
+            {#each [...viewModel.journalEntries].reverse() as entry (`${entry.questId}-${entry.timestamp}`)}
               <div class="card bg-base-200 shadow-sm">
                 <div class="card-body p-4">
                   <div class="flex items-center gap-2">

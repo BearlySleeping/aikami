@@ -655,8 +655,10 @@ describe('replayCommandLog', () => {
     ];
 
     const result = replayCommandLog({ snapshot: emptySnapshot(), commandLog: commands, seed: 42 });
-    // rollDamage produces no event (just advances RNG), so 2 events from 3 commands
-    expect(result.allEvents).toHaveLength(2);
+    // allEvents tracks every command (rollAttack, rollDamage, applyDamage)
+    expect(result.allEvents).toHaveLength(3);
+    // Only rollAttack and applyDamage produce events
+    expect(result.allEvents.filter((e) => e.events.length > 0)).toHaveLength(2);
     expect(result.commandLog).toHaveLength(3);
   });
 

@@ -76,12 +76,12 @@ describe('VendorService', () => {
     const goldBefore = inventoryService.gold;
     const shardEntry = inventoryService.inventory.find((e) => e.itemId === 'wardShard');
     expect(shardEntry).toBeDefined();
-    expect(shardEntry!.quantity).toBe(2);
+    expect(shardEntry?.quantity).toBe(2);
 
     vendorService.sellItem('wardShard');
     expect(inventoryService.gold).toBe(goldBefore + 15);
     const afterSell = inventoryService.inventory.find((e) => e.itemId === 'wardShard');
-    expect(afterSell!.quantity).toBe(1);
+    expect(afterSell?.quantity).toBe(1);
   });
 
   test('sellItem rejects item with zero basePrice', () => {
@@ -94,7 +94,7 @@ describe('VendorService', () => {
     vendorService.sellItem('wardPendant');
     expect(inventoryService.gold).toBe(goldBefore); // unchanged
     const wardPendantAfter = inventoryService.inventory.find((e) => e.itemId === 'wardPendant');
-    expect(wardPendantAfter!.quantity).toBe(1); // unchanged
+    expect(wardPendantAfter?.quantity).toBe(1); // unchanged
   });
 
   test('sellItem rejects item not owned', () => {
@@ -136,7 +136,7 @@ describe('VendorService', () => {
       const mockGenerator = async () => {
         throw new Error('AI unavailable');
       };
-      vendorService['_textGenerator'] = mockGenerator;
+      vendorService._textGenerator = mockGenerator;
       await originalHaggle(message);
       fallbackTriggered = true;
     };

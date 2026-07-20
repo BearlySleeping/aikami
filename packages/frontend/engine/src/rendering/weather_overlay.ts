@@ -464,7 +464,9 @@ export class WeatherOverlay {
     if (this._attached) {
       this.detach();
     }
-    this._mesh.geometry.destroy(true);
+    // Null-guard: the geometry may already be destroyed if the parent
+    // container (stage) was destroyed before this overlay was cleaned up.
+    this._mesh?.geometry?.destroy(true);
   }
 
   // -----------------------------------------------------------------------

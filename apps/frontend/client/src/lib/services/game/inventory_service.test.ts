@@ -6,7 +6,7 @@
 // Contract C-331 AC-1 / AC-2.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { type InventoryServiceInterface, inventoryService } from './inventory_service.svelte';
+import { inventoryService } from './inventory_service.svelte';
 
 // Import the real implementation directly (not through the mocked $services
 // barrel) so we test actual catalog/capacity/stack logic.

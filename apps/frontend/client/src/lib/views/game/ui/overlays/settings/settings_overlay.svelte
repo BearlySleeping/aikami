@@ -34,6 +34,11 @@ const TABS: readonly { id: string; label: string }[] = [
       viewModel.close();
     }
   }}
+  onkeydown={(e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      viewModel.close();
+    }
+  }}
 >
   <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
     <!-- Header -->

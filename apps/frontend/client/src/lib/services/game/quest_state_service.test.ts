@@ -915,6 +915,7 @@ describe('QuestStateService', () => {
       service.hydrate({
         ...serialized,
         repeatableCompletions: {
+          // biome-ignore lint/style/useNamingConvention: quest ID used as data key
           repeatable_test: Date.now() - 2 * 24 * 60 * 60 * 1000, // 2 days ago
         },
       });
@@ -935,6 +936,7 @@ describe('QuestStateService', () => {
       service.hydrate({
         ...firstSerialized,
         repeatableCompletions: {
+          // biome-ignore lint/style/useNamingConvention: quest ID used as data key
           repeatable_test: Date.now() - 2 * 24 * 60 * 60 * 1000,
         },
       });

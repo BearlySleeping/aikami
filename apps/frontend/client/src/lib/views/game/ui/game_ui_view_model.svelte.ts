@@ -41,6 +41,10 @@ import type { EndSessionViewModelInterface } from './overlays/end_session/end_se
 import { getEndSessionViewModel } from './overlays/end_session/end_session_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';
+import {
+  getPartyRosterViewModel,
+  type PartyRosterViewModelInterface,
+} from './overlays/party_roster/party_roster_view_model.svelte';
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import {
@@ -48,9 +52,9 @@ import {
   type SettingsOverlayViewModelInterface,
 } from './overlays/settings/settings_overlay_view_model.svelte';
 import {
-  getPartyRosterViewModel,
-  type PartyRosterViewModelInterface,
-} from './overlays/party_roster/party_roster_view_model.svelte';
+  getTalkToPartyViewModel,
+  type TalkToPartyViewModelInterface,
+} from './overlays/talk_to_party/talk_to_party_view_model.svelte';
 import {
   getQuestTrackerViewModel,
   type QuestTrackerViewModelInterface,
@@ -121,6 +125,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   // ── Party Roster (C-340) ──
   readonly partyRosterViewModel: PartyRosterViewModelInterface | undefined;
 
+  // ── Talk to Party (C-340) ──
+  readonly talkToPartyViewModel: TalkToPartyViewModelInterface | undefined;
+
   // ── Interaction HUD (C-327) ──
 
   /** Current interaction prompt label (e.g. "E — Talk to Elder Thalia"). */
@@ -162,6 +169,9 @@ class GameUIViewModel
 
   // ── Party Roster (C-340) ──
   partyRosterViewModel = $state<PartyRosterViewModelInterface | undefined>(undefined);
+
+  // ── Talk to Party (C-340) ──
+  talkToPartyViewModel = $state<TalkToPartyViewModelInterface | undefined>(undefined);
 
   /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
   questTrackerViewModel = $state<QuestTrackerViewModelInterface>(
@@ -451,6 +461,27 @@ class GameUIViewModel
 
         return () => {
           this.partyRosterViewModel = undefined;
+        };
+      });
+
+      // ── Talk to Party (C-340) ──
+      $effect(() => {
+        if (gameOverlayService.activeOverlay !== 'TALK_TO_PARTY') {
+          return;
+        }
+        // Talk to Party is opened with companion context from party roster
+        // For now, open default — the router will populate context from the
+        // last companion talked to
+        const vm = getTalkToPartyViewModel({
+          className: 'TalkToPartyViewModel',
+          npcId: '', // populated by the party roster button
+          npcName: 'Companion',
+          npcDialogueService: npcDialogueService,
+        });
+        this.talkToPartyViewModel = vm;
+
+        return () => {
+          this.talkToPartyViewModel = undefined;
         };
       });
 

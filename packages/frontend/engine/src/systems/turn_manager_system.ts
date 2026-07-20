@@ -14,6 +14,7 @@ import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics, combatRoleFromIndex } from '../components/combat_tactics.ts';
+import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Position, type PositionData } from '../components/position.ts';
 import { getResistanceFactor } from '../components/resistances.ts';
@@ -242,6 +243,14 @@ const advanceTurn = (world: World, bridge: EngineBridge): void => {
   }
 
   _emitActionEconomy(bridge, foundId);
+
+  // C-340: Companion auto-turn — AI-controlled companions act immediately
+  const isCompanion = Companion.recruited[foundId] === true;
+  if (isCompanion) {
+    _processCompanionTurn(world, foundId, bridge, rollDice);
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
 
   const activeIds = getActiveParticipantIds(world);
   bridge.emit({
@@ -1126,6 +1135,29 @@ const _processStatusTicks = (
 // ---------------------------------------------------------------------------
 
 /**
+ * Handles a companion entering the downed state at 0 HP (C-340 AC-4).
+ * Companions go down but don't get death saves — they revive at 1 HP after combat.
+ */
+const _handleCompanionDowned = (world: World, bridge: EngineBridge, eid: number): void => {
+  CombatStats.health[eid] = 0;
+  TurnOrder.isActive[eid] = false;
+
+  bridge.emit({
+    type: 'ENTITY_DOWNED',
+    entityId: eid,
+  });
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, eid)} has been downed!`,
+    sourceId: eid,
+    targetId: eid,
+    targetRemainingHp: 0,
+    targetMaxHp: _getMaxHp(world, eid),
+  });
+};
+
+/**
  * Handles the player entering the downed state at 0 HP.
  */
 const _handlePlayerDowned = (world: World, bridge: EngineBridge, eid: number): void => {
@@ -1285,6 +1317,174 @@ const _allPlayersDeadOrDowned = (world: World, _deadEid: number): boolean => {
 // ---------------------------------------------------------------------------
 // Internal — enemy turn (C-338: extended with combat roles + damage types)
 // ---------------------------------------------------------------------------
+
+// --------------------------------------------------------------------------
+// Internal — enemy turn (C-338: extended with combat roles + damage types)
+// --------------------------------------------------------------------------
+
+/**
+ * Processes a companion's AI-controlled turn (C-340 AC-4).
+ * Companions auto-target the nearest enemy or heal allies based on class role.
+ */
+const _processCompanionTurn = (
+  world: World,
+  companionId: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+): void => {
+  const companionStats = getComponent(world, companionId, CombatStats) as
+    | CombatStatsData
+    | undefined;
+  if (!companionStats || companionStats.health <= 0) {
+    return;
+  }
+
+  // C-340: Process companion status ticks
+  _processStatusTicks(world, bridge, companionId, 0);
+
+  const classId = companionStats.classId || 'fighter';
+
+  // Class-role-based AI action selection
+  const isSupporter = classId === 'cleric' || classId === 'wizard';
+
+  if (isSupporter) {
+    // Support: heal most damaged ally (player or other companion)
+    const damagedAlly = _findMostDamagedAlly(world, companionId);
+    if (damagedAlly > 0) {
+      const healAmount = roller(6) + 1;
+      _processHealAction(world, bridge, damagedAlly, companionId, healAmount);
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: `${_getEntityName(world, companionId)} heals ${_getEntityName(world, damagedAlly)} for ${healAmount} HP!`,
+        sourceId: companionId,
+        targetId: damagedAlly,
+        targetRemainingHp: _getHp(world, damagedAlly),
+        targetMaxHp: _getMaxHp(world, damagedAlly),
+      });
+      return;
+    }
+  }
+
+  // Default: attack nearest enemy
+  const nearestEnemy = _findClosestEnemy(world, companionId);
+  if (nearestEnemy <= 0) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, companionId)} scans for enemies but finds none.`,
+      sourceId: companionId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    return;
+  }
+
+  const targetStats = getComponent(world, nearestEnemy, CombatStats) as CombatStatsData | undefined;
+  if (!targetStats) {
+    return;
+  }
+
+  // Roll to hit
+  const attackRoll = roller(20);
+  const hitTotal = attackRoll + (companionStats.accuracy ?? 0);
+  const hitThreshold = targetStats.evasion ?? 0;
+
+  if (hitTotal < hitThreshold) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `${_getEntityName(world, companionId)} attacks ${_getEntityName(world, nearestEnemy)} — Miss! (${hitTotal} vs ${hitThreshold})`,
+      sourceId: companionId,
+      targetId: nearestEnemy,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    return;
+  }
+
+  const damageRoll = roller(6);
+  const rawDamage = damageRoll + (companionStats.attack ?? 0);
+  const damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
+
+  CombatStats.health[nearestEnemy] = Math.max(0, targetStats.health - damage);
+  const remainingHp = CombatStats.health[nearestEnemy];
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `${_getEntityName(world, companionId)} attacks ${_getEntityName(world, nearestEnemy)} for ${damage} damage! (HP: ${remainingHp}/${targetStats.maxHealth})`,
+    sourceId: companionId,
+    targetId: nearestEnemy,
+    targetRemainingHp: remainingHp,
+    targetMaxHp: targetStats.maxHealth,
+  });
+
+  // Check defeat
+  if (remainingHp <= 0) {
+    _handleEnemyDefeated(world, nearestEnemy, bridge, companionId);
+  }
+};
+
+/** Finds the most damaged ally (player or companion) for healing. */
+const _findMostDamagedAlly = (world: World, sourceId: number): number => {
+  let bestAlly = 0;
+  let lowestHp = Number.MAX_SAFE_INTEGER;
+
+  for (const eid of turnOrderList) {
+    if (eid === sourceId) {
+      continue;
+    }
+    const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+    if (!stats || stats.health <= 0 || stats.health >= stats.maxHealth) {
+      continue;
+    }
+    const isCompanion = Companion.recruited[eid] === true;
+    const isPlayer = eid === 1;
+    if ((isCompanion || isPlayer) && stats.health < lowestHp) {
+      lowestHp = stats.health;
+      bestAlly = eid;
+    }
+  }
+
+  return bestAlly;
+};
+
+/** Finds the closest enemy (by position) for companion targeting. */
+const _findClosestEnemy = (world: World, sourceId: number): number => {
+  const sourcePos = getComponent(world, sourceId, Position) as PositionData | undefined;
+  if (!sourcePos) {
+    return _findFirstEnemyParticipant(sourceId);
+  }
+
+  let closest = 0;
+  let minDistSq = Number.MAX_SAFE_INTEGER;
+
+  for (const eid of turnOrderList) {
+    if (eid === 1 || Companion.recruited[eid] === true) {
+      continue; // skip player and companions
+    }
+    const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+    if (!stats || stats.health <= 0) {
+      continue;
+    }
+    const pos = getComponent(world, eid, Position) as PositionData | undefined;
+    if (pos) {
+      const dx = pos.x - sourcePos.x;
+      const dy = pos.y - sourcePos.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        closest = eid;
+      }
+    } else if (closest === 0) {
+      closest = eid;
+    }
+  }
+
+  if (closest === 0) {
+    return _findFirstEnemyParticipant(sourceId);
+  }
+
+  return closest;
+};
 
 const _processEnemyTurn = (
   world: World,
@@ -1630,6 +1830,11 @@ const _applyDamageToTarget = (
   });
 
   _emitCombatStateUpdate(world, bridge);
+
+  // C-340: Check if target is a companion — handle downed state
+  if (Companion.recruited[targetId] === true && CombatStats.health[targetId] <= 0) {
+    _handleCompanionDowned(world, bridge, targetId);
+  }
 };
 
 // ---------------------------------------------------------------------------

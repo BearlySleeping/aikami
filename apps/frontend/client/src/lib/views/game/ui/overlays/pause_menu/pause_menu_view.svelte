@@ -45,7 +45,6 @@ const { viewModel }: Props = $props();
         type="button"
         class="btn btn-primary btn-block"
         onclick={() => viewModel.resumeGame()}
-        autofocus
       >
         Resume Game
       </button>
