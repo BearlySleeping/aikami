@@ -85,10 +85,10 @@ export const selectInteractionTarget = (options: {
       continue;
     }
 
-    // Skip NPC-type interactables — they're handled in the NPC pass below.
-    // Only process non-NPC interactables: item, door, chest, lever, pressure_plate,
-    // container, readable, trap.
-    if (interactable.type === 'npc') {
+    // Skip NPC-type and pressure_plate interactables — NPCs are
+    // handled below, and pressure plates are proximity-only
+    // (not player-initiated key-press interactions).
+    if (interactable.type === 'npc' || interactable.type === 'pressure_plate') {
       continue;
     }
 

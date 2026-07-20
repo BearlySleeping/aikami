@@ -138,7 +138,7 @@ const _applyActivation = (options: {
     case 'door': {
       // Check if activation condition is met (requiredState)
       const requiredState = interactable.requiredState ?? 'on';
-      const upstreamToggled = _isUpstreamToggled({ world, spawnId, requiredState });
+      const upstreamToggled = _isUpstreamToggled({ world, interactable, requiredState });
 
       if (upstreamToggled) {
         InteractableState.isOpen[eid] = 1;
@@ -189,16 +189,43 @@ const _applyActivation = (options: {
  */
 const _isUpstreamToggled = (options: {
   world: World;
-  spawnId: string;
+  interactable: InteractableData;
   requiredState: string;
 }): boolean => {
-  const { world, requiredState } = options;
+  const { world, interactable, requiredState } = options;
   const targetState = requiredState === 'off' ? 0 : 1;
 
-  // Find the upstream interactable that serves as the trigger.
-  // We scan all interactables and check if any has `activatesSpawnIds`
-  // (or is in toggled state) indicating the puzzle chain.
-  // For now, return true if the required state matches "on" (most common case).
-  void world;
-  return targetState === 1;
+  if (!interactable.activatesOnSpawnIds) {
+    return true;
+  }
+
+  const upstreamIds = interactable.activatesOnSpawnIds
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+
+  if (upstreamIds.length === 0) {
+    return true;
+  }
+
+  for (const eid of query(world, [Position, Interactable])) {
+    const upstream = getComponent(world, eid, Interactable) as InteractableData | undefined;
+    if (!upstream?.spawnId || !upstreamIds.includes(upstream.spawnId)) {
+      continue;
+    }
+
+    if (upstream.type === 'pressure_plate') {
+      const isPressed = InteractableState.isPressed[eid] === 1;
+      if ((isPressed ? 1 : 0) !== targetState) {
+        return false;
+      }
+    } else {
+      const isToggled = InteractableState.isToggled[eid] === 1;
+      if ((isToggled ? 1 : 0) !== targetState) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 };

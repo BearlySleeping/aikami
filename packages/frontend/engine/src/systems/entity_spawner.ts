@@ -567,7 +567,8 @@ const _spawnInteractable = (
 
   // Resolve AssetAlias and set default state based on type
   let assetIndex: number;
-  const isOpen = savedState?.isOpen ?? false;
+  const isOpen =
+    savedState?.isOpen ?? _getBoolProperty(spawnPoint.properties, 'startsOpen', false);
   const isLocked =
     savedState?.isLocked ?? _getBoolProperty(spawnPoint.properties, 'lockedByDefault', false);
   const isLooted = savedState?.isLooted ?? false;

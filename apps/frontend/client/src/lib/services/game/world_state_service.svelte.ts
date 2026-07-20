@@ -69,7 +69,12 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
   serialize(): WorldPickupState & { defeatedEnemies: string[] };
 
   /** Restores world persistence flags from a save envelope snapshot. */
-  hydrate(data: WorldPickupState & { defeatedEnemies?: string[]; interactableStates?: Record<string, InteractableStateEntry> }): void;
+  hydrate(
+    data: WorldPickupState & {
+      defeatedEnemies?: string[];
+      interactableStates?: Record<string, InteractableStateEntry>;
+    },
+  ): void;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;

@@ -534,7 +534,7 @@ const _parseAndRollDamage = (options: { world: World; eid: number; spawnId: stri
   let total = 0;
   for (let i = 0; i < count; i++) {
     const roll = ((rngValue * 1103515245 + i * 23456) % (sides * 1000000)) / 1000000;
-    total += Math.floor(roll * sides) + 1;
+    total += Math.floor(roll) + 1;
   }
 
   return total + bonus;
