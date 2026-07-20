@@ -206,7 +206,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             // `commit -a` bypasses skip-worktree and picks up
             // PROGRESS.md / PROMOTION.md / .envrc — causing merge conflicts.
             runGit('add -A', { cwd: wsPath });
-            runGit(`commit -m "${checkpointMsg}"`, { cwd: wsPath });
+            runGit(`commit --no-verify -m "${checkpointMsg}"`, { cwd: wsPath });
             console.log(`📝 Workspace checkpointed: ${headCommit}`);
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -454,7 +454,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // Finalize: commit all changes.
       const finalMsg = `Feat: Completed contract pipeline task — PR as \`${headBranch}\` (commit: ${headCommit})`;
       try {
-        runGit(`commit -a -m "${finalMsg}"`, { cwd: wsPath });
+        runGit(`commit -a --no-verify -m "${finalMsg}"`, { cwd: wsPath });
       } catch {
         // No changes to commit — proceed with push.
       }

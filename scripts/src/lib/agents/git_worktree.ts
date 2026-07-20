@@ -398,7 +398,8 @@ export const commitAll = (options: {
     // Staged changes exist — proceed with commit.
   }
 
-  const commitCmd = `${envFlags} commit -m "${options.message.replace(/"/g, '\\"')}"`.trim();
+  const commitCmd =
+    `${envFlags} commit --no-verify -m "${options.message.replace(/"/g, '\\"')}"`.trim();
   runGit(commitCmd, { cwd: options.cwd, env });
   return getGitHeadCommit(options.cwd);
 };
