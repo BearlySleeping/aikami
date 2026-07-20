@@ -504,6 +504,12 @@ const _localServicesMock = () => ({
   pixiTextureInjector: _createServiceStub(),
   gameOverlayService: _createServiceStub(),
   GameOverlayService: class {},
+  combatService: Object.assign(_createServiceStub(), {
+    lastCombatOptions: undefined,
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  }),
   gameEngineService: _createServiceStub(),
   GameEngineService: class {},
   sessionService: Object.assign(_createServiceStub(), {

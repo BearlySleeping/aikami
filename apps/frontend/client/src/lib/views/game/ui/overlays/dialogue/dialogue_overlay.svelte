@@ -43,16 +43,45 @@ const { viewModel }: Props = $props();
     class="mx-auto mb-8 flex w-full max-w-2xl flex-col rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"
     style="height: 40vh;"
   >
-    <!-- Header: NPC name + End Chat button -->
+    <!-- Header: NPC name + address mode + TTS indicator + End Chat button -->
     <div class="flex items-center justify-between border-b border-base-300 px-4 py-2">
-      <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs text-error"
-        onclick={() => viewModel.endChat()}
-      >
-        End Chat
-      </button>
+      <div class="flex items-center gap-2">
+        <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
+        <!-- C-343: TTS speaker indicator -->
+        {#if viewModel.isTtsSpeaking}
+          <span class="text-xs animate-pulse" title="TTS speaking">🔊</span>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- C-343: Address mode toggle (Scene/GM only; Party deferred to C-340) -->
+        <div class="join">
+          <button
+            type="button"
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'scene'}
+            class:btn-success={viewModel.addressMode === 'scene'}
+            onclick={() => viewModel.setAddressMode('scene')}
+          >
+            Scene
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'gm'}
+            class:btn-secondary={viewModel.addressMode === 'gm'}
+            onclick={() => viewModel.setAddressMode('gm')}
+          >
+            GM
+          </button>
+        </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs text-error"
+          onclick={() => viewModel.endChat()}
+        >
+          End Chat
+        </button>
+      </div>
     </div>
 
     <!-- Scrollable message history — DOM ref bound to VM for auto-scroll -->
@@ -65,15 +94,157 @@ const { viewModel }: Props = $props();
           <div class="chat-header mb-0.5 text-xs text-base-content/50">
             {message.role === 'player' ? 'You' : viewModel.npcName}
           </div>
-          <div
-            class="chat-bubble text-sm {message.role === 'player'
-              ? 'chat-bubble-primary'
-              : 'chat-bubble-secondary'}"
-          >
-            {#if message.content}
-              {message.content}
-            {:else if viewModel.isStreaming}
-              <span class="loading loading-dots loading-xs"></span>
+          <!-- C-343: Per-message action bar (hover-visible) -->
+          <div class="group relative">
+            <!-- C-343: Message action buttons (positioned above the bubble on hover) -->
+            <div
+              class="absolute -top-8 right-0 z-30 flex gap-1 rounded-lg bg-base-200/90 px-1 py-0.5 opacity-0 shadow backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100"
+            >
+              {#if message.role === 'npc'}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Copy"
+                  aria-label="Copy"
+                  onclick={() => viewModel.copyMessage(message.content)}
+                >
+                  📋
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Retry"
+                  aria-label="Retry"
+                  disabled={viewModel.isStreaming}
+                  onclick={() => viewModel.regenerateResponse(message.id)}
+                >
+                  🔄
+                </button>
+                {#if viewModel.streamingTtsEnabled}
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs px-1"
+                    title="Speak"
+                    aria-label="Speak"
+                    onclick={() => viewModel.copyMessage(message.content)}
+                  >
+                    🔊
+                  </button>
+                {/if}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
+                >
+                  🌿
+                </button>
+              {:else}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Copy"
+                  aria-label="Copy"
+                  onclick={() => viewModel.copyMessage(message.content)}
+                >
+                  📋
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Edit"
+                  aria-label="Edit"
+                  disabled={viewModel.isStreaming}
+                  onclick={() => viewModel.startEdit(message.id)}
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Delete"
+                  aria-label="Delete"
+                  disabled={viewModel.isStreaming}
+                  onclick={() => viewModel.deleteMessage(message.id)}
+                >
+                  🗑️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
+                >
+                  🌿
+                </button>
+              {/if}
+            </div>
+            <!-- Editing: inline textarea replaces bubble text -->
+            {#if viewModel.editingMessageId === message.id}
+              <div class="flex flex-col gap-1">
+                <textarea
+                  class="textarea textarea-bordered textarea-sm w-full"
+                  rows={3}
+                  value={viewModel.editText}
+                  oninput={(e) => viewModel.setEditText((e.target as HTMLTextAreaElement).value)}
+                ></textarea>
+                <div class="flex gap-1 justify-end">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    onclick={() => viewModel.cancelEdit()}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-xs"
+                    onclick={() => viewModel.editMessage({ messageId: message.id, newText: viewModel.editText })}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            {:else}
+              <div
+                class="chat-bubble text-sm {message.role === 'player'
+                  ? 'chat-bubble-primary'
+                  : 'chat-bubble-secondary'}"
+              >
+                {#if message.content}
+                  {message.content}
+                {:else if viewModel.isStreaming}
+                  <span class="loading loading-dots loading-xs"></span>
+                {/if}
+              </div>
+            {/if}
+            <!-- C-343: Swipe controls for AI messages with alternatives -->
+            {#if message.role === 'npc' && message.alternativeLabel}
+              <div class="flex items-center justify-center gap-1 mt-1">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  disabled={!message.canSwipeLeft}
+                  onclick={() => viewModel.swipeAlternative(message.id, 'left')}
+                  aria-label="Previous alternative"
+                >
+                  ◀
+                </button>
+                <span class="text-xs font-mono text-base-content/50"
+                  >{message.alternativeLabel}</span
+                >
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  disabled={!message.canSwipeRight}
+                  onclick={() => viewModel.swipeAlternative(message.id, 'right')}
+                  aria-label="Next alternative"
+                >
+                  ▶
+                </button>
+              </div>
             {/if}
           </div>
         </div>
@@ -85,10 +256,52 @@ const { viewModel }: Props = $props();
         </div>
       {/if}
 
+      <!-- C-343: CYOA choice buttons from the most recent NPC turn -->
+      {#if viewModel.activeChoices.length > 0}
+        <div class="join join-vertical w-full px-4" data-testid="cyoa-choices">
+          {#each viewModel.activeChoices as choice (choice.id)}
+            <button
+              type="button"
+              class="btn join-item w-full justify-between gap-2 normal-case text-sm"
+              onclick={() => viewModel.sendMessage(choice.label)}
+            >
+              <span class="truncate text-left">{choice.label}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+
       {#if viewModel.isResolvingSkillCheck}
         <div class="flex items-center justify-center gap-2 py-2 text-xs text-base-content/60">
           <span class="loading loading-spinner loading-xs"></span>
           <span>Resolving skill check...</span>
+        </div>
+      {/if}
+
+      <!-- C-343: Branch selector (shown when branches exist) -->
+      {#if viewModel.branches.length > 0}
+        <div class="border-t border-base-300 px-3 py-1">
+          <div class="flex items-center gap-1 text-xs">
+            <span class="text-base-content/50">Branch:</span>
+            <button
+              type="button"
+              class="btn btn-xs"
+              class:btn-active={viewModel.activeBranchId === null}
+              onclick={() => viewModel.switchBranch(viewModel.activeBranchId ?? '')}
+            >
+              Main
+            </button>
+            {#each viewModel.branches as branch (branch.branchId)}
+              <button
+                type="button"
+                class="btn btn-xs"
+                class:btn-active={viewModel.activeBranchId === branch.branchId}
+                onclick={() => viewModel.switchBranch(branch.branchId)}
+              >
+                {branch.label ?? 'Branch'}
+              </button>
+            {/each}
+          </div>
         </div>
       {/if}
     </div>
@@ -97,6 +310,32 @@ const { viewModel }: Props = $props();
     {#if viewModel.toastMessage}
       <div class="absolute top-2 right-2 z-50">
         <div class="alert alert-success text-sm">{viewModel.toastMessage}</div>
+      </div>
+    {/if}
+
+    <!-- C-343: Delete confirmation modal -->
+    {#if viewModel.pendingDeleteMessageId}
+      <div class="absolute inset-0 z-50 flex items-center justify-center bg-base-300/60">
+        <div class="modal-box w-80">
+          <h3 class="text-lg font-bold">Delete Message?</h3>
+          <p class="py-4 text-sm">This will remove the message and all subsequent replies.</p>
+          <div class="modal-action">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onclick={() => viewModel.cancelDelete()}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-error btn-sm"
+              onclick={() => viewModel.confirmDelete()}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -152,12 +391,14 @@ const { viewModel }: Props = $props();
           </div>
           <button
             type="button"
-            class="btn btn-primary btn-sm"
-            onclick={() => viewModel.sendMessage()}
-            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
+            class="btn btn-sm {viewModel.isStreaming ? 'btn-error' : 'btn-primary'}"
+            onclick={() => viewModel.isStreaming ? viewModel.cancelStreaming() : viewModel.sendMessage()}
+            disabled={viewModel.isResolvingSkillCheck || (!viewModel.isStreaming && !viewModel.inputText.trim())}
           >
-            {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+            {#if viewModel.isResolvingSkillCheck}
               <span class="loading loading-spinner loading-xs"></span>
+            {:else if viewModel.isStreaming}
+              Cancel
             {:else}
               Send
             {/if}
@@ -215,6 +456,15 @@ const { viewModel }: Props = $props();
             >
           </div>
         </div>
+        <!-- C-343: Draft recovery badge -->
+        {#if viewModel.showDraftRecovery}
+          <div class="mt-1">
+            <span class="badge badge-info badge-sm gap-1" aria-live="polite">
+              <span>📝</span>
+              Draft restored
+            </span>
+          </div>
+        {/if}
       {:else}
         <div class="flex items-end gap-2">
           <div class="flex-1">
@@ -229,12 +479,14 @@ const { viewModel }: Props = $props();
           </div>
           <button
             type="button"
-            class="btn btn-primary btn-sm"
-            onclick={() => viewModel.sendMessage()}
-            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
+            class="btn btn-sm {viewModel.isStreaming ? 'btn-error' : 'btn-primary'}"
+            onclick={() => viewModel.isStreaming ? viewModel.cancelStreaming() : viewModel.sendMessage()}
+            disabled={viewModel.isResolvingSkillCheck || (!viewModel.isStreaming && !viewModel.inputText.trim())}
           >
-            {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+            {#if viewModel.isResolvingSkillCheck}
               <span class="loading loading-spinner loading-xs"></span>
+            {:else if viewModel.isStreaming}
+              Cancel
             {:else}
               Send
             {/if}
@@ -277,6 +529,15 @@ const { viewModel }: Props = $props();
             🎲
           </button>
         </div>
+        <!-- C-343: Draft recovery badge -->
+        {#if viewModel.showDraftRecovery}
+          <div class="mt-1">
+            <span class="badge badge-info badge-sm gap-1" aria-live="polite">
+              <span>📝</span>
+              Draft restored
+            </span>
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
