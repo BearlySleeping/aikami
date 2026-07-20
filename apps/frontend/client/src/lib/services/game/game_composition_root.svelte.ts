@@ -35,6 +35,8 @@ import type { PlayerStateServiceInterface } from './player_state_service.svelte'
 import { playerStateService } from './player_state_service.svelte';
 import type { QuestStateServiceInterface } from './quest_state_service.svelte';
 import { questStateService } from './quest_state_service.svelte';
+import type { RelationshipServiceInterface } from './relationship_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte.ts';
 import type { SessionServiceInterface } from './session_service.svelte';
 import { sessionService } from './session_service.svelte';
 import { vendorService } from './vendor_service.svelte';
@@ -62,6 +64,7 @@ export type GameCompositionRootInterface = BaseFrontendClassInterface & {
   readonly gameOverlayService: GameOverlayServiceInterface;
   readonly sessionService: SessionServiceInterface;
   readonly npcDialogueService: NpcDialogueServiceInterface;
+  readonly relationshipService: RelationshipServiceInterface;
 
   initialize(): Promise<void>;
   dispose(): Promise<void>;
@@ -102,6 +105,7 @@ export class GameCompositionRoot
   private _sessionService: SessionServiceInterface | undefined;
   private _questStateService: QuestStateServiceInterface | undefined;
   private _npcDialogueService: NpcDialogueServiceInterface | undefined;
+  private _relationshipService: RelationshipServiceInterface | undefined;
 
   get isInitialized(): boolean {
     return this._initialized;
@@ -184,6 +188,13 @@ export class GameCompositionRoot
     return this._npcDialogueService;
   }
 
+  get relationshipService(): RelationshipServiceInterface {
+    if (!this._relationshipService) {
+      throw new Error('GameCompositionRoot not initialised');
+    }
+    return this._relationshipService;
+  }
+
   /** @inheritdoc */
   setLootRollFn(rollFn: () => number): void {
     this._lootRollFn = rollFn;
@@ -214,6 +225,7 @@ export class GameCompositionRoot
     // Phase 1b: Overlay service (init EngineBridge)
     this._gameOverlayService = gameOverlayService;
     this._npcDialogueService = npcDialogueService;
+    this._relationshipService = relationshipService;
 
     // Phase 2: Initialise overlay (sets up bridge listeners)
     await gameOverlayService.initialize();
@@ -416,6 +428,13 @@ export class GameCompositionRoot
     // Phase 5d: Configure quest state service with content pack
     questStateService.configure({ contentPackLoader: contentPack });
 
+    // Phase 5e: Seed faction standings from content pack (C-341)
+    const factions = contentPack.getAllFactions();
+    if (factions.length > 0) {
+      relationshipService.seedFactions(factions);
+      this.debug('initialize:factions-seeded', { factionCount: factions.length });
+    }
+
     // Phase 6: Start ECS bridge listeners for state services
     await playerStateService.startListening();
     await worldStateService.startListening();
@@ -522,6 +541,7 @@ export class GameCompositionRoot
     this._gameOverlayService = undefined;
     this._sessionService = undefined;
     this._npcDialogueService = undefined;
+    this._relationshipService = undefined;
 
     this._initialized = false;
 

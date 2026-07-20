@@ -849,7 +849,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts(),
+        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
       });
 
       // Update the NPC message with the full response
@@ -1119,7 +1119,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts(),
+        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
       });
 
       // Remove the virtual player message

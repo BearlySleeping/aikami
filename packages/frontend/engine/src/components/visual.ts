@@ -54,7 +54,23 @@ export const AssetAlias = {
   // biome-ignore lint/style/useNamingConvention: enum-like constant names
   ENEMY: 4,
   // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_DOOR_CLOSED: 5,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
   ITEM: 6,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_DOOR_OPEN: 8,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_LEVER_OFF: 9,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_LEVER_ON: 10,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_PRESSURE_PLATE: 11,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_CONTAINER: 12,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_READABLE: 13,
+  // biome-ignore lint/style/useNamingConvention: enum-like constant names
+  PROP_TRAP: 14,
 } as const;
 
 /** Type alias for AssetAlias values. */
@@ -79,7 +95,22 @@ export const resolveAssetPath = (alias: number): string => {
       return '/game-data/lpc/props/chest_01.png';
     case AssetAlias.ENEMY:
       return 'enemy';
-
+    case AssetAlias.PROP_DOOR_CLOSED:
+      return '/game-data/lpc/props/door_closed.png';
+    case AssetAlias.PROP_DOOR_OPEN:
+      return '/game-data/lpc/props/door_open.png';
+    case AssetAlias.PROP_LEVER_OFF:
+      return '/game-data/lpc/props/lever_off.png';
+    case AssetAlias.PROP_LEVER_ON:
+      return '/game-data/lpc/props/lever_on.png';
+    case AssetAlias.PROP_PRESSURE_PLATE:
+      return '/game-data/lpc/props/pressure_plate.png';
+    case AssetAlias.PROP_CONTAINER:
+      return '/game-data/lpc/props/container.png';
+    case AssetAlias.PROP_READABLE:
+      return '/game-data/lpc/props/readable.png';
+    case AssetAlias.PROP_TRAP:
+      return '/game-data/lpc/props/trap.png';
     case AssetAlias.ITEM:
       return 'item';
     default:

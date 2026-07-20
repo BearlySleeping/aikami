@@ -5,6 +5,7 @@
 // Contract C-331: unified runtime item shape (itemType, basePrice, consumable
 // effect) shared by the content pack and the client item catalog.
 import Type from 'typebox';
+import { InteractableStateEntrySchema } from '../game/interactable_state.ts';
 
 // ── Equipment Slot ──────────────────────────────────────────────────────
 
@@ -128,8 +129,14 @@ export const WorldPickupStateSchema = Type.Object(
     lootGrantedEncounters: Type.Array(Type.String(), {
       description: 'Encounter IDs with loot already granted',
     }),
+    /** Per-spawnId interactable state for persistence across map revisits (C-342). */
+    interactableStates: Type.Optional(
+      Type.Record(Type.String(), InteractableStateEntrySchema, {
+        description: 'Interactable state keyed by spawn ID',
+      }),
+    ),
   },
-  { description: 'World pickup/loot persistence state (C-331)' },
+  { description: 'World pickup/loot persistence state (C-331, C-342)' },
 );
 
 export type WorldPickupState = Type.Static<typeof WorldPickupStateSchema>;

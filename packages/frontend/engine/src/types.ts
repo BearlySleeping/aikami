@@ -314,9 +314,80 @@ export type GameEvent =
       type: 'INTERACTION_TARGET_CHANGED';
       /** undefined when no interactable is in range. */
       targetEntityId?: number;
-      targetType?: 'npc' | 'item';
-      /** Display name for the prompt (NPC name or item id). */
+      targetType?:
+        | 'npc'
+        | 'item'
+        | 'door'
+        | 'chest'
+        | 'lever'
+        | 'pressure_plate'
+        | 'container'
+        | 'readable'
+        | 'trap';
+      /** Display name for the prompt. */
       targetName?: string;
+    }
+  | {
+      /**
+       * Emitted when a door opens.
+       * Contract: C-342
+       */
+      type: 'DOOR_OPENED';
+      spawnId: string;
+    }
+  | {
+      /**
+       * Emitted when a door closes.
+       * Contract: C-342
+       */
+      type: 'DOOR_CLOSED';
+      spawnId: string;
+    }
+  | {
+      /**
+       * Emitted when a lever is toggled.
+       * Contract: C-342
+       */
+      type: 'LEVER_TOGGLED';
+      spawnId: string;
+      isToggled: boolean;
+    }
+  | {
+      /**
+       * Emitted when loot is generated from a chest or container.
+       * Carries the per-item delta list for inventory processing.
+       * Contract: C-342
+       */
+      type: 'LOOT_GENERATED';
+      spawnId: string;
+      items: Array<{ itemId: string; quantity: number }>;
+    }
+  | {
+      /**
+       * Emitted when a trap is triggered.
+       * Contract: C-342
+       */
+      type: 'TRAP_TRIGGERED';
+      spawnId: string;
+      damage: number;
+    }
+  | {
+      /**
+       * Emitted when a readable signpost/book is inspected.
+       * Contract: C-342
+       */
+      type: 'READABLE_INTERACTED';
+      spawnId: string;
+      textDialogueKey: string;
+    }
+  | {
+      /**
+       * Emitted when a puzzle is solved (all activation conditions met).
+       * Contract: C-342
+       */
+      type: 'PUZZLE_SOLVED';
+      puzzleId: string;
+      solvedDialogueKey: string;
     }
   | {
       /**

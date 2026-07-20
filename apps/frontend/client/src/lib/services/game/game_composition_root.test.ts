@@ -122,6 +122,15 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     mock.module('./equipment_service.svelte', () => ({
       equipmentService: stubService(),
     }));
+    mock.module('./npc_dialogue_service.svelte', () => ({
+      npcDialogueService: stubService(),
+    }));
+    mock.module('./quest_state_service.svelte', () => ({
+      questStateService: stubService(),
+    }));
+    mock.module('./relationship_service.svelte.ts', () => ({
+      relationshipService: stubService(),
+    }));
     mock.module('../campaign/campaign_service.svelte', () => ({
       campaignService: Object.assign(stubService(), {
         activeCampaign: { contentPackId: 'emberwatch' },

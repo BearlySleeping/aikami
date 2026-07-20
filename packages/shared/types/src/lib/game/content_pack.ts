@@ -10,11 +10,13 @@ import type {
   ContentPackCombatStatsSchema,
   ContentPackCreditsSchema,
   ContentPackEncounterEntrySchema,
+  ContentPackInteractableEntrySchema,
   ContentPackItemEntrySchema,
   ContentPackLootEntrySchema,
   ContentPackManifestSchema,
   ContentPackMapEntrySchema,
   ContentPackNpcEntrySchema,
+  ContentPackPuzzleSchema,
   ContentPackQuestEndingSchema,
   ContentPackQuestEntrySchema,
   ContentPackQuestObjectiveSchema,
@@ -85,3 +87,9 @@ export type OnboardingHintStep = Static<typeof OnboardingHintStepSchema>;
 
 /** Onboarding section in a content pack manifest (C-327). */
 export type OnboardingSection = Static<typeof OnboardingSectionSchema>;
+
+/** A world interactable definition (C-342). */
+export type ContentPackInteractableEntry = Static<typeof ContentPackInteractableEntrySchema>;
+
+/** A puzzle DAG definition (C-342). */
+export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
