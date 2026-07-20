@@ -1,5 +1,9 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view.svelte
+//
+// Contract: C-240 Session Management
+// Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
+
 import type { EndSessionViewModelInterface } from './end_session_view_model.svelte';
 
 type Props = {
@@ -23,13 +27,17 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   tabindex="-1"
   onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      viewModel.cancel();
+      if (viewModel.phase === 'editing') {
+        viewModel.cancelEdit();
+      } else {
+        viewModel.cancel();
+      }
       return;
     }
     if (e.key === 'Tab') {
       e.preventDefault();
       const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]'
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href], textarea, input'
       );
       if (focusable.length === 0) {
         return;
@@ -104,9 +112,20 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
             messages
           </p>
         {/if}
+
+        {#if viewModel.recapReviewed}
+          <p class="mt-2 text-xs text-success/70">✓ Recap reviewed</p>
+        {/if}
       </div>
 
       <div class="mt-6 space-y-3">
+        <button
+          type="button"
+          class="btn btn-outline btn-block"
+          onclick={() => viewModel.enterEditMode()}
+        >
+          ✏️ Edit Recap
+        </button>
         <button
           type="button"
           class="btn btn-primary btn-block"
@@ -127,6 +146,44 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
           onclick={() => viewModel.cancel()}
         >
           Return to Pause Menu
+        </button>
+      </div>
+    <!-- Phase: Editing (C-344) -->
+    {:else if viewModel.phase === 'editing'}
+      <h2 class="text-center text-lg font-bold text-base-content">Edit Recap</h2>
+
+      <p class="mt-2 text-sm text-base-content/60 text-center">
+        Edit the AI-generated summary to better capture your session. Minimum 10 characters.
+      </p>
+
+      <div class="mt-4">
+        <textarea
+          class="textarea textarea-bordered w-full h-48 text-sm"
+          value={viewModel.editedSynopsis}
+          oninput={(e: Event) => {
+            const target = e.target as HTMLTextAreaElement;
+            viewModel.setEditedSynopsis(target.value);
+          }}
+          placeholder="Edit your session synopsis..."
+        ></textarea>
+      </div>
+
+      <div class="mt-4 flex gap-3">
+        <button type="button" class="btn btn-ghost flex-1" onclick={() => viewModel.cancelEdit()}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary flex-1"
+          disabled={viewModel.editedSynopsis.trim().length < 10 || viewModel.isSavingRecap}
+          onclick={() => viewModel.saveRecap()}
+        >
+          {#if viewModel.isSavingRecap}
+            <span class="loading loading-spinner loading-xs"></span>
+            Saving...
+          {:else}
+            Save Recap
+          {/if}
         </button>
       </div>
     <!-- Phase: Locked (fallback if preview not available) -->

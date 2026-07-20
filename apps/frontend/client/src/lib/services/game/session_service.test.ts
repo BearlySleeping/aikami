@@ -39,15 +39,17 @@ describe('SessionService', () => {
   });
 
   test('should increment session number for subsequent sessions', async () => {
+    const gameId = `test-inc-${crypto.randomUUID()}`;
+
     // Session 1: start and end
-    await service.startSession({ gameId: 'test-game' });
+    await service.startSession({ gameId });
     const session1Number = service.activeSession?.sessionNumber;
     expect(session1Number).toBe(1);
 
     await service.endSession({ playtimeMinutes: 0 });
 
     // Session 2
-    await service.startSession({ gameId: 'test-game' });
+    await service.startSession({ gameId });
     const session2Number = service.activeSession?.sessionNumber;
     expect(session2Number).toBe(2);
   });
@@ -91,12 +93,14 @@ describe('SessionService', () => {
   });
 
   test('should load sessions for a specific game', async () => {
-    await service.startSession({ gameId: 'game-a' });
+    const gameId = `test-load-${crypto.randomUUID()}`;
+
+    await service.startSession({ gameId });
     await service.endSession({ playtimeMinutes: 0 });
-    await service.startSession({ gameId: 'game-a' });
+    await service.startSession({ gameId });
     await service.endSession({ playtimeMinutes: 0 });
 
-    await service.loadSessions({ gameId: 'game-a' });
+    await service.loadSessions({ gameId });
 
     expect(service.sessions.length).toBe(2);
     expect(service.sessions[0].sessionNumber).toBe(2);
