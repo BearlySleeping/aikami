@@ -112,10 +112,12 @@ const emberwatchManifest = {
     healthPotion: {
       name: 'Health Potion',
       type: 'consumable',
+      effect: { kind: 'heal', amount: 30 },
     },
     manaPotion: {
       name: 'Mana Potion',
       type: 'consumable',
+      effect: { kind: 'heal', amount: 20 },
     },
     ironArmor: {
       name: 'Iron Armor',

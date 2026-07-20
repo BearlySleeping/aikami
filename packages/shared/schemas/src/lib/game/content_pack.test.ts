@@ -178,13 +178,17 @@ describe('ContentPackManifestSchema', () => {
     const types = ['weapon', 'armor', 'consumable', 'key', 'misc'] as const;
     for (const type of types) {
       const itemKey = `item${type.charAt(0).toUpperCase() + type.slice(1)}`;
+      const item: Record<string, unknown> = {
+        name: `Test ${type}`,
+        type,
+      };
+      if (type === 'consumable') {
+        item.effect = { kind: 'heal', amount: 10 };
+      }
       const manifest = {
         ...validManifest,
         items: {
-          [itemKey]: {
-            name: `Test ${type}`,
-            type,
-          },
+          [itemKey]: item,
         },
       };
       const result = Value.Parse(ContentPackManifestSchema, manifest);

@@ -366,6 +366,10 @@ class CampaignService
     };
     this.activeCampaign = updated;
     void campaignRepository.update(updated);
+
+    // Keep the campaigns list in sync so getLatestCampaign() returns accurate state
+    this.campaigns = this.campaigns.map((c) => (c.id === updated.id ? updated : c));
+
     this.debug('_applyTransition', { event: event.type, newState: state });
   }
 }

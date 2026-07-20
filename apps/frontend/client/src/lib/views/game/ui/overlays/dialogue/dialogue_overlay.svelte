@@ -102,7 +102,19 @@ const { viewModel }: Props = $props();
 
     <!-- Input area -->
     <div class="border-t border-base-300 px-4 py-3">
-      {#if viewModel.dialoguePhase === 'MENU'}
+      {#if viewModel.recruitAvailable}
+        <!-- C-340 AC-1: Recruit button -->
+        <div class="flex items-center justify-center gap-3">
+          <div class="badge badge-success badge-lg gap-1">🤝 Recruitable</div>
+          <button
+            type="button"
+            class="btn btn-success btn-sm"
+            onclick={() => viewModel.recruitCompanion()}
+          >
+            Recruit {viewModel.npcName}
+          </button>
+        </div>
+      {:else if viewModel.dialoguePhase === 'MENU'}
         <div class="flex flex-wrap gap-2">
           {#each viewModel.actionOptions as action (action.id)}
             <button

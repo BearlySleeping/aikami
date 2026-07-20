@@ -21,6 +21,7 @@ const { viewModel = getHotbarViewModel({ className: 'HotbarViewModel' }) }: Prop
     <div class="hotbar-container">
       {#each viewModel.slots as slot}
         <button
+          type="button"
           class="hotbar-slot {slot.filled ? 'slot-filled' : 'slot-empty'} {slot.canUse ? '' : 'slot-depleted'}"
           onclick={() => viewModel.activateSlot(slot.index)}
           title={slot.filled ? slot.label : `Slot ${slot.keybind} (empty)`}

@@ -508,16 +508,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._apiService = undefined;
     this._aiService = undefined;
 
+    // Destroy weather overlay BEFORE PixiJS app — the overlay mesh is a
+    // child of the stage, and destroying the app first would null out the
+    // mesh geometry, causing a crash when WeatherOverlay.destroy() runs.
+    if (this._weatherOverlay) {
+      this._weatherOverlay.destroy();
+      this._weatherOverlay = undefined;
+    }
+
     // Destroy PixiJS
     if (this._app) {
       this._app.destroy(true, { children: true });
       this._app = undefined;
-    }
-
-    // Destroy weather overlay (C-213)
-    if (this._weatherOverlay) {
-      this._weatherOverlay.destroy();
-      this._weatherOverlay = undefined;
     }
 
     this._worldContainer = undefined;

@@ -19,12 +19,12 @@ import { resetLocalDatabase } from '@aikami/frontend/repositories';
 
 let mockSnapshotCalls = 0;
 let mockRestoreCalls = 0;
-let mockLastRestorePayload: string | undefined;
+let _mockLastRestorePayload: string | undefined;
 
 const resetMockBridge = (): void => {
   mockSnapshotCalls = 0;
   mockRestoreCalls = 0;
-  mockLastRestorePayload = undefined;
+  _mockLastRestorePayload = undefined;
 };
 
 const MOCK_SNAPSHOT_PAYLOAD = JSON.stringify({
@@ -49,7 +49,7 @@ const createMockBridge = (): EngineBridge => ({
 
   async restoreSnapshot(snapshot: string): Promise<void> {
     mockRestoreCalls++;
-    mockLastRestorePayload = snapshot;
+    _mockLastRestorePayload = snapshot;
   },
 });
 

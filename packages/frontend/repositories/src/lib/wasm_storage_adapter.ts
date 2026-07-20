@@ -104,7 +104,10 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     // Request persistent storage — non-fatal if denied
     await this._requestPersistence();
 
-    // Try SAH pool first (works without COOP/COEP headers), fall back to OpfsDb
+    // Try SAH pool first (works without COOP/COEP headers), fall back to OpfsDb.
+    // If neither is available (e.g. headless Chromium where Atomics.wait() is
+    // blocked on the main thread), fall back to an in-memory database so the
+    // app remains functional — data will not persist across restarts.
     if (oo1['OpfsSAHPoolDb']) {
       const SahCtor = oo1['OpfsSAHPoolDb'] as { new (filename: string): WasmDatabase };
       this._db = new SahCtor(this._databasePath);
@@ -114,10 +117,12 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       };
       this._db = new OpfsCtor(this._databasePath, 'c');
     } else {
-      throw new Error(
-        'WasmStorageAdapter: OPFS VFS not available. ' +
-          'The browser may be missing required File System Access APIs.',
+      logger.warn(
+        'WasmStorageAdapter: OPFS VFS not available — falling back to in-memory database. ' +
+          'Campaign data will NOT persist across page reloads in this environment.',
       );
+      const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
+      this._db = new DbCtor(':memory:', 'c');
     }
   }
 

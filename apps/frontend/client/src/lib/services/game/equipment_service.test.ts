@@ -58,7 +58,7 @@ describe('EquipmentService', () => {
     // rustySword should be back in inventory
     const rusty = inventoryService.inventory.find((e) => e.itemId === 'rustySword');
     expect(rusty).toBeDefined();
-    expect(rusty!.quantity).toBe(1);
+    expect(rusty?.quantity).toBe(1);
   });
 
   test('equipItem with stack splits — equipping from a stack of 2 decrements to 1 (C-331 edge case)', () => {
@@ -68,7 +68,7 @@ describe('EquipmentService', () => {
     expect(equipmentService.equippedWeapon).toBe('ironSword');
     const remaining = inventoryService.inventory.find((e) => e.itemId === 'ironSword');
     expect(remaining).toBeDefined();
-    expect(remaining!.quantity).toBe(1);
+    expect(remaining?.quantity).toBe(1);
   });
 
   test('unequipItem returns item to inventory', () => {
@@ -81,7 +81,7 @@ describe('EquipmentService', () => {
     expect(equipmentService.equippedArmor).toBeUndefined();
     const returned = inventoryService.inventory.find((e) => e.itemId === 'ironArmor');
     expect(returned).toBeDefined();
-    expect(returned!.quantity).toBe(1);
+    expect(returned?.quantity).toBe(1);
   });
 
   test('unequipItem returns false when slot is empty', () => {

@@ -78,7 +78,7 @@ export const resolveLevelFeatures = (options: { classId: string; level: number }
 
   // Auto-assigned subclass features (first subclass for the class)
   const subclass = classDef.subclasses[0];
-  if (subclass && subclass.features[levelKey]) {
+  if (subclass?.features[levelKey]) {
     for (const feature of subclass.features[levelKey]) {
       features.push(feature.id);
     }

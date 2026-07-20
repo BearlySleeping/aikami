@@ -65,7 +65,10 @@ const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck', 'commit'];
 const PI_WORKSPACE = 'aikami-pi';
 const AUTOFIX_TAB = 'autofix';
 const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
-const DEFAULT_THINKING = 'medium';
+/**
+ * Deepseek only support high and max thinking
+ */
+const DEFAULT_THINKING = 'high';
 const CLIENT_PORT = 5274;
 const FB_AUTH_PORT = 9098;
 const FB_HUB_PORT = 4401;
@@ -278,8 +281,7 @@ const buildSystemPrompt = (): string => {
     stepNum += 1;
     stepsText.push(
       `## Step ${stepNum} — \`bun run typecheck\``,
-      'Run `bun run typecheck`. Fix every type error. Re-run until zero',
-      'errors. Pre-existing errors may be left with `@ts-expect-error`.',
+      'Run `bun run typecheck`. Fix every type error. Re-run until zero errors.',
       'Do not proceed until this step is clean.',
       '',
     );
@@ -317,11 +319,10 @@ const buildSystemPrompt = (): string => {
     '- Re-run the command after each round of fixes to verify.',
     '- NEVER skip a step. Steps must complete cleanly before proceeding.',
     '- Do NOT ask questions. If truly blocked, explain why and stop.',
-    '- Do NOT modify .pi/, node_modules/, or generated files.',
+    '- Do NOT modify examples, node_modules/, or generated files.',
     '- Do NOT change moon.yml, biome.json, or tsconfig files unless',
     '  the error specifically requires it.',
-    '- Prefer `@ts-expect-error` over `as any` or `as never` for',
-    '  pre-existing type issues.',
+    '- Try not to use "as" type assertions.',
   ].join('\n');
 };
 
