@@ -209,7 +209,9 @@ const getAutofixCommentState = (num: string): AutofixCommentState => {
       if (
         body.includes('Actionable comments posted') ||
         body.includes('could not resolve') ||
-        body.includes('No autofix changes were needed')
+        body.includes('No autofix changes were needed') ||
+        body.includes('unexpected error') ||
+        body.includes('Not Found')
       ) {
         return 'autofix_failed';
       }
@@ -233,20 +235,29 @@ const getAutofixStatus = (num: string): string | undefined => {
   if (!comments) {
     return undefined;
   }
+  // 🔴 Check for errors FIRST — a comment with autofix-run-id can be a FAILURE.
+  if (
+    comments.includes('unexpected error') ||
+    comments.includes('Not Found') ||
+    comments.includes('could not generate') ||
+    comments.includes('failed to generate')
+  ) {
+    return 'failed';
+  }
   if (comments.includes('Autofix in progress') || comments.includes('autofix in progress')) {
     return 'in_progress';
   }
   if (comments.includes('Autofix skipped') || comments.includes('autofix skipped')) {
     return 'skipped';
   }
-  // CodeRabbit uses multiple phrasings: "Autofix applied", "Fixes Applied Successfully",
-  // or contains an autofix-run-id. All indicate completion.
+  // Completion markers — only match if no error was detected above.
+  // autofix-run-id alone is ambiguous (present in both success and failure),
+  // so require an explicit success marker alongside it.
   if (
     comments.includes('Autofix applied') ||
     comments.includes('autofix applied') ||
     comments.includes('Fixes Applied') ||
-    comments.includes('fixes applied') ||
-    comments.includes('autofix-run-id')
+    comments.includes('fixes applied')
   ) {
     return 'completed';
   }
@@ -497,10 +508,16 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           },
         };
       } else if (preAutofixState === 'autofix_applied') {
-        console.log('✅ Autofix already applied — adopting existing commit.');
+        // Previous autofix completed, but new commits may have been pushed
+        // since then. Re-trigger to get fresh autofix on the new code.
+        console.log('📋 Previous autofix completed — re-triggering for fresh code.');
+        gh(`pr comment ${num} --body "@coderabbitai autofix"`);
       } else if (preAutofixState === 'autofix_skipped') {
-        console.log('📋 Autofix already skipped — clean review.');
-      } else {
+        console.log('📋 Previous autofix skipped — re-triggering for fresh code.');
+        gh(`pr comment ${num} --body "@coderabbitai autofix"`);
+      } else if (preAutofixState === 'autofix_failed') {
+        console.log('⚠️  Previous autofix failed — re-triggering.');
+        gh(`pr comment ${num} --body "@coderabbitai autofix"`);
         console.log(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
         gh(`pr comment ${num} --body "@coderabbitai autofix"`);
       }
