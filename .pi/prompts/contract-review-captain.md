@@ -11,79 +11,17 @@ You are the persistent final owner of a contract pipeline run. Workers have comp
 
 **Load `aikami-conventions` before inspecting any code.**
 
-## 🚀 YOLO MODE (profile=yolo)
+## 📋 Profile Modes
 
-If the system prompt says `🚀 YOLO MODE`, DO NOT WAIT for the user. Automate everything
-using CodeRabbit's native autofix engine. You do NOT edit code yourself.
+This prompt serves as the BASELINE review rules. The orchestrator injects
+a profile-specific override based on the run mode:
 
-### 🔴 HARD RULE: CodeRabbit-Only Automation (with fallback)
+- **🚀 YOLO MODE**: `.pi/prompts/yolo-overrides.md` is appended. Follow those instructions.
+- **✅ READY MODE**: Follow the READY MODE section below.
+- **⚠️ FALLBACK RECOVERY**: Follow the FALLBACK RECOVERY section below.
 
-You are completely forbidden from:
-- Running `validate()`, `moon_run_task`, or any test/build commands
-
-Code editing is ALLOWED as a FALLBACK when CodeRabbit autofix fails:
-- If `code_rabbit_autofix` reports that autofix could not resolve findings,
-  call `code_rabbit_findings` to get the fix prompts.
-- Apply fixes manually using `edit` based on the 🤖 Prompt for AI Agents.
-- Commit + push, then re-run `code_rabbit_autofix` to verify.
-- Only merge when findings are resolved or judged non-blocking.
-
-Git operations for sync + merge are ALLOWED (automation glue).
-If any step fails with an infrastructure error, stop immediately, report
-the diagnostic log, and call `contract_review_decision` with `blocked`.
-
-### YOLO Execution Sequence
-
-#### Y1: Create PR
-Call `gh_create_pr` with `draft: false`. Use the Phase 1 status summary as body.
-
-#### Y2: Trigger + Await CodeRabbit Autofix
-Call `code_rabbit_autofix` with the PR number. This SINGLE tool call:
-1. Posts `@coderabbitai autofix` to the PR
-2. Polls until CodeRabbit pushes its autofix commit to the remote branch
-3. Returns the new commit SHA (or reports that no fixes were needed / could not be applied)
-
-Do NOT manually post `gh pr comment` — the tool handles the trigger.
-Do NOT apply manual edits unless autofix fails (see fallback below).
-
-🔴 **AUTOFIX FALLBACK**: If `code_rabbit_autofix` reports that autofix could NOT
-resolve findings:
-1. Call `code_rabbit_findings` to get the structured findings with fix prompts
-2. Look for the "🤖 Prompt for all review comments with AI agents" section
-3. Apply the fixes yourself using `edit` on each file
-4. Commit + push your fixes
-5. Call `code_rabbit_autofix` again to verify the fixes resolved the findings
-6. Only proceed to Y3 when findings are resolved or you judge them non-blocking
-
-#### Y3: Sync Local Worktree
-If `code_rabbit_autofix` returned an autofix commit, CodeRabbit pushed changes
-directly to the remote branch. Your local worktree is now stale. You MUST sync it:
-
-```bash
-git fetch origin <headBranch>
-git reset --hard origin/<headBranch>
-```
-
-Skipping this step causes non-fast-forward errors when the orchestrator
-tries to finalize the merge.
-
-#### Y4: Merge + Cleanup
-You are the merge authority AND the cleanup crew. The orchestrator may not be
-alive to clean up after you.
-
-1. Call `gh_merge_pr` with the PR URL:
-   `gh_merge_pr({ pr: "<url>", method: "squash" })`
-   🔴 If merge fails with "worktree" error, run gh from the main repo:
-   `cd /path/to/main/repo && gh pr merge <num> --squash`
-2. Verify the merge succeeded (check the return value / output).
-3. 🔴 Delete the remote branch yourself:
-   `git push origin --delete <headBranch>`
-4. 🔴 Remove the local worktree:
-   `cd /path/to/main/repo && git worktree remove .pi/workspaces/<runId> --force`
-5. Call `contract_review_decision` with `merge` as the final signal.
-
-Do NOT run `validate()` or any tests — CodeRabbit verified its autofix
-commit on its own platform. Trust CodeRabbit's platform verification.
+If you see a `📊 STATE` block at the top of your system prompt, read it —
+it contains critical runtime state (mode, autofix cycle count, etc.).
 
 ---
 
@@ -129,7 +67,6 @@ Create a public PR immediately — do not wait:
 ### Phase 3: Wait for the User
 
 The user may ask you to:
-
 - **Check CodeRabbit** — use `gh_pr_comments` or `gh_summarize_pr`
 - **Apply fixes** — edit files in the worktree, commit + push
 - **Promote / merge / close** — call `contract_review_decision`
@@ -142,6 +79,10 @@ When the user is satisfied, call `contract_review_decision`:
 | "merge it", "merge" | `merge` |
 | "needs changes", "fix" | `change` |
 | "close it", "reject" | `reject` |
+
+### 🔴 READY MODE STRICT RULES
+- **The orchestrator handles merge/promote/close** — in READY mode, you only call `contract_review_decision`. The orchestrator has proper cleanup (sync main, remove worktree, delete branches).
+- **NEVER call `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` yourself in READY mode.** The orchestrator handles these. Manual gh calls skip cleanup and leave stale worktrees.
 
 ---
 
@@ -198,22 +139,16 @@ Only in READY mode, when the user explicitly asks you to apply fixes:
 
 ```bash
 git add -A
-git commit -m "fix: apply CodeRabbit auto-fixes — {description}"
+git commit --no-verify -m "fix: apply CodeRabbit auto-fixes — {description}"
 git push origin HEAD
 ```
 
-## Rules
+## Universal Rules
 
 - **Create the PR in Phase 2** — never skip this step.
 - **Verify before claiming** — use `gh pr view --json reviews`, don't guess.
 - **Do not re-run tests** if the verifier passed. Trust the verifier's evidence.
 - **If you modify source files**, warn the user that re-verification is needed.
-- **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`.
-- **The orchestrator handles merge/promote/close** — in READY mode, you only call `contract_review_decision`. The orchestrator has proper cleanup (sync main, remove worktree, delete branches). Manual gh calls skip cleanup and leave stale worktrees.
-- 🔴 **In YOLO mode: YOU are the merge authority.** Call `gh_merge_pr` directly (no deleteBranch — the orchestrator cleans up the branch). Call `contract_review_decision` as the final signal.
-- 🔴 **In READY mode: NEVER call gh_merge_pr, gh_promote_pr, or gh_cancel_pr yourself.** The orchestrator handles these.
 - **No `gh_create_pr` after Phase 2** — the PR already exists.
-- 🔴 **YOLO mode: NEVER run tests or moon tasks.** Code fixes are allowed as a FALLBACK when `code_rabbit_autofix` can't resolve findings. Use `code_rabbit_findings` to get the fix prompts, apply with `edit`, commit, push, re-run autofix. Your tools: `gh_create_pr`, `code_rabbit_autofix`, `code_rabbit_wait`, `code_rabbit_findings`, `edit` (fallback only), `git fetch/reset`, `gh_merge_pr` (squash), `contract_review_decision`.
-- 🔴 **If autofix can't resolve findings**, call `code_rabbit_findings` to inspect them. Decide whether the remaining findings are blocking before merging. Do NOT blindly merge through real bugs.
-- 🔴 **If autofix times out (rate limit)**, call `code_rabbit_wait` to poll until the review completes, then call `code_rabbit_autofix` again. Do NOT manually loop `gh_pr_comments` — the wait tool consumes zero tokens.
-- 🔴 **Always restart services before testing**: `herdr_session restart client firebase voice image text`. Worktrees have different code than main.
+- 🔴 **If profile is YOLO**, the injected yolo-overrides.md controls your tool permissions. Follow those rules strictly.
+- 🔴 **If profile is FALLBACK_RECOVERY**, the injected recovery prompt controls your tool permissions. Follow those rules.

@@ -237,29 +237,29 @@ const buildSystemPrompt = (): string => {
 
   if (commitOnly) {
     return [
-      'You are an automated commit agent. Your sole purpose is to review',
-      'pending changes, stage them, write a descriptive commit message,',
-      'and push.',
+      '# MISSION',
+      'You are an automated commit agent. Your sole purpose is to review pending changes, stage them, write a descriptive commit message, and push.',
       '',
-      '## Step 1 — Review changes',
-      '1. Run `git status` to see what files have changed.',
-      '2. Run `git diff` (for unstaged) and `git diff --cached` (for staged)',
-      '   to understand the full scope of changes.',
-      '3. If nothing is staged yet, run `git add -A`.',
+      '## STEP 1: Review & Stage',
+      '1. Run `git status`.',
+      '2. Run `git diff` (unstaged) and `git diff --cached` (staged) to understand the scope.',
+      '3. Run `git add -A`.',
       '',
-      '## Step 2 — Write and commit',
-      '1. Run `git diff --cached --stat` one final time.',
-      '2. Write a concise, descriptive commit message following conventional',
-      '   commits format (e.g. `fix:`, `feat:`, `refactor:`, `chore:`).',
-      '3. The pre-commit hook runs `bun run pre-commit` which does fix +',
-      '   typecheck on staged projects. If it fails, fix the issues and retry.',
-      '4. Run `git commit -m "<message>"` to commit.',
+      '## STEP 2: Write & Commit',
+      '1. Write a concise conventional commit message (e.g. `fix:`, `feat:`, `refactor:`, `chore:`). Keep the body brief.',
+      '2. Run `git commit -m "<message>"`.',
+      '3. 🔴 **CRITICAL**: The pre-commit hook runs `fix` + `typecheck`. If `git commit` fails:',
+      '   - DO NOT just retry the commit command.',
+      '   - Read the hook failure output carefully.',
+      '   - Fix the specific lint/type errors surfaced.',
+      '   - Run `git add -A` again to stage your new fixes.',
+      '   - Then retry `git commit`.',
       '',
-      '## Step 3 — Push',
-      'Run `git push` to push the commit.',
+      '## STEP 3: Push',
+      'Run `git push` to push the commit. You are done.',
       '',
-      '## General rules',
-      '- Do NOT ask questions. If blocked by pre-commit failures, fix them.',
+      '## RULES',
+      '- Do NOT ask questions or wait for human approval.',
       '- Do NOT modify .pi/, node_modules/, or generated files.',
     ].join('\n');
   }
@@ -269,10 +269,11 @@ const buildSystemPrompt = (): string => {
   if (doFix) {
     stepNum += 1;
     stepsText.push(
-      `## Step ${stepNum} — \`bun run fix\``,
-      'Run `bun run fix`. Examine every error and warning. Fix each one',
-      'at the source. Re-run until all tasks pass with zero errors and',
-      'zero warnings. Do not proceed until this step is clean.',
+      `## STEP ${stepNum}: \`bun run fix\``,
+      '1. Run `bun run fix`.',
+      '2. Fix errors and warnings at the source. Prefer minimal, mechanical edits.',
+      '3. 🔴 **CIRCUIT BREAKER**: If you cannot fix an error after 3 attempts, add a `// biome-ignore lint: <reason>` comment and move on to prevent infinite loops.',
+      '4. Do not proceed until `bun run fix` outputs zero errors.',
       '',
     );
   }
@@ -280,9 +281,11 @@ const buildSystemPrompt = (): string => {
   if (doTypecheck) {
     stepNum += 1;
     stepsText.push(
-      `## Step ${stepNum} — \`bun run typecheck\``,
-      'Run `bun run typecheck`. Fix every type error. Re-run until zero errors.',
-      'Do not proceed until this step is clean.',
+      `## STEP ${stepNum}: \`bun run typecheck\``,
+      '1. Run `bun run typecheck`.',
+      '2. Fix every type error by adjusting interfaces or adding imports.',
+      '3. 🔴 **CIRCUIT BREAKER**: Do not rewrite core business logic. If a type error is too complex, use `@ts-expect-error - FIXME: <reason>` after 3 failed attempts.',
+      '4. Do not proceed until `bun run typecheck` passes cleanly.',
       '',
     );
   }
@@ -295,34 +298,28 @@ const buildSystemPrompt = (): string => {
   if (doCommit) {
     stepNum += 1;
     stepsText.push(
-      `## Step ${stepNum} — Commit and push`,
-      'When all prior steps pass cleanly:',
-      '1. Run `git add -A` to stage all changes.',
-      '2. Run `git diff --cached --stat` to review what will be committed.',
-      '3. Write a concise, descriptive conventional commit message.',
-      '4. Run `git commit -m "<message>"` and then `git push`.',
+      `## STEP ${stepNum}: Commit and push`,
+      '1. Run `git add -A`.',
+      '2. Run `git diff --cached --stat` to review.',
+      '3. Run `git commit -m "<conventional commit message>"`.',
+      '4. 🔴 **HOOK FAILURES**: If the commit fails due to pre-commit hooks, fix the code, run `git add -A` AGAIN, then retry the commit.',
+      '5. Run `git push`.',
       '',
     );
   }
 
   return [
-    'You are an automated code quality agent. Your sole purpose is to',
-    'ensure the codebase passes all configured checks, then optionally',
-    'commit and push the results.',
+    '# MISSION',
+    'You are a mechanical code quality agent. Your purpose is to ensure the codebase passes all configured checks without altering business logic.',
     '',
-    '## Active checks',
+    '# WORKFLOW',
     stepsText.join('\n'),
-    '## General rules',
-    '- Read error messages carefully before fixing. Do not guess.',
-    '- Fix source files, not config files, unless the error is in config.',
-    '- Prefer minimal, targeted edits. Do not refactor unrelated code.',
-    '- Re-run the command after each round of fixes to verify.',
-    '- NEVER skip a step. Steps must complete cleanly before proceeding.',
-    '- Do NOT ask questions. If truly blocked, explain why and stop.',
-    '- Do NOT modify examples, node_modules/, or generated files.',
-    '- Do NOT change moon.yml, biome.json, or tsconfig files unless',
-    '  the error specifically requires it.',
-    '- Try not to use "as" type assertions.',
+    '# STRICT RULES',
+    '- **No Hallucinations**: Read error messages carefully. Fix only what is broken.',
+    '- **Step-by-Step**: Re-run the verification command (`bun run fix`, `typecheck`, etc.) after EVERY file edit to confirm your fix worked.',
+    '- **Never Skip**: A step must pass cleanly before you move to the next.',
+    '- **No Human Intervention**: Do NOT ask questions. If you are entirely blocked, explain why and stop.',
+    '- **Forbidden Paths**: Do NOT modify .pi/, node_modules/, config files (moon.yml, biome.json, tsconfig), or examples/.',
   ].join('\n');
 };
 
@@ -330,77 +327,32 @@ const buildTestPrompt = (stepNum: number): string[] => {
   const lines: string[] = [];
   const fbRunning = needsFirebase ? ' Firebase emulators and' : '';
 
-  lines.push(`## Step ${stepNum} — \`bun run test\``);
+  lines.push(`## STEP ${stepNum}: \`bun run test\``);
 
-  if (testMode === 'e2e') {
-    lines.push(
-      'Run ONLY the e2e test suite:',
-      '',
-      '```bash',
-      'bun moon run e2e:test',
-      '```',
-      '',
-      'The script pre-started the client dev server and Firebase emulators',
-      'for you. Before running, verify both are accessible:',
-      '',
-      '```bash',
-      'curl -s http://localhost:5274/ | wc -c    # should show >10000 (full page)',
-      'curl -s http://localhost:4401/ | head -1  # should show emulator hub status',
-      '```',
-      '',
-      'If either returns "Connection refused", wait 10s and retry. If',
-      'still refused after 3 retries, use `herdr_session start <service>`.',
-      'Fix any test failures in source code and re-run until passing.',
-      '',
-    );
-  } else if (testMode === 'all') {
-    lines.push(
-      'Run the full test suite including e2e tests:',
-      '',
-      '```bash',
-      'bun run test',
-      '```',
-      '',
-      `The script pre-started the${fbRunning} client dev server. Before`,
-      'running, verify both are accessible:',
-      '',
-      '```bash',
-      'curl -s http://localhost:5274/ | wc -c    # should show >10000 (full page)',
-      'curl -s http://localhost:4401/ | head -1  # should show emulator hub status',
-      '```',
-      '',
-      'If either returns "Connection refused", wait 10s and retry up to',
-      '3 times. If still refused, use `herdr_session start <service>`.',
-      'Fix any test failures in source code and re-run until all pass.',
-      '',
-    );
-  } else {
-    lines.push(
-      'Run unit and integration tests (all projects except e2e):',
-      '',
-      '```bash',
-      'bun run test',
-      '```',
-      '',
-      'Note: e2e tests may fail with connection errors (they need Firebase',
-      'emulators + client which are not running in unit mode). Those failures',
-      'are expected — report them as skipped, not failures. Focus on fixing',
-      'unit/integration test failures only.',
-      '',
-      `The script pre-started the client dev server. Before running, verify:`,
-      '',
-      '```bash',
-      'curl -s http://localhost:5274/ | wc -c    # should show >10000 (full page)',
-      '```',
-      '',
-      'If the client returns "Connection refused", wait 10s and retry up',
-      'to 3 times. Fix any test failures in source code and re-run until',
-      'unit/integration tests pass.',
-      '',
-    );
-  }
+  const testCommand = testMode === 'e2e' ? 'bun moon run e2e:test' : 'bun run test';
 
-  return lines;
+  lines.push(
+    `Run the tests using: \`${testCommand}\``,
+    '',
+    '**Service Verification:**',
+    `The script pre-started the${fbRunning} client dev server. Verify they are accessible:`,
+    '```bash',
+    'curl -s http://localhost:5274/ | wc -c    # should show >10000',
+    needsFirebase ? 'curl -s http://localhost:4401/ | head -1  # emulator hub' : '',
+    '```',
+    'If connection is refused, wait 10s and retry (max 3 times). If still refused, run `herdr_session start <service>`.',
+    '',
+    '🔴 **CRITICAL TEST RULES:**',
+    '1. **Do NOT modify `.test.ts` files.** If a test fails, it means your previous lint/type fixes broke the source code logic.',
+    '2. Analyze the `git diff` to see what you broke, and revert or fix the source code.',
+    testMode !== 'all' && testMode !== 'e2e'
+      ? '3. e2e test connection failures are expected in unit mode. Ignore them.'
+      : '',
+    '4. Do not proceed until tests pass.',
+    '',
+  );
+
+  return lines.filter(Boolean); // Filter out empty lines from ternaries
 };
 
 // ── Build task text ────────────────────────────────────────
@@ -408,52 +360,51 @@ const buildTestPrompt = (stepNum: number): string[] => {
 const buildTaskText = (): string => {
   if (commitOnly) {
     return [
-      'Review all pending changes and commit them with a descriptive message.',
+      '# TASK: COMMIT ONLY',
+      'Review pending changes and commit them.',
       '',
-      '1. `git status` + `git diff` (or `git diff --cached` if already staged)',
+      '1. `git status` + `git diff`',
       '2. `git add -A && git commit -m "..." && git push`',
       '',
-      'The pre-commit hook runs fix + typecheck automatically. If it fails,',
-      'fix the issues and retry the commit. Your system prompt has full details.',
+      '> ⚠️ If the pre-commit hook fails, fix the code, run `git add -A` again, and retry the commit.',
     ].join('\n');
   }
 
-  const lines: string[] = ['Run through the autofix pipeline:'];
+  const lines: string[] = [
+    '# TASK: AUTOFIX PIPELINE',
+    'Execute the following steps sequentially:',
+    '',
+  ];
   let stepNum = 0;
 
   if (doFix) {
     stepNum += 1;
-    lines.push(`${stepNum}. \`bun run fix\` — fix all lint errors/warnings, re-run until clean`);
+    lines.push(`${stepNum}. \`bun run fix\` — Fix errors mechanically. Max 3 retries per error.`);
   }
   if (doTypecheck) {
     stepNum += 1;
-    lines.push(`${stepNum}. \`bun run typecheck\` — fix all type errors, re-run until clean`);
+    lines.push(`${stepNum}. \`bun run typecheck\` — Fix types. Max 3 retries per error.`);
   }
   if (doTest) {
     stepNum += 1;
     const modeLabel =
       testMode === 'e2e' ? 'e2e-only' : testMode === 'all' ? 'all incl. e2e' : 'unit';
     lines.push(
-      `${stepNum}. \`bun run test\` [${modeLabel}] — verify services, fix failures, re-run until clean`,
+      `${stepNum}. \`bun run test\` [${modeLabel}] — ONLY fix source code regressions. DO NOT modify test files.`,
     );
   }
   if (doCommit) {
     stepNum += 1;
-    lines.push(
-      `${stepNum}. Review diff → write conventional commit message → \`git add -A && git commit -m "..." && git push\``,
-    );
+    lines.push(`${stepNum}. Review diff → \`git add -A\` → \`git commit -m "..."\` → \`git push\``);
   }
 
   lines.push(
     '',
-    'Your system prompt has the full detailed instructions. Work',
-    'methodically — one step at a time. Do not skip ahead.',
+    '> Read your system prompt for detailed rules. Do not ask for permission, just begin Step 1.',
   );
 
   return lines.join('\n');
 };
-
-// ── Main ───────────────────────────────────────────────────
 
 const checkmark = (v: boolean) => (v ? '✓' : '✗');
 const modeLabel = doTest

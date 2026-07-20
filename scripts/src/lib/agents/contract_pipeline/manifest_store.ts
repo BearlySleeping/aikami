@@ -240,6 +240,7 @@ export const createManifest = (options: {
     verifyLoops: 0,
     attempts: [],
     usage: {},
+    autofixCycles: 0,
   };
 };
 

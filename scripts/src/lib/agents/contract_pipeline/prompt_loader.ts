@@ -109,6 +109,10 @@ export const loadRolePrompt = (options: {
 // Each profile is a self-contained context block that appends to the
 // canonical review captain prompt. They are mutually exclusive and
 // carry no code-editing crossover contamination.
+//
+// The full YOLO instructions live in .pi/prompts/yolo-overrides.md
+// and are loaded dynamically at runtime. This YOLO_INJECT is a lightweight
+// header that references the override file.
 
 const YOLO_INJECT = [
   '',
@@ -117,87 +121,16 @@ const YOLO_INJECT = [
   'You are the YOLO Review Captain. No human in the loop. You orchestrate',
   'CodeRabbit automation — you do NOT edit code or run tests yourself.',
   '',
-  '### 🔴 HARD RULE: CodeRabbit-Only Automation (with fallback)',
-  'You are completely forbidden from:',
-  '- Running `validate()`, `moon_run_task`, or any test/build commands',
+  '🔴 **READ THE STATE JSON ABOVE** before starting. It tells you:',
+  '- Current autofix cycle number (and whether you are at the limit)',
+  '- Whether CodeRabbit has already reviewed',
+  '- How many findings remain unresolved',
   '',
-  'Code editing is ALLOWED as a FALLBACK when CodeRabbit autofix fails:',
-  '- If `code_rabbit_autofix` reports that autofix could not resolve findings,',
-  '  call `code_rabbit_findings` to get the fix prompts.',
-  '- Apply fixes manually using `edit` based on the 🤖 Prompt for AI Agents.',
-  '- Commit + push, then re-run `code_rabbit_autofix` to verify.',
-  '- Only merge when findings are resolved or judged non-blocking.',
+  'The full YOLO execution sequence and tool permissions are described in',
+  'the yolo-overrides.md prompt that was appended below. Follow it EXACTLY.',
   '',
-  'Git operations for sync + merge are ALLOWED (automation glue).',
-  'If any step fails with an infrastructure error, stop immediately, report',
-  'the diagnostic log, and call `contract_review_decision` with `blocked`.',
-  '',
-  '🔴 **FINDINGS GATE**: If `code_rabbit_autofix` reports that autofix could not',
-  'resolve all findings, call `code_rabbit_findings` to inspect them BEFORE',
-  'merging. Decide whether remaining findings are blocking. Do NOT blindly',
-  'merge through real bugs.',
-  '',
-  '🔴 **TIMEOUT RECOVERY**: If `code_rabbit_autofix` times out (rate limit),',
-  'call `code_rabbit_wait` to poll until the review completes, then call',
-  '`code_rabbit_autofix` again. Do NOT manually loop gh_pr_comments —',
-  'the wait tool consumes zero tokens while polling.',
-  '',
-  '### YOLO Execution Sequence',
-  '',
-  '**Y1 — Create PR**: Call `gh_create_pr` with `draft: false`.',
-  '  - Title: `C-XXX: Short description` from the contract',
-  '  - Body: Phase 1 status report from the manifest summary',
-  '  - baseBranch: the branch shown in the Active run section below',
-  '',
-  '**Y2 — Trigger + Await CodeRabbit Autofix**: Call `code_rabbit_autofix` with the PR number.',
-  '  This SINGLE tool call does everything:',
-  '  1. Posts `@coderabbitai autofix` to the PR (delegating code fixes to the platform)',
-  '  2. Polls until CodeRabbit pushes its autofix commit to the remote branch',
-  '  3. Returns the new commit SHA (or reports that no fixes were needed / could not be applied)',
-  '',
-  '  Do NOT manually post `gh pr comment` — the tool handles the trigger.',
-  '',
-  '  🔴 AUTOFIX FALLBACK: If `code_rabbit_autofix` reports that autofix could NOT',
-  '  resolve findings ("actionable comments — autofix could not resolve"):',
-  '  1. Call `code_rabbit_findings` to get the structured findings with fix prompts',
-  '  2. Look for the "🤖 Prompt for all review comments with AI agents" section',
-  '  3. Apply the fixes yourself using `edit` on each file',
-  '  4. Commit + push your fixes',
-  '  5. Call `code_rabbit_autofix` again to verify the fixes resolved the findings',
-  '  6. Only proceed to Y3/Y4 when findings are resolved or you judge them non-blocking',
-  '',
-  '**Y3 — Sync Local Worktree**: If `code_rabbit_autofix` returned an autofix commit,',
-  '  CodeRabbit pushed changes directly to the remote branch. Your local worktree',
-  '  is now stale. You MUST sync it:',
-  '  ```bash',
-  '  git fetch origin <headBranch>',
-  '  git reset --hard origin/<headBranch>',
-  '  ```',
-  '  Skipping this step causes non-fast-forward errors when the orchestrator',
-  '  tries to finalize the merge.',
-  '',
-  '**Y4 — Merge + Cleanup**: You are the merge authority AND the cleanup crew.',
-  '  The orchestrator may not be alive to clean up after you.',
-  '  1. Call `gh_merge_pr` with the PR URL (squash):',
-  '     `gh_merge_pr({ pr: "<url>", method: "squash" })`',
-  '     🔴 If merge fails with "worktree" error, run gh from the main repo:',
-  '     `bash: cd /path/to/main/repo && gh pr merge <num> --squash`',
-  '  2. Verify the merge succeeded (check return value / output).',
-  '  3. 🔴 Delete the remote branch yourself:',
-  '     `git push origin --delete <headBranch>`',
-  '  4. 🔴 Remove the local worktree:',
-  '     `cd /path/to/main/repo && git worktree remove .pi/workspaces/<runId> --force`',
-  '  5. Call `contract_review_decision` with `merge` as the final signal.',
-  '',
-  '  Do NOT run `validate()` or any tests — CodeRabbit verified its autofix',
-  "  commit on its own platform. Trust CodeRabbit's platform verification.",
-  '',
-  '### GitHub tools (reference only — use the Y1-Y4 sequence above)',
-  '| Step | Tool |',
-  '| Y1: Create PR | `gh_create_pr` (draft: false) |',
-  '| Y2: Autofix | `code_rabbit_autofix` |',
-  '| Y3: Sync | bash: `git fetch` + `git reset --hard` |',
-  '| Y4: Merge | `gh_merge_pr` → verify → `contract_review_decision` (merge) |',
+  '🔴 If you hit the autofix cycle limit (autofix_cycle >= max_autofix_cycles),',
+  'call `contract_review_decision` with `change` instead of looping again.',
 ].join('\n');
 
 const READY_INJECT = [
@@ -307,6 +240,10 @@ export const loadReviewPrompt = (options: {
   headBranch?: string;
   baseBranch?: string;
   profile: ReviewProfile;
+  /** Current autofix cycle number (1-indexed). Used for circuit breaker. */
+  autofixCycle?: number;
+  /** Hard limit on autofix cycles before YOLO degrades to manual. */
+  maxAutofixCycles?: number;
 }): string => {
   const promptPath = resolve(options.repoRoot, '.pi/prompts/contract-review-captain.md');
   if (!existsSync(promptPath)) {
@@ -331,7 +268,18 @@ export const loadReviewPrompt = (options: {
 
   const profileInject: string = (() => {
     if (isYolo) {
-      return YOLO_INJECT;
+      // Load yolo-overrides.md for full YOLO instructions
+      const yoloOverridePath = resolve(options.repoRoot, '.pi/prompts/yolo-overrides.md');
+      let yoloOverrides = '';
+      if (existsSync(yoloOverridePath)) {
+        yoloOverrides = [
+          '',
+          '---',
+          '## 📄 YOLO Overrides (from .pi/prompts/yolo-overrides.md)',
+          readFileSync(yoloOverridePath, 'utf-8'),
+        ].join('\n');
+      }
+      return [YOLO_INJECT, yoloOverrides].filter(Boolean).join('\n');
     }
     if (isReady) {
       return READY_INJECT;
@@ -360,7 +308,30 @@ export const loadReviewPrompt = (options: {
     ].join('\n');
   })();
 
+  const autofixCycle = options.autofixCycle ?? 1;
+  const maxCycles = options.maxAutofixCycles ?? 2;
+
+  // 🔴 STATE JSON: Injected at the start so the agent always knows
+  // the current runtime state without having to re-parse the prompt.
+  const stateBlock = isYolo
+    ? [
+        '',
+        '## 📊 STATE',
+        '```json',
+        JSON.stringify({
+          mode: 'YOLO',
+          coderabbitStatus: 'pending',
+          unresolvedComments: 0,
+          autofixCycle,
+          maxAutofixCycles: maxCycles,
+        }),
+        '```',
+        '',
+      ].join('\n')
+    : '';
+
   return [
+    stateBlock,
     stripFrontmatter(readFileSync(promptPath, 'utf-8')).replace(/\$ARGUMENTS\b/g, options.runId),
     profileInject,
     '',

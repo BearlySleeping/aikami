@@ -15,7 +15,20 @@ import { Type } from 'typebox';
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 15_000;
 const MAX_WAIT_MS = 30 * 60 * 1000;
+const CHECKS_POLL_INTERVAL = 10_000;
+const MAX_CHECKS_WAIT_MS = 90 * 1000; // 90s — LLM connection timeout safe
 const TERMINAL_REVIEW_STATES = ['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED', 'DISMISSED'] as const;
+const CODERABBIT_LOGINS = ['coderabbitai', 'coderabbitai[bot]'];
+
+/** Autofix cycle state — prevents duplicate `@coderabbitai autofix` commands. */
+type AutofixCommentState =
+  | 'none'
+  | 'autofix_requested' // Last comment is `@coderabbitai autofix` — waiting for CodeRabbit reply
+  | 'autofix_in_progress' // CodeRabbit replied — autofix is running
+  | 'autofix_applied' // CodeRabbit autofix completed with changes
+  | 'autofix_skipped' // CodeRabbit autofix skipped — no fixable findings
+  | 'autofix_failed' // CodeRabbit autofix could not resolve findings
+  | 'autofix_rate_limited'; // CodeRabbit is rate-limited or quota-exhausted
 
 const gh = (args: string): string => {
   try {
@@ -138,6 +151,78 @@ const ensureReview = async (num: string): Promise<string | undefined> => {
 };
 
 /**
+ * Get the state of the last autofix-related comment thread.
+ * This prevents duplicate `@coderabbitai autofix` commands by checking
+ * whether the last comment on the PR is already an autofix request that
+ * hasn't been answered yet.
+ */
+const getAutofixCommentState = (num: string): AutofixCommentState => {
+  // Fetch ALL comments (not just coderabbit's) to see the full timeline.
+  const lastCommentRaw = gh(
+    `pr view ${num} --json comments --jq '[.comments | sort_by(.createdAt) | .[-1] | {author: .author.login, body: .body}] | .[0]'`,
+  );
+  if (!lastCommentRaw) {
+    return 'none';
+  }
+  try {
+    const last = JSON.parse(lastCommentRaw) as { author: string; body: string };
+    const isAutofixRequest =
+      last.body.includes('@coderabbitai autofix') || last.body.includes('@coderabbitai autofix');
+    const isCoderabbit = CODERABBIT_LOGINS.includes(last.author);
+
+    // If the last comment is @coderabbitai autofix from a non-coderabbit user,
+    // and CodeRabbit hasn't replied yet — we're waiting.
+    if (isAutofixRequest && !isCoderabbit) {
+      return 'autofix_requested';
+    }
+
+    // If last comment is from CodeRabbit, check what it says.
+    if (isCoderabbit) {
+      const body = last.body;
+      // 🔴 Rate limit / quota detection — check FIRST so rate-limited
+      // autofix doesn't get stuck in a polling loop.
+      if (
+        body.includes('available in') ||
+        body.includes('quota') ||
+        body.includes('rate limit') ||
+        body.includes('rate-limited') ||
+        body.includes('Next review available') ||
+        body.includes('usage limit')
+      ) {
+        return 'autofix_rate_limited';
+      }
+      if (body.includes('Autofix in progress') || body.includes('autofix in progress')) {
+        return 'autofix_in_progress';
+      }
+      if (
+        body.includes('Autofix applied') ||
+        body.includes('autofix applied') ||
+        body.includes('Fixes Applied') ||
+        body.includes('fixes applied') ||
+        body.includes('autofix-run-id')
+      ) {
+        return 'autofix_applied';
+      }
+      if (body.includes('Autofix skipped') || body.includes('autofix skipped')) {
+        return 'autofix_skipped';
+      }
+      if (
+        body.includes('Actionable comments posted') ||
+        body.includes('could not resolve') ||
+        body.includes('No autofix changes were needed')
+      ) {
+        return 'autofix_failed';
+      }
+      // CodeRabbit replied but not about autofix — review is in progress
+      return 'none';
+    }
+  } catch {
+    // Fall through
+  }
+  return 'none';
+};
+
+/**
  * Check CodeRabbit's autofix status from comments.
  * Returns 'in_progress', 'skipped', 'completed', or undefined (not started).
  */
@@ -166,6 +251,47 @@ const getAutofixStatus = (num: string): string | undefined => {
     return 'completed';
   }
   return undefined;
+};
+
+/**
+ * Check if any CI checks are pending on the PR.
+ * Returns { pending: boolean, pendingCount: number }.
+ */
+const getChecksPending = (num: string): { pending: boolean; pendingCount: number } => {
+  const checksRaw = gh(`pr checks ${num}`);
+  if (!checksRaw) {
+    return { pending: false, pendingCount: 0 };
+  }
+  // Parse `gh pr checks` output — lines containing "pending" or "in_progress"
+  const lines = checksRaw.split('\n');
+  let pendingCount = 0;
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.includes('pending') || lower.includes('in_progress') || lower.includes('⏳')) {
+      pendingCount++;
+    }
+  }
+  return { pending: pendingCount > 0, pendingCount };
+};
+
+/**
+ * Wait for all CI checks to complete (pass or fail), not just pending.
+ * Returns true if all checks completed (none pending), false if timed out.
+ */
+const waitForChecks = async (num: string): Promise<boolean> => {
+  const deadline = Date.now() + MAX_CHECKS_WAIT_MS;
+  console.log('⏳ Waiting for CI checks to complete (max 90s)...');
+  while (Date.now() < deadline) {
+    const { pending, pendingCount } = getChecksPending(num);
+    if (!pending) {
+      console.log('✅ All CI checks completed.');
+      return true;
+    }
+    console.log(`  ⏳ ${pendingCount} check(s) pending...`);
+    await abortableSleep(CHECKS_POLL_INTERVAL, _signal);
+  }
+  console.log('⚠️  CI checks still running after 90s — bailing out gracefully.');
+  return false;
 };
 
 /**
@@ -202,7 +328,14 @@ const pollForAutofixCommit = async (num: string, baseline: string): Promise<stri
       return undefined;
     }
 
-    // Handle rate limits
+    // Handle rate limits — short-circuit instead of waiting.
+    // Rate-limited autofix triggers the circuit breaker.
+    const commentState = getAutofixCommentState(num);
+    if (commentState === 'autofix_rate_limited') {
+      console.log('⚠️  CodeRabbit rate-limited during autofix poll — bailing out.');
+      return undefined;
+    }
+
     const waitMins = parseRateLimitMinutes(num);
     if (waitMins) {
       console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
@@ -257,6 +390,33 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       console.log(`📌 Baseline commit: ${baselineCommit.slice(0, 7)} (${headRefName})`);
       let autofixCommit: string | undefined;
 
+      // ── Phase 0: Wait for CI checks ───────────────────
+      // Don't trigger CodeRabbit while CI is still running — the review
+      // needs the full code context including build/lint results.
+      const checksReady = await waitForChecks(num);
+      if (!checksReady) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `⏳ CI checks are still running on PR #${num}.`,
+                'Please wait 2 minutes and call `code_rabbit_autofix` again.',
+              ].join('\n'),
+            },
+          ],
+          details: {
+            pr: num,
+            branch: headRefName,
+            baselineCommit,
+            autofixCommit: null,
+            autofixApplied: false,
+            autofixSkipped: true,
+            reason: 'ci_checks_running',
+          },
+        };
+      }
+
       // ── Phase 1: Ensure review exists ───────────────────
       const reviewState = await ensureReview(num);
       if (!reviewState) {
@@ -297,8 +457,53 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       }
 
       // ── Phase 2: Trigger autofix (review anchors it now) ─
-      console.log(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
-      gh(`pr comment ${num} --body "@coderabbitai autofix"`);
+      // 🔴 SYNC GUARD: Check if autofix is already in flight before posting.
+      const preAutofixState = getAutofixCommentState(num);
+      let duplicatePrevented = false;
+
+      if (preAutofixState === 'autofix_requested' || preAutofixState === 'autofix_in_progress') {
+        console.log(
+          `🔍 Autofix already ${preAutofixState === 'autofix_in_progress' ? 'in progress' : 'requested'} — polling instead of re-triggering.`,
+        );
+        duplicatePrevented = true;
+      } else if (preAutofixState === 'autofix_rate_limited') {
+        console.log('⚠️  CodeRabbit is rate-limited or quota-exhausted — short-circuiting.');
+        // Skip autofix entirely — the circuit breaker will handle this.
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `⚠️  CodeRabbit is rate-limited on PR #${num}.`,
+                `**Review state:** \`${reviewState}\``,
+                '',
+                'Autofix was skipped because CodeRabbit reported rate limiting',
+                'or quota exhaustion. The circuit breaker should trigger YOLO',
+                'degradation to manual review on the next cycle.',
+              ].join('\n'),
+            },
+          ],
+          details: {
+            pr: num,
+            branch: headRefName,
+            baselineCommit,
+            autofixCommit: null,
+            reviewState,
+            autofixApplied: false,
+            autofixSkipped: true,
+            reason: 'rate_limited',
+            actionableCount: 0,
+            duplicatePrevented: false,
+          },
+        };
+      } else if (preAutofixState === 'autofix_applied') {
+        console.log('✅ Autofix already applied — adopting existing commit.');
+      } else if (preAutofixState === 'autofix_skipped') {
+        console.log('📋 Autofix already skipped — clean review.');
+      } else {
+        console.log(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
+        gh(`pr comment ${num} --body "@coderabbitai autofix"`);
+      }
 
       // 🔴 Re-capture baseline AFTER posting autofix. If autofix already
       // ran (from a previous session or manual trigger), the head commit
@@ -323,7 +528,23 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         autofixCommit = await pollForAutofixCommit(num, activeBaseline);
       }
 
-      if (!autofixCommit && !getAutofixStatus(num) && !getReviewState(num).includes('APPROVED')) {
+      // 🔴 POST-AUTOFIX SYNC: Verify remote HEAD matches local worktree.
+      // If CodeRabbit pushed an autofix commit, the local worktree is stale.
+      // The caller MUST git fetch + reset --hard before proceeding.
+      const finalAutofixState = getAutofixCommentState(num);
+      const autofixApplied = autofixCommit !== undefined || finalAutofixState === 'autofix_applied';
+      const autofixSkipped =
+        finalAutofixState === 'autofix_skipped' ||
+        finalAutofixState === 'autofix_rate_limited' ||
+        (!autofixCommit && getAutofixStatus(num) === 'skipped');
+      const rateLimited = finalAutofixState === 'autofix_rate_limited';
+
+      if (
+        !autofixCommit &&
+        !getAutofixStatus(num) &&
+        !getReviewState(num).includes('APPROVED') &&
+        !autofixSkipped
+      ) {
         return {
           content: [
             {
@@ -337,11 +558,23 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             baselineCommit,
             autofixCommit: null,
             reviewState,
+            autofixApplied: false,
+            autofixSkipped: false,
+            duplicatePrevented,
           },
         };
       }
 
       // ── Evaluate outcome ────────────────────────────────
+      // Count actionable findings for metadata
+      const commentsBody = gh(
+        `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
+      );
+      const hasActionable = commentsBody.includes('Actionable comments posted:');
+      const actionableCount = hasActionable
+        ? Number.parseInt(commentsBody.match(/Actionable comments posted: (\d+)/)?.[1] ?? '0', 10)
+        : 0;
+
       if (autofixCommit) {
         console.log(`🎯 Autofix commit: ${autofixCommit.slice(0, 7)}`);
 
@@ -354,6 +587,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                 `**Autofix commit:** \`${autofixCommit.slice(0, 7)}\``,
                 `**Branch:** \`${headRefName}\``,
                 `**Review state:** \`${reviewState}\``,
+                `**Actionable findings remaining:** ${actionableCount}`,
                 '',
                 '🔴 **REQUIRED: Sync your local worktree:**',
                 '```bash',
@@ -369,17 +603,15 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             baselineCommit,
             autofixCommit,
             reviewState,
+            autofixApplied: true,
+            autofixSkipped: false,
+            actionableCount,
+            duplicatePrevented,
           },
         };
       }
 
       // No autofix commit — either skipped (clean) or approved mid-wait.
-      // Check if CodeRabbit left actionable comments that autofix couldn't handle.
-      const commentsBody = gh(
-        `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
-      );
-      const hasActionable = commentsBody.includes('Actionable comments posted:');
-
       if (params.merge && reviewState.includes('APPROVED') && !hasActionable) {
         console.log('🚀 No autofix needed — merging...');
         const result = gh(`pr merge ${num} --squash --delete-branch`);
@@ -401,11 +633,20 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             type: 'text',
             text: [
               `✅ CodeRabbit review complete on PR #${num}: ${reviewState}.`,
-              hasActionable
-                ? `⚠️  ${commentsBody.match(/Actionable comments posted: (\d+)/)?.[1] ?? '?'} actionable comments — autofix could not resolve them.`
-                : 'No autofix changes were needed (clean review).',
+              rateLimited
+                ? '⚠️  CodeRabbit is rate-limited — autofix could not run.'
+                : autofixSkipped
+                  ? 'No autofix changes were needed (clean review).'
+                  : hasActionable
+                    ? `⚠️  ${actionableCount} actionable comments — autofix could not resolve them.`
+                    : 'No autofix changes were needed (clean review).',
               findingsWarning,
-            ].join('\n'),
+              duplicatePrevented
+                ? '🔍 Duplicate autofix command was prevented (was already in flight).'
+                : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
           },
         ],
         details: {
@@ -414,7 +655,12 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           baselineCommit,
           autofixCommit: null,
           reviewState,
+          autofixApplied,
+          autofixSkipped,
+          reason: rateLimited ? 'rate_limited' : undefined,
           hasActionableFindings: hasActionable,
+          actionableCount,
+          duplicatePrevented,
         },
       };
     },

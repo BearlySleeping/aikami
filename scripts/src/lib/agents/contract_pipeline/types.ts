@@ -11,6 +11,9 @@
  */
 export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ?? 'main';
 
+/** Maximum autofix cycles before YOLO degrades to manual review. */
+export const MAX_AUTOFIX_CYCLES = 2;
+
 /** Pipeline stages for one contract run. */
 export type ContractPipelineStage =
   | 'prepare'
@@ -122,6 +125,8 @@ export type RunManifest = {
   pipelinePaneId?: string;
   reviewPaneId?: string;
   blockedReason?: string;
+  /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
+  autofixCycles: number;
 };
 
 /** Request passed to the Herdr worker launcher. */

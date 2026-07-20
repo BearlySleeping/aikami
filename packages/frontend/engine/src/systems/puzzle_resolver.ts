@@ -215,7 +215,7 @@ const _isUpstreamToggled = (options: {
     }
 
     if (upstream.type === 'pressure_plate') {
-      const isPressed = InteractableState.isPressed[eid] === 1;
+      const isPressed = InteractableState.isToggled[eid] === 1;
       if ((isPressed ? 1 : 0) !== targetState) {
         return false;
       }

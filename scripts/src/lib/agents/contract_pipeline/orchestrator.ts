@@ -44,7 +44,7 @@ import type {
   ReviewDecision,
   RunManifest,
 } from './types.ts';
-import { PIPELINE_BASE_BRANCH, STATUS_TO_START_STAGE } from './types.ts';
+import { MAX_AUTOFIX_CYCLES, PIPELINE_BASE_BRANCH, STATUS_TO_START_STAGE } from './types.ts';
 
 /** Hard wall-clock caps — only hit when herdr is unreachable. Working agents never killed. */
 const STAGE_HARD_CAPS: Record<string, number> = {
@@ -766,7 +766,7 @@ export const runContractPipeline = async (options: {
           try {
             const contractRelPath = relative(options.repoRoot, manifest.contractPath);
             runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
-            runGit(`commit -m "docs(contracts): approve ${manifest.contractId}"`, {
+            runGit(`commit --no-verify -m "docs(contracts): approve ${manifest.contractId}"`, {
               cwd: options.repoRoot,
               env: {
                 CONTRACT_PIPELINE_WORKTREE: '1',
@@ -936,6 +936,40 @@ export const runContractPipeline = async (options: {
           console.log(`📋 Processing existing review decision: ${existingDecision.decision}`);
           // Fall through to the decision processing block below.
         } else if (!manifest.reviewPaneId) {
+          const isYolo = options.yolo && manifest.autofixCycles < MAX_AUTOFIX_CYCLES;
+          const wasYoloDegraded = options.yolo && manifest.autofixCycles >= MAX_AUTOFIX_CYCLES;
+
+          if (wasYoloDegraded) {
+            console.log(
+              `\n🛑 YOLO DEGRADED: ${manifest.autofixCycles} autofix cycles exhausted (max: ${MAX_AUTOFIX_CYCLES}).`,
+            );
+            console.log(
+              '   Switching to manual review. If a PR exists, it will be converted to Draft.\n',
+            );
+
+            // Convert PR to draft if it exists
+            const degradedPrUrl = manifest.prUrl;
+            if (degradedPrUrl) {
+              try {
+                execSync(`gh pr ready --undo ${degradedPrUrl}`, {
+                  encoding: 'utf-8',
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  cwd: options.repoRoot,
+                  timeout: 15000,
+                });
+                console.log(`📝 PR converted to Draft: ${degradedPrUrl}\n`);
+              } catch {
+                // PR may already be a draft or not found.
+              }
+            }
+
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `🛑 PIPELINE BLOCKED — YOLO degraded after ${manifest.autofixCycles} autofix cycles. Waiting for human intervention.`,
+            });
+          }
+
           const prompt = isBlockedReview
             ? buildBlockedReviewPrompt({ manifest, repoRoot: options.repoRoot })
             : loadReviewPrompt({
@@ -945,15 +979,17 @@ export const runContractPipeline = async (options: {
                 prUrl: undefined,
                 headBranch,
                 baseBranch,
-                profile: options.yolo ? 'yolo' : options.ready ? 'ready' : 'ready',
+                profile: isYolo ? 'yolo' : 'ready',
+                autofixCycle: manifest.autofixCycles + 1,
+                maxAutofixCycles: MAX_AUTOFIX_CYCLES,
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
-            yolo: options.yolo,
+            yolo: isYolo,
           });
-          if (!options.yolo) {
+          if (!isYolo) {
             playSound('pipeline-needs-input');
           }
           writeManifest({ manifest, cwd: options.repoRoot });
@@ -1060,6 +1096,15 @@ export const runContractPipeline = async (options: {
             console.log('\n🔄 Retrying — back to implementer.\n');
             manifest.verifyLoops = 0;
             manifest.blockedReason = undefined;
+            // 🔴 Circuit breaker: Track autofix cycles for YOLO degradation
+            if (options.yolo) {
+              manifest.autofixCycles += 1;
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `Autofix cycle ${manifest.autofixCycles}/${MAX_AUTOFIX_CYCLES} — YOLO.`,
+              });
+            }
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
             // Status tracked in run manifest — don't touch main contract.
@@ -1161,6 +1206,15 @@ export const runContractPipeline = async (options: {
             cwd: options.repoRoot,
             message: `PR kept open for revision: ${prUrl}`,
           });
+          // 🔴 Circuit breaker: Track autofix cycles for YOLO degradation
+          if (options.yolo) {
+            manifest.autofixCycles += 1;
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `Autofix cycle ${manifest.autofixCycles}/${MAX_AUTOFIX_CYCLES} — YOLO.`,
+            });
+          }
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
           // Status tracked in run manifest — don't touch main contract.

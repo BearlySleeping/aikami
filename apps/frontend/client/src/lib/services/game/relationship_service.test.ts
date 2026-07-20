@@ -205,16 +205,16 @@ describe('RelationshipService', () => {
   test('AC-1: seeds faction standings from content pack definitions', () => {
     const standing = relationshipService.getStanding('town_guard');
     expect(standing).toBeDefined();
-    expect(standing!.factionId).toBe('town_guard');
-    expect(standing!.standing).toBe(0);
-    expect(standing!.tier).toBe('neutral');
+    expect(standing?.factionId).toBe('town_guard');
+    expect(standing?.standing).toBe(0);
+    expect(standing?.tier).toBe('neutral');
   });
 
   test('AC-1: seeds faction with non-zero default standing', () => {
     const standing = relationshipService.getStanding('crimson_covenant');
     expect(standing).toBeDefined();
-    expect(standing!.standing).toBe(-30);
-    expect(standing!.tier).toBe('unfriendly');
+    expect(standing?.standing).toBe(-30);
+    expect(standing?.tier).toBe('unfriendly');
   });
 
   test('AC-1: returns undefined for unknown faction', () => {
@@ -237,10 +237,10 @@ describe('RelationshipService', () => {
 
     const rel = relationshipService.getRelationship('guard_captain');
     expect(rel).toBeDefined();
-    expect(rel!.trust).toBe(5);
-    expect(rel!.affinity).toBe(3);
-    expect(rel!.history.length).toBe(1);
-    expect(rel!.history[0].description).toBe('Helped the guard investigate a disturbance');
+    expect(rel?.trust).toBe(5);
+    expect(rel?.affinity).toBe(3);
+    expect(rel?.history.length).toBe(1);
+    expect(rel?.history[0].description).toBe('Helped the guard investigate a disturbance');
   });
 
   test('AC-2: clamps trust at -100 and 100', () => {
@@ -273,7 +273,7 @@ describe('RelationshipService', () => {
     });
 
     const rel = relationshipService.getRelationship('betrayed_npc');
-    expect(rel!.history[0].type).toBe('negative');
+    expect(rel?.history[0].type).toBe('negative');
   });
 
   test('AC-2: initializes neutral relationship for unseen NPC', () => {
@@ -286,9 +286,9 @@ describe('RelationshipService', () => {
 
     const rel = relationshipService.getRelationship('new_npc');
     expect(rel).toBeDefined();
-    expect(rel!.trust).toBe(3);
-    expect(rel!.affinity).toBe(1);
-    expect(rel!.relationshipType).toBe('neutral');
+    expect(rel?.trust).toBe(3);
+    expect(rel?.affinity).toBe(1);
+    expect(rel?.relationshipType).toBe('neutral');
   });
 
   // ── Faction standing adjustments ──
