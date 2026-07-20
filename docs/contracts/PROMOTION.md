@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 120 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 119 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -156,8 +156,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-340 | Build Party And Companion Gameplay | 👍 approved | v2 |
 | C-341 | Add Relationships Factions Reputation And Persistent Consequ | 👍 approved | v2 |
 | C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 👍 approved | v2 |
-| C-343 | Promote Rich Chat UX into Production Gameplay | ⏳ not_started (no contract file) | v1 |
-| C-344 | Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle | ⏳ not_started (no contract file) | v1 |
+| C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | v2 |
 | C-345 | Add a Campaign/Content-Pack Browser and a Second Adventure | ⏳ not_started (no contract file) | v1 |
 | C-346 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | v1 |
 | C-347 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | v1 |
