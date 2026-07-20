@@ -79,6 +79,7 @@ export * from './game/onboarding_hint_service.svelte.ts';
 export * from './game/party_follow_service.svelte.ts';
 export * from './game/party_roster_service.svelte.ts';
 export * from './game/pixi_texture_injector';
+export * from './game/player_journal_service.svelte.ts';
 export * from './game/player_state_service.svelte.ts';
 export * from './game/quest_service.svelte';
 export * from './game/quest_state_service.svelte';

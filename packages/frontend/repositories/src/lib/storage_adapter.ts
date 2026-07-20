@@ -148,9 +148,73 @@ export const AIKAMI_SCHEMA_DDL: readonly string[] = [
     value TEXT NOT NULL UNIQUE
   )`,
 
+  // ── Sessions (C-344 — replaces IndexedDB aikami_sessions) ─────────
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    game_id TEXT NOT NULL,
+    session_number INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    summary_json TEXT,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    duration_minutes INTEGER,
+    character_snapshots_json TEXT NOT NULL DEFAULT '{}',
+    recap_reviewed INTEGER NOT NULL DEFAULT 0,
+    edited_synopsis TEXT,
+    checkpoint_ids_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  // ── Session checkpoints (C-344) ─────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS session_checkpoints (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    description TEXT,
+    session_number INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    save_slot_id TEXT NOT NULL UNIQUE,
+    has_forks INTEGER NOT NULL DEFAULT 0
+  )`,
+
+  // ── Player journal entries (C-344) ──────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS journal_entries (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    session_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  // ── Compacted campaign summaries (C-344) ────────────────────────────
+  `CREATE TABLE IF NOT EXISTS compacted_summaries (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    session_range_first INTEGER NOT NULL,
+    session_range_last INTEGER NOT NULL,
+    compacted_session_ids_json TEXT NOT NULL,
+    synopsis TEXT NOT NULL,
+    key_events_json TEXT NOT NULL DEFAULT '[]',
+    method TEXT NOT NULL CHECK(method IN ('ai', 'truncation')),
+    compacted_at TEXT NOT NULL
+  )`,
+
   // ── Index for session-scoped chat queries ──────────────────────────
   `CREATE INDEX IF NOT EXISTS idx_chat_history_session
     ON chat_history(session_id, created_at)`,
+
+  // ── Indexes for C-344 tables ────────────────────────────────────────
+  `CREATE INDEX IF NOT EXISTS idx_sessions_game ON sessions(game_id, session_number)`,
+  `CREATE INDEX IF NOT EXISTS idx_session_checkpoints_session ON session_checkpoints(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_session_checkpoints_campaign ON session_checkpoints(campaign_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_journal_campaign ON journal_entries(campaign_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_compacted_campaign ON compacted_summaries(campaign_id, compacted_at)`,
 ];
 
 /** Database file name for the local SQLite store. */

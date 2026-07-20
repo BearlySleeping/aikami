@@ -140,6 +140,8 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
         messageCount: 45,
         durationMinutes: 180,
         characterSnapshots: {},
+        recapReviewed: false,
+        checkpointIds: [],
         summary: {
           id: 'summary-1',
           createdAt: Date.now(),
@@ -161,6 +163,8 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
         messageCount: 62,
         durationMinutes: 120,
         characterSnapshots: {},
+        recapReviewed: false,
+        checkpointIds: [],
         summary: {
           id: 'summary-2',
           createdAt: Date.now(),

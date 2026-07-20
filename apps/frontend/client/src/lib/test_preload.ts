@@ -502,8 +502,19 @@ const _localServicesMock = () => ({
   UserService: class {},
   routerService: _createServiceStub(),
   pixiTextureInjector: _createServiceStub(),
-  gameOverlayService: _createServiceStub(),
+  gameOverlayService: {
+    openEndSession: mock(() => {}),
+    closeEndSession: mock(() => {}),
+    endSession: mock(async () => {}),
+    startNewSession: mock(async () => {}),
+  },
   GameOverlayService: class {},
+  combatService: Object.assign(_createServiceStub(), {
+    lastCombatOptions: undefined,
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  }),
   gameEngineService: _createServiceStub(),
   GameEngineService: class {},
   sessionService: Object.assign(_createServiceStub(), {
