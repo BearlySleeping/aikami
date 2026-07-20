@@ -18,8 +18,8 @@ import { Position, type PositionData } from '../components/position.ts';
 /** Default interaction radius in pixels for items. */
 const DEFAULT_ITEM_RADIUS = 50;
 
-/** Cached query terms — entities with Position + Interactable (pickup items). */
-const ITEM_QUERY_TERMS = [Position, Interactable];
+/** Cached query terms — entities with Position + Interactable (all interactable types). */
+const INTERACTABLE_QUERY_TERMS = [Position, Interactable];
 
 /** Cached query terms — entities with Position + NPCDialog (NPCs). */
 const NPC_QUERY_TERMS = [Position, NPCDialog];
@@ -35,7 +35,16 @@ export type InteractionTarget = {
   /** Display name for the prompt (NPC name or item id). */
   targetName: string;
   /** Interaction type. */
-  targetType: 'npc' | 'item';
+  targetType:
+    | 'npc'
+    | 'item'
+    | 'door'
+    | 'chest'
+    | 'lever'
+    | 'pressure_plate'
+    | 'container'
+    | 'readable'
+    | 'trap';
 };
 
 // ---------------------------------------------------------------------------
@@ -66,13 +75,20 @@ export const selectInteractionTarget = (options: {
 
   let closestEid = -1;
   let closestDistSq = Number.POSITIVE_INFINITY;
-  let closestType: 'npc' | 'item' | undefined;
+  let closestType: InteractionTarget['targetType'] | undefined;
 
-  // ── Items first (higher priority) ──
+  // ── Interactables first (items, doors, chests, levers, etc.) — higher priority ──
 
-  for (const eid of query(world, ITEM_QUERY_TERMS)) {
+  for (const eid of query(world, INTERACTABLE_QUERY_TERMS)) {
     const interactable = getComponent(world, eid, Interactable) as InteractableData | undefined;
-    if (interactable?.type !== 'item') {
+    if (!interactable) {
+      continue;
+    }
+
+    // Skip NPC-type and pressure_plate interactables — NPCs are
+    // handled below, and pressure plates are proximity-only
+    // (not player-initiated key-press interactions).
+    if (interactable.type === 'npc' || interactable.type === 'pressure_plate') {
       continue;
     }
 
@@ -89,11 +105,11 @@ export const selectInteractionTarget = (options: {
     if (distSq <= radiusSq && distSq < closestDistSq) {
       closestEid = eid;
       closestDistSq = distSq;
-      closestType = 'item';
+      closestType = interactable.type;
     }
   }
 
-  // ── NPCs — only consider if no item target has been selected (items-before-NPCs) ──
+  // ── NPCs — only consider if no interactable target has been selected ──
 
   if (closestEid < 0) {
     for (const eid of query(world, NPC_QUERY_TERMS)) {
@@ -127,14 +143,21 @@ export const selectInteractionTarget = (options: {
   // ── Resolve display name ──
 
   let targetName: string;
-  if (closestType === 'item') {
+  if (closestType === 'npc') {
+    const npcDialog = getComponent(world, closestEid, NPCDialog) as NPCDialogData | undefined;
+    targetName = npcDialog?.npcName ?? 'Unknown NPC';
+  } else {
+    // All non-NPC types: item, door, chest, lever, pressure_plate, container, readable, trap
     const interactable = getComponent(world, closestEid, Interactable) as
       | InteractableData
       | undefined;
-    targetName = interactable?.itemId ?? 'Unknown Item';
-  } else {
-    const npcDialog = getComponent(world, closestEid, NPCDialog) as NPCDialogData | undefined;
-    targetName = npcDialog?.npcName ?? 'Unknown NPC';
+    const spawnId = interactable?.spawnId ?? '';
+    // Use spawnId as the fallback display name for non-item, non-NPC types
+    if (closestType === 'item') {
+      targetName = interactable?.itemId ?? 'Unknown Item';
+    } else {
+      targetName = spawnId || `Unknown ${closestType}`;
+    }
   }
 
   return {

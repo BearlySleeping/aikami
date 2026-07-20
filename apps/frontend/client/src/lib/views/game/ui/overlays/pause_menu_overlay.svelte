@@ -64,6 +64,14 @@ const { isSaving = false, saveMessage }: Props = $props();
 
       <button
         type="button"
+        class="btn btn-outline btn-block"
+        onclick={() => gameOverlayService.openReputation()}
+      >
+        Reputation
+      </button>
+
+      <button
+        type="button"
         class="btn btn-ghost btn-block text-error"
         onclick={() => gameOverlayService.quitToMainMenu()}
       >

@@ -15,6 +15,7 @@ import type {
   ContentPackMapEntry,
   ContentPackNpcEntry,
   ContentPackQuestEntry,
+  FactionDefinition,
 } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
@@ -67,6 +68,12 @@ export type ContentPackLoaderInterface = {
 
   /** Returns credits or undefined if not present */
   getCredits(): ContentPackCredits | undefined;
+
+  /** Returns a faction definition by ID, or undefined if not found (C-341) */
+  getFaction(factionId: string): FactionDefinition | undefined;
+
+  /** Returns all faction definitions from the pack (C-341) */
+  getAllFactions(): FactionDefinition[];
 
   /** Disposes per-instance resources (no-op if already disposed) */
   dispose(): void;
@@ -215,6 +222,18 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   getCredits(): ContentPackCredits | undefined {
     this._assertNotDisposed();
     return this.manifest.credits;
+  }
+
+  /** @inheritdoc */
+  getFaction(factionId: string): FactionDefinition | undefined {
+    this._assertNotDisposed();
+    return this.manifest.factions?.[factionId];
+  }
+
+  /** @inheritdoc */
+  getAllFactions(): FactionDefinition[] {
+    this._assertNotDisposed();
+    return Object.values(this.manifest.factions ?? {});
   }
 
   /** @inheritdoc */
