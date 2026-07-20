@@ -146,25 +146,40 @@ describe('PackRegistryService', () => {
 
     test('is idempotent — does not re-fetch while already loading', async () => {
       let fetchCount = 0;
+      let resolveFetch: () => void;
+      const fetchPromise = new Promise<FetchResponse>((resolve) => {
+        resolveFetch = () => {
+          resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              schemaVersion: 1,
+              packs: [{ id: 'emberwatch', name: 'Test', version: '1.0.0', updatedAt: '2026-01-01T00:00:00.000Z' }],
+            }),
+          });
+        };
+      });
+
       globalThis.fetch = mock(async () => {
         fetchCount++;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            schemaVersion: 1,
-            packs: [{ id: 'emberwatch', name: 'Test', version: '1.0.0', updatedAt: '2026-01-01T00:00:00.000Z' }],
-          }),
-        };
+        return fetchPromise;
       }) as any;
 
-      // Manually set loading state
-      packRegistryService.isLoading = true;
+      // Start multiple concurrent refresh calls
+      const promise1 = packRegistryService.refresh();
+      const promise2 = packRegistryService.refresh();
+      const promise3 = packRegistryService.refresh();
 
-      await packRegistryService.refresh();
+      // Resolve the fetch
+      resolveFetch!();
 
-      // Should not have fetched since already loading
-      expect(fetchCount).toBe(0);
+      // Wait for all promises to complete
+      await Promise.all([promise1, promise2, promise3]);
+
+      // Should have fetched only once
+      expect(fetchCount).toBe(1);
+      expect(packRegistryService.availablePacks.length).toBe(1);
+      expect(packRegistryService.availablePacks[0].id).toBe('emberwatch');
     });
   });
 

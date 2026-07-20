@@ -44,46 +44,54 @@ class PackRegistryService
   isLoading = $state(false);
   lastError = $state<string | undefined>(undefined);
 
+  /** Cached refresh Promise to deduplicate concurrent refresh calls. */
+  private _refreshPromise: Promise<void> | undefined = undefined;
+
   /** @inheritdoc */
   async refresh(): Promise<void> {
-    if (this.isLoading) {
-      return;
+    if (this._refreshPromise) {
+      return this._refreshPromise;
     }
 
     this.isLoading = true;
     this.lastError = undefined;
 
-    try {
-      const response = await fetch('/content-packs/index.json');
+    this._refreshPromise = (async () => {
+      try {
+        const response = await fetch('/content-packs/index.json');
 
-      if (!response.ok) {
-        this.warn('refresh:fetch-failed', { status: response.status });
-        this.lastError = `Failed to load pack index (HTTP ${response.status})`;
+        if (!response.ok) {
+          this.warn('refresh:fetch-failed', { status: response.status });
+          this.lastError = `Failed to load pack index (HTTP ${response.status})`;
+          this.availablePacks = [];
+          return;
+        }
+
+        const raw: unknown = await response.json();
+
+        if (!Value.Check(PackIndexSchema, raw)) {
+          const errors = [...Value.Errors(PackIndexSchema, raw)];
+          const firstError = errors.length > 0 ? String(errors[0].message) : 'unknown';
+          this.warn('refresh:validation-failed', { errorCount: errors.length, firstError });
+          this.lastError = `Pack index is invalid: ${firstError}`;
+          this.availablePacks = [];
+          return;
+        }
+
+        this.availablePacks = (raw as { packs: PackIndexEntry[] }).packs;
+        this.debug('refresh', { packCount: this.availablePacks.length });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.warn('refresh:error', { error: message });
+        this.lastError = `Failed to load pack index: ${message}`;
         this.availablePacks = [];
-        return;
+      } finally {
+        this.isLoading = false;
+        this._refreshPromise = undefined;
       }
+    })();
 
-      const raw: unknown = await response.json();
-
-      if (!Value.Check(PackIndexSchema, raw)) {
-        const errors = [...Value.Errors(PackIndexSchema, raw)];
-        const firstError = errors.length > 0 ? String(errors[0].message) : 'unknown';
-        this.warn('refresh:validation-failed', { errorCount: errors.length, firstError });
-        this.lastError = `Pack index is invalid: ${firstError}`;
-        this.availablePacks = [];
-        return;
-      }
-
-      this.availablePacks = (raw as { packs: PackIndexEntry[] }).packs;
-      this.debug('refresh', { packCount: this.availablePacks.length });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.warn('refresh:error', { error: message });
-      this.lastError = `Failed to load pack index: ${message}`;
-      this.availablePacks = [];
-    } finally {
-      this.isLoading = false;
-    }
+    return this._refreshPromise;
   }
 
   /** @inheritdoc */

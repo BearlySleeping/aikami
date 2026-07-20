@@ -514,21 +514,26 @@ class StartViewModel
 
   /** @inheritdoc */
   async openPackBrowser(): Promise<void> {
-    // Load the pack registry
-    await packRegistryService.refresh();
+    try {
+      // Load the pack registry
+      await packRegistryService.refresh();
 
-    this.availablePacks = [...packRegistryService.availablePacks];
+      this.availablePacks = [...packRegistryService.availablePacks];
 
-    if (this.availablePacks.length <= 1) {
-      // Single pack or empty — skip browser, proceed directly
-      const packId = this.availablePacks.length === 1 ? this.availablePacks[0].id : 'emberwatch';
-      await this._proceedWithPack(packId);
-      return;
+      if (this.availablePacks.length <= 1) {
+        // Single pack or empty — skip browser, proceed directly
+        const packId = this.availablePacks.length === 1 ? this.availablePacks[0].id : 'emberwatch';
+        await this._proceedWithPack(packId);
+        return;
+      }
+
+      // Multiple packs — show browser
+      this.selectedPackId = this.availablePacks[0].id;
+      this.showPackBrowser = true;
+    } catch (error) {
+      this.error('openPackBrowser:failed', error);
+      this.errorMessage = 'Failed to load content packs. Try starting a new game.';
     }
-
-    // Multiple packs — show browser
-    this.selectedPackId = this.availablePacks[0].id;
-    this.showPackBrowser = true;
   }
 
   /** @inheritdoc */
@@ -560,64 +565,69 @@ class StartViewModel
    * Handles existing-character branching from the original startNewGame logic.
    */
   private async _proceedWithPack(packId: string): Promise<void> {
-    // Check for existing characters from previous sessions
-    const characterCount = this._getCharacterCount();
+    try {
+      // Check for existing characters from previous sessions
+      const characterCount = this._getCharacterCount();
 
-    if (characterCount === 1) {
-      // One character — load it directly into /game with this pack
+      if (characterCount === 1) {
+        // One character — load it directly into /game with this pack
+        inventoryService.reset();
+        worldStateService.reset();
+        playerStateService.reset();
+        equipmentService.reset();
+        gameModeService.reset();
+
+        try {
+          const stored = localStorage.getItem('aikami-characters');
+          if (stored) {
+            const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
+            if (characters.length > 0) {
+              try {
+                await personaService.setActivePersona(characters[0].persona.id);
+              } catch {
+                // Non-critical
+              }
+            }
+          }
+        } catch (error) {
+          this.warn('_proceedWithPack:persona-set-failed', error);
+        }
+
+        await campaignService.startNewCampaign({ contentPackId: packId });
+        await routerService.goToRoute('game', {
+          queryParameters: undefined,
+          pathParameters: undefined,
+        });
+        return;
+      }
+
+      if (characterCount > 1) {
+        // Multiple characters — create campaign, let user choose character
+        await campaignService.startNewCampaign({ contentPackId: packId });
+        await routerService.goToRoute('characters', {
+          queryParameters: undefined,
+          pathParameters: undefined,
+        });
+        return;
+      }
+
+      // Zero characters — go to character creation with pack selected
       inventoryService.reset();
       worldStateService.reset();
       playerStateService.reset();
       equipmentService.reset();
       gameModeService.reset();
 
-      try {
-        const stored = localStorage.getItem('aikami-characters');
-        if (stored) {
-          const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-          if (characters.length > 0) {
-            try {
-              await personaService.setActivePersona(characters[0].persona.id);
-            } catch {
-              // Non-critical
-            }
-          }
-        }
-      } catch (error) {
-        this.warn('_proceedWithPack:persona-set-failed', error);
-      }
-
       await campaignService.startNewCampaign({ contentPackId: packId });
-      await routerService.goToRoute('game', {
+
+      await routerService.goToRoute('setup', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
-      return;
+    } catch (error) {
+      this.error('_proceedWithPack:failed', error);
+      this.errorMessage = 'Failed to start campaign. Try starting a new game.';
     }
-
-    if (characterCount > 1) {
-      // Multiple characters — create campaign, let user choose character
-      await campaignService.startNewCampaign({ contentPackId: packId });
-      await routerService.goToRoute('characters', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-      return;
-    }
-
-    // Zero characters — go to character creation with pack selected
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await campaignService.startNewCampaign({ contentPackId: packId });
-
-    await routerService.goToRoute('setup', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
   }
 }
 

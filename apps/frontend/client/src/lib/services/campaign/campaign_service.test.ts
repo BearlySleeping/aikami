@@ -104,7 +104,7 @@ describe('CampaignService', () => {
     box.svc as unknown as {
       hasCampaigns: () => boolean;
       getLatestCampaign: () => Campaign | undefined;
-      startNewCampaign: (opts?: { personaId?: string }) => Promise<Campaign>;
+      startNewCampaign: (opts?: { personaId?: string; contentPackId?: string }) => Promise<Campaign>;
       loadCampaign: (opts: { campaignId: string }) => Promise<Campaign>;
       completeSetup: () => void;
       pauseCampaign: () => void;
