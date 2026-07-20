@@ -9,6 +9,7 @@ export type {
   AgentRunResult,
   ThoughtBubble,
 } from './agent_types.ts';
+export type { CompactedCampaignSummary } from './compacted_campaign_summary.ts';
 export type { DevAction, DevToggle } from './dev_action.ts';
 export type {
   ActiveContextEntry,
@@ -30,6 +31,7 @@ export type {
   LorebookEntry,
   LorebookEntryInput,
 } from './lorebook';
+export type { PlayerJournalEntry } from './player_journal_entry.ts';
 export type {
   ChatInputDraft,
   EnhancedChatMessage,
@@ -38,6 +40,7 @@ export type {
   MessageAlternatives,
   StreamingTtsConfig,
 } from './rich_chat.ts';
+export type { SessionCheckpoint } from './session_checkpoint.ts';
 
 export type ClientHookData = {
   device?: DeviceData;
