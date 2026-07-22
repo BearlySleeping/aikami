@@ -11,7 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { BUILT_IN_AGENTS } from '$services';
-import type { AgentConfig, AgentRunResult, ThoughtBubble } from '$types/agent_types';
+import type { AgentConfig, AgentRunResult, ThoughtBubble } from '$types';
 import type { AgentHudViewModelInterface } from './agent_hud_view_model.svelte.ts';
 import { getAgentHudViewModel } from './agent_hud_view_model.svelte.ts';
 import type { AgentPipelineViewModelInterface } from './agent_pipeline_view_model.svelte.ts';

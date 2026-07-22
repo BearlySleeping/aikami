@@ -14,7 +14,7 @@ import {
   textGenerationService,
   trackRegistryService,
 } from '$services';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types/agent_types';
+import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 
 /**
  * Executes the Music DJ post-agent.

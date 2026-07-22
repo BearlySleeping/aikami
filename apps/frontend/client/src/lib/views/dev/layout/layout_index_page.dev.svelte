@@ -1,5 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
+import { routerService } from '$services';
 import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
 </script>
 
@@ -20,9 +21,10 @@ import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
   <!-- Nav grid -->
   <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
     {#each NAV_ITEMS as item}
-      <a
-        href={item.route}
+      <button
+        type="button"
         class="btn btn-outline flex h-auto flex-col items-center gap-2 p-4 text-base-content hover:btn-primary"
+        onclick={() => routerService.goToDevRoute(item.route.replace('/dev/', ''))}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -35,7 +37,7 @@ import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
         </svg>
         <span class="text-sm font-medium">{item.label}</span>
-      </a>
+      </button>
     {/each}
   </div>
 </div>

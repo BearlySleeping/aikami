@@ -1,4 +1,5 @@
 <script lang="ts">
+import { routerService } from '$services';
 import OnboardingAppearanceStepView from './onboarding_appearance_step_view.svelte';
 // apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view.svelte
 import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';
@@ -20,7 +21,13 @@ const { viewModel }: Props = $props();
     {#if viewModel.errorMessage}
       <div class="alert alert-error mb-4">
         <span>{viewModel.errorMessage}</span>
-        <a href="/" class="btn btn-sm btn-ghost ml-auto">Return to Start Menu</a>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost ml-auto"
+          onclick={() => routerService.navigateToApp()}
+        >
+          Return to Start Menu
+        </button>
       </div>
     {/if}
 

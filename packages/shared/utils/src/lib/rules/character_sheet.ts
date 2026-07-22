@@ -1,18 +1,24 @@
-// apps/frontend/client/src/lib/data/character_sheet_helpers.ts
+// packages/shared/utils/src/lib/rules/character_sheet.ts
 //
 // Pure computation helpers for the Character Sheet system.
 // No side effects, no Svelte reactivity — all functions are deterministic.
 // Contract: C-232 Character Sheet & Traits System
 
+import type { AbilityKey } from '@aikami/schemas';
 import {
   ABILITY_KEYS,
   ABILITY_LABELS,
-  type AbilityKey,
-  type AbilityScores,
-  type CharacterSheet,
-  type SavingThrow,
-  type Skill,
-} from './character_sheet_types';
+  DEFAULT_ABILITY_SCORE,
+  DEFAULT_SKILLS,
+} from '@aikami/schemas';
+import type {
+  AbilityScores,
+  CharacterSavingThrow,
+  CharacterSkill,
+  CharacterTraits,
+  GameCharacterSheet,
+} from '@aikami/types';
+import { DEFAULT_NARRATIVE_TRAITS, DEFAULT_TRAITS } from '@aikami/types';
 
 // ── Modifier computation ─────────────────────────────────
 
@@ -61,6 +67,46 @@ export const computeSaveModifier = (
   return abilityMod + (isProficient ? proficiencyBonus : 0);
 };
 
+// ── Factory functions ────────────────────────────────────
+
+/** Create default ability scores (value=10, modifier=0). */
+export const createDefaultAbilities = (): AbilityScores => {
+  const abilities = {} as AbilityScores;
+  for (const key of ABILITY_KEYS) {
+    abilities[key] = { value: DEFAULT_ABILITY_SCORE, modifier: 0 };
+  }
+  return abilities;
+};
+
+/** Create default saving throw list (all non-proficient, modifier=0). */
+export const createDefaultSavingThrows = (): CharacterSavingThrow[] =>
+  ABILITY_KEYS.map((key) => ({
+    ability: key,
+    isProficient: false,
+    isExpertise: false,
+    modifier: 0,
+  }));
+
+/** Create default skill list from standard SRD skills (all non-proficient, modifier=0). */
+export const createDefaultSkills = (): CharacterSkill[] =>
+  DEFAULT_SKILLS.map((s) => ({ ...s, modifier: 0 }));
+
+/** Create a full default character sheet. */
+export const createDefaultSheet = (): GameCharacterSheet => ({
+  abilities: createDefaultAbilities(),
+  skills: createDefaultSkills(),
+  savingThrows: createDefaultSavingThrows(),
+  traits: { ...(DEFAULT_TRAITS as CharacterTraits) },
+  narrativeTraits: { ...DEFAULT_NARRATIVE_TRAITS },
+  proficiencyBonus: 2,
+  level: 1,
+  xp: 0,
+  hp: 10,
+  maxHp: 10,
+  attack: 0,
+  defense: 10,
+});
+
 // ── Score recalculation ──────────────────────────────────
 
 /**
@@ -79,10 +125,10 @@ export const recomputeAbilities = (abilities: AbilityScores): AbilityScores => {
  * Recompute all skill modifiers given current abilities and proficiency bonus.
  */
 export const recomputeSkills = (
-  skills: Skill[],
+  skills: CharacterSkill[],
   abilities: AbilityScores,
   proficiencyBonus: number,
-): Skill[] => {
+): CharacterSkill[] => {
   return skills.map((skill) => {
     const abilityMod = abilities[skill.ability]?.modifier ?? 0;
     return {
@@ -101,10 +147,10 @@ export const recomputeSkills = (
  * Recompute all saving throw modifiers.
  */
 export const recomputeSavingThrows = (
-  saves: SavingThrow[],
+  saves: CharacterSavingThrow[],
   abilities: AbilityScores,
   proficiencyBonus: number,
-): SavingThrow[] => {
+): CharacterSavingThrow[] => {
   return saves.map((save) => {
     const abilityMod = abilities[save.ability]?.modifier ?? 0;
     return {
@@ -127,7 +173,7 @@ const formatAbility = (key: AbilityKey, score: { value: number; modifier: number
  * Serialize a CharacterSheet into a compact text block for AI system prompt injection.
  * Target: under 2KB. Omits default values to save tokens.
  */
-export const serializeForAi = (sheet: CharacterSheet): string => {
+export const serializeForAi = (sheet: GameCharacterSheet): string => {
   const lines: string[] = ['[CHARACTER SHEET]'];
 
   // Header line: Level / Class / HP / ATK / DEF
@@ -204,7 +250,7 @@ export const serializeForAi = (sheet: CharacterSheet): string => {
 // ── JSON Validation ──────────────────────────────────────
 
 export type SheetValidationResult =
-  | { ok: true; data: CharacterSheet }
+  | { ok: true; data: GameCharacterSheet }
   | { ok: false; error: string };
 
 /**
@@ -247,5 +293,5 @@ export const validateSheetJson = (json: string): SheetValidationResult => {
     }
   }
 
-  return { ok: true, data: parsed as CharacterSheet };
+  return { ok: true, data: parsed as GameCharacterSheet };
 };

@@ -5,7 +5,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
-import type { AgentConfig } from '$types/agent_types';
+import type { AgentConfig } from '$types';
 
 /**
  * Built-in agent configurations.

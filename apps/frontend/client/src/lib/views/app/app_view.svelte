@@ -3,8 +3,6 @@ import type { Snippet } from 'svelte';
 // apps/frontend/client/src/lib/views/app/app_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import type { AppViewModelInterface } from './app_view_model.svelte.ts';
-import BootDiagnosticsView from './boot/boot_diagnostics_view.svelte';
-import { getBootDiagnosticsViewModel } from './boot/boot_diagnostics_view_model.svelte';
 import AppDialogsView from './dialogs/app_dialogs_view.svelte';
 
 type Props = {
@@ -13,16 +11,7 @@ type Props = {
 };
 
 let { viewModel, children }: Props = $props();
-
-const bootDiagnosticsViewModel = getBootDiagnosticsViewModel({
-  className: 'BootDiagnosticsViewModel',
-  onBootComplete: () => viewModel.onBootComplete(),
-});
 </script>
 
-{#if viewModel.showBootDiagnostics}
-  <BootDiagnosticsView viewModel={bootDiagnosticsViewModel} />
-{:else}
-  <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
-  <AppDialogsView />
-{/if}
+<BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
+<AppDialogsView />

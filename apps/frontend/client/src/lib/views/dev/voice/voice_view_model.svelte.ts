@@ -5,8 +5,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { KOKORO_VOICES, VOICE_ENGINES } from '$lib/services/config/config_service.svelte';
-import { ttsService, type VoiceInfo } from '$services';
+import { KOKORO_VOICES, ttsService, VOICE_ENGINES } from '$services';
+import type { VoiceInfo } from '$types';
 
 export type { VoiceInfo };
 

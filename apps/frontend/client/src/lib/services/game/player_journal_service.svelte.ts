@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { PlayerJournalEntry } from '$types/player_journal_entry';
+import type { PlayerJournalEntry } from '$types';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
 // ---------------------------------------------------------------------------

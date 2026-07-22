@@ -12,13 +12,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { agentPipelineService, BUILT_IN_AGENTS } from '$services';
-import type {
-  AgentConfig,
-  AgentHudState,
-  AgentPhase,
-  AgentRunResult,
-  ThoughtBubble,
-} from '$types/agent_types';
+import type { AgentConfig, AgentHudState, AgentPhase, AgentRunResult, ThoughtBubble } from '$types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

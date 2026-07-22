@@ -337,10 +337,9 @@ export const ActiveSessionSchema = z.object({ ... });
 import { TEXT_PROVIDERS } from '@aikami/constants';
 
 // ✅ CORRECT — client-local type from $types
-import type { Connection, ConnectionId } from '$types/connection';
+import type { Connection, ConnectionId } from '$types';
 
 // ✅ CORRECT — schema from shared package
-import type { ActiveContextEntry } from "$types/game.ts";
 import { ActiveSessionSchema } from "@aikami/schemas";
 ```
 

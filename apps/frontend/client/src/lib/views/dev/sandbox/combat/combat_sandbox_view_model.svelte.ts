@@ -16,12 +16,11 @@ import {
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import type { LpcAnimationState } from '$lib/data/lpc_models';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
 } from '$lib/views/combat/combat_view_model.dev.svelte.ts';
-import { gameModeService } from '$services';
+import { gameModeService, ttsService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -471,12 +470,12 @@ class CombatSandboxViewModel
   async devTriggerEquipSfx(): Promise<void> {
     this.debug('devTriggerEquipSfx');
     try {
-      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
+      const { audioContextManager } = await import('$services');
       // Resume AudioContext directly — unlock() only attaches future listeners
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+      const { audioService } = await import('$services');
       await audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
       this.debug('devTriggerEquipSfx:played');
     } catch (error) {
@@ -517,11 +516,11 @@ class CombatSandboxViewModel
   /** Plays combat hit SFX (C-163). */
   private async _playHitSfx(): Promise<void> {
     try {
-      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
+      const { audioContextManager } = await import('$services');
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+      const { audioService } = await import('$services');
       await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
     } catch (error) {
       this.debug('_playHitSfx:failed', { error: String(error) });

@@ -12,7 +12,7 @@
 //   Bottom: Fixed action bar (Attack / Defend / Flee + custom action input)
 // ---------------------------------------------------------------------------
 
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import { imageGenerationService } from '$services';
 import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';
 import CombatGallery from './components/combat_gallery.svelte';

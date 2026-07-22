@@ -5,7 +5,7 @@
 // "Generate Entries" button, spinner during LLM call, preview cards for
 // generated entries, and "Save All" to confirm.
 
-import type { LorebookEntryInput } from '$types/lorebook';
+import type { LorebookEntryInput } from '$types';
 
 type Props = {
   /** Whether the generator is currently making an LLM call. */

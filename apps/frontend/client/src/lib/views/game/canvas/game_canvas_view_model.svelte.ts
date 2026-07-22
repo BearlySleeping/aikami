@@ -6,12 +6,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type {
-  CombatantScreenState,
-  FloatingTextInstance,
-} from '$lib/services/game/game_engine_service.svelte.ts';
 import { gameBootService, gameEngineService, gameModeService } from '$services';
-import type { ActiveContextEntry } from '$types';
+import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
 // GameCanvasViewModel — thin bridge between the game canvas view and

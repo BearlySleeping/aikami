@@ -6,7 +6,7 @@
 // Contract: C-314 AC-5 — services accepted as parameters, not imported as singletons.
 
 import type { EngineBridge } from '@aikami/frontend/engine';
-import type { AudioServiceInterface } from '$lib/services/audio/audio_service.svelte';
+import type { AudioServiceInterface } from '$services';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';

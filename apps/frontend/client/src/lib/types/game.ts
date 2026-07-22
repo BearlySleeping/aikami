@@ -40,3 +40,15 @@ export type GameStateOptions = {
  * MENU — paused in overlay, all game input disabled
  */
 export type GameMode = 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT';
+
+/** IndexedDB save slot metadata displayed in the start menu. */
+export type SaveSlotInfo = {
+  /** Unique slot identifier (e.g., 'auto-save', 'manual-1'). */
+  id: string;
+  /** Unix timestamp (ms) when the save was created. */
+  timestamp: number;
+  /** Display name of the map/location where the save was made. */
+  mapName: string;
+  /** The campaign ID this save belongs to (C-334). */
+  campaignId?: string;
+};

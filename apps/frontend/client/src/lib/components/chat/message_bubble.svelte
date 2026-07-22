@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/components/chat/MessageBubble.svelte
-import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
+import type { ChatMessage as ChatMessageType } from '$services';
 import { ttsService } from '$services';
 
 type Props = {

@@ -18,6 +18,9 @@ const rootDirectory = resolve(projectDirectory, '../../..');
 export default defineConfig(({ mode }) => {
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
 
+  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin. */
+  const crossOriginEmbedderPolicy = mode === 'emulator' ? undefined : 'require-corp';
+
   const plugins: PluginOption[] = [
     tailwindcss(),
     sveltekit() as PluginOption,
@@ -30,14 +33,18 @@ export default defineConfig(({ mode }) => {
       configureServer(server) {
         server.middlewares.use((_req, res, next) => {
           res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+          if (crossOriginEmbedderPolicy) {
+            res.setHeader('Cross-Origin-Embedder-Policy', crossOriginEmbedderPolicy);
+          }
           next();
         });
       },
       configurePreviewServer(server) {
         server.middlewares.use((_req, res, next) => {
           res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+          if (crossOriginEmbedderPolicy) {
+            res.setHeader('Cross-Origin-Embedder-Policy', crossOriginEmbedderPolicy);
+          }
           next();
         });
       },
@@ -125,10 +132,30 @@ export default defineConfig(({ mode }) => {
       },
       headers: {
         'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        ...(crossOriginEmbedderPolicy
+          ? { 'Cross-Origin-Embedder-Policy': crossOriginEmbedderPolicy }
+          : {}),
       },
       port,
       proxy: {
+        // Proxy Firebase Auth emulator through the dev server so the
+        // popup, relay iframe, and main page all share localhost:5274.
+        // This fixes the "No matching frame" error in signInWithPopup.
+        '/emulator/auth': {
+          target: `http://localhost:${PORTS.emulator.auth}`,
+          changeOrigin: true,
+        },
+        // Proxy Firebase Auth REST API calls to the emulator.
+        // The SDK calls identitytoolkit + securetoken endpoints to
+        // exchange OAuth credentials for Firebase tokens.
+        '/identitytoolkit.googleapis.com': {
+          target: `http://localhost:${PORTS.emulator.auth}`,
+          changeOrigin: true,
+        },
+        '/securetoken.googleapis.com': {
+          target: `http://localhost:${PORTS.emulator.auth}`,
+          changeOrigin: true,
+        },
         '/api/voice': {
           target: `http://localhost:${PORTS.emulator.voice}`,
           changeOrigin: true,
@@ -201,7 +228,9 @@ export default defineConfig(({ mode }) => {
         // Without these, the worker falls back to N-buffer mode which
         // has a transfer-cycle race condition under setInterval ticks.
         'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
+        ...(crossOriginEmbedderPolicy
+          ? { 'Cross-Origin-Embedder-Policy': crossOriginEmbedderPolicy }
+          : {}),
       },
     },
   };

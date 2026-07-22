@@ -138,7 +138,7 @@ describe('SessionService', () => {
   test('should update session recap with edited synopsis', async () => {
     const gameId = `test-recap-${crypto.randomUUID()}`;
     await service.startSession({ gameId });
-    const sessionId = service.activeSession!.id;
+    const sessionId = service.activeSession?.id;
     await service.endSession({ playtimeMinutes: 0 });
 
     await service.updateSessionRecap({
@@ -155,7 +155,7 @@ describe('SessionService', () => {
   test('should reject recap with fewer than 10 characters', async () => {
     const gameId = `test-recap-short-${crypto.randomUUID()}`;
     await service.startSession({ gameId });
-    const sessionId = service.activeSession!.id;
+    const sessionId = service.activeSession?.id;
     await service.endSession({ playtimeMinutes: 0 });
 
     await expect(

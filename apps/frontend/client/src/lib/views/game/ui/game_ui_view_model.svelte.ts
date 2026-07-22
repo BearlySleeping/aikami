@@ -10,11 +10,13 @@ import {
   chatService,
   combatService,
   type DialogueNpcData,
+  type GameEngineServiceInterface,
   type GameOverlayType,
   gameEngineService,
   gameOverlayService,
   inputActionService,
   npcDialogueService,
+  type OverlayStackEntry,
   onboardingHintService,
   playerStateService,
   sessionService,
@@ -78,7 +80,7 @@ export type GameUIViewModelOptions = BaseViewModelOptions;
 
 export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly activeOverlay: GameOverlayType;
-  readonly overlayStack: readonly import('$lib/services/game/game_overlay_service.svelte.ts').OverlayStackEntry[];
+  readonly overlayStack: readonly OverlayStackEntry[];
   readonly isTransitioning: boolean;
   readonly isCombat: boolean;
   readonly autoSaveStatus: AutoSaveStatus;
@@ -223,7 +225,7 @@ class GameUIViewModel
     return gameOverlayService.activeOverlay;
   }
 
-  get overlayStack(): readonly import('$lib/services/game/game_overlay_service.svelte.ts').OverlayStackEntry[] {
+  get overlayStack(): readonly OverlayStackEntry[] {
     return gameOverlayService.overlayStack;
   }
 
@@ -315,9 +317,7 @@ class GameUIViewModel
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
-    gameOverlayService.setEngineService(
-      gameEngineService as import('$lib/services/game/game_engine_service.svelte').GameEngineServiceInterface,
-    );
+    gameOverlayService.setEngineService(gameEngineService as GameEngineServiceInterface);
 
     // React to overlay state changes — create/destroy sub-ViewModels
     this.registerEffectRoot(() => {

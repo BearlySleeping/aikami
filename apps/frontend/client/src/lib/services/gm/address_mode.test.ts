@@ -50,8 +50,8 @@ mock.module(TEXT_GEN_SVC_PATH, () => ({
   },
 }));
 
+import type { AddressMode } from '$types';
 import { gmPromptService } from './gm_prompt_service.svelte.ts';
-import type { AddressMode } from './gm_types';
 
 describe('Address Mode — AC-2', () => {
   const modes: AddressMode[] = ['scene', 'party', 'gm'];

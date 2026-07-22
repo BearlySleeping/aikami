@@ -20,11 +20,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { AgentPhase } from '@aikami/types';
-import { agentRegistryService } from '$lib/services/agent/agent_registry_service.svelte.ts';
-import { runCustomAgent } from '$lib/services/agent/custom_agent_factory.ts';
-import { configService } from '$lib/services/config/config_service.svelte';
-import type { AgentConfig, AgentRunResult, CustomAgentDefinition } from '$types/agent_types';
-import type { Connection } from '$types/connection';
+import { agentRegistryService, configService, runCustomAgent } from '$services';
+import type { AgentConfig, AgentRunResult, Connection, CustomAgentDefinition } from '$types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

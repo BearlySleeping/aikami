@@ -10,7 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { narrativeDirectorService } from '$lib/services/gm/narrative_director_service.svelte.ts';
+import { narrativeDirectorService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types

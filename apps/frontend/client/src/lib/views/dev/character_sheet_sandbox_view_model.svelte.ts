@@ -6,13 +6,13 @@
 //
 // Contract: C-232 Character Sheet & Traits System
 
-import { computeModifier } from '$lib/data/character_sheet_helpers';
+import type { AbilityKey } from '@aikami/types';
 import {
-  type AbilityKey,
+  computeModifier,
   createDefaultAbilities,
   createDefaultSavingThrows,
   createDefaultSkills,
-} from '$lib/data/character_sheet_types';
+} from '@aikami/utils';
 import {
   CharacterSheetViewModel,
   type CharacterSheetViewModelInterface,

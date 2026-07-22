@@ -107,9 +107,7 @@ describe('PackIndexSchema', () => {
   test('rejects packs with invalid entry inside valid index', () => {
     const index = {
       schemaVersion: 1,
-      packs: [
-        { id: 'test', name: 'Test', version: 'bad', updatedAt: '2026-01-01T00:00:00.000Z' },
-      ],
+      packs: [{ id: 'test', name: 'Test', version: 'bad', updatedAt: '2026-01-01T00:00:00.000Z' }],
     };
     expect(Value.Check(PackIndexSchema, index)).toBe(false);
   });

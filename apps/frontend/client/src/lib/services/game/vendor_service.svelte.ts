@@ -19,8 +19,8 @@ import {
   type VendorActionIntent,
   VendorActionSchema,
 } from '$lib/data/ai_prompts/vendor_action_schema';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { audioService } from '$services';
+import { audioService, textGenerationService } from '$services';
+import type { VendorSessionOptions } from '$types';
 import { getItemDefinition, inventoryService } from './inventory_service.svelte';
 
 // ── Pricing ─────────────────────────────────────────────────────────────
@@ -45,12 +45,6 @@ export type VendorSellEntry = {
   label: string;
   quantity: number;
   sellPrice: number;
-};
-
-export type VendorSessionOptions = {
-  vendorId: string;
-  vendorName: string;
-  vendorInventory: string;
 };
 
 export type VendorServiceInterface = BaseFrontendClassInterface & {

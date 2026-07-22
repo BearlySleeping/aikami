@@ -13,9 +13,7 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import { imageGenerationService, textGenerationService, ttsService } from '$services';
 import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
 import type { DiceNotation } from './types/combat_enhancements.ts';
 

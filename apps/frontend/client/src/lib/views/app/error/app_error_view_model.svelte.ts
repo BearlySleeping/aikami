@@ -156,10 +156,7 @@ class AppErrorViewModel
         pathParameters: undefined,
       });
     } else if (currentErrorType === 'access-denied') {
-      await routerService.goToRoute('login', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
+      await routerService.navigateToApp();
     } else {
       globalThis.window.location.reload();
     }

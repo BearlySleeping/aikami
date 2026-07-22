@@ -20,7 +20,8 @@ import {
   timeService,
   worldStateService,
 } from '$services';
-import type { AddressMode, GmCombatContext, GmPromptContext } from './gm_types';
+import type { AddressMode } from '$types';
+import type { GmCombatContext, GmPromptContext } from './gm_types';
 
 // ---------------------------------------------------------------------------
 // Types

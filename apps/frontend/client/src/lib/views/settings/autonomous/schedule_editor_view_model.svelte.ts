@@ -17,8 +17,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { AvailabilityStatus, DaySchedule } from '@aikami/types';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { npcScheduleService } from '$services';
+import { npcScheduleService, textGenerationService } from '$services';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

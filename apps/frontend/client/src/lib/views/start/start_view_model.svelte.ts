@@ -3,7 +3,6 @@
 // ViewModel for the root Start Menu. Bridges AuthService (Firebase auth),
 // RouterService (SPA navigation), and Tauri window API (desktop quit).
 // Supports optional Google Sign-In — the game is fully functional without it.
-// Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-3)
 // Contract: C-334 Crash Detection Recovery (AC-5)
 
 import {
@@ -12,22 +11,21 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
-import { GameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
-import type { SaveSlotInfo } from '$services';
 import {
-  aiGatewayService,
   authService,
   campaignService,
   equipmentService,
   gameModeService,
+  gameOverlayService,
   gameSaveService,
   inventoryService,
   packRegistryService,
+  personaService,
   playerStateService,
   routerService,
   worldStateService,
 } from '$services';
+import type { SaveSlotInfo } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +42,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Whether a Google sign-in or sign-out is in progress. */
   readonly isSigningIn: boolean;
+
+  /** An initialization error message, or null when initialized successfully. */
+  readonly initError: string | null;
 
   /** The logged-in player's display name, or undefined. */
   readonly playerDisplayName: string | undefined;
@@ -66,7 +67,7 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** C-334 AC-5: Whether a recovery action is in progress. */
   readonly isRecovering: boolean;
 
-  /** Start a New Game — resets state and routes to character creation. */
+  /** Start a New Game with Emberwatch — resets state and routes to character creation. */
   startNewGame(): Promise<void>;
 
   /** Continue the most recent saved game. */
@@ -83,6 +84,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Navigates to the options/settings screen. */
   goToOptions(): Promise<void>;
+
+  /** Retries initialization after an error (reloads the page). */
+  retry(): void;
 
   /** Opens the credits modal. */
   showCreditsModal(): void;
@@ -214,6 +218,9 @@ class StartViewModel
   /** Private — tracks sign-in/sign-out progress to prevent double-clicks. */
   private _isSigningIn = $state(false);
 
+  /** Initialization error message — null when initialization succeeded. */
+  private _initError = $state<string | null>(null);
+
   /** Whether there are existing IndexedDB saves. */
   hasSaves = $state(false);
 
@@ -259,36 +266,23 @@ class StartViewModel
   }
 
   /** @inheritdoc */
+  get initError(): string | null {
+    return this._initError;
+  }
+
+  /** @inheritdoc */
   get playerDisplayName(): string | undefined {
     return authService.currentUser?.displayName || authService.currentUser?.email || undefined;
   }
 
   /** @inheritdoc */
   async startNewGame(): Promise<void> {
-    if (!this._resolveTextProvider()) {
-      // @ts-expect-error — 'capability' route not yet registered in routes config
-      await routerService.goToRoute('capability', {
-        queryParameters: { reason: 'text-required' },
-        pathParameters: undefined,
-      });
-      return;
-    }
-
-    // C-345: Load pack registry and show pack browser if multiple packs available
-    await this.openPackBrowser();
+    // Campaign generation is beta; default to Emberwatch directly.
+    await this._proceedWithPack('emberwatch');
   }
 
   /** @inheritdoc */
   async continueGame(): Promise<void> {
-    if (!this._resolveTextProvider()) {
-      // @ts-expect-error — 'capability' route not yet registered in routes config
-      await routerService.goToRoute('capability', {
-        queryParameters: { reason: 'text-required' },
-        pathParameters: undefined,
-      });
-      return;
-    }
-
     if (this.availableSaves.length === 0) {
       this.warn('continueGame:no-saves');
       return;
@@ -323,9 +317,21 @@ class StartViewModel
   override async initialize(): Promise<void> {
     this.debug('initialize');
 
+    // Check for existing campaigns
+    try {
+      await campaignService.refreshCampaigns();
+      this._initError = null;
+    } catch (error) {
+      this._initError = String(error);
+      this.warn('initialize:campaign-refresh-failed', error);
+      await super.initialize();
+      this._showLoadingView = false;
+      return;
+    }
+
     // C-334 AC-5: Check for stale session marker (crash recovery)
     try {
-      const campaignId = await GameOverlayService.checkSessionMarker();
+      const campaignId = await gameOverlayService.checkSessionMarker();
       if (campaignId) {
         this.recoveryCampaignId = campaignId;
         this.showRecoveryPrompt = true;
@@ -349,6 +355,7 @@ class StartViewModel
     }
 
     await super.initialize();
+    this._showLoadingView = false;
   }
 
   /** @inheritdoc */
@@ -405,6 +412,11 @@ class StartViewModel
     this.showCredits = false;
   }
 
+  /** @inheritdoc */
+  retry(): void {
+    window.location.reload();
+  }
+
   /**
    * Returns the credit groups for the credits modal.
    * Public getter so the View can iterate groups.
@@ -427,20 +439,6 @@ class StartViewModel
       return Array.isArray(characters) ? characters.length : 0;
     } catch {
       return 0;
-    }
-  }
-
-  /**
-   * Resolves whether a text AI provider is available via the gateway.
-   * Returns true when the gateway can resolve a text generation mode.
-   * On failure (no provider configured, gateway throws), returns false.
-   */
-  private _resolveTextProvider(): boolean {
-    try {
-      aiGatewayService.resolveMode('text');
-      return true;
-    } catch {
-      return false;
     }
   }
 
@@ -473,7 +471,7 @@ class StartViewModel
 
       if (saves.length === 0) {
         // No saves — just clear the marker and show start screen
-        await GameOverlayService.clearSessionMarker();
+        await gameOverlayService.clearSessionMarker();
         this.showRecoveryPrompt = false;
         this.debug('acceptRecovery:no-saves-for-campaign');
         return;
@@ -483,7 +481,7 @@ class StartViewModel
       this.debug('acceptRecovery', { slotId: latestSave.id, mapName: latestSave.mapName });
 
       // Clear the session marker before navigating
-      await GameOverlayService.clearSessionMarker();
+      await gameOverlayService.clearSessionMarker();
 
       // Dismiss the recovery prompt before navigating
       this.showRecoveryPrompt = false;
@@ -504,7 +502,7 @@ class StartViewModel
   /** @inheritdoc */
   async declineRecovery(): Promise<void> {
     // C-334 AC-5: Clear the session marker silently
-    await GameOverlayService.clearSessionMarker();
+    await gameOverlayService.clearSessionMarker();
     this.showRecoveryPrompt = false;
     this.recoveryCampaignId = undefined;
     this.debug('declineRecovery');
@@ -594,6 +592,7 @@ class StartViewModel
         }
 
         await campaignService.startNewCampaign({ contentPackId: packId });
+        campaignService.completeSetup();
         await routerService.goToRoute('game', {
           queryParameters: undefined,
           pathParameters: undefined,
@@ -604,7 +603,7 @@ class StartViewModel
       if (characterCount > 1) {
         // Multiple characters — create campaign, let user choose character
         await campaignService.startNewCampaign({ contentPackId: packId });
-        await routerService.goToRoute('characters', {
+        await routerService.goToRoute('personas', {
           queryParameters: undefined,
           pathParameters: undefined,
         });
@@ -636,4 +635,4 @@ class StartViewModel
 // ---------------------------------------------------------------------------
 
 export const getStartViewModel = (options: StartViewModelOptions): StartViewModelInterface =>
-  StartViewModel.create(options);
+  StartViewModel.create({ ...options, startWithLoadingView: true } as StartViewModelOptions);

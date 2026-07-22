@@ -9,7 +9,7 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import type { CustomAgentDefinition } from '$types/agent_types';
+import type { CustomAgentDefinition } from '$types';
 import {
   type AgentEditorViewModelInterface,
   getAgentEditorViewModel,

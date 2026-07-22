@@ -12,6 +12,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { SaveSlotInfo } from '$types';
 import {
   hydrateAllServices,
   type ServiceSnapshot,
@@ -130,18 +131,6 @@ export const validateEnvelopeChecksum = async (options: {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Metadata for a single save slot displayed in the UI. */
-export type SaveSlotInfo = {
-  /** Unique slot identifier (e.g., 'auto-save', 'manual-1'). */
-  id: string;
-  /** Unix timestamp (ms) when the save was created. */
-  timestamp: number;
-  /** Display name of the map/location where the save was made. */
-  mapName: string;
-  /** The campaign ID this save belongs to (C-334). */
-  campaignId?: string;
-};
 
 /** Internal save document shape persisted to SQLite. */
 export type SaveDocument = {

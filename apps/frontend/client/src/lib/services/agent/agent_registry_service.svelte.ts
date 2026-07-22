@@ -18,7 +18,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { CreateAgentInput, CustomAgentDefinition, UpdateAgentInput } from '$types/agent_types';
+import type { CreateAgentInput, CustomAgentDefinition, UpdateAgentInput } from '$types';
 import { authService } from '../auth/auth_service.svelte.ts';
 
 type FirestoreModule = typeof import('@aikami/frontend/configs/firestore.ts');

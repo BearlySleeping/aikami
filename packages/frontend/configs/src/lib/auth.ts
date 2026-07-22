@@ -29,7 +29,12 @@ const initializeAuthInstance = (): Auth => {
   const instance = getAuth(app);
 
   if (isEmulatorModePublic()) {
-    connectAuthEmulator(instance, `http://localhost:${EMULATOR_PORTS.auth}`);
+    // Point the Firebase Auth SDK at the app's own origin so all auth
+    // endpoints (popup, redirect, iframe relay) share the same origin.
+    // Vite proxies /emulator/auth → the actual Auth emulator (port 9098).
+    connectAuthEmulator(instance, `http://localhost:${EMULATOR_PORTS.client}`, {
+      disableWarnings: true,
+    });
   }
 
   return instance;

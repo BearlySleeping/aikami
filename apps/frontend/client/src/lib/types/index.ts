@@ -1,51 +1,24 @@
-import type { DeviceData, LogLevel, UserSessionData } from '@aikami/types';
-import type { RouteName } from '$router';
-
-export type {
-  AgentConfig,
-  AgentHudState,
-  AgentPhase,
-  AgentPipelineContext,
-  AgentRunResult,
-  ThoughtBubble,
-} from './agent_types.ts';
-export type { CompactedCampaignSummary } from './compacted_campaign_summary.ts';
-export type { DevAction, DevToggle } from './dev_action.ts';
-export type {
-  ActiveContextEntry,
-  GameStateEvent,
-  GameStateListener,
-  GameStateOptions,
-} from './game.ts';
-export type {
-  GameBootInput,
-  GameBootProgress,
-  GameBootResult,
-  GameBootStage,
-} from './game_boot.ts';
-export type { ImpersonationConfig } from './impersonation.ts';
-export type {
-  KeywordMatch,
-  Lorebook,
-  LorebookEntriesArray,
-  LorebookEntry,
-  LorebookEntryInput,
-} from './lorebook';
-export type { PlayerJournalEntry } from './player_journal_entry.ts';
-export type {
-  ChatInputDraft,
-  EnhancedChatMessage,
-  EnhancedMessage,
-  MessageAction,
-  MessageAlternatives,
-  StreamingTtsConfig,
-} from './rich_chat.ts';
-export type { SessionCheckpoint } from './session_checkpoint.ts';
-
-export type ClientHookData = {
-  device?: DeviceData;
-  userSession?: UserSessionData;
-  currentRoute?: RouteName;
-  logLevel?: LogLevel;
-  sessionId?: string;
-};
+// ── Const data (moved to $lib/data/) ──
+export { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '../data/connection_defaults.ts';
+export { INSTRUCT_TEMPLATES, type InstructTemplate } from '../data/provider_constants.ts';
+export type * from './agent_types.ts';
+export type * from './combat_rendering.ts';
+export type * from './compacted_campaign_summary.ts';
+export type * from './connection.ts';
+export type * from './dev_action.ts';
+export type * from './dialogue.ts';
+export type * from './expression.ts';
+export type * from './game.ts';
+export type * from './game_boot.ts';
+export type * from './gm.ts';
+export type * from './hook_data.ts';
+export type * from './impersonation.ts';
+export type * from './lorebook';
+export type * from './player_journal_entry.ts';
+export type * from './preset.ts';
+export type * from './provider_config.ts';
+export type * from './rich_chat.ts';
+export type * from './session.ts';
+export type * from './session_checkpoint.ts';
+export type * from './vendor.ts';
+export type * from './voice.ts';

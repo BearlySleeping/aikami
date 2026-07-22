@@ -17,8 +17,12 @@ import type {
   ImageStyleProfile,
   ImageType,
 } from '@aikami/types';
-import { compileImagePrompt } from '$lib/services/image/prompt_compiler';
-import { contextualTriggerService, galleryService, styleProfileService } from '$services';
+import {
+  compileImagePrompt,
+  contextualTriggerService,
+  galleryService,
+  styleProfileService,
+} from '$services';
 
 // ── Tab definitions ────────────────────────────────────────────────────
 

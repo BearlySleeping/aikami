@@ -31,18 +31,11 @@ export const isPublicPage = (route: string): boolean => {
   }
   return false;
 };
-export const isAuthenticatedPage = (route: string): boolean => {
-  const routeOptions = routes[route as RouteName];
-  if (routeOptions) {
-    return routeOptions.type === 'authenticated';
-  }
+export const isAuthenticatedPage = (_route: string): boolean => {
+  // All current routes are public — auth gating is handled by app boot flow.
   return false;
 };
-export const isUnauthenticatedPage = (route: string): boolean => {
-  const routeOptions = routes[route as RouteName];
-  if (routeOptions) {
-    return routeOptions.type === 'unauthenticated';
-  }
+export const isUnauthenticatedPage = (_route: string): boolean => {
   return false;
 };
 

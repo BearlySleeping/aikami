@@ -23,7 +23,7 @@ import type {
   ExpressionId,
   ExpressionMap,
   ExpressionOverlay,
-} from '$types/expression';
+} from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
 
 // ── Service Interface ────────────────────────────────────────────────────

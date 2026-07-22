@@ -6,7 +6,7 @@
 //
 // Contract: C-232 Character Sheet & Traits System
 import { Modal } from '@aikami/frontend/components';
-import { ABILITY_KEYS } from '$lib/data/character_sheet_types';
+import { ABILITY_KEYS } from '@aikami/types';
 import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
 
 type Props = {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
+import type { ChatMessage as ChatMessageType } from '$services';
 import { ttsService } from '$services';
 
 /**

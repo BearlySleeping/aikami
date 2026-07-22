@@ -5,8 +5,12 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ImageType } from '@aikami/types';
-import { compileImagePrompt } from '$lib/services/image/prompt_compiler';
-import { type CheckpointInfo, imageGenerationService, styleProfileService } from '$services';
+import {
+  type CheckpointInfo,
+  compileImagePrompt,
+  imageGenerationService,
+  styleProfileService,
+} from '$services';
 
 export type { CheckpointInfo };
 

@@ -10,9 +10,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { agentRegistryService } from '$lib/services/agent/agent_registry_service.svelte.ts';
-import { BUILT_IN_AGENTS } from '$lib/services/agent/built_in_agents.ts';
-import type { AgentConfig, CustomAgentDefinition } from '$types/agent_types';
+import { agentRegistryService, BUILT_IN_AGENTS } from '$services';
+import type { AgentConfig, CustomAgentDefinition } from '$types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

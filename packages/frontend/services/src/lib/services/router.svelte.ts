@@ -91,6 +91,9 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
     },
   ): Promise<void>;
 
+  /** Navigate to a dev route. Accepts the path after /dev (e.g. 'combat', 'agent-editor'). */
+  goToDevRoute(devPath: string): Promise<void>;
+
   /** Stores the SvelteKit goto function and marks the service as initialized. */
   initialize(options: { goto: GoTo; page: Page }): void;
 
@@ -165,6 +168,11 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
 
     this.log('goToRoute:href', href);
     return await this.goToHref(href);
+  }
+
+  async goToDevRoute(devPath: string): Promise<void> {
+    const path = devPath.startsWith('/') ? devPath : `/${devPath}`;
+    return await this.goToHref(`/dev${path}`);
   }
 
   onPageChanged(listener: Listener<Page | undefined>): void {

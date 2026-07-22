@@ -9,16 +9,18 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$lib/services/config/config_service.svelte';
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
+  configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  IMAGE_PROVIDERS,
   PROVIDER_ENDPOINTS,
   PROVIDER_MODEL_FETCH,
-} from '$lib/services/config/provider_endpoints';
-import type { Connection, ConnectionId, ConnectionTestResult } from '$types/connection';
+  VOICE_PROVIDERS,
+} from '$services';
+import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -43,6 +45,12 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   readonly modelOptions: readonly FetchedModel[];
   readonly canFetchModels: boolean;
   readonly isModelCustom: boolean;
+  /** Human-readable capability label for the editor header. */
+  readonly capabilityLabel: string;
+  /** Whether to show the generation params section (text only). */
+  readonly showGenerationParams: boolean;
+  /** Whether model testing is supported (text only). */
+  readonly canTestModel: boolean;
   readonly providerLabels: Record<string, string>;
   readonly providerOptions: ReadonlyArray<{ id: string; label: string }>;
   readonly needsApiKey: boolean;
@@ -58,6 +66,8 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   };
 
   openCreate(): void;
+  /** Opens the editor pre-set for a specific capability (text/image/voice). */
+  openCreateFor(capability: ConnectionCapability): void;
   openEdit(id: ConnectionId): void;
   cancelEdit(): void;
   setDraftField(field: keyof Connection, value: unknown): void;
@@ -126,15 +136,19 @@ class ConnectionManagerViewModel
   }
 
   get providerLabels(): Record<string, string> {
+    const providers = this._capabilityProviders();
     const labels: Record<string, string> = {};
-    for (const p of TEXT_PROVIDERS) {
+    for (const p of providers) {
       labels[p.id] = p.label;
     }
     return labels;
   }
 
   get providerOptions(): ReadonlyArray<{ id: string; label: string }> {
-    return TEXT_PROVIDERS.map((p) => ({ id: p.id, label: `${p.label} — ${p.description}` }));
+    return this._capabilityProviders().map((p) => ({
+      id: p.id,
+      label: `${p.label} — ${p.description}`,
+    }));
   }
 
   get isEditing(): boolean {
@@ -143,11 +157,18 @@ class ConnectionManagerViewModel
 
   get needsApiKey(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    return TEXT_PROVIDERS.find((p) => p.id === provider)?.needsKey ?? true;
+    return this._capabilityProviders().find((p) => p.id === provider)?.needsKey ?? true;
   }
 
   get needsUrl(): boolean {
+    const capability = this.draft.capability ?? 'text';
     const provider = this.draft.provider ?? 'openrouter';
+    if (capability === 'image') {
+      return ['comfyui', 'webui', 'openai-compat'].includes(provider);
+    }
+    if (capability === 'voice') {
+      return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
+    }
     return ['ollama', 'ooba', 'custom'].includes(provider);
   }
 
@@ -183,6 +204,62 @@ class ConnectionManagerViewModel
     return this.draft.model === '__custom__';
   }
 
+  /** Human-readable capability label (e.g. "Text", "Image", "Voice"). */
+  get capabilityLabel(): string {
+    const capability = this.draft.capability ?? 'text';
+    if (capability === 'image') {
+      return 'Image';
+    }
+    if (capability === 'voice') {
+      return 'Voice';
+    }
+    return 'Text';
+  }
+
+  /** Show generation params section only for text connections. */
+  get showGenerationParams(): boolean {
+    return (this.draft.capability ?? 'text') === 'text';
+  }
+
+  /** Model testing is only supported for text connections currently. */
+  get canTestModel(): boolean {
+    return (this.draft.capability ?? 'text') === 'text';
+  }
+
+  // ── Private: capability-aware helpers ─────────────────────────────────
+
+  /**
+   * Returns the provider registry for the draft's current capability.
+   * Falls back to TEXT_PROVIDERS for backward compatibility.
+   */
+  private _capabilityProviders(): ReadonlyArray<{
+    id: string;
+    label: string;
+    description: string;
+    needsKey: boolean;
+    needsUrl?: boolean;
+    isLocal: boolean;
+  }> {
+    const capability = this.draft.capability ?? 'text';
+    if (capability === 'image') {
+      return IMAGE_PROVIDERS.map((p) => ({
+        ...p,
+        needsKey: p.id !== 'comfyui' && p.id !== 'webui',
+        needsUrl: p.id === 'comfyui' || p.id === 'webui' || p.id === 'openai-compat',
+        isLocal: p.id === 'comfyui' || p.id === 'webui',
+      }));
+    }
+    if (capability === 'voice') {
+      return VOICE_PROVIDERS.map((p) => ({
+        ...p,
+        needsKey: p.id === 'elevenlabs' || p.id === 'openai',
+        needsUrl: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
+        isLocal: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
+      }));
+    }
+    return TEXT_PROVIDERS;
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -204,11 +281,35 @@ class ConnectionManagerViewModel
     this.draft = {
       apiKey: '',
       baseUrl: '',
+      capability: 'text',
       generationParams: { ...configService.state.generationParams },
       isDefault: false,
       model: '',
       name: '',
       provider: 'openrouter',
+    };
+  }
+
+  openCreateFor(capability: ConnectionCapability): void {
+    this.debug('openCreateFor', { capability });
+    this._providerCache = {};
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
+    this.editingConnectionId = undefined;
+    this.isEditorOpen = true;
+    // Default provider per capability
+    const defaultProvider =
+      capability === 'text' ? 'openrouter' : capability === 'image' ? 'comfyui' : 'kokoro';
+    this.draft = {
+      apiKey: '',
+      baseUrl: '',
+      capability,
+      generationParams: { ...configService.state.generationParams },
+      isDefault: false,
+      model: '',
+      name: '',
+      provider: defaultProvider,
     };
   }
 
@@ -262,10 +363,22 @@ class ConnectionManagerViewModel
 
     this.draft = {
       ...this.draft,
-      apiKey: cached?.apiKey ?? configService.state.text.apiKeys[provider] ?? '',
+      apiKey: cached?.apiKey ?? this._getDefaultApiKey(provider) ?? '',
       model: '',
       provider,
     };
+  }
+
+  /** Returns the default API key for a provider based on current capability. */
+  private _getDefaultApiKey(provider: string): string | undefined {
+    const capability = this.draft.capability ?? 'text';
+    if (capability === 'image') {
+      return configService.state.image.apiKey;
+    }
+    if (capability === 'voice') {
+      return configService.state.voice.apiKey;
+    }
+    return configService.state.text.apiKeys[provider];
   }
 
   saveDraft(): void {
@@ -287,6 +400,7 @@ class ConnectionManagerViewModel
       configService.addConnection({
         ...(this.draft as Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>),
         model,
+        source: 'stored',
       });
     }
 
@@ -474,6 +588,10 @@ class ConnectionManagerViewModel
           model,
           messages: [{ role: 'user', content: 'hi' }],
           stream: false,
+          options: {
+            // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+            num_predict: 5,
+          },
         });
       }
 

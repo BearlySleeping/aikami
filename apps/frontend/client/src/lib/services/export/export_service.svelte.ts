@@ -22,8 +22,8 @@ import type {
 import { toAppError } from '@aikami/utils';
 import JSZip from 'jszip';
 import { authService, npcService, personaService, sessionService } from '$services';
+import type { GameSession } from '$types';
 import { createPlaceholderPngCard, embedCharacterInPng } from '../character/png_writer.ts';
-import type { GameSession } from '../game/session_service.svelte';
 import { sessionToEpub } from './formatters/epub_formatter.ts';
 import { type ExportMessage, messagesToJsonl } from './formatters/jsonl_formatter.ts';
 import { messagesToPlainText } from './formatters/plaintext_formatter.ts';

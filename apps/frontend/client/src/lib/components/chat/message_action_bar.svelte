@@ -7,7 +7,7 @@
 //
 // Contract: C-231 AC-3 Inline Message Action Bar
 
-import type { MessageAction } from '$types/rich_chat';
+import type { MessageAction } from '$types';
 
 type Props = {
   /** Message sender — controls which actions are shown. */

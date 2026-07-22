@@ -9,23 +9,21 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  type AuxiliaryModels,
-  type ConfigState,
-  configService,
-  INSTRUCT_TEMPLATES,
-  type InstructTemplate,
-  TEXT_PROVIDERS,
-  type TextProvider,
-} from '$lib/services/config/config_service.svelte';
-import {
-  fetchOpenRouterModels,
-  type OpenRouterModel,
-} from '$lib/services/config/openrouter_models';
-import {
   buildVerifyHeaders,
   buildVerifyUrl,
+  type ConfigState,
+  configService,
+  fetchOpenRouterModels,
   PROVIDER_ENDPOINTS,
-} from '$lib/services/config/provider_endpoints';
+  TEXT_PROVIDERS,
+  type TextProvider,
+} from '$services';
+import {
+  type AuxiliaryModels,
+  INSTRUCT_TEMPLATES,
+  type InstructTemplate,
+  type OpenRouterModel,
+} from '$types';
 
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;

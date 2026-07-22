@@ -12,7 +12,7 @@ import {
   dialogService,
 } from '@aikami/frontend/services';
 import { playerJournalService } from '$services/game/player_journal_service.svelte';
-import type { PlayerJournalEntry } from '$types/player_journal_entry';
+import type { PlayerJournalEntry } from '$types';
 
 export type PlayerJournalViewModelInterface = BaseViewModelInterface & {
   /** All journal entries for the current campaign, ordered by createdAt descending. */

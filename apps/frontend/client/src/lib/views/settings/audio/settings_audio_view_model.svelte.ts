@@ -7,7 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { audioService } from '$lib/services/audio/audio_service.svelte';
+import { audioService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Interface

@@ -4,6 +4,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { VoiceInfo } from '$types';
 import { audioContextManager } from './audio_context_manager';
 import { audioService } from './audio_service.svelte';
 import {
@@ -11,12 +12,6 @@ import {
   ringBufferClear,
   type WaitFreeRingBuffer,
 } from './wait_free_ring_buffer';
-
-/** Voice descriptor returned by GET /v1/voices. */
-export type VoiceInfo = {
-  readonly id: string;
-  readonly description: string;
-};
 
 /** Lifecycle status of the native Kokoro WebGPU TTS engine. */
 export type TtsStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';

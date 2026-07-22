@@ -30,6 +30,31 @@ export const AbilityScoresSchema = Type.Object(
 export type AbilityScoresData = Type.Static<typeof AbilityScoresSchema>;
 export type AbilityScores = Type.Static<typeof AbilityScoresSchema>;
 
+/** Ordered ability keys (canonical D&D 5e order). */
+export const ABILITY_KEYS = [
+  'strength',
+  'dexterity',
+  'constitution',
+  'intelligence',
+  'wisdom',
+  'charisma',
+] as const;
+
+export type AbilityKey = (typeof ABILITY_KEYS)[number];
+
+/** Three-letter ability labels for UI display. */
+export const ABILITY_LABELS: Record<AbilityKey, string> = {
+  strength: 'STR',
+  dexterity: 'DEX',
+  constitution: 'CON',
+  intelligence: 'INT',
+  wisdom: 'WIS',
+  charisma: 'CHA',
+} as const;
+
+/** Default ability score value (before racial/class modifiers). */
+export const DEFAULT_ABILITY_SCORE = 10;
+
 // ── Alignment ──────────────────────────────────────────────────────────
 
 export const ALIGNMENTS = [
@@ -206,6 +231,21 @@ export const NarrativeTraitsSchema = Type.Optional(
 );
 
 export type NarrativeTraits = Type.Static<typeof NarrativeTraitsSchema>;
+
+/** Default empty traits for character creation. */
+export const DEFAULT_TRAITS = {
+  personalityTraits: '',
+  ideals: '',
+  bonds: '',
+  flaws: '',
+} as const;
+
+/** Default empty narrative traits for character creation. */
+export const DEFAULT_NARRATIVE_TRAITS: NarrativeTraits = {
+  likes: [],
+  temptations: [],
+  keys: [],
+};
 // ── Background ──────────────────────────────────────────────────────────
 
 export const BackgroundSchema = Type.Optional(

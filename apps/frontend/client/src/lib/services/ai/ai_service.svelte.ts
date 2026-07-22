@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { NpcData, PersonaData } from '@aikami/types';
-import { aiGatewayService } from '$lib/services/ai/ai_gateway_service.svelte.ts';
+import { aiGatewayService } from '$services';
 
 export type AIServiceOptions = BaseFrontendClassOptions;
 

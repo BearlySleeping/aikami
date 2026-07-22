@@ -13,18 +13,18 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { audioService } from '$lib/services/audio/audio_service.svelte.ts';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { getExpressionAssetResolver } from '$lib/services/expression/expression_asset_resolver';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import {
+  audioService,
   diceService,
+  getExpressionAssetResolver,
+  imageGenerationService,
   inventoryService,
+  textGenerationService,
+  ttsService,
   worldGenSeedingService,
   worldStateService,
 } from '$services';
-import type { ExpressionId } from '$types/expression';
+import type { ExpressionId } from '$types';
 import type {
   DeathSaveState,
   DiceNotation,

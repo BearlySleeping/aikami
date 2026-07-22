@@ -223,7 +223,7 @@ const devActions = [
   {
     label: '💾 Save Game (manual-1)',
     onClick: async () => {
-      const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+      const { GameSaveService } = await import('$services');
       const { createEngineBridge } = await import('@aikami/frontend/engine');
       const bridge = createEngineBridge();
       type SaveSvc = { saveGame: (slot: string) => Promise<void> };
@@ -242,7 +242,7 @@ const devActions = [
   {
     label: '📂 Load Last Save',
     onClick: async () => {
-      const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+      const { GameSaveService } = await import('$services');
       type LoadSvc = {
         fetchAvailableSaves: () => Promise<void>;
         availableSaves: Array<{ id: string }>;

@@ -9,11 +9,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  macroPresetStore,
-  type PromptPreset,
-  type PromptSection,
-} from '$lib/services/config/macro_preset_store.svelte';
+import { macroPresetStore } from '$services';
+import type { PromptPreset, PromptSection } from '$types';
 
 export type PresetEditorViewModelInterface = BaseViewModelInterface & {
   /** All available presets (built-in + user-defined). */

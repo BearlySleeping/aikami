@@ -399,6 +399,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_ATTEMPT=${String(request.attempt)}`,
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(request.contractPath)}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${shellQuote(request.resultPath)}`,
+      'HERDR_DISABLE_SOUND=1',
       wsEnv,
       ghEnv,
     ]

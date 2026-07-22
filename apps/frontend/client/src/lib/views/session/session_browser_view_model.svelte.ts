@@ -12,9 +12,8 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import type { GameSession } from '$services/game/session_service.svelte';
-import { sessionService } from '$services/game/session_service.svelte';
-import type { SessionCheckpoint } from '$types/session_checkpoint';
+import { sessionService } from '$services';
+import type { GameSession, SessionCheckpoint } from '$types';
 
 export type SessionBrowserViewModelInterface = BaseViewModelInterface & {
   /** All sessions for the current game, sorted by sessionNumber descending. */

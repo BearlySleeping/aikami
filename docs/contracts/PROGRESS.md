@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-20)
+## Status Summary (Auto-generated: 2026-07-22)
 
-**164 active (25 without contract file), 119 archived, 2 duplicates**
+**164 active (24 without contract file), 119 archived, 2 duplicates**
 
 ### Active Contracts
 
@@ -147,7 +147,7 @@
 | C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 👍 approved | — | v2 |
 | C-343 | Promote Rich Chat Ux Into Production Gameplay | 👍 approved | ❓ `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) | v2 |
 | C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | — | v2 |
-| C-345 | Add a Campaign/Content-Pack Browser and a Second Adventure | ⏳ not_started (no contract file) | — | — |
+| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | — | v2 |
 | C-346 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | — | — |
 | C-347 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | — | — |
 | C-348 | Build a Unified AI Turn Orchestrator with Validated State Patches | ⏳ not_started (no contract file) | — | — |

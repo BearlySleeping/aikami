@@ -1,22 +1,23 @@
-// apps/frontend/client/src/lib/data/__tests__/character_sheet_helpers.test.ts
+// packages/shared/utils/src/lib/rules/__tests__/character_sheet.test.ts
 //
 // Unit tests for Character Sheet computation helpers.
 // Contract: C-232 Character Sheet & Traits System
 
 import { describe, expect, it } from 'bun:test';
+import type { AbilityScores } from '@aikami/types';
+import { ABILITY_KEYS } from '@aikami/types';
 import {
   computeModifier,
   computeProficiencyBonus,
   computeSaveModifier,
   computeSkillModifier,
+  createDefaultSheet,
   recomputeAbilities,
   recomputeSavingThrows,
   recomputeSkills,
   serializeForAi,
   validateSheetJson,
-} from '../character_sheet_helpers';
-import type { AbilityScores } from '../character_sheet_types';
-import { ABILITY_KEYS, createDefaultSheet } from '../character_sheet_types';
+} from '../character_sheet';
 
 // ── computeModifier ──────────────────────────────────────
 
@@ -231,8 +232,8 @@ describe('recomputeSavingThrows', () => {
     } satisfies AbilityScores;
 
     const saves = [
-      { ability: 'strength' as const, isProficient: true, modifier: 99 },
-      { ability: 'charisma' as const, isProficient: false, modifier: 99 },
+      { ability: 'strength' as const, isProficient: true, isExpertise: false, modifier: 99 },
+      { ability: 'charisma' as const, isProficient: false, isExpertise: false, modifier: 99 },
     ];
 
     const result = recomputeSavingThrows(saves, abilities, 2);

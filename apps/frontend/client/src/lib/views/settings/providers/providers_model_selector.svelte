@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/providers/providers_model_selector.svelte
-import type { OpenRouterModel } from '$lib/services/config/openrouter_models';
+import type { OpenRouterModel } from '$types';
 
 type Props = {
   models: readonly OpenRouterModel[];

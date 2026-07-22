@@ -10,8 +10,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import type { GameSession } from '$lib/services/game/session_service.svelte';
 import { exportService } from '$services';
+import type { GameSession } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────
 

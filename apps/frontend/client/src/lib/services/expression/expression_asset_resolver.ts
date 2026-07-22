@@ -6,7 +6,7 @@ import {
 } from '@aikami/frontend/services';
 import { getExpressionEntry } from '$lib/data/expression_catalog';
 import { logger } from '$logger';
-import type { ExpressionId, ExpressionOverlay } from '$types/expression';
+import type { ExpressionId, ExpressionOverlay } from '$types';
 
 // ---------------------------------------------------------------------------
 // ExpressionAssetResolver — checks for pre-generated static expression assets

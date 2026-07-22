@@ -15,29 +15,29 @@ import {
 } from '@aikami/frontend/services';
 import type { ClassFeature, EquipmentSlot, ItemDefinition } from '@aikami/types';
 import {
-  computeModifier,
-  computeProficiencyBonus,
-  recomputeSavingThrows,
-  recomputeSkills,
-  serializeForAi,
-  validateSheetJson,
-} from '$lib/data/character_sheet_helpers';
-import {
   ABILITY_KEYS,
   ABILITY_LABELS,
   type AbilityKey,
   type AbilityScores,
-  type CharacterSheet,
+  type CharacterSavingThrow,
+  type CharacterSkill,
   type CharacterTraits,
+  DEFAULT_NARRATIVE_TRAITS,
+  DEFAULT_TRAITS,
+  type GameCharacterSheet,
+  type NarrativeTraits,
+} from '@aikami/types';
+import {
+  computeModifier,
+  computeProficiencyBonus,
   createDefaultAbilities,
   createDefaultSavingThrows,
   createDefaultSkills,
-  DEFAULT_NARRATIVE_TRAITS,
-  DEFAULT_TRAITS,
-  type NarrativeTraits,
-  type SavingThrow,
-  type Skill,
-} from '$lib/data/character_sheet_types';
+  recomputeSavingThrows,
+  recomputeSkills,
+  serializeForAi,
+  validateSheetJson,
+} from '@aikami/utils';
 import { equipmentService, getItemDefinition, playerStateService } from '$services';
 
 export type { EquipmentSlot, ItemDefinition };
@@ -87,8 +87,8 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   // ── Character sheet data ──
 
   readonly abilities: AbilityScores;
-  readonly skills: Skill[];
-  readonly savingThrows: SavingThrow[];
+  readonly skills: CharacterSkill[];
+  readonly savingThrows: CharacterSavingThrow[];
   readonly traits: CharacterTraits;
   readonly narrativeTraits: NarrativeTraits;
   readonly proficiencyBonus: number;
@@ -108,7 +108,7 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   readonly abilityLabels: Record<AbilityKey, string>;
   readonly modifierColor: (modifier: number) => string;
   readonly modifierSign: (modifier: number) => string;
-  readonly skillsByAbility: Record<AbilityKey, Skill[]>;
+  readonly skillsByAbility: Record<AbilityKey, CharacterSkill[]>;
 
   // ── Class Features (C-337) ──
 
@@ -231,8 +231,8 @@ class CharacterSheetViewModel
   // ── Character sheet data ($state) ──
 
   protected _abilities = $state<AbilityScores>(createDefaultAbilities());
-  protected _skills = $state<Skill[]>(createDefaultSkills());
-  protected _savingThrows = $state<SavingThrow[]>(createDefaultSavingThrows());
+  protected _skills = $state<CharacterSkill[]>(createDefaultSkills());
+  protected _savingThrows = $state<CharacterSavingThrow[]>(createDefaultSavingThrows());
   protected _traits = $state<CharacterTraits>({ ...DEFAULT_TRAITS });
   protected _narrativeTraits = $state<NarrativeTraits>({ ...DEFAULT_NARRATIVE_TRAITS });
 
@@ -266,11 +266,11 @@ class CharacterSheetViewModel
     return this._abilities;
   }
 
-  get skills(): Skill[] {
+  get skills(): CharacterSkill[] {
     return recomputeSkills(this._skills, this._abilities, this.proficiencyBonus);
   }
 
-  get savingThrows(): SavingThrow[] {
+  get savingThrows(): CharacterSavingThrow[] {
     return recomputeSavingThrows(this._savingThrows, this._abilities, this.proficiencyBonus);
   }
 
@@ -310,8 +310,8 @@ class CharacterSheetViewModel
   };
 
   /** Skills grouped by ability for tabular display. */
-  get skillsByAbility(): Record<AbilityKey, Skill[]> {
-    const groups = {} as Record<AbilityKey, Skill[]>;
+  get skillsByAbility(): Record<AbilityKey, CharacterSkill[]> {
+    const groups = {} as Record<AbilityKey, CharacterSkill[]>;
     for (const key of ABILITY_KEYS) {
       groups[key] = this.skills.filter((s) => s.ability === key);
     }
@@ -564,7 +564,7 @@ class CharacterSheetViewModel
 
   /** Refresh the JSON display from current state. */
   private _refreshJsonText(): void {
-    const sheet: CharacterSheet = {
+    const sheet: GameCharacterSheet = {
       abilities: this._abilities,
       skills: this._skills,
       savingThrows: this._savingThrows,
@@ -584,7 +584,7 @@ class CharacterSheetViewModel
   // ── AI Context ──
 
   getAiContext(): string {
-    const sheet: CharacterSheet = {
+    const sheet: GameCharacterSheet = {
       abilities: this._abilities,
       skills: this._skills,
       savingThrows: this._savingThrows,

@@ -81,7 +81,7 @@ const playTestMusic = async () => {
 };
 
 const stopMusic = () => {
-  import('$lib/services/audio/audio_service.svelte.ts').then(({ audioService }) => {
+  import('$services').then(({ audioService }) => {
     audioService.stopAll();
     musicStatus = '⏹️ Stopped';
   });

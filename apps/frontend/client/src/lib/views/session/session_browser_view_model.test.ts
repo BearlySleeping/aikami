@@ -102,7 +102,7 @@ describe('SessionBrowserViewModel', () => {
     // Seed a checkpoint through session service
     const { sessionService } = await import('$services/game/session_service.svelte');
     await sessionService.startSession({ gameId, campaignId });
-    const sessionId = sessionService.activeSession!.id;
+    const sessionId = sessionService.activeSession?.id;
 
     // Create a checkpoint (requires game save service, may fail in test environment)
     try {

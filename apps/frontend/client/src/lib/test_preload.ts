@@ -528,6 +528,12 @@ const _localServicesMock = () => ({
     reset: mock(async () => {}),
   }),
   SessionService: class {},
+  packRegistryService: Object.assign(_createServiceStub(), {
+    availablePacks: [],
+    refresh: mock(async () => {}),
+    getPack: mock(() => undefined),
+  }),
+  PackRegistryService: class {},
   campaignService: _createServiceStub(),
   aiGatewayService: Object.assign(_createServiceStub(), {
     detect: mock(async (capability: string) => {

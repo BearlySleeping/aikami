@@ -12,21 +12,27 @@ import {
 } from '@aikami/frontend/services';
 import {
   type AdvancedOverrides,
-  type AuxiliaryModels,
+  buildVerifyHeaders,
+  buildVerifyUrl,
+  type CheckpointInfo,
   type ConfigState,
   configService,
   DEFAULT_VOICE_ARCHETYPES,
   EMBEDDING_MODELS,
   EMOTION_METHODS,
   type EmotionConfig,
-  type GenerationParams,
+  fetchOpenRouterModels,
   IMAGE_PROVIDERS,
   type ImageConfig,
-  INSTRUCT_TEMPLATES,
-  type InstructTemplate,
+  imageGenerationService,
   KOKORO_VOICES,
+  LocalServiceDetector,
+  type LocalServiceDetectorInterface,
+  type LocalServiceStatus,
   MEMORY_TYPES,
   type MemoryConfig,
+  PROVIDER_ENDPOINTS,
+  type ProviderEndpoint,
   TEXT_PROVIDERS,
   type TextProvider,
   VOICE_ENGINES,
@@ -34,23 +40,14 @@ import {
   type VoiceArchetype,
   type VoiceConfig,
   type VoiceOption,
-} from '$lib/services/config/config_service.svelte';
+} from '$services';
 import {
-  LocalServiceDetector,
-  type LocalServiceDetectorInterface,
-  type LocalServiceStatus,
-} from '$lib/services/config/local_service_detector.svelte';
-import {
-  fetchOpenRouterModels,
+  type AuxiliaryModels,
+  type GenerationParams,
+  INSTRUCT_TEMPLATES,
+  type InstructTemplate,
   type OpenRouterModel,
-} from '$lib/services/config/openrouter_models';
-import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  PROVIDER_ENDPOINTS,
-  type ProviderEndpoint,
-} from '$lib/services/config/provider_endpoints';
-import { type CheckpointInfo, imageGenerationService } from '$services';
+} from '$types';
 
 export type { CheckpointInfo, EmotionConfig, ProviderEndpoint };
 export {

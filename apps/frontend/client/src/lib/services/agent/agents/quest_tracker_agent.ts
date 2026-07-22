@@ -6,7 +6,7 @@
 // Contract: C-236 Agent Pipeline System
 
 import { textGenerationService } from '$services';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types/agent_types';
+import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 import type { QuestUpdateOutput } from '../agent_schemas.ts';
 
 /**
