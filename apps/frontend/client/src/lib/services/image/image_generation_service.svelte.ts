@@ -4,7 +4,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$lib/services/config/config_service.svelte.ts';
+import { configService } from '$services';
 
 /** Base URL of the local ComfyUI instance. */
 const COMFY_BASE_URL = (import.meta.env.PUBLIC_IMAGE_URL ?? 'http://localhost:8188').replace(

@@ -2,6 +2,7 @@
 // apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
 import type { Snippet } from 'svelte';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { routerService } from '$services';
 import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 
 type Props = {
@@ -37,7 +38,9 @@ let { viewModel, children }: Props = $props();
           <path d="M14 10l2 2l-2 2"></path>
         </svg>
       </label>
-      <a href="/dev" class="px-4">Dev Console</a>
+      <button type="button" class="px-4" onclick={() => routerService.goToDevRoute('')}>
+        Dev Console
+      </button>
     </nav>
 
     <div class="p-4">
@@ -77,14 +80,15 @@ let { viewModel, children }: Props = $props();
                 <ul>
                   {#each item.children as child}
                     <li>
-                      <a
-                        href={child.route}
+                      <button
+                        type="button"
                         class:active={viewModel.activeRoute === child.route}
                         class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
                         data-tip={child.label}
+                        onclick={() => routerService.goToDevRoute(child.route.replace('/dev/', ''))}
                       >
                         <span class="is-drawer-close:hidden capitalize">{child.label}</span>
-                      </a>
+                      </button>
                     </li>
                   {/each}
                 </ul>
@@ -92,11 +96,12 @@ let { viewModel, children }: Props = $props();
             </li>
           {:else}
             <li>
-              <a
-                href={item.route}
+              <button
+                type="button"
                 class:active={viewModel.activeRoute === item.route}
                 class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
                 data-tip={item.label}
+                onclick={() => routerService.goToDevRoute(item.route.replace('/dev/', ''))}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -117,7 +122,7 @@ let { viewModel, children }: Props = $props();
                   />
                 </svg>
                 <span class="is-drawer-close:hidden"> {item.label}</span>
-              </a>
+              </button>
             </li>
           {/if}
         {/each}

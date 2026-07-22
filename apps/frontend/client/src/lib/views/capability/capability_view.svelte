@@ -2,7 +2,7 @@
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
-import type { CapabilityViewModelInterface, StatusBadgeInfo } from './capability_view_model.svelte';
+import type { CapabilityViewModelInterface, ConnectionEntry } from './capability_view_model.svelte';
 
 type Props = {
   viewModel: CapabilityViewModelInterface;
@@ -11,20 +11,36 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
-{#snippet StatusBadge(props: StatusBadgeInfo)}
-  {@const statusClass = props.status === 'detected' || props.status === 'configured'
-    ? 'badge-success'
-    : props.status === 'error' || props.status === 'not_found'
-      ? 'badge-error'
-      : 'badge-ghost'}
-  <span class="badge badge-sm {statusClass} gap-1">
-    {props.label}
-    <span class="opacity-60">{props.status === 'not_found' ? 'not found' : props.status}</span>
-  </span>
+{#snippet ConnectionRow(entry: ConnectionEntry)}
+  <button
+    type="button"
+    class="btn btn-lg {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
+    onclick={() => viewModel.setDefaultConnection(entry.connection.id)}
+  >
+    <span class="shrink-0">{entry.icon}</span>
+    <span class="font-mono text-sm truncate">{entry.connection.name}</span>
+    <span
+      class="badge badge-sm ml-auto shrink-0 {entry.isDefault ? 'badge-accent' : 'badge-ghost'}"
+    >
+      {entry.providerLabel}
+    </span>
+    {#if entry.connection.model}
+      <span class="badge badge-sm badge-outline shrink-0">{entry.connection.model}</span>
+    {/if}
+    {#if entry.sourceBadge}
+      <span
+        class="badge badge-sm shrink-0 {entry.sourceBadge.startsWith('env:') ? 'badge-info' : 'badge-ghost'}"
+      >
+        ✓ {entry.sourceBadge}
+      </span>
+    {/if}
+    {#if entry.isDefault}
+      <span class="badge badge-sm badge-success shrink-0">default</span>
+    {/if}
+  </button>
 {/snippet}
 
 <BaseViewModelContainer {viewModel}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="flex min-h-screen items-center justify-center bg-base-200 p-4">
     <div class="card bg-base-100 w-full max-w-lg shadow-xl">
       <div class="card-body gap-6">
@@ -36,7 +52,7 @@ const { viewModel }: Props = $props();
           </p>
         </div>
 
-        <!-- Detection spinner (shown during detection) -->
+        <!-- Detection spinner -->
         {#if viewModel.isDetecting}
           <div class="flex items-center justify-center gap-2 py-4">
             <span class="loading loading-spinner loading-md text-primary"></span>
@@ -44,71 +60,42 @@ const { viewModel }: Props = $props();
           </div>
         {/if}
 
-        <!-- Detection status badges -->
-        <div class="flex justify-center gap-3">
-          {#each viewModel.statusBadges as badge}
-            {@render StatusBadge(badge)}
+        <!-- Tabs with checkmarks -->
+        <div class="tabs tabs-boxed justify-center">
+          {#each viewModel.tabs as tab}
+            <button
+              type="button"
+              class="tab gap-1 {viewModel.activeTab === tab.id ? 'tab-active' : ''}"
+              onclick={() => viewModel.setActiveTab(tab.id)}
+            >
+              {tab.label}
+              {#if tab.hasProvider}
+                <span class="text-success text-xs">✓</span>
+              {/if}
+            </button>
           {/each}
         </div>
 
-        <!-- Path buttons -->
+        <!-- Connection list (filtered by active tab) -->
         <div class="flex flex-col gap-3">
-          <!-- Use Detected Local AI — enabled when Ollama found -->
-          {#if viewModel.localAiDetected}
-            <button
-              type="button"
-              class="btn btn-lg btn-primary"
-              onclick={() => viewModel.selectLocalAi()}
-            >
-              <span class="text-lg">🖥️</span>
-              Use Detected Local AI
-              {#if viewModel.snapshot.textModelName}
-                <span class="badge badge-sm badge-accent ml-2"
-                  >{viewModel.snapshot.textModelName}</span
-                >
-              {/if}
-            </button>
-          {:else}
-            <button type="button" class="btn btn-lg btn-disabled" disabled>
-              <span class="text-lg">🖥️</span>
-              No Local AI Detected
-            </button>
-          {/if}
-
-          <!-- Existing cloud connections -->
-          {#each viewModel.cloudConnections as conn}
-            {@const isDefault = conn.id === viewModel.cloudConnectionVm.defaultConnectionId}
-            <button
-              type="button"
-              class="btn btn-lg {isDefault ? 'btn-primary' : 'btn-outline'}"
-              onclick={() => viewModel.selectCloudConnection(conn.id)}
-            >
-              <span class="text-lg">☁️</span>
-              {conn.name}
-              <span class="badge badge-sm ml-2 {isDefault ? 'badge-accent' : 'badge-ghost'}"
-                >{viewModel.providerLabels[conn.provider] ?? conn.provider}</span
-              >
-              {#if conn.model}
-                <span class="badge badge-sm badge-outline ml-1">{conn.model}</span>
-              {/if}
-              {#if isDefault}
-                <span class="badge badge-sm badge-success ml-1">default</span>
-              {/if}
-            </button>
+          {#each viewModel.connectionEntries as entry}
+            {@render ConnectionRow(entry)}
           {/each}
 
-          <!-- Connect Cloud AI — always available to add new connections -->
+          <!-- Add provider -->
           <button
             type="button"
             class="btn btn-lg btn-outline"
             onclick={() => viewModel.openCloudSetup()}
           >
             <span class="text-lg">➕</span>
-            Add Cloud AI
+            Add
+            {viewModel.tabs.find((t) => t.id === viewModel.activeTab)?.label ?? 'Provider'}
+            Connection
           </button>
 
-          <!-- No AI Available — guidance text when no path is available -->
-          {#if !viewModel.localAiDetected && !viewModel.cloudConfigured && viewModel.cloudConnections.length === 0 && !viewModel.isDetecting}
+          <!-- No connections — guidance + retry -->
+          {#if viewModel.connectionEntries.length === 0 && !viewModel.isDetecting && !viewModel.showCloudSetup}
             <div class="alert alert-warning mt-2">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -126,11 +113,8 @@ const { viewModel }: Props = $props();
                 />
               </svg>
               <div>
-                <h3 class="font-bold">No Text AI Provider Detected</h3>
-                <p class="text-sm">
-                  Aikami requires a text AI engine to create or continue a campaign. Install Ollama
-                  for local AI, or add a cloud provider to get started.
-                </p>
+                <h3 class="font-bold">No Providers Detected</h3>
+                <p class="text-sm">Install the local service or add a provider to get started.</p>
               </div>
             </div>
             <button
@@ -143,6 +127,16 @@ const { viewModel }: Props = $props();
             </button>
           {/if}
         </div>
+
+        <!-- Start Campaign — disabled without a text provider -->
+        <button
+          type="button"
+          class="btn btn-lg btn-primary"
+          disabled={!viewModel.hasTextProvider}
+          onclick={() => viewModel.startCampaign()}
+        >
+          Start Campaign
+        </button>
 
         <!-- Privacy note -->
         <p class="text-center text-xs text-base-content/40">
@@ -160,7 +154,7 @@ const { viewModel }: Props = $props();
   </div>
 </BaseViewModelContainer>
 
-<!-- Cloud Connection Modal — reuses the settings connection editor panel -->
+<!-- Cloud Connection Modal -->
 {#if viewModel.showCloudSetup}
   <ConnectionEditorPanel viewModel={viewModel.cloudConnectionVm} />
 {/if}

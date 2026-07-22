@@ -17,7 +17,6 @@ import {
 } from '@aikami/frontend/services';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
 import type { ChatData, CyoaChoice, MessageData, NpcData } from '@aikami/types';
-import { impersonationService } from '$lib/services/gm/impersonation_service.svelte.ts';
 import {
   aiService,
   authService,
@@ -28,6 +27,7 @@ import {
   diceService,
   draftStore,
   imageGenerationService,
+  impersonationService,
   messageBranchStore,
   npcChatService,
   npcService,
@@ -36,6 +36,7 @@ import {
   ttsService,
 } from '$services';
 import type { ImpersonationConfig } from '$types';
+import type { AgentPipelineViewModelInterface } from '$views/agent/agent_pipeline_view_model.svelte';
 import {
   type ChoiceButtonsViewModelInterface,
   getChoiceButtonsViewModel,
@@ -49,7 +50,7 @@ export type ChatViewModelOptions = BaseViewModelOptions & {
   /** Entity ID of the NPC in the game engine (for expression macros). */
   gameEntityId?: number;
   /** Optional agent pipeline ViewModel for pre/post agent orchestration (C-236). */
-  agentPipelineViewModel?: import('$views/agent/agent_pipeline_view_model.svelte.ts').AgentPipelineViewModelInterface;
+  agentPipelineViewModel?: AgentPipelineViewModelInterface;
 };
 
 export type ChatViewModelInterface = BaseViewModelInterface & {
@@ -200,9 +201,7 @@ export class ChatViewModel
   private _engineBridge: EngineBridge | undefined;
 
   /** Optional agent pipeline ViewModel (C-236). */
-  private _agentPipelineViewModel:
-    | import('$views/agent/agent_pipeline_view_model.svelte.ts').AgentPipelineViewModelInterface
-    | undefined;
+  private _agentPipelineViewModel: AgentPipelineViewModelInterface | undefined;
 
   /**
    * Lazily initializes and caches the engine bridge.

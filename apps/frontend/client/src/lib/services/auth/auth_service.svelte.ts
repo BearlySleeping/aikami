@@ -266,6 +266,19 @@ export class AuthService
 
       const response = await this._auth.signInWithPopup(toAuthProviderId(provider));
 
+      const isFailed = (
+        response: SocialSignInResponse,
+      ): response is SocialSignInResponse<'failed'> => response.status === 'failed';
+
+      if (isFailed(response)) {
+        this.error('socialSignIn:failed', response.payload);
+        this.showSnackbar({
+          text: `Sign-in failed: ${response.payload.message ?? response.payload.code ?? 'Unknown error'}`,
+          type: 'error',
+        });
+        return response;
+      }
+
       const isExitingUser = (
         response: SocialSignInResponse,
       ): response is SocialSignInResponse<'exitingUser'> => response.status === 'exitingUser';
@@ -277,6 +290,16 @@ export class AuthService
       return response;
     } catch (error) {
       this.error('auth signInWithPopup', error);
+      const errMsg: string =
+        error instanceof Error
+          ? error.message
+          : (((error as Record<string, unknown>)?.message as string) ??
+            ((error as Record<string, unknown>)?.code as string) ??
+            'Unknown error');
+      this.showSnackbar({
+        text: `Sign-in failed: ${errMsg}`,
+        type: 'error',
+      });
       const signInError = error as Omit<SocialSignInError, 'emailAlreadyExists'>;
       return {
         payload: {

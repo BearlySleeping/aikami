@@ -13,8 +13,13 @@ import {
 } from '@aikami/frontend/services';
 import { clearVault, decrypt, encrypt } from '$lib/utils/crypto_vault';
 import { logger } from '$logger';
-import type { Connection, ConnectionId } from '$types/connection';
-import type { Lorebook, LorebookEntry } from '$types/lorebook';
+import type { Connection, ConnectionId, Lorebook, LorebookEntry } from '$types';
+import {
+  type AuxiliaryModels,
+  type GenerationParams,
+  INSTRUCT_TEMPLATES,
+  type InstructTemplate,
+} from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -288,47 +293,6 @@ export type EmotionConfig = {
 
 // ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
 
-/** Supported instruct template formats. */
-export const INSTRUCT_TEMPLATES = [
-  'chatml',
-  'alpaca',
-  'vicuna',
-  'llama3',
-  'mistral',
-  'deepseek',
-  'custom',
-] as const;
-
-export type InstructTemplate = (typeof INSTRUCT_TEMPLATES)[number];
-
-/** Generation parameter overrides. */
-export type GenerationParams = {
-  /** Sampling temperature (0–2). */
-  temperature: number;
-  /** Nucleus sampling threshold (0–1). */
-  topP: number;
-  /** Top-k sampling limit. */
-  topK: number;
-  /** Repetition penalty (1–2). */
-  repetitionPenalty: number;
-  /** Presence penalty (-2–2). */
-  presencePenalty: number;
-  /** Maximum tokens to generate. */
-  maxTokens: number;
-  /** Maximum context window size in tokens. */
-  contextSize: number;
-};
-
-/** Auxiliary model assignments for specialised AI tasks. */
-export type AuxiliaryModels = {
-  /** Model used for conversation summarization. */
-  summarization: string | undefined;
-  /** Model used for vision/image analysis. */
-  vision: string | undefined;
-  /** Model used for embedding generation. */
-  embedding: string | undefined;
-};
-
 /** Advanced overrides for specific providers. */
 export type AdvancedOverrides = {
   /** Thinking/reasoning level for DeepSeek/Claude models. */
@@ -350,7 +314,7 @@ export type ResolvedTextProvider = {
 // ---------------------------------------------------------------------------
 // Re-exports for backward compatibility
 export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
-export type { Connection, ConnectionId, ConnectionTestResult } from '$types/connection';
+export type { Connection, ConnectionId, ConnectionTestResult } from '$types';
 
 /** Top-level configuration state. */
 export type ConfigState = {
@@ -380,6 +344,8 @@ export type ConfigState = {
   connections: Connection[];
   /** ID of the default connection, or null if none set. */
   defaultConnectionId: ConnectionId | null;
+  /** Per-capability default connection IDs (text, image, voice). */
+  defaultByCapability: Partial<Record<string, ConnectionId | null>>;
   /** Generation parameter presets (built-in + user-defined). */
   presets: GenParamPreset[];
   /** Lorebooks (world info collections) persisted in localStorage. */
@@ -586,6 +552,7 @@ const DEFAULT_STATE: ConfigState = {
   auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
   connections: [],
   defaultConnectionId: null,
+  defaultByCapability: {},
   emotion: { ...DEFAULT_EMOTION_CONFIG },
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
@@ -932,57 +899,133 @@ class ConfigService
    * Seeds connections from environment variables when no connections
    * have been created yet. This provides a zero-config onboarding path
    * while keeping Connections as the primary configuration surface.
+   *
+   * Supports both PUBLIC_* (Vite) and bare (Tauri/desktop) env var formats.
+   * Each provider with an API key or model env var gets a connection with
+   * source: 'env' so the UI can show a (✓ env: KEY_NAME) badge.
    */
   private _seedConnectionsFromEnv(): void {
     if (this.state.connections && this.state.connections.length > 0) {
       return;
     }
 
-    // Ensure connections array exists
     if (!this.state.connections) {
       this.state.connections = [];
     }
 
-    const ollamaModel = this._readEnv('PUBLIC_OLLAMA_MODEL');
-    const ollamaUrl = this._readEnv('PUBLIC_OLLAMA_BASE_URL');
-    const openrouterModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
-    const openrouterKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
     const now = new Date().toISOString();
     const seeded: Connection[] = [];
 
-    // Seed Ollama connection from env
-    if (ollamaModel) {
-      seeded.push({
-        id: crypto.randomUUID(),
-        name: 'Ollama (local)',
+    // Provider→env var mapping. Each entry defines how to detect a provider
+    // from env vars and what default model + display name to use.
+    const ProviderEnvMap = [
+      {
         provider: 'ollama',
-        apiKey: '',
-        baseUrl: ollamaUrl || 'http://localhost:11434/v1',
-        model: ollamaModel,
-        generationParams: {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          repetitionPenalty: 1,
-          presencePenalty: 0,
-          maxTokens: 1024,
-          contextSize: 4096,
-        },
-        isDefault: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+        label: 'Ollama (local)',
+        apiKeyEnv: undefined, // Ollama doesn't need an API key
+        modelEnv: ['PUBLIC_OLLAMA_MODEL', 'OLLAMA_MODEL'],
+        urlEnv: ['PUBLIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'],
+        defaultModel: 'llama3.2',
+        defaultUrl: 'http://localhost:11434/v1',
+        isLocal: true,
+      },
+      {
+        provider: 'openrouter',
+        label: 'OpenRouter',
+        apiKeyEnv: ['PUBLIC_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
+        modelEnv: ['PUBLIC_OPENROUTER_MODEL', 'OPENROUTER_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'openrouter/auto',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'openai',
+        label: 'OpenAI',
+        apiKeyEnv: ['PUBLIC_OPENAI_API_KEY', 'OPENAI_API_KEY'],
+        modelEnv: ['PUBLIC_OPENAI_MODEL', 'OPENAI_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'gpt-4o-mini',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'anthropic',
+        label: 'Anthropic',
+        apiKeyEnv: ['PUBLIC_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
+        modelEnv: ['PUBLIC_ANTHROPIC_MODEL', 'ANTHROPIC_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'claude-3-haiku-20240307',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'deepseek',
+        label: 'DeepSeek',
+        apiKeyEnv: ['PUBLIC_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
+        modelEnv: ['PUBLIC_DEEPSEEK_MODEL', 'DEEPSEEK_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'deepseek-chat',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'google',
+        label: 'Google (Gemini)',
+        apiKeyEnv: ['PUBLIC_GEMINI_API_KEY', 'GEMINI_API_KEY'],
+        modelEnv: ['PUBLIC_GEMINI_MODEL', 'GEMINI_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'gemini-2.0-flash',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'mistral',
+        label: 'Mistral AI',
+        apiKeyEnv: ['PUBLIC_MISTRAL_API_KEY', 'MISTRAL_API_KEY'],
+        modelEnv: ['PUBLIC_MISTRAL_MODEL', 'MISTRAL_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'mistral-small-latest',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+      {
+        provider: 'cohere',
+        label: 'Cohere',
+        apiKeyEnv: ['PUBLIC_COHERE_API_KEY', 'COHERE_API_KEY'],
+        modelEnv: ['PUBLIC_COHERE_MODEL', 'COHERE_MODEL'],
+        urlEnv: undefined,
+        defaultModel: 'command-r',
+        defaultUrl: undefined,
+        isLocal: false,
+      },
+    ] as const;
 
-    // Seed OpenRouter connection from env (only if no Ollama connection seeded)
-    if (openrouterModel && seeded.length === 0) {
+    for (const entry of ProviderEnvMap) {
+      const apiKey = entry.apiKeyEnv ? this._readEnvFirst(entry.apiKeyEnv) : undefined;
+      const model =
+        (entry.modelEnv ? this._readEnvFirst(entry.modelEnv) : undefined) ??
+        (entry.provider === 'ollama' ? undefined : entry.defaultModel);
+      const url = entry.urlEnv ? this._readEnvFirst(entry.urlEnv) : undefined;
+
+      // Skip providers without an env key or model unless they're local
+      if (!entry.isLocal && !apiKey && !model) {
+        continue;
+      }
+
+      // For local providers (Ollama), skip if no model configured
+      if (entry.isLocal && !model) {
+        continue;
+      }
+
       seeded.push({
         id: crypto.randomUUID(),
-        name: 'OpenRouter',
-        provider: 'openrouter',
-        apiKey: openrouterKey || '',
-        baseUrl: '',
-        model: openrouterModel,
+        name: entry.label,
+        provider: entry.provider,
+        capability: 'text',
+        apiKey: apiKey ?? '',
+        baseUrl: url ?? entry.defaultUrl ?? '',
+        model: model ?? entry.defaultModel,
         generationParams: {
           temperature: 0.7,
           topP: 0.95,
@@ -992,7 +1035,8 @@ class ConfigService
           maxTokens: 1024,
           contextSize: 4096,
         },
-        isDefault: true,
+        isDefault: seeded.length === 0,
+        source: 'env',
         createdAt: now,
         updatedAt: now,
       });
@@ -1014,6 +1058,7 @@ class ConfigService
       auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
       connections: [],
       defaultConnectionId: null,
+      defaultByCapability: {},
       emotion: { ...DEFAULT_EMOTION_CONFIG },
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
@@ -1038,13 +1083,29 @@ class ConfigService
     // Seed connections from env vars when none exist (zero-config onboarding)
     this._seedConnectionsFromEnv();
 
-    // Inject OpenRouter API key from env (always available as fallback)
-    const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
-    if (envKey && !this.state.text.apiKeys.openrouter) {
-      this.state.text = {
-        ...this.state.text,
-        apiKeys: { ...this.state.text.apiKeys, openrouter: envKey },
-      };
+    // Inject API keys from env for all providers (always available as fallback).
+    // Both PUBLIC_* (Vite) and bare (Tauri/desktop) env var names are checked.
+    const ProviderKeyEnvMap: ReadonlyArray<{
+      provider: string;
+      envNames: readonly string[];
+    }> = [
+      { provider: 'openrouter', envNames: ['PUBLIC_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'] },
+      { provider: 'openai', envNames: ['PUBLIC_OPENAI_API_KEY', 'OPENAI_API_KEY'] },
+      { provider: 'anthropic', envNames: ['PUBLIC_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'] },
+      { provider: 'deepseek', envNames: ['PUBLIC_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'] },
+      { provider: 'google', envNames: ['PUBLIC_GEMINI_API_KEY', 'GEMINI_API_KEY'] },
+      { provider: 'mistral', envNames: ['PUBLIC_MISTRAL_API_KEY', 'MISTRAL_API_KEY'] },
+      { provider: 'cohere', envNames: ['PUBLIC_COHERE_API_KEY', 'COHERE_API_KEY'] },
+    ];
+
+    for (const entry of ProviderKeyEnvMap) {
+      const envKey = this._readEnvFirst(entry.envNames);
+      if (envKey && !this.state.text.apiKeys[entry.provider]) {
+        this.state.text = {
+          ...this.state.text,
+          apiKeys: { ...this.state.text.apiKeys, [entry.provider]: envKey },
+        };
+      }
     }
   }
 
@@ -1145,6 +1206,16 @@ class ConfigService
       isDefault: c.id === id,
     }));
     this.state.defaultConnectionId = id;
+
+    // Track per-capability default
+    const connection = this.state.connections.find((c) => c.id === id);
+    if (connection) {
+      const capability = connection.capability ?? 'text';
+      this.state.defaultByCapability = {
+        ...this.state.defaultByCapability,
+        [capability]: id,
+      };
+    }
   }
 
   getConnection(id: ConnectionId): Connection | undefined {
@@ -1180,7 +1251,7 @@ class ConfigService
   // ── Macro preset integration (C-237) ──────────────────────────────
 
   loadMacroPresets(): void {
-    import('$lib/services/config/macro_preset_store.svelte').then((mod) => {
+    import('$services').then((mod) => {
       mod.macroPresetStore.loadPresets();
       this.debug('loadMacroPresets:loaded', { count: mod.macroPresetStore.presets.length });
     });
@@ -1310,14 +1381,30 @@ class ConfigService
     this.state.activeLorebookIds = options.ids;
   }
 
-  /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */
+  /** Safely reads a Vite PUBLIC_* or bare env var. Returns undefined in tests. */
   private _readEnv(name: string): string | undefined {
     try {
-      const value = (import.meta.env as Record<string, string | undefined>)[name];
+      const env = import.meta.env as Record<string, string | undefined>;
+      // Try the exact name first (e.g. PUBLIC_OPENROUTER_API_KEY)
+      const value = env[name];
       return value && value.length > 0 ? value : undefined;
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Tries multiple env var names in order, returning the first non-empty
+   * value. Used to fall back from PUBLIC_* (Vite) to bare names (Tauri).
+   */
+  private _readEnvFirst(names: readonly string[]): string | undefined {
+    for (const name of names) {
+      const value = this._readEnv(name);
+      if (value) {
+        return value;
+      }
+    }
+    return undefined;
   }
 }
 

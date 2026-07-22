@@ -412,9 +412,9 @@ export class WorldGenWizardViewModel
 
   async navigateToCharacterCreation(): Promise<void> {
     this.debug('navigateToCharacterCreation');
-    await routerService.goToRoute('personas/create', {
+    await routerService.goToRoute('personas', {
       queryParameters: undefined,
-      pathParameters: undefined as never,
+      pathParameters: undefined,
     });
   }
 

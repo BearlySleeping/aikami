@@ -17,6 +17,7 @@ project:
 dependsOn:
   - 'constants'
   - 'types'
+  - 'schemas'
   - 'logger'
 
 fileGroups:

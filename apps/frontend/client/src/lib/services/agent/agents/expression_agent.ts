@@ -8,7 +8,7 @@
 // Contract: C-239 Expression Emotion System
 
 import { textGenerationService } from '$services';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types/agent_types';
+import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 import type { ExpressionOutput } from '../agent_schemas.ts';
 
 /**

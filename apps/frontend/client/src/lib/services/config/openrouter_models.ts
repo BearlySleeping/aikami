@@ -5,26 +5,7 @@
 // rate-limit issues.
 
 import { logger } from '$logger';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** A single model entry from the OpenRouter /models endpoint. */
-export type OpenRouterModel = {
-  /** Unique model identifier (e.g. 'openai/gpt-4o'). */
-  id: string;
-  /** Human-readable model name. */
-  name: string;
-  /** Maximum context length in tokens. */
-  // biome-ignore lint/style/useNamingConvention: OpenRouter API uses snake_case
-  context_length: number;
-  /** Pricing information per token. */
-  pricing: {
-    prompt: number;
-    completion: number;
-  };
-};
+import type { OpenRouterModel } from '$types';
 
 /** Response shape from OpenRouter GET /api/v1/models. */
 type OpenRouterModelsResponse = {

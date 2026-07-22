@@ -44,11 +44,13 @@ import type {
   AiDetectionResult,
   AiModeResolution,
 } from '@aikami/types';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { configService } from '$lib/services/config/config_service.svelte.ts';
-import { PROVIDER_MODEL_FETCH } from '$lib/services/config/provider_endpoints';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte.ts';
+import {
+  aiSettingsService,
+  configService,
+  imageGenerationService,
+  PROVIDER_MODEL_FETCH,
+  ttsService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Constants

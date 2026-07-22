@@ -10,8 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { getGameCompositionRoot } from '$lib/services/game/game_composition_root.svelte';
-import { authService } from '$services';
+import { authService, getGameCompositionRoot } from '$services';
 import type { CombatViewModelInterface } from '../combat/combat_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './canvas/game_canvas_view_model.svelte';
 import { getGameCanvasViewModel } from './canvas/game_canvas_view_model.svelte';

@@ -11,15 +11,15 @@ import {
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
-import { characterService } from '$lib/services/character/character.svelte';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import {
   aiSettingsService,
   authService,
+  characterService,
   equipmentService,
   imageGenerationService,
   inventoryService,
   personaCreationService,
+  personaService,
   playerStateService,
   routerService,
   storageService,

@@ -10,8 +10,8 @@ import {
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
-import { scanKeywords } from '$lib/services/lorebook/keyword_scanner';
-import type { KeywordMatch, LorebookEntry, LorebookEntryInput } from '$types/lorebook';
+import { scanKeywords } from '$services';
+import type { KeywordMatch, LorebookEntry, LorebookEntryInput } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

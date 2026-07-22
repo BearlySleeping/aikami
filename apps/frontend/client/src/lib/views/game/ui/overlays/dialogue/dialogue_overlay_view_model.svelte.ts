@@ -7,8 +7,7 @@ import {
 } from '@aikami/frontend/services';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
-import type { NpcDialogueServiceInterface } from '$lib/services/game/npc_dialogue_service.svelte';
-import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
+import type { NpcDialogueServiceInterface } from '$services';
 import {
   buildGameStateFacts,
   combatService,
@@ -19,6 +18,13 @@ import {
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
+import type {
+  ActionOption,
+  ConversationBranch,
+  DialogueAddressMode,
+  DialogueMessage,
+  DialoguePhase,
+} from '$types';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -290,13 +296,13 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly isTtsSpeaking: boolean;
 
   /** Current address mode for dialogue prompt routing. */
-  readonly addressMode: import('$lib/types/dialogue').DialogueAddressMode;
+  readonly addressMode: DialogueAddressMode;
 
   /** Sets the address mode (Scene or GM only; Party deferred to C-340). */
-  setAddressMode(mode: import('$lib/types/dialogue').DialogueAddressMode): void;
+  setAddressMode(mode: DialogueAddressMode): void;
 
   /** Available conversation branches. */
-  readonly branches: readonly import('$lib/types/dialogue').ConversationBranch[];
+  readonly branches: readonly ConversationBranch[];
 
   /** The currently active branch ID, or null if on the main branch. */
   readonly activeBranchId: string | null;
@@ -445,10 +451,10 @@ class DialogueOverlayViewModel
   isTtsSpeaking = $state(false);
 
   /** Current address mode for dialogue prompt routing. */
-  addressMode = $state<import('$lib/types/dialogue').DialogueAddressMode>('scene');
+  addressMode = $state<DialogueAddressMode>('scene');
 
   /** Available conversation branches (in-memory). */
-  branches = $state<import('$lib/types/dialogue').ConversationBranch[]>([]);
+  branches = $state<ConversationBranch[]>([]);
 
   /** The currently active branch ID, or null if on the main branch. */
   activeBranchId = $state<string | null>(null);
@@ -1077,7 +1083,7 @@ class DialogueOverlayViewModel
     }
 
     const branchId = crypto.randomUUID();
-    const branch: import('$lib/types/dialogue').ConversationBranch = {
+    const branch: ConversationBranch = {
       branchId,
       parentMessageId,
       messages: [...this.messages],
@@ -1131,7 +1137,7 @@ class DialogueOverlayViewModel
   }
 
   /** @inheritdoc */
-  setAddressMode(mode: import('$lib/types/dialogue').DialogueAddressMode): void {
+  setAddressMode(mode: DialogueAddressMode): void {
     this.debug('setAddressMode', { mode });
     this.addressMode = mode;
   }

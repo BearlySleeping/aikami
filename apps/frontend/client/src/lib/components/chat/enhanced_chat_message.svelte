@@ -8,7 +8,7 @@
 // Contract: C-231 AC-1, AC-3
 
 import { messageBranchStore } from '$services';
-import type { MessageAction } from '$types/rich_chat';
+import type { MessageAction } from '$types';
 import ChatMessage from './chat_message.svelte';
 import MessageActionBar from './message_action_bar.svelte';
 import MessageSwipeControls from './message_swipe_controls.svelte';

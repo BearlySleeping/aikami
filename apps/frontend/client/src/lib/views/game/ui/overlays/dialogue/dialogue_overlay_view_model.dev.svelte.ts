@@ -12,8 +12,7 @@
 //   - autoGenerateImage: auto-generate scene images on skill check resolution
 //   - generatedImageUrl: latest generated image URL (shown in inspector)
 
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { diceService } from '$services';
+import { diceService, imageGenerationService } from '$services';
 import {
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,

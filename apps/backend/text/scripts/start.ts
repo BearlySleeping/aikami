@@ -6,7 +6,7 @@ import { $ } from 'bun';
 
 const IMAGE = 'ollama/ollama';
 const CONTAINER_NAME = 'aikami-text-dev';
-const HOST_PORT = '11436';
+const HOST_PORT = '11434';
 const CONTAINER_PORT = '11434';
 
 // Ensure cache directory exists

@@ -9,12 +9,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import {
-  type AdvancedOverrides,
-  configService,
-  type GenerationParams,
-  type InstructTemplate,
-} from '$services';
+import { type AdvancedOverrides, configService } from '$services';
+import type { GenerationParams, InstructTemplate } from '$types';
 
 // ── Types ──────────────────────────────────────────────────────────────
 

@@ -9,20 +9,15 @@ import {
 import type {
   ActiveSessionData,
   EquipmentSlot,
+  GameCharacterSheet,
+  NarrativeTraits,
   WorldEvent,
   WorldGenOutput,
   WorldLocation,
   WorldState,
 } from '@aikami/types';
-import { serializeForAi } from '$lib/data/character_sheet_helpers';
-import type { NarrativeTraits } from '$lib/data/character_sheet_types';
-import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
-import type {
-  ActiveContextEntry,
-  GameMode,
-  GameStateEvent,
-  GameStateListener,
-} from '$types/game.ts';
+import { createDefaultSheet, serializeForAi } from '@aikami/utils';
+import type { ActiveContextEntry, GameMode, GameStateEvent, GameStateListener } from '$types';
 import { registerSerializable } from './serializable_service';
 
 // C-314: ITEM_CATALOG and getItemDefinition moved to inventory_service.svelte.ts
@@ -206,7 +201,7 @@ export class GameStateService
 
   /** Compact AI-ready character sheet summary for prompt injection (C-232). */
   get characterSheetSummary(): string {
-    const sheet: CharacterSheet = {
+    const sheet: GameCharacterSheet = {
       ...createDefaultSheet(),
       level: this.playerLevel,
       xp: this.playerXp,

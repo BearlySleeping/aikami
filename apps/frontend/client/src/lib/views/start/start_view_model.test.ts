@@ -58,22 +58,11 @@ import * as _svcStubs from '$services';
 // ---------------------------------------------------------------------------
 
 let mockSessionMarkerCampaignId: string | undefined;
-
-const mockCheckSessionMarker = mock(async () => mockSessionMarkerCampaignId);
-const mockClearSessionMarker = mock(async () => {});
-
-mock.module('$lib/services/game/game_overlay_service.svelte', () => ({
-  // biome-ignore lint/style/useNamingConvention: must match module export name
-  GameOverlayService: {
-    checkSessionMarker: mockCheckSessionMarker,
-    clearSessionMarker: mockClearSessionMarker,
-  },
-  gameOverlayService: {},
-}));
+let mockClearSessionMarkerCalls = 0;
 
 const _setupServiceOverrides = (): void => {
-  // ── gameStateService.reset ────────────────────────────────────────────
-  (_svcStubs.gameStateService as Record<string, unknown>).reset = mock(() => {
+  // ── inventoryService.reset — tracked to verify state reset on new game ──
+  (_svcStubs.inventoryService as Record<string, unknown>).reset = mock(() => {
     resetCalls++;
   });
 
@@ -104,6 +93,14 @@ const _setupServiceOverrides = (): void => {
       routeCalls.push({ route, options });
     },
   );
+
+  // ── gameOverlayService — crash recovery stubs ──
+  (_svcStubs.gameOverlayService as Record<string, unknown>).checkSessionMarker = mock(
+    async () => mockSessionMarkerCampaignId,
+  );
+  (_svcStubs.gameOverlayService as Record<string, unknown>).clearSessionMarker = mock(async () => {
+    mockClearSessionMarkerCalls++;
+  });
 
   // ── aiGatewayService.resolveMode — mock text resolution ──
   (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
@@ -161,6 +158,7 @@ const createViewModel = () => {
 describe('StartViewModel', () => {
   beforeEach(() => {
     resetCalls = 0;
+    mockClearSessionMarkerCalls = 0;
     fetchSavesResult = [];
     routeCalls = [];
     _setupServiceOverrides();
@@ -246,40 +244,40 @@ describe('StartViewModel', () => {
     });
   });
 
-  // ── AC-3: Routes to capability screen when text provider unresolved ──
+  // ── AC-3: starts new game with Emberwatch regardless of AI gate ──
 
-  test('startNewGame routes to /capability when gateway resolveMode fails', async () => {
+  test('startNewGame routes to /setup even when gateway resolveMode would fail', async () => {
     const vm = createViewModel();
 
-    // Make gateway resolution fail
+    // Even when gateway resolution would fail, we default to Emberwatch
     (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
       throw new Error('No text generation provider configured.');
     });
 
     await vm.startNewGame();
 
+    // Should route to setup with Emberwatch, not /capability
     expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('capability');
-    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
+    expect(routeCalls[0].route).toBe('setup');
   });
 
-  test('continueGame routes to /capability when gateway resolveMode fails', async () => {
+  test('continueGame succeeds even when gateway resolveMode would fail', async () => {
     const vm = createViewModel();
     vm.availableSaves = [
       { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
     ];
     vm.hasSaves = true;
 
-    // Make gateway resolution fail
+    // Even when gateway resolution would fail, continueGame proceeds
     (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
       throw new Error('No text generation provider configured.');
     });
 
     await vm.continueGame();
 
+    // Should route to /game, not /capability
     expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('capability');
-    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
+    expect(routeCalls[0].route).toBe('game');
   });
 
   test('startNewGame routes to /setup when gateway resolves successfully', async () => {
@@ -333,7 +331,7 @@ describe('StartViewModel', () => {
       expect(vm.showRecoveryPrompt).toBe(true);
       await vm.acceptRecovery();
 
-      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(mockClearSessionMarkerCalls).toBeGreaterThanOrEqual(1);
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
       expect(vm.showRecoveryPrompt).toBe(false);
@@ -347,7 +345,7 @@ describe('StartViewModel', () => {
 
       await vm.acceptRecovery();
 
-      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(mockClearSessionMarkerCalls).toBeGreaterThanOrEqual(1);
       expect(routeCalls).toHaveLength(0);
       expect(vm.showRecoveryPrompt).toBe(false);
     });
@@ -361,7 +359,7 @@ describe('StartViewModel', () => {
 
       await vm.declineRecovery();
 
-      expect(mockClearSessionMarker).toHaveBeenCalled();
+      expect(mockClearSessionMarkerCalls).toBeGreaterThanOrEqual(1);
       expect(vm.showRecoveryPrompt).toBe(false);
       expect(vm.recoveryCampaignId).toBeUndefined();
     });

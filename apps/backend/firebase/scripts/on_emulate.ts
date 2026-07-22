@@ -9,6 +9,8 @@ import { personaRepository } from '@aikami/backend/database/persona';
 import { setUserData } from '@aikami/backend/database/user';
 import { uploadToFirebase } from '@aikami/backend/utils/storage';
 import {
+  EMULATOR_GOOGLE_PERSONA_DATA,
+  EMULATOR_GOOGLE_USERS,
   EMULATOR_NPCS,
   EMULATOR_PASSWORD,
   EMULATOR_PERSONA_DATA,
@@ -65,9 +67,12 @@ const deleteAllEmulatorUsers = async () => {
   }
 };
 
-const createPersona = async (uid: string): Promise<string> => {
+const createPersona = async (
+  uid: string,
+  data?: Omit<PersonaCreateData, 'uid'>,
+): Promise<string> => {
   const personaData: PersonaCreateData = {
-    ...EMULATOR_PERSONA_DATA,
+    ...(data ?? EMULATOR_PERSONA_DATA),
     uid,
   } as PersonaCreateData;
 
@@ -155,7 +160,82 @@ const createEmulatorUser = async (
   }
 };
 
-// ── Audio asset upload to Firebase Storage emulator ────────────────────────
+// ── Google-simulated users for emulator OAuth sign-in ────────────────────
+
+/**
+ * Pre-imports Google-authenticated users into the Auth emulator.
+ *
+ * The Firebase Auth emulator cannot perform a real Google OAuth handshake.
+ * Instead, we simulate Google sign-in by pre-importing users with a
+ * {@link https://firebase.google.com/docs/reference/admin/node/firebase-admin.auth.userimportrecord.md#userimportrecordproviderdata | google.com providerData}
+ * record. The emulator popup UI then presents these accounts as selectable
+ * Google identities.
+ *
+ * Strategy:
+ * - **Pre-existing users** (`preExisting: true`) — get an Auth account,
+ *   Firestore user document, and a populated persona (returning player flow).
+ * - **Fresh users** (`preExisting: false`) — get ONLY an Auth account with
+ *   no Firestore doc or persona (new player onboarding flow).
+ */
+const importGoogleEmulatorUsers = async () => {
+  const auth = getAuth();
+
+  const records = EMULATOR_GOOGLE_USERS.map((user) => ({
+    uid: `google-${user.email.replace(/[^a-zA-Z0-9]/g, '-')}`,
+    email: user.email,
+    displayName: user.displayName,
+    providerData: [
+      {
+        providerId: 'google.com',
+        uid: user.email,
+        email: user.email,
+        displayName: user.displayName,
+      },
+    ],
+    customClaims: { userRole: user.userRole },
+  }));
+
+  try {
+    const result = await auth.importUsers(records);
+
+    logger.log(
+      `Imported ${result.successCount} Google-simulated users (${result.failureCount} failed)`,
+    );
+
+    if (result.errors.length > 0) {
+      for (const error of result.errors) {
+        logger.error(`Google user import error [${error.index}]:`, error.error.message);
+      }
+    }
+
+    // Create Firestore documents + personas for pre-existing (returning) users only.
+    // Fresh users have ONLY an Auth account — no Firestore doc, no persona.
+    for (const user of EMULATOR_GOOGLE_USERS) {
+      const uid = `google-${user.email.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+      if (user.preExisting) {
+        const userData: UserCreateData = {
+          agreedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+          displayName: user.displayName,
+          email: user.email.toLowerCase(),
+          signInProviders: ['google'],
+          userRole: user.userRole,
+        };
+        await setUserData(uid, userData);
+        await createPersona(uid, EMULATOR_GOOGLE_PERSONA_DATA);
+
+        logger.log(`Created returning Google user: ${user.email} (${uid}) with persona`);
+      } else {
+        logger.log(
+          `Created fresh Google user: ${user.email} (${uid}) — Auth only, no Firestore doc`,
+        );
+      }
+    }
+  } catch (error) {
+    logger.error('Error importing Google users:', error);
+  }
+};
 
 /**
  * Uploads all audio assets from {@link ASSETS_DIR}/audio/ to Firebase Storage
@@ -351,5 +431,8 @@ await seedAudioTracks(audioUrls);
 for (const user of EMULATOR_USERS) {
   await createEmulatorUser(user.email, user.displayName, user.userRole);
 }
+
+// Import Google-simulated users for emulator OAuth sign-in
+await importGoogleEmulatorUsers();
 
 logger.log('Emulation complete!');

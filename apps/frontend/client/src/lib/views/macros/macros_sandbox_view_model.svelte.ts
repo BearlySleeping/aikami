@@ -11,10 +11,8 @@ import {
 } from '@aikami/frontend/services';
 import type { MacroContext } from '@aikami/parser';
 import { resolveMacros } from '@aikami/parser';
-import {
-  macroPresetStore,
-  type PromptPreset,
-} from '$lib/services/config/macro_preset_store.svelte';
+import { macroPresetStore } from '$services';
+import type { PromptPreset } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 

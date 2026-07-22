@@ -17,7 +17,7 @@ import type {
   AgentPipelineContext,
   AgentRunResult,
   CustomAgentDefinition,
-} from '$types/agent_types';
+} from '$types';
 import { agentRegistryService } from './agent_registry_service.svelte.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';

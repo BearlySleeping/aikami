@@ -4,7 +4,7 @@
 // Performs case-insensitive word-boundary matching, deduplicates matches,
 // and sorts by priority. Constant entries are always included.
 
-import type { KeywordMatch, LorebookEntry } from '$types/lorebook';
+import type { KeywordMatch, LorebookEntry } from '$types';
 
 // ---------------------------------------------------------------------------
 // Public API

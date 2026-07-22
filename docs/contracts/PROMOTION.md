@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-07-20
+> Auto-generated: 2026-07-22
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -157,7 +157,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-341 | Add Relationships Factions Reputation And Persistent Consequ | 👍 approved | v2 |
 | C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 👍 approved | v2 |
 | C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | v2 |
-| C-345 | Add a Campaign/Content-Pack Browser and a Second Adventure | ⏳ not_started (no contract file) | v1 |
+| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | v2 |
 | C-346 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | v1 |
 | C-347 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | v1 |
 | C-348 | Build a Unified AI Turn Orchestrator with Validated State Patches | ⏳ not_started (no contract file) | v1 |

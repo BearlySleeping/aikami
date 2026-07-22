@@ -11,8 +11,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { GameSession } from '$services/game/session_service.svelte';
 import { sessionService } from '$services/game/session_service.svelte';
+import type { GameSession } from '$types';
 
 export type SessionSandboxViewModelInterface = BaseViewModelInterface & {
   readonly sessionServiceReady: boolean;

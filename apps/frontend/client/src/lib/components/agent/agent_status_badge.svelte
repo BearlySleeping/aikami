@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/components/agent/agent_status_badge.svelte
-import type { AgentRunResult } from '$types/agent_types';
+import type { AgentRunResult } from '$types';
 
 type Props = {
   result: AgentRunResult;

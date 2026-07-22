@@ -12,9 +12,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { serializeForAi } from '$lib/data/character_sheet_helpers';
-import type { NarrativeTraits } from '$lib/data/character_sheet_types';
-import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
+import type { GameCharacterSheet, NarrativeTraits } from '@aikami/types';
+import { createDefaultSheet, serializeForAi } from '@aikami/utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,7 +103,7 @@ class PlayerStateService
 
   /** Compact AI-ready character sheet summary for prompt injection (C-232). */
   get characterSheetSummary(): string {
-    const sheet: CharacterSheet = {
+    const sheet: GameCharacterSheet = {
       ...createDefaultSheet(),
       level: this.playerLevel,
       xp: this.playerXp,

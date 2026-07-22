@@ -224,9 +224,9 @@ class NpcListViewModel
       const chat = await this.getOrCreateChat({ npcId });
       finalChatId = chat.id;
     }
-    return routerService.goToRoute('chat', {
-      pathParameters: { chatId: finalChatId },
-      queryParameters: { npcId },
+    return routerService.goToRoute('game', {
+      pathParameters: undefined,
+      queryParameters: undefined,
     });
   }
 
