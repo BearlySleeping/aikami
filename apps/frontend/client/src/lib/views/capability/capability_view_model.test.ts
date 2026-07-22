@@ -77,15 +77,43 @@ mock.module('$services', () => ({
     completeSetup: mock(() => {}),
     activeCampaign: { id: 'test-id', capabilityProfile: {} },
   },
-  configService: {
-    state: {
+  configService: (() => {
+    let _nextId = 1;
+    const state: {
+      connections: Array<{ id: string; provider: string; capability?: string }>;
+      defaultConnectionId: null;
+      defaultByCapability?: Record<string, string>;
+    } = {
       connections: [],
       defaultConnectionId: null,
-    },
-    addConnection: mock(() => 'test-connection-id'),
-    setDefaultConnection: mock(() => {}),
-    save: mock(async () => {}),
-  },
+    };
+    return {
+      state,
+      addConnection: mock((params: { provider: string; capability?: string }) => {
+        const id = `conn-${_nextId++}`;
+        state.connections.push({
+          id,
+          provider: params.provider,
+          capability: params.capability ?? 'text',
+        });
+        return id;
+      }),
+      setDefaultConnection: mock((connectionId: string) => {
+        state.defaultByCapability ??= {};
+        const conn = state.connections.find((c) => c.id === connectionId);
+        if (conn) {
+          state.defaultByCapability[conn.capability ?? 'text'] = connectionId;
+        }
+      }),
+      save: mock(async () => {}),
+      _resetForTest: () => {
+        _nextId = 1;
+        state.connections.length = 0;
+        delete state.defaultByCapability;
+        state.defaultConnectionId = null;
+      },
+    };
+  })(),
   aiSettingsService: {
     textProvider: { apiKey: 'test-key', endpoint: 'http://localhost:11434', model: 'llama3' },
     imageProvider: { apiKey: '', endpoint: '' },
@@ -94,6 +122,22 @@ mock.module('$services', () => ({
   routerService: {
     goToRoute: mock(async () => {}),
   },
+  IMAGE_PROVIDERS: [
+    { id: 'comfyui', label: 'ComfyUI (local)', description: 'Local ComfyUI via Docker' },
+    { id: 'webui', label: 'AUTOMATIC1111 WebUI', description: 'Local Stable Diffusion WebUI' },
+    { id: 'novelai', label: 'NovelAI', description: 'Cloud-based anime/SD' },
+    { id: 'dalle', label: 'DALL·E', description: 'OpenAI DALL·E' },
+    { id: 'stability', label: 'Stability AI', description: 'Stability API' },
+    { id: 'fal', label: 'fal.ai', description: 'Serverless generative media' },
+    { id: 'openai-compat', label: 'OpenAI Compatible', description: 'OpenAI-compatible image API' },
+  ],
+  VOICE_PROVIDERS: [
+    { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
+    { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
+    { id: 'voicevox', label: 'VOICEVOX', description: 'Local Japanese TTS engine' },
+    { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
+    { id: 'fish-speech', label: 'Fish Speech', description: 'Open-source TTS' },
+  ],
 }));
 
 const { getCapabilityViewModel } = await import('./capability_view_model.svelte');
@@ -103,21 +147,31 @@ const createVm = (): Vm => {
   return getCapabilityViewModel({ className: 'CapabilityViewModel' });
 };
 
-const setDetectionResult = (textStatus: string, imageStatus = 'not_found') => {
+const setDetectionResult = (
+  textStatus: string,
+  imageStatus = 'not_found',
+  voiceStatus = 'not_found',
+) => {
   _detectResult.textStatus = textStatus;
   _detectResult.imageStatus = imageStatus;
+  _detectResult.voiceStatus = voiceStatus;
   _detectResult.textProviderId = textStatus === 'detected' ? 'ollama' : undefined;
   _detectResult.summary =
     textStatus === 'detected' ? 'Local AI detected' : 'No AI providers detected';
 };
 
 describe('CapabilityViewModel', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setDetectionResult('not_found');
+    // Reset config mock state between tests so seed assertions don't leak.
+    const { configService } = await import('$services');
+    (configService as unknown as { _resetForTest: () => void })._resetForTest();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     setDetectionResult('not_found');
+    const { configService } = await import('$services');
+    (configService as unknown as { _resetForTest: () => void })._resetForTest();
   });
 
   test('starts with text tab active', () => {
@@ -167,14 +221,12 @@ describe('CapabilityViewModel', () => {
     const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
     startMock.mockClear();
 
-    // Note: no text connections in state, so hasTextProvider=false
-    // but the mock still fires when startCampaign is called
+    // With seeding working, hasTextProvider should be true when ollama detected
     await vm.startCampaign();
 
-    // Without text connections, textProvider is false
     expect(startMock).toHaveBeenCalledWith({
       capabilityProfile: {
-        textProvider: false,
+        textProvider: true,
         imageProvider: false,
         voiceProvider: false,
       },
@@ -194,5 +246,27 @@ describe('CapabilityViewModel', () => {
     expect(vm.showCloudSetup).toBe(true);
     vm.closeCloudSetup();
     expect(vm.showCloudSetup).toBe(false);
+  });
+
+  test('startDetection seeds connections and sets hasTextProvider to true', async () => {
+    setDetectionResult('detected');
+    const vm = createVm();
+    await vm.startDetection();
+
+    // After detection with ollama, the seed should have pushed a text connection
+    expect(vm.hasTextProvider).toBe(true);
+    expect(vm.connectionEntries.length).toBeGreaterThan(0);
+    expect(vm.connectionEntries[0].providerLabel).toBe('Ollama (local)');
+  });
+
+  test('startDetection with image detected seeds image connection', async () => {
+    setDetectionResult('not_found', 'detected');
+    const vm = createVm();
+    await vm.startDetection();
+
+    vm.setActiveTab('image');
+    expect(vm.hasImageProvider).toBe(true);
+    expect(vm.connectionEntries.length).toBeGreaterThan(0);
+    expect(vm.connectionEntries[0].providerLabel).toBe('ComfyUI (local)');
   });
 });

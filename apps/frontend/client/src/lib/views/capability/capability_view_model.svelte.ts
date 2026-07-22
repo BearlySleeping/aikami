@@ -13,7 +13,14 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
-import { campaignService, capabilityService, configService, routerService } from '$services';
+import {
+  campaignService,
+  capabilityService,
+  configService,
+  IMAGE_PROVIDERS,
+  routerService,
+  VOICE_PROVIDERS,
+} from '$services';
 import type { Connection, ConnectionCapability } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
 import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
@@ -138,6 +145,18 @@ class CapabilityViewModel
     return connections.some((c) => (c.capability ?? 'text') === 'text');
   }
 
+  /** True when at least one image connection exists. */
+  get hasImageProvider(): boolean {
+    const connections = configService.state.connections ?? [];
+    return connections.some((c) => (c.capability ?? 'text') === 'image');
+  }
+
+  /** True when at least one voice connection exists. */
+  get hasVoiceProvider(): boolean {
+    const connections = configService.state.connections ?? [];
+    return connections.some((c) => (c.capability ?? 'text') === 'voice');
+  }
+
   get connectionEntries(): readonly ConnectionEntry[] {
     const connections = configService.state.connections;
     if (!connections || connections.length === 0) {
@@ -150,12 +169,11 @@ class CapabilityViewModel
     return connections
       .filter((c) => (c.capability ?? 'text') === this.activeTab)
       .map((connection) => {
-        const providerDef = TEXT_PROVIDERS.find((p) => p.id === connection.provider);
         const isDefault = connection.id === capDefault;
         return {
           connection,
           icon: LOCAL_PROVIDERS.has(connection.provider) ? '🖥️' : '☁️',
-          providerLabel: providerDef?.label ?? connection.provider,
+          providerLabel: this._providerLabel(connection),
           isDefault,
           sourceBadge: this._sourceBadge(connection),
         };
@@ -223,8 +241,8 @@ class CapabilityViewModel
     this.debug('startCampaign');
     await this._startCampaign({
       textProvider: this.hasTextProvider,
-      imageProvider: this.snapshot.imageStatus === 'detected',
-      voiceProvider: false,
+      imageProvider: this.hasImageProvider,
+      voiceProvider: this.hasVoiceProvider,
     });
   }
 
@@ -251,6 +269,7 @@ class CapabilityViewModel
   private _ensureAllDefaults(): void {
     const connections = configService.state.connections ?? [];
     const defaultByCap = configService.state.defaultByCapability ?? {};
+    let changed = false;
 
     for (const capability of CAPABILITY_TABS) {
       const capConnections = connections.filter((c) => (c.capability ?? 'text') === capability.id);
@@ -266,8 +285,31 @@ class CapabilityViewModel
       if (!stillExists) {
         // Pick the first connection for this capability as the new default
         configService.setDefaultConnection(capConnections[0].id);
+        changed = true;
       }
     }
+
+    if (changed) {
+      void configService.save();
+    }
+  }
+
+  // ── Private: provider labels ─────────────────────────────────────────
+
+  /** Resolves a human-readable label for any connection provider, regardless of capability. */
+  private _providerLabel(connection: Connection): string {
+    const capability = connection.capability ?? 'text';
+    if (capability === 'image') {
+      return (
+        IMAGE_PROVIDERS.find((p) => p.id === connection.provider)?.label ?? connection.provider
+      );
+    }
+    if (capability === 'voice') {
+      return (
+        VOICE_PROVIDERS.find((p) => p.id === connection.provider)?.label ?? connection.provider
+      );
+    }
+    return TEXT_PROVIDERS.find((p) => p.id === connection.provider)?.label ?? connection.provider;
   }
 
   // ── Private: source badges ───────────────────────────────────────────

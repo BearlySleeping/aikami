@@ -290,8 +290,14 @@ export class AuthService
       return response;
     } catch (error) {
       this.error('auth signInWithPopup', error);
+      const errMsg: string =
+        error instanceof Error
+          ? error.message
+          : (((error as Record<string, unknown>)?.message as string) ??
+            ((error as Record<string, unknown>)?.code as string) ??
+            'Unknown error');
       this.showSnackbar({
-        text: String(error instanceof Error ? error.message : error),
+        text: `Sign-in failed: ${errMsg}`,
         type: 'error',
       });
       const signInError = error as Omit<SocialSignInError, 'emailAlreadyExists'>;

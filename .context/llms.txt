@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-20
-> Files: 299 across 14 categories
+> Generated: 2026-07-22
+> Files: 300 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -289,6 +289,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-342: Add World Interactables, Dungeons, Puzzles, and Loot Tables](contracts/C-342-add-world-interactables-dungeons-puzzles-and-loot-tables.md)
 - [Contract C-343: Promote Rich Chat UX into Production Gameplay](contracts/C-343-promote-rich-chat-ux-into-production-gameplay.md)
 - [Contract C-344: Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle](contracts/C-344-complete-session-recaps-checkpoints-and-long-campaign-lifecy.md)
+- [Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure](contracts/C-345-add-a-campaigncontent-pack-browser-and-a-second-adventure.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
