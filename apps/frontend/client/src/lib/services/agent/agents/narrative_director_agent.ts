@@ -6,9 +6,8 @@
 //
 // Contract: C-236 Agent Pipeline System
 
-import { narrativeDirectorService } from '$lib/services/gm/narrative_director_service.svelte.ts';
-import { textGenerationService } from '$services';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types/agent_types';
+import { narrativeDirectorService, textGenerationService } from '$services';
+import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 import type { SceneDirectionOutput } from '../agent_schemas.ts';
 
 /**

@@ -9,8 +9,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$lib/services/config/config_service.svelte.ts';
-import type { KeywordMatch, Lorebook, LorebookEntry } from '$types/lorebook';
+import { configService } from '$services';
+import type { KeywordMatch, Lorebook, LorebookEntry } from '$types';
 import { scanKeywords } from './keyword_scanner';
 
 // ---------------------------------------------------------------------------

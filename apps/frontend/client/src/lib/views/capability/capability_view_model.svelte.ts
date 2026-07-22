@@ -1,27 +1,37 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts
 //
 // ViewModel for the pre-game capability detection screen.
-// Orchestrates provider detection, presents two paths based on results
-// (Local AI, Cloud AI), and creates the campaign with the chosen profile.
+// Shows tabs (Text | Image | Voice), auto-detects local services,
+// auto-seeds connections, and starts the campaign through a unified
+// connection list with cloud/local icons and source badges.
 // Contract: C-318 (origin), C-323 (offline demo removed, text AI gate)
 
+import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { CapabilityProfile, CapabilitySnapshot, DetectionStatus } from '@aikami/types';
-import { campaignService, capabilityService, routerService } from '$services';
-import type { Connection } from '$types/connection';
+import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
+import { campaignService, capabilityService, configService, routerService } from '$services';
+import type { Connection, ConnectionCapability } from '$types';
+import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
 import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
 import { getConnectionManagerViewModel } from '$views/settings/connection/connection_manager_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-/** Status badge info passed from ViewModel to View for rendering. */
-export type StatusBadgeInfo = {
-  label: string;
-  status: DetectionStatus;
+/** Connection entry info passed from ViewModel to View for rendering a row. */
+export type ConnectionEntry = {
+  connection: Connection;
+  /** 🖥️ for local, ☁️ for cloud. */
+  icon: string;
+  /** Human-readable provider label. */
+  providerLabel: string;
+  /** Whether this is the default connection. */
+  isDefault: boolean;
+  /** Source badge label, e.g. "env: OPENROUTER_API_KEY" or "stored" or undefined. */
+  sourceBadge?: string;
 };
 
 export type CapabilityViewModelInterface = BaseViewModelInterface & {
@@ -29,38 +39,46 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly snapshot: CapabilitySnapshot;
   /** Whether detection is currently running. */
   readonly isDetecting: boolean;
-  /** Whether local AI was detected (Ollama reachable). */
-  readonly localAiDetected: boolean;
-  /** Whether a cloud provider is configured. */
-  readonly cloudConfigured: boolean;
+  /** Currently active tab. */
+  readonly activeTab: ConnectionCapability;
   /** Whether the guided cloud connection modal is visible. */
   readonly showCloudSetup: boolean;
   /** Error message to display, or empty string. */
   readonly errorMessage: string;
-  /** Status badges derived from the snapshot. */
-  readonly statusBadges: readonly StatusBadgeInfo[];
+  /** Unified connection entries filtered by active tab. */
+  readonly connectionEntries: readonly ConnectionEntry[];
+  /** All tabs for the UI with checkmark when a provider is configured. */
+  readonly tabs: readonly { id: ConnectionCapability; label: string; hasProvider: boolean }[];
+  /** Whether at least one text provider is configured (required to start). */
+  readonly hasTextProvider: boolean;
   /** ViewModel for the cloud connection editor panel. */
   readonly cloudConnectionVm: ConnectionManagerViewModelInterface;
-  /** Existing cloud connections from settings. */
-  readonly cloudConnections: readonly Connection[];
-  /** The default cloud connection, or undefined. */
-  readonly defaultConnection: Connection | undefined;
-  /** Provider display labels (id → label). */
-  readonly providerLabels: Record<string, string>;
 
   /** Starts provider detection. Called on initialization. */
   startDetection(): Promise<void>;
-  /** Selects the "Use Detected Local AI" path. */
-  selectLocalAi(): Promise<void>;
-  /** Selects an existing cloud connection and starts the campaign. */
-  selectCloudConnection(connectionId: string): Promise<void>;
-  /** Opens the guided cloud connection modal. */
+  /** Switches to a different tab. */
+  setActiveTab(tab: ConnectionCapability): void;
+  /** Sets a connection as default (does NOT navigate). */
+  setDefaultConnection(connectionId: string): void;
+  /** Opens the guided cloud connection modal for the active tab's capability. */
   openCloudSetup(): void;
   /** Closes the guided cloud connection modal. */
   closeCloudSetup(): void;
+  /** Starts the campaign and navigates to /setup. */
+  startCampaign(): Promise<void>;
 };
 
 export type CapabilityViewModelOptions = BaseViewModelOptions;
+
+// ── Constants ──────────────────────────────────────────────────────────
+
+const LOCAL_PROVIDERS = new Set(['ollama', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox']);
+
+const CAPABILITY_TABS: readonly { id: ConnectionCapability; label: string }[] = [
+  { id: 'text', label: 'Text' },
+  { id: 'image', label: 'Image' },
+  { id: 'voice', label: 'Voice' },
+];
 
 // ── ViewModel ──────────────────────────────────────────────────────────
 
@@ -68,7 +86,6 @@ class CapabilityViewModel
   extends BaseViewModel<CapabilityViewModelOptions>
   implements CapabilityViewModelInterface
 {
-  /** Current capability snapshot. */
   snapshot = $state<CapabilitySnapshot>({
     isComplete: false,
     textStatus: 'pending',
@@ -77,19 +94,12 @@ class CapabilityViewModel
     summary: 'Detecting AI providers...',
   });
 
-  /** Whether detection is currently running. */
   isDetecting = $state(false);
-
-  /** Whether the guided cloud connection modal is visible. */
+  activeTab = $state<ConnectionCapability>('text');
   showCloudSetup = $state(false);
-
-  /** Error message for display. */
   errorMessage = $state('');
 
-  /** Cloud connection editor ViewModel — reused from settings. */
   cloudConnectionVm: ConnectionManagerViewModelInterface;
-
-  // ── Constructor ──────────────────────────────────────────────────────
 
   constructor(options: CapabilityViewModelOptions) {
     super(options);
@@ -97,46 +107,59 @@ class CapabilityViewModel
       className: 'CloudConnectionViewModel',
     });
 
-    // Sync: when the connection editor closes itself (save or cancel),
-    // close our modal and detect if a new connection was created.
     $effect(() => {
       void this.cloudConnectionVm.isEditorOpen;
       if (!this.cloudConnectionVm.isEditorOpen && this.showCloudSetup) {
         this._handleEditorClosed();
       }
     });
+
+    // When the connection list changes (add/edit/delete), re-ensure defaults
+    $effect(() => {
+      void configService.state.connections;
+      this._ensureAllDefaults();
+    });
   }
 
   // ── Derived ──────────────────────────────────────────────────────────
 
-  get localAiDetected(): boolean {
-    return this.snapshot.textStatus === 'detected';
+  /** Tabs with per-tab checkmark when at least one provider exists. */
+  get tabs(): readonly { id: ConnectionCapability; label: string; hasProvider: boolean }[] {
+    const connections = configService.state.connections ?? [];
+    return CAPABILITY_TABS.map((tab) => ({
+      ...tab,
+      hasProvider: connections.some((c) => (c.capability ?? 'text') === tab.id),
+    }));
   }
 
-  get cloudConfigured(): boolean {
-    return this.snapshot.textStatus === 'configured';
+  /** True when at least one text connection exists — required to start. */
+  get hasTextProvider(): boolean {
+    const connections = configService.state.connections ?? [];
+    return connections.some((c) => (c.capability ?? 'text') === 'text');
   }
 
-  get statusBadges(): readonly StatusBadgeInfo[] {
-    return [
-      { label: 'Text AI', status: this.snapshot.textStatus },
-      { label: 'Image AI', status: this.snapshot.imageStatus },
-      { label: 'Voice', status: this.snapshot.voiceStatus },
-    ];
-  }
+  get connectionEntries(): readonly ConnectionEntry[] {
+    const connections = configService.state.connections;
+    if (!connections || connections.length === 0) {
+      return [];
+    }
 
-  get cloudConnections(): readonly Connection[] {
-    return this.cloudConnectionVm.connections;
-  }
+    const defaultByCap = configService.state.defaultByCapability ?? {};
+    const capDefault = defaultByCap[this.activeTab] ?? null;
 
-  get defaultConnection(): Connection | undefined {
-    return this.cloudConnectionVm.connections.find(
-      (c) => c.id === this.cloudConnectionVm.defaultConnectionId,
-    );
-  }
-
-  get providerLabels(): Record<string, string> {
-    return this.cloudConnectionVm.providerLabels;
+    return connections
+      .filter((c) => (c.capability ?? 'text') === this.activeTab)
+      .map((connection) => {
+        const providerDef = TEXT_PROVIDERS.find((p) => p.id === connection.provider);
+        const isDefault = connection.id === capDefault;
+        return {
+          connection,
+          icon: LOCAL_PROVIDERS.has(connection.provider) ? '🖥️' : '☁️',
+          providerLabel: providerDef?.label ?? connection.provider,
+          isDefault,
+          sourceBadge: this._sourceBadge(connection),
+        };
+      });
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────
@@ -146,9 +169,14 @@ class CapabilityViewModel
     return super.initialize();
   }
 
+  // ── Tab navigation ───────────────────────────────────────────────────
+
+  setActiveTab(tab: ConnectionCapability): void {
+    this.activeTab = tab;
+  }
+
   // ── Detection ────────────────────────────────────────────────────────
 
-  /** Runs provider detection and updates the snapshot. */
   async startDetection(): Promise<void> {
     if (this.isDetecting) {
       return;
@@ -164,6 +192,9 @@ class CapabilityViewModel
         imageStatus: result.imageStatus,
         voiceStatus: result.voiceStatus,
       });
+
+      this._seedDetectedConnections(result);
+      this._ensureAllDefaults();
     } catch (error) {
       this.warn('startDetection:failed', error);
       this.snapshot = {
@@ -179,69 +210,193 @@ class CapabilityViewModel
     }
   }
 
-  // ── Path selection ───────────────────────────────────────────────────
+  // ── Connection selection ─────────────────────────────────────────────
 
-  /**
-   * "Use Detected Local AI" — creates campaign with text AI enabled.
-   */
-  async selectLocalAi(): Promise<void> {
-    this.debug('selectLocalAi');
+  /** Sets a connection as default without navigating. */
+  setDefaultConnection(connectionId: string): void {
+    configService.setDefaultConnection(connectionId);
+    void configService.save();
+  }
+
+  /** Starts the campaign and navigates to /setup. */
+  async startCampaign(): Promise<void> {
+    this.debug('startCampaign');
     await this._startCampaign({
-      textProvider: true,
+      textProvider: this.hasTextProvider,
       imageProvider: this.snapshot.imageStatus === 'detected',
       voiceProvider: false,
     });
   }
 
-  /**
-   * Selects an existing cloud connection and starts the campaign.
-   */
-  async selectCloudConnection(connectionId: string): Promise<void> {
-    this.debug('selectCloudConnection', { connectionId });
-    await this._startCampaign({
-      textProvider: true,
-      imageProvider: false,
-      voiceProvider: false,
-    });
-  }
-
-  /**
-   * Opens the guided cloud connection modal.
-   * The connection editor panel (from settings) handles the provider
-   * selection, API key entry, and testing.
-   */
   openCloudSetup(): void {
-    this.cloudConnectionVm.openCreate();
+    this.cloudConnectionVm.openCreateFor(this.activeTab);
     this.showCloudSetup = true;
   }
 
-  /** Closes the guided cloud connection modal. */
   closeCloudSetup(): void {
     this.cloudConnectionVm.cancelEdit();
     this.showCloudSetup = false;
   }
 
-  /**
-   * Called when the connection editor panel closes itself (via save or cancel).
-   * Closes the modal so the user sees their connections listed in the main view.
-   */
   private _handleEditorClosed(): void {
     this.showCloudSetup = false;
+    this._ensureAllDefaults();
   }
 
-  // ── Private ──────────────────────────────────────────────────────────
-
   /**
-   * Creates a new campaign with the given capability profile and
-   * navigates to character onboarding (/setup).
-   * The capability profile is passed to startNewCampaign() as an option —
-   * the gate enforcement runs on this profile during creation.
+   * Ensures every capability with at least one connection has a default
+   * selected. Falls back to the first connection when none is set.
+   * Called on initial detection and when the connection list mutates.
    */
+  private _ensureAllDefaults(): void {
+    const connections = configService.state.connections ?? [];
+    const defaultByCap = configService.state.defaultByCapability ?? {};
+
+    for (const capability of CAPABILITY_TABS) {
+      const capConnections = connections.filter((c) => (c.capability ?? 'text') === capability.id);
+      if (capConnections.length === 0) {
+        continue;
+      }
+
+      const currentDefault = defaultByCap[capability.id];
+      const stillExists = currentDefault
+        ? capConnections.some((c) => c.id === currentDefault)
+        : false;
+
+      if (!stillExists) {
+        // Pick the first connection for this capability as the new default
+        configService.setDefaultConnection(capConnections[0].id);
+      }
+    }
+  }
+
+  // ── Private: source badges ───────────────────────────────────────────
+
+  private _sourceBadge(connection: Connection): string | undefined {
+    switch (connection.source) {
+      case 'detected':
+        return 'detected';
+      case 'env': {
+        const provider = TEXT_PROVIDERS.find((p) => p.id === connection.provider);
+        if (!provider || provider.isLocal) {
+          return undefined;
+        }
+        const envName = this._guessEnvKeyName(connection.provider);
+        return envName ? `env: ${envName}` : 'env';
+      }
+      case 'stored':
+        return 'stored';
+      default:
+        return undefined;
+    }
+  }
+
+  private _guessEnvKeyName(provider: string): string | undefined {
+    const mapping: Record<string, string> = {
+      openrouter: 'OPENROUTER_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      anthropic: 'ANTHROPIC_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY',
+      google: 'GEMINI_API_KEY',
+      gemini: 'GEMINI_API_KEY',
+      mistral: 'MISTRAL_API_KEY',
+      cohere: 'COHERE_API_KEY',
+    };
+    return mapping[provider];
+  }
+
+  // ── Private: auto-seed detected connections ──────────────────────────
+
+  private _seedDetectedConnections(result: CapabilitySnapshot): void {
+    if (result.textStatus === 'detected' && result.textProviderId === 'ollama') {
+      this._seedConnection({
+        capability: 'text',
+        provider: 'ollama',
+        name: 'Ollama (local)',
+        model: result.textModelName ?? 'llama3.2',
+        baseUrl: 'http://localhost:11434/v1',
+      });
+    }
+
+    if (result.imageStatus === 'detected') {
+      this._seedConnection({
+        capability: 'image',
+        provider: 'comfyui',
+        name: 'ComfyUI (local)',
+        model: '',
+        baseUrl: 'http://localhost:8188',
+        imageOptions: { ...DEFAULT_IMAGE_OPTIONS },
+      });
+    }
+
+    if (result.voiceStatus === 'detected') {
+      this._seedConnection({
+        capability: 'voice',
+        provider: 'kokoro',
+        name: 'Kokoro (local)',
+        model: '',
+        baseUrl: '',
+        voiceOptions: { ...DEFAULT_VOICE_OPTIONS },
+      });
+    }
+  }
+
+  private _seedConnection(params: {
+    capability: ConnectionCapability;
+    provider: string;
+    name: string;
+    model: string;
+    baseUrl: string;
+    imageOptions?: typeof DEFAULT_IMAGE_OPTIONS;
+    voiceOptions?: typeof DEFAULT_VOICE_OPTIONS;
+  }): void {
+    const { capability, provider, name, model, baseUrl, imageOptions, voiceOptions } = params;
+    const connections = configService.state.connections ?? [];
+    const exists = connections.some(
+      (c) => c.provider === provider && (c.capability ?? 'text') === capability,
+    );
+    if (exists) {
+      return;
+    }
+
+    this.debug('_seedConnection', { capability, provider, model });
+    const newId = configService.addConnection({
+      name,
+      provider,
+      capability,
+      apiKey: '',
+      baseUrl,
+      model,
+      generationParams: {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 1024,
+        contextSize: 4096,
+      },
+      imageOptions,
+      voiceOptions,
+      isDefault: connections.length === 0,
+      source: 'detected',
+    });
+
+    // Set per-capability default if this is the first connection for its capability
+    const capDefault = configService.state.defaultByCapability?.[capability];
+    if (!capDefault) {
+      configService.setDefaultConnection(newId);
+    }
+
+    void configService.save();
+  }
+
+  // ── Private: campaign start ──────────────────────────────────────────
+
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
       await campaignService.startNewCampaign({ capabilityProfile: profile });
       if (campaignService.activeCampaign) {
-        // Transition creating → playing (persists via repository internally)
         campaignService.completeSetup();
       }
 

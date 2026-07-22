@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/components/agent/agent_thought_bubble.svelte
-import type { ThoughtBubble } from '$types/agent_types';
+import type { ThoughtBubble } from '$types';
 
 type Props = {
   bubble: ThoughtBubble;

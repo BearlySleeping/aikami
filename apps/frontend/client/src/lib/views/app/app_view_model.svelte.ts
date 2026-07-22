@@ -29,10 +29,6 @@ export type AppViewModelInterface = BaseViewModelInterface & {
   readonly isLoggedIn: boolean;
   readonly currentRoute: RouteName | undefined;
   readonly currentUser: CurrentUser | undefined;
-  /** Whether the boot diagnostics screen is currently visible. */
-  readonly showBootDiagnostics: boolean;
-  /** Called when the player clicks "Initialize Core" on the boot screen. */
-  onBootComplete(): void;
 };
 
 /**
@@ -45,9 +41,6 @@ export type AppViewModelInterface = BaseViewModelInterface & {
  */
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
   private _initialRouteHandled = false;
-
-  /** Boot screen is shown only on first visit; subsequent refreshes skip it. */
-  private _showBootDiagnostics = $state(!appService.bootComplete);
 
   constructor(options: AppViewModelOptions) {
     super(options);
@@ -101,33 +94,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     return routerService.currentRoute;
   }
 
-  get showBootDiagnostics() {
-    const { url } = page;
-    const { pathname, searchParams } = url;
-
-    // Skip boot diagnostics on settings, dev routes, or when skip-onboarding is set.
-    // These routes must work without the boot gate to avoid a deadlock
-    // (user needs /settings to configure providers).
-    if (
-      pathname.startsWith('/settings') ||
-      pathname.startsWith('/dev') ||
-      searchParams.get('skip-onboarding') !== null
-    ) {
-      return false;
-    }
-
-    return this._showBootDiagnostics;
-  }
-
   // --------------------------------------------------------------------------
   // Initialization
   // --------------------------------------------------------------------------
-
-  /** Hides the boot diagnostics screen and persists the flag so it won't show again. */
-  onBootComplete(): void {
-    appService.markBootComplete();
-    this._showBootDiagnostics = false;
-  }
 
   override async initialize(): Promise<void> {
     // 0. Bootstrap AI settings from environment defaults (e.g. OpenRouter

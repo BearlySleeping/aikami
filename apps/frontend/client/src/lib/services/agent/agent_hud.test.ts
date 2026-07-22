@@ -6,7 +6,7 @@
 // Contract: C-236 Agent Pipeline System
 
 import { describe, expect, it } from 'bun:test';
-import type { AgentHudState, ThoughtBubble } from '$types/agent_types';
+import type { AgentHudState, ThoughtBubble } from '$types';
 
 describe('AgentHudState', () => {
   const createInitialState = (): AgentHudState => ({

@@ -10,7 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { NpcDialogueServiceInterface } from '$lib/services/game/npc_dialogue_service.svelte';
+import type { NpcDialogueServiceInterface } from '$services';
 import { gameOverlayService, partyRosterService } from '$services';
 
 // ---------------------------------------------------------------------------

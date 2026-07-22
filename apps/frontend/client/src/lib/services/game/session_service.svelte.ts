@@ -16,54 +16,16 @@ import {
 } from '@aikami/frontend/services';
 import { playerStateService } from '$services';
 import { textGenerationService } from '$services/ai/text_generation_service.svelte';
-import type { CompactedCampaignSummary } from '$types/compacted_campaign_summary';
-import type { SessionCheckpoint } from '$types/session_checkpoint';
+import type {
+  CompactedCampaignSummary,
+  GameSession,
+  SessionCheckpoint,
+  SessionSummary,
+} from '$types';
 import { chatService } from '../chat/chat.svelte';
-import type { SessionSummary } from '../gm/gm_types';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte';
 import { gameSaveService } from './game_save_service.svelte.ts';
 import { registerSerializable, type SerializableService } from './serializable_service';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/**
- * A saved game session wrapping a C-235 SessionSummary with metadata.
- *
- * Each session represents one play period. Sessions are numbered sequentially
- * per game. The active session is locked (read-only) once ended.
- *
- * Extended in C-344 with recapReviewed, editedSynopsis, and checkpointIds.
- */
-export type GameSession = {
-  /** Unique session identifier. */
-  id: string;
-  /** The game this session belongs to. */
-  gameId: string;
-  /** Monotonically increasing session number (1-indexed). */
-  sessionNumber: number;
-  /** ISO-8601 timestamp of session start. */
-  startedAt: string;
-  /** ISO-8601 timestamp of session end, or undefined if still active. */
-  endedAt?: string;
-  /** Whether this session is currently active (not ended). */
-  isActive: boolean;
-  /** The C-235 session summary, generated when the session ends. */
-  summary?: SessionSummary;
-  /** Total message count in the chat when the session was ended. */
-  messageCount: number;
-  /** Session duration in minutes. */
-  durationMinutes?: number;
-  /** Stat snapshots for party members at session end. */
-  characterSnapshots: Record<string, { level: number; xp: number; hp: number }>;
-  /** Whether the player has reviewed/edited the recap for this session (C-344). */
-  recapReviewed: boolean;
-  /** The player-edited synopsis (if edited; original summary.synopsis if not) (C-344). */
-  editedSynopsis?: string;
-  /** Checkpoint IDs created during this session, in creation order (C-344). */
-  checkpointIds: readonly string[];
-};
 
 /** Options for constructing a {@link SessionService}. */
 export type SessionServiceOptions = BaseFrontendClassOptions;

@@ -5,7 +5,7 @@
 //
 // Contract: C-239 Expression Emotion System
 
-import type { ExpressionEntry, ExpressionId } from '$types/expression';
+import type { ExpressionEntry, ExpressionId } from '$types';
 
 /**
  * Complete expression catalog — 19 entries.

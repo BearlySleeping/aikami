@@ -10,7 +10,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { MacroContext } from '@aikami/parser';
-import { macroPresetStore } from '$lib/services/config/macro_preset_store.svelte';
+import { macroPresetStore } from '$services';
 
 export type PromptPreviewViewModelInterface = BaseViewModelInterface & {
   /** The fully resolved prompt text. */

@@ -6,7 +6,7 @@
 // "matched: 'goblin'"), new-match highlight animation, and inline editing
 // toggle. Token budget indicator turns red when >2KB.
 
-import type { KeywordMatch } from '$types/lorebook';
+import type { KeywordMatch } from '$types';
 
 type Props = {
   /** Whether the drawer is open. */

@@ -5,7 +5,7 @@ Local LLM text generation microservice using the official `ollama/ollama` Docker
 ## Use Case
 
 - Provides a containerized Ollama API for local LLM text generation
-- Exposes Ollama REST endpoints on port 11436
+- Exposes Ollama REST endpoints on port 11434
 - Model weights persisted in `src/cache/ollama/` (bind-mounted into container)
 
 ## Where It's Used
@@ -83,7 +83,7 @@ apps/backend/text/
 |---|---|
 | `--pull=newer` | Always check for a newer image tag before starting |
 | `--security-opt label=disable` | Disable SELinux label enforcement (required for bind mounts on some systems) |
-| `-p 11434:11434` | Expose Ollama on host port 11434 |
+| `-p 11434:11434` | Expose Ollama on host port 11434 (matches text port in development_ports.ts) |
 | `--rm` | Auto-remove container on stop (no stale state) |
 | `--name aikami-text-dev` | Fixed container name for herdr orchestration |
 

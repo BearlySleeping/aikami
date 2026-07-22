@@ -2,6 +2,7 @@
 import type { PersonaData } from '@aikami/types';
 // apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
 import { browser } from '$app/environment';
+import { routerService } from '$services';
 
 type SavedCharacter = {
   persona: PersonaData;
@@ -38,7 +39,13 @@ if (browser) {
           saved
         </p>
       </div>
-      <a href="/dev/character" class="btn btn-primary btn-sm">+ New Character</a>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        onclick={() => routerService.goToDevRoute('character')}
+      >
+        + New Character
+      </button>
     </div>
 
     {#if characters.length === 0}
@@ -49,7 +56,13 @@ if (browser) {
           <p class="text-base-content/60 text-sm text-center max-w-sm">
             Create your first D&D character using the AI-powered character builder.
           </p>
-          <a href="/dev/character" class="btn btn-primary mt-2">Create Character</a>
+          <button
+            type="button"
+            class="btn btn-primary mt-2"
+            onclick={() => routerService.goToDevRoute('character')}
+          >
+            Create Character
+          </button>
         </div>
       </div>
     {:else}

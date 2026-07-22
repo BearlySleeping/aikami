@@ -16,7 +16,7 @@ import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
 import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
 import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
-import { inventoryService, worldStateService } from '$services';
+import { inventoryService, routerService, worldStateService } from '$services';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Available test maps for zone transitions
@@ -179,7 +179,7 @@ const _rapidCycle = async (count: number): Promise<void> => {
 // ═══════════════════════════════════════════════════════════════════════════
 const _verifySave = async (): Promise<void> => {
   try {
-    const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+    const { GameSaveService } = await import('$services');
     const saveService = GameSaveService.create({ className: 'SandboxSaveService' });
     await saveService.fetchAvailableSaves();
 
@@ -308,7 +308,13 @@ const devActions: DevAction[] = [
       <!-- Header -->
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-bold text-primary">🧪 Zone Transition</h2>
-        <a href="/dev/sandbox" class="btn btn-ghost btn-xs">← Back</a>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          onclick={() => routerService.goToDevRoute('sandbox')}
+        >
+          ← Back
+        </button>
       </div>
 
       <!-- Autosave status monitor (AC-2) -->

@@ -4,7 +4,8 @@
 // and error handling for the pack browser (C-345).
 // Contract: C-345 Add a Campaign/Content-Pack Browser and a Second Adventure
 
-import { beforeAll, afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { PackRegistryServiceInterface } from './pack_registry_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Mock global fetch
@@ -30,12 +31,10 @@ mock.module('globalThis', () => ({
 // ---------------------------------------------------------------------------
 
 describe('PackRegistryService', () => {
-  let packRegistryService: any;
+  let packRegistryService: PackRegistryServiceInterface;
 
   beforeAll(async () => {
-    const { packRegistryService: service } = await import(
-      './pack_registry_service.svelte.ts'
-    );
+    const { packRegistryService: service } = await import('./pack_registry_service.svelte.ts');
     packRegistryService = service;
   });
 
@@ -57,10 +56,12 @@ describe('PackRegistryService', () => {
   function mockFetch(response: FetchResponse | Error): void {
     if (response instanceof Error) {
       _mockError = response;
-      globalThis.fetch = mock(async () => { throw _mockError; }) as any;
+      globalThis.fetch = mock(async () => {
+        throw _mockError;
+      }) as typeof globalThis.fetch;
     } else {
       _mockResponse = response;
-      globalThis.fetch = mock(async () => _mockResponse) as any;
+      globalThis.fetch = mock(async () => _mockResponse) as typeof globalThis.fetch;
     }
   }
 
@@ -154,7 +155,14 @@ describe('PackRegistryService', () => {
             status: 200,
             json: async () => ({
               schemaVersion: 1,
-              packs: [{ id: 'emberwatch', name: 'Test', version: '1.0.0', updatedAt: '2026-01-01T00:00:00.000Z' }],
+              packs: [
+                {
+                  id: 'emberwatch',
+                  name: 'Test',
+                  version: '1.0.0',
+                  updatedAt: '2026-01-01T00:00:00.000Z',
+                },
+              ],
             }),
           });
         };
@@ -163,7 +171,7 @@ describe('PackRegistryService', () => {
       globalThis.fetch = mock(async () => {
         fetchCount++;
         return fetchPromise;
-      }) as any;
+      }) as typeof globalThis.fetch;
 
       // Start multiple concurrent refresh calls
       const promise1 = packRegistryService.refresh();
@@ -171,7 +179,7 @@ describe('PackRegistryService', () => {
       const promise3 = packRegistryService.refresh();
 
       // Resolve the fetch
-      resolveFetch!();
+      resolveFetch?.();
 
       // Wait for all promises to complete
       await Promise.all([promise1, promise2, promise3]);
@@ -201,8 +209,8 @@ describe('PackRegistryService', () => {
 
       const found = packRegistryService.getPack('emberwatch');
       expect(found).toBeDefined();
-      expect(found!.id).toBe('emberwatch');
-      expect(found!.name).toBe('Emberwatch: The Fading Ward');
+      expect(found?.id).toBe('emberwatch');
+      expect(found?.name).toBe('Emberwatch: The Fading Ward');
     });
 
     test('returns undefined for unknown pack ID', () => {

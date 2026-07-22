@@ -20,7 +20,7 @@ import type {
   WorldPickupState,
   WorldState,
 } from '@aikami/types';
-import type { ActiveContextEntry, GameStateEvent, GameStateListener } from '$types/game.ts';
+import type { ActiveContextEntry, GameStateEvent, GameStateListener } from '$types';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
 // ---------------------------------------------------------------------------

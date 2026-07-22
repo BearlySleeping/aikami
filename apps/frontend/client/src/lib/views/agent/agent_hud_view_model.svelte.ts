@@ -11,7 +11,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { AgentPhase, AgentRunResult } from '$types/agent_types';
+import type { AgentPhase, AgentRunResult } from '$types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 

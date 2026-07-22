@@ -7,12 +7,10 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { audioContextManager } from '$lib/services/audio/audio_context_manager.ts';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import { logger } from '$logger';
-import { audioService } from '$services';
+import { audioContextManager, audioService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
-import type { ActiveContextEntry } from '$types';
+import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
 // GameEngineService — owns the PixiJS engine bridge, world, and game state
@@ -26,26 +24,7 @@ import type { ActiveContextEntry } from '$types';
 // The ViewModel layer reads reactive state directly from this service.
 // ---------------------------------------------------------------------------
 
-// ── Re-exported types (used by ViewModel and View) ──
-
-/** A single floating damage text instance rendered in the Svelte UI layer. */
-export type FloatingTextInstance = {
-  readonly id: number;
-  readonly amount: number;
-  readonly x: number;
-  readonly y: number;
-  readonly isCritical: boolean;
-};
-
-/** Screen-space state for a combatant — used by diegetic health bars (C-166). */
-export type CombatantScreenState = {
-  readonly entityId: number;
-  readonly hp: number;
-  readonly maxHp: number;
-  readonly screenX: number;
-  readonly screenY: number;
-  readonly isActiveTurn: boolean;
-};
+// ---------------------------------------------------------------------------
 
 /** Data passed to the engine for player entity initialization. */
 type PlayerInitData = {

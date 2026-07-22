@@ -11,7 +11,7 @@ import type {
   AgentPipelineContext,
   AgentRunResult,
   CustomAgentDefinition,
-} from '$types/agent_types';
+} from '$types';
 
 /**
  * Converts a CustomAgentDefinition from the registry into a standard

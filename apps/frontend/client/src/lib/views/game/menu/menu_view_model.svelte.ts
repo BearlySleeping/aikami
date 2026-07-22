@@ -4,13 +4,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  authService,
-  campaignService,
-  gameSaveService,
-  routerService,
-  type SaveSlotInfo,
-} from '$services';
+import { authService, campaignService, gameSaveService, routerService } from '$services';
+import type { SaveSlotInfo } from '$types';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
   /** Called when the player clicks "Start" to begin the game. */

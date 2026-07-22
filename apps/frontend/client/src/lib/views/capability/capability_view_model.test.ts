@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts
 //
-// Unit tests for CapabilityViewModel — path selection and cloud setup.
+// Unit tests for CapabilityViewModel — tabs, connection entries, selection, campaign start.
 // Contract: C-323 AC-2 (offline demo removed, only local + cloud paths)
 //
 // Run with:
@@ -10,11 +10,6 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
-// $services stubs are provided globally via test_preload.ts
-
-// ── Mock @aikami/utils ────────────────────────────────────────────────
 
 mock.module('@aikami/utils', () => ({
   AiTextProviderRequiredError: class AiTextProviderRequiredError extends Error {
@@ -28,8 +23,6 @@ mock.module('@aikami/utils', () => ({
     error instanceof Error && error.message.includes('text AI provider'),
 }));
 
-// ── Mocks for crypto_vault ─────────────────────────────────────────────
-
 mock.module('$views/settings/connection/connection_manager_view_model.svelte', () => ({
   getConnectionManagerViewModel: mock(() => ({
     connections: [],
@@ -37,6 +30,7 @@ mock.module('$views/settings/connection/connection_manager_view_model.svelte', (
     isEditorOpen: false,
     providerLabels: {},
     openCreate: mock(() => {}),
+    openCreateFor: mock(() => {}),
     cancelEdit: mock(() => {}),
   })),
 }));
@@ -46,8 +40,6 @@ mock.module('$lib/utils/crypto_vault', () => ({
   decrypt: mock(async () => undefined),
   clearVault: mock(() => {}),
 }));
-
-// ── Mutable stubs for services ────────────────────────────────────────
 
 const _detectResult = {
   isComplete: true,
@@ -59,10 +51,6 @@ const _detectResult = {
   textProviderId: undefined as string | undefined,
   textModelName: undefined as string | undefined,
 };
-
-// ── Override $services with mutable capabilityService ─────────────────
-// Include all exports the preload provides via Proxy stub, overriding only
-// the services this test needs to control.
 
 const _createSvcStub = () => {
   const handler: ProxyHandler<Record<string, unknown>> = {
@@ -89,6 +77,15 @@ mock.module('$services', () => ({
     completeSetup: mock(() => {}),
     activeCampaign: { id: 'test-id', capabilityProfile: {} },
   },
+  configService: {
+    state: {
+      connections: [],
+      defaultConnectionId: null,
+    },
+    addConnection: mock(() => 'test-connection-id'),
+    setDefaultConnection: mock(() => {}),
+    save: mock(async () => {}),
+  },
   aiSettingsService: {
     textProvider: { apiKey: 'test-key', endpoint: 'http://localhost:11434', model: 'llama3' },
     imageProvider: { apiKey: '', endpoint: '' },
@@ -99,12 +96,8 @@ mock.module('$services', () => ({
   },
 }));
 
-// ── Import after mocks are set up ──────────────────────────────────────
-
 const { getCapabilityViewModel } = await import('./capability_view_model.svelte');
 type Vm = ReturnType<typeof getCapabilityViewModel>;
-
-// ── Helpers ────────────────────────────────────────────────────────────
 
 const createVm = (): Vm => {
   return getCapabilityViewModel({ className: 'CapabilityViewModel' });
@@ -113,11 +106,10 @@ const createVm = (): Vm => {
 const setDetectionResult = (textStatus: string, imageStatus = 'not_found') => {
   _detectResult.textStatus = textStatus;
   _detectResult.imageStatus = imageStatus;
+  _detectResult.textProviderId = textStatus === 'detected' ? 'ollama' : undefined;
   _detectResult.summary =
     textStatus === 'detected' ? 'Local AI detected' : 'No AI providers detected';
 };
-
-// ── Tests ─────────────────────────────────────────────────────────────
 
 describe('CapabilityViewModel', () => {
   beforeEach(() => {
@@ -125,49 +117,48 @@ describe('CapabilityViewModel', () => {
   });
 
   afterEach(() => {
-    // Reset to defaults
     setDetectionResult('not_found');
   });
 
-  // ── Initial state ────────────────────────────────────────────────────
-
-  test('starts with pending detection and detecting flag true', async () => {
+  test('starts with text tab active', () => {
     const vm = createVm();
-    // Initial state before initialization
-    expect(vm.snapshot.textStatus).toBe('pending');
-    expect(vm.snapshot.isComplete).toBe(false);
-
-    // Initialize and verify detection completes
-    await vm.initialize();
-    expect(vm.snapshot.isComplete).toBe(true);
-    expect(vm.snapshot.textStatus).not.toBe('pending');
-    expect(vm.isDetecting).toBe(false);
+    expect(vm.activeTab).toBe('text');
   });
 
-  test('localAiDetected is false when textStatus is not_found', async () => {
-    setDetectionResult('not_found');
+  test('setActiveTab switches tabs', () => {
     const vm = createVm();
-    await vm.startDetection();
-    expect(vm.localAiDetected).toBe(false);
+    vm.setActiveTab('image');
+    expect(vm.activeTab).toBe('image');
+    vm.setActiveTab('voice');
+    expect(vm.activeTab).toBe('voice');
   });
 
-  test('localAiDetected is true when textStatus is detected', async () => {
-    setDetectionResult('detected');
+  test('has three tabs: text, image, voice', () => {
     const vm = createVm();
-    await vm.startDetection();
-    expect(vm.localAiDetected).toBe(true);
+    expect(vm.tabs.length).toBe(3);
+    expect(vm.tabs[0].id).toBe('text');
+    expect(vm.tabs[1].id).toBe('image');
+    expect(vm.tabs[2].id).toBe('voice');
   });
 
-  test('cloudConfigured is true when textStatus is configured', async () => {
-    setDetectionResult('configured');
+  test('hasTextProvider is false when no text connections', () => {
     const vm = createVm();
-    await vm.startDetection();
-    expect(vm.cloudConfigured).toBe(true);
+    expect(vm.hasTextProvider).toBe(false);
   });
 
-  // ── AC-2: selectLocalAi ─────────────────────────────────────────────
+  test('tabs have hasProvider false when no connections', () => {
+    const vm = createVm();
+    for (const tab of vm.tabs) {
+      expect(tab.hasProvider).toBe(false);
+    }
+  });
 
-  test('selectLocalAi calls campaignService.startNewCampaign', async () => {
+  test('connectionEntries returns empty when no connections exist', () => {
+    const vm = createVm();
+    expect(vm.connectionEntries).toEqual([]);
+  });
+
+  test('startCampaign calls campaignService.startNewCampaign', async () => {
     setDetectionResult('detected');
     const vm = createVm();
     await vm.startDetection();
@@ -176,49 +167,23 @@ describe('CapabilityViewModel', () => {
     const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
     startMock.mockClear();
 
-    await vm.selectLocalAi();
+    // Note: no text connections in state, so hasTextProvider=false
+    // but the mock still fires when startCampaign is called
+    await vm.startCampaign();
 
-    expect(startMock).toHaveBeenCalledTimes(1);
+    // Without text connections, textProvider is false
     expect(startMock).toHaveBeenCalledWith({
       capabilityProfile: {
-        textProvider: true,
+        textProvider: false,
         imageProvider: false,
         voiceProvider: false,
       },
     });
-    expect(vm.errorMessage).toBe('');
   });
-
-  // ── AC-2: selectCloudConnection ─────────────────────────────────────
-
-  test('selectCloudConnection calls campaignService.startNewCampaign', async () => {
-    setDetectionResult('configured');
-    const vm = createVm();
-    await vm.startDetection();
-
-    const { campaignService } = await import('$services');
-    const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
-    startMock.mockClear();
-
-    await vm.selectCloudConnection('test-conn-id');
-
-    expect(startMock).toHaveBeenCalledTimes(1);
-    expect(startMock).toHaveBeenCalledWith({
-      capabilityProfile: {
-        textProvider: true,
-        imageProvider: false,
-        voiceProvider: false,
-      },
-    });
-    expect(vm.errorMessage).toBe('');
-  });
-
-  // ── Cloud setup modal ───────────────────────────────────────────────
 
   test('openCloudSetup shows modal', () => {
     const vm = createVm();
     expect(vm.showCloudSetup).toBe(false);
-
     vm.openCloudSetup();
     expect(vm.showCloudSetup).toBe(true);
   });
@@ -227,7 +192,6 @@ describe('CapabilityViewModel', () => {
     const vm = createVm();
     vm.openCloudSetup();
     expect(vm.showCloudSetup).toBe(true);
-
     vm.closeCloudSetup();
     expect(vm.showCloudSetup).toBe(false);
   });

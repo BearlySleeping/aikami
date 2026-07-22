@@ -15,6 +15,74 @@ export const EMULATOR_USERS = [
 
 export type EmulatorUser = (typeof EMULATOR_USERS)[number];
 
+// ── Google-Simulated Users for Emulator OAuth ─────────────────
+
+/**
+ * Pre-imported Google users for the Auth emulator.
+ *
+ * The emulator cannot perform real OAuth redirects — we simulate Google sign-in
+ * by pre-importing users with `providerData[0].providerId: 'google.com'`.
+ * Users select their account in the emulator's fake sign-in popup.
+ *
+ * - `preExisting` users get a Firestore user doc + persona (returning player).
+ * - `fresh` users get only an Auth account (new player onboarding).
+ */
+export const EMULATOR_GOOGLE_USERS = [
+  {
+    email: 'aragorn.ranger@example.com',
+    displayName: 'Aragorn the Ranger',
+    userRole: 'member' as const,
+    preExisting: true,
+  },
+  {
+    email: 'new.adventurer@example.com',
+    displayName: 'Fresh Adventurer',
+    userRole: 'member' as const,
+    preExisting: false,
+  },
+] as const;
+
+export type EmulatorGoogleUser = (typeof EMULATOR_GOOGLE_USERS)[number];
+
+// ── Persona for Pre-Existing Google User ─────────────────────
+
+/** Rich ranger persona for the pre-existing Google user (aragorn.ranger). */
+export const EMULATOR_GOOGLE_PERSONA_DATA = {
+  name: 'Aragorn',
+  race: 'Human',
+  class: 'Ranger',
+  level: 12,
+  experiencePoints: 75000,
+  abilityScores: {
+    strength: 17,
+    dexterity: 18,
+    constitution: 16,
+    intelligence: 15,
+    wisdom: 17,
+    charisma: 16,
+  },
+  hitPoints: 110,
+  temporaryHitPoints: 0,
+  savingThrows: DEFAULT_SAVING_THROWS,
+  skills: DEFAULT_SKILLS,
+  armorClass: 16,
+  speed: 30,
+  alignment: 'Lawful Good' as const,
+  background: 'Noble',
+  proficiencies: ['Longsword', 'Longbow', 'Survival', 'Stealth', 'Animal Handling'],
+  languages: ['Common', 'Elvish', 'Sindarin', 'Orc'],
+  equipment: ['Andúril', 'Bow of the Galadhrim', 'Elven Cloak', 'Healing Herbs'],
+  inventory: [
+    'Andúril',
+    'Bow of the Galadhrim',
+    'Elven Cloak',
+    'Healing Herbs',
+    'Map of Middle-earth',
+    'Lembas Bread',
+  ],
+  isActive: true,
+} satisfies Omit<import('@aikami/types').PersonaCreateData, 'uid'>;
+
 // ── NPC Seed Data ──────────────────────────────────────────
 
 export const EMULATOR_NPCS: NpcCreateData[] = [

@@ -11,8 +11,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { AddressMode } from '$lib/services/gm/gm_types';
 import { gmPromptService } from '$services';
+import type { AddressMode } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

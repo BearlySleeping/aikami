@@ -12,9 +12,8 @@ import {
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
 import { EXPRESSION_CATALOG } from '$lib/data/expression_catalog';
-import { getExpressionAssetResolver } from '$lib/services/expression/expression_asset_resolver';
-import { expressionService } from '$services';
-import type { DetectExpressionResult, ExpressionId, ExpressionOverlay } from '$types/expression';
+import { expressionService, getExpressionAssetResolver } from '$services';
+import type { DetectExpressionResult, ExpressionId, ExpressionOverlay } from '$types';
 
 // ── Interfaces ───────────────────────────────────────────────────────────
 

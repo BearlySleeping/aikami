@@ -12,7 +12,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { EnhancedChatMessage, MessageAlternatives } from '$types/rich_chat';
+import type { EnhancedChatMessage, MessageAlternatives } from '$types';
 
 // ── Constants ────────────────────────────────────────────────────────────
 

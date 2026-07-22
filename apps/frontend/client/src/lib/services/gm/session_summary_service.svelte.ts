@@ -12,8 +12,8 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { textGenerationService, worldStateService } from '$services';
+import type { SessionSummary } from '$types';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
-import type { SessionSummary } from './gm_types';
 
 // ---------------------------------------------------------------------------
 // Types

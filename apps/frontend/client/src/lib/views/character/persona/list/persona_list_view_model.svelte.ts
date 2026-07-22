@@ -9,12 +9,13 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import {
   authService,
+  campaignService,
   equipmentService,
   gameModeService,
   inventoryService,
+  personaService,
   playerStateService,
   routerService,
   worldStateService,
@@ -121,6 +122,9 @@ class PersonaListViewModel
     equipmentService.reset();
     gameModeService.reset();
     worldStateService.reset();
+
+    // Transition campaign from creating → playing before the game boot loads it
+    campaignService.completeSetup();
 
     await routerService.goToRoute('game', {
       queryParameters: undefined,

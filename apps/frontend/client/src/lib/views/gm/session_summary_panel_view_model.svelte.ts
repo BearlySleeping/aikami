@@ -10,8 +10,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { SessionSummary } from '$lib/services/gm/gm_types';
-import { sessionSummaryService } from '$lib/services/gm/session_summary_service.svelte.ts';
+import { sessionSummaryService } from '$services';
+import type { SessionSummary } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

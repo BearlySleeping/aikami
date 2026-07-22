@@ -8,8 +8,8 @@ import {
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
 import {
+  aiSettingsService,
   audioService,
   campaignService,
   gameModeService,
@@ -264,6 +264,12 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     visible: boolean;
     targetMetadata?: { verb: string; targetName: string };
   }): void;
+
+  /** C-334: Checks for a stale session_active marker (crash detection). Returns the campaign ID or undefined. */
+  checkSessionMarker(): Promise<string | undefined>;
+
+  /** C-334: Clears the session_active marker (e.g. from the start menu after recovery). */
+  clearSessionMarker(): Promise<void>;
 };
 
 export type GameOverlayServiceOptions = BaseFrontendClassOptions;
@@ -1245,7 +1251,7 @@ export class GameOverlayService
    * Returns the campaign ID that was active when the crash occurred,
    * or undefined if no marker exists.
    */
-  static async checkSessionMarker(): Promise<string | undefined> {
+  async checkSessionMarker(): Promise<string | undefined> {
     try {
       const { getLocalDatabase } = await import('@aikami/frontend/repositories');
       const db = await getLocalDatabase();
@@ -1263,19 +1269,10 @@ export class GameOverlayService
   }
 
   /**
-   * Clears the session_active marker (static — usable from start menu).
+   * Clears the session_active marker (e.g. from the start menu after recovery).
    */
-  static async clearSessionMarker(): Promise<void> {
-    try {
-      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
-      const db = await getLocalDatabase();
-      await db.execute({
-        sql: 'DELETE FROM meta WHERE key = ?',
-        args: ['session_active'],
-      });
-    } catch {
-      // Best effort
-    }
+  async clearSessionMarker(): Promise<void> {
+    await this._clearSessionMarker();
   }
 }
 

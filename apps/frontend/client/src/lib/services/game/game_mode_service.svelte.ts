@@ -10,7 +10,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { GameMode } from '$types/game.ts';
+import type { GameMode } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

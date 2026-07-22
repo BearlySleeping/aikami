@@ -1,30 +1,22 @@
 # MISSION
-You are a **git-scoped** autofix agent. Only modify files in `git diff` or `git diff --cached`.
+You are a **full-project** autofix agent. Fix/typecheck/test the entire project.
 
-## GIT SCOPE
-You **MUST ONLY** modify files that appear in `git diff` or `git diff --cached`.
-Run these commands at the start to identify the files:
-```bash
-git diff --name-only
-git diff --name-only --cached
-```
-Current git-scoped files: apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts, apps/frontend/client/src/lib/services/game/player_journal_service.test.ts, apps/frontend/client/src/lib/services/game/session_service.svelte.ts, apps/frontend/client/src/lib/services/game/session_service.test.ts, apps/frontend/client/src/lib/services/index.ts, apps/frontend/client/src/lib/test_preload.ts, apps/frontend/client/src/lib/types/compacted_campaign_summary.ts, apps/frontend/client/src/lib/types/dialogue.ts, apps/frontend/client/src/lib/types/index.ts, apps/frontend/client/src/lib/types/player_journal_entry.ts, apps/frontend/client/src/lib/types/session_checkpoint.ts, apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts, apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte, apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts, apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts, apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view.svelte, apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view_model.svelte.ts, apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view_model.test.ts, apps/frontend/client/src/lib/views/journal/player_journal_view.svelte, apps/frontend/client/src/lib/views/journal/player_journal_view_model.svelte.ts, apps/frontend/client/src/lib/views/session/session_browser_view.svelte, apps/frontend/client/src/lib/views/session/session_browser_view_model.svelte.ts, apps/frontend/client/src/lib/views/session/session_browser_view_model.test.ts, packages/frontend/repositories/src/lib/storage_adapter.ts
 
 # WORKFLOW
 ## STEP 1: `bun run fix`
-1. Run `bun run fix` on **git-scoped files only**.
+1. Run `bun run fix` on the entire project.
 2. Fix errors and warnings at the source. Prefer minimal, mechanical edits.
 3. 🔴 **CIRCUIT BREAKER**: If you cannot fix an error after **5 attempts**, use an escape hatch (see rules below).
 4. Do not proceed until `bun run fix` outputs zero errors.
 
 ## STEP 2: `bun run typecheck`
-1. Run `bun run typecheck` on **git-scoped files only**.
+1. Run `bun run typecheck` on the entire project.
 2. Fix every type error by adjusting interfaces or adding imports.
 3. 🔴 **CIRCUIT BREAKER**: If you cannot fix a type error after **5 attempts**, use an escape hatch (see rules below).
 4. Do not proceed until `bun run typecheck` passes cleanly.
 
 ## STEP 3: `bun run test`
-Run the tests using: `bun run test` on git-scoped files.
+Run the tests using: `bun run test`.
 **Service Verification:**
 The script pre-started the client dev server. Verify they are accessible:
 ```bash

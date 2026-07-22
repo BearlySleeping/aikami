@@ -9,8 +9,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { lorebookStore } from '$lib/services/lorebook/lorebook_store.svelte';
-import type { Lorebook, LorebookEntry, LorebookEntryInput } from '$types/lorebook';
+import { lorebookStore } from '$services';
+import type { Lorebook, LorebookEntry, LorebookEntryInput } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

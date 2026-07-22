@@ -290,3 +290,4 @@ tmp/
 apps/frontend/client/static/game-assets/
 .pi/github/
 apps/backend/image/src/user/comfyui.db.bkp
+.pi/autofix/system_prompt.md

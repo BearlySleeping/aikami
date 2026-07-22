@@ -4,6 +4,7 @@
 // Dev sandbox view for testing BGM transitions and SFX playback.
 // Buttons trigger AudioService methods via the DevAudioViewModel.
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { routerService } from '$services';
 import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';
 
 type Props = {
@@ -20,7 +21,13 @@ const { viewModel }: Props = $props();
         <h1 class="text-2xl font-bold">🎵 Dev Audio Sandbox</h1>
         <p class="text-base-content/60 text-sm mt-1">
           Test BGM crossfade transitions and SFX playback.
-          <a href="/dev/settings" class="link link-primary">Go to Dev Settings →</a>
+          <button
+            type="button"
+            class="link link-primary"
+            onclick={() => routerService.goToDevRoute('settings')}
+          >
+            Go to Dev Settings →
+          </button>
           to change volume.
         </p>
       </div>
@@ -127,7 +134,13 @@ const { viewModel }: Props = $props();
 
     <!-- Quick nav -->
     <div class="text-center pb-4">
-      <a href="/dev/settings" class="btn btn-outline btn-wide"> ⚙️ Dev Settings (Change Volume) </a>
+      <button
+        type="button"
+        class="btn btn-outline btn-wide"
+        onclick={() => routerService.goToDevRoute('settings')}
+      >
+        ⚙️ Dev Settings (Change Volume)
+      </button>
     </div>
   </div>
 </BaseViewModelContainer>

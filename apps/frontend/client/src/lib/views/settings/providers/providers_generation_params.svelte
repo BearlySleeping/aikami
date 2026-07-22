@@ -1,9 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/providers/providers_generation_params.svelte
-import type {
-  GenerationParams,
-  InstructTemplate,
-} from '$lib/services/config/config_service.svelte';
+import type { GenerationParams, InstructTemplate } from '$types';
 
 type Props = {
   params: GenerationParams;

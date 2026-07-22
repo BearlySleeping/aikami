@@ -6,40 +6,7 @@
 // users can duplicate, modify copies, and save custom presets.
 
 import { logger } from '$logger';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** A single section within a prompt preset. */
-export type PromptSection = {
-  /** Unique section ID. */
-  id: string;
-  /** Human-readable section name. */
-  name: string;
-  /** Raw template content containing macros. */
-  content: string;
-  /** Whether this section is enabled during assembly. */
-  enabled?: boolean;
-  /** Optional sort order index. */
-  order?: number;
-};
-
-/** A complete prompt preset composed of multiple sections. */
-export type PromptPreset = {
-  /** Unique preset identifier. */
-  id: string;
-  /** Human-readable preset name. */
-  name: string;
-  /** Optional description. */
-  description?: string;
-  /** Ordered list of sections. */
-  sections: PromptSection[];
-  /** Whether this is a built-in preset (cannot be deleted). */
-  isBuiltIn?: boolean;
-  /** ISO timestamp of last modification. */
-  updatedAt?: string;
-};
+import type { PromptPreset, PromptSection } from '$types';
 
 // ---------------------------------------------------------------------------
 // Built-in defaults
