@@ -37,3 +37,8 @@
 - consider creating internal mcp instead of tool calling
 - Refactor .pi/skills/aikami-conventions/SKILL.md to bloated.
 - consinder removing .pi/generated-skills/daisyui, maybe llm already knows daisyui
+
+## New
+
+- view models that relies on other viewmodels inputs, like events, we should consider always having a service as a layer, so the view model can be stateless and focused on presentation
+-

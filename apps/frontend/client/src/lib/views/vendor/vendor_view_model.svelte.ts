@@ -9,7 +9,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
-import { vendorService } from '$services';
+import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 
 // Re-export for consumers
@@ -134,6 +134,7 @@ class VendorViewModel
   }
   closeVendor(): void {
     vendorService.close();
+    gameOverlayService.closeVendor();
   }
   getItemDef(itemId: string): ItemDefinition {
     return vendorService.getItemDef(itemId);

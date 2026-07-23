@@ -3,8 +3,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { goto } from '$app/navigation';
-import { authService, personaService } from '$services';
+import { authService, personaService, routerService } from '$services';
 
 export type OnboardingServiceOptions = BaseFrontendClassOptions;
 
@@ -30,7 +29,10 @@ class OnboardingService
   async redirectIfNeeded(): Promise<void> {
     const needsOnboarding = await this.needsOnboarding();
     if (needsOnboarding) {
-      await goto('/personas/create?onboarding=true');
+      await routerService.goToRoute('personaCreate', {
+        pathParameters: undefined,
+        queryParameters: { onboarding: 'true' },
+      });
     }
   }
 }

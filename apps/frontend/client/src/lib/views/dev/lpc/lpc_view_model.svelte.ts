@@ -8,13 +8,17 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { setContext } from 'svelte';
-import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import {
   LPC_BATCH_MANAGER_KEY,
   LPC_STAGE_CONTAINER_KEY,
 } from '$lib/components/game/lpc_context_keys';
-import { ANIMATION_STATE_OPTIONS, DIRECTION_OPTIONS } from '$lib/data/lpc_asset_catalog';
+import {
+  ANIMATION_STATE_OPTIONS,
+  DIRECTION_OPTIONS,
+  LPC_DEFAULT_HEAD_ASSET_ID,
+  REQUIRED_LPC_SLOTS,
+} from '$lib/data/lpc_asset_catalog';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import {
@@ -22,6 +26,7 @@ import {
   lpcStateToSearchParams,
   searchParamsToLpcState,
 } from '$lib/data/lpc_url_config';
+import { routerService } from '$services';
 import type { Application } from './lpc_pixi_facade';
 import { Container, Graphics, Sprite, Texture } from './lpc_pixi_facade';
 
@@ -393,6 +398,33 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       });
     }
 
+    // ── Required slot validation ───────────────────────────────────
+    // Head, body, and torso are mandatory for a valid character render.
+    // Head has a texture-level fallback (default head spritesheet).
+    // Body and torso produce hard validation errors via TypeBox.
+    if (result.length > 0) {
+      const presentSlots = new Set(result.map((r) => r.slot));
+
+      for (const required of REQUIRED_LPC_SLOTS) {
+        if (!presentSlots.has(required)) {
+          if (required === 'head') {
+            this.warn('lpc.recipeValidation.headMissing', {
+              message: 'Head slot not configured — will fallback to default head spritesheet.',
+            });
+          } else {
+            this.error('lpc.recipeValidation.missingRequiredSlot', {
+              slot: required,
+              message: `Missing required LPC spritesheet: "${required}". Character render will be incomplete.`,
+            });
+            this._setStatus(
+              `Missing required spritesheet: "${required}". Add a ${required} layer to render correctly.`,
+              'error',
+            );
+          }
+        }
+      }
+    }
+
     return result;
   }
   // ── Animation setters ───────────────────────────────────────────────
@@ -516,11 +548,26 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           [LpcAnimationState.Die]: 'hurt',
         };
         const stateSuffix = stateMap[currentState] ?? 'walk';
-        const texture = await this._loadSheetTexture(
+        let texture = await this._loadSheetTexture(
           '',
           slotDef.slot,
           `${variant.assetId}.${stateSuffix}`,
         );
+
+        // Head fallback: if the configured head spritesheet fails to load,
+        // retry with the default human male head. The character still renders
+        // with the intended palette tint — only the spritesheet geometry changes.
+        if ((!texture || texture === Texture.EMPTY) && slotDef.slot === 'head') {
+          const defaultAssetId = `${LPC_DEFAULT_HEAD_ASSET_ID}.${stateSuffix}`;
+          if (defaultAssetId !== `${variant.assetId}.${stateSuffix}`) {
+            this.warn('lpc.headFallback', {
+              original: variant.assetId,
+              fallback: LPC_DEFAULT_HEAD_ASSET_ID,
+            });
+            texture = await this._loadSheetTexture('', 'head', defaultAssetId);
+          }
+        }
+
         if (!texture || texture === Texture.EMPTY) {
           return;
         }
@@ -693,10 +740,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   private _createDefaultLayers(): ActiveLayerConfig[] {
     const bodyIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
+    const torsoIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'torso');
     const headIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'head');
     const layers: ActiveLayerConfig[] = [];
     if (bodyIdx >= 0) {
       layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
+    }
+    if (torsoIdx >= 0) {
+      layers.push({ slotDefIndex: torsoIdx, variantIndex: 0 });
     }
     if (headIdx >= 0) {
       layers.push({ slotDefIndex: headIdx, variantIndex: 0 });
@@ -755,7 +806,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const newUrl = `${page.url.pathname}?${params.toString()}`;
 
       this._isApplyingUrlState = true;
-      void goto(newUrl, { replaceState: true, keepFocus: true, noScroll: true }).finally(() => {
+      void routerService.goToHref(newUrl).finally(() => {
         this._isApplyingUrlState = false;
       });
     }, 100);

@@ -264,11 +264,10 @@ const handleSetPlayerVelocity = (velocity: { x: number; y: number }): void => {
     return;
   }
 
-  // Gate: only apply velocity in EXPLORE mode
-  if (getEngineGameMode() !== 'EXPLORE') {
-    return;
-  }
-
+  // Always apply velocity — the movement system (updateMovement) gates on
+  // game mode separately. If we gate here, {0,0} stop commands sent while
+  // in MENU/DIALOGUE are silently dropped, causing sticky movement when
+  // returning to EXPLORE.
   addComponent(world, playerEntityId, set(Velocity, velocity));
 };
 

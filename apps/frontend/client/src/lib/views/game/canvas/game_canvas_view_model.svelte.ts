@@ -141,8 +141,10 @@ class GameCanvasViewModel
     this.registerEffectRoot(() => {
       $effect(() => {
         return () => {
-          // Navigation away — cancel in-flight boot and teardown
-          gameBootService.cancelBoot();
+          // Navigation away — teardown engine resources.
+          // teardown() always destroys the game world even after boot completes;
+          // cancelBoot() is only effective during an active boot pipeline.
+          gameBootService.teardown();
           gameEngineService.destroyEngine();
         };
       });

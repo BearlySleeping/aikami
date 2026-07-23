@@ -10,7 +10,7 @@ import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
 import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
 import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
-import { inventoryService, worldStateService } from '$services';
+import { inventoryService, routerService, worldStateService } from '$services';
 import type { DevAction } from '$types';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -274,37 +274,37 @@ const devActions = [
   {
     label: 'Map & Zoning Sandbox',
     onClick: () => {
-      window.location.href = '/dev/sandbox/map';
+      void routerService.goToDevRoute('sandbox/map');
     },
   },
   {
     label: 'Zone Transition & Autosave (C-155)',
     onClick: () => {
-      window.location.href = '/dev/sandbox/zone-transition';
+      void routerService.goToDevRoute('sandbox/zone-transition');
     },
   },
   {
     label: 'Camera & Spatial UI (C-161)',
     onClick: () => {
-      window.location.href = '/dev/sandbox/camera';
+      void routerService.goToDevRoute('sandbox/camera');
     },
   },
   {
     label: 'Dialogue Action Menu (C-162)',
     onClick: () => {
-      window.location.href = '/dev/sandbox/dialogue';
+      void routerService.goToDevRoute('sandbox/dialogue');
     },
   },
   {
     label: 'Vendor Sandbox (C-154)',
     onClick: () => {
-      window.location.href = '/dev/sandbox/vendor';
+      void routerService.goToDevRoute('sandbox/vendor');
     },
   },
   {
     label: 'Combat Encounter (C-144)',
     onClick: () => {
-      window.location.href = '/dev/sandbox/combat';
+      void routerService.goToDevRoute('sandbox/combat');
     },
   },
 ] satisfies DevAction[];

@@ -9,9 +9,8 @@ import type { AiModeResolution } from '@aikami/types';
 import {
   createOpenAiCompatibleTextAdapter,
   isAiGatewayError,
-  OLLAMA_VRAM_EVICTION_PARAMS,
 } from '../src/index.ts';
-import { createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
+import { createJsonFetchMock, createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
 
 const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => ({
   capability: 'text',
@@ -96,7 +95,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 
   test('falls back to well-known local endpoint for ollama', async () => {
-    const { fetchFn, calls } = createSseFetchMock();
+    const { fetchFn, calls } = createJsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     await adapter.generateText({
@@ -105,7 +104,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(calls[0].url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(calls[0].url).toBe('http://localhost:11434/api/chat');
   });
 
   test('uses injected default endpoint for cloud providers without one', async () => {
@@ -145,8 +144,10 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     }
   });
 
-  test('includes Ollama VRAM eviction params for ollama provider only', async () => {
-    const { fetchFn, calls } = createSseFetchMock();
+  // Updated for C-320: Ollama native /api/chat no longer sends VRAM eviction
+  // params — the endpoint uses stream: false which naturally releases VRAM.
+  test('Ollama native endpoint does not send VRAM eviction params', async () => {
+    const { fetchFn, calls } = createJsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     await adapter.generateText({
@@ -160,8 +161,10 @@ describe('OpenAI-compatible text adapter — streaming', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(calls[0].body.keep_alive).toBe(OLLAMA_VRAM_EVICTION_PARAMS.keep_alive);
-    expect(calls[0].body.options).toEqual(OLLAMA_VRAM_EVICTION_PARAMS.options);
+    // Ollama native endpoint should NOT include VRAM eviction params.
+    expect(calls[0].body.keep_alive).toBeUndefined();
+    expect(calls[0].body.options).toBeUndefined();
+    // Non-Ollama providers also skip them.
     expect(calls[1].body.keep_alive).toBeUndefined();
     expect(calls[1].body.options).toBeUndefined();
   });

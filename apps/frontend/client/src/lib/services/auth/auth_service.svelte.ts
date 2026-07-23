@@ -149,8 +149,6 @@ export class AuthService
     return this._options.auth;
   }
 
-  private _currentToken: string | undefined;
-
   async initialize(): Promise<CurrentUser | undefined> {
     this.log('initialize');
     try {
@@ -177,7 +175,7 @@ export class AuthService
               return;
             }
 
-            await this.setAuthUser(user, true);
+            await this.setAuthUser(user);
           },
           (error) => {
             this.error(error.message);
@@ -190,7 +188,7 @@ export class AuthService
         );
       });
 
-      await this.setAuthUser(initialUser, true);
+      await this.setAuthUser(initialUser);
       this.isAuthReady = true;
 
       return this.currentUser;
@@ -208,9 +206,7 @@ export class AuthService
     this.log('signInWithEmailAndPassword', options);
     try {
       const user = await this._auth.signInWithEmailAndPassword(options);
-      await this.setAuthUser(user, true);
-
-      await this.setAuthUser(user, true);
+      await this.setAuthUser(user);
       return { success: true, data: undefined };
     } catch (error: unknown) {
       // TypeScript defaults to unknown in strict mode
@@ -227,7 +223,7 @@ export class AuthService
     try {
       this.log('signOut');
       await this._auth.signOut();
-      await this.setAuthUser(undefined, true);
+      await this.setAuthUser(undefined);
 
       void this.logEvent('logout', undefined);
 
@@ -408,12 +404,7 @@ export class AuthService
     }
   }
 
-  protected async setAuthUser(
-    user: FirebaseUser | undefined,
-    forceRefresh?: boolean,
-  ): Promise<void> {
-    await this._setToken(user, forceRefresh);
-
+  protected async setAuthUser(user: FirebaseUser | undefined): Promise<void> {
     if (!user) {
       this.setCurrentUser(undefined);
       return;
@@ -441,47 +432,6 @@ export class AuthService
       type: 'completeDeviceHandoff',
       payload: { code: options.code, uid: options.uid },
     });
-  }
-
-  async syncAuthWithBackend(forceEmpty = false): Promise<boolean> {
-    try {
-      const user = forceEmpty ? undefined : await this._auth.getAuthUser();
-      this.log('syncAuthWithBackend', { user });
-
-      await this._setToken(user, true);
-
-      return true;
-    } catch (error) {
-      this.error('syncAuthWithBackend', error);
-      return false;
-    }
-  }
-
-  /**
-   * Set a JSON Web Token (JWT) used to identify the user to a Firebase
-   * service on the server.
-   *
-   * @remarks
-   * Returns the current token if it has not expired or if it will not expire
-   * in the next five minutes. Otherwise, this will refresh the token and
-   * return a new one.
-   * @param user - The user.
-   * @param forceRefresh - Force refresh regardless of token expiration.
-   * @public
-   */
-  private async _setToken(user?: FirebaseUser, forceRefresh?: boolean) {
-    const token = user ? await this._auth.getIdToken(user, forceRefresh) : undefined;
-    if (!forceRefresh && token === this._currentToken) {
-      return;
-    }
-
-    this._currentToken = token;
-
-    this.log('_setToken', { forceRefresh, uid: user?.uid });
-
-    // In SPA mode, Firebase callable functions handle auth automatically.
-    // The ID token is managed by the Firebase Auth SDK and included in
-    // callable function requests without manual synchronization.
   }
 }
 

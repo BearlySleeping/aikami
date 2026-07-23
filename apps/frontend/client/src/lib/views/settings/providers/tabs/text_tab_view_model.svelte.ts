@@ -159,7 +159,7 @@ class TextTabViewModel
             !configService.state.preferredModel ||
             configService.state.preferredModel.startsWith('openrouter/')
           ) {
-            configService.setPreferredModel('llama3.2');
+            // No default model — user must configure via Connections
             needsSave = true;
           }
           if (needsSave) {

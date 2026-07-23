@@ -13,6 +13,7 @@ import {
   toRoutePathFromRouteId,
   toRoutePathFromURL,
 } from '$router';
+import { defaultRoute } from '$routes';
 import type { BaseFrontendClassInterface } from '../base/base_frontend_class.ts';
 
 type Navigation =
@@ -94,6 +95,12 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
   /** Navigate to a dev route. Accepts the path after /dev (e.g. 'combat', 'agent-editor'). */
   goToDevRoute(devPath: string): Promise<void>;
 
+  /**
+   * Go back to the previous page in the navigation history.
+   * If there is no history, navigates to {@link defaultRoute}.
+   */
+  goBack(): Promise<void>;
+
   /** Stores the SvelteKit goto function and marks the service as initialized. */
   initialize(options: { goto: GoTo; page: Page }): void;
 
@@ -173,6 +180,19 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   async goToDevRoute(devPath: string): Promise<void> {
     const path = devPath.startsWith('/') ? devPath : `/${devPath}`;
     return await this.goToHref(`/dev${path}`);
+  }
+
+  async goBack(): Promise<void> {
+    this.log('goBack');
+    const prev = this.previousPage;
+    if (prev && prev.url.href !== this.url.href) {
+      await this.goToHref(prev.url.href);
+    } else {
+      await this.goToRoute(defaultRoute, {
+        pathParameters: undefined,
+        queryParameters: undefined,
+      });
+    }
   }
 
   onPageChanged(listener: Listener<Page | undefined>): void {
@@ -279,7 +299,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       if (forceRefresh) {
         globalThis.window.open(
           defaultHref ??
-            this.toRouteHref('settings', {
+            this.toRouteHref(defaultRoute, {
               pathParameters: undefined,
               queryParameters: undefined,
               url: this.url,
@@ -288,7 +308,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       } else {
         await (defaultHref
           ? this.goToHref(defaultHref)
-          : this.goToRoute('settings', {
+          : this.goToRoute(defaultRoute, {
               pathParameters: undefined,
               queryParameters: undefined,
             }));

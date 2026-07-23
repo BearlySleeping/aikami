@@ -9,9 +9,6 @@ export const featureFlags = {
   /** Enable Firestore offline persistence */
   offlinePersistence: publicEnv.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1',
 
-  /** Enable Gmail integration */
-  gmailIntegration: Boolean(publicEnv.PUBLIC_GMAIL_CLIENT_ID),
-
   /** Enable push notifications */
   pushNotifications: Boolean(publicEnv.PUBLIC_VAPID_KEY),
 

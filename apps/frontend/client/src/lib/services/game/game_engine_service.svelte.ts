@@ -557,9 +557,18 @@ class GameEngineService
           continue;
         }
         const slotDef = generatedLpcSlots[catalogIdx];
-        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : slotName === 'head' ? 94 : -1;
-        if (slotName === 'head' && effectiveIdx < 0) {
-          effectiveIdx = 94;
+        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
+        if (slotName === 'head') {
+          // Ensure we always get an actual head asset (not ears, faces, etc.).
+          // Index 94 = head/heads/human_male in the generated catalog.
+          if (effectiveIdx < 0) {
+            effectiveIdx = 94;
+          }
+          const headVariant = slotDef?.variants[effectiveIdx];
+          if (!headVariant?.assetId.startsWith('head/heads/')) {
+            // Computed variant is not a head — fall back to default human head.
+            effectiveIdx = 94;
+          }
         }
         const variant = slotDef?.variants[effectiveIdx];
         if (!variant) {

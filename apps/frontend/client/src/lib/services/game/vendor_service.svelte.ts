@@ -187,6 +187,7 @@ class VendorService
         schemaName: 'VendorActionIntent',
         prompt,
         systemPrompt: VENDOR_ACTION_SYSTEM_PROMPT,
+        signal: AbortSignal.timeout(15_000),
       });
       const intent = raw as VendorActionIntent;
       const clamped = Math.max(0.5, Math.min(1.5, intent.priceMultiplier));
@@ -203,13 +204,15 @@ class VendorService
         }
       }
     } catch (error) {
-      // AI unavailable — degrade to the vendor's authored content-pack line
-      // at unchanged base prices (C-331 AC-3). Never the bare '...'.
-      this.debug('haggle:fallback-authored', { error: String(error) });
-      this.priceMultiplier = 1.0;
+      // AI unavailable — fall back to the authored vendor line.
+      this.error('haggle:ai-failed', { error: String(error) });
       this.messages = [
         ...this.messages,
-        { id: crypto.randomUUID(), role: 'vendor', content: this._authoredFallbackLine() },
+        {
+          id: crypto.randomUUID(),
+          role: 'vendor',
+          content: this._authoredFallbackLine(),
+        },
       ];
     } finally {
       this.isHaggling = false;

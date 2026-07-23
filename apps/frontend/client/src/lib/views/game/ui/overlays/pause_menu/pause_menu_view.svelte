@@ -37,82 +37,107 @@ const { viewModel }: Props = $props();
   }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
-    <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
+    {#if viewModel.confirmingQuit}
+      <h2 class="text-center text-lg font-bold text-base-content">Quit to Main Menu?</h2>
+      <p class="mt-2 text-center text-sm text-base-content/60">
+        Any unsaved progress will be lost.
+      </p>
 
-    <div class="mt-6 space-y-3">
-      <!-- svelte-ignore a11y_autofocus — intentional for modal dialog focus (C-332 AC-4) -->
-      <button
-        type="button"
-        class="btn btn-primary btn-block"
-        onclick={() => viewModel.resumeGame()}
-      >
-        Resume Game
-      </button>
-
-      <button
-        type="button"
-        class="btn btn-outline btn-block"
-        disabled={viewModel.isSaving}
-        onclick={() => viewModel.saveGame()}
-      >
-        {#if viewModel.isSaving}
-          <span class="loading loading-spinner loading-xs"></span>
-          Saving...
-        {:else}
-          Save Game
-        {/if}
-      </button>
-
-      {#if viewModel.saveMessage}
-        <p
-          class="text-center text-sm"
-          class:text-success={viewModel.saveMessage === 'Game Saved!'}
-          class:text-error={viewModel.saveMessage === 'Save failed'}
+      <div class="mt-6 space-y-3">
+        <button
+          type="button"
+          class="btn btn-error btn-block"
+          onclick={() => viewModel.confirmQuit()}
         >
-          {viewModel.saveMessage}
-        </p>
-      {/if}
+          Quit
+        </button>
 
-      <button
-        type="button"
-        class="btn btn-outline btn-block"
-        onclick={() => viewModel.goToSettings()}
-      >
-        Settings
-      </button>
+        <button
+          type="button"
+          class="btn btn-outline btn-block"
+          onclick={() => viewModel.cancelQuit()}
+        >
+          Cancel
+        </button>
+      </div>
+    {:else}
+      <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
-      <button
-        type="button"
-        class="btn btn-ghost btn-block"
-        onclick={() => viewModel.openEndSession()}
-      >
-        End Session
-      </button>
+      <div class="mt-6 space-y-3">
+        <!-- svelte-ignore a11y_autofocus — intentional for modal dialog focus (C-332 AC-4) -->
+        <button
+          type="button"
+          class="btn btn-primary btn-block"
+          onclick={() => viewModel.resumeGame()}
+        >
+          Resume Game
+        </button>
 
-      <button
-        type="button"
-        class="btn btn-ghost btn-block"
-        onclick={() => viewModel.openReputation()}
-      >
-        Reputation
-      </button>
+        <button
+          type="button"
+          class="btn btn-outline btn-block"
+          disabled={viewModel.isSaving}
+          onclick={() => viewModel.saveGame()}
+        >
+          {#if viewModel.isSaving}
+            <span class="loading loading-spinner loading-xs"></span>
+            Saving...
+          {:else}
+            Save Game
+          {/if}
+        </button>
 
-      <button
-        type="button"
-        class="btn btn-ghost btn-block"
-        onclick={() => viewModel.replayOnboarding()}
-      >
-        Replay Tutorial
-      </button>
+        {#if viewModel.saveMessage}
+          <p
+            class="text-center text-sm"
+            class:text-success={viewModel.saveMessage === 'Game Saved!'}
+            class:text-error={viewModel.saveMessage === 'Save failed'}
+          >
+            {viewModel.saveMessage}
+          </p>
+        {/if}
 
-      <button
-        type="button"
-        class="btn btn-ghost btn-block text-error"
-        onclick={() => viewModel.quitToMainMenu()}
-      >
-        Quit to Main Menu
-      </button>
-    </div>
+        <button
+          type="button"
+          class="btn btn-outline btn-block"
+          onclick={() => viewModel.goToSettings()}
+        >
+          Settings
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block"
+          onclick={() => viewModel.openEndSession()}
+        >
+          End Session
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block"
+          onclick={() => viewModel.openReputation()}
+        >
+          Reputation
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block"
+          onclick={() => viewModel.replayOnboarding()}
+        >
+          Replay Tutorial
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block text-error"
+          onclick={() => viewModel.requestQuit()}
+        >
+          Quit to Main Menu
+        </button>
+      </div>
+    {/if}
 
     <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to resume</p>
   </div>

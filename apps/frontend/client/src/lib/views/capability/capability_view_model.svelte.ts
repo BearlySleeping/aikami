@@ -67,6 +67,8 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   setActiveTab(tab: ConnectionCapability): void;
   /** Sets a connection as default (does NOT navigate). */
   setDefaultConnection(connectionId: string): void;
+  /** Opens the connection editor pre-filled for an existing connection. */
+  editConnection(connectionId: string): void;
   /** Opens the guided cloud connection modal for the active tab's capability. */
   openCloudSetup(): void;
   /** Closes the guided cloud connection modal. */
@@ -236,6 +238,12 @@ class CapabilityViewModel
     void configService.save();
   }
 
+  /** Opens the connection editor pre-filled for an existing connection. */
+  editConnection(connectionId: string): void {
+    this.cloudConnectionVm.openEdit(connectionId);
+    this.showCloudSetup = true;
+  }
+
   /** Starts the campaign and navigates to /setup. */
   async startCampaign(): Promise<void> {
     this.debug('startCampaign');
@@ -355,7 +363,7 @@ class CapabilityViewModel
         capability: 'text',
         provider: 'ollama',
         name: 'Ollama (local)',
-        model: result.textModelName ?? 'llama3.2',
+        model: result.textModelName ?? '',
         baseUrl: 'http://localhost:11434/v1',
       });
     }

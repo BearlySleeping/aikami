@@ -5,7 +5,12 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
-import { BUILT_IN_PRESETS, type GenParamPreset, type TextProvider } from '@aikami/constants';
+import {
+  BUILT_IN_PRESETS,
+  type GenParamPreset,
+  TEXT_PROVIDERS,
+  type TextProvider,
+} from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -599,9 +604,11 @@ class ConfigService
           vault.apiKeys && typeof vault.apiKeys === 'object'
             ? { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }
             : { ...DEFAULT_API_KEYS };
+        const rawProvider = typeof vault.textProvider === 'string' ? vault.textProvider : '';
+        const validIds: readonly string[] = TEXT_PROVIDERS.map((p) => p.id);
         const provider: TextProvider =
-          typeof vault.textProvider === 'string'
-            ? (vault.textProvider as TextProvider)
+          rawProvider && validIds.includes(rawProvider)
+            ? (rawProvider as TextProvider)
             : this.state.text.provider;
         const url: string | undefined =
           typeof vault.textUrl === 'string' ? vault.textUrl : this.state.text.url;
@@ -809,7 +816,12 @@ class ConfigService
       this._injectEnvDefaults();
     }
 
-    const { text, connections = [], defaultConnectionId } = this.state;
+    const { text, connections: allConnections = [], defaultConnectionId } = this.state;
+
+    // Only consider text connections — voice/image connections are irrelevant
+    // for text provider resolution and can cause the wrong provider (e.g.,
+    // 'kokoro') to be returned for text requests.
+    const connections = allConnections.filter((c) => (c.capability ?? 'text') === 'text');
 
     // ── Priority 1: Default connection (C-230) ──────────────────────
     if (defaultConnectionId) {
@@ -836,7 +848,13 @@ class ConfigService
     }
 
     // ── Priority 3: Legacy provider config (no connections created) ──
-    const provider = text.provider;
+    // Validate that the stored provider is actually a text provider.
+    // Corrupt vaults may contain voice/image provider IDs (e.g., 'kokoro')
+    // that were accidentally written to the text provider field.
+    const validIds: readonly string[] = TEXT_PROVIDERS.map((p) => p.id);
+    const provider = validIds.includes(text.provider as string)
+      ? (text.provider as TextProvider)
+      : 'openrouter';
     const { preferredModel, models } = this.state;
 
     let endpoint = text.url ?? '';
@@ -925,7 +943,7 @@ class ConfigService
         apiKeyEnv: undefined, // Ollama doesn't need an API key
         modelEnv: ['PUBLIC_OLLAMA_MODEL', 'OLLAMA_MODEL'],
         urlEnv: ['PUBLIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'],
-        defaultModel: 'llama3.2',
+        defaultModel: '',
         defaultUrl: 'http://localhost:11434/v1',
         isLocal: true,
       },

@@ -1078,12 +1078,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   setInputLocked(locked: boolean): void {
     this._inputLocked = locked;
-    if (locked) {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
-      });
-    }
+    // Always send zero velocity when lock state changes so the worker
+    // has a clean slate — prevents sticky movement persisting across
+    // pause/unpause cycles.
+    this._postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
+    });
   }
 
   /** Returns the current input lock state. */
@@ -1160,9 +1161,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
 
-      // Block movement keys when input is locked
+      // Block movement keys when input is locked and force-stop velocity.
+      // Repeated keydown events (browser key repeat while a key is held)
+      // must continuously send {0,0} to the worker — otherwise the last
+      // pre-lock velocity persists and the player slides across the map
+      // while the overlay is open.
       if (this._inputLocked) {
         activeKeys.clear();
+        if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+          updateVelocity();
+        }
         return;
       }
 
@@ -1181,10 +1189,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (activeKeys.has(key)) {
         event.preventDefault();
         activeKeys.delete(key);
-        // Only update if not locked, otherwise we already sent {0,0}
-        if (!this._inputLocked) {
-          updateVelocity();
-        }
+        updateVelocity();
       }
     };
 

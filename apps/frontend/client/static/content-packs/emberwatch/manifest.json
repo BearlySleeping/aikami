@@ -4,6 +4,58 @@
   "version": "2.1.0",
   "updatedAt": "2026-07-13T00:00:00.000Z",
   "startingMapId": "emberwatch_village",
+  "tileSize": 32,
+  "atlas": {
+    "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
+    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
+  },
+  "fallbackTile": "grass.png",
+  "tiles": {
+    "1": {
+      "name": "grass",
+      "frame": "grass.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "2": {
+      "name": "wall_brick",
+      "frame": "brick.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "3": {
+      "name": "path_tough",
+      "frame": "tough.png",
+      "isWalkable": true,
+      "movementCost": 0.8
+    },
+    "4": {
+      "name": "wall_brick_variant",
+      "frame": "brick_wall.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "5": {
+      "name": "chest",
+      "frame": "chest.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "6": {
+      "name": "red_chest",
+      "frame": "red_chest.png",
+      "isWalkable": false,
+      "isWall": false
+    }
+  },
+  "entities": {
+    "player_spawn": {
+      "name": "Hero Spawn",
+      "frame": "char_hero_idle.png",
+      "anchor": { "x": 0.5, "y": 1.0 },
+      "collision": { "type": "rect", "width": 16, "height": 16 }
+    }
+  },
   "maps": {
     "emberwatch_village": {
       "file": "maps/emberwatch_village.json",

@@ -1,5 +1,5 @@
 // apps/frontend/client/src/lib/constants/routes.ts
-import type { Routes } from '@aikami/frontend/services';
+import type { RouteName, Routes } from '@aikami/frontend/services';
 
 export {
   type AllRoutes,
@@ -13,6 +13,12 @@ export {
 } from '@aikami/frontend/services';
 
 export const routes = {
+  index: {
+    getPath: () => '/',
+    queryParameters: undefined,
+    routeId: '/',
+    type: 'public',
+  },
   capability: {
     getPath: () => '/capability',
     queryParameters: undefined as
@@ -51,10 +57,23 @@ export const routes = {
       | undefined
       | {
           'skip-wizard'?: string;
+          from?: string;
         },
     routeId: '/setup',
+    type: 'public',
+  },
+  personaCreate: {
+    getPath: () => '/personas/create',
+    queryParameters: undefined as
+      | undefined
+      | {
+          onboarding?: string;
+        },
+    routeId: '/personas/create',
     type: 'public',
   },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;
+
+export const defaultRoute: RouteName = 'index';

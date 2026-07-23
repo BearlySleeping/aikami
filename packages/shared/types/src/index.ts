@@ -57,6 +57,7 @@ export * from './lib/game/ecs_snapshot.ts';
 export * from './lib/game/faction_standing.ts';
 export * from './lib/game/game_assets.ts';
 export * from './lib/game/interactable.ts';
+export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';
 export * from './lib/game/npc_dialogue_command.ts';
 export * from './lib/game/npc_schedule.ts';

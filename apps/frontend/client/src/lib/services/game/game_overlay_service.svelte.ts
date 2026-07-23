@@ -715,8 +715,28 @@ export class GameOverlayService
   }
 
   handleKeyDown(event: KeyboardEvent): void {
+    // When the user is typing in an input/textarea, skip game action
+    // processing (wasd movement, etc.) so keystrokes reach the text field.
+    // However, Escape must still be processed to allow closing overlays.
+    const target = event.target as HTMLElement | null;
+    const isInputField =
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable);
+
+    if (isInputField && event.key !== 'Escape') {
+      return;
+    }
+
     const actionId = inputActionService.keyToAction(event.key);
-    inputActionService.onKeyDown();
+
+    // Only record game input when NOT typing in a field (prevents wasd
+    // keystrokes from moving the character while chatting with a vendor).
+    if (!isInputField) {
+      inputActionService.onKeyDown();
+    }
 
     // ── Escape: always pops exactly one layer (C-332 AC-2) ──
     if (actionId === 'open_menu') {

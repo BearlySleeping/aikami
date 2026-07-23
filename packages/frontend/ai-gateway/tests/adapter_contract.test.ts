@@ -18,7 +18,7 @@ import {
   createServiceStubTextAdapter,
   isAiGatewayError,
 } from '../src/index.ts';
-import { createSseFetchMock, mixedModeConfig } from './helpers.ts';
+import { createJsonFetchMock, createSseFetchMock, mixedModeConfig } from './helpers.ts';
 
 const textResolution: AiModeResolution = {
   capability: 'text',
@@ -248,7 +248,8 @@ describe('Service mode guard — mode_unavailable', () => {
 describe('Gateway dispatch — mixed-mode resolution and cancellation', () => {
   test('mixed modes: text offline + image byok resolve independently', async () => {
     const registry = createAdapterRegistry();
-    const { fetchFn } = createSseFetchMock();
+    // Ollama offline text uses native /api/chat → plain JSON response
+    const { fetchFn } = createJsonFetchMock();
     registry.registerText({
       mode: 'offline',
       adapter: createOpenAiCompatibleTextAdapter({ fetchFn }),
@@ -282,7 +283,8 @@ describe('Gateway dispatch — mixed-mode resolution and cancellation', () => {
 
   test('resolution is exposed exactly once per call via onResolve', async () => {
     const registry = createAdapterRegistry();
-    const { fetchFn } = createSseFetchMock();
+    // Ollama offline text uses native /api/chat → plain JSON response
+    const { fetchFn } = createJsonFetchMock();
     registry.registerText({
       mode: 'offline',
       adapter: createOpenAiCompatibleTextAdapter({ fetchFn }),

@@ -32,7 +32,7 @@ export const OPENROUTER_ATTRIBUTION_HEADERS = {
 
 /** Well-known chat-completions base URLs for local providers. */
 export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {
-  ollama: 'http://localhost:11434/v1',
+  ollama: 'http://localhost:11434',
   ooba: 'http://localhost:5000/v1',
 } as const;
 
@@ -122,6 +122,13 @@ export const createOpenAiCompatibleTextAdapter = (
       });
     }
 
+    // Ollama uses its native /api/chat endpoint; strip any OpenAI-compatible
+    // /v1 suffix that may be stored in the connection baseUrl.
+    if (resolution.provider === 'ollama') {
+      const base = endpoint.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+      return `${base}/api/chat`;
+    }
+
     const base = endpoint.replace(/\/$/, '');
     return base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
   };
@@ -138,17 +145,19 @@ export const createOpenAiCompatibleTextAdapter = (
     };
   };
 
-  /** Builds the chat completion body, preserving Ollama VRAM eviction. */
+  /** Builds the chat completion body. */
   const buildBody = (options2: {
     resolution: AiModeResolution;
     messages: AiChatMessage[];
   }): Record<string, unknown> => {
     const { resolution, messages } = options2;
+    // Ollama native /api/chat works best with stream: false.
+    // stream: true returns NDJSON which the SSE parser can't handle.
+    const stream = resolution.provider !== 'ollama';
     return {
       model: resolution.model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream: true,
-      ...(resolution.provider === 'ollama' ? OLLAMA_VRAM_EVICTION_PARAMS : {}),
+      stream,
     };
   };
 
@@ -217,6 +226,33 @@ export const createOpenAiCompatibleTextAdapter = (
 
     const body = buildBody({ resolution, messages });
 
+    // Ollama native /api/chat with stream: false returns a plain JSON
+    // response, not SSE. Parse it directly instead of streaming.
+    if (resolution.provider === 'ollama') {
+      return withRequestScope({
+        signal,
+        run: async (requestSignal) => {
+          const response = await streamCompletion({ resolution, body, requestSignal });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            onEvent?.('fetch-failed', { status: response.status });
+            throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
+          }
+
+          onEvent?.('fetch-ok', { status: response.status, stream: false });
+
+          const data = (await response.json()) as {
+            message?: { content?: string };
+          };
+          const text = data.message?.content ?? '';
+          onChunk?.(text);
+          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+          return { text };
+        },
+      });
+    }
+
     await withRequestScope({
       signal,
       run: async (requestSignal) => {
@@ -227,6 +263,8 @@ export const createOpenAiCompatibleTextAdapter = (
           onEvent?.('fetch-failed', { status: response.status });
           throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
         }
+
+        onEvent?.('fetch-ok', { status: response.status, stream: body.stream });
 
         if (!response.body) {
           throw new Error(`No response body from provider "${resolution.provider}"`);

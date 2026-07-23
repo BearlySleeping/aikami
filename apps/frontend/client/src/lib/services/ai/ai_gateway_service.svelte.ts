@@ -188,6 +188,8 @@ class AiGatewayService
           capability: resolution.capability,
           mode: resolution.mode,
           provider: resolution.provider,
+          model: resolution.model,
+          endpoint: resolution.endpoint,
         }),
     });
   }
