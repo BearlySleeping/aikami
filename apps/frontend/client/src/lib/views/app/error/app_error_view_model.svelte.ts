@@ -52,7 +52,7 @@ export type AppErrorViewModelInterface = BaseViewModelInterface & {
   /**
    * Navigates to a different page based on the error.
    */
-  goTo(): void;
+  goTo(): Promise<void>;
 
   /**
    * Retries the action that caused the error.
@@ -151,10 +151,7 @@ class AppErrorViewModel
   async handleRetry(): Promise<void> {
     const currentErrorType = this.errorType;
     if (currentErrorType === 'page-not-found') {
-      await routerService.goToRoute('settings', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
+      await routerService.goBack();
     } else if (currentErrorType === 'access-denied') {
       await routerService.navigateToApp();
     } else {
@@ -162,16 +159,13 @@ class AppErrorViewModel
     }
   }
 
-  goTo(): void {
+  async goTo(): Promise<void> {
     const { status } = page;
 
-    // Simple navigation fallback
     if (status === 403) {
-      globalThis.window.location.href = '/personal';
-    } else if (status === 404) {
-      globalThis.window.location.href = '/';
+      await routerService.navigateToApp();
     } else {
-      globalThis.window.location.href = '/login';
+      await routerService.goBack();
     }
   }
 

@@ -83,6 +83,11 @@ class PersonaListViewModel
       // Load from localStorage (always available)
       this._loadFromStorage();
 
+      // Wait for Firebase Auth to resolve before checking uid.
+      // On direct refresh, auth may not be ready yet (IndexedDB read).
+      // authService.initialize() is idempotent — returns immediately if already ready.
+      await authService.initialize();
+
       // Load from Firestore if authenticated
       const uid = (authService as { uid?: string }).uid;
       if (uid) {
@@ -107,6 +112,17 @@ class PersonaListViewModel
     }
 
     this.debug('selectPersona', { id, name: persona.persona.name });
+
+    // Always create a fresh campaign when selecting a persona.
+    // This ensures the campaign is in 'creating' state before completeSetup(),
+    // even if a previous campaign was left in 'playing' state (e.g., after
+    // pressing back from a game session).
+    try {
+      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+    } catch (error) {
+      this.error('selectPersona:start-campaign-failed', error);
+      return;
+    }
 
     // Set as active persona if logged in, so Firestore-aware game init can find it
     try {

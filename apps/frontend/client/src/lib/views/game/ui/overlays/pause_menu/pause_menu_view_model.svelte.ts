@@ -10,10 +10,13 @@ import { gameOverlayService } from '$services';
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  readonly confirmingQuit: boolean;
   resumeGame(): void;
   saveGame(): Promise<void>;
   goToSettings(): Promise<void>;
-  quitToMainMenu(): Promise<void>;
+  requestQuit(): void;
+  confirmQuit(): Promise<void>;
+  cancelQuit(): void;
   openEndSession(): void;
   replayOnboarding(): void;
   openReputation(): void;
@@ -23,6 +26,8 @@ class PauseMenuViewModel
   extends BaseViewModel<BaseViewModelOptions>
   implements PauseMenuViewModelInterface
 {
+  confirmingQuit = $state(false);
+
   get isSaving(): boolean {
     return gameOverlayService.isSaving;
   }
@@ -43,8 +48,16 @@ class PauseMenuViewModel
     await gameOverlayService.goToSettings();
   }
 
-  async quitToMainMenu(): Promise<void> {
+  requestQuit(): void {
+    this.confirmingQuit = true;
+  }
+
+  async confirmQuit(): Promise<void> {
     await gameOverlayService.quitToMainMenu();
+  }
+
+  cancelQuit(): void {
+    this.confirmingQuit = false;
   }
 
   openEndSession(): void {

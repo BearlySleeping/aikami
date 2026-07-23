@@ -216,7 +216,7 @@ export class PersonaCreateViewModel
 
   configureImageGen(): void {
     // Navigate to the Config dev dashboard
-    window.location.href = '/dev/config';
+    void routerService.goToDevRoute('config');
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -456,7 +456,10 @@ export class PersonaCreateViewModel
   async saveCharacter(): Promise<void> {
     await this._persistCharacter();
     // Redirect to persona list
-    window.location.href = '/personas';
+    await routerService.goToRoute('personas', {
+      pathParameters: undefined,
+      queryParameters: undefined,
+    });
   }
 
   async enterWorld(): Promise<void> {

@@ -62,8 +62,8 @@ export class InputActionService
   device = $state<InputDevice>('keyboard');
   isGamepadActive = $state<boolean>(false);
 
-  private _keyToActionMap = new Map<string, string>();
   private _bindings = { ...DEFAULT_KEYBINDINGS };
+  private _keyToActionMap = buildKeyToAction(this._bindings);
   private _lastDeviceSwitchTime = 0;
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future dpad edge-trigger detection
   private _previousDpadState: number[] = [];

@@ -339,18 +339,7 @@ export class SettingsViewModel
     // Revert any unsaved preview changes
     this._revertPreviewChanges();
 
-    const params = new URLSearchParams(window.location.search);
-    const from = params.get('from');
-
-    if (from === 'game') {
-      await routerService.goToRoute('game', {
-        pathParameters: undefined,
-        queryParameters: undefined,
-      });
-      return;
-    }
-
-    await routerService.navigateToApp();
+    await routerService.goBack();
   }
 
   // ── Preview/revert helpers ──

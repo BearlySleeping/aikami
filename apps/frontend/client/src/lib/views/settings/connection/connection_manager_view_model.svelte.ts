@@ -511,12 +511,12 @@ class ConnectionManagerViewModel
 
   /** Tests provider auth by pinging the verify endpoint. */
   async testDraftConnection(): Promise<void> {
-    this.debug('testDraftConnection');
+    const provider = this.draft.provider ?? 'openrouter';
+    this.debug('testDraftConnection', { provider });
     this.isTestingDraft = true;
     this.draftTestResult = undefined;
 
     const startMs = performance.now();
-    const provider = this.draft.provider ?? 'openrouter';
 
     try {
       if (provider === 'ollama') {
@@ -525,9 +525,11 @@ class ConnectionManagerViewModel
         await this._testDraftProvider(provider, startMs);
       }
     } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      this.debug('testDraftConnection:failed', { provider, elapsed, error: String(err) });
       this.draftTestResult = {
         ok: false,
-        latencyMs: Math.round(performance.now() - startMs),
+        latencyMs: elapsed,
         error: String(err),
       };
     } finally {
@@ -537,9 +539,9 @@ class ConnectionManagerViewModel
 
   /** Tests the selected model by sending a simple "hi" chat completion. */
   async testDraftModel(): Promise<void> {
-    this.debug('testDraftModel');
     const provider = this.draft.provider ?? 'openrouter';
     const config = PROVIDER_MODEL_FETCH[provider];
+    this.debug('testDraftModel', { provider, hasConfig: !!config });
     if (!config?.chatTestUrl) {
       this.draftModelTestResult = {
         ok: false,
@@ -595,6 +597,12 @@ class ConnectionManagerViewModel
         });
       }
 
+      this.debug('testDraftModel:fetch', {
+        url: config.chatTestUrl,
+        model,
+        bodyLength: body.length,
+      });
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
@@ -606,15 +614,21 @@ class ConnectionManagerViewModel
           signal: controller.signal,
         });
         const elapsed = Math.round(performance.now() - startMs);
+        this.debug('testDraftModel:response', { status: response.status, elapsed });
 
         if (!response.ok) {
           const errorBody = await response.text().catch(() => '');
+          this.debug('testDraftModel:error', {
+            status: response.status,
+            errorBody: errorBody.slice(0, 300),
+          });
           this.draftModelTestResult = {
             ok: false,
             latencyMs: elapsed,
             error: `HTTP ${response.status}${errorBody ? `: ${errorBody.slice(0, 200)}` : ''}`,
           };
         } else {
+          this.debug('testDraftModel:ok', { elapsed });
           this.draftModelTestResult = { ok: true, latencyMs: elapsed };
         }
       } finally {
@@ -622,6 +636,7 @@ class ConnectionManagerViewModel
       }
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
+      this.debug('testDraftModel:exception', { elapsed, error: String(err) });
       if (err instanceof DOMException && err.name === 'AbortError') {
         this.draftModelTestResult = {
           ok: false,
@@ -781,12 +796,14 @@ class ConnectionManagerViewModel
   // ── Private: draft connection test helpers ────────────────────────────
 
   private async _testDraftOllama(startMs: number): Promise<void> {
+    this.debug('_testDraftOllama:fetch', { url: OLLAMA_TAGS_URL });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
       const elapsed = Math.round(performance.now() - startMs);
+      this.debug('_testDraftOllama:response', { status: response.status, elapsed });
 
       if (!response.ok) {
         this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
@@ -795,6 +812,7 @@ class ConnectionManagerViewModel
 
       const data = (await response.json()) as { models?: unknown[] };
       const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
+      this.debug('_testDraftOllama:ok', { elapsed, modelCount });
       this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
@@ -802,6 +820,7 @@ class ConnectionManagerViewModel
         err instanceof DOMException && err.name === 'AbortError'
           ? 'Connection timed out'
           : String(err);
+      this.debug('_testDraftOllama:failed', { elapsed, error: message });
       this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
     } finally {
       clearTimeout(timeoutId);
@@ -810,6 +829,7 @@ class ConnectionManagerViewModel
 
   private async _testDraftProvider(provider: string, startMs: number): Promise<void> {
     const endpoint = PROVIDER_ENDPOINTS[provider];
+    this.debug('_testDraftProvider', { provider, hasEndpoint: !!endpoint });
     if (!endpoint) {
       this.draftTestResult = {
         ok: false,
@@ -835,12 +855,14 @@ class ConnectionManagerViewModel
     try {
       const url = buildVerifyUrl(endpoint, apiKey);
       const headers = buildVerifyHeaders(endpoint, apiKey);
+      this.debug('_testDraftProvider:fetch', { url, method: endpoint.method });
       const response = await fetch(url, {
         headers,
         method: endpoint.method,
         signal: controller.signal,
       });
       const elapsed = Math.round(performance.now() - startMs);
+      this.debug('_testDraftProvider:response', { status: response.status, elapsed });
 
       if (!response.ok) {
         this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
@@ -859,6 +881,7 @@ class ConnectionManagerViewModel
         /* not JSON */
       }
 
+      this.debug('_testDraftProvider:ok', { elapsed, modelCount });
       this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
@@ -866,6 +889,7 @@ class ConnectionManagerViewModel
         err instanceof DOMException && err.name === 'AbortError'
           ? 'Connection timed out'
           : String(err);
+      this.debug('_testDraftProvider:failed', { elapsed, error: message });
       this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
     } finally {
       clearTimeout(timeoutId);

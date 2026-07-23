@@ -24,6 +24,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeInventory(); } }}
   onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       viewModel.closeInventory();
       return;
     }

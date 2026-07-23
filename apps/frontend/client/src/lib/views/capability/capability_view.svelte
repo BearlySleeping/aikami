@@ -14,7 +14,7 @@ const { viewModel }: Props = $props();
 {#snippet ConnectionRow(entry: ConnectionEntry)}
   <button
     type="button"
-    class="btn btn-lg {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
+    class="btn btn-lg w-full {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
     onclick={() => viewModel.setDefaultConnection(entry.connection.id)}
   >
     <span class="shrink-0">{entry.icon}</span>
@@ -79,7 +79,19 @@ const { viewModel }: Props = $props();
         <!-- Connection list (filtered by active tab) -->
         <div class="flex flex-col gap-3">
           {#each viewModel.connectionEntries as entry}
-            {@render ConnectionRow(entry)}
+            <div class="flex items-center gap-2">
+              <div class="flex-1">
+                {@render ConnectionRow(entry)}
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost btn-square shrink-0"
+                onclick={() => viewModel.editConnection(entry.connection.id)}
+                aria-label="Edit connection"
+              >
+                ✎
+              </button>
+            </div>
           {/each}
 
           <!-- Add provider -->

@@ -200,8 +200,10 @@ class GameBootService
     const elapsed = performance.now() - t0;
     this.debug('boot:complete', { elapsedMs: elapsed, renderer: this._renderer });
 
-    // Drive campaign state machine to playing (loading → playing via LOAD_COMPLETE)
-    if (this._campaign) {
+    // Drive campaign state machine to playing (loading → playing via LOAD_COMPLETE).
+    // Skip if campaign is already playing (e.g., new game via completeSetup, or
+    // loadCampaign which also transitions to playing immediately).
+    if (this._campaign && this._campaign.state !== 'playing') {
       try {
         const playingState = transition(this._campaign.state, { type: 'LOAD_COMPLETE' });
         const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
@@ -333,24 +335,30 @@ class GameBootService
     }
 
     // Drive state machine: LOAD_REQUESTED → loading
+    // Skip if campaign is already playing (e.g., new game via completeSetup)
     if (campaign) {
-      try {
-        // Validate transition is legal from current state
-        const loadingState = transition(campaign.state, {
-          type: 'LOAD_REQUESTED',
-          campaignId: campaign.id,
-        });
-        // Persist the loading state
-        const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
-        campaign = { ...campaign, state: loadingState, updatedAt: new Date().toISOString() };
-        await campaignRepository.update(campaign);
+      if (campaign.state === 'playing') {
+        this.debug('stage:loading_campaign:already-playing');
         this._campaign = campaign;
-      } catch (error) {
-        this.warn('stage:loading_campaign:transition-failed', {
-          currentState: campaign.state,
-          error: String(error),
-        });
-        this._campaign = campaign;
+      } else {
+        try {
+          // Validate transition is legal from current state
+          const loadingState = transition(campaign.state, {
+            type: 'LOAD_REQUESTED',
+            campaignId: campaign.id,
+          });
+          // Persist the loading state
+          const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
+          campaign = { ...campaign, state: loadingState, updatedAt: new Date().toISOString() };
+          await campaignRepository.update(campaign);
+          this._campaign = campaign;
+        } catch (error) {
+          this.warn('stage:loading_campaign:transition-failed', {
+            currentState: campaign.state,
+            error: String(error),
+          });
+          this._campaign = campaign;
+        }
       }
     }
 
@@ -504,7 +512,6 @@ class GameBootService
     const mapUrl = pack.resolveMapUrl(pack.manifest.startingMapId);
     this.bootProgress.detail = mapUrl;
     await this._preloadAsset(mapUrl);
-
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
       elapsedMs: elapsed,
@@ -740,9 +747,18 @@ class GameBootService
           continue;
         }
         const slotDef = generatedLpcSlots[catalogIdx];
-        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : slotName === 'head' ? 94 : -1;
-        if (slotName === 'head' && effectiveIdx < 0) {
-          effectiveIdx = 94;
+        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
+        if (slotName === 'head') {
+          // Ensure we always get an actual head asset (not ears, faces, etc.).
+          // Index 94 = head/heads/human_male in the generated catalog.
+          if (effectiveIdx < 0) {
+            effectiveIdx = 94;
+          }
+          const headVariant = slotDef?.variants[effectiveIdx];
+          if (!headVariant?.assetId.startsWith('head/heads/')) {
+            // Computed variant is not a head — fall back to default human head.
+            effectiveIdx = 94;
+          }
         }
         const variant = slotDef?.variants[effectiveIdx];
         if (!variant) {

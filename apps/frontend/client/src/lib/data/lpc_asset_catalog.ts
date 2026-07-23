@@ -7,6 +7,12 @@ import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 // the Universal LPC Spritesheet Character Generator.
 // ---------------------------------------------------------------------------
 
+/** Slots that every LPC character recipe MUST include for a valid render. */
+export const REQUIRED_LPC_SLOTS = ['head', 'body', 'torso'] as const;
+
+/** Default head asset used as fallback when a character's head texture fails to load. */
+export const LPC_DEFAULT_HEAD_ASSET_ID = 'head/heads/human_male';
+
 /** Shape type for procedural mock sheet generation. */
 export type LpcMockShapeType =
   | 'humanoid'

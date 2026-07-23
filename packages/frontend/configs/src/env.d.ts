@@ -15,8 +15,6 @@ declare global {
     readonly PUBLIC_RECAPTCHA_SITE_KEY?: string;
     readonly PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE?: string;
     readonly PUBLIC_GMAIL_CLIENT_ID?: string;
-    readonly PUBLIC_EDGE_PROXY_URL?: string;
-    readonly PUBLIC_DEFAULT_COMPANY_ID?: string;
     readonly PUBLIC_VAPID_KEY?: string;
     readonly PUBLIC_PARSE_LEVEL?: string;
     readonly PUBLIC_SITE_URL?: string;

@@ -9,7 +9,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$services';
+import { configService, routerService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,7 +102,10 @@ class AIPrivacyViewModel
   }
 
   async connectAi(): Promise<void> {
-    window.location.href = '/setup?from=settings';
+    await routerService.goToRoute('setup', {
+      pathParameters: undefined,
+      queryParameters: { from: 'settings' },
+    });
   }
 
   toggleOfflineMode(): void {
