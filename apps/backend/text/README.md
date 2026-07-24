@@ -1,12 +1,12 @@
 # @aikami/text
 
-Local LLM text generation microservice using the official `ollama/ollama` Docker image.
+Local LLM text generation microservice using Shimmy — a lightweight, pure-Rust WebGPU/WGSL inference server with 100% OpenAI-compatible API endpoints for GGUF models. Downloads the pre-built Linux binary from GitHub Releases onto Ubuntu 24.04.
 
 ## Use Case
 
-- Provides a containerized Ollama API for local LLM text generation
-- Exposes Ollama REST endpoints on port 11434
-- Model weights persisted in `src/cache/ollama/` (bind-mounted into container)
+- Provides a containerized Shimmy API for local LLM text generation
+- Exposes OpenAI-compatible REST endpoints on port 11434 (`/v1/chat/completions`, `/v1/models`)
+- GGUF model weights persisted in `src/cache/models/` (bind-mounted into container)
 
 ## Where It's Used
 
@@ -23,20 +23,20 @@ bun install
 
 ## Dependencies
 
-None — container-only microservice.
+None — container-only microservice. Requires Podman or Docker to run the Shimmy container.
 
 ## Tasks
 
-| Task         | Command                           | Description                      |
-| ------------ | --------------------------------- | -------------------------------- |
-| `dev`        | `bun run dev:docker`              | Start Ollama container           |
-| `test:text`     | `bun run scripts/check_health.ts`   | Health check via /               |
-| `download:model` | `bun run scripts/download_model.ts`  | Pull qwen3.5:4b (idempotent)     |
-| `test:generate`  | `bun run scripts/test_generate.ts`   | Test generation with a prompt    |
-| `typecheck`  | `true`                            | No TypeScript source to check    |
-| `format`     | `true`                            | No source to format              |
-| `lint`       | `true`                            | No source to lint                |
-| `fix`        | `true`                            | No source to fix                 |
+| Task              | Command                            | Description                              |
+| ----------------- | ---------------------------------- | ---------------------------------------- |
+| `dev`             | `bun run dev:docker`               | Start Shimmy container                   |
+| `test:text`       | `bun run scripts/check_health.ts`  | Health check via /health or /v1/models   |
+| `download:model`  | `bun run scripts/download_model.ts`| List available GGUF models               |
+| `test:generate`   | `bun run scripts/test_generate.ts` | Test generation via /v1/chat/completions |
+| `typecheck`       | `true`                             | No TypeScript source to check            |
+| `format`          | `true`                             | No source to format                      |
+| `lint`            | `true`                             | No source to lint                        |
+| `fix`             | `true`                             | No source to fix                         |
 
 ## Usage
 
@@ -47,9 +47,12 @@ bun herdr:start text
 # Check health
 bun run test:text
 
+# List available GGUF models
+bun run download:model
+
 # Test generation with a prompt
 bun run test:generate "Hello!"
-bun run test:generate --model llama3.2:3b "Write a haiku"
+bun run test:generate --model default "Write a haiku"
 
 # Stop
 bun herdr:stop text
@@ -59,12 +62,18 @@ bun herdr:stop text
 
 ```
 apps/backend/text/
+├── docker/
+│   ├── start-server.sh     # Docker ENTRYPOINT — starts shimmy serve
+│   └── healthcheck.sh      # Docker HEALTHCHECK — /health + /v1/models
 ├── scripts/
-│   ├── check_health.ts     # Health check → /
-│   ├── download_model.ts   # Pull qwen3.5:4b (idempotent)
-│   └── test_generate.ts    # Send prompt + stream response
-├── src/                    # Ollama data — mounted into container (git-ignored)
-│   └── cache/ollama/       # Model weights, pulled images
+│   ├── check_health.ts     # CLI health check → /health or /v1/models
+│   ├── download_model.ts   # List available GGUF models via /v1/models
+│   ├── test_generate.ts    # Send prompt + stream via /v1/chat/completions
+│   ├── start.ts            # Podman/Docker build + run for local dev
+│   └── update.ts           # Check GitHub + update .shimmy-version + rebuild
+├── src/
+│   └── cache/models/       # GGUF model files — mounted into container (git-ignored)
+├── .shimmy-version         # Single source of truth for Shimmy release tag
 ├── Dockerfile
 ├── package.json
 ├── moon.yml
@@ -75,29 +84,40 @@ apps/backend/text/
 
 ### Image
 
-`ollama/ollama` — Official Ollama image providing local LLM serving.
+Pre-built `shimmy-linux-x86_64` binary from GitHub Releases running on Ubuntu 24.04.
 
 ### Podman Run Flags
 
-| Flag / Mount | Purpose |
-|---|---|
-| `--pull=newer` | Always check for a newer image tag before starting |
-| `--security-opt label=disable` | Disable SELinux label enforcement (required for bind mounts on some systems) |
-| `-p 11434:11434` | Expose Ollama on host port 11434 (matches text port in development_ports.ts) |
-| `--rm` | Auto-remove container on stop (no stale state) |
-| `--name aikami-text-dev` | Fixed container name for herdr orchestration |
+| Flag / Mount                          | Purpose                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `--security-opt label=disable`        | Disable SELinux label enforcement (required for bind mounts on some systems) |
+| `-p 11434:11434`                      | Expose Shimmy on host port 11434                                        |
+| `--rm`                                | Auto-remove container on stop (no stale state)                          |
+| `--name aikami-text-dev`              | Fixed container name for herdr orchestration                            |
+
+### Environment Variables
+
+| Variable             | Default    | Purpose                                   |
+| -------------------- | ---------- | ----------------------------------------- |
+| `SHIMMY_PORT`        | `11434`    | Server port                               |
+| `SHIMMY_BASE_GGUF`   | `/models`  | Models directory or specific GGUF path    |
+| `SHIMMY_HOST`        | `0.0.0.0`  | Listen address                            |
+| `SHIMMY_MAX_CTX`     | (optional) | Maximum context length (e.g. `4096`)      |
+| `SHIMMY_KV_QUANT`    | (optional) | Set to `int4` for TurboShimmy INT4 KV     |
 
 ### Volume Mounts
 
-| Host (`src/…`) | Container | Why |
-|---|---|---|
-| `cache/ollama/` | `/root/.ollama` | Model weights and pulled images — git-ignored |
+| Host (`src/…`)      | Container  | Why                                    |
+| ------------------- | ---------- | -------------------------------------- |
+| `cache/models/`     | `/models`  | GGUF model files — git-ignored         |
 
 ### Scripts
 
-| Script | What it does |
-|---|---|
-| `scripts/check_health.ts` | Hits `/` to verify container is up and serving |
+| Script                        | What it does                                          |
+| ----------------------------- | ----------------------------------------------------- |
+| `docker/start-server.sh`      | Docker ENTRYPOINT — scans for GGUF files, starts shimmy serve |
+| `docker/healthcheck.sh`       | Docker HEALTHCHECK — polls /health then /v1/models    |
+| `scripts/check_health.ts`     | CLI health check — /health or /v1/models              |
 
 ### Reproducibility
 
@@ -105,6 +125,8 @@ A fresh clone on another machine needs only:
 
 ```bash
 cd apps/backend/text
+# Place .gguf model files in src/cache/models/
 bun run dev                        # starts container
-bun run test:text                  # verifies Ollama is running
+bun run test:text                  # verifies Shimmy is running
+bun run test:generate              # test a generation
 ```

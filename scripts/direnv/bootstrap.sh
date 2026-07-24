@@ -2,15 +2,6 @@
 # ─── Aikami Direnv Bootstrap ─────────────────────────────────────────────
 #
 # THE ONLY direnv shell script. Sourced by .envrc on every shell entry.
-#
-# Responsibilities:
-#   1. nix-direnv integration + Nix flake devShell loading
-#   2. AIKAMI_MODE resolution from .env.local
-#   3. Shell aliases + workflow functions (moon shortcuts, aikami_*)
-#   4. Delegates secrets loading to Bun (scripts/src/lib/env/secrets.ts)
-#   5. Delegates runtime validation to Bun (scripts/src/lib/env/check.ts)
-#
-# Fish shell users: env vars are set, but aliases/functions are bash-only.
 # ────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -116,12 +107,10 @@ _aikami_load_mode() {
 _aikami_load_mode
 
 # ── 3.5. Pi Version Sync ─────────────────────────────────────────────
-# Auto-installs correct @earendil-works/pi-coding-agent when .pi/package.json
-# drifts from node_modules (e.g. after `pi update`).
 source "${AIKAMI_ROOT}/scripts/direnv/sync-pi.sh"
 _aikami_sync_pi_version
 
-# ── 4. Pi-Hypa binary + configuration (additive mode — keeps custom tools active) ─
+# ── 4. Pi-Hypa binary + configuration ─────────────────────────────────
 _path_hypa_bin="$AIKAMI_ROOT/.pi/node_modules/.bin"
 if [ -d "$_path_hypa_bin" ]; then
   export PATH="$_path_hypa_bin:$PATH"
@@ -130,6 +119,30 @@ unset _path_hypa_bin
 export HYPA_PI_MODE="additive"
 export HYPA_PI_REWRITE_TIMEOUT_MS="10000"
 export HYPA_PI_ASK_NON_INTERACTIVE="deny"
+
+# ── 4.1. Hardware / GPU Acceleration & Vulkan (NixOS / PRIME Offload) ─
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+export WGPU_POWER_PREF="high-performance"
+export __NV_PRIME_RENDER_OFFLOAD="1"
+export __GLX_VENDOR_LIBRARY_NAME="nvidia"
+export DRI_PRIME="1"
+export SHIMMY_KV_QUANT="${SHIMMY_KV_QUANT:-int4}"
+
+if [ -d "/run/opengl-driver/lib" ]; then
+  export LD_LIBRARY_PATH="/run/opengl-driver/lib:${LD_LIBRARY_PATH:-}"
+fi
+
+for _icd in \
+  "/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.x86_64.json" \
+  "/run/opengl-driver/share/vulkan/icd.d/nvidia_icd.json" \
+  "/usr/share/vulkan/icd.d/nvidia_icd.json"; do
+  if [ -f "$_icd" ]; then
+    export VK_ICD_FILENAMES="$_icd"
+    export VK_DRIVER_FILES="$_icd"
+    break
+  fi
+done
+unset _icd
 
 # ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 
@@ -150,8 +163,6 @@ _aikami_is_bash_or_zsh() {
 }
 
 if _aikami_is_bash_or_zsh; then
-
-  # ── Core aliases ────────────────────────────────────────────────────
 
   alias nr='bunx moon run'
   alias nrf='bunx moon run :fix'
@@ -233,8 +244,6 @@ if _aikami_is_bash_or_zsh; then
     fi
   }
 
-  # ── aikami_dev: start full local dev in herdr ────────────────────────
-
   aikami_dev() {
     echo "🎴 Starting Aikami local dev environment..."
     echo "   Mode: ${AIKAMI_MODE:-emulator}"
@@ -251,21 +260,17 @@ if _aikami_is_bash_or_zsh; then
     aikami_herdr_join firebase 2>/dev/null || true
   }
 
-  # ── Herdr shortcuts ──────────────────────────────────────────────────
-
-  aikami_herdr_start()   { bun run scripts/src/lib/herdr/start.ts "$@"; }
-  aikami_herdr_join()    { bun run scripts/src/lib/herdr/join.ts "$@"; }
-  aikami_herdr_stop()    { bun run scripts/src/lib/herdr/stop.ts "$@"; }
+  aikami_herdr_start()    { bun run scripts/src/lib/herdr/start.ts "$@"; }
+  aikami_herdr_join()     { bun run scripts/src/lib/herdr/join.ts "$@"; }
+  aikami_herdr_stop()     { bun run scripts/src/lib/herdr/stop.ts "$@"; }
   aikami_herdr_stop_all() { bun run scripts/src/lib/herdr/stop_all.ts; }
-  aikami_herdr_status()  { bun run scripts/src/lib/herdr/status.ts; }
+  aikami_herdr_status()   { bun run scripts/src/lib/herdr/status.ts; }
 
   alias ahstart='aikami_herdr_start'
   alias ahjoin='aikami_herdr_join'
   alias ahstop='aikami_herdr_stop'
   alias ahstopall='aikami_herdr_stop_all'
   alias ahstatus='aikami_herdr_status'
-
-  # ── aikami_validate ─────────────────────────────────────────────────
 
   aikami_validate() {
     local do_test="${1:-}"
@@ -361,13 +366,11 @@ if _aikami_is_bash_or_zsh; then
     aikami_secrets_refresh   Re-pull secrets
 
   STATE
-    Mode:     ${AIKAMI_MODE:-emulator}
-    Project:  ${AIKAMI_PROJECT_ID:-demo-aikami-emulator}
+    Mode:      ${AIKAMI_MODE:-emulator}
+    Project:   ${AIKAMI_PROJECT_ID:-demo-aikami-emulator}
 
 EOF
   }
-
-  # ── Banner ──────────────────────────────────────────────────────────
 
   echo ""
   echo "  🎴 Aikami ready  |  Mode: ${AIKAMI_MODE}  |  $(bun --version 2>/dev/null || echo 'bun N/A')"
@@ -375,7 +378,6 @@ EOF
   echo ""
 
 else
-  # Fish shell
   echo ""
   echo "  🐟 Fish shell detected — moon aliases not loaded."
   echo "     Env vars are set (AIKAMI_MODE=$AIKAMI_MODE)."
@@ -383,7 +385,5 @@ else
   echo "  🎴 Aikami ready  |  Mode: ${AIKAMI_MODE}  |  $(bun --version 2>/dev/null || echo 'bun N/A')"
   echo ""
 fi
-
-# ── Mark as loaded ─────────────────────────────────────────────────────
 
 export AIKAMI_ENV_LOADED=1

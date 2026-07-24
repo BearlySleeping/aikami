@@ -1,99 +1,75 @@
 // apps/backend/text/scripts/test_generate.ts
-// biome-ignore-all lint/style/useNamingConvention: Property names must match Ollama API field names (snake_case)
-// Test generation script for the Ollama text microservice.
-// Sends a prompt to /api/generate and streams the response.
-//
-// Usage:
-//   bun run scripts/test_generate.ts
-//   bun run scripts/test_generate.ts "Explain quantum computing in one sentence"
-//   bun run scripts/test_generate.ts --model llama3.2:3b "Write a haiku"
+// Test generation and benchmark for Shimmy text microservice.
 
-const OLLAMA_PORT = 11436;
-const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
-const DEFAULT_MODEL = 'qwen3.5:4b';
+const SHIMMY_PORT = process.env.SHIMMY_PORT || 11435;
+const SHIMMY_URL = `http://localhost:${SHIMMY_PORT}`;
 const DEFAULT_PROMPT = 'Say hello and introduce yourself in one sentence.';
 
-// ── Types ──────────────────────────────────────────────────
-
-type GenerateChunk = {
-  response?: string;
-  done: boolean;
-  total_duration?: number;
-  load_duration?: number;
-  prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
-  eval_duration?: number;
-  error?: string;
+type ChatCompletionChunk = {
+  id: string;
+  choices: Array<{
+    delta: { content?: string };
+    finish_reason: string | null;
+  }>;
 };
-
-// ── Helpers ─────────────────────────────────────────────────
-
-/**
- * Format nanoseconds into a human-readable duration.
- */
-const formatDuration = (ns: number): string => {
-  if (ns < 1000) {
-    return `${ns}ns`;
-  }
-  if (ns < 1_000_000) {
-    return `${(ns / 1000).toFixed(1)}µs`;
-  }
-  if (ns < 1_000_000_000) {
-    return `${(ns / 1_000_000).toFixed(1)}ms`;
-  }
-  return `${(ns / 1_000_000_000).toFixed(2)}s`;
-};
-
-// ── Health Check ───────────────────────────────────────────
 
 const checkHealth = async (): Promise<boolean> => {
   try {
-    const response = await fetch(OLLAMA_URL, {
-      signal: AbortSignal.timeout(10_000),
+    const res = await fetch(`${SHIMMY_URL}/v1/models`, {
+      signal: AbortSignal.timeout(5_000),
     });
-    const text = await response.text();
-    return response.ok && text.includes('Ollama is running');
+    return res.ok;
   } catch {
     return false;
   }
 };
 
-// ── Generate ──────────────────────────────────────────────
+const processSSEBuffer = (buffer: string): { processed: number; remaining: string } => {
+  const lines = buffer.split('\n');
+  const remaining = lines.pop() ?? '';
+  let tokenCount = 0;
 
-/**
- * Send a prompt to /api/generate and stream the token-by-token response.
- *
- * Prints tokens as they arrive, then reports timing metrics on completion.
- */
-const generate = async (options: {
-  model: string;
-  prompt: string;
-}): Promise<void> => {
-  const { model, prompt } = options;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
 
-  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+    try {
+      const chunk = JSON.parse(trimmed.slice(6)) as ChatCompletionChunk;
+      const content = chunk.choices?.[0]?.delta?.content;
+      if (content) {
+        process.stdout.write(content);
+        tokenCount++;
+      }
+    } catch {
+      // Ignore incomplete frames
+    }
+  }
+
+  return { processed: tokenCount, remaining };
+};
+
+const chatCompletion = async (model: string, prompt: string): Promise<void> => {
+  const response = await fetch(`${SHIMMY_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      prompt,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 256,
       stream: true,
     }),
     signal: AbortSignal.timeout(300_000),
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null');
+  if (!response.ok || !response.body) {
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let totalTokens = 0;
+  const startTime = Date.now();
 
   console.log('\n──────────────────────────────────────────\n');
 
@@ -101,93 +77,45 @@ const generate = async (options: {
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
+        if (buffer.trim()) {
+          const { processed } = processSSEBuffer(buffer + '\n');
+          totalTokens += processed;
+        }
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0) {
-          continue;
-        }
-
-        try {
-          const chunk = JSON.parse(trimmed) as GenerateChunk;
-
-          if (chunk.error) {
-            throw new Error(chunk.error);
-          }
-
-          // Print token as it arrives
-          if (chunk.response) {
-            process.stdout.write(chunk.response);
-          }
-
-          // Report metrics on completion
-          if (chunk.done) {
-            console.log('\n\n──────────────────────────────────────────\n');
-            if (chunk.total_duration !== undefined) {
-              console.log(`  Total:      ${formatDuration(chunk.total_duration)}`);
-            }
-            if (chunk.load_duration !== undefined) {
-              console.log(`  Load:       ${formatDuration(chunk.load_duration)}`);
-            }
-            if (chunk.prompt_eval_count !== undefined) {
-              console.log(`  Prompt:     ${chunk.prompt_eval_count} tokens in ${formatDuration(chunk.prompt_eval_duration ?? 0)}`);
-            }
-            if (chunk.eval_count !== undefined) {
-              const evalMs = (chunk.eval_duration ?? 0) / 1_000_000;
-              const tps = evalMs > 0 ? ((chunk.eval_count / evalMs) * 1000).toFixed(1) : '?';
-              console.log(`  Generated:  ${chunk.eval_count} tokens in ${formatDuration(chunk.eval_duration ?? 0)} (${tps} tok/s)`);
-            }
-          }
-        } catch (parseError) {
-          if (!(parseError instanceof SyntaxError)) {
-            throw parseError;
-          }
-        }
-      }
+      const { processed, remaining } = processSSEBuffer(buffer);
+      totalTokens += processed;
+      buffer = remaining;
     }
   } finally {
     reader.releaseLock();
   }
 
-  console.log('');
+  const elapsed = Date.now() - startTime;
+  const tps = elapsed > 0 ? ((totalTokens / elapsed) * 1000).toFixed(1) : '0';
+
+  console.log('\n\n──────────────────────────────────────────\n');
+  console.log(`  Tokens: ${totalTokens}`);
+  console.log(`  Time:   ${(elapsed / 1000).toFixed(2)}s`);
+  console.log(`  Speed:  ${tps} tok/s`);
 };
 
-// ── Entry Point ─────────────────────────────────────────────
-
-const main = async (): Promise<void> => {
-  // Parse args: --model <name> [prompt...]
-  const args = Bun.argv.slice(2);
-  let model = DEFAULT_MODEL;
-  let prompt = '';
-
-  const modelIndex = args.indexOf('--model');
-  if (modelIndex !== -1 && args[modelIndex + 1]) {
-    model = args[modelIndex + 1];
-    args.splice(modelIndex, 2);
-  }
-
-  prompt = args.join(' ') || DEFAULT_PROMPT;
-
-  console.log(`\n  Model:  ${model}`);
-  console.log(`  Prompt: "${prompt}"`);
-
-  // ── Health check ──────────────────────────────
+const main = async () => {
   if (!(await checkHealth())) {
-    console.error(
-      `\n✗ Ollama is not running on port ${OLLAMA_PORT}.`,
-    );
-    console.error('  Start it with: bun herdr:start text');
+    console.error(`✗ Shimmy is not reachable on ${SHIMMY_URL}`);
     process.exit(1);
   }
 
-  await generate({ model, prompt });
+  const modelsRes = await fetch(`${SHIMMY_URL}/v1/models`);
+  const modelsData = (await modelsRes.json()) as { data?: Array<{ id: string }> };
+  const model = modelsData.data?.[0]?.id || 'default';
+
+  console.log(`  Model:  ${model}`);
+  console.log(`  Prompt: "${DEFAULT_PROMPT}"`);
+
+  await chatCompletion(model, DEFAULT_PROMPT);
 };
 
 main();

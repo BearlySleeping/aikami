@@ -1,2 +1,2 @@
-# Ollama cache — model weights, pulled images
+# Shimmy model cache — GGUF files
 src/cache/

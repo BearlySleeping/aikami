@@ -1,110 +1,92 @@
 // apps/backend/text/scripts/download_model.ts
-// Idempotent model puller for Ollama text microservice.
-// Checks if qwen3.5:4b is cached; if not, streams the pull via /api/pull.
+// Downloads the recommended GGUF model for Shimmy inference.
+// Default: Llama-3.2-3B-Instruct Q4_K_M (~2.0 GB, ~2.5 GB VRAM at 2K ctx).
 //
 // Usage:
-//   bun run scripts/download_model.ts
-//   bun run scripts/download_model.ts qwen3.5:4b
-//   bun run scripts/download_model.ts llama3.2:3b
+//   bun run scripts/download_model.ts              # default model
+//   bun run scripts/download_model.ts --list       # list available models
 
-const OLLAMA_PORT = 11436;
-const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
-const DEFAULT_MODEL = 'qwen3.5:4b';
+import { readFileSync, existsSync, statSync, createWriteStream } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_DIR = resolve(__dirname, '..');
+
+// ── Recommended model ──────────────────────────────────────
+
+const DEFAULT_MODEL = {
+  name: 'llama-3.2-3b-instruct',
+  url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+  file: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+  size: '1.9 GB',
+} as const;
+
+/** Lightweight model — fits in 1 GB VRAM, fast on CPU. */
+const TINY_MODEL = {
+  name: 'tinyllama-1.1b',
+  url: 'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_0.gguf',
+  file: 'tinyllama-1.1b-chat-v1.0.Q4_0.gguf',
+  size: '638 MB',
+} as const;
+
+const MODELS_DIR = resolve(PROJECT_DIR, 'src/cache/models');
+const SHIMMY_PORT = 11435;
+const SHIMMY_URL = `http://localhost:${SHIMMY_PORT}`;
 
 // ── Types ──────────────────────────────────────────────────
 
-type PullChunk = {
-  status: string;
-  digest?: string;
-  total?: number;
-  completed?: number;
-  error?: string;
+type ModelEntry = {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
 };
 
-type TagEntry = {
-  name: string;
-  // model, modified_at, size, digest, details
+type ModelsResponse = {
+  object: string;
+  data: ModelEntry[];
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 
-/**
- * Format bytes into a human-readable string.
- */
 const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) {
-    return `${bytes}B`;
-  }
   if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
   }
-  const mb = bytes / (1024 * 1024);
-  return mb >= 1000 ? `${(mb / 1024).toFixed(1)}GB` : `${mb.toFixed(1)}MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
 /**
- * Check if Ollama is running and responsive.
+ * Download a file via streaming fetch with progress reporting.
  */
-const checkHealth = async (): Promise<boolean> => {
-  try {
-    const response = await fetch(OLLAMA_URL, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const text = await response.text();
-    return response.ok && text.includes('Ollama is running');
-  } catch {
-    return false;
-  }
-};
+const downloadFile = async (options: {
+  url: string;
+  dest: string;
+}): Promise<void> => {
+  const { url, dest } = options;
 
-/**
- * Check if a model is already pulled.
- */
-const isModelCached = async (model: string): Promise<boolean> => {
-  try {
-    const response = await fetch(`${OLLAMA_URL}/api/tags`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      return false;
-    }
-    const data = await response.json() as { models?: TagEntry[] };
-    const models = data.models ?? [];
-    return models.some((m) => m.name === model || m.name === `${model}:latest`);
-  } catch {
-    return false;
-  }
-};
-
-// ── Model Pull ──────────────────────────────────────────────
-
-/**
- * Pull a model from the Ollama registry via streaming /api/pull.
- *
- * Ollama returns NDJSON (one JSON object per line) with progress info.
- * We stream the response body, parse each line, and report status.
- */
-const pullModel = async (model: string): Promise<void> => {
-  const response = await fetch(`${OLLAMA_URL}/api/pull`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: model }),
-    signal: AbortSignal.timeout(600_000), // 10 min timeout for large models
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(600_000), // 10 min for 2 GB
   });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
   if (!response.body) {
-    throw new Error('Response body is null');
+    throw new Error('Response has no body');
   }
 
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+  const stream = createWriteStream(dest);
   const startTime = Date.now();
-  let lastStatus = '';
+  let downloaded = 0;
+  let lastReport = 0;
 
   try {
     while (true) {
@@ -113,91 +95,101 @@ const pullModel = async (model: string): Promise<void> => {
         break;
       }
 
-      buffer += decoder.decode(value, { stream: true });
+      stream.write(Buffer.from(value));
+      downloaded += value.length;
 
-      // Process complete lines (NDJSON)
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? ''; // keep incomplete line in buffer
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0) {
-          continue;
-        }
-
-        try {
-          const chunk = JSON.parse(trimmed) as PullChunk;
-
-          if (chunk.error) {
-            throw new Error(chunk.error);
-          }
-
-          // Progress reporting
-          if (chunk.completed !== undefined && chunk.total !== undefined && chunk.total > 0) {
-            const pct = ((chunk.completed / chunk.total) * 100).toFixed(1);
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = elapsed > 0
-              ? formatBytes(chunk.completed / elapsed)
-              : '...';
-            const status = chunk.status || 'downloading';
-            process.stdout.write(
-              `\r  ${formatBytes(chunk.completed)} / ${formatBytes(chunk.total)} (${pct}%) @ ${speed}/s — ${status}`,
-            );
-          } else if (chunk.status && chunk.status !== lastStatus) {
-            // Status-only update (e.g. "pulling manifest", "verifying digest")
-            lastStatus = chunk.status;
-            // Use ANSI escape for clear-line + cursor-to-start
-            process.stdout.write(`\r\x1b[K  ${chunk.status}`);
-          }
-        } catch (parseError) {
-          // Skip malformed JSON lines (shouldn't happen with Ollama)
-          if (!(parseError instanceof SyntaxError)) {
-            throw parseError;
-          }
-        }
+      // Report every 500ms
+      const now = Date.now();
+      if (now - lastReport >= 500) {
+        const elapsed = (now - startTime) / 1000;
+        const speed = elapsed > 0 ? formatBytes(downloaded / elapsed) : '...';
+        const pct = contentLength > 0
+          ? `${((downloaded / contentLength) * 100).toFixed(0)}%`
+          : '';
+        process.stdout.write(
+          `\r  ${formatBytes(downloaded)}${contentLength > 0 ? ` / ${formatBytes(contentLength)}` : ''} ${pct} @ ${speed}/s`,
+        );
+        lastReport = now;
       }
     }
   } finally {
     reader.releaseLock();
+    stream.end();
   }
 
-  // Clear progress line
-  process.stdout.write('\n');
   const elapsed = (Date.now() - startTime) / 1000;
-  console.log(`✓ ${model} pulled successfully in ${elapsed.toFixed(1)}s`);
+  process.stdout.write('\n');
+  console.log(`  ✓ Downloaded ${formatBytes(downloaded)} in ${elapsed.toFixed(1)}s`);
+};
+
+// ── Model listing ───────────────────────────────────────────
+
+const listModels = async (): Promise<ModelEntry[]> => {
+  const response = await fetch(`${SHIMMY_URL}/v1/models`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const data = (await response.json()) as ModelsResponse;
+  return data.data ?? [];
 };
 
 // ── Entry Point ─────────────────────────────────────────────
 
 const main = async (): Promise<void> => {
-  const model = Bun.argv[2] ?? DEFAULT_MODEL;
+  const listOnly = Bun.argv.includes('--list');
 
-  console.log(`\n  Model: ${model}\n`);
-
-  // ── Health check ──────────────────────────────
-  if (!(await checkHealth())) {
-    console.error(
-      `✗ Ollama is not running on port ${OLLAMA_PORT}.`,
-    );
-    console.error('  Start it with: bun herdr:start text');
-    process.exit(1);
+  if (listOnly) {
+    // Just list what's available
+    console.log('\n  Shimmy — Available Models\n');
+    try {
+      const models = await listModels();
+      console.log(`  ${models.length} model(s):\n`);
+      for (const model of models) {
+        const destPath = resolve(MODELS_DIR, `${model.id}.gguf`);
+        const size = existsSync(destPath)
+          ? formatBytes(statSync(destPath).size)
+          : '(not downloaded)';
+        console.log(`    • ${model.id}  ${size}`);
+      }
+    } catch {
+      console.log('  Shimmy is not running.');
+      console.log('  Start with: bun herdr:start text');
+    }
+    console.log('');
+    return;
   }
 
-  console.log('✓ Ollama is responsive');
+  // ── Download ──────────────────────────────────
+  const useTiny = Bun.argv.includes('--tiny');
+  const model = useTiny ? TINY_MODEL : DEFAULT_MODEL;
+  const destPath = resolve(MODELS_DIR, model.file);
 
-  // ── Check if already cached ──────────────────
-  if (await isModelCached(model)) {
-    console.log(`○ ${model} already cached, skipping pull.\n`);
+  await Bun.$`mkdir -p ${MODELS_DIR}`.cwd(PROJECT_DIR).quiet();
+
+  // Check if already downloaded
+  if (existsSync(destPath)) {
+    const size = formatBytes(statSync(destPath).size);
+    console.log(`○ ${model.file} already exists (${size})`);
+    console.log('  Delete it to re-download.');
     process.exit(0);
   }
 
-  // ── Pull the model ───────────────────────────
-  console.log(`⬇ Pulling ${model}...`);
+  console.log(`\n⬇  Downloading ${model.name} (${model.size})...`);
+  console.log(`   ${model.url.split('/').slice(0, 3).join('/')}/...`);
+
   try {
-    await pullModel(model);
+    await downloadFile({ url: model.url, dest: destPath });
+    console.log(`\n✓ Model saved to src/cache/models/${model.file}`);
+    console.log('  Restart Shimmy to load it: bun herdr:restart text');
   } catch (error) {
+    // Clean up partial download
+    if (existsSync(destPath)) {
+      await Bun.$`rm -f ${destPath}`.quiet();
+    }
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`\n✗ Pull failed: ${message}`);
+    console.error(`\n✗ Download failed: ${message}`);
     process.exit(1);
   }
 

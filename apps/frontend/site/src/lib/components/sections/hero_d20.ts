@@ -84,7 +84,7 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.45 + 0.35 * Math.sin(rotation * 3 + i);
     const faceColor = lerpColor(COLORS.rune, COLORS.shadow, shade);
 
-    g.poly([cx, topY, upperRing[i]?.x, upperRing[i]?.y, upperRing[next]?.x, upperRing[next]?.y]);
+    g.poly([cx, topY, upperRing[i]!.x, upperRing[i]!.y, upperRing[next]!.x, upperRing[next]!.y]);
     g.fill({ color: faceColor, alpha: 0.85 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.4, width: 0.8 });
   }
@@ -98,24 +98,24 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
 
     // Left face
     g.poly([
-      upperRing[i]?.x,
-      upperRing[i]?.y,
-      eqRing[prevEq]?.x,
-      eqRing[prevEq]?.y,
-      eqRing[i]?.x,
-      eqRing[i]?.y,
+      upperRing[i]!.x,
+      upperRing[i]!.y,
+      eqRing[prevEq]!.x,
+      eqRing[prevEq]!.y,
+      eqRing[i]!.x,
+      eqRing[i]!.y,
     ]);
     g.fill({ color: faceColor, alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
 
     // Right face
     g.poly([
-      upperRing[i]?.x,
-      upperRing[i]?.y,
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      upperRing[next]?.x,
-      upperRing[next]?.y,
+      upperRing[i]!.x,
+      upperRing[i]!.y,
+      eqRing[i]!.x,
+      eqRing[i]!.y,
+      upperRing[next]!.x,
+      upperRing[next]!.y,
     ]);
     g.fill({ color: lerpColor(faceColor, COLORS.shadow, 0.2), alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
@@ -128,23 +128,23 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const faceColor = lerpColor(COLORS.rune, COLORS.magicBlue, shade);
 
     g.poly([
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      lowerRing[i]?.x,
-      lowerRing[i]?.y,
-      lowerRing[next]?.x,
-      lowerRing[next]?.y,
+      eqRing[i]!.x,
+      eqRing[i]!.y,
+      lowerRing[i]!.x,
+      lowerRing[i]!.y,
+      lowerRing[next]!.x,
+      lowerRing[next]!.y,
     ]);
     g.fill({ color: faceColor, alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
 
     g.poly([
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      lowerRing[next]?.x,
-      lowerRing[next]?.y,
-      eqRing[next]?.x,
-      eqRing[next]?.y,
+      eqRing[i]!.x,
+      eqRing[i]!.y,
+      lowerRing[next]!.x,
+      lowerRing[next]!.y,
+      eqRing[next]!.x,
+      eqRing[next]!.y,
     ]);
     g.fill({ color: lerpColor(faceColor, COLORS.shadow, 0.15), alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
@@ -156,7 +156,7 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.5 + 0.3 * Math.sin(rotation * 3 + i + 1);
     const faceColor = lerpColor(COLORS.rune, COLORS.shadow, shade);
 
-    g.poly([cx, bottomY, lowerRing[next]?.x, lowerRing[next]?.y, lowerRing[i]?.x, lowerRing[i]?.y]);
+    g.poly([cx, bottomY, lowerRing[next]!.x, lowerRing[next]!.y, lowerRing[i]!.x, lowerRing[i]!.y]);
     g.fill({ color: faceColor, alpha: 0.85 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.4, width: 0.8 });
   }

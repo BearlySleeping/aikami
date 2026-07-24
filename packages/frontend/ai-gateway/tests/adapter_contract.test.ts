@@ -18,7 +18,7 @@ import {
   createServiceStubTextAdapter,
   isAiGatewayError,
 } from '../src/index.ts';
-import { createJsonFetchMock, createSseFetchMock, mixedModeConfig } from './helpers.ts';
+import { createJsonFetchMock, mixedModeConfig } from './helpers.ts';
 
 const textResolution: AiModeResolution = {
   capability: 'text',

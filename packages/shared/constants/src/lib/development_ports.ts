@@ -49,7 +49,7 @@ export const EMULATOR_PORTS = {
   site: 5280,
   voice: 8089,
   image: 8188,
-  text: 11434,
+  text: 11435,
 } as const;
 
 export const STAGING_PORTS = {
