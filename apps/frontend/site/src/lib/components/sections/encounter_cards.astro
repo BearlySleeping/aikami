@@ -1,0 +1,332 @@
+---
+// apps/frontend/site/src/lib/components/sections/encounter_cards.astro
+/**
+ * Draggable Encounter Cards — skill, spell, and inventory showcase.
+ * Drag two cards into the active slot to trigger combination effects.
+ */
+---
+
+<section id="encounter-cards" class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow text-ember">Tactical Combat</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
+        Combine skills. Amplify power.
+      </h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Drag two skill cards into the active encounter slot to combine them. Watch the live spell
+        effect preview on the canvas and read the AI-generated combat log entry.
+      </p>
+    </div>
+
+    <!-- Canvas preview area -->
+    <div class="mt-10 rune-border overflow-hidden bg-background/50">
+      <div
+        id="encounter-effects-canvas"
+        class="w-full h-[180px] relative flex items-center justify-center"
+        role="img"
+        aria-label="Spell combination effect preview"
+      >
+        <div id="encounter-placeholder" class="text-center text-muted-foreground/40">
+          <p class="font-mono text-xs tracking-widest uppercase">Active Encounter Slot</p>
+          <p class="text-[10px] mt-1">Drag two cards here</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Combat log -->
+    <div
+      id="combat-log"
+      class="mt-3 glass-panel p-4 min-h-[3rem] font-mono text-xs text-muted-foreground"
+      aria-live="polite"
+      role="log"
+    >
+      <span class="text-rune">[Combat Log]</span>
+      Awaiting skill combination...
+    </div>
+
+    <!-- Card grid -->
+    <div id="card-grid" class="mt-8 grid grid-cols-2 md:grid-cols-3 gap-4">
+      <!-- Cards are rendered by client-side script -->
+    </div>
+
+    <!-- Active slot -->
+    <div class="mt-8">
+      <p class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+        Active Slot
+      </p>
+      <section
+        id="active-slot"
+        class="glass-panel border-dashed border-rune/30 min-h-[5rem] flex items-center justify-center gap-4 p-4 flex-wrap"
+        aria-label="Active encounter slot — drag cards here"
+      >
+        <span class="text-muted-foreground/40 text-xs font-mono">Drop cards here to combine</span>
+      </section>
+    </div>
+  </div>
+</section>
+
+<script>
+type Card = {
+  id: string;
+  name: string;
+  school: string;
+  description: string;
+  color: string;
+};
+
+// Card data — defined inline to avoid Astro JSON escaping issues
+const cards: Card[] = [
+  {
+    id: 'flame-arc',
+    name: 'Flame Arc',
+    school: 'Evocation',
+    description: 'A sweeping arc of fire that scorches enemies in a cone.',
+    color: '#f59e0b',
+  },
+  {
+    id: 'shadow-step',
+    name: 'Shadow Step',
+    school: 'Illusion',
+    description: 'Blink through shadows to reposition behind your target.',
+    color: '#7c3aed',
+  },
+  {
+    id: 'frost-barrier',
+    name: 'Frost Barrier',
+    school: 'Abjuration',
+    description: 'Encase yourself in ice, absorbing the next attack.',
+    color: '#22d3ee',
+  },
+  {
+    id: 'divine-smite',
+    name: 'Divine Smite',
+    school: 'Conjuration',
+    description: 'Channel holy power through your weapon for bonus radiant damage.',
+    color: '#fbbf24',
+  },
+  {
+    id: 'thorn-grasp',
+    name: 'Thorn Grasp',
+    school: 'Transmutation',
+    description: 'Vines erupt from the ground, rooting enemies in place.',
+    color: '#34d399',
+  },
+  {
+    id: 'mind-rift',
+    name: 'Mind Rift',
+    school: 'Enchantment',
+    description: "Tear open an enemy's psyche, dealing psychic damage over time.",
+    color: '#ec4899',
+  },
+];
+
+const cardGrid = document.getElementById('card-grid');
+const activeSlot = document.getElementById('active-slot');
+const combatLog = document.getElementById('combat-log');
+const placeholder = document.getElementById('encounter-placeholder');
+
+let slottedCards: Card[] = [];
+
+// Combat log entries
+const combatEntries: Record<string, string> = {
+  'flame-arc+shadow-step':
+    'Shadowflame Dash: You vanish in a burst of smoke, reappearing behind the enemy as a wave of violet fire erupts along your path. (3d8 fire + 2d6 psychic)',
+  'flame-arc+frost-barrier':
+    'Flashfreeze Armor: Your Frost Barrier explodes outward, flash-freezing the arc of fire into razor-sharp ice shards. (4d6 cold in cone, barrier refreshed)',
+  'shadow-step+frost-barrier':
+    'Glacial Ambush: You shatter your barrier into a blinding mist, then step through the fog to deliver a freezing strike. (2d8 cold, target blinded 1 turn)',
+  'divine-smite+shadow-step':
+    'Judgment from Beyond: Holy light erupts as you phase through the target, striking both body and soul. (4d6 radiant, ignores armor)',
+  'divine-smite+flame-arc':
+    'Holy Inferno: Your Flame Arc is infused with divine radiance, searing flesh and purifying corruption. (3d8 fire + 2d8 radiant, undead take double)',
+  'divine-smite+frost-barrier':
+    'Sanctified Ice: The barrier crystallizes into holy water, healing allies within range while damaging foes. (2d6 heal allies, 2d6 radiant enemies)',
+  'flame-arc+flame-arc':
+    'Inferno Overload: Twin arcs of fire merge into a devastating conflagration. (6d8 fire, all enemies in range, 1 turn exhaust)',
+  'shadow-step+shadow-step':
+    'Void Echo: You split into two shadow selves, attacking from both directions simultaneously. (2d8 psychic x 2, advantage on next attack)',
+  'thorn-grasp+flame-arc':
+    'Burning Brambles: Vines soaked in oil ignite as they entangle. (2d6 piercing + 2d6 fire per turn while rooted)',
+  'thorn-grasp+frost-barrier':
+    'Frozen Garden: The grasping vines crystallize into ice sculptures, trapping enemies in a glittering prison. (rooted + 2d6 cold, 2 turns)',
+  'mind-rift+shadow-step':
+    'Psychic Ambush: You tear open their mind as you step through — they attack their own allies in confusion. (3d6 psychic, target confused 2 turns)',
+  'mind-rift+divine-smite':
+    'Revelation Strike: Holy light floods the rift, forcing the target to see their sins. (2d6 psychic + 2d8 radiant, fear effect)',
+};
+
+const getCombatEntry = (a: Card, b: Card): string => {
+  const key = `${a.id}+${b.id}`;
+  if (combatEntries[key]) {
+    return combatEntries[key];
+  }
+  const reverseKey = `${b.id}+${a.id}`;
+  if (combatEntries[reverseKey]) {
+    return combatEntries[reverseKey];
+  }
+  return `Combined ${a.name} with ${b.name}: The energies intertwine, creating an unpredictable surge of magic. (Hybrid effect, DM discretion)`;
+};
+
+// Render cards
+const renderCards = () => {
+  if (!cardGrid) {
+    return;
+  }
+
+  cardGrid.innerHTML = cards
+    .filter((c) => !slottedCards.find((s) => s.id === c.id))
+    .map(
+      (card) => `
+          <div
+            class="glass-panel-solid p-4 cursor-grab active:cursor-grabbing transition-all hover:shadow-card hover:-translate-y-0.5 select-none"
+            draggable="true"
+            data-card-id="${card.id}"
+            role="button"
+            tabindex="0"
+            aria-label="${card.name} — ${card.school} skill card"
+          >
+            <div class="flex items-center gap-2 mb-2">
+              <span class="h-2.5 w-2.5 rounded-full shrink-0" style="background: ${card.color}" aria-hidden></span>
+              <span class="font-mono text-[9px] uppercase tracking-wider" style="color: ${card.color}">${card.school}</span>
+            </div>
+            <h3 class="font-serif text-lg leading-tight">${card.name}</h3>
+            <p class="mt-1.5 text-xs text-muted-foreground leading-relaxed">${card.description}</p>
+          </div>
+        `,
+    )
+    .join('');
+
+  // Attach drag handlers
+  const cardEls = cardGrid.querySelectorAll<HTMLElement>('[data-card-id]');
+  for (const el of cardEls) {
+    el.addEventListener('dragstart', (e: DragEvent) => {
+      e.dataTransfer?.setData('text/plain', el.dataset.cardId ?? '');
+      el.classList.add('opacity-50');
+    });
+
+    el.addEventListener('dragend', () => {
+      el.classList.remove('opacity-50');
+    });
+
+    // Keyboard accessibility
+    el.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const cardId = el.dataset.cardId;
+        if (cardId) {
+          const card = cards.find((c) => c.id === cardId);
+          if (card) {
+            slotCard(card);
+          }
+        }
+      }
+    });
+  }
+};
+
+const slotCard = async (card: Card) => {
+  if (slottedCards.length >= 2) {
+    return;
+  }
+
+  slottedCards.push(card);
+  renderCards();
+  updateActiveSlot();
+
+  if (slottedCards.length === 2) {
+    // Trigger combination!
+    const [a, b] = slottedCards as [Card, Card];
+    const entry = getCombatEntry(a, b);
+
+    if (combatLog) {
+      combatLog.innerHTML = `<span class="text-ember">[Combat Log]</span> <span class="text-foreground">${entry}</span>`;
+    }
+
+    if (placeholder) {
+      placeholder.style.display = 'none';
+    }
+
+    // Trigger canvas effect
+    const { triggerComboEffect } = await import('./encounter_effects_canvas');
+    await triggerComboEffect('encounter-effects-canvas', a.id, b.id);
+
+    // Reset after animation
+    setTimeout(() => {
+      slottedCards = [];
+      renderCards();
+      updateActiveSlot();
+      if (placeholder) {
+        placeholder.style.display = '';
+      }
+      if (combatLog) {
+        combatLog.innerHTML =
+          '<span class="text-rune">[Combat Log]</span> Awaiting skill combination...';
+      }
+    }, 3500);
+  }
+};
+
+const updateActiveSlot = () => {
+  if (!activeSlot) {
+    return;
+  }
+
+  if (slottedCards.length === 0) {
+    activeSlot.innerHTML =
+      '<span class="text-muted-foreground/40 text-xs font-mono">Drop cards here to combine</span>';
+    return;
+  }
+
+  activeSlot.innerHTML = slottedCards
+    .map(
+      (card) => `
+          <div class="glass-panel-solid px-4 py-2 flex items-center gap-2 text-sm">
+            <span class="h-2 w-2 rounded-full shrink-0" style="background: ${card.color}" aria-hidden></span>
+            <span class="font-medium">${card.name}</span>
+            <button type="button" class="ml-2 text-muted-foreground hover:text-foreground text-xs" data-remove="${card.id}" aria-label="Remove ${card.name}">✕</button>
+          </div>
+        `,
+    )
+    .join('');
+
+  // Remove buttons
+  const removeBtns = activeSlot.querySelectorAll<HTMLElement>('[data-remove]');
+  for (const btn of removeBtns) {
+    btn.addEventListener('click', () => {
+      const cardId = btn.dataset.remove;
+      slottedCards = slottedCards.filter((c) => c.id !== cardId);
+      renderCards();
+      updateActiveSlot();
+    });
+  }
+};
+
+// Active slot drop zone
+activeSlot?.addEventListener('dragover', (e: DragEvent) => {
+  e.preventDefault();
+  activeSlot.classList.add('border-rune');
+});
+
+activeSlot?.addEventListener('dragleave', () => {
+  activeSlot.classList.remove('border-rune');
+});
+
+activeSlot?.addEventListener('drop', (e: DragEvent) => {
+  e.preventDefault();
+  activeSlot.classList.remove('border-rune');
+
+  const cardId = e.dataTransfer?.getData('text/plain');
+  if (!cardId) {
+    return;
+  }
+
+  const card = cards.find((c) => c.id === cardId);
+  if (card && !slottedCards.find((s) => s.id === cardId)) {
+    slotCard(card);
+  }
+});
+
+// Initial render
+renderCards();
+</script>
