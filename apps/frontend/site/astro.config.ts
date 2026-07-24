@@ -10,24 +10,20 @@ import { defineConfig, envField } from 'astro/config';
 import compress from 'astro-compress';
 import robotsTxt from 'astro-robots-txt';
 
-const mode = (process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mode;
+import { PORTS } from '../../../packages/shared/constants/src/index';
 
-const PORT_MAP: Record<string, number> = {
-  production: 5281,
-  staging: 5279,
-  emulator: 5280,
-};
-const port = Number(process.env.PORT || PORT_MAP[mode] || 5280);
+const _mode = (process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mode;
+const port = Number(process.env.PORT || PORTS[_mode].site);
 
 const SITE_URL_MAP: Record<string, string> = {
-  production: 'https://aikami.dev',
-  staging: 'https://stg.aikami.dev',
+  production: 'https://nordclaw.eu',
+  staging: 'https://stg.nordclaw.eu',
   emulator: `http://localhost:${port}`,
 };
 const site =
   process.env.SITE_URL ||
   process.env.PUBLIC_SITE_URL ||
-  SITE_URL_MAP[mode] ||
+  SITE_URL_MAP[_mode] ||
   `http://localhost:${port}`;
 
 // https://astro.build/config
