@@ -7,7 +7,7 @@ import { $, file } from 'bun';
 import {
   MODE_PROJECT_MAP,
   resolveHostingSiteId,
-} from '../../../scripts/src/lib/deploy/deployment_config';
+} from '../../../../scripts/src/lib/deploy/deployment_config';
 
 // 1. Parse incoming arguments
 const { values } = parseArgs({
