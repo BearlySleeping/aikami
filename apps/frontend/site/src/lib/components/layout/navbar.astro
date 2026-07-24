@@ -1,0 +1,126 @@
+---
+// apps/frontend/site/src/lib/components/layout/navbar.astro
+import { siteContent } from '$data/site_content';
+---
+
+<header
+  class="sticky top-0 z-50 border-b border-border/70 bg-background/95 backdrop-blur"
+  id="site-header"
+>
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+    <a href="/" class="flex items-center gap-3 no-underline">
+      <span class="font-logo text-xl tracking-tight">Aikami</span>
+    </a>
+
+    <nav
+      class="hidden items-center gap-8 text-sm text-muted-foreground"
+      aria-label="Main navigation"
+    >
+      {siteContent.nav.map((item) => (
+        <a href={item.href} class="hover:text-foreground transition-colors no-underline">
+          {item.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="flex items-center gap-3">
+      <a
+        href="https://github.com/BearlySleeping/aikami"
+        class="hidden sm:inline-flex rounded-sm bg-primary px-4 py-2 text-xs font-medium uppercase tracking-wider text-primary-foreground transition-opacity hover:opacity-90 no-underline"
+      >
+        GitHub
+      </a>
+      <button
+        id="mobile-menu-button"
+        type="button"
+        aria-label="Toggle menu"
+        aria-expanded="false"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-border text-foreground"
+      >
+        <svg
+          id="mobile-menu-icon-open"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <title>Open menu</title>
+          <path
+            d="M2 4h12M2 8h12M2 12h12"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+        <svg
+          id="mobile-menu-icon-close"
+          class="hidden"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <title>Close menu</title>
+          <path
+            d="M3 3l10 10M13 3L3 13"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="mobile-menu" class="hidden md:hidden border-t border-border/70 bg-background">
+    <nav
+      class="mx-auto max-w-6xl px-6 py-4 flex flex-col gap-1 text-sm"
+      aria-label="Mobile navigation"
+    >
+      {siteContent.nav.map((item) => (
+        <a href={item.href} class="py-2 text-foreground hover:text-brand no-underline">
+          {item.label}
+        </a>
+      ))}
+      <a
+        href="https://github.com/BearlySleeping/aikami"
+        class="mt-2 inline-flex justify-center rounded-sm bg-primary px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-primary-foreground no-underline"
+      >
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<script>
+const btn = document.getElementById('mobile-menu-button');
+const menu = document.getElementById('mobile-menu');
+const iconOpen = document.getElementById('mobile-menu-icon-open');
+const iconClose = document.getElementById('mobile-menu-icon-close');
+
+btn?.addEventListener('click', () => {
+  const isOpen = !menu?.classList.contains('hidden');
+  menu?.classList.toggle('hidden');
+  iconOpen?.classList.toggle('hidden');
+  iconClose?.classList.toggle('hidden');
+  btn?.setAttribute('aria-expanded', String(!isOpen));
+});
+
+const desktopNav = document.querySelector('nav[aria-label="Main navigation"]');
+const BREAKPOINT = 768;
+
+const applyLayout = () => {
+  const isDesktop = window.innerWidth >= BREAKPOINT;
+  if (desktopNav) {
+    (desktopNav as HTMLElement).style.display = isDesktop ? 'flex' : 'none';
+  }
+  if (btn) {
+    btn.style.display = isDesktop ? 'none' : '';
+  }
+};
+
+applyLayout();
+window.addEventListener('resize', applyLayout);
+</script>

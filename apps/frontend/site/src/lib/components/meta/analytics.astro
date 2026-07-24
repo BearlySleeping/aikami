@@ -1,0 +1,29 @@
+---
+// apps/frontend/site/src/lib/components/meta/analytics.astro
+
+type Props = {
+  id: string;
+};
+
+const { id } = Astro.props;
+const url = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+---
+
+<script src={url} type="text/partytown" is:inline></script>
+<script type="text/partytown" is:inline>
+  globalThis.dataLayer = globalThis.dataLayer || [];
+  const gtag = (...args) => {
+    dataLayer.push(args);
+  };
+
+  gtag('js', new Date());
+
+  gtag('consent', 'default', {
+    ad_storage: 'denied',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    analytics_storage: 'denied',
+  });
+
+  gtag('config', id);
+</script>

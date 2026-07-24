@@ -1,0 +1,94 @@
+---
+// apps/frontend/site/src/lib/components/layout/head/schema.astro
+import { site } from '$data/site_content';
+
+type Props = {
+  canonicalURL: string;
+  description: string;
+  image: string;
+  publishDate?: string;
+  title: string;
+  type: 'website' | 'article';
+  updateDate?: string;
+};
+
+const { title, description, image, canonicalURL, type, publishDate, updateDate } = Astro.props;
+
+const sameAs = Object.values(site.social).filter((url) => url && url.length > 0);
+
+const identity = {
+  '@type': 'Organization',
+  name: site.name,
+  url: site.url,
+  ...(site.email ? { email: site.email } : {}),
+  ...(site.telephone ? { telephone: site.telephone } : {}),
+  ...(site.address.street
+    ? {
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: site.address.street,
+          addressLocality: site.address.locality,
+          addressCountry: site.address.country,
+        },
+      }
+    : {}),
+  sameAs,
+};
+
+type SchemaGraph = { '@context': string; '@graph': Record<string, unknown>[] };
+
+const schema: SchemaGraph = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${site.url}/#website`,
+      url: site.url,
+      name: site.name,
+      description: site.description,
+      publisher: { '@id': `${site.url}/#identity` },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${site.url}?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@id': `${site.url}/#identity`,
+      ...identity,
+    },
+  ],
+};
+
+if (type === 'article') {
+  schema['@graph'].push({
+    '@type': 'BlogPosting',
+    '@id': `${canonicalURL}/#article`,
+    headline: title,
+    description,
+    image,
+    datePublished: publishDate,
+    dateModified: updateDate || publishDate,
+    author: {
+      '@type': 'Person',
+      name: site.author,
+      url: site.url,
+    },
+    publisher: { '@id': `${site.url}/#identity` },
+    isPartOf: { '@id': `${site.url}/#website` },
+    mainEntityOfPage: { '@id': canonicalURL },
+  });
+} else {
+  schema['@graph'].push({
+    '@type': 'WebPage',
+    '@id': canonicalURL,
+    url: canonicalURL,
+    name: title,
+    description,
+    isPartOf: { '@id': `${site.url}/#website` },
+    about: { '@id': `${site.url}/#identity` },
+  });
+}
+---
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(schema)} />

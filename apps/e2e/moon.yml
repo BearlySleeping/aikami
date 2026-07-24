@@ -67,3 +67,18 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
+  test-site:
+    command: 'bun run test:site'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-site-a11y:
+    command: 'bun run test:site:a11y'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-site-visual:
+    command: 'bun run test:site:visual'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'

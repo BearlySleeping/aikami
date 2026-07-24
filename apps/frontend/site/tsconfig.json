@@ -1,8 +1,45 @@
 {
-  "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
-    "strictNullChecks": true
+    "ignoreDeprecations": "6.0",
+
+    "strict": true,
+    "noImplicitAny": true,
+    "strictFunctionTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "jsx": "preserve",
+    "jsxImportSource": "astro",
+    "rootDir": "../../..",
+
+    "paths": {
+      "$assets/*": ["./src/lib/assets/*"],
+      "$components/*": ["./src/lib/components/*"],
+      "$layouts/*": ["./src/lib/layouts/*"],
+      "$views/*": ["./src/lib/views/*"],
+      "$sections/*": ["./src/lib/components/sections/*"],
+      "$styles/*": ["./src/lib/styles/*"],
+      "$data/*": ["./src/lib/data/*"],
+      "$firebase/*": ["./src/lib/firebase/*"],
+      "$types": ["./src/lib/types"],
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../../packages/shared/constants/src/*"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../../packages/shared/schemas/src/*"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../../packages/shared/types/src/*"],
+      "@aikami/utils": ["../../../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../../packages/shared/utils/src/*"],
+      "$logger": ["../../../packages/shared/logger/src/lib/logger_browser.ts"]
+    }
   },
-  "include": [".astro/types.d.ts", "src/**/*", "astro.config.ts"],
-  "exclude": ["dist"]
+  "exclude": ["dist", "node_modules"],
+  "extends": "astro/tsconfigs/strict",
+  "include": [
+    ".astro/types.d.ts",
+    "src",
+    "test",
+    "scripts/**/*",
+    "astro.config.ts"
+  ]
 }

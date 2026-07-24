@@ -1,11 +1,12 @@
 ---
+// apps/frontend/site/src/pages/index.astro
+import Layout from '$layouts/layout.astro';
+import Home from '$views/home.astro';
 ---
 
-<MainLayout>
-  <DemoSection />
-  <div class="flex justify-center">
-    <Picture src={fantasyImage} alt="Fantasy image" class="p-10" height={500} />
-  </div>
-  <IntroSection />
-  <BacklogSection />
-</MainLayout>
+<Layout
+  title="Aikami | AI-Powered 2D RPG"
+  description="Aikami is an AI-powered 2D top-down RPG where every NPC is driven by generative AI — dynamic quests, evolving relationships, and an infinite living world."
+>
+  <Home />
+</Layout>

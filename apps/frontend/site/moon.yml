@@ -23,6 +23,7 @@ fileGroups:
   sources:
     - 'src/**/*'
     - 'public/**/*'
+    - 'scripts/**/*'
   configs:
     - 'package.json'
     - 'tsconfig.json'
@@ -48,5 +49,40 @@ tasks:
   preview:
     command: 'bun run preview'
     preset: 'server'
+  preview-chromium:
+    command: bun
+    args:
+      - run
+      - preview:chromium
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - 'scripts/*'
+    options:
+      cache: false
+      runInCI: false
+      persistent: true
+  deploy:
+    command: bun
+    args:
+      - run
+      - deploy
+    inputs:
+      - '@group(deployment)'
+    options:
+      cache: false
+      runInCI: true
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+    options:
+      cache: false
+      runInCI: true
+  unlighthouse:
+    command: bun run unlighthouse
+    options:
+      cache: false
+      runInCI: false
   astro:
     command: 'bun run astro'

@@ -1,0 +1,31 @@
+---
+// apps/frontend/site/src/lib/components/layout/head/socials.astro
+import { site } from '$data/site_content';
+
+type Props = {
+  canonicalURL: string;
+  description: string;
+  image: string;
+  title: string;
+  type: 'website' | 'article';
+};
+
+const { title, description, image, canonicalURL, type } = Astro.props;
+---
+
+<meta content={type} property="og:type">
+<meta content={canonicalURL} property="og:url">
+<meta content={title} property="og:title">
+<meta content={description} property="og:description">
+<meta content={image} property="og:image">
+<meta content={site.name} property="og:site_name">
+<meta content="en_US" property="og:locale">
+
+<meta content="summary_large_image" property="twitter:card">
+<meta content={canonicalURL} property="twitter:url">
+<meta content={title} property="twitter:title">
+<meta content={description} property="twitter:description">
+<meta content={image} property="twitter:image">
+
+{site.social.twitter && <meta content={site.social.twitter} property="twitter:creator" />}
+{site.social.twitter && <meta content={site.social.twitter} property="twitter:site" />}

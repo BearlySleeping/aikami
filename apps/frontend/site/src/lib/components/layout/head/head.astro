@@ -1,0 +1,94 @@
+---
+// apps/frontend/site/src/lib/components/layout/head/head.astro
+import serif400Latin from '@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2';
+import inter400Latin from '@fontsource/inter/files/inter-latin-400-normal.woff2';
+import mono400Latin from '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2';
+import { site } from '$data/site_content';
+import Favicons from './favicons.astro';
+import Schema from './schema.astro';
+import Socials from './socials.astro';
+
+type Props = {
+  description?: string;
+  image?: string;
+  noindex?: boolean;
+  publishDate?: string;
+  title?: string;
+  type?: 'website' | 'article';
+  updateDate?: string;
+};
+
+const {
+  title = site.name,
+  description = site.description,
+  image = '/images/site_image.jpg',
+  type = 'website',
+  publishDate,
+  updateDate,
+  noindex = false,
+} = Astro.props;
+
+const siteUrl = Astro.site?.toString() ?? site.url;
+const cleanImage = image.startsWith('/') ? image.slice(1) : image;
+const absoluteImageUrl = new URL(cleanImage, siteUrl).toString();
+const canonicalURL = new URL(Astro.url.pathname, siteUrl).toString();
+const pageTitle = title === site.name ? site.name : `${title} | ${site.name}`;
+---
+
+<script is:inline>
+const forcedTheme = document.documentElement.dataset.theme;
+const theme =
+  forcedTheme ||
+  (() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
+      return localStorage.getItem('theme');
+    }
+    if (globalThis.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  })();
+
+document.documentElement.classList.toggle('dark', theme === 'dark');
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content={Astro.generator}>
+
+<link rel="preload" href={inter400Latin} as="font" type="font/woff2" crossorigin>
+<link rel="preload" href={serif400Latin} as="font" type="font/woff2" crossorigin>
+<link rel="preload" href={mono400Latin} as="font" type="font/woff2" crossorigin>
+
+<title>{pageTitle}</title>
+<meta name="title" content={pageTitle}>
+<meta name="description" content={description}>
+<meta name="author" content={site.author}>
+
+{noindex ? (
+    <meta name="robots" content="noindex, nofollow" />
+  ) : (
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  )}
+
+<link href={canonicalURL} rel="canonical">
+<link href={canonicalURL} rel="alternate" hreflang="en">
+<link href={canonicalURL} rel="alternate" hreflang="x-default">
+<link href="/sitemap-index.xml" rel="sitemap">
+<Favicons />
+<Socials
+  title={pageTitle}
+  type={type}
+  canonicalURL={canonicalURL}
+  description={description}
+  image={absoluteImageUrl}
+/>
+<Schema
+  title={pageTitle}
+  type={type}
+  canonicalURL={canonicalURL}
+  description={description}
+  image={absoluteImageUrl}
+  publishDate={publishDate}
+  updateDate={updateDate}
+/>
