@@ -1,0 +1,48 @@
+---
+// apps/frontend/site/src/lib/components/common/pixi_canvas.astro
+/**
+ * Reusable PixiJS v8 canvas island wrapper.
+ * Renders a container div that initializes a PixiJS Application on client:load.
+ * Passes the app instance to the onInit callback for scene setup.
+ */
+type Props = {
+  /** Unique id for the canvas container */
+  id: string;
+  /** CSS class for the wrapper */
+  class?: string;
+  /** Whether pointer events are enabled */
+  interactive?: boolean;
+  /** Whether to make background transparent */
+  transparent?: boolean;
+  /** Custom background color (CSS value, applied to canvas parent) */
+  background?: string;
+  /** PixiJS resolution multiplier (default: window.devicePixelRatio) */
+  resolution?: number;
+  /** aria-label for the canvas region */
+  ariaLabel?: string;
+};
+
+const {
+  id,
+  class: className = '',
+  interactive = false,
+  transparent = false,
+  background,
+  resolution,
+  ariaLabel = 'Interactive visualization',
+} = Astro.props;
+
+const layerClass = interactive ? 'canvas-layer interactive' : 'canvas-layer';
+---
+
+<div
+  id={id}
+  class={`${layerClass} ${className}`}
+  role="img"
+  aria-label={ariaLabel}
+  style={background ? `background: ${background}` : ''}
+  data-pixi-transparent={transparent ? 'true' : 'false'}
+  data-pixi-resolution={resolution ? String(resolution) : ''}
+>
+  <!-- Canvas is injected here by client-side PixiJS init -->
+</div>

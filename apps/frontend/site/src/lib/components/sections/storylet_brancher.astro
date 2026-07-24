@@ -1,0 +1,57 @@
+---
+// apps/frontend/site/src/lib/components/sections/storylet_brancher.astro
+---
+
+<section id="storylets" class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow text-ember">Narrative Possibility Space</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
+        Every choice branches the story.
+      </h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Aikami's AI generates rich, branching narratives where player decisions cascade through the
+        world. Each branch is colored by narrative metrics — Courage vs. Corruption, Mercy vs.
+        Vengeance — creating unique, personalized storylines.
+      </p>
+    </div>
+
+    <div class="mt-10 rune-border overflow-hidden bg-background/50">
+      <div
+        id="storylet-canvas"
+        class="w-full h-[400px] md:h-[480px] relative"
+        role="img"
+        aria-label="Interactive narrative branching tree showing Courage and Corruption paths"
+      ></div>
+    </div>
+
+    <div class="mt-6 flex flex-wrap items-center gap-6 text-xs">
+      <div class="flex items-center gap-2">
+        <span class="h-2.5 w-2.5 rounded-full bg-amber-400" aria-hidden></span>
+        <span class="font-mono text-[10px] uppercase tracking-wider text-amber-400"
+          >Courage Path</span
+        >
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="h-2.5 w-2.5 rounded-full bg-rose-600" aria-hidden></span>
+        <span class="font-mono text-[10px] uppercase tracking-wider text-rose-600"
+          >Corruption Path</span
+        >
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="h-2.5 w-2.5 rounded-full bg-purple-500" aria-hidden></span>
+        <span class="font-mono text-[10px] uppercase tracking-wider text-purple-400">Neutral</span>
+      </div>
+      <span class="text-muted-foreground/60">Click nodes to preview story outcomes.</span>
+    </div>
+  </div>
+</section>
+
+<script>
+import { initStoryletBrancher } from './storylet_brancher_canvas';
+
+const cleanup = await initStoryletBrancher('storylet-canvas');
+document.addEventListener('astro:before-swap', () => {
+  cleanup();
+});
+</script>

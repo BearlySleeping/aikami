@@ -1,0 +1,33 @@
+---
+// apps/frontend/site/src/lib/components/common/glass_panel.astro
+/**
+ * Glassmorphic translucent panel with backdrop blur.
+ * Variants: 'frosted' (translucent), 'solid' (opaque card), 'rune' (glowing rune border)
+ */
+type Props = {
+  variant?: 'frosted' | 'solid' | 'rune';
+  class?: string;
+  as?: 'div' | 'section' | 'article';
+  ariaLabel?: string;
+};
+
+const {
+  variant = 'frosted',
+  class: className = '',
+  as: tag = 'div',
+  ariaLabel,
+} = Astro.props as Props;
+
+const variantMap: Record<string, string> = {
+  frosted: 'glass-panel',
+  solid: 'glass-panel-solid',
+  rune: 'rune-border',
+};
+const variantClass = variantMap[variant] ?? variantMap.frosted;
+
+const Tag = tag;
+---
+
+<Tag class={`${variantClass} ${className}`} aria-label={ariaLabel}>
+  <slot />
+</Tag>

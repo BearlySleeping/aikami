@@ -6,7 +6,7 @@ export const site = {
   shortName: 'Aikami',
   url: 'https://aikami.dev',
   description:
-    'Aikami is an AI-powered 2D top-down RPG where every NPC is driven by generative AI — dynamic quests, evolving relationships, and an infinite living world.',
+    'Aikami is a free, open-source, self-hosted AI-native 2D RPG engine. Every NPC thinks, remembers, and adapts — driven by local AI models you control. BYOK, run offline, or deploy anywhere.',
   author: 'Aikami Team',
   email: 'hello@aikami.dev',
   telephone: '',
@@ -23,11 +23,14 @@ export const site = {
   keywords: [
     'Aikami',
     'AI RPG',
-    'generative AI game',
+    'open-source RPG engine',
+    'self-hosted AI game',
     'AI-driven NPCs',
-    'top-down RPG',
+    'local AI RPG',
+    'BYOK game engine',
     '2D RPG',
     'dynamic storytelling',
+    'Ollama RPG',
   ],
 };
 
@@ -35,8 +38,9 @@ export const siteContent = {
   site,
   nav: [
     { label: 'Features', href: '/#features' },
-    { label: 'Demo', href: '/#demo' },
-    { label: 'Roadmap', href: '/#roadmap' },
+    { label: 'AI Engine', href: '/#ai-cognition' },
+    { label: 'Self-Host', href: '/#your-realm' },
+    { label: 'Guild', href: '/#adventurers-guild' },
   ],
   footer: {
     copyright: `© ${new Date().getFullYear()} Aikami — AI-powered 2D RPG.`,

@@ -1,57 +1,124 @@
 ---
 // apps/frontend/site/src/lib/components/sections/hero.astro
+import HeroTerminal from './hero_terminal.astro';
 ---
 
-<section class="relative overflow-hidden border-b border-border/70">
-  <div class="grain absolute inset-0 opacity-60" aria-hidden></div>
-  <div class="mx-auto max-w-6xl px-6 pt-20 pb-24 md:pt-28 md:pb-28 relative">
+<!-- Canvas layer — ambient PixiJS D20 + particles -->
+<div
+  id="hero-canvas"
+  class="absolute inset-0 z-0"
+  role="img"
+  aria-label="Interactive 3D d20 die with magical particle effects — click to roll"
+></div>
+
+<!-- Semantic DOM layer -->
+<section class="relative overflow-hidden border-b border-border/70 min-h-[90dvh] flex items-center">
+  <div class="grain absolute inset-0 opacity-60 z-[1] pointer-events-none" aria-hidden></div>
+
+  <div class="mx-auto max-w-6xl px-6 pt-16 pb-24 md:pt-24 md:pb-28 relative w-full z-10">
     <div class="flex items-center gap-3 mb-8">
-      <span class="h-px w-10 bg-brand"></span>
-      <span class="eyebrow">AI-Powered 2D RPG</span>
-    </div>
-    <h1
-      class="font-serif text-5xl leading-[1.02] tracking-tight md:text-7xl lg:text-[5.25rem] max-w-5xl"
-    >
-      A living world driven by AI{' '}
-      <span class="italic text-muted-foreground">&mdash; every NPC has a mind of their own.</span>
-    </h1>
-    <p class="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
-      Aikami is an AI-powered 2D top-down RPG where NPCs have their own beliefs, personalities, and
-      strategies. No prewritten dialogs. No scripted behavior. Every interaction is dynamically
-      generated &mdash; creating an infinite, evolving narrative.
-    </p>
-
-    <div class="mt-10 flex flex-wrap items-center gap-4">
-      <a
-        href="/#demo"
-        class="group inline-flex items-center gap-3 rounded-sm bg-primary px-6 py-3.5 text-sm font-medium text-primary-foreground transition-all hover:gap-4 no-underline"
-      >
-        Try the demo
-        <span aria-hidden>&rarr;</span>
-      </a>
-      <a
-        href="https://github.com/BearlySleeping/aikami"
-        class="inline-flex items-center gap-2 text-sm font-medium text-foreground underline-offset-8 hover:underline no-underline"
-      >
-        View on GitHub &rarr;
-      </a>
+      <span class="h-px w-10 bg-rune" aria-hidden></span>
+      <span class="eyebrow text-rune">Open-Source AI RPG Engine</span>
     </div>
 
-    <div
-      class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
-    >
-      <span class="inline-flex items-center gap-2">
-        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
-        PixiJS v8 + SvelteKit
-      </span>
-      <span class="inline-flex items-center gap-2">
-        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
-        AI-generated NPCs
-      </span>
-      <span class="inline-flex items-center gap-2">
-        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
-        Open source
-      </span>
+    <div class="grid lg:grid-cols-2 gap-12 lg:gap-6 items-start">
+      <!-- Left column: Title + CTA -->
+      <div>
+        <h1
+          class="font-serif text-5xl leading-[1.02] tracking-tight md:text-7xl lg:text-[5rem] max-w-2xl"
+        >
+          Your world.{' '}
+          <span class="text-rune">Your AI.</span>{' '}
+          <span class="italic text-muted-foreground">Your hardware.</span>
+        </h1>
+        <p class="mt-8 max-w-xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+          Aikami is an open-source, self-hosted AI-native 2D RPG engine. Every NPC thinks,
+          remembers, and adapts — driven by local AI models you control. No API keys required. No
+          subscriptions. Just infinite, evolving narrative on your hardware.
+        </p>
+
+        <div class="mt-10 flex flex-wrap items-center gap-4">
+          <a
+            href="https://github.com/BearlySleeping/aikami"
+            class="group inline-flex items-center gap-3 rounded-sm bg-rune px-6 py-3.5 text-sm font-medium text-white transition-all hover:gap-4 no-underline shadow-rune hover:shadow-none"
+          >
+            Clone &amp; Self-Host
+            <span aria-hidden>&rarr;</span>
+          </a>
+          <a
+            href="#your-realm"
+            class="inline-flex items-center gap-2 text-sm font-medium text-foreground underline-offset-8 hover:underline no-underline"
+          >
+            Explore Architecture &darr;
+          </a>
+        </div>
+
+        <div
+          class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
+        >
+          <span class="inline-flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-rune" aria-hidden></span>
+            Self-Hosted
+          </span>
+          <span class="inline-flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-ember" aria-hidden></span>
+            BYOK / Local AI
+          </span>
+          <span class="inline-flex items-center gap-2">
+            <span class="h-1.5 w-1.5 rounded-full bg-rune" aria-hidden></span>
+            Free &amp; Open Source
+          </span>
+        </div>
+
+        <!-- DM Terminal -->
+        <HeroTerminal />
+      </div>
+
+      <!-- Right column: D20 interaction hint -->
+      <div class="hidden lg:flex flex-col items-center justify-center min-h-[320px]">
+        <div class="glass-panel p-6 text-center max-w-xs">
+          <p class="font-mono text-[11px] uppercase tracking-widest text-rune mb-2">
+            Interactive Tabletop
+          </p>
+          <p class="text-sm text-muted-foreground leading-relaxed">
+            <span class="text-foreground font-medium">Click or drag the d20</span>
+            {' '}to roll. Each roll generates a unique narrative encounter snippet and triggers
+            reactive spell effects on the canvas.
+          </p>
+          <div class="mt-4 flex items-center justify-center gap-2 text-muted-foreground/60 text-xs">
+            <span class="inline-flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M8 2L2 6l6 4 6-4L8 2z"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  fill="none"
+                />
+                <path d="M2 10l6 4 6-4" stroke="currentColor" stroke-width="1.2" fill="none" />
+              </svg>
+              Click to roll
+            </span>
+            <span class="inline-flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2" fill="none" />
+                <path d="M8 3v5l3 3" stroke="currentColor" stroke-width="1.2" fill="none" />
+              </svg>
+              Drag up
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
+
+<script>
+import { initHeroD20 } from './hero_d20';
+
+const containerId = 'hero-canvas';
+const cleanup = await initHeroD20(containerId);
+
+document.addEventListener('astro:before-swap', () => {
+  cleanup();
+});
+</script>

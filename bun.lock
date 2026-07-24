@@ -139,6 +139,7 @@
         "@fontsource/inter": "^5.2.8",
         "@fontsource/jetbrains-mono": "^5.2.8",
         "firebase": "12.14.0",
+        "pixi.js": "^8.6.6",
       },
       "devDependencies": {
         "@astrojs/check": "^0.9.9",

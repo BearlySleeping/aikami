@@ -49,16 +49,37 @@
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
 
+  /* Dark fantasy tone tokens */
+  --color-slate: var(--slate);
+  --color-slate-light: var(--slate-light);
+  --color-obsidian: var(--obsidian);
+  --color-ember: var(--ember);
+  --color-rune: var(--rune);
+  --color-rune-glow: var(--rune-glow);
+  --color-parchment: var(--parchment);
+  --color-magic-dust: var(--magic-dust);
+
   --shadow-elegant:
     0 2px 4px oklch(0.2 0.04 250 / 0.06), 0 24px 48px -16px oklch(0.2 0.04 250 / 0.18);
+  --shadow-rune: 0 0 12px oklch(0.65 0.2 285 / 0.3), 0 0 40px oklch(0.65 0.2 285 / 0.12);
+  --shadow-card: 0 4px 24px oklch(0.1 0.02 270 / 0.4), 0 1px 2px oklch(0.3 0.02 270 / 0.3);
 }
 
-/* ── Light theme ── */
+/* ── Light theme (parchment / warm slate) ── */
 :root {
   --radius: 0.5rem;
 
   --brand: oklch(0.52 0.22 285);
   --brand-soft: oklch(0.72 0.16 285);
+
+  --slate: oklch(0.25 0.01 260);
+  --slate-light: oklch(0.45 0.01 260);
+  --obsidian: oklch(0.12 0.01 260);
+  --ember: oklch(0.62 0.18 48);
+  --rune: oklch(0.58 0.2 285);
+  --rune-glow: oklch(0.72 0.18 285 / 0.4);
+  --parchment: oklch(0.92 0.03 85);
+  --magic-dust: oklch(0.72 0.18 285 / 0.15);
 
   --background: oklch(0.985 0.006 270);
   --foreground: oklch(0.18 0.03 270);
@@ -88,36 +109,45 @@
   --ring: oklch(0.52 0.22 285);
 }
 
-/* ── Dark theme ── */
+/* ── Dark theme (obsidian / rune-glow) ── */
 .dark {
   --brand: oklch(0.65 0.2 285);
   --brand-soft: oklch(0.78 0.14 285);
 
-  --background: oklch(0.15 0.02 270);
-  --foreground: oklch(0.92 0.01 270);
+  --slate: oklch(0.32 0.01 260);
+  --slate-light: oklch(0.48 0.01 260);
+  --obsidian: oklch(0.14 0.01 260);
+  --ember: oklch(0.65 0.18 48);
+  --rune: oklch(0.62 0.2 285);
+  --rune-glow: oklch(0.68 0.18 285 / 0.5);
+  --parchment: oklch(0.85 0.04 85);
+  --magic-dust: oklch(0.68 0.18 285 / 0.2);
 
-  --card: oklch(0.18 0.02 270);
-  --card-foreground: oklch(0.92 0.01 270);
-  --popover: oklch(0.18 0.02 270);
-  --popover-foreground: oklch(0.92 0.01 270);
+  --background: oklch(0.13 0.015 260);
+  --foreground: oklch(0.9 0.01 270);
 
-  --primary: oklch(0.92 0.01 270);
-  --primary-foreground: oklch(0.15 0.02 270);
+  --card: oklch(0.16 0.018 260);
+  --card-foreground: oklch(0.9 0.01 270);
+  --popover: oklch(0.16 0.018 260);
+  --popover-foreground: oklch(0.9 0.01 270);
 
-  --secondary: oklch(0.22 0.02 270);
-  --secondary-foreground: oklch(0.92 0.01 270);
+  --primary: oklch(0.9 0.01 270);
+  --primary-foreground: oklch(0.13 0.015 260);
 
-  --muted: oklch(0.22 0.02 270);
+  --secondary: oklch(0.2 0.02 260);
+  --secondary-foreground: oklch(0.9 0.01 270);
+
+  --muted: oklch(0.2 0.02 260);
   --muted-foreground: oklch(0.55 0.03 270);
 
-  --accent: oklch(0.22 0.02 270);
-  --accent-foreground: oklch(0.92 0.01 270);
+  --accent: oklch(0.2 0.02 260);
+  --accent-foreground: oklch(0.9 0.01 270);
 
   --destructive: oklch(0.55 0.18 25);
-  --destructive-foreground: oklch(0.92 0.01 270);
+  --destructive-foreground: oklch(0.9 0.01 270);
 
-  --border: oklch(0.25 0.02 270);
-  --input: oklch(0.25 0.02 270);
+  --border: oklch(0.24 0.02 260);
+  --input: oklch(0.24 0.02 260);
   --ring: oklch(0.65 0.2 285);
 }
 
@@ -176,5 +206,119 @@
 
   .tabnum {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Glassmorphic panel ── */
+  .glass-panel {
+    background: oklch(from var(--color-card) l c h / 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid oklch(from var(--color-border) l c h / 0.5);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  .glass-panel-solid {
+    background: var(--color-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid oklch(from var(--color-border) l c h / 0.6);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* ── Rune border glow ── */
+  .rune-border {
+    position: relative;
+    border: 1px solid var(--color-rune);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-rune);
+    overflow: hidden;
+  }
+
+  .rune-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      var(--rune-glow),
+      transparent 40%,
+      transparent 60%,
+      var(--rune-glow)
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: rune-shimmer 4s ease-in-out infinite;
+  }
+
+  @keyframes rune-shimmer {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* ── Ember glow text ── */
+  .text-ember-glow {
+    color: var(--ember);
+    text-shadow: 0 0 8px oklch(0.62 0.18 48 / 0.5);
+  }
+
+  /* ── Atmospheric canvas layer ── */
+  .canvas-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .canvas-layer.interactive {
+    pointer-events: auto;
+  }
+
+  /* ── Terminal text effect ── */
+  .terminal-cursor::after {
+    content: "▊";
+    animation: cursor-blink 1s step-end infinite;
+    color: var(--rune);
+  }
+
+  @keyframes cursor-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* ── Typing reveal ── */
+  .typing-reveal {
+    overflow: hidden;
+    border-right: 2px solid var(--rune);
+    white-space: nowrap;
+    animation: typing-reveal 3s steps(40) forwards;
+    width: 0;
+  }
+
+  @keyframes typing-reveal {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
+    }
   }
 }

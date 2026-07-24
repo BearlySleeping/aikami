@@ -1,0 +1,203 @@
+---
+// apps/frontend/site/src/lib/components/sections/your_realm.astro
+/**
+ * "Your Realm, Your Rules" — self-hosting, BYOK & Local AI showcase.
+ * Interactive deployment tabs and visual tech stack cards.
+ */
+---
+
+<!-- Tab data embedded as JSON for the interactive tab panel -->
+<div
+  id="realm-tab-data"
+  data-tabs='[
+    {
+      "id": "local-ai",
+      "label": "Local AI / Offline First",
+      "icon": "🏠",
+      "title": "Run AI models on your own machine.",
+      "description": "Native Ollama &amp; vLLM support. All NPC reasoning, dialog generation, and world simulation runs locally — zero API costs, 100% privacy. No internet required after initial model download.",
+      "bullets": [
+        "Ollama integration for Llama, Mistral, and custom models",
+        "vLLM support for high-throughput inference",
+        "Model hot-swapping at runtime — switch models mid-session",
+        "GPU acceleration via CUDA / Metal / ROCm",
+        "All data stays on your machine — no telemetry, no cloud"
+      ]
+    },
+    {
+      "id": "byok",
+      "label": "BYOK (Bring Your Own Key)",
+      "icon": "🔑",
+      "title": "Plug in your own API keys.",
+      "description": "Not ready to run local models? Seamlessly connect Anthropic Claude, OpenAI GPT, Google Gemini, or any OpenAI-compatible endpoint. Mix and match providers per NPC role.",
+      "bullets": [
+        "First-class Anthropic, OpenAI, and Gemini connectors",
+        "OpenAI-compatible endpoint support for any provider",
+        "Per-NPC model routing — warrior NPC on Claude, mage on GPT-4",
+        "Fallback chains — if one provider fails, the next takes over",
+        "Cost tracking and rate-limit-aware batching built in"
+      ]
+    },
+    {
+      "id": "self-host",
+      "label": "Self-Host Anywhere",
+      "icon": "🖥️",
+      "title": "Deploy on your terms.",
+      "description": "Docker, Bun, Firebase Local Emulators, or native Tauri desktop builds. Aikami adapts to your infrastructure — not the other way around.",
+      "bullets": [
+        "Single-command Docker Compose for full stack",
+        "Firebase Local Emulator Suite for offline development",
+        "Tauri v2 desktop builds for Windows, macOS, and Linux",
+        "Bun runtime — install once, run everywhere",
+        "Runs on a Raspberry Pi 5, your gaming rig, or a VPS"
+      ]
+    }
+  ]'
+></div>
+
+<section id="your-realm" class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow text-rune">Zero Lock-In Architecture</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">Your realm. Your rules.</h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Aikami is built from the ground up for self-hosting and local-first operation. BYOK, run
+        models offline, or deploy to the cloud — you choose how your world runs.
+      </p>
+    </div>
+
+    <!-- Interactive Tab Panel -->
+    <div class="mt-10">
+      <!-- Tab buttons -->
+      <div
+        id="realm-tabs"
+        class="flex flex-wrap gap-2 mb-6"
+        role="tablist"
+        aria-label="Deployment options"
+      >
+        <!-- Rendered by script -->
+      </div>
+
+      <!-- Tab content -->
+      <div id="realm-content" class="rune-border p-8 bg-card/50 backdrop-blur min-h-[260px]">
+        <!-- Rendered by script -->
+      </div>
+    </div>
+
+    <!-- Tech Stack Cards -->
+    <div class="mt-16">
+      <h3
+        class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground text-center mb-8"
+      >
+        Built on Modern Open-Source Foundation
+      </h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-rune mb-2">Frontend</p>
+          <p class="font-serif text-xl">Svelte 5</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ PixiJS v8</p>
+        </div>
+        <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ember mb-2">Backend</p>
+          <p class="font-serif text-xl">Firestack</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ Data Connect</p>
+        </div>
+        <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-rune mb-2">AI Runtime</p>
+          <p class="font-serif text-xl">Ollama</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ vLLM + BYOK</p>
+        </div>
+        <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ember mb-2">Desktop</p>
+          <p class="font-serif text-xl">Tauri v2</p>
+          <p class="text-[10px] text-muted-foreground mt-1">Rust-powered</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+type TabData = {
+  id: string;
+  label: string;
+  icon: string;
+  title: string;
+  description: string;
+  bullets: string[];
+};
+
+const dataEl = document.getElementById('realm-tab-data');
+const tabs: TabData[] = JSON.parse(dataEl?.dataset.tabs ?? '[]');
+
+const tabsContainer = document.getElementById('realm-tabs');
+const contentContainer = document.getElementById('realm-content');
+
+let activeTab = tabs[0]?.id ?? 'local-ai';
+
+const renderTabs = () => {
+  if (!tabsContainer) {
+    return;
+  }
+
+  tabsContainer.innerHTML = tabs
+    .map(
+      (tab) => `
+          <button
+            type="button"
+            role="tab"
+            aria-selected="${tab.id === activeTab}"
+            class="rounded-sm px-4 py-2.5 text-xs font-mono tracking-wider transition-all ${
+              tab.id === activeTab
+                ? 'bg-rune text-white shadow-rune'
+                : 'bg-card text-muted-foreground hover:text-foreground border border-border'
+            }"
+            data-tab="${tab.id}"
+          >
+            ${tab.icon} ${tab.label}
+          </button>
+        `,
+    )
+    .join('');
+
+  const tabBtns = tabsContainer.querySelectorAll<HTMLElement>('[data-tab]');
+  for (const btn of tabBtns) {
+    btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tab ?? 'local-ai';
+      renderTabs();
+      renderContent();
+    });
+  }
+};
+
+const renderContent = () => {
+  if (!contentContainer) {
+    return;
+  }
+
+  const tab = tabs.find((t) => t.id === activeTab);
+  if (!tab) {
+    return;
+  }
+
+  contentContainer.innerHTML = `
+        <h3 class="font-serif text-2xl md:text-3xl leading-tight mb-3">${tab.title}</h3>
+        <p class="text-muted-foreground leading-relaxed mb-6">${tab.description}</p>
+        <ul class="space-y-2">
+          ${tab.bullets
+            .map(
+              (b) => `
+            <li class="flex items-start gap-2.5 text-sm text-muted-foreground">
+              <span class="text-rune shrink-0 mt-0.5" aria-hidden>✦</span>
+              <span>${b}</span>
+            </li>
+          `,
+            )
+            .join('')}
+        </ul>
+      `;
+};
+
+renderTabs();
+renderContent();
+</script>
