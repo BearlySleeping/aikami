@@ -6,10 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { AiModeResolution } from '@aikami/types';
-import {
-  createOpenAiCompatibleTextAdapter,
-  isAiGatewayError,
-} from '../src/index.ts';
+import { createOpenAiCompatibleTextAdapter, isAiGatewayError } from '../src/index.ts';
 import { createJsonFetchMock, createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
 
 const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => ({

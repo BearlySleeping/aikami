@@ -88,11 +88,7 @@ export const createJsonFetchMock = (options?: {
   status?: number;
   statusBody?: string;
 }): { fetchFn: typeof fetch; calls: CapturedFetch[] } => {
-  const {
-    content = 'Hello from JSON mock',
-    status = 200,
-    statusBody = '',
-  } = options ?? {};
+  const { content = 'Hello from JSON mock', status = 200, statusBody = '' } = options ?? {};
   const calls: CapturedFetch[] = [];
 
   const fetchFn = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {

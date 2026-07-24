@@ -35,11 +35,5 @@
   },
   "exclude": ["dist", "node_modules"],
   "extends": "astro/tsconfigs/strict",
-  "include": [
-    ".astro/types.d.ts",
-    "src",
-    "test",
-    "scripts/**/*",
-    "astro.config.ts"
-  ]
+  "include": [".astro/types.d.ts", "src", "test", "scripts/**/*", "astro.config.ts"]
 }

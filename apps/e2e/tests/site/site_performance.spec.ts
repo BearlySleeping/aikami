@@ -9,7 +9,10 @@ import { expect, test } from '@playwright/test';
 const PERF_PAGES = [{ path: '/', name: 'home' }];
 
 test.describe('Performance — page load', () => {
-  test.skip(({ browserName }) => browserName !== 'chromium', 'Performance metrics only on Chromium');
+  test.skip(
+    ({ browserName }) => browserName !== 'chromium',
+    'Performance metrics only on Chromium',
+  );
 
   for (const pageDef of PERF_PAGES) {
     test(`${pageDef.name} page meets performance thresholds`, async ({ page, browserName }) => {
