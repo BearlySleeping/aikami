@@ -1,0 +1,46 @@
+---
+// apps/frontend/site/src/lib/layouts/layout.astro
+import '$styles/global.css';
+import { PUBLIC_GOOGLE_ANALYTICS_ID, PUBLIC_MICROSOFT_CLARITY_ID } from 'astro:env/client';
+import Footer from '$components/layout/footer.astro';
+import Head from '$components/layout/head/head.astro';
+import Navbar from '$components/layout/navbar.astro';
+import Analytics from '$components/meta/analytics.astro';
+import Clarity from '$components/meta/clarity.astro';
+import { site } from '$data/site_content';
+
+type Props = {
+  description?: string;
+  image?: string;
+  title?: string;
+  hideNavbar?: boolean;
+  hideFooter?: boolean;
+};
+
+const {
+  title = site.name,
+  description = site.description,
+  image,
+  hideNavbar = false,
+  hideFooter = false,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="h-full scroll-smooth">
+  <head>
+    <Head title={title} description={description.slice(0, 160)} image={image} />
+    {import.meta.env.PROD && PUBLIC_GOOGLE_ANALYTICS_ID && <Analytics id={PUBLIC_GOOGLE_ANALYTICS_ID} />}
+    {import.meta.env.PROD && PUBLIC_MICROSOFT_CLARITY_ID && <Clarity id={PUBLIC_MICROSOFT_CLARITY_ID} />}
+  </head>
+
+  <body class="flex min-h-dvh flex-col bg-background text-foreground antialiased">
+    {!hideNavbar && <Navbar />}
+
+    <main class="flex-1" data-pagefind-body>
+      <slot />
+    </main>
+
+    {!hideFooter && <Footer />}
+  </body>
+</html>

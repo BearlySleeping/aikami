@@ -1,0 +1,34 @@
+---
+// apps/frontend/site/src/lib/components/sections/backlog.astro
+import Button from '$components/common/button.astro';
+---
+
+<section id="roadmap" class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow">Open development</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">Follow the journey.</h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Aikami is developed in the open. Star the repo, submit issues, or check out the roadmap to
+        see what&apos;s coming next.
+      </p>
+    </div>
+    <div class="mt-10 flex flex-wrap gap-4">
+      <Button
+        href="https://github.com/BearlySleeping/aikami"
+        label="GitHub Repository"
+        variant="primary"
+      />
+      <Button
+        href="https://github.com/BearlySleeping/aikami/issues"
+        label="Submit Feature / Bug"
+        variant="secondary"
+      />
+      <Button
+        href="https://github.com/users/BearlySleeping/projects/1"
+        label="View Roadmap"
+        variant="secondary"
+      />
+    </div>
+  </div>
+</section>

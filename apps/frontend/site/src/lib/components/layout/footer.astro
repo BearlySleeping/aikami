@@ -1,0 +1,26 @@
+---
+// apps/frontend/site/src/lib/components/layout/footer.astro
+import { siteContent } from '$data/site_content';
+---
+
+<footer class="bg-background">
+  <div
+    class="mx-auto max-w-6xl px-6 py-12 flex flex-col gap-6 md:flex-row md:items-center md:justify-between text-sm text-muted-foreground"
+  >
+    <div class="flex items-center gap-2.5">
+      <span class="font-logo text-base text-foreground">Aikami</span>
+      <span class="mx-3 text-border">/</span>
+      <span>AI-powered 2D RPG.</span>
+    </div>
+    <div class="flex flex-wrap gap-x-6 gap-y-2">
+      {siteContent.footer.trustLinks.map((link) => (
+        <a href={link.href} class="hover:text-foreground no-underline">
+          {link.label}
+        </a>
+      ))}
+      <a href={`mailto:${siteContent.site.email}`} class="hover:text-foreground no-underline">
+        {siteContent.site.email}
+      </a>
+    </div>
+  </div>
+</footer>

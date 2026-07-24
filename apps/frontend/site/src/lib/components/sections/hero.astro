@@ -1,0 +1,57 @@
+---
+// apps/frontend/site/src/lib/components/sections/hero.astro
+---
+
+<section class="relative overflow-hidden border-b border-border/70">
+  <div class="grain absolute inset-0 opacity-60" aria-hidden></div>
+  <div class="mx-auto max-w-6xl px-6 pt-20 pb-24 md:pt-28 md:pb-28 relative">
+    <div class="flex items-center gap-3 mb-8">
+      <span class="h-px w-10 bg-brand"></span>
+      <span class="eyebrow">AI-Powered 2D RPG</span>
+    </div>
+    <h1
+      class="font-serif text-5xl leading-[1.02] tracking-tight md:text-7xl lg:text-[5.25rem] max-w-5xl"
+    >
+      A living world driven by AI{' '}
+      <span class="italic text-muted-foreground">&mdash; every NPC has a mind of their own.</span>
+    </h1>
+    <p class="mt-8 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+      Aikami is an AI-powered 2D top-down RPG where NPCs have their own beliefs, personalities, and
+      strategies. No prewritten dialogs. No scripted behavior. Every interaction is dynamically
+      generated &mdash; creating an infinite, evolving narrative.
+    </p>
+
+    <div class="mt-10 flex flex-wrap items-center gap-4">
+      <a
+        href="/#demo"
+        class="group inline-flex items-center gap-3 rounded-sm bg-primary px-6 py-3.5 text-sm font-medium text-primary-foreground transition-all hover:gap-4 no-underline"
+      >
+        Try the demo
+        <span aria-hidden>&rarr;</span>
+      </a>
+      <a
+        href="https://github.com/BearlySleeping/aikami"
+        class="inline-flex items-center gap-2 text-sm font-medium text-foreground underline-offset-8 hover:underline no-underline"
+      >
+        View on GitHub &rarr;
+      </a>
+    </div>
+
+    <div
+      class="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground"
+    >
+      <span class="inline-flex items-center gap-2">
+        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
+        PixiJS v8 + SvelteKit
+      </span>
+      <span class="inline-flex items-center gap-2">
+        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
+        AI-generated NPCs
+      </span>
+      <span class="inline-flex items-center gap-2">
+        <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
+        Open source
+      </span>
+    </div>
+  </div>
+</section>

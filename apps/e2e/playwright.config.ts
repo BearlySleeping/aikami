@@ -27,6 +27,7 @@ const FIRESTORE_PORT = 8081;
 const STORAGE_PORT = 9198;
 const PUBSUB_PORT = 8086;
 const CLIENT_PORT = 5274;
+const SITE_PORT = 5280;
 
 /**
  * Worker-specific project ID for emulator data isolation.
@@ -48,6 +49,7 @@ process.env.GCLOUD_PROJECT = PROJECT_ID;
 // ── Dev server base URLs ──────────────────────────────────────
 
 const CLIENT_BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const SITE_BASE_URL = `http://localhost:${SITE_PORT}`;
 
 // Auth state cache file — per-worker for data isolation.
 // Falls back to worker-0 if the specific worker file doesn't exist
@@ -131,6 +133,32 @@ export default defineConfig({
       name: 'setup',
       testDir: './src',
       testMatch: /auth\.setup\.ts/,
+    },
+
+    // ── Site Domain (Astro Marketing Site) ──────────────────
+    {
+      name: 'site-chromium',
+      testDir: './tests/site',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: SITE_BASE_URL,
+      },
+    },
+    {
+      name: 'site-mobile',
+      testDir: './tests/site',
+      use: {
+        ...devices['Pixel 5'],
+        baseURL: SITE_BASE_URL,
+      },
+    },
+    {
+      name: 'site-firefox',
+      testDir: './tests/site',
+      use: {
+        ...devices['Desktop Firefox'],
+        baseURL: SITE_BASE_URL,
+      },
     },
 
     // ── Client Domain ──────────────────────────────────────

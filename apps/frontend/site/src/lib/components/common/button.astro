@@ -1,0 +1,24 @@
+---
+// apps/frontend/site/src/lib/components/common/button.astro
+import type { HTMLAttributes } from 'astro/types';
+
+type Props = HTMLAttributes<'a'> & {
+  href: string;
+  label: string;
+  variant?: 'primary' | 'secondary';
+};
+
+const { href, label, variant = 'secondary', class: className } = Astro.props;
+
+const baseClass =
+  'inline-flex items-center rounded-sm px-5 py-3 text-sm font-medium transition-all no-underline';
+
+const variantClass =
+  variant === 'primary'
+    ? 'bg-primary text-primary-foreground hover:opacity-90'
+    : 'border border-border bg-card text-foreground hover:bg-muted';
+---
+
+<a href={href} class={`${baseClass} ${variantClass} ${className ?? ''}`}>
+  {label}
+</a>

@@ -1,0 +1,180 @@
+/* apps/frontend/site/src/lib/styles/global.css */
+
+/* ── Fonts (self-hosted via Fontsource) ── */
+@import "@fontsource/inter/300.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@import "tailwindcss";
+
+/* ── Design tokens ── */
+@theme inline {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-logo: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+
+  --shadow-elegant:
+    0 2px 4px oklch(0.2 0.04 250 / 0.06), 0 24px 48px -16px oklch(0.2 0.04 250 / 0.18);
+}
+
+/* ── Light theme ── */
+:root {
+  --radius: 0.5rem;
+
+  --brand: oklch(0.52 0.22 285);
+  --brand-soft: oklch(0.72 0.16 285);
+
+  --background: oklch(0.985 0.006 270);
+  --foreground: oklch(0.18 0.03 270);
+
+  --card: oklch(0.99 0.005 270);
+  --card-foreground: oklch(0.18 0.03 270);
+  --popover: oklch(0.99 0.005 270);
+  --popover-foreground: oklch(0.18 0.03 270);
+
+  --primary: oklch(0.25 0.05 270);
+  --primary-foreground: oklch(0.985 0.006 270);
+
+  --secondary: oklch(0.94 0.01 270);
+  --secondary-foreground: oklch(0.25 0.05 270);
+
+  --muted: oklch(0.94 0.01 270);
+  --muted-foreground: oklch(0.45 0.03 270);
+
+  --accent: oklch(0.94 0.01 270);
+  --accent-foreground: oklch(0.25 0.05 270);
+
+  --destructive: oklch(0.45 0.18 25);
+  --destructive-foreground: oklch(0.985 0.006 270);
+
+  --border: oklch(0.87 0.01 270);
+  --input: oklch(0.91 0.01 270);
+  --ring: oklch(0.52 0.22 285);
+}
+
+/* ── Dark theme ── */
+.dark {
+  --brand: oklch(0.65 0.2 285);
+  --brand-soft: oklch(0.78 0.14 285);
+
+  --background: oklch(0.15 0.02 270);
+  --foreground: oklch(0.92 0.01 270);
+
+  --card: oklch(0.18 0.02 270);
+  --card-foreground: oklch(0.92 0.01 270);
+  --popover: oklch(0.18 0.02 270);
+  --popover-foreground: oklch(0.92 0.01 270);
+
+  --primary: oklch(0.92 0.01 270);
+  --primary-foreground: oklch(0.15 0.02 270);
+
+  --secondary: oklch(0.22 0.02 270);
+  --secondary-foreground: oklch(0.92 0.01 270);
+
+  --muted: oklch(0.22 0.02 270);
+  --muted-foreground: oklch(0.55 0.03 270);
+
+  --accent: oklch(0.22 0.02 270);
+  --accent-foreground: oklch(0.92 0.01 270);
+
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: oklch(0.92 0.01 270);
+
+  --border: oklch(0.25 0.02 270);
+  --input: oklch(0.25 0.02 270);
+  --ring: oklch(0.65 0.2 285);
+}
+
+/* ── Base styles ── */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.018em;
+  }
+
+  ::selection {
+    background-color: var(--brand);
+    color: white;
+  }
+}
+
+/* ── Utility classes ── */
+@layer components {
+  .grain {
+    position: relative;
+  }
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.06;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .tabnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
