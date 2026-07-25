@@ -15,9 +15,7 @@ const checkHealth = async (): Promise<void> => {
     });
 
     if (!response.ok) {
-      console.error(
-        `✗ Ollama returned status ${response.status} — container may be booting.`,
-      );
+      console.error(`✗ Ollama returned status ${response.status} — container may be booting.`);
       process.exit(1);
     }
 
@@ -34,9 +32,7 @@ const checkHealth = async (): Promise<void> => {
     const err = error as Error & { code?: string };
 
     if (err.code === 'ECONNREFUSED' || err.name === 'TypeError') {
-      console.error(
-        `✗ Ollama container is not running on port ${OLLAMA_PORT}.`,
-      );
+      console.error(`✗ Ollama container is not running on port ${OLLAMA_PORT}.`);
       console.error('  Start it with: bun herdr:start text');
     } else {
       console.error(`✗ Health check failed: ${err.message}`);

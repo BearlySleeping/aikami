@@ -7,6 +7,7 @@ import {
   formatProjectList,
   parseMoonProjects,
 } from './lib/output_filter';
+import { runCommand } from './lib/process_runner';
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
@@ -19,15 +20,15 @@ export default function (pi: ExtensionAPI) {
   let workspaceSummary = FALLBACK_SUMMARY;
 
   /** Default timeout for short-running CLI commands (3 min). */
-  const DefaultTimeout = 180_000;
+  const DefaultTimeoutMs = 180_000;
 
   /** Extended timeout for heavy tasks like builds and integration tests (5 min). */
-  const HeavyTimeout = 300_000;
+  const HeavyTimeoutMs = 300_000;
 
   // ── Fetch workspace dynamically on session start ─────────────────────
   pi.on('session_start', async (_event, _ctx) => {
     try {
-      const result = await pi.exec('bun', ['moon', 'query', 'projects']);
+      const result = await runCommand('bun', ['moon', 'query', 'projects']);
       if (result.code === 0 && result.stdout) {
         const projects = parseMoonProjects(result.stdout);
         if (projects) {
@@ -54,9 +55,9 @@ export default function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
-      const result = await pi.exec('bun', ['moon', 'query', 'projects', '--affected'], {
+      const result = await runCommand('bun', ['moon', 'query', 'projects', '--affected'], {
         signal,
-        timeout: DefaultTimeout,
+        timeoutMs: DefaultTimeoutMs,
       });
       const raw = result.stdout || result.stderr;
       const ids = extractAffectedIds(raw);
@@ -187,9 +188,9 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      const result = await pi.exec('bun', ['moon', 'run', params.target], {
+      const result = await runCommand('bun', ['moon', 'run', params.target], {
         signal,
-        timeout: DefaultTimeout,
+        timeoutMs: DefaultTimeoutMs,
       });
       const raw = result.stdout || result.stderr || '';
       const filtered = filterByTaskType(raw, target);
@@ -208,9 +209,9 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: 'Use moon_list_projects to understand the monorepo workspace structure.',
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
-      const result = await pi.exec('bun', ['moon', 'query', 'projects'], {
+      const result = await runCommand('bun', ['moon', 'query', 'projects'], {
         signal,
-        timeout: DefaultTimeout,
+        timeoutMs: DefaultTimeoutMs,
       });
       const raw = result.stdout || result.stderr;
       const projects = parseMoonProjects(raw);
@@ -249,15 +250,31 @@ export default function (pi: ExtensionAPI) {
           description: 'If true, also run build + tests after fix+typecheck pass.',
         }),
       ),
+      timeoutSeconds: Type.Optional(
+        Type.Number({
+          description:
+            'Max execution time per phase in seconds. Default: 180 (3 min). Increase for large test suites (e.g. 600 for full E2E).',
+          minimum: 10,
+          maximum: 900,
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const errors: string[] = [];
       const ok: string[] = [];
 
+      // Allow AI to override timeout via timeoutSeconds (seconds → ms)
+      const phaseTimeoutMs = params.timeoutSeconds
+        ? params.timeoutSeconds * 1000
+        : DefaultTimeoutMs;
+      const heavyTimeoutMs = params.timeoutSeconds
+        ? Math.max(params.timeoutSeconds * 1000, HeavyTimeoutMs)
+        : HeavyTimeoutMs;
+
       // 1. Detect affected
-      const affectedResult = await pi.exec('bun', ['moon', 'query', 'projects', '--affected'], {
+      const affectedResult = await runCommand('bun', ['moon', 'query', 'projects', '--affected'], {
         signal,
-        timeout: DefaultTimeout,
+        timeoutMs: DefaultTimeoutMs,
       });
       const affectedProjects = extractAffectedIds(affectedResult.stdout || '');
 
@@ -273,10 +290,10 @@ export default function (pi: ExtensionAPI) {
 
       // 2. Run fix + typecheck via workspace-level --affected.
       // --concurrency 4 caps parallel project builds to prevent OOM crashes.
-      const fixResult = await pi.exec(
+      const fixResult = await runCommand(
         'bun',
         ['moon', 'run', ':fix', '--affected', '--concurrency', '4'],
-        { signal, timeout: DefaultTimeout },
+        { signal, timeoutMs: phaseTimeoutMs },
       );
       if (fixResult.code !== 0) {
         errors.push(':fix');
@@ -287,10 +304,10 @@ export default function (pi: ExtensionAPI) {
         ok.push(':fix');
       }
 
-      const tcResult = await pi.exec(
+      const tcResult = await runCommand(
         'bun',
         ['moon', 'run', ':typecheck', '--affected', '--concurrency', '4'],
-        { signal, timeout: DefaultTimeout },
+        { signal, timeoutMs: phaseTimeoutMs },
       );
       if (tcResult.code !== 0) {
         errors.push(':typecheck');
@@ -303,10 +320,10 @@ export default function (pi: ExtensionAPI) {
 
       // 3. Build + test (optional, only if fix+typecheck passed)
       if (params.test && errors.length === 0) {
-        const buildResult = await pi.exec(
+        const buildResult = await runCommand(
           'bun',
           ['moon', 'run', ':build', '--affected', '--concurrency', '4'],
-          { signal, timeout: HeavyTimeout },
+          { signal, timeoutMs: heavyTimeoutMs },
         );
         if (buildResult.code !== 0) {
           errors.push(':build');
@@ -317,10 +334,10 @@ export default function (pi: ExtensionAPI) {
           ok.push(':build');
         }
 
-        const testResult = await pi.exec(
+        const testResult = await runCommand(
           'bun',
           ['moon', 'run', ':test', '--affected', '--concurrency', '4'],
-          { signal, timeout: HeavyTimeout },
+          { signal, timeoutMs: heavyTimeoutMs },
         );
         if (testResult.code !== 0) {
           errors.push(':test');
@@ -380,6 +397,14 @@ export default function (pi: ExtensionAPI) {
           default: false,
         }),
       ),
+      timeoutSeconds: Type.Optional(
+        Type.Number({
+          description:
+            'Max execution time in seconds. Default: 300 (5 min). Increase for full suite runs.',
+          minimum: 30,
+          maximum: 900,
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const args = ['run', 'test:blackbox'];
@@ -389,6 +414,8 @@ export default function (pi: ExtensionAPI) {
       if (params.noCrossService) {
         args.push('--no-cross-service');
       }
+
+      const testTimeoutMs = params.timeoutSeconds ? params.timeoutSeconds * 1000 : HeavyTimeoutMs;
 
       _onUpdate?.({
         content: [
@@ -400,7 +427,7 @@ export default function (pi: ExtensionAPI) {
         details: {},
       });
 
-      const result = await pi.exec('bun', args, { signal, timeout: HeavyTimeout }); // 5 min timeout
+      const result = await runCommand('bun', args, { signal, timeoutMs: testTimeoutMs });
 
       // Try to parse JSON report for structured output
       let parsedReport: Record<string, unknown> | null = null;

@@ -58,25 +58,24 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
   const cy = offsetY;
 
   // Face points for an icosahedron projection (simplified 2.5D)
-  // Top point
   const topY = cy - size * 1.3;
-  // Upper ring (5 points)
   const upperRing = Array.from({ length: 5 }, (_, i) => {
     const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2 + rotation;
     return { x: cx + Math.cos(angle) * size * 0.7, y: cy - size * 0.45 };
   });
-  // Equatorial ring (5 points, offset)
   const eqRing = Array.from({ length: 5 }, (_, i) => {
     const angle = (Math.PI * 2 * i) / 5 + Math.PI / 5 - Math.PI / 2 + rotation;
     return { x: cx + Math.cos(angle) * size, y: cy + size * 0.05 };
   });
-  // Lower ring (5 points)
   const lowerRing = Array.from({ length: 5 }, (_, i) => {
     const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2 + rotation;
     return { x: cx + Math.cos(angle) * size * 0.7, y: cy + size * 0.55 };
   });
-  // Bottom point
   const bottomY = cy + size * 1.3;
+
+  // Safe ring access: indices 0-4 are always valid for these 5-element arrays
+  const rp = (ring: { x: number; y: number }[], i: number): { x: number; y: number } =>
+    ring[i] ?? { x: 0, y: 0 };
 
   // Draw top cap faces (top → upper ring)
   for (let i = 0; i < 5; i++) {
@@ -84,7 +83,9 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.45 + 0.35 * Math.sin(rotation * 3 + i);
     const faceColor = lerpColor(COLORS.rune, COLORS.shadow, shade);
 
-    g.poly([cx, topY, upperRing[i]?.x, upperRing[i]?.y, upperRing[next]?.x, upperRing[next]?.y]);
+    const ui = rp(upperRing, i);
+    const un = rp(upperRing, next);
+    g.poly([cx, topY, ui.x, ui.y, un.x, un.y]);
     g.fill({ color: faceColor, alpha: 0.85 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.4, width: 0.8 });
   }
@@ -96,27 +97,18 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.4 + 0.4 * Math.sin(rotation * 2.5 + i + 1);
     const faceColor = lerpColor(COLORS.rune, COLORS.ember, shade);
 
+    const ui = rp(upperRing, i);
+    const un = rp(upperRing, next);
+    const ep = rp(eqRing, prevEq);
+    const ei = rp(eqRing, i);
+
     // Left face
-    g.poly([
-      upperRing[i]?.x,
-      upperRing[i]?.y,
-      eqRing[prevEq]?.x,
-      eqRing[prevEq]?.y,
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-    ]);
+    g.poly([ui.x, ui.y, ep.x, ep.y, ei.x, ei.y]);
     g.fill({ color: faceColor, alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
 
     // Right face
-    g.poly([
-      upperRing[i]?.x,
-      upperRing[i]?.y,
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      upperRing[next]?.x,
-      upperRing[next]?.y,
-    ]);
+    g.poly([ui.x, ui.y, ei.x, ei.y, un.x, un.y]);
     g.fill({ color: lerpColor(faceColor, COLORS.shadow, 0.2), alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
   }
@@ -127,25 +119,16 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.4 + 0.4 * Math.sin(rotation * 2.5 + i + 2);
     const faceColor = lerpColor(COLORS.rune, COLORS.magicBlue, shade);
 
-    g.poly([
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      lowerRing[i]?.x,
-      lowerRing[i]?.y,
-      lowerRing[next]?.x,
-      lowerRing[next]?.y,
-    ]);
+    const ei = rp(eqRing, i);
+    const en = rp(eqRing, next);
+    const li = rp(lowerRing, i);
+    const ln = rp(lowerRing, next);
+
+    g.poly([ei.x, ei.y, li.x, li.y, ln.x, ln.y]);
     g.fill({ color: faceColor, alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
 
-    g.poly([
-      eqRing[i]?.x,
-      eqRing[i]?.y,
-      lowerRing[next]?.x,
-      lowerRing[next]?.y,
-      eqRing[next]?.x,
-      eqRing[next]?.y,
-    ]);
+    g.poly([ei.x, ei.y, ln.x, ln.y, en.x, en.y]);
     g.fill({ color: lerpColor(faceColor, COLORS.shadow, 0.15), alpha: 0.8 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.35, width: 0.8 });
   }
@@ -156,7 +139,9 @@ const drawD20 = (g: Graphics, rotation: number, scale: number, offsetY: number):
     const shade = 0.5 + 0.3 * Math.sin(rotation * 3 + i + 1);
     const faceColor = lerpColor(COLORS.rune, COLORS.shadow, shade);
 
-    g.poly([cx, bottomY, lowerRing[next]?.x, lowerRing[next]?.y, lowerRing[i]?.x, lowerRing[i]?.y]);
+    const li = rp(lowerRing, i);
+    const ln = rp(lowerRing, next);
+    g.poly([cx, bottomY, ln.x, ln.y, li.x, li.y]);
     g.fill({ color: faceColor, alpha: 0.85 });
     g.stroke({ color: COLORS.runeGlow, alpha: 0.4, width: 0.8 });
   }

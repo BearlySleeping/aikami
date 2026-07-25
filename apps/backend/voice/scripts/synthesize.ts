@@ -58,9 +58,7 @@ try {
     console.log(`🔊 Playing with ${available}...`);
     await Bun.$`${available} ${args}`;
   } else {
-    console.log(
-      `⚠  No audio player found (tried mpv, ffplay, aplay). File saved at ${outfile}`,
-    );
+    console.log(`⚠  No audio player found (tried mpv, ffplay, aplay). File saved at ${outfile}`);
   }
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
