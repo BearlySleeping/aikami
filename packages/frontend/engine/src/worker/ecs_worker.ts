@@ -826,7 +826,24 @@ const stopTickLoop = (): void => {
  * Contract: C-196 Emergent World Integration
  */
 const tickLoop = (): void => {
-  if (!world || !running || !activeWriteView || isTicking) {
+  // If already ticking, return early — the in-flight tick's finally block
+  // will handle clearing the handle and rescheduling.
+  if (isTicking) {
+    return;
+  }
+
+  // If other conditions prevent execution, clear the stale handle and
+  // attempt self-healing reschedule (unless intentionally stopped).
+  if (!world || !running || !activeWriteView) {
+    if (_tickTimerHandle !== undefined) {
+      clearTimeout(_tickTimerHandle);
+      _tickTimerHandle = undefined;
+    }
+    // If still running (transient condition), reschedule to self-heal.
+    // If stopped (!running), let the loop die as intended.
+    if (running && world) {
+      _scheduleNextTick();
+    }
     return;
   }
 
@@ -1383,6 +1400,8 @@ self.onmessage = (event: MessageEvent): void => {
                 break;
               }
             }
+            // Explicitly restart the tick loop now that we have a valid buffer
+            startTickLoop();
           }
         }
         break;

@@ -72,6 +72,15 @@ const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' 
       value,
       fallback,
     });
+    // Validate fallback before returning it; if fallback is also invalid, use 0
+    if (!Number.isFinite(fallback)) {
+      logger.error('[WorkerEngine] CRITICAL: Fallback position also invalid — returning 0', {
+        eid,
+        axis,
+        fallback,
+      });
+      return 0;
+    }
     return fallback;
   }
   return value;

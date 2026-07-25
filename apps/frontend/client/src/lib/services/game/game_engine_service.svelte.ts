@@ -336,6 +336,7 @@ class GameEngineService
       clearTimeout(this._shakeTimeout);
       this._shakeTimeout = undefined;
     }
+    this.isShaking = false;
 
     // ── Reset initialization guard so re-mounts can reinit (C-332 AC-fix) ──
     this._initialized = false;

@@ -283,6 +283,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Heartbeat interval timer handle. */
   private _heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  /** Unsubscribe function for the MAP_LOADED listener. */
+  private _mapLoadedUnsubscribe: (() => void) | undefined;
   /** Timestamp of the last pong received from the worker (ms). */
   private _lastPongMs = 0;
   /** Number of consecutive missed heartbeats. */
@@ -725,7 +727,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // The heartbeat is deferred until the first map finishes loading because
     // the worker's tick loop is paused/restarted during LOAD_MAP in the boot
     // pipeline. MAP_LOADED signals the game is fully interactive.
-    this._bridge.on('MAP_LOADED', () => {
+    this._mapLoadedUnsubscribe = this._bridge.on('MAP_LOADED', () => {
       if (!this._heartbeatTimer) {
         this._startHeartbeat();
       }
@@ -1303,6 +1305,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       clearInterval(this._heartbeatTimer);
       this._heartbeatTimer = undefined;
       this.debug('[GameWorld] heartbeat:stopped');
+    }
+    if (this._mapLoadedUnsubscribe) {
+      this._mapLoadedUnsubscribe();
+      this._mapLoadedUnsubscribe = undefined;
     }
   }
 
