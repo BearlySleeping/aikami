@@ -193,16 +193,6 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   // ── C-327 AC-2: Interaction proximity ──
 
   bridge.on('INTERACTION_TARGET_CHANGED', (event) => {
-    // Don't show interaction prompt when an overlay (dialogue, vendor, etc.) is active
-    if (gameOverlayService.activeOverlay !== 'NONE') {
-      gameOverlayService.setInteractionPrompt({
-        label: '',
-        visible: false,
-        targetMetadata: { verb: '', targetName: '' },
-      });
-      return;
-    }
-
     if (event.targetEntityId !== undefined && event.targetName && event.targetType) {
       // Store target metadata so the display label can react to device/binding changes.
       // The prompt ViewModel/GUI derives the label from inputActionService.actionDisplayLabel()
@@ -211,14 +201,14 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       const keyLabel = inputActionService.actionDisplayLabel('interact');
       gameOverlayService.setInteractionPrompt({
         label: `${keyLabel} — ${verb} ${event.targetName}`,
-        visible: true,
+        visible: gameOverlayService.activeOverlay === 'NONE',
         targetMetadata: { verb, targetName: event.targetName },
       });
     } else {
       gameOverlayService.setInteractionPrompt({
         label: '',
         visible: false,
-        targetMetadata: { verb: '', targetName: '' },
+        targetMetadata: undefined,
       });
     }
 

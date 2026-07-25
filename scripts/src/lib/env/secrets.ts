@@ -65,7 +65,16 @@ function readEnvFile(modeLabel: string): Map<string, string> {
       continue;
     }
     const key = trimmed.slice(0, eq);
-    const value = trimmed.slice(eq + 1);
+    let value = trimmed.slice(eq + 1);
+
+    // Strip matching surrounding quotes (single or double)
+    if (
+      (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+      (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+    ) {
+      value = value.slice(1, -1);
+    }
+
     if ((SECRET_KEYS as readonly string[]).includes(key)) {
       result.set(key, value);
     }
@@ -101,7 +110,7 @@ function loadMocks(): void {
 
     // 2. Process env (may survive on first load before Nix stripping)
     const existing = process.env[key];
-    if (existing) {
+    if (existing !== undefined) {
       emitExport(key, existing);
       continue;
     }

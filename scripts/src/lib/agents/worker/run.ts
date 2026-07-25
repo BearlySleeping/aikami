@@ -34,7 +34,6 @@ const piArgs: string[] = [
   'deepseek-v4-pro',
   '--system-prompt',
   systemPrompt,
-  '--no-context-files',
   ...userArgs,
 ];
 

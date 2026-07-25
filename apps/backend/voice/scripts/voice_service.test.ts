@@ -33,6 +33,7 @@ type VoiceEntry = {
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
+let voicesAvailable: VoiceEntry[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
@@ -97,13 +98,27 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
-  const ready = await isReady();
-  if (ready.ok) {
-    console.log(`✓ Kokoro already running (${ready.detail})`);
+  // Service startup already handled in top-level await if needed
+  // This hook is now just a placeholder for test framework lifecycle
+}, STARTUP_TIMEOUT_MS + 30_000);
+
+afterAll(async () => {
+  if (!startedByUs) {
+    console.log('○ Kokoro was already running — leaving it alone');
     return;
   }
 
-  console.log('○ Kokoro not running — starting via herdr...');
+  console.log('  Stopping voice service...');
+  await $`bun run herdr:stop voice`.cwd(ROOT).nothrow();
+  console.log('✓ Kokoro stopped');
+});
+
+// ── Top-level await: Discover voices for skip logic ─────────
+
+// Ensure service is ready and discover available voices before test registration
+const ready = await isReady();
+if (!ready.ok) {
+  console.log('○ Kokoro not running — starting via herdr for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
@@ -117,18 +132,26 @@ beforeAll(async () => {
   startedByUs = true;
   console.log('  Waiting for Kokoro to become ready...');
   await waitForReady(STARTUP_TIMEOUT_MS);
-}, STARTUP_TIMEOUT_MS + 30_000);
+} else {
+  console.log(`✓ Kokoro already running (${ready.detail})`);
+}
 
-afterAll(async () => {
-  if (!startedByUs) {
-    console.log('○ Kokoro was already running — leaving it alone');
-    return;
+// Now discover voices
+try {
+  const voicesResponse = await fetch(`${BASE_URL}/v1/voices`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (voicesResponse.ok) {
+    const voicesData = (await voicesResponse.json()) as { voices?: VoiceEntry[] };
+    voicesAvailable = voicesData.voices ?? [];
   }
+} catch (err) {
+  console.warn('  ⚠ Failed to discover voices:', (err as Error).message);
+}
 
-  console.log('  Stopping voice service...');
-  await $`bun run herdr:stop voice`.cwd(ROOT).nothrow();
-  console.log('✓ Kokoro stopped');
-});
+if (voicesAvailable.length === 0) {
+  console.warn('  ⚠ No voices available — synthesis test will be skipped');
+}
 
 // ── Tests ───────────────────────────────────────────────────
 
@@ -152,18 +175,8 @@ describe('Kokoro TTS voice service', () => {
     }
   });
 
-  test('/v1/audio/speech synthesizes WAV audio (super lite)', async () => {
-    // Discover available voices via /v1/voices (returns voice names like af_heart, not model IDs)
-    const voicesResponse = await fetch(`${BASE_URL}/v1/voices`);
-    const voicesData = (await voicesResponse.json()) as { voices?: VoiceEntry[] };
-    const voices = voicesData.voices ?? [];
-
-    if (voices.length === 0) {
-      console.warn('  ⚠ No voices available — skipping synthesis test');
-      return;
-    }
-
-    const voice = voices[0].id;
+  test.skipIf(voicesAvailable.length === 0)('/v1/audio/speech synthesizes WAV audio (super lite)', async () => {
+    const voice = voicesAvailable[0].id;
     const text = 'OK';
 
     console.log(`  Voice:   ${voice}`);
@@ -192,13 +205,17 @@ describe('Kokoro TTS voice service', () => {
 
     expect(buffer.byteLength).toBeGreaterThan(0);
 
-    // WAV header check: "RIFF" at offset 0
-    const header = new Uint8Array(buffer.slice(0, 4));
-    const riff = new TextDecoder().decode(header);
+    // WAV header check: "RIFF" at offset 0 and "WAVE" FourCC at bytes 8-11
+    const headerRiff = new Uint8Array(buffer.slice(0, 4));
+    const riff = new TextDecoder().decode(headerRiff);
     expect(riff).toBe('RIFF');
 
+    const headerWave = new Uint8Array(buffer.slice(8, 12));
+    const wave = new TextDecoder().decode(headerWave);
+    expect(wave).toBe('WAVE');
+
     console.log(`  Size:    ${buffer.byteLength} bytes`);
-    console.log(`  Format:  ${riff} (valid WAV)`);
+    console.log(`  Format:  ${riff}...${wave} (valid WAV)`);
     console.log(`  Wall:    ${wallMs}ms`);
   }, 60_000);
 });

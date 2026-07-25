@@ -81,10 +81,16 @@ const generate = async (options: { model: string; prompt: string }): Promise<voi
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
+    if (response.status === 404) {
+      throw new Error(
+        `Model '${model}' not found (HTTP 404).\n` +
+          `Pull it first: bun run download:model ${model}\n` +
+          `${errorBody ? `Detail: ${errorBody.slice(0, 200)}` : ''}`,
+      );
+    }
     throw new Error(
-      `Model '${model}' not found (HTTP ${response.status}).\n` +
-        `Pull it first: bun run download:model ${model}\n` +
-        `${errorBody ? `Detail: ${errorBody.slice(0, 200)}` : ''}`,
+      `Model generation request failed (HTTP ${response.status}).\n` +
+        `${errorBody ? `Error: ${errorBody.slice(0, 200)}` : 'No error details available.'}`,
     );
   }
 

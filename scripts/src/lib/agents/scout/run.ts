@@ -37,9 +37,9 @@ const piArgs: string[] = [
   '--skill',
   '.pi/skills/aikami-conventions',
   '--no-context-files',
-  '--exclude-tools',
-  'write,edit',
   ...userArgs,
+  '--exclude-tools',
+  'write,edit,bash',
 ];
 
 // Exec pi, inheriting stdio for full TUI interactivity

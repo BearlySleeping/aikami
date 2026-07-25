@@ -409,9 +409,9 @@ export class GameOverlayService
     this.overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
 
-    // Clear interaction prompt whenever an overlay opens — avoids the
+    // Hide interaction prompt whenever an overlay opens — avoids the
     // "E — Talk to NPC" prompt rendering on top of dialogues/menus.
-    this.interactionPromptLabel = '';
+    // Keep target metadata so prompt can be restored when overlay closes.
     this.interactionPromptVisible = false;
 
     // ── C-332: Flush stale key state when overlay opens ──
@@ -436,6 +436,13 @@ export class GameOverlayService
 
     // Restore focus to the element that was focused before this overlay opened
     this._restoreFocus(entry.previousFocus);
+
+    // Restore interaction prompt when returning to NONE overlay state
+    if (this.stackDepth === 0 && this._interactionTargetMetadata) {
+      const keyLabel = inputActionService.actionDisplayLabel('interact');
+      this.interactionPromptLabel = `${keyLabel} — ${this._interactionTargetMetadata.verb} ${this._interactionTargetMetadata.targetName}`;
+      this.interactionPromptVisible = true;
+    }
 
     // ── C-332: Flush stale key state when overlay closes ──
     // If the user was holding keys when the overlay opened, the keyUp
@@ -496,6 +503,13 @@ export class GameOverlayService
     const bottomEntry = this.overlayStack[0];
     this.overlayStack = [];
     this._restoreFocus(bottomEntry.previousFocus);
+
+    // Restore interaction prompt when stack becomes empty
+    if (this._interactionTargetMetadata) {
+      const keyLabel = inputActionService.actionDisplayLabel('interact');
+      this.interactionPromptLabel = `${keyLabel} — ${this._interactionTargetMetadata.verb} ${this._interactionTargetMetadata.targetName}`;
+      this.interactionPromptVisible = true;
+    }
 
     // ── C-332: Flush stale key state when stack clears ──
     gameEngineService.flushInput();
@@ -638,6 +652,9 @@ export class GameOverlayService
   /** Interaction prompt state (C-327 AC-2). */
   interactionPromptLabel = $state<string>('');
   interactionPromptVisible = $state<boolean>(false);
+  private _interactionTargetMetadata = $state<{ verb: string; targetName: string } | undefined>(
+    undefined,
+  );
 
   /** Sets the interaction prompt label and visibility (called by bridge_listeners). */
   setInteractionPrompt(options: {
@@ -647,6 +664,7 @@ export class GameOverlayService
   }): void {
     this.interactionPromptLabel = options.label;
     this.interactionPromptVisible = options.visible;
+    this._interactionTargetMetadata = options.targetMetadata;
   }
 
   /** Plays pickup SFX when inventory count increases. */

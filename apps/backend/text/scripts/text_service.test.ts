@@ -50,6 +50,7 @@ type GenerateResponse = {
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
+let modelsAvailable: TagEntry[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
@@ -111,13 +112,27 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
-  const ready = await isReady();
-  if (ready.ok) {
-    console.log(`✓ Ollama already running (${ready.detail})`);
+  // Service startup already handled in top-level await if needed
+  // This hook is now just a placeholder for test framework lifecycle
+}, STARTUP_TIMEOUT_MS + 30_000);
+
+afterAll(async () => {
+  if (!startedByUs) {
+    console.log('○ Ollama was already running — leaving it alone');
     return;
   }
 
-  console.log('○ Ollama not running — starting via herdr...');
+  console.log('  Stopping text service...');
+  await $`bun run herdr:stop text`.cwd(ROOT).nothrow();
+  console.log('✓ Ollama stopped');
+});
+
+// ── Top-level await: Discover models for skip logic ─────────
+
+// Ensure service is ready and discover available models before test registration
+const ready = await isReady();
+if (!ready.ok) {
+  console.log('○ Ollama not running — starting via herdr for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
@@ -131,18 +146,27 @@ beforeAll(async () => {
   startedByUs = true;
   console.log('  Waiting for Ollama to become ready...');
   await waitForReady(STARTUP_TIMEOUT_MS);
-}, STARTUP_TIMEOUT_MS + 30_000);
+} else {
+  console.log(`✓ Ollama already running (${ready.detail})`);
+}
 
-afterAll(async () => {
-  if (!startedByUs) {
-    console.log('○ Ollama was already running — leaving it alone');
-    return;
+// Now discover models
+try {
+  const tagsResponse = await fetch(`${BASE_URL}/api/tags`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (tagsResponse.ok) {
+    const tagsData = (await tagsResponse.json()) as TagsResponse;
+    modelsAvailable = tagsData.models ?? [];
   }
+} catch (err) {
+  console.warn('  ⚠ Failed to discover models:', (err as Error).message);
+}
 
-  console.log('  Stopping text service...');
-  await $`bun run herdr:stop text`.cwd(ROOT).nothrow();
-  console.log('✓ Ollama stopped');
-});
+if (modelsAvailable.length === 0) {
+  console.warn('  ⚠ No models available — generation test will be skipped');
+  console.warn('    Pull a model first: bun run download:model qwen3.5:4b');
+}
 
 // ── Tests ───────────────────────────────────────────────────
 
@@ -175,20 +199,9 @@ describe('Ollama text inference service', () => {
     }
   });
 
-  test('/api/generate returns a response (super lite)', async () => {
-    // Discover available models
-    const tagsResponse = await fetch(`${BASE_URL}/api/tags`);
-    const tagsData = (await tagsResponse.json()) as TagsResponse;
-    const models = tagsData.models ?? [];
-
-    if (models.length === 0) {
-      console.warn('  ⚠ No models available — skipping generation test');
-      console.warn('    Pull a model first: bun run download:model qwen3.5:4b');
-      return;
-    }
-
+  test.skipIf(modelsAvailable.length === 0)('/api/generate returns a response (super lite)', async () => {
     // Prefer smallest model for fast test
-    const sorted = [...models].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
+    const sorted = [...modelsAvailable].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
     const model = sorted[0].name;
 
     console.log(`  Model:   ${model} (${(sorted[0].size / (1024 * 1024)).toFixed(0)} MB)`);

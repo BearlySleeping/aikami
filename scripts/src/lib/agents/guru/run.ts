@@ -42,9 +42,9 @@ const piArgs: string[] = [
   '--skill',
   '.pi/skills/aikami-standards',
   '--no-context-files',
-  '--exclude-tools',
-  'write,edit',
   ...userArgs,
+  '--exclude-tools',
+  'write,edit,bash',
 ];
 
 const proc = Bun.spawn(['pi', ...piArgs], {

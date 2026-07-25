@@ -50,6 +50,7 @@ type HistoryEntry = {
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
+let checkpointsAvailable: string[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
@@ -108,13 +109,27 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
-  const ready = await isReady();
-  if (ready.ok) {
-    console.log(`✓ ComfyUI already running (${ready.detail})`);
+  // Service startup already handled in top-level await if needed
+  // This hook is now just a placeholder for test framework lifecycle
+}, STARTUP_TIMEOUT_MS + 60_000);
+
+afterAll(async () => {
+  if (!startedByUs) {
+    console.log('○ ComfyUI was already running — leaving it alone');
     return;
   }
 
-  console.log('○ ComfyUI not running — starting via herdr...');
+  console.log('  Stopping image service...');
+  await $`bun run herdr:stop image`.cwd(ROOT).nothrow();
+  console.log('✓ ComfyUI stopped');
+});
+
+// ── Top-level await: Discover checkpoints for skip logic ────
+
+// Ensure service is ready and discover available checkpoints before test registration
+const ready = await isReady();
+if (!ready.ok) {
+  console.log('○ ComfyUI not running — starting via herdr for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
@@ -128,18 +143,30 @@ beforeAll(async () => {
   startedByUs = true;
   console.log('  Waiting for ComfyUI to become ready (may take minutes)...');
   await waitForReady(STARTUP_TIMEOUT_MS);
-}, STARTUP_TIMEOUT_MS + 60_000);
+} else {
+  console.log(`✓ ComfyUI already running (${ready.detail})`);
+}
 
-afterAll(async () => {
-  if (!startedByUs) {
-    console.log('○ ComfyUI was already running — leaving it alone');
-    return;
+// Now discover checkpoints
+try {
+  const infoResponse = await fetch(`${BASE_URL}/object_info`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (infoResponse.ok) {
+    const infoData = (await infoResponse.json()) as ObjectInfo;
+    const loader = infoData.CheckpointLoaderSimple as {
+      input?: { required?: { ckpt_name?: [string[]] } };
+    };
+    checkpointsAvailable = loader?.input?.required?.ckpt_name?.[0] ?? [];
   }
+} catch (err) {
+  console.warn('  ⚠ Failed to discover checkpoints:', (err as Error).message);
+}
 
-  console.log('  Stopping image service...');
-  await $`bun run herdr:stop image`.cwd(ROOT).nothrow();
-  console.log('✓ ComfyUI stopped');
-});
+if (checkpointsAvailable.length === 0) {
+  console.warn('  ⚠ No checkpoints available — generation test will be skipped');
+  console.warn('    Download models first: bun run download:model');
+}
 
 // ── Tests ───────────────────────────────────────────────────
 
@@ -189,22 +216,8 @@ describe('ComfyUI image generation service', () => {
     }
   });
 
-  test('/api/prompt generates an image (super lite)', async () => {
-    // Discover available checkpoints
-    const infoResponse = await fetch(`${BASE_URL}/object_info`);
-    const infoData = (await infoResponse.json()) as ObjectInfo;
-    const loader = infoData.CheckpointLoaderSimple as {
-      input?: { required?: { ckpt_name?: [string[]] } };
-    };
-    const checkpoints: string[] = loader?.input?.required?.ckpt_name?.[0] ?? [];
-
-    if (checkpoints.length === 0) {
-      console.warn('  ⚠ No checkpoints available — skipping generation test');
-      console.warn('    Download models first: bun run download:model');
-      return;
-    }
-
-    const checkpoint = checkpoints[0];
+  test.skipIf(checkpointsAvailable.length === 0)('/api/prompt generates an image (super lite)', async () => {
+    const checkpoint = checkpointsAvailable[0];
     console.log(`  Checkpoint: ${checkpoint}`);
 
     // Minimal workflow: 1 step, 64×64, seed 42
