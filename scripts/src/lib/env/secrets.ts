@@ -25,6 +25,8 @@ const SECRET_KEYS = [
   'VLM_MODEL',
   'VLM_TEMPERATURE',
   'VLM_NUM_PREDICT',
+  'GH_TOKEN',
+  'GITHUB_ACCESS_TOKEN',
 ] as const;
 
 // see check.ts for cache TTL
@@ -51,7 +53,11 @@ function loadMocks(): void {
     GEMINI_API_KEY: 'emulator-key',
   };
   for (const key of SECRET_KEYS) {
-    if (process.env[key]) {
+    // Re-export existing values so they survive direnv reloads
+    // (e.g. Home Manager session vars like GH_TOKEN)
+    const existing = process.env[key];
+    if (existing) {
+      emitExport(key, existing);
       continue;
     }
     const mock = mocks[key];
@@ -86,7 +92,8 @@ function loadFromEnvFile(): void {
     const key = trimmed.slice(0, eq);
     const value = trimmed.slice(eq + 1);
 
-    if ((SECRET_KEYS as readonly string[]).includes(key) && !process.env[key]) {
+    if ((SECRET_KEYS as readonly string[]).includes(key)) {
+      // Prefer env-file value over existing env var (env file is authoritative in live modes)
       emitExport(key, value);
       loaded++;
     }
