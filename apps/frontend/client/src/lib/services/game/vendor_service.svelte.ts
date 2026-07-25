@@ -187,7 +187,7 @@ class VendorService
         schemaName: 'VendorActionIntent',
         prompt,
         systemPrompt: VENDOR_ACTION_SYSTEM_PROMPT,
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(120_000),
       });
       const intent = raw as VendorActionIntent;
       const clamped = Math.max(0.5, Math.min(1.5, intent.priceMultiplier));

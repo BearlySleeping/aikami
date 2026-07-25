@@ -6,8 +6,15 @@ import { $ } from 'bun';
 
 const IMAGE = 'ollama/ollama';
 const CONTAINER_NAME = 'aikami-text-dev';
-const HOST_PORT = '11434';
-const CONTAINER_PORT = '11434';
+const HOST_PORT = 11434;
+const CONTAINER_PORT = 11434;
+
+// Skip Docker if a system Ollama is already listening on the port.
+const checkPort = await $`ss -tlnp src :${HOST_PORT} 2>/dev/null | grep -q LISTEN`.nothrow();
+if (checkPort.exitCode === 0) {
+  console.log(`Port ${HOST_PORT} is already in use — skipping Docker (system Ollama detected).`);
+  process.exit(0);
+}
 
 // Ensure cache directory exists
 await $`mkdir -p src/cache/ollama`;

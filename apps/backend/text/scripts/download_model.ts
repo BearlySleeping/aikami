@@ -7,7 +7,7 @@
 //   bun run scripts/download_model.ts qwen3.5:4b
 //   bun run scripts/download_model.ts llama3.2:3b
 
-const OLLAMA_PORT = 11436;
+const OLLAMA_PORT = 11434;
 const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
 const DEFAULT_MODEL = 'qwen3.5:4b';
 

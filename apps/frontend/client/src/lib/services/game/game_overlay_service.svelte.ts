@@ -409,6 +409,11 @@ export class GameOverlayService
     this.overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
 
+    // Clear interaction prompt whenever an overlay opens — avoids the
+    // "E — Talk to NPC" prompt rendering on top of dialogues/menus.
+    this.interactionPromptLabel = '';
+    this.interactionPromptVisible = false;
+
     // ── C-332: Flush stale key state when overlay opens ──
     // Prevents key-state poisoning where the browser's internal key-repeat
     // survives the overlay transition, causing subsequent keyDown events
