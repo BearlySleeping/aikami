@@ -722,19 +722,21 @@ let tickCount = 0;
 let _lastProcessedInputSequence = 0;
 
 /**
- * Handle for the active tick interval timer.
+ * Handle for the active tick timer.
  *
- * Cleared on PAUSE_ENGINE, restarted on UNPAUSE_ENGINE / initializeEngine.
- * A stored handle eliminates the risk of orphaned intervals.
+ * Uses setTimeout + manual reschedule (not setInterval) so that
+ * stopTickLoop/startTickLoop calls are safe even when a tick is
+ * in-flight. The finally block checks _running and reschedules
+ * automatically.
  */
-let _tickIntervalHandle: ReturnType<typeof setInterval> | undefined;
+let _tickTimerHandle: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Single-instance guard — true while tickLoop() is executing.
  *
- * In single-threaded JS setInterval cannot preempt a running callback,
- * but if any async boundary is ever introduced into the tick pipeline
- * this prevents concurrent world mutation.
+ * In single-threaded JS a timer callback cannot preempt a running
+ * callback, but if any async boundary is ever introduced into the
+ * tick pipeline this prevents concurrent world mutation.
  */
 let isTicking = false;
 
@@ -753,36 +755,57 @@ const MACRO_TICK_INTERVAL_MS = 500;
 const MAX_FRAME_DELTA_MS = 100;
 
 /**
- * Starts the tick loop interval.
+ * Schedules the next tick via setTimeout.
  *
- * Resets {@link lastTickTime} to the current monotonic clock so the first
- * frame after start/unpause gets a near-zero delta. Guards against
- * duplicate intervals — if one is already active, this is a no-op.
+ * Only called when _running is true and no timer is pending.
+ */
+const _scheduleNextTick = (): void => {
+  if (_tickTimerHandle !== undefined || !running) {
+    return;
+  }
+  _tickTimerHandle = setTimeout(tickLoop, 16);
+};
+
+/**
+ * Starts the tick loop.
+ *
+ * Sets _running = true so that the currently-in-flight tick (if any)
+ * will reschedule itself in its finally block, or schedules the first
+ * tick via setTimeout if nothing is executing.
+ *
+ * Safe to call while tickLoop() is executing — the finally block
+ * will pick up the _running flag and auto-reschedule.
  */
 const startTickLoop = (): void => {
-  if (_tickIntervalHandle !== undefined) {
+  if (running) {
     logger.debug('[WorkerEngine] startTickLoop:already-running');
     return;
   }
   lastTickTime = performance.now();
   running = true;
-  _tickIntervalHandle = setInterval(tickLoop, 16);
+
+  // If a tick is already executing, its finally block will auto-reschedule.
+  if (isTicking) {
+    logger.debug('[WorkerEngine] startTickLoop:tick-in-progress (will auto-reschedule)');
+    return;
+  }
+
+  _scheduleNextTick();
   logger.debug('[WorkerEngine] startTickLoop:started', { lastTickTime });
 };
 
 /**
- * Stops the tick loop interval.
+ * Stops the tick loop.
  *
- * Clears the stored interval handle and sets {@link running} to false.
- * Safe to call when no interval is active (no-op).
+ * Sets _running = false so the currently-in-flight tick (if any) will
+ * NOT reschedule itself. Clears any pending timer.
  */
 const stopTickLoop = (): void => {
-  if (_tickIntervalHandle === undefined) {
-    return;
-  }
-  clearInterval(_tickIntervalHandle);
-  _tickIntervalHandle = undefined;
   running = false;
+  if (_tickTimerHandle !== undefined) {
+    clearTimeout(_tickTimerHandle);
+    _tickTimerHandle = undefined;
+  }
   logger.debug('[WorkerEngine] stopTickLoop:stopped');
 };
 
@@ -1118,11 +1141,16 @@ const tickLoop = (): void => {
       type: 'ENGINE_ERROR',
       message: `Tick loop crashed: ${err instanceof Error ? err.message : String(err)}`,
     });
-    // Stop the tick loop — the main thread will surface the error via GAME_ERROR.
-    // Also clear the interval so an orphaned timer doesn't keep calling crash-prone code.
     stopTickLoop();
   } finally {
     isTicking = false;
+    _tickTimerHandle = undefined;
+    // ── Auto-reschedule: if startTickLoop() was called mid-tick, the
+    // _running flag is now true and we schedule the next frame here.
+    // This eliminates the race where stopTickLoop + startTickLoop are
+    // called in quick succession while a tick is in-flight — the
+    // original setInterval approach could leave a dead tick loop. ──
+    _scheduleNextTick();
   }
 };
 
@@ -1414,7 +1442,7 @@ self.onmessage = (event: MessageEvent): void => {
         let wasRunning = false;
         try {
           // ── RC-3 FIX: Route through stopTickLoop for consistency ──
-          wasRunning = _tickIntervalHandle !== undefined;
+          wasRunning = running;
           stopTickLoop();
 
           // Clear all existing entities
@@ -1554,7 +1582,7 @@ self.onmessage = (event: MessageEvent): void => {
           setSimulationState(world, SimulationState.transitioning);
 
           // ── RC-3 FIX: Route through stopTickLoop for consistency ──
-          wasRunning = _tickIntervalHandle !== undefined;
+          wasRunning = running;
           stopTickLoop();
 
           const {
