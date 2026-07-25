@@ -2,7 +2,7 @@
 // Health check script for the Ollama text microservice.
 // Fetches / and reports readiness.
 
-const OLLAMA_PORT = 11436;
+const OLLAMA_PORT = 11434;
 const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
 
 /**

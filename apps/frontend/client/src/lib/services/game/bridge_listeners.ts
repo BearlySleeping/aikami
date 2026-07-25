@@ -201,14 +201,14 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       const keyLabel = inputActionService.actionDisplayLabel('interact');
       gameOverlayService.setInteractionPrompt({
         label: `${keyLabel} — ${verb} ${event.targetName}`,
-        visible: true,
+        visible: gameOverlayService.activeOverlay === 'NONE',
         targetMetadata: { verb, targetName: event.targetName },
       });
     } else {
       gameOverlayService.setInteractionPrompt({
         label: '',
         visible: false,
-        targetMetadata: { verb: '', targetName: '' },
+        targetMetadata: undefined,
       });
     }
 

@@ -8,9 +8,8 @@
 //   bun run scripts/test_generate.ts "Explain quantum computing in one sentence"
 //   bun run scripts/test_generate.ts --model llama3.2:3b "Write a haiku"
 
-const OLLAMA_PORT = 11436;
+const OLLAMA_PORT = 11434;
 const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
-const DEFAULT_MODEL = 'qwen3.5:4b';
 const DEFAULT_PROMPT = 'Say hello and introduce yourself in one sentence.';
 
 // ── Types ──────────────────────────────────────────────────
@@ -81,7 +80,18 @@ const generate = async (options: { model: string; prompt: string }): Promise<voi
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const errorBody = await response.text().catch(() => '');
+    if (response.status === 404) {
+      throw new Error(
+        `Model '${model}' not found (HTTP 404).\n` +
+          `Pull it first: bun run download:model ${model}\n` +
+          `${errorBody ? `Detail: ${errorBody.slice(0, 200)}` : ''}`,
+      );
+    }
+    throw new Error(
+      `Model generation request failed (HTTP ${response.status}).\n` +
+        `${errorBody ? `Error: ${errorBody.slice(0, 200)}` : 'No error details available.'}`,
+    );
   }
 
   if (!response.body) {
@@ -165,7 +175,7 @@ const generate = async (options: { model: string; prompt: string }): Promise<voi
 const main = async (): Promise<void> => {
   // Parse args: --model <name> [prompt...]
   const args = Bun.argv.slice(2);
-  let model = DEFAULT_MODEL;
+  let model = '';
   let prompt = '';
 
   const modelIndex = args.indexOf('--model');
@@ -176,15 +186,37 @@ const main = async (): Promise<void> => {
 
   prompt = args.join(' ') || DEFAULT_PROMPT;
 
-  console.log(`\n  Model:  ${model}`);
-  console.log(`  Prompt: "${prompt}"`);
-
   // ── Health check ──────────────────────────────
   if (!(await checkHealth())) {
     console.error(`\n✗ Ollama is not running on port ${OLLAMA_PORT}.`);
     console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }
+
+  // ── Auto-discover model if not specified ──────
+  if (!model) {
+    try {
+      const tagsRes = await fetch(`${OLLAMA_URL}/api/tags`);
+      const tagsData = (await tagsRes.json()) as { models?: Array<{ name: string; size: number }> };
+      const models = tagsData.models ?? [];
+      if (models.length > 0) {
+        // Prefer smallest model for fast inference
+        const sorted = [...models].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
+        model = sorted[0].name;
+        console.log(`\n  Auto-detected model: ${model}`);
+      } else {
+        console.error('\n✗ No models available. Pull one first:');
+        console.error('  bun run download:model qwen3.5:4b');
+        process.exit(1);
+      }
+    } catch {
+      console.error('\n✗ Failed to discover models. Specify one with --model:');
+      console.error('  bun run test:generate --model qwen3:14b "Hello"');
+      process.exit(1);
+    }
+  }
+
+  console.log(`  Prompt: "${prompt}"`);
 
   await generate({ model, prompt });
 };
