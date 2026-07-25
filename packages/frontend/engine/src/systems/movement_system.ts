@@ -58,14 +58,11 @@ const ENTITY_HEIGHT_ABOVE = 32;
 
 // ── C-332: NaN/Infinity position recovery ──────────────────────────
 
-/** Last known valid position for the player entity (eid 1). */
-let _lastValidPlayerX = 0;
-let _lastValidPlayerY = 0;
-
 /**
  * Checks whether a coordinate value is safe (finite, not NaN) for
  * position storage. If the value is unsafe, logs an explicit error
- * and returns the last valid position as a recovery coordinate.
+ * and returns the entity's current position (fallback) as a recovery
+ * coordinate — per-entity, always valid.
  */
 const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' | 'y'): number => {
   if (!Number.isFinite(value)) {
@@ -241,12 +238,6 @@ const updateMovement = (world: World, deltaMs: number): void => {
     // recover to the entity's current position instead of corrupting ECS state.
     nextX = safeCoordinate(nextX, pos.x, eid, 'x');
     nextY = safeCoordinate(nextY, pos.y, eid, 'y');
-
-    // Track last valid position for recovery (player-specific if needed)
-    if (eid === 1 && Number.isFinite(nextX) && Number.isFinite(nextY)) {
-      _lastValidPlayerX = nextX;
-      _lastValidPlayerY = nextY;
-    }
 
     addComponent(
       world,

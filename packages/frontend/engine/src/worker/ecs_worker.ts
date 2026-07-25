@@ -1040,24 +1040,30 @@ const tickLoop = (): void => {
       }
 
       // ── RC-1 FIX: Never transfer the last writable buffer ──
-      // If no free slot remains, the worker is starved. Instead of setting
-      // activeWriteView = undefined (permanent deadlock), create a shallow
-      // copy of the current buffer's data, post the copy, and RETAIN
-      // ownership of activeWriteView. The tick loop MUST NOT stop — this
-      // is the deadlock that froze the engine.
+      // If no free slot remains, the worker is starved. Post a copy of
+      // the current data and retain ownership. The tick loop MUST NOT
+      // stop — this is the deadlock that froze the engine.
+      //
+      // In the normal path: transfer the OLD buffer (bufferPool[oldIndex])
+      // and create a view on the NEW buffer. PostMessage's transfer list
+      // detaches whatever buffer we include — so we must NEVER include the
+      // buffer that activeWriteView wraps.
       let bufferToSend: ArrayBuffer;
       if (nextWritableIndex === -1) {
-        // Starvation: copy out, retain ownership
-        bufferToSend = activeWriteView.slice().buffer;
+        // Starvation: copy out, retain ownership.
+        // bufferPool[oldIndex] stays in the pool (not nulled).
+        bufferToSend = buffer.slice(0);
         logger.debug('[WorkerEngine] tickLoop:starvation-copy', {
           writableBufferCount: 0,
         });
       } else {
-        // Mark the buffer we're about to transfer as consumed
+        // Normal path: mark old slot as consumed, advance to next.
+        // Transfer the OLD buffer (the one we just finished writing to),
+        // NOT the new one — otherwise the transfer detaches activeWriteView.
+        bufferToSend = bufferPool[oldIndex] as ArrayBuffer;
         bufferPool[oldIndex] = null as unknown as ArrayBuffer;
         activeBufferIndex = nextWritableIndex;
-        bufferToSend = bufferPool[nextWritableIndex] as ArrayBuffer;
-        activeWriteView = new Float32Array(bufferToSend);
+        activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
       }
 
       const camera = getCameraPosition();
