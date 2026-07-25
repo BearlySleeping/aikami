@@ -768,6 +768,21 @@ class GameBootService
         }
         const variant = slotDef?.variants[effectiveIdx];
         if (!variant) {
+          // C-370: body fallback — if body slot variant lookup fails, inject default
+          if (slotName === 'body') {
+            const bodyCatalogIdx = SlotCatalogIndex.body;
+            if (bodyCatalogIdx !== undefined) {
+              const bodySlotDef = generatedLpcSlots[bodyCatalogIdx];
+              const bodyDefault = bodySlotDef?.variants[0];
+              if (bodyDefault) {
+                recipes.push({
+                  slot: 'body',
+                  assetId: bodyDefault.assetId,
+                  hexPalette: new Uint8Array(1024),
+                });
+              }
+            }
+          }
           continue;
         }
         recipes.push({
@@ -775,6 +790,22 @@ class GameBootService
           assetId: variant.assetId,
           hexPalette: new Uint8Array(1024),
         });
+      }
+      // C-370: ensure body recipe exists — inject default if missing
+      const hasBody = recipes.some((r) => r.slot === 'body');
+      if (!hasBody) {
+        const bodyCatalogIdx = SlotCatalogIndex.body;
+        if (bodyCatalogIdx !== undefined) {
+          const bodySlotDef = generatedLpcSlots[bodyCatalogIdx];
+          const bodyDefault = bodySlotDef?.variants[0];
+          if (bodyDefault) {
+            recipes.unshift({
+              slot: 'body',
+              assetId: bodyDefault.assetId,
+              hexPalette: new Uint8Array(1024),
+            });
+          }
+        }
       }
       return recipes;
     };

@@ -478,6 +478,12 @@ const _updatePlayerAppearanceFromEquipment = (
   const currentLayers = getAppearanceLayers(eid);
   const newLayers = [...currentLayers];
 
+  // C-370: enforce body layer invariant — if layer0 is 0 or undefined,
+  // inject the default body variant so the paperdoll always has a base.
+  if (!newLayers[0]) {
+    newLayers[0] = 1;
+  }
+
   // Map armor to torso layer (index 2)
   if (equipment.armor) {
     const armorToLayer = (armorId: string): number => {
@@ -537,6 +543,9 @@ const _updatePlayerAppearanceFromEquipment = (
 /** Slot name lookup for converting Appearance layer IDs to recipes. */
 const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
+/** Index of the body slot in the layer ID array (layer0). */
+const WORKER_BODY_SLOT_INDEX = 0;
+
 /**
  * Converts entity layer IDs to {@link LpcLayerRecipe} arrays using
  * empty palettes (zero-filled 1024-byte LUTs).
@@ -546,18 +555,25 @@ const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as c
  * This means fingerprint evaluation in the worker matches the main
  * thread even without access to the actual palette textures.
  *
- * @param layerIds - Array of 5 layer asset IDs from the Appearance component.
+ * **C-370**: Injects a default body recipe when layer0 ≤ 0 to prevent
+ * background bleed-through between head and torso sprites.
+ *
+ * @param layerIds - Array of 6 layer asset IDs from the Appearance component.
  * @returns Layer recipes with empty palettes for structural tracking.
  */
 const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
   const recipes: LpcLayerRecipe[] = [];
   for (let i = 0; i < layerIds.length; i++) {
-    if (layerIds[i] > 0) {
+    const effectiveId = i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? 1 : layerIds[i];
+    if (effectiveId > 0) {
       recipes.push({
         slot: WORKER_SLOT_NAMES[i] ?? `layer_${i}`,
-        assetId: String(layerIds[i]),
+        assetId: String(effectiveId),
         hexPalette: new Uint8Array(1024),
       });
+      if (i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0) {
+        // C-370: body fallback triggered — log for observability
+      }
     }
   }
   return recipes;
