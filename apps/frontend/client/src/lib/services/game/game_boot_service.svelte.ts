@@ -20,6 +20,7 @@ import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } f
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_repository.svelte';
+import { gameEngineService } from './game_engine_service.svelte';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -564,6 +565,11 @@ class GameBootService
       rendererPreference: input.rendererPreference,
     });
 
+    // ── C-332: Bind GameWorld to GameEngineService so pauseEngine/resumeEngine
+    // reach the worker. Without this, all overlay close/resume calls silently
+    // no-op with :no-world log. ──
+    gameEngineService.registerWorld(this._gameWorld);
+
     // Lock input immediately after initialization
     this._gameWorld.setInputLocked(true);
 
@@ -978,6 +984,10 @@ class GameBootService
       this._gameWorld.destroy();
       this._gameWorld = undefined;
     }
+
+    // ── C-332: Unbind from GameEngineService so stale reference doesn't
+    // survive teardown. Next boot will re-register via registerWorld(). ──
+    gameEngineService.registerWorld(undefined as unknown as GameWorld);
 
     this._bridge = undefined;
   }

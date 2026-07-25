@@ -102,6 +102,18 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
   /** Boots the engine with the given canvas (called by ViewModel after canvas bind). */
   bootWithCanvas(canvas: HTMLCanvasElement): Promise<void>;
 
+  /** Registers a GameWorld created by the boot pipeline for pause/resume control. */
+  registerWorld(world: GameWorld): void;
+
+  /**
+   * Flushes all tracked keyboard state (C-332).
+   *
+   * Clears activeKeys in the main-thread keyboard handler and sends
+   * {0,0} velocity to the worker. Call on overlay open/close and window
+   * blur to prevent key-state poisoning.
+   */
+  flushInput(): void;
+
   /** Initializes the engine bridge and registers listeners (call once before use). */
   initializeEngine(): Promise<void>;
 
@@ -157,6 +169,36 @@ class GameEngineService
   /** Content pack ID set by the composition root before boot. */
   contentPackId = $state<string>('emberwatch');
 
+  /**
+   * Whether the engine is currently in a boot/pause state.
+   * Used by input suppression logging to explain WHY input is blocked.
+   */
+  get isEnginePaused(): boolean {
+    return !this._gameWorld || !this.isGameReady;
+  }
+
+  /**
+   * Registers a GameWorld instance created by the boot pipeline.
+   *
+   * Called by {@link GameBootService} after creating the GameWorld so
+   * {@link pauseEngine} and {@link resumeEngine} can reach the worker.
+   * Without this, all pause/resume calls silently no-op with `:no-world`.
+   */
+  registerWorld(world: GameWorld): void {
+    this._gameWorld = world;
+    this.debug('registerWorld:bound');
+  }
+
+  /**
+   * Flushes all tracked keyboard state (C-332).
+   *
+   * Delegates to {@link GameWorld.flushInput} to clear activeKeys and
+   * send {0,0} velocity. Called on overlay open/close and window blur.
+   */
+  flushInput(): void {
+    this._gameWorld?.flushInput();
+  }
+
   // ── Computed ──
 
   get playerDisplayName(): string {
@@ -178,9 +220,13 @@ class GameEngineService
    */
   async initializeEngine(): Promise<void> {
     if (this._initialized) {
+      this.debug('initializeEngine:already-initialized');
       return;
     }
+
+    // Guard against parallel initialization — set before any await
     this._initialized = true;
+    this.debug('initializeEngine:start');
 
     try {
       const { createEngineBridge } = await import('@aikami/frontend/engine');
@@ -190,7 +236,9 @@ class GameEngineService
 
       // Reactive canvas → engine boot effect
       this._setupCanvasEffect();
+      this.debug('initializeEngine:complete');
     } catch (error) {
+      this._initialized = false;
       logger.debug('GameEngineService:bridge-init-failed', { error: String(error) });
     }
   }
@@ -207,18 +255,30 @@ class GameEngineService
 
   /** @inheritdoc */
   pauseEngine(): void {
-    if (this._gameWorld) {
-      this._gameWorld.pause();
-      this._gameWorld.setInputLocked(true);
+    if (!this._gameWorld) {
+      this.debug('pauseEngine:no-world');
+      return;
     }
+    this.debug('pauseEngine:locking-input');
+    this._gameWorld.pause();
+    this._gameWorld.setInputLocked(true);
+    // Send explicit PAUSE_ENGINE to worker so the tick loop gates properly
+    this._bridge?.send({ type: 'PAUSE_ENGINE' } as unknown as GameCommand);
   }
 
   /** @inheritdoc */
   resumeEngine(): void {
-    if (this._gameWorld) {
-      this._gameWorld.setInputLocked(false);
-      this._gameWorld.resume();
+    if (!this._gameWorld) {
+      this.debug('resumeEngine:no-world');
+      return;
     }
+    // ── Send UNPAUSE_ENGINE first so the worker restores its tick loop
+    // before we unlock input — prevents a frame where input arrives
+    // before the worker is ready to process it. ──
+    this._bridge?.send({ type: 'UNPAUSE_ENGINE' } as unknown as GameCommand);
+    this._gameWorld.resume();
+    this._gameWorld.setInputLocked(false);
+    this.debug('resumeEngine:unlocked-input');
   }
 
   /** @inheritdoc */
@@ -253,6 +313,8 @@ class GameEngineService
 
   /** @inheritdoc */
   destroyEngine(): void {
+    this.debug('destroyEngine:start', { wasReady: this.isGameReady });
+
     if (this._resizeCleanup) {
       this._resizeCleanup();
       this._resizeCleanup = undefined;
@@ -264,17 +326,30 @@ class GameEngineService
     }
 
     this.isGameReady = false;
+    this.playerScene = 'unknown';
+    this.gameError = undefined;
+    this.activeContexts = [];
+    this.floatingTexts = [];
+    this.combatantScreenStates = [];
 
     if (this._shakeTimeout) {
       clearTimeout(this._shakeTimeout);
       this._shakeTimeout = undefined;
     }
 
+    // ── Reset initialization guard so re-mounts can reinit (C-332 AC-fix) ──
+    this._initialized = false;
+    this._personaPlayerName = '';
+    this._activePersona = undefined;
+    this._floatingTextIdCounter = 0;
+
     // Clear content pack cache so the next boot re-fetches the manifest (C-315)
     if (this._clearContentPackCache) {
       this._clearContentPackCache();
       this._clearContentPackCache = undefined;
     }
+
+    this.debug('destroyEngine:complete');
   }
 
   // ── Private: bridge event registration ──

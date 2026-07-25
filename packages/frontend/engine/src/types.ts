@@ -84,6 +84,25 @@ export type GameCommand =
     }
   | {
       /**
+       * Requests the worker to pause its simulation tick loop (C-332).
+       *
+       * Sent by the main thread when an overlay opens or a map transition
+       * begins. The worker stops processing ticks but still responds to
+       * messages (RECYCLE_BUFFER, PING, etc.).
+       */
+      type: 'PAUSE_ENGINE';
+    }
+  | {
+      /**
+       * Requests the worker to resume its simulation tick loop (C-332).
+       *
+       * Sent by the main thread when all overlays close. The worker
+       * restores its tick loop and flushes any stale player velocity.
+       */
+      type: 'UNPAUSE_ENGINE';
+    }
+  | {
+      /**
        * Sets the global game mode state machine.
        *
        * EXPLORE — free movement, interaction allowed.
