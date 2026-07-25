@@ -664,11 +664,6 @@ class GameBootService
     // Unlock input — the world is ready
     this._gameWorld.setInputLocked(false);
 
-    // ── C-332: Start heartbeat AFTER boot completes ──
-    // Delaying until this point prevents false-positive stall detection
-    // during LOAD_MAP, tilemap loading, and auto-save in earlier stages.
-    this._gameWorld.startHeartbeat();
-
     const elapsed = performance.now() - t0;
     this.debug('stage:spawning_entities:complete', { elapsedMs: elapsed });
   }

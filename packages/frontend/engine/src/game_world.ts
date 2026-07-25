@@ -721,6 +721,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Forward bridge commands to the worker
     this._setupCommandForwarding();
 
+    // ── C-332: Start heartbeat on first MAP_LOADED ──
+    // The heartbeat is deferred until the first map finishes loading because
+    // the worker's tick loop is paused/restarted during LOAD_MAP in the boot
+    // pipeline. MAP_LOADED signals the game is fully interactive.
+    this._bridge.on('MAP_LOADED', () => {
+      if (!this._heartbeatTimer) {
+        this._startHeartbeat();
+      }
+    });
+
     // Register snapshot/restore handlers on the bridge
     this._setupSnapshotHandlers();
 
@@ -1224,7 +1234,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Called by {@link GameBootService._stageSpawnEntities} after the
    * game is fully booted and input is unlocked.
    */
-  startHeartbeat(): void {
+  private _startHeartbeat(): void {
     if (this._heartbeatTimer) {
       return;
     }
