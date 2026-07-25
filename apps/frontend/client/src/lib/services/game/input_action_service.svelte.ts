@@ -106,6 +106,7 @@ export class InputActionService
   /** Called on `keydown` to mark keyboard as active device. */
   onKeyDown(): void {
     this._switchToDevice('keyboard');
+    this.debug('[InputActionService] device:keyboard');
   }
 
   /**

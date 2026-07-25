@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/movement_system.ts
 import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
+import { logger } from '$logger';
 import { CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
@@ -54,6 +55,36 @@ const ENTITY_HALF_WIDTH = 16;
  * No margin is applied below the feet — the sprite renders entirely upward.
  */
 const ENTITY_HEIGHT_ABOVE = 32;
+
+// ── C-332: NaN/Infinity position recovery ──────────────────────────
+
+/**
+ * Checks whether a coordinate value is safe (finite, not NaN) for
+ * position storage. If the value is unsafe, logs an explicit error
+ * and returns the entity's current position (fallback) as a recovery
+ * coordinate — per-entity, always valid.
+ */
+const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' | 'y'): number => {
+  if (!Number.isFinite(value)) {
+    logger.error('[WorkerEngine] CRITICAL: Invalid position — NaN/Infinity detected', {
+      eid,
+      axis,
+      value,
+      fallback,
+    });
+    // Validate fallback before returning it; if fallback is also invalid, use 0
+    if (!Number.isFinite(fallback)) {
+      logger.error('[WorkerEngine] CRITICAL: Fallback position also invalid — returning 0', {
+        eid,
+        axis,
+        fallback,
+      });
+      return 0;
+    }
+    return fallback;
+  }
+  return value;
+};
 
 /**
  * Updates world-space positions for all entities that have both a
@@ -210,6 +241,12 @@ const updateMovement = (world: World, deltaMs: number): void => {
         nextY = pos.y;
       }
     }
+
+    // ── C-332: NaN/Infinity position guard ──
+    // If delta-time explosion or collision math produces invalid coordinates,
+    // recover to the entity's current position instead of corrupting ECS state.
+    nextX = safeCoordinate(nextX, pos.x, eid, 'x');
+    nextY = safeCoordinate(nextY, pos.y, eid, 'y');
 
     addComponent(
       world,
