@@ -8,7 +8,7 @@
     "fix": "true",
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
-    "test": "echo 'no tests — container-only'",
+    "test": "bun test scripts/image_service.test.ts",
     "test:image": "bun run scripts/check_health.ts",
     "download:model": "bun run scripts/download_model.ts",
     "models:download": "bun run scripts/download_models.ts",

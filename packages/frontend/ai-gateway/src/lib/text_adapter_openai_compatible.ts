@@ -358,6 +358,18 @@ export const createOpenAiCompatibleTextAdapter = (
           throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
         }
 
+        // Ollama native /api/chat with stream: false returns a plain JSON
+        // response, not SSE. Parse it directly instead of streaming.
+        if (resolution.provider === 'ollama') {
+          const data = (await response.json()) as {
+            message?: { content?: string };
+          };
+          const text = data.message?.content ?? '';
+          deliver(text);
+          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+          return {};
+        }
+
         if (!response.body) {
           throw new Error(`No response body from provider "${resolution.provider}"`);
         }

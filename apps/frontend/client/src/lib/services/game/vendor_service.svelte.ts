@@ -99,6 +99,7 @@ class VendorService
   private _vendorId = '';
   private _transactionMessageTimer: ReturnType<typeof setTimeout> | undefined;
   private _getVendorLine: ((vendorId: string) => string | undefined) | undefined;
+  private _sessionAbortController: AbortController | undefined;
 
   get isOpen(): boolean {
     return this._isOpen;
@@ -135,12 +136,24 @@ class VendorService
     this._isOpen = false;
     this.priceMultiplier = 1.0;
     this.refusesToSell = false;
+    // Cancel any in-flight haggle requests from the previous session
+    if (this._sessionAbortController) {
+      this._sessionAbortController.abort();
+      this._sessionAbortController = undefined;
+    }
   }
   toggle(): void {
     this._isOpen = !this._isOpen;
   }
 
   startSession(options: VendorSessionOptions): void {
+    // Cancel any in-flight haggle requests from a previous session
+    if (this._sessionAbortController) {
+      this._sessionAbortController.abort();
+    }
+    // Create a new abort controller for this session
+    this._sessionAbortController = new AbortController();
+
     this._vendorId = options.vendorId;
     this.vendorName = options.vendorName;
     const itemIds = options.vendorInventory
@@ -175,6 +188,12 @@ class VendorService
     if (this.isHaggling || this.refusesToSell || !message.trim()) {
       return;
     }
+    // Capture the current session controller for validation after the async operation
+    const sessionController = this._sessionAbortController;
+    if (!sessionController) {
+      return;
+    }
+
     this.isHaggling = true;
     this.messages = [
       ...this.messages,
@@ -187,8 +206,15 @@ class VendorService
         schemaName: 'VendorActionIntent',
         prompt,
         systemPrompt: VENDOR_ACTION_SYSTEM_PROMPT,
-        signal: AbortSignal.timeout(15_000),
+        signal: sessionController.signal,
       });
+
+      // Verify session is still active before mutating state
+      if (this._sessionAbortController !== sessionController || sessionController.signal.aborted) {
+        this.debug('haggle:stale-response', { vendorId: this._vendorId });
+        return;
+      }
+
       const intent = raw as VendorActionIntent;
       const clamped = Math.max(0.5, Math.min(1.5, intent.priceMultiplier));
       this.priceMultiplier = clamped;
@@ -204,6 +230,12 @@ class VendorService
         }
       }
     } catch (error) {
+      // Verify session is still active before showing fallback
+      if (this._sessionAbortController !== sessionController || sessionController.signal.aborted) {
+        this.debug('haggle:stale-error', { vendorId: this._vendorId });
+        return;
+      }
+
       // AI unavailable — fall back to the authored vendor line.
       this.error('haggle:ai-failed', { error: String(error) });
       this.messages = [
