@@ -15,9 +15,7 @@ const checkHealth = async (): Promise<void> => {
     });
 
     if (!response.ok) {
-      console.error(
-        `✗ ComfyUI returned status ${response.status} — container may be booting.`,
-      );
+      console.error(`✗ ComfyUI returned status ${response.status} — container may be booting.`);
       process.exit(1);
     }
 
@@ -28,9 +26,7 @@ const checkHealth = async (): Promise<void> => {
     const err = error as Error & { code?: string };
 
     if (err.code === 'ECONNREFUSED' || err.name === 'TypeError') {
-      console.error(
-        `✗ ComfyUI container is not running on port ${COMFYUI_PORT}.`,
-      );
+      console.error(`✗ ComfyUI container is not running on port ${COMFYUI_PORT}.`);
       console.error('  Start it with: bun herdr:start image');
     } else {
       console.error(`✗ Health check failed: ${err.message}`);

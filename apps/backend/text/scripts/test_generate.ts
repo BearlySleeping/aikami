@@ -66,10 +66,7 @@ const checkHealth = async (): Promise<boolean> => {
  *
  * Prints tokens as they arrive, then reports timing metrics on completion.
  */
-const generate = async (options: {
-  model: string;
-  prompt: string;
-}): Promise<void> => {
+const generate = async (options: { model: string; prompt: string }): Promise<void> => {
   const { model, prompt } = options;
 
   const response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -137,12 +134,16 @@ const generate = async (options: {
               console.log(`  Load:       ${formatDuration(chunk.load_duration)}`);
             }
             if (chunk.prompt_eval_count !== undefined) {
-              console.log(`  Prompt:     ${chunk.prompt_eval_count} tokens in ${formatDuration(chunk.prompt_eval_duration ?? 0)}`);
+              console.log(
+                `  Prompt:     ${chunk.prompt_eval_count} tokens in ${formatDuration(chunk.prompt_eval_duration ?? 0)}`,
+              );
             }
             if (chunk.eval_count !== undefined) {
               const evalMs = (chunk.eval_duration ?? 0) / 1_000_000;
               const tps = evalMs > 0 ? ((chunk.eval_count / evalMs) * 1000).toFixed(1) : '?';
-              console.log(`  Generated:  ${chunk.eval_count} tokens in ${formatDuration(chunk.eval_duration ?? 0)} (${tps} tok/s)`);
+              console.log(
+                `  Generated:  ${chunk.eval_count} tokens in ${formatDuration(chunk.eval_duration ?? 0)} (${tps} tok/s)`,
+              );
             }
           }
         } catch (parseError) {
@@ -180,9 +181,7 @@ const main = async (): Promise<void> => {
 
   // ── Health check ──────────────────────────────
   if (!(await checkHealth())) {
-    console.error(
-      `\n✗ Ollama is not running on port ${OLLAMA_PORT}.`,
-    );
+    console.error(`\n✗ Ollama is not running on port ${OLLAMA_PORT}.`);
     console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }

@@ -11,14 +11,11 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const MODELS_DIR = resolve(
-  import.meta.dirname,
-  '../src/models/checkpoints',
-);
+const MODELS_DIR = resolve(import.meta.dirname, '../src/models/checkpoints');
 
 /** Well-known lightweight models for quick testing. */
 const KNOWN_MODELS = {
-  'sd15': {
+  sd15: {
     url: 'https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.ckpt',
     filename: 'v1-5-pruned-emaonly.ckpt',
     description: 'Stable Diffusion 1.5 (pruned, ~4.3 GB) — fast, reliable baseline',

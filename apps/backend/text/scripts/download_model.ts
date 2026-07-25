@@ -68,7 +68,7 @@ const isModelCached = async (model: string): Promise<boolean> => {
     if (!response.ok) {
       return false;
     }
-    const data = await response.json() as { models?: TagEntry[] };
+    const data = (await response.json()) as { models?: TagEntry[] };
     const models = data.models ?? [];
     return models.some((m) => m.name === model || m.name === `${model}:latest`);
   } catch {
@@ -136,9 +136,7 @@ const pullModel = async (model: string): Promise<void> => {
           if (chunk.completed !== undefined && chunk.total !== undefined && chunk.total > 0) {
             const pct = ((chunk.completed / chunk.total) * 100).toFixed(1);
             const elapsed = (Date.now() - startTime) / 1000;
-            const speed = elapsed > 0
-              ? formatBytes(chunk.completed / elapsed)
-              : '...';
+            const speed = elapsed > 0 ? formatBytes(chunk.completed / elapsed) : '...';
             const status = chunk.status || 'downloading';
             process.stdout.write(
               `\r  ${formatBytes(chunk.completed)} / ${formatBytes(chunk.total)} (${pct}%) @ ${speed}/s — ${status}`,
@@ -176,9 +174,7 @@ const main = async (): Promise<void> => {
 
   // ── Health check ──────────────────────────────
   if (!(await checkHealth())) {
-    console.error(
-      `✗ Ollama is not running on port ${OLLAMA_PORT}.`,
-    );
+    console.error(`✗ Ollama is not running on port ${OLLAMA_PORT}.`);
     console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }
