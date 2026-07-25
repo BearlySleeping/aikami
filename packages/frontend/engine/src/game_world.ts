@@ -441,8 +441,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._app.ticker.add(this._tickerCallback);
     this._running = true;
 
-    // ── C-332: Start worker heartbeat ──
-    this._startHeartbeat();
+    // ── C-332: Heartbeat started by GameBootService._stageSpawnEntities ──
+    // Deferred until the game is fully booted to prevent false positive
+    // stall detection during LOAD_MAP, tilemap loading, and auto-save.
 
     // ── C-217: E2E test mode — freeze ticker after first render ──
     // When running in deterministic E2E mode, let exactly one ticker
@@ -1219,8 +1220,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Sends a PING message every {@link _HEARTBEAT_INTERVAL_MS}ms.
    * If the worker fails to respond with PONG within 3 intervals,
    * logs a warning and attempts recovery.
+   *
+   * Called by {@link GameBootService._stageSpawnEntities} after the
+   * game is fully booted and input is unlocked.
    */
-  private _startHeartbeat(): void {
+  startHeartbeat(): void {
     if (this._heartbeatTimer) {
       return;
     }
