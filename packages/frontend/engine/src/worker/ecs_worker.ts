@@ -1028,9 +1028,6 @@ const tickLoop = (): void => {
       // any null entries (transferred but not yet recycled).
       const oldIndex = activeBufferIndex;
 
-      // Mark the buffer we're about to transfer as consumed
-      bufferPool[oldIndex] = null as unknown as ArrayBuffer;
-
       // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only
       let nextWritableIndex = -1;
       for (let attempt = 1; attempt <= FALLBACK_BUFFER_COUNT; attempt++) {
@@ -1056,6 +1053,8 @@ const tickLoop = (): void => {
           writableBufferCount: 0,
         });
       } else {
+        // Mark the buffer we're about to transfer as consumed
+        bufferPool[oldIndex] = null as unknown as ArrayBuffer;
         activeBufferIndex = nextWritableIndex;
         bufferToSend = bufferPool[nextWritableIndex] as ArrayBuffer;
         activeWriteView = new Float32Array(bufferToSend);

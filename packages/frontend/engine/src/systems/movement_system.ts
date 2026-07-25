@@ -68,7 +68,7 @@ let _lastValidPlayerY = 0;
  * and returns the last valid position as a recovery coordinate.
  */
 const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' | 'y'): number => {
-  if (Number.isNaN(value) || !Number.isFinite(value)) {
+  if (!Number.isFinite(value)) {
     logger.error('[WorkerEngine] CRITICAL: Invalid position — NaN/Infinity detected', {
       eid,
       axis,
@@ -238,11 +238,11 @@ const updateMovement = (world: World, deltaMs: number): void => {
 
     // ── C-332: NaN/Infinity position guard ──
     // If delta-time explosion or collision math produces invalid coordinates,
-    // recover to the last known valid position instead of corrupting ECS state.
-    nextX = safeCoordinate(nextX, _lastValidPlayerX, eid, 'x');
-    nextY = safeCoordinate(nextY, _lastValidPlayerY, eid, 'y');
+    // recover to the entity's current position instead of corrupting ECS state.
+    nextX = safeCoordinate(nextX, pos.x, eid, 'x');
+    nextY = safeCoordinate(nextY, pos.y, eid, 'y');
 
-    // Track last valid position for recovery (only for player, eid 1)
+    // Track last valid position for recovery (player-specific if needed)
     if (eid === 1 && Number.isFinite(nextX) && Number.isFinite(nextY)) {
       _lastValidPlayerX = nextX;
       _lastValidPlayerY = nextY;

@@ -291,6 +291,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private static readonly _HEARTBEAT_INTERVAL_MS = 2000;
   /** Last known tickCount from the worker (0 if never received). */
   private _lastKnownTickCount = 0;
+  /** Baseline tickCount from the previous heartbeat cycle (for stale-tick detection). */
+  private _lastCheckedTickCount = 0;
   /** Number of consecutive heartbeat cycles with no tickCount progress. */
   private _staleTickCycles = 0;
 
@@ -1226,6 +1228,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._lastPongMs = performance.now();
     this._missedHeartbeats = 0;
     this._lastKnownTickCount = 0;
+    this._lastCheckedTickCount = 0;
     this._staleTickCycles = 0;
 
     this._heartbeatTimer = setInterval(() => {
@@ -1240,7 +1243,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // stalled — even if PONG answers perfectly.
       const currentTick = this._lastKnownTickCount;
       if (currentTick > 0 && !this._inputLocked) {
-        if (currentTick === this._lastKnownTickCount) {
+        if (currentTick === this._lastCheckedTickCount) {
           this._staleTickCycles++;
         } else {
           this._staleTickCycles = 0;
@@ -1255,6 +1258,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           this._postToWorker({ type: 'RESET_TICK_LOOP' });
           this._staleTickCycles = 0;
         }
+
+        this._lastCheckedTickCount = currentTick;
       }
 
       // Check for missed PONG heartbeats (connection-level failure)
