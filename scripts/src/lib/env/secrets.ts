@@ -44,42 +44,17 @@ function emitExport(key: string, value: string): void {
   process.stdout.write(`export ${key}='${escaped}'\n`);
 }
 
-// ── Emulator mode ─────────────────────────────────────────────────────
+// ── Env-file reader (shared by both modes) ────────────────────────────
 
-function loadMocks(): void {
-  process.stderr.write('  ℹ️  Secrets: using emulator mock values\n');
-  const mocks: Record<string, string> = {
-    // biome-ignore lint/style/useNamingConvention: env var name
-    GEMINI_API_KEY: 'emulator-key',
-  };
-  for (const key of SECRET_KEYS) {
-    // Re-export existing values so they survive direnv reloads
-    // (e.g. Home Manager session vars like GH_TOKEN)
-    const existing = process.env[key];
-    if (existing) {
-      emitExport(key, existing);
-      continue;
-    }
-    const mock = mocks[key];
-    if (mock !== undefined) {
-      emitExport(key, mock);
-    }
-  }
-}
-
-// ── Live mode — load from .env.{mode} ─────────────────────────────────
-
-function loadFromEnvFile(): void {
-  const envFile = join(root, `.env.${mode}`);
+function readEnvFile(modeLabel: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const envFile = join(root, `.env.${modeLabel}`);
 
   if (!existsSync(envFile)) {
-    process.stderr.write(`  ⚠️  Secrets: .env.${mode} not found\n`);
-    return;
+    return result;
   }
 
   const content = readFileSync(envFile, 'utf8');
-  let loaded = 0;
-
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
@@ -91,12 +66,68 @@ function loadFromEnvFile(): void {
     }
     const key = trimmed.slice(0, eq);
     const value = trimmed.slice(eq + 1);
-
     if ((SECRET_KEYS as readonly string[]).includes(key)) {
-      // Prefer env-file value over existing env var (env file is authoritative in live modes)
-      emitExport(key, value);
-      loaded++;
+      result.set(key, value);
     }
+  }
+
+  return result;
+}
+
+// ── Emulator mode ─────────────────────────────────────────────────────
+
+function loadMocks(): void {
+  process.stderr.write('  ℹ️  Secrets: using emulator mock values\n');
+
+  // ═══ Priority: env file > process.env > mocks ═══
+  // Nix devShell (use flake) strips Home Manager session vars before we
+  // run, so process.env is unreliable for tokens like GH_TOKEN. The
+  // .env.emulator file is the canonical source for real secrets that
+  // mocks don't cover.
+
+  const envFileValues = readEnvFile(mode);
+  const mocks: Record<string, string> = {
+    // biome-ignore lint/style/useNamingConvention: env var name
+    GEMINI_API_KEY: 'emulator-key',
+  };
+
+  for (const key of SECRET_KEYS) {
+    // 1. Env file takes priority (survives Nix shell stripping)
+    const fromFile = envFileValues.get(key);
+    if (fromFile !== undefined) {
+      emitExport(key, fromFile);
+      continue;
+    }
+
+    // 2. Process env (may survive on first load before Nix stripping)
+    const existing = process.env[key];
+    if (existing) {
+      emitExport(key, existing);
+      continue;
+    }
+
+    // 3. Fallback to mock
+    const mock = mocks[key];
+    if (mock !== undefined) {
+      emitExport(key, mock);
+    }
+  }
+}
+
+// ── Live mode — load from .env.{mode} ─────────────────────────────────
+
+function loadFromEnvFile(): void {
+  const envFileValues = readEnvFile(mode);
+
+  if (envFileValues.size === 0) {
+    process.stderr.write(`  ⚠️  Secrets: .env.${mode} not found or empty\n`);
+    return;
+  }
+
+  let loaded = 0;
+  for (const [key, value] of envFileValues) {
+    emitExport(key, value);
+    loaded++;
   }
 
   process.stderr.write(`  ✅ Secrets: loaded ${loaded} from .env.${mode}\n`);
