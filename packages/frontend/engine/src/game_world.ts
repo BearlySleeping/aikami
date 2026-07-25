@@ -260,6 +260,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Global input lock — set true when dialogue/UI is active. */
   private _inputLocked = false;
 
+  /**
+   * Currently held movement keys (WASD/arrows).
+   *
+   * Hoisted from the _setupKeyboardInput closure so flushInput()
+   * can clear them. Without this, the old closure-based approach
+   * left activeKeys unreachable from outside the keyboard handler,
+   * making the C-332 flushInput() implemention a no-op.
+   */
+  private _activeKeys = new Set<string>();
+
   /** Callback invoked when the interaction key is pressed near an NPC. */
   private _interactRequestCallback: InteractRequestCallback | undefined;
 
@@ -268,6 +278,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Whether the game loop is currently running. */
   private _running = false;
+
+  // ── Worker heartbeat (C-332) ──
+
+  /** Heartbeat interval timer handle. */
+  private _heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  /** Unsubscribe function for the MAP_LOADED listener. */
+  private _mapLoadedUnsubscribe: (() => void) | undefined;
+  /** Timestamp of the last pong received from the worker (ms). */
+  private _lastPongMs = 0;
+  /** Number of consecutive missed heartbeats. */
+  private _missedHeartbeats = 0;
+  /** Heartbeat interval in milliseconds. */
+  private static readonly _HEARTBEAT_INTERVAL_MS = 2000;
+  /** Last known tickCount from the worker (0 if never received). */
+  private _lastKnownTickCount = 0;
+  /** Baseline tickCount from the previous heartbeat cycle (for stale-tick detection). */
+  private _lastCheckedTickCount = 0;
+  /** Number of consecutive heartbeat cycles with no tickCount progress. */
+  private _staleTickCycles = 0;
 
   /** PixiJS ticker callback reference for teardown. */
   private _tickerCallback: (() => void) | undefined;
@@ -414,6 +443,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._app.ticker.add(this._tickerCallback);
     this._running = true;
 
+    // ── C-332: Heartbeat started by GameBootService._stageSpawnEntities ──
+    // Deferred until the game is fully booted to prevent false positive
+    // stall detection during LOAD_MAP, tilemap loading, and auto-save.
+
     // ── C-217: E2E test mode — freeze ticker after first render ──
     // When running in deterministic E2E mode, let exactly one ticker
     // frame render, then pause the ticker and expose engine state
@@ -477,6 +510,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   destroy(): void {
     // Stop the render loop
     this._running = false;
+
+    // ── C-332: Stop worker heartbeat ──
+    this._stopHeartbeat();
 
     if (this._app && this._tickerCallback) {
       this._app.ticker.remove(this._tickerCallback);
@@ -631,15 +667,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       return;
     }
 
-    worker.postMessage({
-      type: 'INITIALIZE_ENGINE',
-      canvasWidth,
-      canvasHeight,
-      buffers: this._bufferPool,
-      loadPayload,
-      playerData,
-      collisionGrid,
-    });
+    worker.postMessage(
+      {
+        type: 'INITIALIZE_ENGINE',
+        canvasWidth,
+        canvasHeight,
+        buffers: this._bufferPool,
+        loadPayload,
+        playerData,
+        collisionGrid,
+      },
+      // ── RC-1 FIX: Transfer buffers to worker, don't structure-clone ──
+      // Without the transferables array, postMessage clones the 3 buffers
+      // instead of transferring ownership. This creates 6 distinct buffers
+      // — the main thread's 3 originals and the worker's 3 clones — which
+      // are completely disjoint pools.
+      this._useSharedMemory ? [] : [...this._bufferPool],
+    );
+    // Ownership moved to worker — clear main-thread references
+    if (!this._useSharedMemory) {
+      this._bufferPool = [];
+      this._activeRenderView = undefined;
+    }
 
     // Set up message listener for worker → main communication
     worker.onmessage = (event: MessageEvent): void => {
@@ -653,15 +702,36 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         lineno: error.lineno,
         colno: error.colno,
       };
-      this.error('Worker error', detail);
+      this.error('[GameWorld] Worker error', detail);
       this._bridge.emit({
         type: 'GAME_ERROR',
         message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}:${detail.colno}`,
       });
     };
 
+    // ── C-332: Handle worker message serialization errors ──
+    worker.onmessageerror = (event: MessageEvent): void => {
+      this.error('[GameWorld] Worker message serialization error', {
+        data: typeof event.data,
+      });
+      this._bridge.emit({
+        type: 'GAME_ERROR',
+        message: 'Worker message serialization error — data could not be deserialized',
+      });
+    };
+
     // Forward bridge commands to the worker
     this._setupCommandForwarding();
+
+    // ── C-332: Start heartbeat on first MAP_LOADED ──
+    // The heartbeat is deferred until the first map finishes loading because
+    // the worker's tick loop is paused/restarted during LOAD_MAP in the boot
+    // pipeline. MAP_LOADED signals the game is fully interactive.
+    this._mapLoadedUnsubscribe = this._bridge.on('MAP_LOADED', () => {
+      if (!this._heartbeatTimer) {
+        this._startHeartbeat();
+      }
+    });
 
     // Register snapshot/restore handlers on the bridge
     this._setupSnapshotHandlers();
@@ -705,17 +775,39 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       case 'ENGINE_ERROR': {
+        // ── RC-2 FIX: ENGINE_ERROR is recoverable — do NOT destroy ──
+        // Non-fatal errors (autosave serialization hiccup, map-load
+        // warning, snapshot failure) should surface via GAME_ERROR
+        // without terminating the engine. Only ENGINE_FATAL warrants
+        // worker termination (detached buffer cascades, unrecoverable
+        // corruption).
         this._bridge.emit({
           type: 'GAME_ERROR',
           message: message.message as string,
+        });
+        break;
+      }
+
+      case 'ENGINE_FATAL': {
+        // ── RC-2: Unrecoverable — terminate the worker ──
+        this.error('[GameWorld] ENGINE_FATAL', { message: message.message as string });
+        this._bridge.emit({
+          type: 'GAME_ERROR',
+          message: `FATAL: ${message.message as string}`,
         });
 
         // Terminate the worker immediately on fatal errors (detached
         // ArrayBuffer cascades, infinite tick-loop failures, etc.).
         // This stops the postMessage flood so the browser event loop
-        // can recover. The error surfaced via GAME_ERROR above so
-        // the ViewModel can show it to the user.
+        // can recover.
         this.destroy();
+        break;
+      }
+
+      // ── C-332: Worker heartbeat — record pong timestamp ──
+      case 'PONG': {
+        this._lastPongMs = performance.now();
+        this._missedHeartbeats = 0;
         break;
       }
 
@@ -756,15 +848,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
 
-      // Recycle the old render buffer back to the worker
-      const oldBuffer = this._bufferPool.shift();
-      if (oldBuffer && this._worker) {
-        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: oldBuffer }, [oldBuffer]);
+      // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
+      // FIFO shift from a ring buffer that has no relation to what the
+      // worker actually owns. After INITIALIZE_ENGINE with transferables,
+      // _bufferPool is empty — and even before the fix, the original
+      // buffers were clones disconnected from the worker's pool. ──
+      const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
+      if (outgoing && outgoing.byteLength > 0 && this._worker) {
+        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
       }
 
-      // Add the new buffer to the pool and set as active render view
-      this._bufferPool.push(newBuffer);
       this._activeRenderView = new Float32Array(newBuffer);
+    }
+
+    // ── C-332: Extract tickCount for semantic heartbeat ──
+    const ack = message.ack as { tickCount?: number; writableBufferCount?: number } | undefined;
+    if (typeof ack?.tickCount === 'number') {
+      this._lastKnownTickCount = ack.tickCount;
     }
 
     // Re-emit events through the bridge
@@ -1087,6 +1187,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
   }
 
+  /**
+   * Flushes all tracked key state and zeroes player velocity.
+   *
+   * Called when overlays open/close or the window loses focus to
+   * prevent key-state poisoning — where the browser's internal key-repeat
+   * state survives an overlay transition and subsequent keyDown events
+   * are treated as OS repeats (dropped).
+   *
+   * Contract: C-332 — Prevent key-state poisoning
+   */
+  flushInput(): void {
+    // ── RC-4 FIX: Directly clear _activeKeys (now a field, not a closure var) ──
+    this._activeKeys.clear();
+    this._postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
+    });
+    this.debug('[GameWorld] flushInput:cleared');
+  }
+
   /** Returns the current input lock state. */
   get isInputLocked(): boolean {
     return this._inputLocked;
@@ -1103,6 +1223,96 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   // -----------------------------------------------------------------------
+  // Internal: Worker heartbeat (C-332)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Starts the worker heartbeat interval.
+   *
+   * Sends a PING message every {@link _HEARTBEAT_INTERVAL_MS}ms.
+   * If the worker fails to respond with PONG within 3 intervals,
+   * logs a warning and attempts recovery.
+   *
+   * Called by {@link GameBootService._stageSpawnEntities} after the
+   * game is fully booted and input is unlocked.
+   */
+  private _startHeartbeat(): void {
+    if (this._heartbeatTimer) {
+      return;
+    }
+
+    this._lastPongMs = performance.now();
+    this._missedHeartbeats = 0;
+    this._lastKnownTickCount = 0;
+    this._lastCheckedTickCount = 0;
+    this._staleTickCycles = 0;
+
+    this._heartbeatTimer = setInterval(() => {
+      if (!this._worker) {
+        return;
+      }
+
+      // ── C-332: Semantic heartbeat — check for simulation progress ──
+      // The PONG proves message-handler liveness. But the real signal is
+      // whether tickCount is advancing. If tickCount stagnates across 3
+      // heartbeat cycles while the engine is unpaused, the simulation is
+      // stalled — even if PONG answers perfectly.
+      const currentTick = this._lastKnownTickCount;
+      if (currentTick > 0 && !this._inputLocked) {
+        if (currentTick === this._lastCheckedTickCount) {
+          this._staleTickCycles++;
+        } else {
+          this._staleTickCycles = 0;
+        }
+
+        if (this._staleTickCycles >= 3) {
+          this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
+            tickCount: currentTick,
+            staleCycles: this._staleTickCycles,
+          });
+          // Escalate: send RESET_TICK_LOOP to the worker
+          this._postToWorker({ type: 'RESET_TICK_LOOP' });
+          this._staleTickCycles = 0;
+        }
+
+        this._lastCheckedTickCount = currentTick;
+      }
+
+      // Check for missed PONG heartbeats (connection-level failure)
+      const elapsed = performance.now() - this._lastPongMs;
+      if (elapsed > GameWorld._HEARTBEAT_INTERVAL_MS * 3) {
+        this._missedHeartbeats++;
+        this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
+          elapsedMs: Math.round(elapsed),
+          missedCount: this._missedHeartbeats,
+        });
+        this._lastPongMs = performance.now();
+      }
+
+      this._postToWorker({ type: 'PING', timestamp: performance.now() });
+    }, GameWorld._HEARTBEAT_INTERVAL_MS);
+
+    this.debug('[GameWorld] heartbeat:started', {
+      intervalMs: GameWorld._HEARTBEAT_INTERVAL_MS,
+    });
+  }
+
+  /**
+   * Stops the worker heartbeat interval.
+   */
+  private _stopHeartbeat(): void {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = undefined;
+      this.debug('[GameWorld] heartbeat:stopped');
+    }
+    if (this._mapLoadedUnsubscribe) {
+      this._mapLoadedUnsubscribe();
+      this._mapLoadedUnsubscribe = undefined;
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: Keyboard input (main thread)
   // -----------------------------------------------------------------------
 
@@ -1116,22 +1326,32 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @returns A cleanup function that removes all listeners.
    */
   private _setupKeyboardInput(): () => void {
-    const activeKeys = new Set<string>();
+    // ── RC-4 FIX: Use field-scoped _activeKeys, not closure variable ──
+
+    // ── Input dispatch telemetry — logged every 500ms to avoid spam ──
+    let _lastInputLog = 0;
+    const _throttledLog = (label: string, detail: Record<string, unknown>): void => {
+      const now = performance.now();
+      if (now - _lastInputLog > 500) {
+        _lastInputLog = now;
+        this.debug(label, detail);
+      }
+    };
 
     const updateVelocity = () => {
       let vx = 0;
       let vy = 0;
 
-      if (activeKeys.has('w') || activeKeys.has('arrowup')) {
+      if (this._activeKeys.has('w') || this._activeKeys.has('arrowup')) {
         vy -= 1;
       }
-      if (activeKeys.has('s') || activeKeys.has('arrowdown')) {
+      if (this._activeKeys.has('s') || this._activeKeys.has('arrowdown')) {
         vy += 1;
       }
-      if (activeKeys.has('a') || activeKeys.has('arrowleft')) {
+      if (this._activeKeys.has('a') || this._activeKeys.has('arrowleft')) {
         vx -= 1;
       }
-      if (activeKeys.has('d') || activeKeys.has('arrowright')) {
+      if (this._activeKeys.has('d') || this._activeKeys.has('arrowright')) {
         vx += 1;
       }
 
@@ -1146,6 +1366,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       vx *= 150;
       vy *= 150;
 
+      _throttledLog('[GameWorld] dispatchInputToWorker', {
+        vector: { x: Math.round(vx), y: Math.round(vy) },
+        activeKeys: [...this._activeKeys],
+        inputLocked: this._inputLocked,
+      });
+
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: vx, y: vy } },
@@ -1154,6 +1380,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     const handleKeyDown = (event: KeyboardEvent): void => {
       const key = event.key.toLowerCase();
+
+      // ── Skip game keys when focus is in a text input (C-332 AC-fix) ──
+      const target = event.target as HTMLElement | null;
+      const isInputField =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+
+      if (isInputField) {
+        return;
+      }
+
       // Interaction key — only when input is not locked (DIALOGUE/MENU)
       if ((key === 'e' || key === 'enter') && !this._inputLocked) {
         event.preventDefault();
@@ -1167,8 +1407,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // pre-lock velocity persists and the player slides across the map
       // while the overlay is open.
       if (this._inputLocked) {
-        activeKeys.clear();
+        this._activeKeys.clear();
         if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+          _throttledLog('[GameWorld] inputSuppressed:inputLocked', {
+            key,
+            reason: 'inputLocked',
+          });
           updateVelocity();
         }
         return;
@@ -1176,8 +1420,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
         event.preventDefault();
-        if (!activeKeys.has(key)) {
-          activeKeys.add(key);
+        if (!this._activeKeys.has(key)) {
+          this._activeKeys.add(key);
           updateVelocity();
         }
       }
@@ -1186,19 +1430,45 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const handleKeyUp = (event: KeyboardEvent): void => {
       const key = event.key.toLowerCase();
 
-      if (activeKeys.has(key)) {
+      // ── Also skip game keys in text input fields ──
+      const target = event.target as HTMLElement | null;
+      const isInputField =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+
+      if (isInputField) {
+        return;
+      }
+
+      if (this._activeKeys.has(key)) {
         event.preventDefault();
-        activeKeys.delete(key);
+        this._activeKeys.delete(key);
         updateVelocity();
       }
     };
 
+    // ── RC-4 FIX: Window blur handled here so it's torn down with
+    // the other keyboard listeners (Path B). Previously the blur handler
+    // lived in game_ui_view_model (Path A) — a separate lifecycle. ──
+    const handleBlur = (): void => {
+      this._activeKeys.clear();
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
+      });
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
 
     return (): void => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }
 

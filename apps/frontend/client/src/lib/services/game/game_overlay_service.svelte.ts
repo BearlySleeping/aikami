@@ -408,6 +408,13 @@ export class GameOverlayService
 
     this.overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
+
+    // ── C-332: Flush stale key state when overlay opens ──
+    // Prevents key-state poisoning where the browser's internal key-repeat
+    // survives the overlay transition, causing subsequent keyDown events
+    // to be treated as OS repeats and silently dropped.
+    gameEngineService.flushInput();
+
     return true;
   }
 
@@ -424,6 +431,11 @@ export class GameOverlayService
 
     // Restore focus to the element that was focused before this overlay opened
     this._restoreFocus(entry.previousFocus);
+
+    // ── C-332: Flush stale key state when overlay closes ──
+    // If the user was holding keys when the overlay opened, the keyUp
+    // events were lost. Flushing here ensures a clean slate.
+    gameEngineService.flushInput();
   }
 
   /** @inheritdoc */
@@ -479,6 +491,9 @@ export class GameOverlayService
     const bottomEntry = this.overlayStack[0];
     this.overlayStack = [];
     this._restoreFocus(bottomEntry.previousFocus);
+
+    // ── C-332: Flush stale key state when stack clears ──
+    gameEngineService.flushInput();
   }
 
   /** @inheritdoc */
@@ -649,15 +664,16 @@ export class GameOverlayService
       clearTimeout(this._mapTransitionDebounce);
     }
 
-    // Trigger auto-save 1s after the LAST map transition (debounced)
-    this._mapTransitionDebounce = setTimeout(() => {
-      if (this._firstMapLoaded) {
-        // Only trigger after the very first map load — subsequent auto-saves
-        // are handled by the interval scheduler
+    // Trigger auto-save 1s after map transitions (zoned to a new map).
+    // Do NOT auto-save on the very first map load during boot — the
+    // engine tick loop is still stabilizing and snapshotWorld can
+    // race with the setTimeout-based tick rescheduling.
+    if (this._firstMapLoaded) {
+      this._mapTransitionDebounce = setTimeout(() => {
         void this._triggerAutoSave();
-      }
-      this._mapTransitionDebounce = undefined;
-    }, 1000);
+        this._mapTransitionDebounce = undefined;
+      }, 1000);
+    }
 
     this._firstMapLoaded = true;
   }

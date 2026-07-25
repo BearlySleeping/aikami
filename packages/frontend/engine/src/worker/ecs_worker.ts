@@ -301,6 +301,12 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
  * Dispatches an incoming GameCommand from the main thread.
  */
 const handleBridgeCommand = (command: GameCommand): void => {
+  // ── Track last processed input sequence for ACK ──
+  const cmdWithSeq = command as GameCommand & { _seq?: number };
+  if (typeof cmdWithSeq._seq === 'number') {
+    _lastProcessedInputSequence = cmdWithSeq._seq;
+  }
+
   switch (command.type) {
     case 'SET_PLAYER_VELOCITY': {
       handleSetPlayerVelocity(command.velocity);
@@ -335,10 +341,31 @@ const handleBridgeCommand = (command: GameCommand): void => {
     case 'OPEN_MENU':
     case 'CLOSE_MENU':
     case 'LOAD_SCENE':
-    case 'PAUSE_GAME':
-    case 'RESUME_GAME':
     case 'EXECUTE_COMMAND': {
       // These commands are not processed by the worker in the current MVP.
+      break;
+    }
+    case 'PAUSE_ENGINE': {
+      // ── C-332: Main thread requests worker tick loop pause ──
+      // Clears the interval so no orphaned timer fires after unpause
+      // with a stale lastTickTime. Also clears player velocity.
+      logger.debug('[WorkerEngine] pauseEngine:requested');
+      if (world && playerEntityId > 0) {
+        addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
+      }
+      stopTickLoop();
+      break;
+    }
+    case 'UNPAUSE_ENGINE': {
+      // ── C-332: Main thread requests worker tick loop resume ──
+      // startTickLoop resets lastTickTime to performance.now() BEFORE
+      // creating the interval, so the first frame after unpause has
+      // delta ≈ 0ms instead of the entire pause duration.
+      logger.debug('[WorkerEngine] unpauseEngine:requested');
+      if (world && playerEntityId > 0) {
+        addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
+      }
+      startTickLoop();
       break;
     }
     case 'TRIGGER_MACRO': {
@@ -623,7 +650,7 @@ const initializeEngine = (
   lpcBatchManager = new LpcBatchManager({ maxInstances: 64 });
 
   // 6. Start the tick loop (~60fps = 16ms interval)
-  running = true;
+  startTickLoop();
 
   // 6a. Start the macro simulation tick loop (C-194)
   //     Runs at 500ms interval for offline agent stepping.
@@ -635,8 +662,6 @@ const initializeEngine = (
     capacity: MAX_ENTITIES * 2,
   });
   positionBuffer = new Float32Array(MAX_ENTITIES * 2);
-
-  setInterval(tickLoop, 16);
 
   // 8. Spawn entities — from saved payload or defaults
   if (loadPayload) {
@@ -683,8 +708,107 @@ const initializeEngine = (
 /** Timestamp of the previous tick for computing delta time. */
 let lastTickTime = performance.now();
 
+/**
+ * Monotonic tick counter — incremented each time tickLoop completes
+ * a full simulation frame. Used by the main-thread heartbeat to detect
+ * simulation stalls (distinct from message-handler liveness).
+ */
+let tickCount = 0;
+
+/**
+ * Last input sequence number processed in handleBridgeCommand.
+ * Echoed back in STATE_UPDATE so the main thread can measure input lag.
+ */
+let _lastProcessedInputSequence = 0;
+
+/**
+ * Handle for the active tick timer.
+ *
+ * Uses setTimeout + manual reschedule (not setInterval) so that
+ * stopTickLoop/startTickLoop calls are safe even when a tick is
+ * in-flight. The finally block checks _running and reschedules
+ * automatically.
+ */
+let _tickTimerHandle: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Single-instance guard — true while tickLoop() is executing.
+ *
+ * In single-threaded JS a timer callback cannot preempt a running
+ * callback, but if any async boundary is ever introduced into the
+ * tick pipeline this prevents concurrent world mutation.
+ */
+let isTicking = false;
+
 /** Macro simulation tick interval in milliseconds (C-196). */
 const MACRO_TICK_INTERVAL_MS = 500;
+
+/**
+ * Hard cap for frame delta time in milliseconds (100ms = 10fps floor).
+ *
+ * During tab backgrounding, WASM auto-saves, or heavy GC pauses the
+ * browser timer may deliver a single callback with a massive delta.
+ * Without clamping, velocity × delta propels entities off the map into
+ * NaN/Infinity territory. 100ms is the smallest value that still allows
+ * a visible frame-rate drop without causing physics tunneling.
+ */
+const MAX_FRAME_DELTA_MS = 100;
+
+/**
+ * Schedules the next tick via setTimeout.
+ *
+ * Only called when _running is true and no timer is pending.
+ */
+const _scheduleNextTick = (): void => {
+  if (_tickTimerHandle !== undefined || !running) {
+    return;
+  }
+  _tickTimerHandle = setTimeout(tickLoop, 16);
+};
+
+/**
+ * Starts the tick loop.
+ *
+ * Sets _running = true so that the currently-in-flight tick (if any)
+ * will reschedule itself in its finally block, or schedules the first
+ * tick via setTimeout if nothing is executing.
+ *
+ * Safe to call while tickLoop() is executing — the finally block
+ * will pick up the _running flag and auto-reschedule.
+ */
+const startTickLoop = (): void => {
+  lastTickTime = performance.now();
+  running = true;
+
+  // If a tick is already executing, its finally block will auto-reschedule.
+  if (isTicking) {
+    return;
+  }
+
+  // Always clear any stale timer and schedule fresh.
+  // Guard removed — if for any reason running was already true
+  // but no timer is pending (zombie state from a race), this fixes it.
+  if (_tickTimerHandle !== undefined) {
+    clearTimeout(_tickTimerHandle);
+    _tickTimerHandle = undefined;
+  }
+  _scheduleNextTick();
+};
+
+/**
+ * Stops the tick loop.
+ *
+ * Sets _running = false so the currently-in-flight tick (if any) will
+ * NOT reschedule itself. Clears any pending timer.
+ */
+const stopTickLoop = (): void => {
+  running = false;
+  if (_tickTimerHandle !== undefined) {
+    clearTimeout(_tickTimerHandle);
+    _tickTimerHandle = undefined;
+  }
+  logger.debug('[WorkerEngine] stopTickLoop:stopped');
+};
 
 /**
  * Runs one simulation frame following the Emergent World 6-step pipeline:
@@ -702,280 +826,351 @@ const MACRO_TICK_INTERVAL_MS = 500;
  * Contract: C-196 Emergent World Integration
  */
 const tickLoop = (): void => {
-  if (!world || !running || !activeWriteView) {
+  // If already ticking, return early — the in-flight tick's finally block
+  // will handle clearing the handle and rescheduling.
+  if (isTicking) {
     return;
   }
 
-  // Compute delta time
-  const now = performance.now();
-  const deltaMs = now - lastTickTime;
-  lastTickTime = now;
-
-  // ── Environment: time-of-day, diurnal colours, weather ──
-  // Contract C-213: Step environment before all other systems so
-  // diurnal and weather UBO data is fresh for this frame.
-  const environment = stepEnvironment({ deltaMs });
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 1: Ingestion — process streaming payloads from tool orchestrator
-  //
-  // Drains the macro queue (expression changes, state mask updates) that
-  // arrived via the bridge since the last tick. These must be applied
-  // BEFORE perception so new expression states are visible this frame.
-  // ────────────────────────────────────────────────────────────────────────
-  updateExpressions(world, workerBridge);
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 2: Macro Sim — time-gated coarse simulation for inactive zones
-  //
-  // Macro simulation runs independently on a 500ms setInterval (C-194).
-  // This gate tracks the last macro tick for the pipeline sequence — the
-  // actual macro stepping is handled by the interval timer to avoid
-  // per-frame overhead (C-196 Watch Point: Step Multiplier Overlaps).
-  // ────────────────────────────────────────────────────────────────────────
-  if (now - _lastMacroTickMs >= MACRO_TICK_INTERVAL_MS) {
-    _lastMacroTickMs = now;
-    // Macro simulation ticks independently via startMacroSimulation() —
-    // no per-frame call needed. The time-gate solely tracks alignment.
+  // If other conditions prevent execution, clear the stale handle and
+  // attempt self-healing reschedule (unless intentionally stopped).
+  if (!world || !running || !activeWriteView) {
+    if (_tickTimerHandle !== undefined) {
+      clearTimeout(_tickTimerHandle);
+      _tickTimerHandle = undefined;
+    }
+    // If still running (transient condition), reschedule to self-heal.
+    // If stopped (!running), let the loop die as intended.
+    if (running && world) {
+      _scheduleNextTick();
+    }
+    return;
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 3: Perception — spatial hash visibility sweeps
-  //
-  // For each VisionObserver entity, casts DDA ray cones (idle/patrol)
-  // or recursive shadowcasting (suspicious/alert) and writes visibility
-  // bitmasks into VisionVisible.visibleByMask on target entities.
-  // ────────────────────────────────────────────────────────────────────────
-  updateSpatialVision(world);
+  isTicking = true;
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 4: Cognition — GOAP bitmask evaluations + crime event reactions
-  //
-  // For each GoapAgent, validates/selects/applies actions toward goals
-  // via bitwise precondition/effect evaluation. Processes CrimeEvent
-  // entities for emergent reactions: witnesses go hostile, cache
-  // perpetrator targets, and drop stale behavioral loops.
-  //
-  // C-197: Also runs tactical combat evaluations for enemy combatants —
-  // scores targets using JPS distance weighting, selects optimal
-  // tactical actions (attack/move/retreat/hold) in sub-ms time.
-  // ────────────────────────────────────────────────────────────────────────
-  updateGoapScheduler(world);
-  updateGoapCombatTactics(world, playerEntityId);
+  try {
+    // Compute delta time with hard clamp (C-332 — prevents dt explosion)
+    const now = performance.now();
+    const rawDeltaMs = now - lastTickTime;
+    lastTickTime = now;
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 5: Navigation — time-sliced JPS pathfinding
-  //
-  // Cooperative JPS search with generational O(1) reset and flat
-  // min-heap. Steps one time-budgeted iteration per frame — path
-  // completion may span multiple ticks under the 2.0ms ceiling.
-  // ────────────────────────────────────────────────────────────────────────
-  tickJpsPathfinder();
+    // ── HARD CLAMP: never allow delta > 100ms ──
+    // Protects against tab backgrounding, WASM save spikes, and GC pauses.
+    // Minimum floor of 0.001ms prevents division-by-zero in derived rates.
+    const deltaMs = Math.max(0.001, Math.min(rawDeltaMs, MAX_FRAME_DELTA_MS));
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Step 6: Resolution — movement + collision
-  //
-  // Axis-independent continuous movement with bitmask collision via
-  // the dense spatial grid (isCellBlocked) and legacy boolean grid
-  // fallback (isWalkable). MoveIntents are resolved against spatial
-  // grid occupancy after velocities settle.
-  // ────────────────────────────────────────────────────────────────────────
-  updateMovement(world, deltaMs);
-  resolveMoveIntents(world);
+    // ── Environment: time-of-day, diurnal colours, weather ──
+    // Contract C-213: Step environment before all other systems so
+    // diurnal and weather UBO data is fresh for this frame.
+    const environment = stepEnvironment({ deltaMs });
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Post-resolution systems (do not mutate core state)
-  // ────────────────────────────────────────────────────────────────────────
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 1: Ingestion — process streaming payloads from tool orchestrator
+    //
+    // Drains the macro queue (expression changes, state mask updates) that
+    // arrived via the bridge since the last tick. These must be applied
+    // BEFORE perception so new expression states are visible this frame.
+    // ────────────────────────────────────────────────────────────────────────
+    updateExpressions(world, workerBridge);
 
-  // Camera: track CameraFocus entity, lerp toward target
-  updateCameraSystem(world, deltaMs);
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 2: Macro Sim — time-gated coarse simulation for inactive zones
+    //
+    // Macro simulation runs independently on a 500ms setInterval (C-194).
+    // This gate tracks the last macro tick for the pipeline sequence — the
+    // actual macro stepping is handled by the interval timer to avoid
+    // per-frame overhead (C-196 Watch Point: Step Multiplier Overlaps).
+    // ────────────────────────────────────────────────────────────────────────
+    if (now - _lastMacroTickMs >= MACRO_TICK_INTERVAL_MS) {
+      _lastMacroTickMs = now;
+      // Macro simulation ticks independently via startMacroSimulation() —
+      // no per-frame call needed. The time-gate solely tracks alignment.
+    }
 
-  // Encounters: check proximity-based combat triggers
-  updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 3: Perception — spatial hash visibility sweeps
+    //
+    // For each VisionObserver entity, casts DDA ray cones (idle/patrol)
+    // or recursive shadowcasting (suspicious/alert) and writes visibility
+    // bitmasks into VisionVisible.visibleByMask on target entities.
+    // ────────────────────────────────────────────────────────────────────────
+    updateSpatialVision(world);
 
-  // ── Combat stage setup / teardown (C-166) ──
-  const screen = getScreenSize();
-  if (getEngineGameMode() === 'COMBAT' && !isCombatStageActive()) {
-    setupCombatStage(world, { screenWidth: screen.width, screenHeight: screen.height });
-  } else if (getEngineGameMode() !== 'COMBAT' && isCombatStageActive()) {
-    teardownCombatStage(world);
-  }
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 4: Cognition — GOAP bitmask evaluations + crime event reactions
+    //
+    // For each GoapAgent, validates/selects/applies actions toward goals
+    // via bitwise precondition/effect evaluation. Processes CrimeEvent
+    // entities for emergent reactions: witnesses go hostile, cache
+    // perpetrator targets, and drop stale behavioral loops.
+    //
+    // C-197: Also runs tactical combat evaluations for enemy combatants —
+    // scores targets using JPS distance weighting, selects optimal
+    // tactical actions (attack/move/retreat/hold) in sub-ms time.
+    // ────────────────────────────────────────────────────────────────────────
+    updateGoapScheduler(world);
+    updateGoapCombatTactics(world, playerEntityId);
 
-  // Dialog triggers: proximity-based NPC dialogue activation
-  updateDialogTriggers(world, playerEntityId, workerBridge);
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 5: Navigation — time-sliced JPS pathfinding
+    //
+    // Cooperative JPS search with generational O(1) reset and flat
+    // min-heap. Steps one time-budgeted iteration per frame — path
+    // completion may span multiple ticks under the 2.0ms ceiling.
+    // ────────────────────────────────────────────────────────────────────────
+    tickJpsPathfinder();
 
-  // Zoning: portal trigger overlap detection
-  updateZoningSystem(world, playerEntityId, workerBridge);
+    // ────────────────────────────────────────────────────────────────────────
+    // Step 6: Resolution — movement + collision
+    //
+    // Axis-independent continuous movement with bitmask collision via
+    // the dense spatial grid (isCellBlocked) and legacy boolean grid
+    // fallback (isWalkable). MoveIntents are resolved against spatial
+    // grid occupancy after velocities settle.
+    // ────────────────────────────────────────────────────────────────────────
+    updateMovement(world, deltaMs);
+    resolveMoveIntents(world);
 
-  // Context: populate spatial hash grid for proximity queries
-  if (spatialGrid && positionBuffer) {
-    populateSpatialGrid(world, spatialGrid, positionBuffer);
-  }
-  if (spatialGrid) {
-    updateContextSystem({
+    // ────────────────────────────────────────────────────────────────────────
+    // Post-resolution systems (do not mutate core state)
+    // ────────────────────────────────────────────────────────────────────────
+
+    // Camera: track CameraFocus entity, lerp toward target
+    updateCameraSystem(world, deltaMs);
+
+    // Encounters: check proximity-based combat triggers
+    updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
+
+    // ── Combat stage setup / teardown (C-166) ──
+    const screen = getScreenSize();
+    if (getEngineGameMode() === 'COMBAT' && !isCombatStageActive()) {
+      setupCombatStage(world, { screenWidth: screen.width, screenHeight: screen.height });
+    } else if (getEngineGameMode() !== 'COMBAT' && isCombatStageActive()) {
+      teardownCombatStage(world);
+    }
+
+    // Dialog triggers: proximity-based NPC dialogue activation
+    updateDialogTriggers(world, playerEntityId, workerBridge);
+
+    // Zoning: portal trigger overlap detection
+    updateZoningSystem(world, playerEntityId, workerBridge);
+
+    // Context: populate spatial hash grid for proximity queries
+    if (spatialGrid && positionBuffer) {
+      populateSpatialGrid(world, spatialGrid, positionBuffer);
+    }
+    if (spatialGrid) {
+      updateContextSystem({
+        world,
+        playerEntityId,
+        bridge: workerBridge,
+        spatialGrid,
+      });
+    }
+
+    // ── C-327 AC-2: Interaction proximity ──
+    // Evaluates the nearest interactable and emits INTERACTION_TARGET_CHANGED
+    // only when the target changes (dirty-checked).
+    updateInteractionProximity({
       world,
       playerEntityId,
       bridge: workerBridge,
-      spatialGrid,
     });
-  }
 
-  // ── C-327 AC-2: Interaction proximity ──
-  // Evaluates the nearest interactable and emits INTERACTION_TARGET_CHANGED
-  // only when the target changes (dirty-checked).
-  updateInteractionProximity({
-    world,
-    playerEntityId,
-    bridge: workerBridge,
-  });
-
-  // ── C-342 AC-3: Pressure plate per-tick overlap detection ──
-  updatePressurePlates({
-    world,
-    playerEntityId,
-    bridge: workerBridge,
-  });
-
-  // Compute per-entity animation frame indices from velocity vectors.
-  // Runs right before the uniform buffer flush so that the frame index
-  // is available for any render-path consumers (UBO packing, texture
-  // slicing via TextureManager.getFrameAt, etc.).
-  animateEntitySystem(world);
-
-  // Synchronize bitECS Appearance state into the LPC batch UBO pool.
-  // Handles entity enter/exit lifecycle (slot allocation/free) and
-  // structural fingerprint comparison to skip redundant UBO re-packs.
-  // Uses a headless LpcBatchManager — no GPU Buffers in the worker.
-  if (lpcBatchManager) {
-    syncAppearanceSystem({
+    // ── C-342 AC-3: Pressure plate per-tick overlap detection ──
+    updatePressurePlates({
       world,
-      batchManager: lpcBatchManager,
-      recipeResolver: workerRecipeResolver,
+      playerEntityId,
       bridge: workerBridge,
     });
-  }
 
-  // Serialize entity positions into the active buffer
-  serializeEntityStates(world, activeWriteView);
+    // Compute per-entity animation frame indices from velocity vectors.
+    // Runs right before the uniform buffer flush so that the frame index
+    // is available for any render-path consumers (UBO packing, texture
+    // slicing via TextureManager.getFrameAt, etc.).
+    animateEntitySystem(world);
 
-  // Collect events to send
-  const events = pendingEvents;
-  pendingEvents = [];
-
-  if (useSharedMemory) {
-    // SharedArrayBuffer — main thread reads directly, no transfer needed
-    const camera = getCameraPosition();
-    const zoom = getCameraZoom();
-    const screenPos = getActiveNpcScreenPosition();
-    const message: Record<string, unknown> = {
-      type: 'STATE_UPDATE',
-      events,
-      cameraX: camera.x,
-      cameraY: camera.y,
-      zoom,
-      environment: {
-        gameHour: environment.gameHour,
-        gameMinute: environment.gameMinute,
-        gameTimeSeconds: environment.gameTimeSeconds,
-        windVelocity: environment.windVelocity,
-        rainIntensity: environment.rainIntensity,
-        ubo: environment.ubo,
-      },
-    };
-    if (screenPos.x !== undefined) {
-      message.npcScreenX = screenPos.x;
-      message.npcScreenY = screenPos.y;
-    }
-
-    // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
-    if (screenPos.x !== undefined) {
-      events.push({
-        type: 'CAMERA_ZOOM_UPDATE',
-        zoom,
-        npcScreenX: screenPos.x,
-        npcScreenY: screenPos.y,
+    // Synchronize bitECS Appearance state into the LPC batch UBO pool.
+    // Handles entity enter/exit lifecycle (slot allocation/free) and
+    // structural fingerprint comparison to skip redundant UBO re-packs.
+    // Uses a headless LpcBatchManager — no GPU Buffers in the worker.
+    if (lpcBatchManager) {
+      syncAppearanceSystem({
+        world,
+        batchManager: lpcBatchManager,
+        recipeResolver: workerRecipeResolver,
+        bridge: workerBridge,
       });
     }
 
-    postMessage(message);
-  } else {
-    // ArrayBuffer fallback — transfer ownership so main thread can read.
-    // IMPORTANT: after transfer the worker's reference to `buffer` is
-    // detached.  The next buffer in the pool may also be detached if the
-    // main thread hasn't recycled it yet — guard with byteLength > 0.
-    const buffer = bufferPool[activeBufferIndex];
-    if (!buffer || buffer.byteLength === 0) {
-      return; // No writable buffer available — skip this frame
-    }
+    // Serialize entity positions into the active buffer
+    serializeEntityStates(world, activeWriteView);
 
-    // Advance to the next writable buffer in the pool, skipping
-    // any null entries (transferred but not yet recycled).
-    const oldIndex = activeBufferIndex;
+    // ── Increment monotonic tick counter for liveness detection ──
+    tickCount++;
 
-    // Mark the buffer we're about to transfer as consumed
-    bufferPool[oldIndex] = null as unknown as ArrayBuffer;
+    // Collect events to send
+    const events = pendingEvents;
+    pendingEvents = [];
 
-    // Find the next writable buffer
-    let nextWritableIndex = -1;
-    for (let attempt = 0; attempt < FALLBACK_BUFFER_COUNT; attempt++) {
-      const candidate = (oldIndex + 1 + attempt) % FALLBACK_BUFFER_COUNT;
-      const buf = bufferPool[candidate] as ArrayBuffer | null;
-      if (buf && buf.byteLength > 0) {
-        nextWritableIndex = candidate;
-        break;
+    if (useSharedMemory) {
+      // SharedArrayBuffer — main thread reads directly, no transfer needed
+      const camera = getCameraPosition();
+      const zoom = getCameraZoom();
+      const screenPos = getActiveNpcScreenPosition();
+      const message: Record<string, unknown> = {
+        type: 'STATE_UPDATE',
+        events,
+        cameraX: camera.x,
+        cameraY: camera.y,
+        zoom,
+        ack: {
+          tickCount,
+          lastProcessedInputSequence: _lastProcessedInputSequence,
+          writableBufferCount: FALLBACK_BUFFER_COUNT,
+        },
+        environment: {
+          gameHour: environment.gameHour,
+          gameMinute: environment.gameMinute,
+          gameTimeSeconds: environment.gameTimeSeconds,
+          windVelocity: environment.windVelocity,
+          rainIntensity: environment.rainIntensity,
+          ubo: environment.ubo,
+        },
+      };
+      if (screenPos.x !== undefined) {
+        message.npcScreenX = screenPos.x;
+        message.npcScreenY = screenPos.y;
       }
-    }
 
-    if (nextWritableIndex === -1) {
-      // All buffers are transferred — pause the tick loop until
-      // the main thread recycles one back via RECYCLE_BUFFER.
-      activeWriteView = undefined;
-      return;
-    }
+      // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
+      if (screenPos.x !== undefined) {
+        events.push({
+          type: 'CAMERA_ZOOM_UPDATE',
+          zoom,
+          npcScreenX: screenPos.x,
+          npcScreenY: screenPos.y,
+        });
+      }
 
-    activeBufferIndex = nextWritableIndex;
-    activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
+      postMessage(message);
+    } else {
+      // ArrayBuffer fallback — transfer ownership so main thread can read.
+      // IMPORTANT: after transfer the worker's reference to `buffer` is
+      // detached.  The next buffer in the pool may also be detached if the
+      // main thread hasn't recycled it yet — guard with byteLength > 0.
+      const buffer = bufferPool[activeBufferIndex];
+      if (!buffer || buffer.byteLength === 0) {
+        return; // No writable buffer available — skip this frame
+      }
 
-    const camera = getCameraPosition();
-    const zoom = getCameraZoom();
-    const screenPos = getActiveNpcScreenPosition();
+      // Advance to the next writable buffer in the pool, skipping
+      // any null entries (transferred but not yet recycled).
+      const oldIndex = activeBufferIndex;
 
-    // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
-    if (screenPos.x !== undefined) {
-      events.push({
-        type: 'CAMERA_ZOOM_UPDATE',
+      // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only
+      let nextWritableIndex = -1;
+      for (let attempt = 1; attempt <= FALLBACK_BUFFER_COUNT; attempt++) {
+        const candidate = (oldIndex + attempt) % FALLBACK_BUFFER_COUNT;
+        const buf = bufferPool[candidate] as ArrayBuffer | null;
+        if (buf && buf.byteLength > 0) {
+          nextWritableIndex = candidate;
+          break;
+        }
+      }
+
+      // ── RC-1 FIX: Never transfer the last writable buffer ──
+      // If no free slot remains, the worker is starved. Post a copy of
+      // the current data and retain ownership. The tick loop MUST NOT
+      // stop — this is the deadlock that froze the engine.
+      //
+      // In the normal path: transfer the OLD buffer (bufferPool[oldIndex])
+      // and create a view on the NEW buffer. PostMessage's transfer list
+      // detaches whatever buffer we include — so we must NEVER include the
+      // buffer that activeWriteView wraps.
+      let bufferToSend: ArrayBuffer;
+      if (nextWritableIndex === -1) {
+        // Starvation: copy out, retain ownership.
+        // bufferPool[oldIndex] stays in the pool (not nulled).
+        bufferToSend = buffer.slice(0);
+        logger.debug('[WorkerEngine] tickLoop:starvation-copy', {
+          writableBufferCount: 0,
+        });
+      } else {
+        // Normal path: mark old slot as consumed, advance to next.
+        // Transfer the OLD buffer (the one we just finished writing to),
+        // NOT the new one — otherwise the transfer detaches activeWriteView.
+        bufferToSend = bufferPool[oldIndex] as ArrayBuffer;
+        bufferPool[oldIndex] = null as unknown as ArrayBuffer;
+        activeBufferIndex = nextWritableIndex;
+        activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
+      }
+
+      const camera = getCameraPosition();
+      const zoom = getCameraZoom();
+      const screenPos = getActiveNpcScreenPosition();
+
+      // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
+      if (screenPos.x !== undefined) {
+        events.push({
+          type: 'CAMERA_ZOOM_UPDATE',
+          zoom,
+          npcScreenX: screenPos.x,
+          npcScreenY: screenPos.y,
+        });
+      }
+
+      const message: Record<string, unknown> = {
+        type: 'STATE_UPDATE',
+        buffer: bufferToSend,
+        events,
+        cameraX: camera.x,
+        cameraY: camera.y,
         zoom,
-        npcScreenX: screenPos.x,
-        npcScreenY: screenPos.y,
-      });
-    }
+        ack: {
+          tickCount,
+          lastProcessedInputSequence: _lastProcessedInputSequence,
+          writableBufferCount: nextWritableIndex === -1 ? 0 : 1,
+        },
+        environment: {
+          gameHour: environment.gameHour,
+          gameMinute: environment.gameMinute,
+          gameTimeSeconds: environment.gameTimeSeconds,
+          windVelocity: environment.windVelocity,
+          rainIntensity: environment.rainIntensity,
+          ubo: environment.ubo,
+        },
+      };
+      if (screenPos.x !== undefined) {
+        message.npcScreenX = screenPos.x;
+        message.npcScreenY = screenPos.y;
+      }
 
-    const message: Record<string, unknown> = {
-      type: 'STATE_UPDATE',
-      buffer,
-      events,
-      cameraX: camera.x,
-      cameraY: camera.y,
-      zoom,
-      environment: {
-        gameHour: environment.gameHour,
-        gameMinute: environment.gameMinute,
-        gameTimeSeconds: environment.gameTimeSeconds,
-        windVelocity: environment.windVelocity,
-        rainIntensity: environment.rainIntensity,
-        ubo: environment.ubo,
-      },
-    };
-    if (screenPos.x !== undefined) {
-      message.npcScreenX = screenPos.x;
-      message.npcScreenY = screenPos.y;
+      postMessage(
+        message,
+        // Transfer the buffer to the main thread (zero-copy handoff)
+        [bufferToSend],
+      );
     }
-
-    postMessage(
-      message,
-      // Transfer the buffer to the main thread (zero-copy handoff)
-      [buffer],
-    );
+  } catch (err) {
+    logger.error('[WorkerEngine] tickLoop:crash', err);
+    postMessage({
+      type: 'ENGINE_ERROR',
+      message: `Tick loop crashed: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    stopTickLoop();
+  } finally {
+    isTicking = false;
+    _tickTimerHandle = undefined;
+    // ── Self-healing: always reschedule if the world exists. The _running
+    // flag is a soft gate inside tickLoop — if it's false, the tick returns
+    // early after checking. But we MUST schedule so the loop can recover
+    // when _running is restored. Without this, a stopTickLoop/startTickLoop
+    // race can leave the timer dead permanently. ──
+    if (world) {
+      _scheduleNextTick();
+    }
   }
 };
 
@@ -1184,13 +1379,19 @@ self.onmessage = (event: MessageEvent): void => {
               break;
             }
           }
-          // Fallback: push if all slots are somehow full (shouldn't happen)
+          // ── RC-1 FIX: Never grow the pool past FALLBACK_BUFFER_COUNT ──
+          // If all 3 slots are occupied, discard the recycled buffer.
+          // The scan in tickLoop is modulo-bound to indices 0..2, so any
+          // buffer at index 3+ is permanently invisible.
           if (!slotFound) {
-            bufferPool.push(recycled);
+            // Discard — the worker still has at least one active buffer
+            logger.debug('[WorkerEngine] recycleBuffer:discard', {
+              poolSize: bufferPool.filter((b) => b !== null).length,
+            });
           }
 
-          // Resume paused tick loop
-          if (!activeWriteView) {
+          // Resume paused tick loop if it was starved (now has a real buffer)
+          if (!activeWriteView && slotFound) {
             activeWriteView = new Float32Array(recycled);
             // Find which index we just filled
             for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
@@ -1199,6 +1400,8 @@ self.onmessage = (event: MessageEvent): void => {
                 break;
               }
             }
+            // Explicitly restart the tick loop now that we have a valid buffer
+            startTickLoop();
           }
         }
         break;
@@ -1257,10 +1460,12 @@ self.onmessage = (event: MessageEvent): void => {
           break;
         }
 
+        // ── RC-3: Hoist wasRunning before try so finally can access it ──
+        let wasRunning = false;
         try {
-          // Pause the tick loop during entity teardown + recreate
-          const wasRunning = running;
-          running = false;
+          // ── RC-3 FIX: Route through stopTickLoop for consistency ──
+          wasRunning = running;
+          stopTickLoop();
 
           // Clear all existing entities
           const allEids = getAllEntities(world);
@@ -1361,8 +1566,10 @@ self.onmessage = (event: MessageEvent): void => {
             logger.debug('LOAD_GAME', 'no transition zones to re-spawn');
           }
 
-          // Restore the tick loop if it was running
-          running = wasRunning;
+          // ── RC-3 FIX: Restore tick loop via startTickLoop(), not raw flag ──
+          if (wasRunning) {
+            startTickLoop();
+          }
 
           queueMicrotask(() => {
             postMessage({ type: 'ENGINE_READY' });
@@ -1372,6 +1579,11 @@ self.onmessage = (event: MessageEvent): void => {
             type: 'ENGINE_ERROR',
             message: `Load game failed: ${err instanceof Error ? err.message : String(err)}`,
           });
+        } finally {
+          // ── RC-3 FIX: Always restore the tick loop state, even on error ──
+          if (wasRunning) {
+            startTickLoop();
+          }
         }
         break;
       }
@@ -1385,15 +1597,15 @@ self.onmessage = (event: MessageEvent): void => {
           break;
         }
 
+        // ── RC-3: Hoist wasRunning before try so finally can access it ──
+        let wasRunning = false;
         try {
           // ── C-172: Set engine state to TRANSITIONING ──
-          // This gates all core systems (movement, interaction, AI, zoning)
-          // so the active world is not mutated during the transition.
           setSimulationState(world, SimulationState.transitioning);
 
-          // Pause the tick loop during map teardown + recreate
-          const wasRunning = running;
-          running = false;
+          // ── RC-3 FIX: Route through stopTickLoop for consistency ──
+          wasRunning = running;
+          stopTickLoop();
 
           const {
             spawnPoints,
@@ -1668,8 +1880,10 @@ self.onmessage = (event: MessageEvent): void => {
           // ── C-172: Restore engine state to ACTIVE ──
           setSimulationState(world, SimulationState.active);
 
-          // 10. Restore the tick loop
-          running = wasRunning;
+          // ── RC-3 FIX: Restore tick loop via startTickLoop(), not raw flag ──
+          if (wasRunning) {
+            startTickLoop();
+          }
 
           queueMicrotask(() => {
             postMessage({ type: 'MAP_LOADED' });
@@ -1683,11 +1897,37 @@ self.onmessage = (event: MessageEvent): void => {
             type: 'ENGINE_ERROR',
             message: `Load map failed: ${err instanceof Error ? err.message : String(err)}`,
           });
+        } finally {
+          // ── RC-3 FIX: Always restore the tick loop state, even on error ──
+          if (wasRunning) {
+            startTickLoop();
+          }
         }
         break;
       }
 
       default: {
+        // ── C-332: Worker heartbeat — respond to main-thread PING ──
+        if (message.type === 'PING') {
+          postMessage({ type: 'PONG', timestamp: performance.now() });
+          break;
+        }
+        // ── C-332: Main thread requests tick loop reset (stall recovery) ──
+        if (message.type === 'RESET_TICK_LOOP') {
+          logger.debug('[WorkerEngine] resetTickLoop:requested');
+          stopTickLoop();
+          // Reuse any live buffer in the pool to rebuild activeWriteView
+          for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
+            const buf = bufferPool[i] as ArrayBuffer | null;
+            if (buf && buf.byteLength > 0) {
+              activeWriteView = new Float32Array(buf);
+              activeBufferIndex = i;
+              break;
+            }
+          }
+          startTickLoop();
+          break;
+        }
         break;
       }
     }
