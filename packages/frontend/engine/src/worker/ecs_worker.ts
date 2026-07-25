@@ -777,21 +777,22 @@ const _scheduleNextTick = (): void => {
  * will pick up the _running flag and auto-reschedule.
  */
 const startTickLoop = (): void => {
-  if (running) {
-    logger.debug('[WorkerEngine] startTickLoop:already-running');
-    return;
-  }
   lastTickTime = performance.now();
   running = true;
 
   // If a tick is already executing, its finally block will auto-reschedule.
   if (isTicking) {
-    logger.debug('[WorkerEngine] startTickLoop:tick-in-progress (will auto-reschedule)');
     return;
   }
 
+  // Always clear any stale timer and schedule fresh.
+  // Guard removed — if for any reason running was already true
+  // but no timer is pending (zombie state from a race), this fixes it.
+  if (_tickTimerHandle !== undefined) {
+    clearTimeout(_tickTimerHandle);
+    _tickTimerHandle = undefined;
+  }
   _scheduleNextTick();
-  logger.debug('[WorkerEngine] startTickLoop:started', { lastTickTime });
 };
 
 /**
@@ -1145,12 +1146,14 @@ const tickLoop = (): void => {
   } finally {
     isTicking = false;
     _tickTimerHandle = undefined;
-    // ── Auto-reschedule: if startTickLoop() was called mid-tick, the
-    // _running flag is now true and we schedule the next frame here.
-    // This eliminates the race where stopTickLoop + startTickLoop are
-    // called in quick succession while a tick is in-flight — the
-    // original setInterval approach could leave a dead tick loop. ──
-    _scheduleNextTick();
+    // ── Self-healing: always reschedule if the world exists. The _running
+    // flag is a soft gate inside tickLoop — if it's false, the tick returns
+    // early after checking. But we MUST schedule so the loop can recover
+    // when _running is restored. Without this, a stopTickLoop/startTickLoop
+    // race can leave the timer dead permanently. ──
+    if (world) {
+      _scheduleNextTick();
+    }
   }
 };
 

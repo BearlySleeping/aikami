@@ -664,15 +664,16 @@ export class GameOverlayService
       clearTimeout(this._mapTransitionDebounce);
     }
 
-    // Trigger auto-save 1s after the LAST map transition (debounced)
-    this._mapTransitionDebounce = setTimeout(() => {
-      if (this._firstMapLoaded) {
-        // Only trigger after the very first map load — subsequent auto-saves
-        // are handled by the interval scheduler
+    // Trigger auto-save 1s after map transitions (zoned to a new map).
+    // Do NOT auto-save on the very first map load during boot — the
+    // engine tick loop is still stabilizing and snapshotWorld can
+    // race with the setTimeout-based tick rescheduling.
+    if (this._firstMapLoaded) {
+      this._mapTransitionDebounce = setTimeout(() => {
         void this._triggerAutoSave();
-      }
-      this._mapTransitionDebounce = undefined;
-    }, 1000);
+        this._mapTransitionDebounce = undefined;
+      }, 1000);
+    }
 
     this._firstMapLoaded = true;
   }
