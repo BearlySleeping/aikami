@@ -14,6 +14,7 @@ import { logger } from '$logger';
 import type { SpawnPointEntity, TransitionZone } from '../assets/map_loader.ts';
 import {
   Appearance,
+  DEFAULT_BODY_LAYER_ID,
   getAppearanceLayers,
   type LpcLayerRecipe,
   registerAppearanceObservers,
@@ -481,7 +482,7 @@ const _updatePlayerAppearanceFromEquipment = (
   // C-370: enforce body layer invariant — if layer0 is 0 or undefined,
   // inject the default body variant so the paperdoll always has a base.
   if (!newLayers[0]) {
-    newLayers[0] = 1;
+    newLayers[0] = DEFAULT_BODY_LAYER_ID;
   }
 
   // Map armor to torso layer (index 2)
@@ -564,7 +565,7 @@ const WORKER_BODY_SLOT_INDEX = 0;
 const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
   const recipes: LpcLayerRecipe[] = [];
   for (let i = 0; i < layerIds.length; i++) {
-    const effectiveId = i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? 1 : layerIds[i];
+    const effectiveId = i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? DEFAULT_BODY_LAYER_ID : layerIds[i];
     if (effectiveId > 0) {
       recipes.push({
         slot: WORKER_SLOT_NAMES[i] ?? `layer_${i}`,
@@ -572,7 +573,7 @@ const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => 
         hexPalette: new Uint8Array(1024),
       });
       if (i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0) {
-        // C-370: body fallback triggered — log for observability
+        logger.debug('workerRecipeResolver:body-fallback', { effectiveId });
       }
     }
   }
