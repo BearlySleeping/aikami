@@ -16,6 +16,7 @@ import {
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
+  LPC_DEFAULT_BODY_ASSET_ID,
   LPC_DEFAULT_HEAD_ASSET_ID,
   REQUIRED_LPC_SLOTS,
 } from '$lib/data/lpc_asset_catalog';
@@ -395,6 +396,19 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         slot: slotDef.slot,
         assetId: variant.assetId,
         hexPalette: palette,
+      });
+    }
+
+    // ── C-370: body layer fallback ────────────────────────────────
+    // If no body layer is present in the recipe list, inject the default
+    // body asset unconditionally. This ensures neck continuity when
+    // characters wear torso garments without an explicit body layer.
+    const hasBody = result.some((r) => r.slot === 'body');
+    if (!hasBody && result.length > 0) {
+      result.unshift({
+        slot: 'body',
+        assetId: LPC_DEFAULT_BODY_ASSET_ID,
+        hexPalette: new Uint8Array(1024),
       });
     }
 

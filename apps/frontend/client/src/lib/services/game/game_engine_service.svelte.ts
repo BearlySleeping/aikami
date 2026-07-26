@@ -10,6 +10,7 @@ import type { PersonaData } from '@aikami/types';
 import { logger } from '$logger';
 import { audioContextManager, audioService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
+import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -650,18 +651,11 @@ class GameEngineService
         if (!variant) {
           // C-370: body fallback — if body slot variant lookup fails, inject default
           if (slotName === 'body') {
-            const bodyCatalogIdx = SlotCatalogIndex.body;
-            if (bodyCatalogIdx !== undefined) {
-              const bodySlotDef = generatedLpcSlots[bodyCatalogIdx];
-              const bodyDefault = bodySlotDef?.variants[0];
-              if (bodyDefault) {
-                recipes.push({
-                  slot: 'body',
-                  assetId: bodyDefault.assetId,
-                  hexPalette: new Uint8Array(1024),
-                });
-              }
-            }
+            recipes.push({
+              slot: 'body',
+              assetId: LPC_DEFAULT_BODY_ASSET_ID,
+              hexPalette: new Uint8Array(1024),
+            });
           }
           continue;
         }
@@ -674,18 +668,11 @@ class GameEngineService
       // C-370: ensure body recipe exists — inject default if missing
       const hasBody = recipes.some((r) => r.slot === 'body');
       if (!hasBody) {
-        const bodyCatalogIdx = SlotCatalogIndex.body;
-        if (bodyCatalogIdx !== undefined) {
-          const bodySlotDef = generatedLpcSlots[bodyCatalogIdx];
-          const bodyDefault = bodySlotDef?.variants[0];
-          if (bodyDefault) {
-            recipes.unshift({
-              slot: 'body',
-              assetId: bodyDefault.assetId,
-              hexPalette: new Uint8Array(1024),
-            });
-          }
-        }
+        recipes.unshift({
+          slot: 'body',
+          assetId: LPC_DEFAULT_BODY_ASSET_ID,
+          hexPalette: new Uint8Array(1024),
+        });
       }
       return recipes;
     };

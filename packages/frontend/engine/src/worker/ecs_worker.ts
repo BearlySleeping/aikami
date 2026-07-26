@@ -479,9 +479,9 @@ const _updatePlayerAppearanceFromEquipment = (
   const currentLayers = getAppearanceLayers(eid);
   const newLayers = [...currentLayers];
 
-  // C-370: enforce body layer invariant — if layer0 is 0 or undefined,
+  // C-370: enforce body layer invariant — if layer0 is non-positive or undefined,
   // inject the default body variant so the paperdoll always has a base.
-  if (!newLayers[0]) {
+  if ((newLayers[0] ?? 0) <= 0) {
     newLayers[0] = DEFAULT_BODY_LAYER_ID;
   }
 
