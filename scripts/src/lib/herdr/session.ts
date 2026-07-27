@@ -40,7 +40,7 @@ import { EMULATOR_PORTS } from '../../../../packages/shared/constants/src/index'
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'firebase' | 'client' | 'voice' | 'image' | 'text' | 'preview-client';
+export type DevService = 'firebase' | 'client' | 'voice' | 'image' | 'text' | 'preview-client' | 'site' | 'preview-site';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
@@ -114,6 +114,17 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: 'bun run scripts/src/lib/ops/preview_client.ts',
     cwd: (root) => root,
   },
+  site: {
+    name: 'site',
+    command: 'bun run dev',
+    cwd: (root) => resolve(root, 'apps/frontend/site'),
+    readyPort: EMULATOR_PORTS.site,
+  },
+  'preview-site': {
+    name: 'preview-site',
+    command: 'bun run scripts/src/lib/ops/preview_site.ts',
+    cwd: (root) => root,
+  },
 };
 
 export const ALL_SERVICES: DevService[] = [
@@ -123,13 +134,15 @@ export const ALL_SERVICES: DevService[] = [
   'image',
   'text',
   'preview-client',
+  'site',
+  'preview-site',
 ];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   if (![...ALL_SERVICES, 'all'].includes(input)) {
     throw new Error(
-      `Unknown service: "${input}". Valid: firebase, client, voice, image, text, preview-client, all`,
+      `Unknown service: "${input}". Valid: firebase, client, voice, image, text, preview-client, site, preview-site, all`,
     );
   }
   return input as DevService | 'all';

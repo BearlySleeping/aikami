@@ -504,6 +504,9 @@ export const runContractPipeline = async (options: {
   dryRun?: boolean;
   ready?: boolean;
   yolo?: boolean;
+  /** When true, the writer stage runs in interactive TUI mode so the user
+   *  can chat directly with the writer pi session. */
+  interactiveWriter?: boolean;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (opts: {
     repoRoot: string;
@@ -608,6 +611,7 @@ export const runContractPipeline = async (options: {
       repoRoot: options.repoRoot,
       runId: manifest.runId,
       contractId: manifest.contractId,
+      interactiveWriter: options.interactiveWriter,
     });
 
   try {

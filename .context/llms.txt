@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-27
-> Files: 299 across 12 categories
+> Files: 300 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -313,6 +313,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [CI/CD Pipeline](guides/CI_CD.md)
 - [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
+- [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
 - [Playwright Tests](guides/PLAYWRIGHT.md)
