@@ -94,9 +94,10 @@ Examples:
   bun run contract C-370 --source todo
   bun run contract "Fix LPC Paperdoll" --source todo
   bun run contract #102 --source roadmap
-  bun run contract --source direct
+  bun run contract --source direct        # Auto-generate ID, launch writer pi session
   bun run contract C-370 --root
   bun run contract C-370 --root --dirty
+  bun run contract --source direct --root  # Direct draft + root branch
   bun run contract docs/contracts/C-xxx-....md
   bun run contract --resume <run-id>
 
@@ -345,215 +346,62 @@ const resolveIssueFromProject = (searchTitle: string): number | undefined => {
 };
 
 /**
- * Handle --source direct: true interactive contract drafting session.
- * Prompts the user step-by-step for title, goals, acceptance criteria, and constraints.
- * Supports inline /write syntax and multi-line text input.
- * Writes the final contract to docs/contracts/C-XXX.md.
+ * Prepare a --source direct contract pipeline run.
+ *
+ * Generates the next available contract ID, creates a minimal placeholder
+ * contract on disk, and returns the ID. The pipeline writer stage then opens
+ * in interactive TUI mode so the user can describe the feature directly.
  */
-const handleDirectSource = async (): Promise<void> => {
-  const readline = await import('node:readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-  });
+const prepareDirectSource = (repoRoot: string): string => {
+  const contractsDir = join(repoRoot, 'docs/contracts');
 
-  const ask = (prompt: string): Promise<string> =>
-    new Promise((resolve) => {
-      rl.question(prompt, (answer) => {
-        resolve(answer.trim());
-      });
-    });
+  // Determine next contract ID from existing files on disk
+  const existingContracts = existsSync(contractsDir)
+    ? readdirSync(contractsDir).filter((f) => /^C-\d+/.test(f) && f.endsWith('.md'))
+    : [];
+  const maxId = existingContracts.reduce((max: number, f: string) => {
+    const match = f.match(/^C-(\d+)/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  const contractId = `C-${maxId + 1}`;
 
-  const askMultiline = async (prompt: string): Promise<string> => {
-    console.log(prompt);
-    const lines: string[] = [];
-    for (;;) {
-      const line = await ask('  > ');
-      if (line === '' || line === '.' || line === '/end') {
-        break;
-      }
-      if (line.startsWith('/write ')) {
-        lines.push(line.slice(7));
-        break;
-      }
-      lines.push(line);
-    }
-    return lines.join('\n').trim();
-  };
+  // Create a minimal placeholder so resolveContract() can find it.
+  // The writer pi session will call contract_generate to create the
+  // full v2 contract shell and fill it in based on user input.
+  const placeholderPath = join(contractsDir, `${contractId}.md`);
+  const placeholder = [
+    `# Contract ${contractId}: Direct Draft`,
+    '',
+    '> ⚠️ Placeholder created by `--source direct`. The writer will call',
+    '> `contract_generate` to create the full contract shell, then complete',
+    '> every section based on the feature you describe in the chat.',
+    '',
+    '| **Status** | draft |',
+    '',
+  ].join('\n');
+
+  mkdirSync(contractsDir, { recursive: true });
+  writeFileSync(placeholderPath, placeholder);
 
   console.log(
     [
       '',
       '═══════════════════════════════════════════',
-      '  Interactive Contract Drafting Mode',
+      `  Contract ID: ${contractId}`,
       '═══════════════════════════════════════════',
       '',
-      'This session will guide you through creating a contract specification.',
-      'Answer each prompt. Use /write "full text" for inline specs,',
-      'or type multiple lines (empty line to finish).',
-      '',
-      'Commands:',
-      '  /write "text"  — Submit complete text inline',
-      '  /end or .       — Finish multi-line input',
-      '  /skip           — Skip the current question',
-      '  /quit           — Abort without saving',
+      'A writer pi session will open in a moment.',
+      'Describe your feature in the chat and the writer',
+      'will create the full contract specification.',
       '',
       '═══════════════════════════════════════════',
       '',
     ].join('\n'),
   );
 
-  try {
-    // Step 1: Feature title
-    const title = await ask('📝  Feature title (required): ');
-    if (title === '/quit') {
-      console.log('❌ Aborted.');
-      rl.close();
-      return;
-    }
-    if (!title || title === '/skip') {
-      console.log('❌ Title is required. Aborting.');
-      rl.close();
-      return;
-    }
-
-    // Step 2: Goals / Outcome
-    console.log('');
-    const goals = await askMultiline(
-      '🎯  What should this feature accomplish? (multi-line, empty line to finish):',
-    );
-    if (goals === '/quit') {
-      console.log('❌ Aborted.');
-      rl.close();
-      return;
-    }
-
-    // Step 3: Acceptance criteria
-    console.log('');
-    const ac = await askMultiline('✅  Acceptance criteria (one per line, empty line to finish):');
-    if (ac === '/quit') {
-      console.log('❌ Aborted.');
-      rl.close();
-      return;
-    }
-
-    // Step 4: Scope / Constraints
-    console.log('');
-    const constraints = await ask('🔒  Constraints / out-of-scope notes (optional): ');
-    if (constraints === '/quit') {
-      console.log('❌ Aborted.');
-      rl.close();
-      return;
-    }
-
-    // Step 5: Priority
-    console.log('');
-    const priorityRaw = await ask('⚡  Priority (P0/P1/P2, default P1): ');
-    const priority = ['P0', 'P1', 'P2'].includes(priorityRaw.toUpperCase())
-      ? priorityRaw.toUpperCase()
-      : 'P1';
-
-    // Generate contract
-    const contractsDir = join(process.cwd(), 'docs/contracts');
-    const templatePath = join(contractsDir, 'TEMPLATE.md');
-
-    if (!existsSync(templatePath)) {
-      console.error('❌ Contract template not found:', templatePath);
-      rl.close();
-      return;
-    }
-
-    // Determine next contract ID
-    const existingContracts = existsSync(contractsDir)
-      ? readdirSync(contractsDir).filter((f) => /^C-\d+/.test(f) && f.endsWith('.md'))
-      : [];
-    const maxId = existingContracts.reduce((max: number, f: string) => {
-      const match = f.match(/^C-(\d+)/);
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0);
-    const contractId = `C-${maxId + 1}`;
-
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 60);
-    const contractFileName = `${contractId}-${slug}.md`;
-    const contractPath = join(contractsDir, contractFileName);
-
-    const template = readFileSync(templatePath, 'utf-8');
-    const now = new Date().toISOString();
-
-    const acLines = ac
-      ? ac
-          .split('\n')
-          .map((line, i) => `### AC-${i + 1}: ${line}`)
-          .join('\n\n')
-      : '### AC-1: TBD';
-
-    const content = template
-      .replace(/{FEATURE_CODE}/g, contractId)
-      .replace(/{TITLE}/g, title)
-      .replace(/{source}/g, 'direct')
-      .replace(/{created_at}/g, now)
-      .replace(/{reference_description}/g, 'Interactive direct drafting session')
-      .replace(/{path}/g, 'TBD')
-      .replace(/{brief description}/g, 'TBD')
-      .replace(/{0\|1\|2\|3}/g, priority)
-      .replace(
-        /{one-line justification}/g,
-        goals.split('\n')[0]?.slice(0, 100) ?? 'From interactive draft',
-      )
-      .replace(/{list of contracts or packages this depends on}/g, 'None identified')
-      .replace(
-        /{what is broken or missing today — be concrete}/g,
-        goals.slice(0, 500) || 'See goals below.',
-      )
-      .replace(/{steps to reproduce the issue or observe the gap}/g, 'See goals below.')
-      .replace(/{paths to code that already partially solves this}/g, 'TBD')
-      .replace(/{what the existing code does NOT handle}/g, 'TBD')
-      .replace(/{player\|creator\|developer}/g, 'player')
-      .replace(
-        /{2-4 sentences describing what this task is, what changes, and why it matters\.}/g,
-        goals || 'TBD',
-      )
-      .replace(/\{e\.g\. "game start under 3s"[^}]+\}/g, 'TBD')
-      .replace(/\{what happens when AI\/network is unavailable\}/g, 'TBD')
-      .replace(/\{the real user flow this unlocks[^}]+\}/g, 'TBD')
-      .replace(/\{capability\}/g, 'TBD')
-      .replace(/\{file path or contract\}/g, 'TBD')
-      .replace(/\{reuse \| modify \| replace\}/g, 'check')
-      // Replace the full AC template block with user-provided ACs
-      .replace(/### AC-1: \{[^}]+\}[\s\S]*?(?=## Implementation Sequence)/, `${acLines}\n\n`);
-
-    // Add constraints note
-    const withConstraints =
-      constraints && constraints !== '/skip'
-        ? content.replace(
-            /(## Scope Boundaries[\s\S]*?- \*\*In Scope:\*\*)/,
-            `$1\n  - ${goals.split('\n')[0] ?? 'See goals above.'}\n- **Out of Scope:** ${constraints}`,
-          )
-        : content;
-
-    writeFileSync(contractPath, withConstraints);
-
-    console.log('');
-    console.log('═══════════════════════════════════════════');
-    console.log(`✅ Contract created: ${contractFileName}`);
-    console.log(`   ID: ${contractId}`);
-    console.log(`   Path: ${contractPath}`);
-    console.log(`   Priority: ${priority}`);
-    console.log(`   Source: direct (interactive)`);
-    console.log('');
-    console.log('Next steps:');
-    console.log(`  bun run contract ${contractId}  # Run through the contract pipeline`);
-    console.log('  Or edit the contract directly to fill in remaining TBD fields.');
-    console.log('═══════════════════════════════════════════');
-  } finally {
-    rl.close();
-  }
+  return contractId;
 };
+
 
 // ── Root Branch Checkout ────────────────────────────────────
 
@@ -741,9 +589,12 @@ const main = async (): Promise<void> => {
     return;
   }
 
+  // --source direct: generate contract ID + placeholder, then fall through
+  // to the pipeline. The writer stage opens in interactive TUI mode.
+  let interactiveWriter = false;
   if (cli.source === 'direct') {
-    await handleDirectSource();
-    return;
+    cli.target = prepareDirectSource(process.cwd());
+    interactiveWriter = true;
   }
 
   // --root mode: switch branch directly in root repo instead of using worktrees
@@ -773,6 +624,7 @@ const main = async (): Promise<void> => {
     dryRun: cli.dryRun,
     ready: cli.ready,
     yolo: cli.yolo,
+    interactiveWriter,
     onReady: cli.launcherToken
       ? (readyManifest) => {
           atomicWrite({
@@ -785,7 +637,6 @@ const main = async (): Promise<void> => {
         }
       : undefined,
   });
-
   if (cli.dryRun) {
     console.log(
       JSON.stringify(

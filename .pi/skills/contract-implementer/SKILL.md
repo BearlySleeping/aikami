@@ -12,6 +12,9 @@ description: >-
 
 The authoritative phase-by-phase flow lives in the `/contract` prompt (`.pi/prompts/contract.md`). This skill carries the supporting reference material.
 
+For the complete pipeline user guide (source modes, CLI options, workflows), see:
+📄 **`docs/guides/contract-pipeline.md`**
+
 ## Sources of Truth
 
 | File | Role | Writable? |

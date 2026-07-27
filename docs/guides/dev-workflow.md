@@ -51,10 +51,25 @@ Emulator ports:
 
 ## Adding a Feature
 
-1. **Write a contract** in `docs/contracts/` using the [TEMPLATE](contracts/TEMPLATE.md)
-2. **Implement** following the ViewModel pattern for Client, Zod schemas for data, repository pattern for Firestore
-3. **Verify** with `bun run validate` then `bun run test:blackbox`
-4. **Update knowledge** — run `bun run scripts -- generate_llms`
+All feature development flows through the **Contract Pipeline**. See the full guide:
+
+📄 **[docs/guides/contract-pipeline.md](contract-pipeline.md)**
+
+Quick start:
+
+```bash
+# Chat-draft a new feature (auto-generates contract, no worktree):
+bun run contract --source direct --root
+
+# From the TODO backlog:
+bun run contract C-370 --root
+
+# From a GitHub Issue:
+bun run contract #102 --source roadmap
+```
+
+The pipeline orchestrates: **Write → Critique → Implement → Verify → Review → Merge**,
+with Pi AI agents handling each stage in isolated Herdr workspaces.
 
 ## Project Conventions
 

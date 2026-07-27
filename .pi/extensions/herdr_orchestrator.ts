@@ -703,10 +703,10 @@ export default function (pi: ExtensionAPI) {
     name: 'herdr_session',
     label: 'Herdr: Manage Dev Services',
     description:
-      'Manage Aikami dev services (firebase, client, image, text, voice, preview-client) via herdr. ' +
+      'Manage Aikami dev services (firebase, client, image, text, voice, preview-client, site, preview-site) via herdr. ' +
       'Services survive pi restarts. Workspace naming: aikami-{mode}.',
     promptGuidelines: [
-      'Use herdr_session start <service> to start firebase, client, image, text, voice, or preview-client.',
+      'Use herdr_session start <service> to start firebase, client, image, text, voice, preview-client, site, or preview-site.',
       'Use herdr_session stop <service> to cleanly stop a service.',
       'Use herdr_session restart <service> to stop+start (e.g. restart client after the coder added new routes).',
       'Use herdr_session read <service> to capture log output from a running service.',

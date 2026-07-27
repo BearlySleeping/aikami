@@ -64,6 +64,7 @@ bun run validate       # lint + format + typecheck + test
 
 ## Documentation
 
+- **`docs/guides/contract-pipeline.md`** — Primary development flow (contract pipeline)
 - `.context/CONTEXT.md` — AI briefing (read this first)
 - `.context/index.md` — AI entry point with doc index
 - `docs/architecture/architecture.md` — System architecture + engine boundary

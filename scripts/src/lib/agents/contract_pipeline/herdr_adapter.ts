@@ -171,6 +171,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _runId: string;
   private readonly _workspaceLabel: string;
   private readonly _headless: boolean;
+  /** When true, the writer stage runs in interactive TUI mode so the user can
+   *  chat directly with the writer pi session to describe the feature. Other
+   *  stages remain headless JSON. */
+  private readonly _interactiveWriter: boolean;
   private _workspaceId = '';
   private _pipelinePaneId = '';
   private _workspacePath = '';
@@ -180,11 +184,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     runId: string;
     contractId: string;
     headless?: boolean;
+    interactiveWriter?: boolean;
   }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
     this._workspaceLabel = `aikami-contract-${options.contractId}`;
     this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS === '1';
+    this._interactiveWriter = options.interactiveWriter ?? false;
   }
 
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
@@ -424,16 +430,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       '--thinking',
       getContractThinkingForRole(request.role),
     ];
-    // 🔴 Always use JSON mode for pipeline workers — PTY keystroke injection
+    // 🔴 Default: use JSON mode for pipeline workers — PTY keystroke injection
     // (send-text + send-keys Enter) is fundamentally unreliable. The prompt
     // is passed via -p and the task message via $(cat ...).
-    // Only use TUI mode when CONTRACT_PIPELINE_HEADLESS=0 is explicitly set
-    // (for manual debugging).
+    //
+    // Exceptions:
+    // - CONTRACT_PIPELINE_HEADLESS=0 → TUI for all stages (manual debugging)
+    // - interactiveWriter + writer role → TUI so the user can chat directly
+    //   with the writer pi session to describe the feature
+    //
     // 🔴 Herdr PTY drops the first character via pane run too — prepend newline
     // to protect inline env vars ('C' in CONTRACT_PIPELINE_RUN_ID).
     // Without this, the shell tries to execute "ONTRACT_PIPELINE_RUN_ID=..." as a
     // command, losing all pipeline env vars.
-    if (this._headless) {
+    const useHeadless =
+      this._headless && !(this._interactiveWriter && request.role === 'writer');
+    if (useHeadless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return [
         '\n',
