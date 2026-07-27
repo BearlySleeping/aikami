@@ -362,28 +362,17 @@ const prepareDirectSource = (repoRoot: string): string => {
     ? readdirSync(contractsDir).filter((f) => /^C-\d+/.test(f) && f.endsWith('.md'))
     : [];
 
-  // Reuse an existing placeholder if one exists (no slug — bare C-XXX.md)
-  const existingPlaceholder = existingContracts.find(
-    (f) => /^C-\d+\.md$/.test(f),
-  );
-  if (existingPlaceholder) {
-    const id = existingPlaceholder.replace('.md', '');
-    console.log(
-      [
-        '',
-        '═══════════════════════════════════════════',
-        `  Contract ID: ${id} (reusing existing placeholder)`,
-        '═══════════════════════════════════════════',
-        '',
-        'A writer pi session will open in a moment.',
-        'Describe your feature in the chat and the writer',
-        'will create the full contract specification.',
-        '',
-        '═══════════════════════════════════════════',
-        '',
-      ].join('\n'),
+  // Reuse an existing placeholder if running in background mode
+  // (foreground already created it). In foreground, always create fresh.
+  const isBackground = process.argv.includes('--background');
+  if (isBackground) {
+    const existingPlaceholder = existingContracts.find(
+      (f) => /^C-\d+\.md$/.test(f),
     );
-    return id;
+    if (existingPlaceholder) {
+      const id = existingPlaceholder.replace('.md', '');
+      return id;
+    }
   }
 
   const maxId = existingContracts.reduce((max: number, f: string) => {
