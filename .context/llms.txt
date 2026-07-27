@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-25
-> Files: 300 across 14 categories
+> Generated: 2026-07-27
+> Files: 299 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -290,6 +290,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-343: Promote Rich Chat UX into Production Gameplay](contracts/C-343-promote-rich-chat-ux-into-production-gameplay.md)
 - [Contract C-344: Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle](contracts/C-344-complete-session-recaps-checkpoints-and-long-campaign-lifecy.md)
 - [Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure](contracts/C-345-add-a-campaigncontent-pack-browser-and-a-second-adventure.md)
+- [Contract C-370: Fix LPC Paperdoll Base Layering and Neck Alignment](contracts/C-370-fix-lpc-paperdoll-base-layering-and-neck-alignment.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
@@ -335,12 +336,6 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 ## scripts/
 
 - [Scripts](scripts/README.md)
-## TODO_DRAFT_TTRPG.md/
-
-- [Aikami Roadmap (Critical Draft)](TODO_DRAFT_TTRPG.md)
-## TODO_DRAFT.md/
-
-- [Aikami Less Organized TODO](TODO_DRAFT.md)
 ## TODO.md/
 
 - [Aikami Unified Product Backlog](TODO.md)
