@@ -183,5 +183,5 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-368 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | v1 |
 | C-369 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | v1 |
 | C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | v2 |
-| C-371 | C 371 | 👍 approved | v2 |
+| C-371 | C 371 | ✅ verified | v2 |
 
