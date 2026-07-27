@@ -83,7 +83,8 @@
             { "name": "npcId", "type": "string", "value": "village_elder" },
             { "name": "npcName", "type": "string", "value": "Elder Thalia" },
             { "name": "dialogueKey", "type": "string", "value": "elder_thalia_greeting" },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            { "name": "interactionRadius", "type": "float", "value": 48 },
+            { "name": "appearanceLayers", "type": "string", "value": "2,3,65,21,20,97" }
           ]
         },
         {
@@ -97,7 +98,8 @@
             { "name": "npcId", "type": "string", "value": "guard_captain" },
             { "name": "npcName", "type": "string", "value": "Guard Captain Aldric" },
             { "name": "dialogueKey", "type": "string", "value": "guard_captain_greeting" },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            { "name": "interactionRadius", "type": "float", "value": 48 },
+            { "name": "appearanceLayers", "type": "string", "value": "3,3,23,22,7,95" }
           ]
         },
         {
@@ -113,6 +115,7 @@
             { "name": "dialogueKey", "type": "string", "value": "merchant_keth_greeting" },
             { "name": "interactionRadius", "type": "float", "value": 48 },
             { "name": "isVendor", "type": "bool", "value": true },
+            { "name": "appearanceLayers", "type": "string", "value": "3,91,127,22,19,95" },
             {
               "name": "vendorInventory",
               "type": "string",

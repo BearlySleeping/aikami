@@ -182,11 +182,13 @@ class CombatSandboxViewModel
 
       this._textureManager = new TextureManager({});
 
+      const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
+
       const worldOptions: GameWorldOptions = {
         className: 'CombatSandboxGameWorld',
         bridge: this._bridge,
         workerFactory: () => new workerCtor(),
-        recipeResolver: _recipeResolver,
+        recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,

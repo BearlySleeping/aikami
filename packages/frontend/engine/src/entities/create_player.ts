@@ -75,7 +75,7 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
   // Contract C-158: when appearanceLayers is provided from character
   // creation, use those values instead of the hardcoded defaults.
   addComponent(world, entityId, Appearance);
-  const layers = options?.appearanceLayers ?? [1, 1, 1, 1, 1, 95];
+  const layers = options?.appearanceLayers ?? [3, 3, 23, 22, 7, 95];
   setAppearanceLayers(world, entityId, layers);
 
   // Initialize empty inventory with zero-filled slots.

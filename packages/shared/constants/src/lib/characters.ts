@@ -359,9 +359,9 @@ export const DEFAULT_LPC_RECIPE: Readonly<Record<string, string>> = {
   head: 'head/heads/human_male',
   body: 'body/bodies_male',
   hair: 'hair/bangs_adult',
-  torso: 'torso/clothes/longsleeve/longsleeve_male',
+  torso: 'torso/chainmail_male',
   legs: 'legs/pants_male',
-  feet: 'feet/shoes/basic_male',
+  feet: 'feet/boots/basic_male',
 } as const;
 
 export const APPEARANCE_PRESETS: readonly AppearancePreset[] = [

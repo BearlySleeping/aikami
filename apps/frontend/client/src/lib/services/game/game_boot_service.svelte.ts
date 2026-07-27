@@ -9,6 +9,7 @@
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
 import type { EngineBridge, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
+import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -755,14 +756,11 @@ class GameBootService
         const slotDef = generatedLpcSlots[catalogIdx];
         let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
         if (slotName === 'head') {
-          // Ensure we always get an actual head asset (not ears, faces, etc.).
-          // Index 94 = head/heads/human_male in the generated catalog.
           if (effectiveIdx < 0) {
             effectiveIdx = 94;
           }
           const headVariant = slotDef?.variants[effectiveIdx];
           if (!headVariant?.assetId.startsWith('head/heads/')) {
-            // Computed variant is not a head — fall back to default human head.
             effectiveIdx = 94;
           }
         }
@@ -776,6 +774,10 @@ class GameBootService
           hexPalette: new Uint8Array(1024),
         });
       }
+      this.debug('lpc.boot.recipeResolver.call', {
+        input: JSON.stringify(layerIds),
+        output: JSON.stringify(recipes.map((r) => `${r.slot}=${r.assetId}`)),
+      });
       return recipes;
     };
 
@@ -799,16 +801,13 @@ class GameBootService
     const lpcRecipe = (this._persona.appearance as Record<string, unknown> | undefined)
       ?.lpcRecipe as Record<string, string> | undefined;
 
-    if (!lpcRecipe) {
-      return playerData;
-    }
-
     const { generatedLpcSlots } = this._getLpcCatalogSync();
     if (!generatedLpcSlots) {
+      this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
       return playerData;
     }
 
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+    // Build slot → catalog index lookup first
     const slotIndexMap = new Map<string, number>();
     for (let i = 0; i < generatedLpcSlots.length; i++) {
       const entry = generatedLpcSlots[i];
@@ -818,27 +817,70 @@ class GameBootService
       slotIndexMap.set(entry.slot, i);
     }
 
+    // Use DEFAULT_LPC_RECIPE as the base. The persona's lpcRecipe
+    // may contain AI-generated assets that don't render well.
+    // Only override slots where the persona's recipe explicitly
+    // provides a VALID asset ID that exists in the catalog.
+    const effectiveRecipe: Record<string, string> = { ...DEFAULT_LPC_RECIPE };
+    if (lpcRecipe) {
+      for (const [slot, assetId] of Object.entries(lpcRecipe)) {
+        const catalogIdx = slotIndexMap.get(slot);
+        if (catalogIdx !== undefined) {
+          const slotDef = generatedLpcSlots[catalogIdx];
+          const found = slotDef?.variants.some((v) => v.assetId === assetId);
+          if (found) {
+            effectiveRecipe[slot] = assetId;
+          }
+        }
+      }
+    }
+
+    this.debug('lpc.boot.PlayerData', {
+      personaId: this._persona.id,
+      personaName: this._persona.name,
+      hasRecipe: !!lpcRecipe,
+      recipeSlots: lpcRecipe ? Object.keys(lpcRecipe).join(',') : 'none',
+      recipeRaw: lpcRecipe ? JSON.stringify(lpcRecipe) : 'none',
+      effectiveRecipe: JSON.stringify(effectiveRecipe),
+    });
+
+    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+
+    // Map effective recipe to engine variant indices.
+    // Fallback per-slot values produce a good-looking male character
+    // (bodies_male=3, bangs=3, chainmail=23, pants=22, boots=7, head=95).
+    const SLOT_FALLBACKS: Record<string, number> = {
+      body: 3,
+      hair: 3,
+      torso: 23,
+      legs: 22,
+      feet: 7,
+      head: 95,
+    };
+
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = lpcRecipe[slotName];
+      const assetId = effectiveRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : 1);
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
     }
     playerData.appearanceLayers = appearanceLayers;
+
+    this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 
     return playerData;
   }

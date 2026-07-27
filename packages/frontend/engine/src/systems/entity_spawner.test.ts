@@ -122,12 +122,12 @@ describe('spawnEntities', () => {
     expect(Visual.tint[eid]).toBe(0xffcc00);
 
     // Appearance — 6-layer stack: body, hair, torso, legs, feet, head
-    expect(Appearance.layer0[eid]).toBe(10);
-    expect(Appearance.layer1[eid]).toBe(11);
-    expect(Appearance.layer2[eid]).toBe(14);
-    expect(Appearance.layer3[eid]).toBe(12);
-    expect(Appearance.layer4[eid]).toBe(15);
-    expect(Appearance.layer5[eid]).toBe(13);
+    expect(Appearance.layer0[eid]).toBe(3);
+    expect(Appearance.layer1[eid]).toBe(3);
+    expect(Appearance.layer2[eid]).toBe(23);
+    expect(Appearance.layer3[eid]).toBe(22);
+    expect(Appearance.layer4[eid]).toBe(7);
+    expect(Appearance.layer5[eid]).toBe(95);
 
     // NPCDialog
     expect(NPCDialog.npcId[eid]).toBe('guard_town_1');

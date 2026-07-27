@@ -102,21 +102,13 @@ class EnvironmentSandboxViewModel
 
       const paletteBytes = new Uint8Array(1024);
 
-      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
-        1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
-        2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
-        5: { slot: 'torso', assetId: 'torso/chainmail_male', hexPalette: paletteBytes },
-        3: { slot: 'legs', assetId: 'legs/pants_male', hexPalette: paletteBytes },
-        6: { slot: 'feet', assetId: 'feet/shoes/male', hexPalette: paletteBytes },
-        4: { slot: 'head', assetId: 'head/heads/human_male', hexPalette: paletteBytes },
-      };
+      const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 
       const worldOptions: GameWorldOptions = {
         className: 'EnvironmentSandboxGameWorld',
         bridge: this._bridge,
         workerFactory: () => new workerCtor(),
-        recipeResolver: (layerIds) =>
-          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
+        recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,
