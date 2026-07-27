@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-27
-> Files: 300 across 12 categories
+> Files: 299 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -282,7 +282,6 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-336: Extract a Deterministic Rules Kernel and Typed Game Command Protocol](contracts/C-336-extract-a-deterministic-rules-kernel-and-typed-game-command.md)
 - [Contract C-337: Complete Character Progression, Classes, Abilities, Skills, and Spells](contracts/C-337-complete-character-progression-classes-abilities-skills-and.md)
 - [Contract C-338: Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI](contracts/C-338-deepen-turn-based-combat-with-action-economy-statuses-and-ta.md)
-- [Contract C-338: Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI](contracts/C-338.md)
 - [Contract C-339: Complete Quest Graph, Journal, Objectives, and Reward Pipelines](contracts/C-339-complete-quest-graph-journal-objectives-and-reward-pipelines.md)
 - [Contract C-340: Build Party and Companion Gameplay](contracts/C-340-build-party-and-companion-gameplay.md)
 - [Contract C-341: Add Relationships, Factions, Reputation, and Persistent Consequences](contracts/C-341-add-relationships-factions-reputation-and-persistent-consequ.md)

@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-27)
 
-**165 active (24 without contract file), 119 archived, 2 duplicates**
+**165 active (24 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -212,6 +212,5 @@ C-024, C-025, C-026, C-027, C-028, C-029, C-030, C-032, C-033, C-034, C-035, C-0
 </details>
 
 ## ⚠️ Duplicate IDs
-- `C-338` — resolve before next sync
 - `C-035` — resolve before next sync
 
