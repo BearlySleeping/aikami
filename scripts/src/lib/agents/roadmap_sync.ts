@@ -314,11 +314,13 @@ const fetchProjectItems = (options: { owner: string; number: number }): ProjectI
   // Try organization first, fall back to user
   const query = `query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { items(first: 100) { nodes { id content { ... on Issue { url } ... on PullRequest { url } } fieldValues(first: 5) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } } }`;
 
-  let nodes: Array<{
-    id: string;
-    content: { url?: string };
-    fieldValues: { nodes: Array<{ name?: string }> };
-  }> | undefined = undefined;
+  let nodes:
+    | Array<{
+        id: string;
+        content: { url?: string };
+        fieldValues: { nodes: Array<{ name?: string }> };
+      }>
+    | undefined;
 
   // Try organization query, catch failures to allow user fallback
   try {
@@ -651,8 +653,12 @@ const syncTodoItems = (options: {
       } catch (backfillErr: unknown) {
         const msg = backfillErr instanceof Error ? backfillErr.message : String(backfillErr);
         console.error(`       ⚠️  Failed to backfill TODO.md: ${msg}`);
-        console.error(`       📝 Manually add reference to ${item.id}: [Issue #${issueNum}](${issueUrl})`);
-        errors.push(`Failed to backfill TODO.md for ${item.id} (Issue #${issueNum} at ${issueUrl}): ${msg}`);
+        console.error(
+          `       📝 Manually add reference to ${item.id}: [Issue #${issueNum}](${issueUrl})`,
+        );
+        errors.push(
+          `Failed to backfill TODO.md for ${item.id} (Issue #${issueNum} at ${issueUrl}): ${msg}`,
+        );
         // Continue processing other items despite backfill failure
       }
     } catch (err: unknown) {
