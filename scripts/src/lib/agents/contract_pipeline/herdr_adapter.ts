@@ -331,7 +331,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    */
   private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
     // Double-idle check: two consecutive idle observations are much stronger
-    // evidence that pi's input handler is truly ready.
+    // evidence that pi's input handler is truly ready. If agent_status is
+    // unavailable (pi doesn't report it to herdr), fall back to a fixed delay.
     for (const delay of [0, 500]) {
       await sleep(delay);
       const ready = await this._waitForAgentStatus({
@@ -339,10 +340,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         statuses: ['idle', 'blocked'],
         timeoutMs: AGENT_READY_TIMEOUT_MS,
       });
-      if (!ready) {
-        console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
-        return;
+      if (ready) {
+        continue;
       }
+      // Agent status may not be reported by this pi session.
+      // If pi is running in the pane, proceed after a brief init delay.
+      if (await isCommandRunning(options.paneId).catch(() => false)) {
+        console.warn(
+          `⚠️  Pane ${options.paneId} agent_status unavailable — proceeding with fixed delay.`,
+        );
+        await sleep(5000);
+        break;
+      }
+      console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
+      return;
     }
 
     // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
@@ -418,9 +429,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // is passed via -p and the task message via $(cat ...).
     // Only use TUI mode when CONTRACT_PIPELINE_HEADLESS=0 is explicitly set
     // (for manual debugging).
+    // 🔴 Herdr PTY drops the first character via pane run too — prepend newline
+    // to protect inline env vars ('C' in CONTRACT_PIPELINE_RUN_ID).
+    // Without this, the shell tries to execute "ONTRACT_PIPELINE_RUN_ID=..." as a
+    // command, losing all pipeline env vars.
     if (this._headless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return [
+        '\n',
         env,
         'pi',
         '--mode',
@@ -437,6 +453,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
     // TUI mode — no -p, prompt is sent via _sendTaskText to the PTY.
     return [
+      '\n',
       env,
       'pi',
       '--approve',
@@ -621,7 +638,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // Review captain runs in TUI mode — needs interactivity to inspect
     // findings, interrupt if needed, and manually intervene. JSON mode
     // is for automated workers only.
+    // 🔴 Herdr PTY drops the first character via pane run — prepend newline
+    // to protect inline env vars (same as worker branches).
     const command = [
+      '\n',
       environment,
       'pi',
       '--approve',

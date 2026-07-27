@@ -83,7 +83,7 @@
             { "name": "npcId", "type": "string", "value": "shrine_spirit" },
             { "name": "npcName", "type": "string", "value": "Vesperine Spirit" },
             { "name": "dialogueKey", "type": "string", "value": "shrine_spirit_greeting" },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            { "name": "appearanceLayers", "type": "string", "value": "2,3,65,21,20,96" }
           ]
         },
         {

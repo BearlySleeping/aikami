@@ -1,15 +1,12 @@
 <script lang="ts">
 import type { QuestData } from '@aikami/frontend/engine';
 // apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte
-// Extends /game — reuses the same GameCanvasView + GameCanvasViewModel + GameUIViewModel
-// infrastructure, but seeds localStorage with a mock persona so a character
-// loads instantly without needing to go through the character creation flow.
+// Extends /game — reuses the same GameView + GameViewModel infrastructure,
+// but seeds localStorage with a mock persona so a character loads instantly.
 import { browser } from '$app/environment';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
-import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
-import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
-import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+import GameView from '$lib/views/game/game_view.svelte';
+import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
 import { inventoryService, routerService, worldStateService } from '$services';
 import type { DevAction } from '$types';
 
@@ -165,8 +162,10 @@ if (browser) {
   }
 }
 
-const viewModel = getGameCanvasViewModel({ className: 'GameCanvasViewModel' });
-const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
+const viewModel = getGameViewModel({ className: 'GameViewModel' });
+
+// Cast to access sandbox-specific methods from the underlying canvas view model
+const canvasVm = viewModel.canvasViewModel;
 
 const devActions = [
   // ── Inventory ─────────────────────────────────────────────────
@@ -264,9 +263,8 @@ const devActions = [
         return;
       }
       const payload = await saveService.getSavePayload(latest.id);
-      await viewModel.loadSave(payload);
-      // Engine was paused by Pause Menu — resume so the player can move
-      viewModel.resumeEngine();
+      await canvasVm.loadSave(payload);
+      canvasVm.resumeEngine();
       alert('Save loaded! Position + items restored.');
     },
   },
@@ -310,9 +308,6 @@ const devActions = [
 ] satisfies DevAction[];
 </script>
 
-<div class="w-screen h-screen overflow-hidden relative">
-  <GameCanvasView {viewModel} />
-  <GameUIView viewModel={gameUIViewModel} />
-</div>
+<GameView {viewModel} />
 
 <DevToolsPanel actions={devActions} />

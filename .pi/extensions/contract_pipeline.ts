@@ -183,7 +183,23 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       evidence: Type.Array(Type.String(), { default: [] }),
     }),
     async execute(_toolCallId, params) {
-      const runId = environment('CONTRACT_PIPELINE_RUN_ID');
+      // Derive runId from CONTRACT_PIPELINE_RUN_ID, with fallback from RESULT_PATH.
+      // The result path contains the run ID: .../.pi/contract-runs/run-XXXX/stages/...
+      let runId: string;
+      try {
+        runId = environment('CONTRACT_PIPELINE_RUN_ID');
+      } catch {
+        const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
+        if (!resultPath) {
+          throw new Error('Missing CONTRACT_PIPELINE_RUN_ID and CONTRACT_PIPELINE_RESULT_PATH.');
+        }
+        const m = resultPath.match(/contract-runs\/(run-[^/]+)\//);
+        if (!m?.[1]) {
+          throw new Error(`Cannot derive run ID from CONTRACT_PIPELINE_RESULT_PATH: ${resultPath}`);
+        }
+        runId = m[1];
+        console.warn(`⚠️  CONTRACT_PIPELINE_RUN_ID not set — derived ${runId} from result path.`);
+      }
       const role = environment('CONTRACT_PIPELINE_ROLE') as ContractWorkerRole;
       if (!['writer', 'critic', 'implementer', 'verifier'].includes(role)) {
         throw new Error(`Role ${role} cannot complete a worker stage.`);

@@ -5,6 +5,7 @@ description: >-
   Flow: plan → implement → QA (sandbox + E2E + visual) → validate → docs → handoff. Use when implementing features
   defined in docs/contracts/*.md. PROGRESS.md is auto-generated via `bun knowledge:sync`; INDEX.md is read-only;
   execution reports live at the bottom of individual contract files.
+  Also covers GitHub Roadmap integration via `bun run sync:roadmap` and PR-contract lifecycle linkage.
 ---
 
 # Contract Implementer
@@ -19,8 +20,34 @@ The authoritative phase-by-phase flow lives in the `/contract` prompt (`.pi/prom
 | `docs/contracts/C-*.md` | Contract spec + execution report at bottom | ✅ (Status field, report) |
 | `docs/contracts/INDEX.md` | Priority ranking | 🔴 READ-ONLY — never edit |
 | `docs/contracts/PROGRESS.md` | Status dashboard | 🔴 AUTO-GENERATED — run `bun knowledge:sync`, never hand-edit |
+| `docs/TODO.md` | Backlog ingestion buffer | ✅ (parsed by `parseBacklog`) |
+| GitHub Issues | Macro backlog authority | ✅ (sync via `bun run sync:todo`) |
+| GitHub Project #1 | Roadmap board | ✅ (sync via `bun run sync:contracts`) |
 
-## Status Lifecycle
+## Contract YAML Frontmatter
+
+Every contract MUST have YAML frontmatter at the top:
+
+```yaml
+---
+id: C-XXX
+title: "Feature Title"
+source: "todo | roadmap | direct"
+status: draft
+github:
+  issue_number: 123
+  issue_url: "https://github.com/..."
+  project_item_id: null
+  pr_url: null
+created_at: "2026-07-26T15:30:00Z"
+---
+```
+
+- `source`: How the contract was created — `todo` (from TODO.md), `roadmap` (from GitHub Issue), `direct` (interactive)
+- `github`: Populated when synced with GitHub. `pr_url` is set when a PR is created for this contract.
+- `status`: Uses the contract lifecycle status (see below).
+
+## Status Lifecycle & Roadmap Mapping
 
 ```
 draft → approved → in_progress → implemented → verified → completed
@@ -28,6 +55,35 @@ draft → approved → in_progress → implemented → verified → completed
 draft → blocked
 draft → superseded
 ```
+
+Contract statuses map to GitHub Project v2 roadmap columns:
+
+| Contract Status | Roadmap Column |
+|---|---|
+| `draft`, `approved`, `todo` | **Todo** / Backlog |
+| `in_progress` | **Implementing** |
+| `implemented` | **Verifying** |
+| `review`, `in_review` | **In Review** |
+| `verified`, `done`, `completed` | **Done** |
+| `verification_failed` | **Implementing** (back to implement) |
+
+Sync commands:
+- `bun run sync:roadmap` — Full sync (todo + contracts + prs + issues)
+- `bun run sync:todo` — Backlog → GitHub Issues + Project #1
+- `bun run sync:contracts` — Contract status → Roadmap columns
+- `bun run sync:prs` — Check merged PRs → update contracts + close issues
+
+## PR & Issue Linkage
+
+When a PR is created for a contract (via `gh_create_pr` or the contract pipeline):
+- The PR body auto-includes `Closes #<issue_number>` if the contract has a linked GitHub Issue.
+- The contract YAML frontmatter should be updated with `pr_url`.
+- The roadmap item transitions to **In Review**.
+
+When the PR is merged:
+- Run `bun run sync:prs` to auto-update the contract status to `verified`.
+- The roadmap item moves to **Done**.
+- The linked GitHub Issue is closed.
 
 - `draft`: contract written but not approved for implementation.
 - `approved`: contract reviewed (via `/contract-critique`) and approved by user.
@@ -38,6 +94,37 @@ draft → superseded
 - `verification_failed`: verifier found issues. Returns to implementer.
 - `blocked`: cannot proceed due to unresolved dependency.
 - `superseded`: replaced by another contract.
+
+## Contract Source Modes
+
+Contracts can be created from three sources via `bun run contract [ID] --source <mode>`:
+
+| Mode | Command | Description |
+|---|---|---|
+| `todo` (default) | `bun run contract C-370` | Parse docs/TODO.md, generate from backlog item |
+| `roadmap` | `bun run contract #102 --source roadmap` | Fetch GitHub Issue, freeze into contract |
+| `direct` | `bun run contract --source direct` | Interactive step-by-step drafting session |
+
+## Working Modes: Worktree vs Root
+
+Two working modes are supported when running a contract pipeline:
+
+| Mode | Command | Description |
+|---|---|---|
+| **Worktree** (default) | `bun run contract C-370` | Creates isolated `.pi/workspaces/` worktree for background agents |
+| **Root** | `bun run contract C-370 --root` | Starts on branch `contract/C-370` in the repo root before launching pipeline |
+| **Root + dirty** | `bun run contract C-370 --root --dirty` | Switches branch carrying uncommitted changes over |
+
+### Root Mode Behavior
+- Derives branch name `contract/C-XXX` from the contract ID.
+- Checks for dirty working directory via `git status --porcelain`.
+- **Without `--dirty`**: Fails fast with a clear error if uncommitted changes exist.
+- **With `--dirty`**: Executes `git checkout -b contract/C-XXX` directly, carrying over staged/unstaged changes.
+- Sets up the target branch in the root directory before launching the pipeline; worktrees may still be used by individual pipeline stages.
+
+### When to Use Each
+- **Worktree**: Default mode for background/automated pipeline runs, multi-agent isolation, CI/CD.
+- **Root**: Start the pipeline from a specific branch in your working tree; useful when you want to prepare the branch state before pipeline execution.
 
 ## Handoff Protocol
 

@@ -10,19 +10,30 @@
 //   tracking that gh_pr_comments cannot match.
 //
 // Registered tools:
-//   gh_create_pr      — Create a PR (default base: main)
-//   gh_list_prs       — List open PRs
-//   gh_summarize_pr   — View + summarize a PR
-//   gh_pr_comments    — Fetch PR comments (reviews + timeline) with timestamp cache
-//   gh_pr_status      — Show CI checks status for a PR
-//   gh_merge_pr       — Merge a PR (default: squash)
-//   gh_cancel_pr      — Close a PR without merging
-//   gh_edit_pr        — Edit PR title/body/base/labels
-//   gh_promote_pr     — Promote a draft PR to "Ready for Review"
+//   gh_create_pr            — Create a PR (default base: main)
+//   gh_list_prs             — List open PRs
+//   gh_summarize_pr         — View + summarize a PR
+//   gh_pr_comments          — Fetch PR comments (reviews + timeline) with timestamp cache
+//   gh_pr_status            — Show CI checks status for a PR
+//   gh_merge_pr             — Merge a PR (default: squash)
+//   gh_cancel_pr            — Close a PR without merging
+//   gh_edit_pr              — Edit PR title/body/base/labels
+//   gh_promote_pr           — Promote a draft PR to "Ready for Review"
+//   gh_list_issues          — List GitHub Issues
+//   gh_create_issue         — Create a GitHub Issue
+//   gh_close_issue          — Close a GitHub Issue
+//   gh_reopen_issue         — Reopen a closed Issue
+//   gh_edit_issue           — Edit an Issue
+//   gh_view_issue           — View full Issue details
+//   gh_list_projects        — List GitHub Projects
+//   gh_project_view         — View a GitHub Project board
+//   gh_project_item_add     — Add an Issue/PR to a Project
+//   gh_project_item_mutate  — Mutate a Project v2 item field (e.g. Status)
+//   gh_project_item_get     — Get Project v2 item details by content URL
 //
 // For git branch management after merge, use `git pull` on the target branch.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -542,6 +553,19 @@ export default function (pi: ExtensionAPI) {
       }
 
       const base = params.baseBranch ?? DEFAULT_BASE;
+
+      // 🔗 Auto-linkage: detect explicit "closes #N" markers or GitHub issue URLs
+      let body = params.body ?? '';
+      const closesMatch = body.match(/closes:\s*#(\d+)/im);
+      const ghIssueMatch = body.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+      const linkedIssue = closesMatch?.[1] ?? ghIssueMatch?.[1];
+      if (linkedIssue) {
+        const closePrefix = `Closes #${linkedIssue}\n\n`;
+        if (!body.startsWith('Closes #')) {
+          body = closePrefix + body;
+        }
+      }
+
       const args = [
         'pr',
         'create',
@@ -553,8 +577,8 @@ export default function (pi: ExtensionAPI) {
         base,
       ];
 
-      if (params.body) {
-        args.push('--body', params.body);
+      if (body) {
+        args.push('--body', body);
       }
       if (params.draft) {
         args.push('--draft');
@@ -586,6 +610,54 @@ export default function (pi: ExtensionAPI) {
 
       // Extract the PR URL from the output
       const prUrl = result.text.match(/(https:\/\/github\.com\/[^\s]+)/)?.[1] ?? result.text;
+      const prNumber = ((): number | undefined => {
+        const match = prUrl.match(/\/pull\/(\d+)/);
+        return match ? Number(match[1]) : undefined;
+      })();
+
+      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter
+      let contractUpdated: string | undefined;
+      if (prNumber && prUrl) {
+        const contractMatch =
+          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ?? body.match(/\b(C-\d+|MIG-\d+)\b/i);
+        if (contractMatch?.[1]) {
+          const contractId = contractMatch[1].toUpperCase();
+          const cwd = _ctx?.cwd ?? process.cwd();
+          const contractsDir = join(cwd, 'docs/contracts');
+          try {
+            if (existsSync(contractsDir)) {
+              const files = readdirSync(contractsDir).filter(
+                (f: string) => f.startsWith(`${contractId}-`) && f.endsWith('.md'),
+              );
+              if (files.length === 1 && files[0]) {
+                const contractPath = join(contractsDir, files[0]);
+                const content = readFileSync(contractPath, 'utf-8');
+                const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
+                if (yamlMatch?.[1]) {
+                  let yaml = yamlMatch[1];
+                  // Update pr_url and pr_number — preserve existing indentation
+                  const prUrlMatch = yaml.match(/^(\s*)pr_url:\s*.+/m);
+                  const indent = prUrlMatch?.[1] ?? '  ';
+                  yaml = yaml.replace(/^\s*pr_url:\s*.+/m, `${indent}pr_url: "${prUrl}"`);
+                  if (/^\s*pr_number:/m.test(yaml)) {
+                    yaml = yaml.replace(/^\s*pr_number:\s*.+/m, `${indent}pr_number: ${prNumber}`);
+                  } else {
+                    // Add pr_number after pr_url if missing
+                    yaml = yaml.replace(/(^\s*pr_url:\s*.+)/m, `$1\n${indent}pr_number: ${prNumber}`);
+                  }
+                  const updated = content.replace(yamlMatch[1], yaml);
+                  if (updated !== content) {
+                    writeFileSync(contractPath, updated);
+                    contractUpdated = contractPath;
+                  }
+                }
+              }
+            }
+          } catch {
+            // Non-fatal — contract auto-write is best-effort
+          }
+        }
+      }
 
       return {
         content: [
@@ -597,6 +669,7 @@ export default function (pi: ExtensionAPI) {
               `**Title:** ${params.title}`,
               `**Branch:** ${params.headBranch} → ${base}`,
               params.draft ? `**Draft:** yes` : '',
+              contractUpdated ? `**Contract:** Updated \`${contractUpdated}\` with PR URL` : '',
               '',
               `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
             ]
@@ -606,10 +679,12 @@ export default function (pi: ExtensionAPI) {
         ],
         details: {
           prUrl,
+          prNumber,
           title: params.title,
           headBranch: params.headBranch,
           baseBranch: base,
           draft: params.draft ?? false,
+          contractUpdated: contractUpdated ?? null,
         },
       };
     },
@@ -1991,6 +2066,806 @@ export default function (pi: ExtensionAPI) {
             {
               type: 'text',
               text: `❌ Failed to fetch PR comments: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_project_item_mutate
+  // ═══════════════════════════════════════════════════════════════════════
+
+  pi.registerTool({
+    name: 'gh_project_item_mutate',
+    label: 'GitHub: Mutate Project Item',
+    description:
+      'Update a GitHub Project v2 item field value — e.g. change its Status column. ' +
+      'Uses GraphQL to mutate single-select fields on project items.',
+    promptSnippet: "Use gh_project_item_mutate to update a project item's status or other field",
+    promptGuidelines: [
+      "Use gh_project_item_mutate to change a project item's Status column.",
+      "Requires the project number (e.g. 1), the item's content URL (issue/PR URL), or item ID.",
+      'Also works with any single-select project field, not just Status.',
+    ],
+    parameters: Type.Object({
+      project: Type.String({ description: 'Project number (e.g. "1")' }),
+      url: Type.Optional(
+        Type.String({ description: 'Issue or PR URL linked to the project item' }),
+      ),
+      itemId: Type.Optional(
+        Type.String({ description: 'Project item node ID (from GraphQL). Alternative to url.' }),
+      ),
+      fieldName: Type.Optional(
+        Type.String({ default: 'Status', description: 'Field name to mutate (default: "Status")' }),
+      ),
+      value: Type.String({ description: 'New value for the field (e.g. "In Progress", "Done")' }),
+      owner: Type.Optional(
+        Type.String({ description: 'Org or user handle (default: repo owner)' }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      let owner = params.owner;
+      if (!owner) {
+        const repoCheck = await ensureGitHubRepo(pi);
+        if (!repoCheck.ok) {
+          return {
+            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+            isError: true,
+            details: {},
+          };
+        }
+        owner = repoCheck.owner;
+      }
+
+      const projectOwner = owner ?? '';
+      if (!projectOwner) {
+        return {
+          content: [
+            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+
+      const fieldName = params.fieldName ?? 'Status';
+      const projectNum = Number(params.project);
+
+      // Step 1: Fetch project metadata to get project node ID and field options
+      // Try organization first, fall back to user
+      const orgQuery = `
+        query($owner: String!, $number: Int!) {
+          organization(login: $owner) {
+            projectV2(number: $number) {
+              id
+              fields(first: 50) {
+                nodes {
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                    options {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const userQuery = `
+        query($owner: String!, $number: Int!) {
+          user(login: $owner) {
+            projectV2(number: $number) {
+              id
+              fields(first: 50) {
+                nodes {
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                    options {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      let projectData: { projectId: string; fieldId: string; optionId: string };
+      try {
+        // Try organization first
+        let result = await runGh(
+          pi,
+          [
+            'api',
+            'graphql',
+            '-f',
+            `query=${orgQuery}`,
+            '-F',
+            `owner=${projectOwner}`,
+            '-F',
+            `number=${projectNum}`,
+          ],
+          { parseJson: true },
+        );
+
+        // If organization fails, fall back to user
+        if (!result.success || !result.json || !(result.json as any).data?.organization?.projectV2) {
+          result = await runGh(
+            pi,
+            [
+              'api',
+              'graphql',
+              '-f',
+              `query=${userQuery}`,
+              '-F',
+              `owner=${projectOwner}`,
+              '-F',
+              `number=${projectNum}`,
+            ],
+            { parseJson: true },
+          );
+        }
+
+        if (!result.success || !result.json) {
+          return {
+            content: [{ type: 'text', text: `❌ Failed to fetch project: ${result.text}` }],
+            isError: true,
+            details: {},
+          };
+        }
+
+        const data = result.json as {
+          data?: {
+            organization?: {
+              projectV2?: {
+                id: string;
+                fields: {
+                  nodes: Array<{
+                    id: string;
+                    name: string;
+                    options: Array<{ id: string; name: string }>;
+                  }>;
+                };
+              };
+            };
+            user?: {
+              projectV2?: {
+                id: string;
+                fields: {
+                  nodes: Array<{
+                    id: string;
+                    name: string;
+                    options: Array<{ id: string; name: string }>;
+                  }>;
+                };
+              };
+            };
+          };
+        };
+        const pv2 = data.data?.organization?.projectV2 ?? data.data?.user?.projectV2;
+        if (!pv2) {
+          return {
+            content: [
+              { type: 'text', text: `❌ Project #${projectNum} not found for @${projectOwner}` },
+            ],
+            isError: true,
+            details: {},
+          };
+        }
+
+        const field = pv2.fields?.nodes?.find((f) => f.name === fieldName);
+        if (!field) {
+          const available = (pv2.fields?.nodes ?? []).map((f) => f.name).join(', ');
+          return {
+            content: [
+              { type: 'text', text: `❌ Field "${fieldName}" not found. Available: ${available}` },
+            ],
+            isError: true,
+            details: {},
+          };
+        }
+
+        const option = field.options?.find((o) => o.name === params.value);
+        if (!option) {
+          const available = (field.options ?? []).map((o) => o.name).join(', ');
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Option "${params.value}" not found for field "${fieldName}". Available: ${available}`,
+              },
+            ],
+            isError: true,
+            details: {},
+          };
+        }
+
+        projectData = {
+          projectId: pv2.id,
+          fieldId: field.id,
+          optionId: option.id,
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to resolve project metadata: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+
+      // Step 2: Find the project item by URL or item ID
+      let itemId = params.itemId;
+      if (!itemId && params.url) {
+        try {
+          // Try organization first, fall back to user, with pagination
+          const itemOrgQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              organization(login: $owner) {
+                projectV2(number: $number) {
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      id
+                      content {
+                        ... on Issue { url }
+                        ... on PullRequest { url }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+          const itemUserQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              user(login: $owner) {
+                projectV2(number: $number) {
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      id
+                      content {
+                        ... on Issue { url }
+                        ... on PullRequest { url }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+
+          let allNodes: Array<{ id: string; content: { url?: string } }> = [];
+          let cursor: string | null = null;
+          let hasNextPage = true;
+
+          // Try organization first
+          while (hasNextPage && !itemId) {
+            const args = [
+              'api',
+              'graphql',
+              '-f',
+              `query=${itemOrgQuery}`,
+              '-F',
+              `owner=${projectOwner}`,
+              '-F',
+              `number=${projectNum}`,
+            ];
+            if (cursor) {
+              args.push('-f', `cursor=${cursor}`);
+            }
+
+            const itemResult = await runGh(pi, args, { parseJson: true });
+            const itemData = itemResult.json as {
+              data?: {
+                organization?: {
+                  projectV2?: {
+                    items: {
+                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                      nodes: Array<{ id: string; content: { url?: string } }>;
+                    };
+                  };
+                };
+              };
+            };
+
+            const items = itemData.data?.organization?.projectV2?.items;
+            if (!items && cursor === null) {
+              // Organization failed on first page, try user instead
+              break;
+            }
+            if (!items) {
+              hasNextPage = false;
+              break;
+            }
+
+            allNodes.push(...items.nodes);
+            const match = items.nodes.find((n) => n.content?.url === params.url);
+            if (match) {
+              itemId = match.id;
+              break;
+            }
+
+            hasNextPage = items.pageInfo.hasNextPage;
+            cursor = items.pageInfo.endCursor;
+          }
+
+          // If organization didn't work or item not found, try user
+          if (!itemId) {
+            cursor = null;
+            hasNextPage = true;
+            while (hasNextPage && !itemId) {
+              const args = [
+                'api',
+                'graphql',
+                '-f',
+                `query=${itemUserQuery}`,
+                '-F',
+                `owner=${projectOwner}`,
+                '-F',
+                `number=${projectNum}`,
+              ];
+              if (cursor) {
+                args.push('-f', `cursor=${cursor}`);
+              }
+
+              const itemResult = await runGh(pi, args, { parseJson: true });
+              const itemData = itemResult.json as {
+                data?: {
+                  user?: {
+                    projectV2?: {
+                      items: {
+                        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                        nodes: Array<{ id: string; content: { url?: string } }>;
+                      };
+                    };
+                  };
+                };
+              };
+
+              const items = itemData.data?.user?.projectV2?.items;
+              if (!items) {
+                hasNextPage = false;
+                break;
+              }
+
+              allNodes.push(...items.nodes);
+              const match = items.nodes.find((n) => n.content?.url === params.url);
+              if (match) {
+                itemId = match.id;
+                break;
+              }
+
+              hasNextPage = items.pageInfo.hasNextPage;
+              cursor = items.pageInfo.endCursor;
+            }
+          }
+        } catch {
+          // will report error below
+        }
+      }
+
+      if (!itemId) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ Could not find the project item. Provide either `url` (issue/PR URL) or `itemId` (project item node ID).',
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+
+      // Step 3: Mutate the field value
+      const mutation = `
+        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+          updateProjectV2ItemFieldValue(input: {
+            projectId: $projectId
+            itemId: $itemId
+            fieldId: $fieldId
+            value: { singleSelectOptionId: $optionId }
+          }) {
+            clientMutationId
+          }
+        }
+      `;
+
+      try {
+        const mutResult = await runGh(
+          pi,
+          [
+            'api',
+            'graphql',
+            '-f',
+            `query=${mutation}`,
+            '-f',
+            `projectId=${projectData.projectId}`,
+            '-f',
+            `itemId=${itemId}`,
+            '-f',
+            `fieldId=${projectData.fieldId}`,
+            '-f',
+            `optionId=${projectData.optionId}`,
+          ],
+          { parseJson: true },
+        );
+
+        if (!mutResult.success) {
+          return {
+            content: [{ type: 'text', text: `❌ Mutation failed: ${mutResult.text}` }],
+            isError: true,
+            details: {},
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ **Project #${projectNum} item updated:** \`${fieldName}\` → "${params.value}"`,
+            },
+          ],
+          details: { project: projectNum, fieldName, value: params.value, updated: true },
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to mutate project item: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_project_item_get
+  // ═══════════════════════════════════════════════════════════════════════
+
+  pi.registerTool({
+    name: 'gh_project_item_get',
+    label: 'GitHub: Get Project Item',
+    description:
+      'Get a GitHub Project v2 item by its linked content URL (issue/PR URL). ' +
+      'Returns the item node ID, field values, and content metadata. ' +
+      'Useful for finding a project item to mutate its fields.',
+    promptSnippet: 'Use gh_project_item_get to find a project item by its linked issue/PR URL',
+    promptGuidelines: [
+      "Use gh_project_item_get to get a project item's node ID for subsequent mutations.",
+      'Pass the issue/PR URL to find its corresponding project item.',
+    ],
+    parameters: Type.Object({
+      project: Type.String({ description: 'Project number (e.g. "1")' }),
+      url: Type.String({ description: 'Issue or PR URL to find in the project' }),
+      owner: Type.Optional(
+        Type.String({ description: 'Org or user handle (default: repo owner)' }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      let owner = params.owner;
+      if (!owner) {
+        const repoCheck = await ensureGitHubRepo(pi);
+        if (!repoCheck.ok) {
+          return {
+            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+            isError: true,
+            details: {},
+          };
+        }
+        owner = repoCheck.owner;
+      }
+
+      const projectOwner = owner ?? '';
+      if (!projectOwner) {
+        return {
+          content: [
+            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+
+      const projectNum = Number(params.project);
+
+      // Try organization first, fall back to user, with pagination
+      const orgQuery = `
+        query($owner: String!, $number: Int!, $cursor: String) {
+          organization(login: $owner) {
+            projectV2(number: $number) {
+              id
+              title
+              items(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  id
+                  content {
+                    ... on Issue {
+                      number
+                      title
+                      url
+                      state
+                    }
+                    ... on PullRequest {
+                      number
+                      title
+                      url
+                      state
+                    }
+                  }
+                  fieldValues(first: 20) {
+                    nodes {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        name
+                        field { ... on ProjectV2Field { name } }
+                      }
+                      ... on ProjectV2ItemFieldTextValue {
+                        text
+                        field { ... on ProjectV2Field { name } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const userQuery = `
+        query($owner: String!, $number: Int!, $cursor: String) {
+          user(login: $owner) {
+            projectV2(number: $number) {
+              id
+              title
+              items(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  id
+                  content {
+                    ... on Issue {
+                      number
+                      title
+                      url
+                      state
+                    }
+                    ... on PullRequest {
+                      number
+                      title
+                      url
+                      state
+                    }
+                  }
+                  fieldValues(first: 20) {
+                    nodes {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        name
+                        field { ... on ProjectV2Field { name } }
+                      }
+                      ... on ProjectV2ItemFieldTextValue {
+                        text
+                        field { ... on ProjectV2Field { name } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      try {
+        type ProjectItemNode = {
+          id: string;
+          content: {
+            number?: number;
+            title?: string;
+            url?: string;
+            state?: string;
+          };
+          fieldValues: {
+            nodes: Array<{
+              name?: string;
+              text?: string;
+              field?: { name?: string };
+            }>;
+          };
+        };
+
+        let allItems: ProjectItemNode[] = [];
+        let cursor: string | null = null;
+        let hasNextPage = true;
+
+        // Try organization first
+        while (hasNextPage) {
+          const args = [
+            'api',
+            'graphql',
+            '-f',
+            `query=${orgQuery}`,
+            '-F',
+            `owner=${projectOwner}`,
+            '-F',
+            `number=${projectNum}`,
+          ];
+          if (cursor) {
+            args.push('-f', `cursor=${cursor}`);
+          }
+
+          const result = await runGh(pi, args, { parseJson: true });
+          const data = result.json as {
+            data?: {
+              organization?: {
+                projectV2?: {
+                  id: string;
+                  title: string;
+                  items: {
+                    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                    nodes: ProjectItemNode[];
+                  };
+                };
+              };
+            };
+          };
+
+          const pv2 = data.data?.organization?.projectV2;
+          if (!pv2 && cursor === null) {
+            // Organization failed on first page, try user instead
+            break;
+          }
+          if (!pv2) {
+            hasNextPage = false;
+            break;
+          }
+
+          allItems.push(...pv2.items.nodes);
+          hasNextPage = pv2.items.pageInfo.hasNextPage;
+          cursor = pv2.items.pageInfo.endCursor;
+        }
+
+        // If organization didn't work, try user
+        if (allItems.length === 0) {
+          cursor = null;
+          hasNextPage = true;
+          while (hasNextPage) {
+            const args = [
+              'api',
+              'graphql',
+              '-f',
+              `query=${userQuery}`,
+              '-F',
+              `owner=${projectOwner}`,
+              '-F',
+              `number=${projectNum}`,
+            ];
+            if (cursor) {
+              args.push('-f', `cursor=${cursor}`);
+            }
+
+            const result = await runGh(pi, args, { parseJson: true });
+
+            if (!result.success || !result.json) {
+              return {
+                content: [{ type: 'text', text: `❌ Failed to fetch project items: ${result.text}` }],
+                isError: true,
+                details: {},
+              };
+            }
+
+            const data = result.json as {
+              data?: {
+                user?: {
+                  projectV2?: {
+                    id: string;
+                    title: string;
+                    items: {
+                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                      nodes: ProjectItemNode[];
+                    };
+                  };
+                };
+              };
+            };
+
+            const pv2 = data.data?.user?.projectV2;
+            if (!pv2) {
+              hasNextPage = false;
+              break;
+            }
+
+            allItems.push(...pv2.items.nodes);
+            hasNextPage = pv2.items.pageInfo.hasNextPage;
+            cursor = pv2.items.pageInfo.endCursor;
+          }
+        }
+
+        // Now search through all collected items
+        const match = params.url ? allItems.find((n) => n.content?.url === params.url) : allItems[0];
+
+        if (!match) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: params.url
+                  ? `❌ No project item found for URL: ${params.url}`
+                  : '❌ No project items found',
+              },
+            ],
+            isError: true,
+            details: {},
+          };
+        }
+
+        const content = match.content;
+        const fieldValues = (match.fieldValues?.nodes ?? [])
+          .filter((fv) => fv.field?.name)
+          .map((fv) => {
+            const value = fv.name ?? fv.text ?? '—';
+            return `  - ${fv.field?.name ?? '?'}: ${value}`;
+          });
+
+        const lines = [
+          `**Project Item Found**`,
+          `**Node ID:** \`${match.id}\``,
+          `**Content:** ${content?.title ?? '?'} (#${content?.number ?? '?'}) — ${content?.state ?? '?'}`,
+          `**URL:** ${content?.url ?? '?'}`,
+          '',
+          '**Field Values:**',
+          ...fieldValues,
+        ];
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+          details: {
+            itemId: match.id,
+            url: content?.url,
+            number: content?.number,
+            title: content?.title,
+            state: content?.state,
+          },
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to get project item: ${err instanceof Error ? err.message : String(err)}`,
             },
           ],
           isError: true,

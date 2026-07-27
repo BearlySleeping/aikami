@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-07-25
+> Auto-generated: 2026-07-27
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 119 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 120 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -182,4 +182,5 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-367 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | v1 |
 | C-368 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | v1 |
 | C-369 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | v1 |
+| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | v2 |
 

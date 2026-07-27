@@ -87,7 +87,8 @@
             { "name": "npcId", "type": "string", "value": "elara_wayfinder" },
             { "name": "npcName", "type": "string", "value": "Elara Wayfinder" },
             { "name": "dialogueKey", "type": "string", "value": "elara_wayfinder_greeting" },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            { "name": "interactionRadius", "type": "float", "value": 48 },
+            { "name": "appearanceLayers", "type": "string", "value": "2,91,22,21,20,94" }
           ]
         },
         {
@@ -101,7 +102,8 @@
             { "name": "npcId", "type": "string", "value": "kade_blackthorn" },
             { "name": "npcName", "type": "string", "value": "Kade Blackthorn" },
             { "name": "dialogueKey", "type": "string", "value": "kade_blackthorn_taunt" },
-            { "name": "interactionRadius", "type": "float", "value": 64 }
+            { "name": "interactionRadius", "type": "float", "value": 64 },
+            { "name": "appearanceLayers", "type": "string", "value": "3,123,23,22,7,95" }
           ]
         },
         {
