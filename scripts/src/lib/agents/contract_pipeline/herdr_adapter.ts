@@ -443,8 +443,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // to protect inline env vars ('C' in CONTRACT_PIPELINE_RUN_ID).
     // Without this, the shell tries to execute "ONTRACT_PIPELINE_RUN_ID=..." as a
     // command, losing all pipeline env vars.
-    const useHeadless =
-      this._headless && !(this._interactiveWriter && request.role === 'writer');
+    const useHeadless = this._headless && !(this._interactiveWriter && request.role === 'writer');
     if (useHeadless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return [

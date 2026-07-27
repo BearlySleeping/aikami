@@ -1,204 +1,105 @@
 // scripts/src/lib/ops/preview_site.ts
 //
-// Aikami Site Preview & Launch — build, dev server, preview server, and Chromium.
+// Aikami Site Preview — ensures the site dev server is running in herdr,
+// then launches Chromium for visual testing.
 //
 // Usage:
-//   bun run scripts -- preview-site                           # build + preview + chromium
-//   bun run scripts -- preview-site --dev                     # live dev server + chromium (HMR)
-//   bun run scripts -- preview-site --no-build                # skip build, preview existing dist/
-//   bun run scripts -- preview-site --no-chromium             # server only, no browser
-//   bun run scripts -- preview-site --mode staging            # staging mode
+//   bun run scripts -- preview-site                  # ensure site dev server + chromium
 //
-// CLI flags:
-//   --mode <mode>         emulator (default), staging, production
-//   --dev                 Use live dev server (hot reload) instead of build+preview
-//   --no-build            Skip build step (still uses preview server from dist/)
-//   --no-chromium         Skip Chromium launch
+// The site dev server is managed via herdr. If the site tab isn't running
+// in the current aikami workspace, it will be started automatically.
 
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PORTS } from '@aikami/constants';
+import type { AikamiMode } from '../herdr/session.ts';
+import { findWorkspace, isPortReady, resolveSessionName, startServices } from '../herdr/session.ts';
 
 // ── CLI colors ─────────────────────────────────────────────────────────────
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
 const BLUE = '\x1b[34m';
-const YELLOW = '\x1b[33m';
 const BOLD = '\x1b[1m';
 const RESET = '\x1b[0m';
 
-const log = (prefix: string, color: string, message: string): void => {
+const log = (prefix: string, color: string, message: string) => {
   console.log(`${color}${BOLD}[${prefix}]${RESET} ${message}`);
 };
 const info = (m: string) => log('info', BLUE, m);
 const ok = (m: string) => log('ok', GREEN, m);
-const warn = (m: string) => log('warn', YELLOW, m);
 const error = (m: string) => log('error', RED, m);
-
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type AikamiMode = 'emulator' | 'staging' | 'production';
-
-type PreviewOptions = {
-  devMode: boolean;
-  build: boolean;
-  chromium: boolean;
-  mode: AikamiMode;
-};
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const ROOT = resolve(import.meta.dirname, '../../../..');
-const SITE_DIR = resolve(ROOT, 'apps/frontend/site');
-const DIST_DIR = resolve(SITE_DIR, 'dist');
-const SITE_PORT = PORTS.emulator.site;
 const CHROMIUM_PROFILE_DIR = resolve(ROOT, 'dist/tmp/.chromium-profile-site');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const cleanDir = (dirPath: string, label: string): void => {
-  if (existsSync(dirPath)) {
-    info(`Cleaning ${label}…`);
-    rmSync(dirPath, { recursive: true, force: true });
-  }
-};
-
-const spawn = (cmd: string[], cwd: string, label: string): Promise<number> => {
-  return new Promise((resolvePromise) => {
-    info(`Running: ${cmd.join(' ')}`);
-    const proc = Bun.spawn({
-      cmd,
-      cwd,
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-    proc.exited.then((code) => {
-      if (code === 0) {
-        ok(`${label} — exit 0`);
-      } else {
-        error(`${label} — exit ${code}`);
-      }
-      resolvePromise(code);
-    });
-  });
-};
-
-const hasFlag = (args: string[], flag: string): boolean => args.includes(flag);
-
-const parseArg = (args: string[], flag: string): string | undefined => {
-  const idx = args.indexOf(flag);
-  if (idx !== -1 && idx + 1 < args.length) {
-    return args[idx + 1];
-  }
-  return undefined;
-};
-
-const parseMode = (raw: string | undefined): AikamiMode => {
-  if (raw === 'staging' || raw === 'production' || raw === 'emulator') {
-    return raw;
-  }
-  if (raw) {
-    warn(`Unknown mode "${raw}" — falling back to emulator`);
-  }
-  return 'emulator';
-};
-
-const waitForPort = async (port: number, timeoutMs: number, label: string): Promise<boolean> => {
+const waitForPort = async (port: number, timeoutMs: number): Promise<boolean> => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(2000) });
-      if (res.ok) {
-        ok(`${label} ready at http://localhost:${port}`);
-        return true;
-      }
-    } catch {}
+    if (await isPortReady(port)) {
+      ok(`Site ready at http://localhost:${port}`);
+      return true;
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
-  warn(`${label} did not respond within ${timeoutMs}ms`);
   return false;
 };
 
-// ── Arg parsing ────────────────────────────────────────────────────────────
+// ── Ensure site dev server ─────────────────────────────────────────────────
 
-const parseOptions = (args: string[]): PreviewOptions => {
-  const devMode = hasFlag(args, '--dev');
-  const build = !devMode && !hasFlag(args, '--no-build');
-  const chromium = !hasFlag(args, '--no-chromium');
-  const mode = parseMode(parseArg(args, '--mode'));
-  return { devMode, build, chromium, mode };
-};
+const ensureSite = async (mode: AikamiMode): Promise<number> => {
+  const wsName = resolveSessionName(mode);
+  const sitePort = PORTS[mode].site;
+  const wsId = await findWorkspace(wsName);
 
-// ── Build ──────────────────────────────────────────────────────────────────
+  // Check if site is already running and responding
+  if (wsId && (await isPortReady(sitePort))) {
+    ok(`Site dev server already running on port ${sitePort}`);
+    return sitePort;
+  }
 
-const buildSite = async (mode: AikamiMode): Promise<boolean> => {
-  cleanDir(DIST_DIR, 'dist/');
+  info(`Starting site dev server in herdr workspace ${wsName}…`);
+  await startServices({ mode, services: ['site'], projectRoot: ROOT });
 
-  const code = await spawn(
-    ['bun', 'run', 'moon', 'run', 'site:build', '--', '--mode', mode],
-    ROOT,
-    `site:build (${mode})`,
-  );
-  return code === 0;
-};
+  const isReady = await waitForPort(sitePort, 30_000);
+  if (!isReady) {
+    error('Site dev server did not respond within 30s');
+    process.exit(1);
+  }
 
-// ── Dev server ─────────────────────────────────────────────────────────────
-
-const startDevServer = (mode: AikamiMode): { proc: { kill: () => void }; ready: Promise<boolean> } => {
-  info(`Starting dev server on port ${SITE_PORT} (${mode} mode)…`);
-
-  const cmd = mode === 'emulator'
-    ? ['bun', 'run', 'dev']
-    : ['bun', 'run', `dev:${mode}`];
-
-  const proc = Bun.spawn({
-    cmd,
-    cwd: SITE_DIR,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-
-  return { proc, ready: waitForPort(SITE_PORT, 15_000, 'Dev server') };
-};
-
-// ── Preview server ─────────────────────────────────────────────────────────
-
-const startPreview = (): { proc: { kill: () => void }; ready: Promise<boolean> } => {
-  info(`Starting astro preview on port ${SITE_PORT}…`);
-
-  const proc = Bun.spawn({
-    cmd: ['bun', 'run', 'preview', '--port', String(SITE_PORT)],
-    cwd: SITE_DIR,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-
-  return { proc, ready: waitForPort(SITE_PORT, 15_000, 'Preview server') };
+  return sitePort;
 };
 
 // ── Chromium launch ────────────────────────────────────────────────────────
 
-const launchChromium = async (): Promise<void> => {
+const launchChromium = async (port: number) => {
+  // Wipe stale profile directory to clear locks and cached extension state
+  rmSync(CHROMIUM_PROFILE_DIR, { recursive: true, force: true });
   mkdirSync(CHROMIUM_PROFILE_DIR, { recursive: true });
 
-  const targetUrl = `http://localhost:${SITE_PORT}`;
+  const targetUrl = `http://localhost:${port}`;
+
+  info(`Launching Chromium → ${targetUrl}`);
 
   const proc = Bun.spawn(
     [
-      'chromium',
+      'chromium-unwrapped', // Bypasses flake.nix wrapper that forces --enable-automation
       `--user-data-dir=${CHROMIUM_PROFILE_DIR}`,
       '--no-first-run',
       '--no-default-browser-check',
+      '--test-type', // Silences "unsupported command-line flag" warning bars
+      '--disable-extensions',
       '--disable-background-networking',
       '--disable-sync',
       '--no-pings',
       '--window-size=1440,900',
       `--app=${targetUrl}`,
     ],
-    {
-      stdio: ['ignore', 'inherit', 'inherit'],
-    },
+    { stdio: ['ignore', 'inherit', 'inherit'] },
   );
 
   await proc.exited;
@@ -206,51 +107,15 @@ const launchChromium = async (): Promise<void> => {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
-const args = process.argv.slice(2);
-const opts = parseOptions(args);
+const mode: AikamiMode =
+  process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
+    ? process.env.AIKAMI_MODE
+    : 'emulator';
 
 console.log(`\n${BOLD}Aikami Site Preview${RESET}\n`);
-info(`Mode: ${opts.mode}`);
+info(`Mode: ${mode}`);
 
-if (opts.devMode) {
-  // Live dev server with HMR
-  info('Using live dev server (HMR)');
-  const dev = startDevServer(opts.mode);
-  const isReady = await dev.ready;
-  if (!isReady) {
-    error('Dev server failed to start');
-    dev.proc.kill();
-    process.exit(1);
-  }
-
-  if (opts.chromium) {
-    info('Launching Chromium…');
-    await launchChromium();
-  }
-} else {
-  // Build → preview path
-  if (opts.build) {
-    const ok_ = await buildSite(opts.mode);
-    if (!ok_) {
-      error('Build failed. Aborting.');
-      process.exit(1);
-    }
-  } else {
-    info('Skipping build (--no-build)');
-  }
-
-  const preview = startPreview();
-  const isReady = await preview.ready;
-  if (!isReady) {
-    error('Preview server failed to start');
-    preview.proc.kill();
-    process.exit(1);
-  }
-
-  if (opts.chromium) {
-    info('Launching Chromium…');
-    await launchChromium();
-  }
-}
+const port = await ensureSite(mode);
+await launchChromium(port);
 
 ok('Done.');

@@ -40,7 +40,15 @@ import { EMULATOR_PORTS } from '../../../../packages/shared/constants/src/index'
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'firebase' | 'client' | 'voice' | 'image' | 'text' | 'preview-client' | 'site' | 'preview-site';
+export type DevService =
+  | 'firebase'
+  | 'client'
+  | 'voice'
+  | 'image'
+  | 'text'
+  | 'preview-client'
+  | 'site'
+  | 'preview-site';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';

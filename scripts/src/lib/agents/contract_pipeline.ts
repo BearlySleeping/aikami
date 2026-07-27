@@ -402,7 +402,6 @@ const prepareDirectSource = (repoRoot: string): string => {
   return contractId;
 };
 
-
 // ── Root Branch Checkout ────────────────────────────────────
 
 /**
@@ -608,7 +607,9 @@ const main = async (): Promise<void> => {
       allowDirty: cli.dirty,
     });
     console.log(`📁 Root checkout complete on \`${branchName}\`.`);
-    console.log('   Pipeline will launch from this branch (worktrees may still be used by stages).');
+    console.log(
+      '   Pipeline will launch from this branch (worktrees may still be used by stages).',
+    );
   }
 
   if (!cli.background && !cli.dryRun) {
