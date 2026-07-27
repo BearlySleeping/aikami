@@ -25,6 +25,8 @@ import type {
   DialogueMessage,
   DialoguePhase,
 } from '$types';
+import type { NpcSuggestionChip } from '@aikami/types';
+import { SKILL_STAT_MAP } from '@aikami/constants';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -100,11 +102,21 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    */
   readonly dialoguePhase: DialoguePhase;
 
-  /** The ID of the currently selected action, or `null` if no action is selected. */
-  readonly selectedActionId: string | null;
+  /**
+   * Suggested follow-up chips from the LLM or authored fallback.
+   * Shown below the most recent NPC message. 0–4 chips.
+   *
+   * Contract: C-371 Suggestion Chips
+   */
+  readonly suggestedChips: readonly NpcSuggestionChip[];
 
-  /** Available action options for the current NPC interaction. */
-  readonly actionOptions: readonly ActionOption[];
+  /**
+   * Taps a suggestion chip — pre-fills the input with the chip's
+   * prefill_text and sends it as a player message.
+   *
+   * Contract: C-371 Suggestion Chips
+   */
+  handleChipTap(chipId: string): void;
 
   /**
    * Skill check UI state for the animated d20 component.
@@ -169,15 +181,6 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   inputElement: HTMLTextAreaElement | undefined;
 
   /**
-   * Selects an action from the context menu.
-   *
-   * - `skill_check`: Sets up interactive dice, waits for player click (C-162).
-   * - `direct_combat`: Bypasses LLM, triggers combat immediately.
-   * - `custom`: Switches to freeform text input.
-   */
-  selectAction(actionId: string): Promise<void>;
-
-  /**
    * Acknowledges the DC declaration and transitions to the interactive dice phase.
    *
    * Only valid when `skillCheckState.phase === 'declared'`.
@@ -221,9 +224,6 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Sets the player's input text (bound to text input field). */
   setInput(text: string): void;
-
-  /** Returns to the action context menu from the custom input or dice phases. */
-  goToMenu(): void;
 
   /** Closes the dialogue overlay and resumes the game. */
   endChat(): void;
@@ -336,19 +336,6 @@ class DialogueOverlayViewModel
   extends BaseViewModel<DialogueOverlayViewModelOptions>
   implements DialogueOverlayViewModelInterface
 {
-  /**
-   * Pre-written action buttons for the BG3-style context menu.
-   *
-   * Contract: C-162 BG3 Action Menu & Dice
-   */
-  static readonly ACTION_OPTIONS: readonly ActionOption[] = [
-    { id: 'persuasion', label: 'Persuasion', type: 'skill_check', skill: 'persuasion' },
-    { id: 'intimidation', label: 'Intimidation', type: 'skill_check', skill: 'intimidation' },
-    { id: 'stealth', label: 'Stealth', type: 'skill_check', skill: 'sleight_of_hand' },
-    { id: 'attack', label: 'Attack', type: 'direct_combat' },
-    { id: 'custom', label: 'Custom', type: 'custom' },
-  ] as const;
-
   messages = $state<DialogueMessage[]>([]);
 
   isStreaming = $state<boolean>(false);
@@ -358,13 +345,16 @@ class DialogueOverlayViewModel
   streamError = $state<string | null>(null);
 
   /**
-   * Current phase of the dialogue interaction loop (C-162).
-   * Starts in `MENU` — action context menu visible.
+   * Current phase of the dialogue interaction loop.
+   * Starts in `FREE_TEXT` — free-text input always visible (C-371).
    */
-  dialoguePhase = $state<DialoguePhase>('MENU');
+  dialoguePhase = $state<DialoguePhase>('FREE_TEXT');
 
-  /** The ID of the currently selected action, or `null`. */
-  selectedActionId = $state<string | null>(null);
+  /**
+   * Suggested follow-up chips from the most recent NPC response.
+   * 0–4 chips derived from LLM output or authored fallback.
+   */
+  suggestedChips = $state<NpcSuggestionChip[]>([]);
 
   /**
    * Skill check dice roll UI state — null when idle.
@@ -548,11 +538,6 @@ class DialogueOverlayViewModel
     return this._imageProviderAvailable;
   }
 
-  /** Available action options for the context menu (C-162). */
-  get actionOptions(): readonly ActionOption[] {
-    return DialogueOverlayViewModel.ACTION_OPTIONS;
-  }
-
   /** @inheritdoc */
   async initialize(): Promise<void> {
     // Register reactive effects for DOM interactions
@@ -609,61 +594,32 @@ class DialogueOverlayViewModel
   }
 
   /** @inheritdoc */
-  goToMenu(): void {
-    this.dialoguePhase = 'MENU';
-    this.inputText = '';
-  }
-
-  /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
     // Fire-and-forget draft save
     void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
   }
 
-  // ── Action Context Menu (C-162) ─────────────────────────────────────
+  // ── Suggestion Chips (C-371) ────────────────────────────────────────
 
   /** @inheritdoc */
-  async selectAction(actionId: string): Promise<void> {
-    this.debug('selectAction', { actionId });
-
-    if (actionId === 'attack') {
-      await this._handleDirectCombat();
+  handleChipTap(chipId: string): void {
+    const chip = this.suggestedChips.find((c) => c.id === chipId);
+    if (!chip || this.isStreaming || this.isResolvingSkillCheck) {
       return;
     }
 
-    if (actionId === 'custom') {
-      this.dialoguePhase = 'CUSTOM_INPUT';
+    this.debug('handleChipTap', { chipId, intent_type: chip.intent_type });
+
+    // If the chip is a combat intent, trigger direct combat
+    if (chip.intent_type === 'combat') {
+      void this._handleDirectCombat();
       return;
     }
 
-    const option = DialogueOverlayViewModel.ACTION_OPTIONS.find((o) => o.id === actionId);
-    if (option?.type !== 'skill_check' || !option.skill) {
-      this.warn('selectAction:unknown-action', { actionId });
-      return;
-    }
-
-    this.selectedActionId = actionId;
-    this.dialoguePhase = 'DICE';
-
-    // Determine the difficulty class based on the NPC's persona difficulty
-    const difficultyClass = this._getDifficultyClass(option.skill);
-
-    // Compute the player's stat modifier for this skill
-    const { statModifier, statModifierValue } = this._getStatModifier(option.skill);
-    const targetNumber = Math.max(1, difficultyClass - statModifierValue);
-
-    // Set up declared-DC phase first (C-330: DC committed before RNG)
-    this.skillCheckState = {
-      checkType: option.label,
-      difficultyClass,
-      statModifier,
-      statModifierValue,
-      targetNumber,
-      rollValue: null,
-      phase: 'declared',
-      isSuccess: null,
-    };
+    // Otherwise, pre-fill and send as a player message
+    this.inputText = chip.prefill_text;
+    void this.sendMessage(chip.prefill_text);
   }
 
   /** @inheritdoc */
@@ -690,7 +646,9 @@ class DialogueOverlayViewModel
 
     // Use a default skill check — persuasion vs DC 12
     const difficultyClass = 12;
-    const { statModifier, statModifierValue } = this._getStatModifier('persuasion');
+    const skillEntry = SKILL_STAT_MAP['persuasion'];
+    const statModifier = skillEntry?.stat ?? '—';
+    const statModifierValue = skillEntry?.defaultModifier ?? 0;
     const targetNumber = Math.max(1, difficultyClass - statModifierValue);
 
     // Show the declared DC before rolling
@@ -821,18 +779,66 @@ class DialogueOverlayViewModel
     // Brief pause so the player can absorb the outcome
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
 
-    // Now send the action + dice result to the LLM for narrative resolution
-    await this._executeSkillCheckAction({
-      skill: state.checkType,
+    // ── C-371: Call #2 — roll resolution ────────────────────────────
+    await this._executeRollResolution({
+      checkType: state.checkType,
       difficultyClass: state.difficultyClass,
       rollValue,
+      total,
       isSuccess,
     });
 
-    // Clear dice overlay and return to menu for the next action
+    // Clear dice overlay and return to FREE_TEXT
     this.skillCheckState = null;
-    this.selectedActionId = null;
-    this.dialoguePhase = 'MENU';
+    this.dialoguePhase = 'FREE_TEXT';
+  }
+
+  /**
+   * C-371: Call #2 — sends the dice outcome to the LLM for narrative resolution.
+   */
+  private async _executeRollResolution(options: {
+    checkType: string;
+    difficultyClass: number;
+    rollValue: number;
+    total: number;
+    isSuccess: boolean;
+  }): Promise<void> {
+    const { checkType, difficultyClass, total, isSuccess } = options;
+    this.isResolvingSkillCheck = true;
+
+    try {
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
+        (m) => ({
+          role: m.role,
+          content: m.content,
+        }),
+      );
+
+      const lastPlayerMsg = [...this.messages].reverse().find((m) => m.role === 'player');
+      const playerInput = lastPlayerMsg?.content ?? '';
+
+      const resolution = await this._npcDialogueService.resolveRoll({
+        npcId: this._npcData.npcId,
+        npcName: this._npcData.npcName,
+        messages,
+        signal: new AbortController().signal,
+        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        checkType,
+        difficultyClass,
+        rollTotal: total,
+        outcome: isSuccess ? 'pass' : 'fail',
+        playerInput,
+      });
+
+      this._appendNpcMessage(resolution.narrative_result);
+      this.suggestedChips = resolution.suggested_chips;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.warn('_executeRollResolution:failed', { msg });
+      this.streamError = msg;
+    } finally {
+      this.isResolvingSkillCheck = false;
+    }
   }
 
   /** @inheritdoc */
@@ -845,6 +851,7 @@ class DialogueOverlayViewModel
     // Clear input immediately so the player sees feedback
     this.inputText = '';
     this.streamError = null;
+    this.suggestedChips = [];
 
     // Clear the per-chat draft since a message is being sent
     void draftStore.clearDraft({ chatId: this._npcData.npcId });
@@ -861,8 +868,79 @@ class DialogueOverlayViewModel
     };
     this.messages = [...this.messages, playerMessage];
 
-    // Delegate to the NPC dialogue orchestrator (handles AI + fallback)
-    await this._delegateGenerateResponse();
+    // ── C-371: Two-call pipeline ────────────────────────────────────
+    if (this._npcDialogueService.useFreeTextFirst) {
+      await this._sendWithIntentAnalysis(content);
+    } else {
+      // Legacy path — single-call generateTurn
+      await this._delegateGenerateResponse();
+    }
+  }
+
+  /**
+   * C-371: Sends a player message through the two-call intent analysis pipeline.
+   * Call #1 (analyzeIntent) → if roll needed: DECLARED_DC → dice → rollDice → call #2.
+   * If no roll needed: display narrative + chips directly.
+   */
+  private async _sendWithIntentAnalysis(content: string): Promise<void> {
+    this.isStreaming = true;
+
+    const controller = new AbortController();
+    this._activeAbortController = controller;
+
+    try {
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
+        (m) => ({
+          role: m.role,
+          content: m.content,
+        }),
+      );
+
+      const analysis = await this._npcDialogueService.analyzeIntent({
+        npcId: this._npcData.npcId,
+        npcName: this._npcData.npcName,
+        messages,
+        signal: controller.signal,
+        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+      });
+
+      // Display the pre-roll narrative
+      this._appendNpcMessage(analysis.narrative_pre_roll);
+
+      // Show suggestion chips
+      this.suggestedChips = analysis.suggested_chips;
+
+      if (analysis.requires_roll && analysis.check_type && analysis.difficulty_class) {
+        // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
+        const modSource = analysis.modifier_source ?? '—';
+        const modValue = 0; // TODO: read from character sheet when available
+        const targetNumber = Math.max(1, analysis.difficulty_class - modValue);
+
+        this.skillCheckState = {
+          checkType: analysis.check_type,
+          difficultyClass: analysis.difficulty_class,
+          statModifier: modSource,
+          statModifierValue: modValue,
+          targetNumber,
+          rollValue: null,
+          phase: 'declared',
+          isSuccess: null,
+        };
+        this.dialoguePhase = 'DECLARED_DC';
+      } else {
+        // ── No roll needed: stay in FREE_TEXT ────────────────────────
+        this.dialoguePhase = 'FREE_TEXT';
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.warn('_sendWithIntentAnalysis:failed', { msg });
+      this.streamError = msg;
+    } finally {
+      this.isStreaming = false;
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
+    }
   }
 
   /** @inheritdoc */
@@ -1363,68 +1441,6 @@ class DialogueOverlayViewModel
   }
 
   // ── Private: Action Menu Helpers (C-162) ───────────────────────────
-
-  /**
-   * Returns a difficulty class for the given skill check against this NPC.
-   *
-   * Base DC is 12; harder NPC personas (guard, bandit, guildMaster) get
-   * +2, softer personas (innkeeper, healer, merchant) get -2.
-   *
-   * Contract: C-162 BG3 Action Menu & Dice
-   */
-  private _getDifficultyClass(_skill: string): number {
-    const hardPersonas = ['guard', 'bandit', 'guildMaster'] as const;
-    const softPersonas = ['innkeeper', 'healer', 'merchant'] as const;
-    const personaId = this._npcData.personaId ?? 'default';
-
-    if (hardPersonas.includes(personaId as (typeof hardPersonas)[number])) {
-      return 14;
-    }
-    if (softPersonas.includes(personaId as (typeof softPersonas)[number])) {
-      return 10;
-    }
-    return 12;
-  }
-
-  /**
-   * Returns the player's stat modifier for the given skill.
-   *
-   * Maps skills to stat abbreviations and provides default modifier values
-   * for the demo. In a full implementation, this would read from the
-   * player's character sheet.
-   *
-   * Contract: C-330 Declared-DC — modifier must be shown before RNG
-   */
-  private _getStatModifier(skill: string): {
-    statModifier: string;
-    statModifierValue: number;
-  } {
-    const SkillStatMap: Record<string, { label: string; value: number }> = {
-      persuasion: { label: 'CHA', value: 2 },
-      intimidation: { label: 'STR', value: 1 },
-      // biome-ignore lint/style/useNamingConvention: content pack skill key convention
-      sleight_of_hand: { label: 'DEX', value: 1 },
-      stealth: { label: 'DEX', value: 1 },
-      insight: { label: 'WIS', value: 1 },
-      investigation: { label: 'INT', value: 0 },
-      arcana: { label: 'INT', value: 0 },
-      religion: { label: 'INT', value: 0 },
-      nature: { label: 'WIS', value: 1 },
-      medicine: { label: 'WIS', value: 1 },
-      survival: { label: 'WIS', value: 1 },
-      performance: { label: 'CHA', value: 1 },
-      deception: { label: 'CHA', value: 2 },
-      acrobatics: { label: 'DEX', value: 1 },
-      athletics: { label: 'STR', value: 2 },
-    };
-
-    const entry = SkillStatMap[skill];
-    if (entry) {
-      return { statModifier: entry.label, statModifierValue: entry.value };
-    }
-    // Default: no modifier
-    return { statModifier: '—', statModifierValue: 0 };
-  }
 
   /**
    * Bypasses the LLM entirely and triggers combat against the current NPC.
