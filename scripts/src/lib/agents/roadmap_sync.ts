@@ -251,7 +251,7 @@ const fetchProjectMeta = (options: { owner: string; number: number }): ProjectMe
       '-F',
       `number=${options.number}`,
     ]);
-    pv2 = userResult.data?.user?.projectV2;
+    pv2 = userResult.data?.user?.projectV2 ?? null;
   }
   if (!pv2) {
     throw new Error(`Project v2 #${options.number} not found via GraphQL for @${options.owner}`);

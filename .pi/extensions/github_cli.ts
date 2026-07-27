@@ -2708,8 +2708,6 @@ export default function (pi: ExtensionAPI) {
         };
 
         let allItems: ProjectItemNode[] = [];
-        let projectId = '';
-        let projectTitle = '';
         let cursor: string | null = null;
         let hasNextPage = true;
 
@@ -2753,11 +2751,6 @@ export default function (pi: ExtensionAPI) {
           if (!pv2) {
             hasNextPage = false;
             break;
-          }
-
-          if (cursor === null) {
-            projectId = pv2.id;
-            projectTitle = pv2.title;
           }
 
           allItems.push(...pv2.items.nodes);
@@ -2813,11 +2806,6 @@ export default function (pi: ExtensionAPI) {
             if (!pv2) {
               hasNextPage = false;
               break;
-            }
-
-            if (cursor === null) {
-              projectId = pv2.id;
-              projectTitle = pv2.title;
             }
 
             allItems.push(...pv2.items.nodes);

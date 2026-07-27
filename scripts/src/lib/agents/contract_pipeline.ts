@@ -63,7 +63,7 @@ const parseArguments = (): CliArguments => {
     sourceRaw === 'roadmap' || sourceRaw === 'direct' ? sourceRaw : 'todo';
 
   return {
-    target: args.find((value) => !value.startsWith('--') && !consumed.has(value)),
+    target: args.find((value) => !value.startsWith('-') && !consumed.has(value)),
     source,
     resumeRunId: valueAfter('--resume'),
     launcherToken: valueAfter('--launcher-token'),
@@ -253,7 +253,7 @@ const handleRoadmapSource = (target: string): void => {
   }
 
   // Check if we found an existing contract — if so, reuse it
-  const existingContractFound = existsSync(contractPath);
+  const existingContractFound = existsSync(contractPath!);
   if (existingContractFound) {
     console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
@@ -302,7 +302,7 @@ const handleRoadmapSource = (target: string): void => {
       .replace(/issue_number:\s*null/, `issue_number: ${issueNum}`)
       .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
-    writeFileSync(contractPath, finalContent);
+    writeFileSync(contractPath!, finalContent);
     console.log(`✅ Contract frozen from roadmap: ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
