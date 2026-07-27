@@ -534,6 +534,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const contractId = extractContractId(options.request.contractPath);
     const isRetry = options.request.attempt > 1;
     const parts: string[] = [];
+
+    // Interactive writer: wait for user to describe the feature, then create the contract.
+    const isInteractiveWriter =
+      this._interactiveWriter && options.request.role === 'writer' && !isRetry;
+
     parts.push(
       isRetry
         ? [
@@ -545,16 +550,35 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
             '   `contract_stage_complete` with that same status. Do NOT redo work.',
             '3. Only do new work if no valid result exists yet.',
           ].join('\n')
-        : `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`,
+        : isInteractiveWriter
+          ? [
+              `👋 Welcome to direct contract drafting for ${contractId}.`,
+              '',
+              'The user will describe their feature in this chat. Wait for their',
+              'description, then create a complete contract specification:',
+              '',
+              '1. Call `contract_generate` with the feature code to create the v2 shell',
+              '2. Read `docs/contracts/TEMPLATE.md` for the required sections',
+              '3. Inspect the codebase to fill in architecture directives, data models,',
+              '   and baseline evidence',
+              '4. Write concrete Given/When/Then acceptance criteria',
+              '5. Fill every section — no TBD or placeholders',
+              '6. Set status to `draft` and call `contract_stage_complete`',
+              '',
+              '🔴 Your LAST action MUST call contract_stage_complete.',
+            ].join('\n')
+          : `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`,
     );
     if (options.request.userMessage) {
       parts.push(options.request.userMessage);
     }
-    parts.push(
-      'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
-      'Printing a text summary without the tool call will block the pipeline forever.',
-      'Do not ask questions — if blocked, finish with status blocked.',
-    );
+    if (!isInteractiveWriter) {
+      parts.push(
+        'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
+        'Printing a text summary without the tool call will block the pipeline forever.',
+        'Do not ask questions — if blocked, finish with status blocked.',
+      );
+    }
 
     const taskMessagePath = join(
       this._repoRoot,
@@ -575,9 +599,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     if (!this._headless) {
       // TUI mode — send task text via PTY.
-      const taskText = isRetry
-        ? `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
-        : `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
+      let taskText: string;
+      if (isRetry) {
+        taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`;
+      } else if (isInteractiveWriter) {
+        taskText = `👋 Welcome to direct contract drafting for ${contractId}! Describe your feature and I'll create the full contract specification.`;
+      } else {
+        taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
+      }
       await this._sendTaskText({ paneId, text: taskText });
     }
     return { paneId };
