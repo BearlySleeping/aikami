@@ -353,31 +353,7 @@ const { viewModel }: Props = $props();
             Recruit {viewModel.npcName}
           </button>
         </div>
-      {:else if viewModel.dialoguePhase === 'MENU'}
-        <div class="flex flex-wrap gap-2">
-          {#each viewModel.actionOptions as action (action.id)}
-            <button
-              type="button"
-              class="btn btn-sm {action.type === 'direct_combat' ? 'btn-error' : action.type === 'skill_check' ? 'btn-outline btn-info' : 'btn-ghost'}"
-              onclick={() => viewModel.selectAction(action.id)}
-              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-            >
-              {#if action.type === 'direct_combat'}
-                ⚔️
-              {:else if action.skill === 'persuasion'}
-                🗣️
-              {:else if action.skill === 'intimidation'}
-                😠
-              {:else if action.skill === 'sleight_of_hand'}
-                🤫
-              {:else}
-                ✏️
-              {/if}
-              {action.label}
-            </button>
-          {/each}
-        </div>
-      {:else if viewModel.dialoguePhase === 'CUSTOM_INPUT'}
+      {:else}
         <div class="flex items-end gap-2">
           <div class="flex-1">
             <AutoResizeTextarea
@@ -385,7 +361,7 @@ const { viewModel }: Props = $props();
               onchange={(text) => viewModel.setInput(text)}
               onkeydown={(e) => viewModel.handleKeyDown(e)}
               disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-              placeholder="Type your message..."
+              placeholder="What do you say to {viewModel.npcName}?"
               class="w-full"
             />
           </div>
@@ -441,10 +417,7 @@ const { viewModel }: Props = $props();
             🎲
           </button>
         </div>
-        <div class="mt-2 flex items-center justify-between">
-          <button type="button" class="btn btn-ghost btn-xs" onclick={() => viewModel.goToMenu()}>
-            ← Back to actions
-          </button>
+        <div class="mt-2 flex items-center justify-end">
           <!-- Streaming TTS toggle -->
           <div class="flex items-center gap-1">
             <span class="text-xs text-base-content/50">TTS</span>
@@ -465,80 +438,35 @@ const { viewModel }: Props = $props();
             </span>
           </div>
         {/if}
-      {:else}
-        <div class="flex items-end gap-2">
-          <div class="flex-1">
-            <AutoResizeTextarea
-              value={viewModel.inputText}
-              onchange={(text) => viewModel.setInput(text)}
-              onkeydown={(e) => viewModel.handleKeyDown(e)}
-              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-              placeholder="Type your message..."
-              class="w-full"
-            />
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm {viewModel.isStreaming ? 'btn-error' : 'btn-primary'}"
-            onclick={() => viewModel.isStreaming ? viewModel.cancelStreaming() : viewModel.sendMessage()}
-            disabled={viewModel.isResolvingSkillCheck || (!viewModel.isStreaming && !viewModel.inputText.trim())}
-          >
-            {#if viewModel.isResolvingSkillCheck}
-              <span class="loading loading-spinner loading-xs"></span>
-            {:else if viewModel.isStreaming}
-              Cancel
-            {:else}
-              Send
-            {/if}
-          </button>
-          <!-- C-234: Quick-dice button → popover -->
-          {#if showDicePopover}
-            <div class="absolute bottom-20 right-4 z-50 w-64">
-              <DiceQuickMenu
-                queuedRolls={queuedDice}
-                onQueueRoll={(opts) => {
-                  const id = `qd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-                  queuedDice = [...queuedDice, { id, notation: opts.notation, label: opts.label, timestamp: Date.now() }];
-                }}
-                onRemoveQueuedRoll={(id) => {
-                  queuedDice = queuedDice.filter((r) => r.id !== id);
-                }}
-                onRollAll={() => {
-                  const results = queuedDice.map((r) => {
-                    let total = 0;
-                    for (let i = 0; i < r.notation.count; i++) {
-                      total += Math.floor(Math.random() * r.notation.sides) + 1;
-                    }
-                    const label = r.label !== r.notation.label ? `${r.label} (${r.notation.label})` : r.notation.label;
-                    return `${label}: ${total}`;
-                  });
-                  queuedDice = [];
-                  showDicePopover = false;
-                  viewModel.setInput(`🎲 Dice Roll — ${results.join(' | ')}`);
-                }}
-                isRolling={false}
-              />
-            </div>
-          {/if}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs"
-            onclick={() => (showDicePopover = !showDicePopover)}
-            title="Quick Dice Roll"
-          >
-            🎲
-          </button>
-        </div>
-        <!-- C-343: Draft recovery badge -->
-        {#if viewModel.showDraftRecovery}
-          <div class="mt-1">
-            <span class="badge badge-info badge-sm gap-1" aria-live="polite">
-              <span>📝</span>
-              Draft restored
-            </span>
-          </div>
-        {/if}
       {/if}
     </div>
   </div>
+
+  <!-- C-371: Suggestion chips — rendered below the dialogue box -->
+  {#if viewModel.suggestedChips.length > 0}
+    <div
+      class="mx-auto mb-4 flex w-full max-w-2xl gap-2 overflow-x-auto px-2"
+      data-testid="suggestion-chips"
+    >
+      {#each viewModel.suggestedChips as chip (chip.id)}
+        <button
+          type="button"
+          class="btn btn-sm btn-outline shrink-0 normal-case"
+          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          onclick={() => viewModel.handleChipTap(chip.id)}
+          aria-label="{chip.label}"
+        >
+          <span class="mr-1">
+            {#if chip.intent_type === 'skill_check'}🎲
+            {:else if chip.intent_type === 'combat'}⚔️
+            {:else if chip.intent_type === 'trade'}💰
+            {:else if chip.intent_type === 'quest'}📋
+            {:else}💬
+            {/if}
+          </span>
+          {chip.label}
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
