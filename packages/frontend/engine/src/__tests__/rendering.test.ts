@@ -1268,7 +1268,7 @@ describe('C-370 AC-2: Equipment updates preserve body layer invariant', () => {
     const newLayers = [...currentLayers];
 
     // C-370: enforce body layer invariant
-    if (!newLayers[0]) {
+    if ((newLayers[0] ?? 0) <= 0) {
       newLayers[0] = 1;
     }
 
@@ -1291,7 +1291,7 @@ describe('C-370 AC-2: Equipment updates preserve body layer invariant', () => {
     const newLayers = [...currentLayers];
 
     // C-370: enforce body layer invariant
-    if (!newLayers[0]) {
+    if ((newLayers[0] ?? 0) <= 0) {
       newLayers[0] = 1;
     }
 
@@ -1313,13 +1313,43 @@ describe('C-370 AC-2: Equipment updates preserve body layer invariant', () => {
     expect(torsoRecipe?.assetId).toBe('2');
   });
 
+  it('repairs body layer when initial value is -1 and applies equipment change (regression)', () => {
+    // C-370 regression: negative body layer values must trigger repair.
+    // The production invariant uses <= 0, not a falsy check.
+    const currentLayers = [-1, 0, 1, 0, 0]; // body=-1 (invalid)
+    const newLayers = [...currentLayers];
+
+    // C-370: enforce body layer invariant
+    if ((newLayers[0] ?? 0) <= 0) {
+      newLayers[0] = 1;
+    }
+
+    // Simulate armor equip: ironArmor → layer index 3 for torso
+    newLayers[2] = 3;
+
+    // Body layer must be repaired to default
+    expect(newLayers[0]).toBe(1);
+    // Torso must reflect the equipment change
+    expect(newLayers[2]).toBe(3);
+
+    // Resolve recipes — body is default, torso uses armor mapping
+    const recipes: LpcLayerRecipe[] = testRecipeResolver(newLayers);
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('1');
+
+    const torsoRecipe = recipes.find((r) => r.slot === 'torso');
+    expect(torsoRecipe).toBeDefined();
+    expect(torsoRecipe?.assetId).toBe('3');
+  });
+
   it('equipment removal (armor unequip) does not affect body layer', () => {
     // Player unequips armor — torso reverts to default 1, body stays at 3
     const currentLayers = [3, 0, 3, 0, 0]; // body=3, torso=3 (iron armor)
     const newLayers = [...currentLayers];
 
     // C-370: enforce body layer invariant (already valid in this case)
-    if (!newLayers[0]) {
+    if ((newLayers[0] ?? 0) <= 0) {
       newLayers[0] = 1;
     }
 

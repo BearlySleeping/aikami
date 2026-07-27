@@ -541,16 +541,16 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const newSprites: Sprite[] = [];
 
       const layerPromises = currentRecipes.map(async (recipe, i) => {
-        const layer = this.activeLayers[i];
-        if (!recipe || !layer) {
+        if (!recipe) {
           return;
         }
 
-        const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
-        const variant = slotDef?.variants[layer.variantIndex];
-        if (!variant) {
-          return;
-        }
+        // Resolve texture slot and assetId from the recipe entry directly.
+        // This works for both activeLayers-derived recipes and injected
+        // recipes (e.g. body fallback) that don't map to an active layer.
+        // activeLayers is only used for per-layer palette settings below.
+        const recipeSlot = recipe.slot;
+        const recipeAssetId = recipe.assetId;
 
         // Load webp spritesheet for the current animation state
         const stateMap: Record<number, string> = {
@@ -564,18 +564,18 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const stateSuffix = stateMap[currentState] ?? 'walk';
         let texture = await this._loadSheetTexture(
           '',
-          slotDef.slot,
-          `${variant.assetId}.${stateSuffix}`,
+          recipeSlot,
+          `${recipeAssetId}.${stateSuffix}`,
         );
 
         // Head fallback: if the configured head spritesheet fails to load,
         // retry with the default human male head. The character still renders
         // with the intended palette tint — only the spritesheet geometry changes.
-        if ((!texture || texture === Texture.EMPTY) && slotDef.slot === 'head') {
+        if ((!texture || texture === Texture.EMPTY) && recipeSlot === 'head') {
           const defaultAssetId = `${LPC_DEFAULT_HEAD_ASSET_ID}.${stateSuffix}`;
-          if (defaultAssetId !== `${variant.assetId}.${stateSuffix}`) {
+          if (defaultAssetId !== `${recipeAssetId}.${stateSuffix}`) {
             this.warn('lpc.headFallback', {
-              original: variant.assetId,
+              original: recipeAssetId,
               fallback: LPC_DEFAULT_HEAD_ASSET_ID,
             });
             texture = await this._loadSheetTexture('', 'head', defaultAssetId);
