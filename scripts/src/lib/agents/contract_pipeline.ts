@@ -355,10 +355,37 @@ const resolveIssueFromProject = (searchTitle: string): number | undefined => {
 const prepareDirectSource = (repoRoot: string): string => {
   const contractsDir = join(repoRoot, 'docs/contracts');
 
-  // Determine next contract ID from existing files on disk
+  // Determine next contract ID from existing files on disk.
+  // Check for existing direct-draft placeholders first (idempotent
+  // across foreground+background process launches).
   const existingContracts = existsSync(contractsDir)
     ? readdirSync(contractsDir).filter((f) => /^C-\d+/.test(f) && f.endsWith('.md'))
     : [];
+
+  // Reuse an existing placeholder if one exists (no slug — bare C-XXX.md)
+  const existingPlaceholder = existingContracts.find(
+    (f) => /^C-\d+\.md$/.test(f),
+  );
+  if (existingPlaceholder) {
+    const id = existingPlaceholder.replace('.md', '');
+    console.log(
+      [
+        '',
+        '═══════════════════════════════════════════',
+        `  Contract ID: ${id} (reusing existing placeholder)`,
+        '═══════════════════════════════════════════',
+        '',
+        'A writer pi session will open in a moment.',
+        'Describe your feature in the chat and the writer',
+        'will create the full contract specification.',
+        '',
+        '═══════════════════════════════════════════',
+        '',
+      ].join('\n'),
+    );
+    return id;
+  }
+
   const maxId = existingContracts.reduce((max: number, f: string) => {
     const match = f.match(/^C-(\d+)/);
     return match ? Math.max(max, Number(match[1])) : max;

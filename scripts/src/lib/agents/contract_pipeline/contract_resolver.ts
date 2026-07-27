@@ -49,11 +49,19 @@ export const resolveContract = (options: { target: string; repoRoot: string }): 
 
   const contractsDirectory = resolve(options.repoRoot, CONTRACTS_DIR);
   if (existsSync(contractsDirectory)) {
+    // First: look for a full contract (C-XXX-slug.md)
     const existingFile = readdirSync(contractsDirectory).find(
       (file) => file.startsWith(`${identifier}-`) && file.endsWith('.md'),
     );
     if (existingFile) {
       return parseContract(join(contractsDirectory, existingFile));
+    }
+    // Second: look for a placeholder (C-XXX.md, no slug — from --source direct)
+    const placeholderFile = readdirSync(contractsDirectory).find(
+      (file) => file === `${identifier}.md`,
+    );
+    if (placeholderFile) {
+      return parseContract(join(contractsDirectory, placeholderFile));
     }
   }
 
