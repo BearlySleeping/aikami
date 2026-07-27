@@ -96,8 +96,35 @@ const DEFAULT_COMPANION_APPROVAL = 0;
 /** Default tint for props (white = no tint). */
 const PROP_TINT = 0xffffff;
 
-/** Default Appearance layer IDs for NPCs — 6-layer stack (body, hair, torso, legs, feet, head). */
-const NPC_APPEARANCE_LAYERS: readonly number[] = [10, 11, 14, 12, 15, 13];
+/** Default Appearance layer IDs for NPCs — 6-layer stack (body, hair, torso, legs, feet, head).
+ * 1-indexed variant numbers within each engine slot.
+ * body=3 (bodies_male), hair=3 (bangs), torso=23 (chainmail_male),
+ * legs=22 (pants_male), feet=7 (boots/basic_male), head=95 (heads/human_male). */
+const NPC_APPEARANCE_LAYERS: readonly number[] = [3, 3, 23, 22, 7, 95];
+
+/**
+ * Reads appearance layer indices from a SpawnPoint's properties.
+ * Falls back to {@link NPC_APPEARANCE_LAYERS} when not present.
+ *
+ * Accepts a comma-separated string of 1-indexed variant numbers
+ * (e.g. "3,3,23,22,7,95") matching the engine slot order:
+ * body, hair, torso, legs, feet, head.
+ */
+const _getNpcAppearanceLayers = (spawnPoint: SpawnPoint): readonly number[] => {
+  const raw = _getStringProperty(spawnPoint.properties, 'appearanceLayers', '');
+  if (!raw) {
+    return NPC_APPEARANCE_LAYERS;
+  }
+  const parts = raw.split(',').map((s) => Number.parseInt(s.trim(), 10));
+  if (parts.length < 6) {
+    return NPC_APPEARANCE_LAYERS;
+  }
+  // Validate all are finite numbers >= 1
+  if (parts.some((p) => !Number.isFinite(p) || p < 1)) {
+    return NPC_APPEARANCE_LAYERS;
+  }
+  return parts;
+};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -315,7 +342,8 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   );
 
   addComponent(world, eid, Appearance);
-  setAppearanceLayers(world, eid, NPC_APPEARANCE_LAYERS);
+  const appearanceLayers = _getNpcAppearanceLayers(spawnPoint);
+  setAppearanceLayers(world, eid, appearanceLayers);
 
   addComponent(world, eid, NPCDialog);
   addComponent(

@@ -214,29 +214,13 @@ class MapSandboxViewModel
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
 
-      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
-        // Player — 6-layer stack
-        1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
-        2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
-        5: { slot: 'torso', assetId: 'torso/chainmail_male', hexPalette: paletteBytes },
-        3: { slot: 'legs', assetId: 'legs/pants_male', hexPalette: paletteBytes },
-        6: { slot: 'feet', assetId: 'feet/shoes/male', hexPalette: paletteBytes },
-        4: { slot: 'head', assetId: 'head/heads/human_male', hexPalette: paletteBytes },
-        // NPC — 6-layer stack
-        10: { slot: 'body', assetId: 'body/bodies_female', hexPalette: paletteBytes },
-        11: { slot: 'hair', assetId: 'hair/long_adult', hexPalette: paletteBytes },
-        14: { slot: 'torso', assetId: 'torso/chainmail_female', hexPalette: paletteBytes },
-        12: { slot: 'legs', assetId: 'legs/pants_female', hexPalette: paletteBytes },
-        15: { slot: 'feet', assetId: 'feet/shoes/female', hexPalette: paletteBytes },
-        13: { slot: 'head', assetId: 'head/heads/human_female', hexPalette: paletteBytes },
-      };
+      const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
         textureManager: tm,
-        recipeResolver: (layerIds) =>
-          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
+        recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),

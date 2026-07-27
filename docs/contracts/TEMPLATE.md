@@ -1,3 +1,16 @@
+---
+id: {FEATURE_CODE}
+title: "{TITLE}"
+source: "{source}"
+status: draft
+github:
+  issue_number: null
+  issue_url: null
+  project_item_id: null
+  pr_url: null
+created_at: "{created_at}"
+---
+
 # Contract {FEATURE_CODE}: {TITLE}
 
 ## Metadata

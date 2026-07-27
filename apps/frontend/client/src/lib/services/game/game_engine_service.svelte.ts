@@ -6,6 +6,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { PersonaData } from '@aikami/types';
 import { logger } from '$logger';
 import { audioContextManager, audioService, personaService } from '$services';
@@ -469,13 +470,14 @@ class GameEngineService
         '$lib/data/lpc_asset_catalog_generated'
       );
 
-      const playerData = this._buildPlayerData();
       const textureManager = new TextureManager();
 
       const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
         generatedLpcSlots,
         (slot, assetId, state) => getLpcAssetPath(slot, assetId, state as unknown as number),
       );
+
+      const playerData = this._buildPlayerData();
 
       this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',
@@ -549,42 +551,77 @@ class GameEngineService
     const lpcRecipe = (this._activePersona.appearance as Record<string, unknown> | undefined)
       ?.lpcRecipe as Record<string, string> | undefined;
 
-    if (!lpcRecipe) {
-      return playerData;
-    }
-
     const { generatedLpcSlots } = this._getLpcCatalogSync();
-    if (!generatedLpcSlots) {
+    if (generatedLpcSlots.length === 0) {
+      this.warn('lpc.engine.noCatalog');
       return playerData;
     }
 
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+    // Build slot → catalog index lookup first
     const slotIndexMap = new Map<string, number>();
     for (let i = 0; i < generatedLpcSlots.length; i++) {
       slotIndexMap.set(generatedLpcSlots[i].slot, i);
     }
 
+    // Use DEFAULT_LPC_RECIPE as the base. Only allow persona's recipe
+    // to override slots where the asset ID is valid in the catalog.
+    const effectiveRecipe: Record<string, string> = { ...DEFAULT_LPC_RECIPE };
+    if (lpcRecipe) {
+      for (const [slot, assetId] of Object.entries(lpcRecipe)) {
+        const catalogIdx = slotIndexMap.get(slot);
+        if (catalogIdx !== undefined) {
+          const slotDef = generatedLpcSlots[catalogIdx];
+          const found = slotDef?.variants.some((v) => v.assetId === assetId);
+          if (found) {
+            effectiveRecipe[slot] = assetId;
+          }
+        }
+      }
+    }
+
+    this.debug('lpc.engine.PlayerData', {
+      personaId: this._activePersona.id,
+      personaName: this._activePersona.name,
+      hasRecipe: !!lpcRecipe,
+      recipeSlots: lpcRecipe ? Object.keys(lpcRecipe).join(',') : 'none',
+      recipeRaw: lpcRecipe ?? {},
+      effectiveRecipe,
+    });
+
+    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+
+    const SLOT_FALLBACKS: Record<string, number> = {
+      body: 3,
+      hair: 3,
+      torso: 23,
+      legs: 22,
+      feet: 7,
+      head: 95,
+    };
+
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = lpcRecipe[slotName];
+      const assetId = effectiveRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : 1);
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
     }
     playerData.appearanceLayers = appearanceLayers;
+
+    this.debug('lpc.engine.appearanceLayers', { appearanceLayers });
 
     return playerData;
   }

@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-25)
+## Status Summary (Auto-generated: 2026-07-27)
 
-**164 active (24 without contract file), 119 archived, 2 duplicates**
+**165 active (24 without contract file), 119 archived, 2 duplicates**
 
 ### Active Contracts
 
@@ -172,6 +172,7 @@
 | C-367 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | — | — |
 | C-368 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
 | C-369 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
+| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | — | v2 |
 
 ---
 

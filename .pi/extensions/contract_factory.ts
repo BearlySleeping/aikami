@@ -416,7 +416,11 @@ export default function (pi: ExtensionAPI) {
 
       // Step 1: Only substitute {FEATURE_CODE} and {TITLE} globally.
       // These appear in the H1 heading — no template hints use these exact tokens.
-      let filled = template.replace(/\{FEATURE_CODE\}/g, item.id).replace(/\{TITLE\}/g, item.title);
+      let filled = template
+        .replace(/\{FEATURE_CODE\}/g, item.id)
+        .replace(/\{TITLE\}/g, item.title)
+        .replace(/\{source\}/g, 'todo')
+        .replace(/\{created_at\}/g, new Date().toISOString());
 
       // Step 2: Rewrite Metadata table rows using structured markdown matching.
       // Replaces the ENTIRE row (including display hints like P{0|1|2|3})
@@ -507,12 +511,15 @@ export default function (pi: ExtensionAPI) {
       'Provision an isolated Git Worktree for a contract task. ' +
       'Creates a worktree at .pi/workspaces/<id> on a new branch and returns ' +
       'the absolute path and branch name. Use BEFORE writing files or ' +
-      'running compilation tools in a contract task.',
+      'running compilation tools in a contract task. ' +
+      'For interactive development, use `bun run contract C-XXX --root` instead — ' +
+      'it works directly in the repo root without a worktree.',
     promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated Git Worktree.',
     promptGuidelines: [
       'Call this before any file mutations or build steps in a contract pipeline.',
       'Use the returned branch_name for reference.',
       'Workspace directories live under .pi/workspaces/ and are .gitignored.',
+      'For local interactive development, prefer `bun run contract C-XXX --root` which switches the branch directly in the repo root instead of creating a worktree.',
     ],
     parameters: Type.Object({
       taskId: Type.String({

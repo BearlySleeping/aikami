@@ -28,7 +28,7 @@
     "test:unit": "bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.22.0",
+    "@inlang/paraglide-js": "2.23.0",
     "@playwright/test": "1.61.1",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "2.70.1",
@@ -39,9 +39,9 @@
     "@types/node": "26.1.1",
     "@types/png-chunks-extract": "1.0.2",
     "@types/text-encoding": "0.0.40",
-    "daisyui": "5.7.0",
+    "daisyui": "5.7.4",
     "rollup-plugin-visualizer": "7.0.1",
-    "svelte": "5.56.7",
+    "svelte": "5.56.8",
     "svelte-check": "4.7.3",
     "tailwindcss": "4.3.3",
     "vite": "8.1.5",
