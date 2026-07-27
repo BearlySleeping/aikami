@@ -97,7 +97,34 @@ export const acquireLock = async (options: {
       return;
     }
 
-    // Process is alive — check if its herdr workspace still exists.
+    // Process is alive — check if its run is in a terminal state.
+    // A blocked/merged/completed run no longer needs the lock.
+    if (existing.runId) {
+      const manifestPath = join(
+        options.cwd,
+        RUNS_DIR,
+        existing.runId,
+        'manifest.json',
+      );
+      try {
+        const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+          currentStage?: string;
+        };
+        const terminalStages = new Set(['blocked', 'merged', 'pr_created']);
+        if (raw.currentStage && terminalStages.has(raw.currentStage)) {
+          // Run is in a terminal state — orphaned lock. Break it.
+          console.log(
+            `🔓 Breaking stale lock for ${existing.contractId} (run ${existing.runId} at ${raw.currentStage}).`,
+          );
+          removeFile(path);
+          return;
+        }
+      } catch {
+        // Manifest unreadable — fall through to workspace check.
+      }
+    }
+
+    // Check if its herdr workspace still exists.
     if (options.checkWorkspaceAlive && existing.runId) {
       const workspaceAlive = await options.checkWorkspaceAlive(existing.runId);
       if (!workspaceAlive) {
@@ -108,7 +135,9 @@ export const acquireLock = async (options: {
     }
 
     throw new Error(
-      `Pipeline already running for ${options.contractId} (PID ${existing.pid}, run ${existing.runId}).`,
+      `Pipeline already running for ${options.contractId} (PID ${existing.pid}, run ${existing.runId}).\n` +
+        `  Kill it: kill ${existing.pid}\n` +
+        `  Then re-run your command.`,
     );
   };
 
