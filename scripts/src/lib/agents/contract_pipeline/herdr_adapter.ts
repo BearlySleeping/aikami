@@ -189,7 +189,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
     this._workspaceLabel = `aikami-contract-${options.contractId}`;
-    this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS === '1';
+    this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS !== '0';
     this._interactiveWriter = options.interactiveWriter ?? false;
   }
 
@@ -395,6 +395,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     console.warn(`⚠️  Prompt to ${options.paneId} unacked after Enter retries — pane may be dead`);
   }
 
+  /** JSON mode (no PTY): headless AND not an interactive writer.
+   *  Hoisted so both _buildWorkerCommand and _createWorkerTab
+   *  use the same decision — prevents the latent bug where one
+   *  site builds a TUI command but the other skips the PTY send. */
+  private _useJsonMode(role: ContractWorkerRole): boolean {
+    return this._headless && !(this._interactiveWriter && role === 'writer');
+  }
+
   private _buildWorkerCommand(
     request: WorkerLaunchRequest,
     sessionId: string | undefined,
@@ -443,7 +451,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // to protect inline env vars ('C' in CONTRACT_PIPELINE_RUN_ID).
     // Without this, the shell tries to execute "ONTRACT_PIPELINE_RUN_ID=..." as a
     // command, losing all pipeline env vars.
-    const useHeadless = this._headless && !(this._interactiveWriter && request.role === 'writer');
+    const useHeadless = this._useJsonMode(request.role);
     if (useHeadless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return [
@@ -597,7 +605,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     );
     await runPaneCommand({ paneId, command: startCommand });
 
-    if (!this._headless) {
+    if (!this._useJsonMode(options.request.role)) {
       // TUI mode — send task text via PTY.
       let taskText: string;
       if (isRetry) {
