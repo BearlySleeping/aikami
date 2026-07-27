@@ -470,13 +470,14 @@ class GameEngineService
         '$lib/data/lpc_asset_catalog_generated'
       );
 
-      const playerData = this._buildPlayerData();
       const textureManager = new TextureManager();
 
       const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
         generatedLpcSlots,
         (slot, assetId, state) => getLpcAssetPath(slot, assetId, state as unknown as number),
       );
+
+      const playerData = this._buildPlayerData();
 
       this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',
@@ -551,7 +552,7 @@ class GameEngineService
       ?.lpcRecipe as Record<string, string> | undefined;
 
     const { generatedLpcSlots } = this._getLpcCatalogSync();
-    if (!generatedLpcSlots) {
+    if (generatedLpcSlots.length === 0) {
       this.warn('lpc.engine.noCatalog');
       return playerData;
     }

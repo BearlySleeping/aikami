@@ -554,11 +554,11 @@ export default function (pi: ExtensionAPI) {
 
       const base = params.baseBranch ?? DEFAULT_BASE;
 
-      // 🔗 Auto-linkage: detect contract references in PR body and prepend Closes #N
+      // 🔗 Auto-linkage: detect explicit "closes #N" markers or GitHub issue URLs
       let body = params.body ?? '';
-      const issueLinkMatch = body.match(/\[?#(\d+)\]?\s*$|closes:\s*#(\d+)/im);
+      const closesMatch = body.match(/closes:\s*#(\d+)/im);
       const ghIssueMatch = body.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
-      const linkedIssue = issueLinkMatch?.[1] ?? issueLinkMatch?.[2] ?? ghIssueMatch?.[1];
+      const linkedIssue = closesMatch?.[1] ?? ghIssueMatch?.[1];
       if (linkedIssue) {
         const closePrefix = `Closes #${linkedIssue}\n\n`;
         if (!body.startsWith('Closes #')) {
@@ -635,13 +635,15 @@ export default function (pi: ExtensionAPI) {
                 const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
                 if (yamlMatch?.[1]) {
                   let yaml = yamlMatch[1];
-                  // Update pr_url and pr_number
-                  yaml = yaml.replace(/^\s*pr_url:\s*.+/m, `pr_url: "${prUrl}"`);
+                  // Update pr_url and pr_number — preserve existing indentation
+                  const prUrlMatch = yaml.match(/^(\s*)pr_url:\s*.+/m);
+                  const indent = prUrlMatch?.[1] ?? '  ';
+                  yaml = yaml.replace(/^\s*pr_url:\s*.+/m, `${indent}pr_url: "${prUrl}"`);
                   if (/^\s*pr_number:/m.test(yaml)) {
-                    yaml = yaml.replace(/^\s*pr_number:\s*.+/m, `pr_number: ${prNumber}`);
+                    yaml = yaml.replace(/^\s*pr_number:\s*.+/m, `${indent}pr_number: ${prNumber}`);
                   } else {
                     // Add pr_number after pr_url if missing
-                    yaml = yaml.replace(/(^\s*pr_url:\s*.+)/m, `$1\n  pr_number: ${prNumber}`);
+                    yaml = yaml.replace(/(^\s*pr_url:\s*.+)/m, `$1\n${indent}pr_number: ${prNumber}`);
                   }
                   const updated = content.replace(yamlMatch[1], yaml);
                   if (updated !== content) {
@@ -2134,7 +2136,30 @@ export default function (pi: ExtensionAPI) {
       const projectNum = Number(params.project);
 
       // Step 1: Fetch project metadata to get project node ID and field options
-      const query = `
+      // Try organization first, fall back to user
+      const orgQuery = `
+        query($owner: String!, $number: Int!) {
+          organization(login: $owner) {
+            projectV2(number: $number) {
+              id
+              fields(first: 50) {
+                nodes {
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                    options {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const userQuery = `
         query($owner: String!, $number: Int!) {
           user(login: $owner) {
             projectV2(number: $number) {
@@ -2158,20 +2183,39 @@ export default function (pi: ExtensionAPI) {
 
       let projectData: { projectId: string; fieldId: string; optionId: string };
       try {
-        const result = await runGh(
+        // Try organization first
+        let result = await runGh(
           pi,
           [
             'api',
             'graphql',
             '-f',
-            `query=${query}`,
-            '-f',
+            `query=${orgQuery}`,
+            '-F',
             `owner=${projectOwner}`,
-            '-f',
+            '-F',
             `number=${projectNum}`,
           ],
           { parseJson: true },
         );
+
+        // If organization fails, fall back to user
+        if (!result.success || !result.json || !(result.json as any).data?.organization?.projectV2) {
+          result = await runGh(
+            pi,
+            [
+              'api',
+              'graphql',
+              '-f',
+              `query=${userQuery}`,
+              '-F',
+              `owner=${projectOwner}`,
+              '-F',
+              `number=${projectNum}`,
+            ],
+            { parseJson: true },
+          );
+        }
 
         if (!result.success || !result.json) {
           return {
@@ -2183,6 +2227,18 @@ export default function (pi: ExtensionAPI) {
 
         const data = result.json as {
           data?: {
+            organization?: {
+              projectV2?: {
+                id: string;
+                fields: {
+                  nodes: Array<{
+                    id: string;
+                    name: string;
+                    options: Array<{ id: string; name: string }>;
+                  }>;
+                };
+              };
+            };
             user?: {
               projectV2?: {
                 id: string;
@@ -2197,7 +2253,7 @@ export default function (pi: ExtensionAPI) {
             };
           };
         };
-        const pv2 = data.data?.user?.projectV2;
+        const pv2 = data.data?.organization?.projectV2 ?? data.data?.user?.projectV2;
         if (!pv2) {
           return {
             content: [
@@ -2257,11 +2313,16 @@ export default function (pi: ExtensionAPI) {
       let itemId = params.itemId;
       if (!itemId && params.url) {
         try {
-          const itemQuery = `
-            query($owner: String!, $number: Int!) {
-              user(login: $owner) {
+          // Try organization first, fall back to user, with pagination
+          const itemOrgQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              organization(login: $owner) {
                 projectV2(number: $number) {
-                  items(first: 100) {
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
                     nodes {
                       id
                       content {
@@ -2274,34 +2335,131 @@ export default function (pi: ExtensionAPI) {
               }
             }
           `;
-          const itemResult = await runGh(
-            pi,
-            [
+          const itemUserQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              user(login: $owner) {
+                projectV2(number: $number) {
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      id
+                      content {
+                        ... on Issue { url }
+                        ... on PullRequest { url }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+
+          let allNodes: Array<{ id: string; content: { url?: string } }> = [];
+          let cursor: string | null = null;
+          let hasNextPage = true;
+
+          // Try organization first
+          while (hasNextPage && !itemId) {
+            const args = [
               'api',
               'graphql',
               '-f',
-              `query=${itemQuery}`,
-              '-f',
+              `query=${itemOrgQuery}`,
+              '-F',
               `owner=${projectOwner}`,
-              '-f',
+              '-F',
               `number=${projectNum}`,
-            ],
-            { parseJson: true },
-          );
-          if (itemResult.success && itemResult.json) {
+            ];
+            if (cursor) {
+              args.push('-f', `cursor=${cursor}`);
+            }
+
+            const itemResult = await runGh(pi, args, { parseJson: true });
             const itemData = itemResult.json as {
               data?: {
-                user?: {
+                organization?: {
                   projectV2?: {
-                    items: { nodes: Array<{ id: string; content: { url?: string } }> };
+                    items: {
+                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                      nodes: Array<{ id: string; content: { url?: string } }>;
+                    };
                   };
                 };
               };
             };
-            const nodes = itemData.data?.user?.projectV2?.items?.nodes ?? [];
-            const match = nodes.find((n) => n.content?.url === params.url);
+
+            const items = itemData.data?.organization?.projectV2?.items;
+            if (!items && cursor === null) {
+              // Organization failed on first page, try user instead
+              break;
+            }
+            if (!items) {
+              hasNextPage = false;
+              break;
+            }
+
+            allNodes.push(...items.nodes);
+            const match = items.nodes.find((n) => n.content?.url === params.url);
             if (match) {
               itemId = match.id;
+              break;
+            }
+
+            hasNextPage = items.pageInfo.hasNextPage;
+            cursor = items.pageInfo.endCursor;
+          }
+
+          // If organization didn't work or item not found, try user
+          if (!itemId) {
+            cursor = null;
+            hasNextPage = true;
+            while (hasNextPage && !itemId) {
+              const args = [
+                'api',
+                'graphql',
+                '-f',
+                `query=${itemUserQuery}`,
+                '-F',
+                `owner=${projectOwner}`,
+                '-F',
+                `number=${projectNum}`,
+              ];
+              if (cursor) {
+                args.push('-f', `cursor=${cursor}`);
+              }
+
+              const itemResult = await runGh(pi, args, { parseJson: true });
+              const itemData = itemResult.json as {
+                data?: {
+                  user?: {
+                    projectV2?: {
+                      items: {
+                        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                        nodes: Array<{ id: string; content: { url?: string } }>;
+                      };
+                    };
+                  };
+                };
+              };
+
+              const items = itemData.data?.user?.projectV2?.items;
+              if (!items) {
+                hasNextPage = false;
+                break;
+              }
+
+              allNodes.push(...items.nodes);
+              const match = items.nodes.find((n) => n.content?.url === params.url);
+              if (match) {
+                itemId = match.id;
+                break;
+              }
+
+              hasNextPage = items.pageInfo.hasNextPage;
+              cursor = items.pageInfo.endCursor;
             }
           }
         } catch {
@@ -2438,13 +2596,64 @@ export default function (pi: ExtensionAPI) {
 
       const projectNum = Number(params.project);
 
-      const query = `
-        query($owner: String!, $number: Int!) {
+      // Try organization first, fall back to user, with pagination
+      const orgQuery = `
+        query($owner: String!, $number: Int!, $cursor: String) {
+          organization(login: $owner) {
+            projectV2(number: $number) {
+              id
+              title
+              items(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  id
+                  content {
+                    ... on Issue {
+                      number
+                      title
+                      url
+                      state
+                    }
+                    ... on PullRequest {
+                      number
+                      title
+                      url
+                      state
+                    }
+                  }
+                  fieldValues(first: 20) {
+                    nodes {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        name
+                        field { ... on ProjectV2Field { name } }
+                      }
+                      ... on ProjectV2ItemFieldTextValue {
+                        text
+                        field { ... on ProjectV2Field { name } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+
+      const userQuery = `
+        query($owner: String!, $number: Int!, $cursor: String) {
           user(login: $owner) {
             projectV2(number: $number) {
               id
               title
-              items(first: 100) {
+              items(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
                 nodes {
                   id
                   content {
@@ -2481,58 +2690,153 @@ export default function (pi: ExtensionAPI) {
       `;
 
       try {
-        const result = await runGh(
-          pi,
-          [
+        type ProjectItemNode = {
+          id: string;
+          content: {
+            number?: number;
+            title?: string;
+            url?: string;
+            state?: string;
+          };
+          fieldValues: {
+            nodes: Array<{
+              name?: string;
+              text?: string;
+              field?: { name?: string };
+            }>;
+          };
+        };
+
+        let allItems: ProjectItemNode[] = [];
+        let projectId = '';
+        let projectTitle = '';
+        let cursor: string | null = null;
+        let hasNextPage = true;
+
+        // Try organization first
+        while (hasNextPage) {
+          const args = [
             'api',
             'graphql',
             '-f',
-            `query=${query}`,
-            '-f',
+            `query=${orgQuery}`,
+            '-F',
             `owner=${projectOwner}`,
-            '-f',
+            '-F',
             `number=${projectNum}`,
-          ],
-          { parseJson: true },
-        );
+          ];
+          if (cursor) {
+            args.push('-f', `cursor=${cursor}`);
+          }
 
-        if (!result.success || !result.json) {
-          return {
-            content: [{ type: 'text', text: `❌ Failed to fetch project items: ${result.text}` }],
-            isError: true,
-            details: {},
-          };
-        }
-
-        const data = result.json as {
-          data?: {
-            user?: {
-              projectV2?: {
-                id: string;
-                title: string;
-                items: {
-                  nodes: Array<{
-                    id: string;
-                    content?: { number: number; title: string; url: string; state: string };
-                    fieldValues?: {
-                      nodes: Array<{ name?: string; text?: string; field?: { name?: string } }>;
-                    };
-                  }>;
+          const result = await runGh(pi, args, { parseJson: true });
+          const data = result.json as {
+            data?: {
+              organization?: {
+                projectV2?: {
+                  id: string;
+                  title: string;
+                  items: {
+                    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                    nodes: ProjectItemNode[];
+                  };
                 };
               };
             };
           };
-        };
 
-        const nodes = data.data?.user?.projectV2?.items?.nodes ?? [];
-        const match = nodes.find((n) => n.content?.url === params.url);
+          const pv2 = data.data?.organization?.projectV2;
+          if (!pv2 && cursor === null) {
+            // Organization failed on first page, try user instead
+            break;
+          }
+          if (!pv2) {
+            hasNextPage = false;
+            break;
+          }
+
+          if (cursor === null) {
+            projectId = pv2.id;
+            projectTitle = pv2.title;
+          }
+
+          allItems.push(...pv2.items.nodes);
+          hasNextPage = pv2.items.pageInfo.hasNextPage;
+          cursor = pv2.items.pageInfo.endCursor;
+        }
+
+        // If organization didn't work, try user
+        if (allItems.length === 0) {
+          cursor = null;
+          hasNextPage = true;
+          while (hasNextPage) {
+            const args = [
+              'api',
+              'graphql',
+              '-f',
+              `query=${userQuery}`,
+              '-F',
+              `owner=${projectOwner}`,
+              '-F',
+              `number=${projectNum}`,
+            ];
+            if (cursor) {
+              args.push('-f', `cursor=${cursor}`);
+            }
+
+            const result = await runGh(pi, args, { parseJson: true });
+
+            if (!result.success || !result.json) {
+              return {
+                content: [{ type: 'text', text: `❌ Failed to fetch project items: ${result.text}` }],
+                isError: true,
+                details: {},
+              };
+            }
+
+            const data = result.json as {
+              data?: {
+                user?: {
+                  projectV2?: {
+                    id: string;
+                    title: string;
+                    items: {
+                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                      nodes: ProjectItemNode[];
+                    };
+                  };
+                };
+              };
+            };
+
+            const pv2 = data.data?.user?.projectV2;
+            if (!pv2) {
+              hasNextPage = false;
+              break;
+            }
+
+            if (cursor === null) {
+              projectId = pv2.id;
+              projectTitle = pv2.title;
+            }
+
+            allItems.push(...pv2.items.nodes);
+            hasNextPage = pv2.items.pageInfo.hasNextPage;
+            cursor = pv2.items.pageInfo.endCursor;
+          }
+        }
+
+        // Now search through all collected items
+        const match = params.url ? allItems.find((n) => n.content?.url === params.url) : allItems[0];
 
         if (!match) {
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ No project item found for URL: ${params.url}`,
+                text: params.url
+                  ? `❌ No project item found for URL: ${params.url}`
+                  : '❌ No project items found',
               },
             ],
             isError: true,

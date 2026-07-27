@@ -638,7 +638,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // Review captain runs in TUI mode — needs interactivity to inspect
     // findings, interrupt if needed, and manually intervene. JSON mode
     // is for automated workers only.
+    // 🔴 Herdr PTY drops the first character via pane run — prepend newline
+    // to protect inline env vars (same as worker branches).
     const command = [
+      '\n',
       environment,
       'pi',
       '--approve',

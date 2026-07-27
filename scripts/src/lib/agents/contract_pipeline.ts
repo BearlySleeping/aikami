@@ -7,7 +7,7 @@
 //   --source roadmap  Fetch from GitHub Issue or Project v2 item and freeze into contract
 //   --source direct   Initiate interactive Pi session for conversational contract drafting
 
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import {
   closeSync,
   existsSync,
@@ -102,7 +102,7 @@ Examples:
 
 Options:
   --source <mode>   Source for contract generation: todo, roadmap, direct (default: todo)
-  --root, -r        Work directly in the root repo (no worktree). Creates branch contract/C-XXX
+  --root, -r        Start work on branch contract/C-XXX in the root repo before launching pipeline
   --dirty           Allow branch switch with uncommitted changes (only with --root)
   --resume <run-id> Resume an incomplete v3 run
   --dry-run          Resolve and create the manifest without starting Herdr/Pi
@@ -214,6 +214,9 @@ const handleRoadmapSource = (target: string): void => {
 
   // Try to find an existing contract for this issue
   let contractId: string | undefined;
+  let contractFileName: string | undefined;
+  let contractPath: string | undefined;
+
   for (const file of existingContracts) {
     try {
       const content = readFileSync(join(contractsDir, file), 'utf-8');
@@ -221,6 +224,8 @@ const handleRoadmapSource = (target: string): void => {
         const idMatch = content.match(/^#\s+Contract\s+(C-\d+)/m);
         if (idMatch?.[1]) {
           contractId = idMatch[1];
+          contractFileName = file;
+          contractPath = join(contractsDir, file);
           break;
         }
       }
@@ -229,71 +234,79 @@ const handleRoadmapSource = (target: string): void => {
     }
   }
 
-  // If no existing contract, use next sequential ID
+  // If no existing contract, generate new ID and path
   if (!contractId) {
     const maxId = existingContracts.reduce((max: number, f: string) => {
       const match = f.match(/^C-(\d+)/);
       return match ? Math.max(max, Number(match[1])) : max;
     }, 0);
     contractId = `C-${maxId + 1}`;
+
+    // Build slug from title
+    const slug = issueData.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60);
+    contractFileName = `${contractId}-${slug}.md`;
+    contractPath = join(contractsDir, contractFileName);
   }
 
-  // Build slug from title
-  const slug = issueData.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60);
-  const contractFileName = `${contractId}-${slug}.md`;
-  const contractPath = join(contractsDir, contractFileName);
+  // Check if we found an existing contract — if so, reuse it
+  const existingContractFound = existsSync(contractPath);
+  if (existingContractFound) {
+    console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
+    console.log(`   Path: ${contractPath}`);
+    console.log(`   Issue: ${issueUrl}`);
+  } else {
+    // Read template and generate new contract
+    const template = readFileSync(templatePath, 'utf-8');
 
-  // Read template
-  const template = readFileSync(templatePath, 'utf-8');
+    // Generate contract content — fill YAML frontmatter + markdown template
+    const now = new Date().toISOString();
+    const contractContent = template
+      .replace(/{FEATURE_CODE}/g, contractId)
+      .replace(/{TITLE}/g, issueData.title)
+      .replace(/{source}/g, 'roadmap')
+      .replace(/{created_at}/g, now)
+      .replace(/{reference_description}/g, `GitHub Issue [#${issueNum}](${issueUrl})`)
+      .replace(/{path}/g, 'TBD — determined during implementation')
+      .replace(/{brief description}/g, 'TBD')
+      .replace(/{0\|1\|2\|3}/g, 'P1')
+      .replace(/{one-line justification}/g, 'From GitHub Roadmap')
+      .replace(/{list of contracts or packages this depends on}/g, 'None identified')
+      .replace(
+        /{what is broken or missing today — be concrete}/g,
+        issueData.body.slice(0, 500) || 'See GitHub Issue for details.',
+      )
+      .replace(/{steps to reproduce the issue or observe the gap}/g, 'See GitHub Issue.')
+      .replace(/{paths to code that already partially solves this}/g, 'TBD')
+      .replace(/{what the existing code does NOT handle}/g, 'TBD')
+      .replace(/{player\|creator\|developer}/g, 'player')
+      .replace(/{e\.g\. "game start under 3s", "response under 500ms"}/g, 'TBD')
+      .replace(/{what happens when AI\/network is unavailable}/g, 'TBD')
+      .replace(
+        /{the real user flow this unlocks — e\.g\. "player can create a character and enter the game world"}/g,
+        'TBD',
+      )
+      .replace(/{capability}/g, 'TBD')
+      .replace(/{file path or contract}/g, 'TBD')
+      .replace(/{reuse \| modify \| replace}/g, 'check')
+      .replace(
+        /{2-4 sentences describing what this task is, what changes, and why it matters\.}/g,
+        `From GitHub Issue [#${issueNum}](${issueUrl}):\n\n${issueData.body.slice(0, 800) || 'TBD'}`,
+      );
 
-  // Generate contract content — fill YAML frontmatter + markdown template
-  const now = new Date().toISOString();
-  const contractContent = template
-    .replace(/{FEATURE_CODE}/g, contractId)
-    .replace(/{TITLE}/g, issueData.title)
-    .replace(/{source}/g, 'roadmap')
-    .replace(/{created_at}/g, now)
-    .replace(/{reference_description}/g, `GitHub Issue [#${issueNum}](${issueUrl})`)
-    .replace(/{path}/g, 'TBD — determined during implementation')
-    .replace(/{brief description}/g, 'TBD')
-    .replace(/{0\|1\|2\|3}/g, 'P1')
-    .replace(/{one-line justification}/g, 'From GitHub Roadmap')
-    .replace(/{list of contracts or packages this depends on}/g, 'None identified')
-    .replace(
-      /{what is broken or missing today — be concrete}/g,
-      issueData.body.slice(0, 500) || 'See GitHub Issue for details.',
-    )
-    .replace(/{steps to reproduce the issue or observe the gap}/g, 'See GitHub Issue.')
-    .replace(/{paths to code that already partially solves this}/g, 'TBD')
-    .replace(/{what the existing code does NOT handle}/g, 'TBD')
-    .replace(/{player\|creator\|developer}/g, 'player')
-    .replace(/{e\.g\. "game start under 3s", "response under 500ms"}/g, 'TBD')
-    .replace(/{what happens when AI\/network is unavailable}/g, 'TBD')
-    .replace(
-      /{the real user flow this unlocks — e\.g\. "player can create a character and enter the game world"}/g,
-      'TBD',
-    )
-    .replace(/{capability}/g, 'TBD')
-    .replace(/{file path or contract}/g, 'TBD')
-    .replace(/{reuse \| modify \| replace}/g, 'check')
-    .replace(
-      /{2-4 sentences describing what this task is, what changes, and why it matters\.}/g,
-      `From GitHub Issue [#${issueNum}](${issueUrl}):\n\n${issueData.body.slice(0, 800) || 'TBD'}`,
-    );
+    // Populate GitHub metadata in YAML frontmatter
+    const finalContent = contractContent
+      .replace(/issue_number:\s*null/, `issue_number: ${issueNum}`)
+      .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
-  // Populate GitHub metadata in YAML frontmatter
-  const finalContent = contractContent
-    .replace(/issue_number:\s*null/, `issue_number: ${issueNum}`)
-    .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
-
-  writeFileSync(contractPath, finalContent);
-  console.log(`✅ Contract frozen from roadmap: ${contractFileName}`);
-  console.log(`   Path: ${contractPath}`);
-  console.log(`   Issue: ${issueUrl}`);
+    writeFileSync(contractPath, finalContent);
+    console.log(`✅ Contract frozen from roadmap: ${contractFileName}`);
+    console.log(`   Path: ${contractPath}`);
+    console.log(`   Issue: ${issueUrl}`);
+  }
 };
 
 /** Search for an issue in Project v2 by title match. */
@@ -553,9 +566,16 @@ const setupRootBranch = (options: {
   target: string;
   allowDirty: boolean;
 }): { branchName: string; wasDirty: boolean } => {
-  // Derive branch name from contract ID
+  // Derive branch name from contract ID and validate format
   const contractId = options.target.toUpperCase();
   const branchName = `contract/${contractId}`;
+
+  // Validate branch name format (must be contract/C-NNN)
+  if (!/^contract\/C-\d+$/.test(branchName)) {
+    throw new Error(
+      `Invalid contract branch name: "${branchName}". Must match contract/C-NNN format.`,
+    );
+  }
 
   // Check for dirty working directory
   let wasDirty = false;
@@ -605,7 +625,7 @@ const setupRootBranch = (options: {
   // Check if branch already exists
   let branchExists = false;
   try {
-    execSync(`git rev-parse --verify ${branchName}`, {
+    execFileSync('git', ['rev-parse', '--verify', branchName], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -622,7 +642,7 @@ const setupRootBranch = (options: {
 
   try {
     const args = branchExists ? ['checkout', branchName] : ['checkout', '-b', branchName];
-    execSync(['git', ...args].join(' '), {
+    execFileSync('git', args, {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -737,7 +757,7 @@ const main = async (): Promise<void> => {
       allowDirty: cli.dirty,
     });
     console.log(`📁 Root checkout complete on \`${branchName}\`.`);
-    console.log('   Pipeline will run in the root directory (no worktree).');
+    console.log('   Pipeline will launch from this branch (worktrees may still be used by stages).');
   }
 
   if (!cli.background && !cli.dryRun) {

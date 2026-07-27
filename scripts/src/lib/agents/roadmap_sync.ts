@@ -176,36 +176,53 @@ const fetchProjectMeta = (options: { owner: string; number: number }): ProjectMe
   // Try organization first (BearlySleeping is an org), fall back to user
   const query = `query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id title fields(first: 50) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }`;
 
-  const gqlResult = ghJson<{
-    data?: {
-      organization?: {
-        projectV2?: {
-          id: string;
-          title: string;
-          fields: {
-            nodes: Array<{
-              id: string;
-              name: string;
-              options: Array<{ id: string; name: string }>;
-            }>;
+  let pv2: {
+    id: string;
+    title: string;
+    fields: {
+      nodes: Array<{
+        id: string;
+        name: string;
+        options: Array<{ id: string; name: string }>;
+      }>;
+    };
+  } | null = null;
+
+  // Try organization query, catch failures to allow user fallback
+  try {
+    const gqlResult = ghJson<{
+      data?: {
+        organization?: {
+          projectV2?: {
+            id: string;
+            title: string;
+            fields: {
+              nodes: Array<{
+                id: string;
+                name: string;
+                options: Array<{ id: string; name: string }>;
+              }>;
+            };
           };
         };
       };
-    };
-  }>([
-    'api',
-    'graphql',
-    '-f',
-    `query=${query}`,
-    '-F',
-    `owner=${options.owner}`,
-    '-F',
-    `number=${options.number}`,
-  ]);
+    }>([
+      'api',
+      'graphql',
+      '-f',
+      `query=${query}`,
+      '-F',
+      `owner=${options.owner}`,
+      '-F',
+      `number=${options.number}`,
+    ]);
+    pv2 = gqlResult.data?.organization?.projectV2 ?? null;
+  } catch {
+    // Organization query failed, will try user
+    pv2 = null;
+  }
 
-  let pv2 = gqlResult.data?.organization?.projectV2;
-
-  // Fall back to user if organization lookup fails
+  // Fall back to user if organization lookup failed
   if (!pv2) {
     const userQuery = `query($owner: String!, $number: Int!) { user(login: $owner) { projectV2(number: $number) { id title fields(first: 50) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }`;
     const userResult = ghJson<{
@@ -297,32 +314,43 @@ const fetchProjectItems = (options: { owner: string; number: number }): ProjectI
   // Try organization first, fall back to user
   const query = `query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { items(first: 100) { nodes { id content { ... on Issue { url } ... on PullRequest { url } } fieldValues(first: 5) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } } }`;
 
-  const result = ghJson<{
-    data?: {
-      organization?: {
-        projectV2?: {
-          items: {
-            nodes: Array<{
-              id: string;
-              content: { url?: string };
-              fieldValues: { nodes: Array<{ name?: string }> };
-            }>;
+  let nodes: Array<{
+    id: string;
+    content: { url?: string };
+    fieldValues: { nodes: Array<{ name?: string }> };
+  }> | undefined = undefined;
+
+  // Try organization query, catch failures to allow user fallback
+  try {
+    const result = ghJson<{
+      data?: {
+        organization?: {
+          projectV2?: {
+            items: {
+              nodes: Array<{
+                id: string;
+                content: { url?: string };
+                fieldValues: { nodes: Array<{ name?: string }> };
+              }>;
+            };
           };
         };
       };
-    };
-  }>([
-    'api',
-    'graphql',
-    '-f',
-    `query=${query}`,
-    '-F',
-    `owner=${options.owner}`,
-    '-F',
-    `number=${options.number}`,
-  ]);
-
-  let nodes = result.data?.organization?.projectV2?.items?.nodes;
+    }>([
+      'api',
+      'graphql',
+      '-f',
+      `query=${query}`,
+      '-F',
+      `owner=${options.owner}`,
+      '-F',
+      `number=${options.number}`,
+    ]);
+    nodes = result.data?.organization?.projectV2?.items?.nodes;
+  } catch {
+    // Organization query failed, will try user
+    nodes = undefined;
+  }
 
   if (!nodes) {
     const userQuery = `query($owner: String!, $number: Int!) { user(login: $owner) { projectV2(number: $number) { items(first: 100) { nodes { id content { ... on Issue { url } ... on PullRequest { url } } fieldValues(first: 5) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } } }`;
@@ -354,8 +382,9 @@ const fetchProjectItems = (options: { owner: string; number: number }): ProjectI
   }
   const finalNodes = nodes ?? [];
   return finalNodes.map((n) => {
-    // Get the first single-select value (typically Status if there's only one)
-    const name = n.fieldValues?.nodes?.[0]?.name ?? '';
+    // Find the first field value node that actually has a name (typically Status)
+    const statusNode = n.fieldValues?.nodes?.find((node) => node.name);
+    const name = statusNode?.name ?? '';
     return {
       id: n.id,
       contentUrl: n.content?.url ?? '',
@@ -615,8 +644,17 @@ const syncTodoItems = (options: {
         errors.push(`Failed to link ${issueUrl} to project #${PROJECT_NUMBER}`);
       }
 
-      backfillTodoReference({ item, issueUrl, issueNum });
-      console.log(`       📝 Backfilled TODO.md with #${issueNum}`);
+      // Backfill TODO.md with issue reference — catch failures separately
+      try {
+        backfillTodoReference({ item, issueUrl, issueNum });
+        console.log(`       📝 Backfilled TODO.md with #${issueNum}`);
+      } catch (backfillErr: unknown) {
+        const msg = backfillErr instanceof Error ? backfillErr.message : String(backfillErr);
+        console.error(`       ⚠️  Failed to backfill TODO.md: ${msg}`);
+        console.error(`       📝 Manually add reference to ${item.id}: [Issue #${issueNum}](${issueUrl})`);
+        errors.push(`Failed to backfill TODO.md for ${item.id} (Issue #${issueNum} at ${issueUrl}): ${msg}`);
+        // Continue processing other items despite backfill failure
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`Failed to sync ${label}: ${msg}`);
@@ -723,8 +761,10 @@ const syncContractsToRoadmap = (options: {
     }
 
     // Also consider PR-based status: if contract has an open PR, it's "In Review"
+    // but only apply override for non-terminal statuses (preserve "Done" for verified contracts)
+    const isTerminal = CLOSE_ON_STATUSES.has(contract.status);
     const effectiveColumn =
-      contract.prRef && contract.prRef.state === 'OPEN' ? 'In Review' : targetColumn;
+      contract.prRef && contract.prRef.state === 'OPEN' && !isTerminal ? 'In Review' : targetColumn;
 
     // Use issue URL first, fall back to PR URL
     const linkedUrl = contract.issueRef?.url ?? contract.prRef?.url;

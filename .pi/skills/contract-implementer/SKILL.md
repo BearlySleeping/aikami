@@ -112,7 +112,7 @@ Two working modes are supported when running a contract pipeline:
 | Mode | Command | Description |
 |---|---|---|
 | **Worktree** (default) | `bun run contract C-370` | Creates isolated `.pi/workspaces/` worktree for background agents |
-| **Root** | `bun run contract C-370 --root` | Works directly in the repo root on branch `contract/C-370` |
+| **Root** | `bun run contract C-370 --root` | Starts on branch `contract/C-370` in the repo root before launching pipeline |
 | **Root + dirty** | `bun run contract C-370 --root --dirty` | Switches branch carrying uncommitted changes over |
 
 ### Root Mode Behavior
@@ -120,11 +120,11 @@ Two working modes are supported when running a contract pipeline:
 - Checks for dirty working directory via `git status --porcelain`.
 - **Without `--dirty`**: Fails fast with a clear error if uncommitted changes exist.
 - **With `--dirty`**: Executes `git checkout -b contract/C-XXX` directly, carrying over staged/unstaged changes.
-- Pipeline runs in the root directory — no worktree isolation.
+- Sets up the target branch in the root directory before launching the pipeline; worktrees may still be used by individual pipeline stages.
 
 ### When to Use Each
-- **Worktree**: Background/automated pipeline runs, multi-agent isolation, CI/CD.
-- **Root**: Interactive development, quick edits, testing directly in the main tree.
+- **Worktree**: Default mode for background/automated pipeline runs, multi-agent isolation, CI/CD.
+- **Root**: Start the pipeline from a specific branch in your working tree; useful when you want to prepare the branch state before pipeline execution.
 
 ## Handoff Protocol
 
