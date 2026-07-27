@@ -10,6 +10,7 @@ import type { PersonaData } from '@aikami/types';
 import { logger } from '$logger';
 import { audioContextManager, audioService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
+import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -648,11 +649,28 @@ class GameEngineService
         }
         const variant = slotDef?.variants[effectiveIdx];
         if (!variant) {
+          // C-370: body fallback — if body slot variant lookup fails, inject default
+          if (slotName === 'body') {
+            recipes.push({
+              slot: 'body',
+              assetId: LPC_DEFAULT_BODY_ASSET_ID,
+              hexPalette: new Uint8Array(1024),
+            });
+          }
           continue;
         }
         recipes.push({
           slot: slotName,
           assetId: variant.assetId,
+          hexPalette: new Uint8Array(1024),
+        });
+      }
+      // C-370: ensure body recipe exists — inject default if missing
+      const hasBody = recipes.some((r) => r.slot === 'body');
+      if (!hasBody) {
+        recipes.unshift({
+          slot: 'body',
+          assetId: LPC_DEFAULT_BODY_ASSET_ID,
           hexPalette: new Uint8Array(1024),
         });
       }

@@ -17,6 +17,7 @@ import {
 import type { Campaign, PersonaData } from '@aikami/types';
 import { authService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_repository.svelte';
@@ -768,11 +769,28 @@ class GameBootService
         }
         const variant = slotDef?.variants[effectiveIdx];
         if (!variant) {
+          // C-370: body fallback — if body slot variant lookup fails, inject default
+          if (slotName === 'body') {
+            recipes.push({
+              slot: 'body',
+              assetId: LPC_DEFAULT_BODY_ASSET_ID,
+              hexPalette: new Uint8Array(1024),
+            });
+          }
           continue;
         }
         recipes.push({
           slot: slotName,
           assetId: variant.assetId,
+          hexPalette: new Uint8Array(1024),
+        });
+      }
+      // C-370: ensure body recipe exists — inject default if missing
+      const hasBody = recipes.some((r) => r.slot === 'body');
+      if (!hasBody) {
+        recipes.unshift({
+          slot: 'body',
+          assetId: LPC_DEFAULT_BODY_ASSET_ID,
           hexPalette: new Uint8Array(1024),
         });
       }

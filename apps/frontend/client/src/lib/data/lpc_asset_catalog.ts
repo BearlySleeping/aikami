@@ -13,6 +13,9 @@ export const REQUIRED_LPC_SLOTS = ['head', 'body', 'torso'] as const;
 /** Default head asset used as fallback when a character's head texture fails to load. */
 export const LPC_DEFAULT_HEAD_ASSET_ID = 'head/heads/human_male';
 
+/** Default body asset used as fallback when a character's body layer is missing. */
+export const LPC_DEFAULT_BODY_ASSET_ID = 'body/bodies/male/light';
+
 /** Shape type for procedural mock sheet generation. */
 export type LpcMockShapeType =
   | 'humanoid'

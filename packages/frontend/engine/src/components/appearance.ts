@@ -37,6 +37,9 @@ export const FACE_LAYER_INDEX = 1;
 /** Number of asset layers an entity can compose from. */
 export const APPEARANCE_LAYER_COUNT = 6;
 
+/** Default body variant index used when Appearance.layer0 is 0 or unset. */
+export const DEFAULT_BODY_LAYER_ID = 1;
+
 /**
  * Describes a single layer in an AI-generated LPC character manifest.
  *
