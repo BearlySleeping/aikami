@@ -424,14 +424,19 @@ const setupRootBranch = (options: {
     );
   }
 
-  // Check for dirty working directory
+  // Check for dirty working directory — only modifications, staged changes,
+  // and conflicts count. Untracked files (??) don't block branch switches.
   let wasDirty = false;
   try {
     const status = execSync('git status --porcelain', {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
-    wasDirty = status.length > 0;
+    // Filter out untracked files — only staged/modified/conflict lines matter
+    const dirtyLines = status
+      .split('\n')
+      .filter((line) => line.length > 2 && !line.startsWith('??'));
+    wasDirty = dirtyLines.length > 0;
   } catch {
     throw new Error('Not a git repository. --root requires a git working tree.');
   }
