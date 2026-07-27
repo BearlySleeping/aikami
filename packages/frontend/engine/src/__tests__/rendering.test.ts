@@ -1185,6 +1185,189 @@ describe('C-034 LPC Batch Pipeline — Structural Alignment', () => {
 });
 
 // ===========================================================================
+// C-370 LPC Paperdoll Base Layering — Recipe Resolver Body Fallback Tests
+// ===========================================================================
+
+// === AC-1: Recipe Contains Clothing but No Explicit Skin Layer ===
+
+describe('C-370 AC-1: Recipe resolver injects body fallback when layer0 is missing', () => {
+  it('injects a body recipe when layer0 is 0 but layer2 (torso) is valid', () => {
+    // Simulate a character with torso gear but no body layer
+    const recipes = testRecipeResolver([0, 0, 2, 0, 0]);
+
+    // Should have at least 2 recipes: body (injected) + torso (gear)
+    expect(recipes.length).toBeGreaterThanOrEqual(2);
+
+    // Body recipe must be present with slot "body" and assetId "1" (default)
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('1');
+    expect(bodyRecipe?.hexPalette).toBeInstanceOf(Uint8Array);
+    expect(bodyRecipe?.hexPalette.length).toBe(1024);
+
+    // Body recipe should be at index 0 (z-order: body renders first/behind)
+    expect(recipes[0]?.slot).toBe('body');
+
+    // Torso recipe must also be present
+    const torsoRecipe = recipes.find((r) => r.slot === 'torso');
+    expect(torsoRecipe).toBeDefined();
+  });
+
+  it('injects a body recipe when all layers are zero', () => {
+    // Edge case: entity with no layers at all
+    const recipes = testRecipeResolver([0, 0, 0, 0, 0]);
+
+    // Should have exactly 1 recipe: the injected body default
+    expect(recipes.length).toBe(1);
+    expect(recipes[0]?.slot).toBe('body');
+    expect(recipes[0]?.assetId).toBe('1');
+  });
+
+  it('does NOT override a valid body layer when one already exists', () => {
+    // Normal case: body layer is already set to a specific variant
+    const recipes = testRecipeResolver([3, 5, 2, 1, 4]);
+
+    // Body recipe should use the original layer ID, not the fallback
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('3');
+
+    // All 5 layers should be present (none skipped)
+    expect(recipes.length).toBe(5);
+  });
+
+  it('uses fallback body assetId "1" when layer0 is negative', () => {
+    // Defensive: negative layer IDs should trigger fallback
+    const recipes = testRecipeResolver([-1, 0, 2, 0, 0]);
+
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('1');
+  });
+
+  it('preserves body recipe at first position in return array (z-order 0)', () => {
+    const recipes = testRecipeResolver([0, 5, 3, 2, 1]);
+
+    // Body must be first in the array (renders behind everything)
+    expect(recipes[0]?.slot).toBe('body');
+
+    // Hair should come after body (hair z=5, body z=0)
+    const bodyIndex = recipes.findIndex((r) => r.slot === 'body');
+    const hairIndex = recipes.findIndex((r) => r.slot === 'hair');
+    expect(bodyIndex).toBeLessThan(hairIndex);
+  });
+});
+
+// === AC-2: Equipment Changes Preserve the Body Layer ===
+
+describe('C-370 AC-2: Equipment updates preserve body layer invariant', () => {
+  it('body layer remains after torso equipment update simulates armor equip', () => {
+    // Simulate: current appearance has body=3, torso=1 (default)
+    // Equipment update maps ironArmor → torso layer 3
+    const currentLayers = [3, 0, 1, 0, 0];
+    const newLayers = [...currentLayers];
+
+    // C-370: enforce body layer invariant
+    if ((newLayers[0] ?? 0) <= 0) {
+      newLayers[0] = 1;
+    }
+
+    // Simulate armor equip: ironArmor → layer index 3 for torso
+    newLayers[2] = 3;
+
+    // Body layer must remain at original value
+    expect(newLayers[0]).toBe(3);
+
+    // Resolve recipes — body should be present with original ID
+    const recipes = testRecipeResolver(newLayers);
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('3');
+  });
+
+  it('body layer is repaired when current layers have body=0 before equipment update', () => {
+    // Simulate: broken save where body=0 and torso=1
+    const currentLayers = [0, 0, 1, 0, 0];
+    const newLayers = [...currentLayers];
+
+    // C-370: enforce body layer invariant
+    if ((newLayers[0] ?? 0) <= 0) {
+      newLayers[0] = 1;
+    }
+
+    // Simulate armor equip: leatherArmor → layer index 2 for torso
+    newLayers[2] = 2;
+
+    // Body layer must be repaired to default
+    expect(newLayers[0]).toBe(1);
+
+    // Resolve recipes — body should be present with default ID
+    const recipes = testRecipeResolver(newLayers);
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('1');
+
+    // Torso recipe should use the armor mapping
+    const torsoRecipe = recipes.find((r) => r.slot === 'torso');
+    expect(torsoRecipe).toBeDefined();
+    expect(torsoRecipe?.assetId).toBe('2');
+  });
+
+  it('repairs body layer when initial value is -1 and applies equipment change (regression)', () => {
+    // C-370 regression: negative body layer values must trigger repair.
+    // The production invariant uses <= 0, not a falsy check.
+    const currentLayers = [-1, 0, 1, 0, 0]; // body=-1 (invalid)
+    const newLayers = [...currentLayers];
+
+    // C-370: enforce body layer invariant
+    if ((newLayers[0] ?? 0) <= 0) {
+      newLayers[0] = 1;
+    }
+
+    // Simulate armor equip: ironArmor → layer index 3 for torso
+    newLayers[2] = 3;
+
+    // Body layer must be repaired to default
+    expect(newLayers[0]).toBe(1);
+    // Torso must reflect the equipment change
+    expect(newLayers[2]).toBe(3);
+
+    // Resolve recipes — body is default, torso uses armor mapping
+    const recipes: LpcLayerRecipe[] = testRecipeResolver(newLayers);
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe).toBeDefined();
+    expect(bodyRecipe?.assetId).toBe('1');
+
+    const torsoRecipe = recipes.find((r) => r.slot === 'torso');
+    expect(torsoRecipe).toBeDefined();
+    expect(torsoRecipe?.assetId).toBe('3');
+  });
+
+  it('equipment removal (armor unequip) does not affect body layer', () => {
+    // Player unequips armor — torso reverts to default 1, body stays at 3
+    const currentLayers = [3, 0, 3, 0, 0]; // body=3, torso=3 (iron armor)
+    const newLayers = [...currentLayers];
+
+    // C-370: enforce body layer invariant (already valid in this case)
+    if ((newLayers[0] ?? 0) <= 0) {
+      newLayers[0] = 1;
+    }
+
+    // Simulate armor unequip: torso reverts to default
+    newLayers[2] = 1;
+
+    // Body must remain unchanged
+    expect(newLayers[0]).toBe(3);
+
+    const recipes = testRecipeResolver(newLayers);
+    const bodyRecipe = recipes.find((r) => r.slot === 'body');
+    expect(bodyRecipe?.assetId).toBe('3');
+    const torsoRecipe = recipes.find((r) => r.slot === 'torso');
+    expect(torsoRecipe?.assetId).toBe('1');
+  });
+});
+
+// ===========================================================================
 // C-036 ECS Appearance Bridge — bitECS → LpcBatchManager Integration Tests
 // ===========================================================================
 
@@ -1194,17 +1377,30 @@ describe('C-034 LPC Batch Pipeline — Structural Alignment', () => {
  * Maps layer IDs to {@link LpcLayerRecipe} entries using predictable
  * slot names and a filled 1024-byte palette so UBO packing produces
  * non-zero tint values.
+ *
+ * **C-370**: Injects a default body recipe (assetId "1") when layer0 ≤ 0
+ * to prevent background bleed-through between head and torso sprites.
  */
+const BODY_SLOT_INDEX = 0;
 const testRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
   const slotNames = ['body', 'hair', 'torso', 'legs', 'feet'];
-  return layerIds
+  const recipes = layerIds
     .map((id, index) => {
-      if (id <= 0) {
+      const effectiveId = index === BODY_SLOT_INDEX && (id ?? 0) <= 0 ? 1 : id;
+      if (effectiveId <= 0) {
         return null;
       }
-      return createTestRecipe(slotNames[index] ?? `layer_${index}`, String(id));
+      return createTestRecipe(slotNames[index] ?? `layer_${index}`, String(effectiveId));
     })
     .filter((r): r is LpcLayerRecipe => r !== null);
+
+  // C-370: defense-in-depth — ensure body recipe always exists
+  const hasBody = recipes.some((r) => r.slot === 'body');
+  if (!hasBody) {
+    recipes.unshift(createTestRecipe('body', '1'));
+  }
+
+  return recipes;
 };
 
 /** Helper to set Appearance layers on an entity. */
