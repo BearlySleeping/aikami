@@ -40,7 +40,6 @@ const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const AGENT_READY_TIMEOUT_MS = 120_000;
-const SEND_ACCEPT_TIMEOUT_MS = 120_000;
 const MAX_SEND_ATTEMPTS = 5;
 const SHELL_READY_TIMEOUT_MS = 90_000;
 const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
@@ -369,30 +368,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const bufferWaitMs = Math.min(Math.max(500, options.text.length * 2), 2000);
     await sleep(bufferWaitMs);
 
-    // Send Enter — then retry ONLY Enter (never re-send text).
-    // Text is idempotent in the buffer; additional Enter presses are harmless.
-    const enterDelays = [500, 1000, 2000, 4000, 8000];
-    for (const delay of enterDelays) {
+    // 🔴 PTY reliability: send Enter multiple times with backoff.
+    // herdr pane send-keys Enter is unreliable — the first press may not
+    // register. Multiple presses are harmless (extra newlines in pi's
+    // input are either processed as empty turns or ignored).
+    // No acceptance check — isCommandRunning always true for pi itself.
+    for (const delay of [200, 400, 800, 1600]) {
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-
-      const accepted = await this._waitForAgentStatus({
-        paneId: options.paneId,
-        statuses: ['working', 'done'],
-        timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
-      });
-      if (accepted) {
-        return;
-      }
-      if (await isCommandRunning(options.paneId).catch(() => false)) {
-        return;
-      }
-
-      if (delay < 8000) {
-        await sleep(delay);
-      }
+      await sleep(delay);
     }
-
-    console.warn(`⚠️  Prompt to ${options.paneId} unacked after Enter retries — pane may be dead`);
   }
 
   /** JSON mode (no PTY): headless AND not an interactive writer.
