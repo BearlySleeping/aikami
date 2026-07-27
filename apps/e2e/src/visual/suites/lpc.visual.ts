@@ -249,5 +249,36 @@ export default defineConfig({
       schema: LpcSchema,
       canvasSelector: '#game-canvas',
     },
+
+    // ── C-370: Neck Gap — Torso Garment Without Body — 4x Zoom ──────
+    {
+      name: 'C-370 — Neck Continuity (Torso Only, No Body)',
+      searchParams: Object.fromEntries(
+        new URLSearchParams(
+          buildLpcUrl({
+            layers: [
+              { slotDefIndex: 1, variantIndex: 0 },  // head only
+              { slotDefIndex: 2, variantIndex: 6 },  // torso (chainmail) — creates neck gap
+            ],
+            frame: 0,
+            zoom: 4,
+          }),
+        ),
+      ),
+      prompt: [
+        LPC_PROMPT,
+        '',
+        'CRITICAL CHECK (C-370): No transparent or background-colored pixels should be visible',
+        'between the character\'s chin and the top of the torso garment. The neck region must',
+        'show continuous opaque skin/body pixels filling the gap from chin to garment neckline.',
+        'A body layer should be visible beneath the torso chainmail.',
+        '',
+        'Score 90+: No background pixels in the neck gap.',
+        'Score 70-89: Small (< 3px) gap with minor background bleed.',
+        'Score 0-69: Clearly visible background bleed in the neck/chest region.',
+      ].join('\n'),
+      schema: LpcSchema,
+      canvasSelector: '#game-canvas',
+    },
   ],
 });
