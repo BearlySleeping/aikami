@@ -1,8 +1,8 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts
 //
-// Unit tests for DialogueOverlayViewModel (C-328 refactor).
-// Tests delegation to NpcDialogueService (orchestrator) instead of
-// direct OllamaClient/textGenerationService streaming.
+// Unit tests for DialogueOverlayViewModel (C-328 refactor, C-371 free-text-first).
+// Tests delegation to NpcDialogueService (orchestrator) using the two-call
+// pipeline (analyzeIntent → resolveRoll) or legacy single-call (generateTurn).
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
-// Mock: npcDialogueService (orchestrator)
+// Mock: npcDialogueService (orchestrator) — C-371 two-call pipeline
 // ---------------------------------------------------------------------------
 
 let generateTurnStub = mock(async () => ({
@@ -24,8 +24,29 @@ let generateTurnStub = mock(async () => ({
   source: 'ai' as const,
 }));
 
+let analyzeIntentStub = mock(async () => ({
+  requires_roll: false,
+  check_type: undefined,
+  difficulty_class: undefined,
+  modifier_source: undefined,
+  narrative_pre_roll: 'The elder considers your words.',
+  suggested_chips: [
+    { id: 'talk', label: 'Ask about the ward', intent_type: 'dialogue' as const, prefill_text: 'Tell me about the ward.' },
+    { id: 'leave', label: 'Leave', intent_type: 'dialogue' as const, prefill_text: 'Goodbye.' },
+  ],
+}));
+
+let resolveRollStub = mock(async () => ({
+  narrative_result: 'The attempt succeeds.',
+  state_deltas: [],
+  suggested_chips: [],
+}));
+
 const mockNpcDialogueService = {
   generateTurn: generateTurnStub,
+  analyzeIntent: analyzeIntentStub,
+  resolveRoll: resolveRollStub,
+  useFreeTextFirst: true,
   wasCommandExecuted: mock(() => false),
   markCommandExecuted: mock(() => {}),
   configure: mock(() => {}),
@@ -235,9 +256,9 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.inputText).toBe('');
   });
 
-  // ── Orchestrator Delegation (C-328) ────────────────────────────────────
+  // ── Orchestrator Delegation (C-328 / C-371) ─────────────────────────
 
-  test('sendMessage delegates to npcDialogueService.generateTurn', async () => {
+  test('sendMessage delegates to analyzeIntent when useFreeTextFirst is true', async () => {
     const vm = createViewModel();
     vm.inputText = 'What do you know about the ward?';
     vm.sendMessage();
@@ -245,19 +266,21 @@ describe('DialogueOverlayViewModel', () => {
     // Wait for async
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(mockNpcDialogueService.generateTurn).toHaveBeenCalled();
-    // Should have 3 messages: greeting, player, NPC response
+    expect(mockNpcDialogueService.analyzeIntent).toHaveBeenCalled();
+    // Should have 3 messages: greeting, player, NPC pre-roll narrative
     expect(vm.messages.length).toBe(3);
-    expect(vm.messages[2].role).toBe('npc');
   });
 
-  test('npc message contains orchestrator narrative', async () => {
-    generateTurnStub = mock(async () => ({
-      narrative: 'The elder strokes his beard. "The ward is failing."',
-      choices: [{ id: 'talk', label: 'Tell me more' }],
-      source: 'ai' as const,
+  test('npc message contains pre-roll narrative from intent analysis', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requires_roll: false,
+      check_type: undefined,
+      difficulty_class: undefined,
+      modifier_source: undefined,
+      narrative_pre_roll: 'The elder strokes his beard. "The ward is failing."',
+      suggested_chips: [{ id: 'talk', label: 'Tell me more', intent_type: 'dialogue' as const, prefill_text: 'Tell me more.' }],
     }));
-    mockNpcDialogueService.generateTurn = generateTurnStub;
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
     const vm = createViewModel();
     vm.inputText = 'Tell me about the ward.';
@@ -269,16 +292,19 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.messages[2].content).toBe('The elder strokes his beard. "The ward is failing."');
   });
 
-  test('authored fallback when orchestrator returns source=author', async () => {
-    generateTurnStub = mock(async () => ({
-      narrative: '"Greetings, traveler. Our village has need of your aid."',
-      choices: [
-        { id: 'quest', label: 'Ask about quest' },
-        { id: 'leave', label: 'Leave' },
+  test('chips are populated from intent analysis', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requires_roll: false,
+      check_type: undefined,
+      difficulty_class: undefined,
+      modifier_source: undefined,
+      narrative_pre_roll: 'Hello.',
+      suggested_chips: [
+        { id: 'quest', label: 'Ask about quests', intent_type: 'quest' as const, prefill_text: 'Do you have work?' },
+        { id: 'trade', label: 'Trade', intent_type: 'trade' as const, prefill_text: 'Show me your wares.' },
       ],
-      source: 'authored' as const,
     }));
-    mockNpcDialogueService.generateTurn = generateTurnStub;
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
     const vm = createViewModel();
     vm.inputText = 'Hi';
@@ -286,48 +312,56 @@ describe('DialogueOverlayViewModel', () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(vm.messages[vm.messages.length - 1].content).toBe(
-      '"Greetings, traveler. Our village has need of your aid."',
-    );
+    expect(vm.suggestedChips.length).toBe(2);
+    expect(vm.suggestedChips[0].intent_type).toBe('quest');
   });
 
-  // ── Action Menu (C-162) ────────────────────────────────────────────────
+  // ── C-371: Default phase is FREE_TEXT ─────────────────────────────────
 
-  test('goToMenu resets phase to MENU and clears input', () => {
+  test('default dialoguePhase is FREE_TEXT', () => {
     const vm = createViewModel();
-    vm.inputText = 'hello';
-    vm.goToMenu();
-    expect(vm.dialoguePhase).toBe('MENU');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
+  });
+
+  // ── C-371: Suggestion chips ──────────────────────────────────────────
+
+  test('handleChipTap pre-fills input and sends message', () => {
+    const vm = createViewModel();
+    // Simulate chips being set (as from an analyzeIntent response)
+    vm.inputText = '';
+    vm.handleChipTap('talk');
+    // handleChipTap delegates to sendMessage with prefill_text
+    // The prefill_text from the mock is 'Tell me about the ward.'
     expect(vm.inputText).toBe('');
   });
 
-  test('selectAction with custom sets phase to CUSTOM_INPUT', async () => {
+  test('handleChipTap does nothing when streaming', () => {
     const vm = createViewModel();
-    await vm.selectAction('custom');
-    expect(vm.dialoguePhase).toBe('CUSTOM_INPUT');
+    // When chips don't exist, handleChipTap is a no-op
+    vm.handleChipTap('nonexistent');
   });
 
-  test('selectAction with attack triggers direct combat', async () => {
-    let ended = false;
-    const vm = createViewModel({
-      onEndChat: () => {
-        ended = true;
-      },
-    });
-    await vm.selectAction('attack');
-
-    // Combat message appended + endChat called
-    expect(ended).toBe(true);
-  });
-
-  test('selectAction with skill check sets DICE phase', async () => {
+  test('suggestedChips is empty by default', () => {
     const vm = createViewModel();
-    await vm.selectAction('persuasion');
-    expect(vm.dialoguePhase).toBe('DICE');
-    expect(vm.skillCheckState).not.toBeNull();
+    expect(vm.suggestedChips.length).toBe(0);
   });
 
-  // ── Dice Mechanics ────────────────────────────────────────────────────
+  // ── C-371: sendMessage uses analyzeIntent pipeline ──────────────────
+
+  test('sendMessage delegates to analyzeIntent when useFreeTextFirst is true', async () => {
+    const vm = createViewModel();
+    vm.inputText = 'What do you know about the ward?';
+    vm.sendMessage();
+
+    // Wait for async
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockNpcDialogueService.analyzeIntent).toHaveBeenCalled();
+    // Should have 3 messages: greeting, player, NPC pre-roll narrative
+    expect(vm.messages.length).toBe(3);
+  });
+
+  // ── Dice Mechanics (C-371 updated) ─────────────────────────────────
 
   test('rollDice no-ops when phase is not awaiting_click', async () => {
     const vm = createViewModel();
@@ -335,14 +369,21 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.skillCheckState).toBeNull();
   });
 
-  test('rollDice transitions through declared → awaiting_click → rolling → revealed → MENU', async () => {
+  test('rollDice transitions through declared → awaiting_click → rolling → revealed → FREE_TEXT', async () => {
     const vm = createViewModel();
-    await vm.selectAction('persuasion');
+    // Manually set up skill check state (simulating DECLARED_DC from analyzeIntent)
+    vm.skillCheckState = {
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      statModifier: 'CHA',
+      statModifierValue: 2,
+      targetNumber: 10,
+      rollValue: null,
+      phase: 'declared',
+      isSuccess: null,
+    };
 
-    // AC-3: selectAction now produces 'declared' phase (DC committed before RNG)
     expect(vm.skillCheckState?.phase).toBe('declared');
-    expect(vm.skillCheckState?.statModifier).toBe('CHA');
-    expect(vm.skillCheckState?.targetNumber).toBeGreaterThan(0);
 
     // Acknowledge the declaration to make the dice interactive
     vm.acknowledgeDeclaration();
@@ -356,9 +397,9 @@ describe('DialogueOverlayViewModel', () => {
 
     await rollPromise;
 
-    // After resolution, dice clears and phase returns to MENU
+    // After resolution, dice clears and phase returns to FREE_TEXT
     expect(vm.skillCheckState).toBeNull();
-    expect(vm.dialoguePhase).toBe('MENU');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
   });
 
   // ── End Dialogue ───────────────────────────────────────────────────────

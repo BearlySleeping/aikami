@@ -5,6 +5,7 @@
 // so any module can reference them without pulling in ViewModel dependencies.
 //
 // Extended by C-343: alternative tracking, conversation branching.
+// Extended by C-371: free-text-first phases, suggestion chips.
 
 /** A single chat message rendered in the dialogue history. */
 export type DialogueMessage = {
@@ -46,8 +47,25 @@ export type ActionOption = {
   skill?: string;
 };
 
-/** Phases of the dialogue interaction loop. */
-export type DialoguePhase = 'MENU' | 'CUSTOM_INPUT' | 'DICE' | 'CHAT';
+/**
+ * Phases of the dialogue interaction loop.
+ *
+ * - `FREE_TEXT`: Default state — free-text input always visible. (C-371)
+ * - `DECLARED_DC`: DC declaration shown after intent analysis determines a roll. (C-371)
+ * - `DICE`: Dice interactive — roll, animation, reveal. (C-162/C-371)
+ * - `CHIPS`: Post-response state — suggestion chips shown below messages. (C-371)
+ * - `MENU`: LEGACY — BG3-style action menu. Used when feature flag is off.
+ * - `CUSTOM_INPUT`: LEGACY — freeform text after selecting "Custom" action.
+ * - `CHAT`: LEGACY — standard chat phase.
+ */
+export type DialoguePhase =
+  | 'FREE_TEXT'
+  | 'DECLARED_DC'
+  | 'DICE'
+  | 'CHIPS'
+  | 'MENU'
+  | 'CUSTOM_INPUT'
+  | 'CHAT';
 
 /** Address modes available in the dialogue overlay (Scene and GM only; Party deferred to C-340). */
 export type DialogueAddressMode = 'scene' | 'gm';

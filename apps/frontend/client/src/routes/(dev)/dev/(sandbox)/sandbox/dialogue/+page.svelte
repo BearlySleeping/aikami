@@ -66,6 +66,23 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
     }),
     executeCommand: () => true,
+    analyzeIntent: async () => ({
+      requires_roll: false,
+      check_type: undefined,
+      difficulty_class: undefined,
+      modifier_source: undefined,
+      narrative_pre_roll: '[Dev mock intent analysis — no roll needed]',
+      suggested_chips: [
+        { id: 'talk', label: 'Ask more', intent_type: 'dialogue', prefill_text: 'Tell me more.' },
+        { id: 'leave', label: 'Leave', intent_type: 'dialogue', prefill_text: 'Goodbye.' },
+      ],
+    }),
+    resolveRoll: async () => ({
+      narrative_result: '[Dev mock roll resolution]',
+      state_deltas: [],
+      suggested_chips: [],
+    }),
+    useFreeTextFirst: true,
   },
   onStartCombat: () => {
     goBack();
@@ -303,7 +320,7 @@ let devToolsOpen = $state(true);
             >Dice:
             <strong class="text-accent">{viewModel.skillCheckState?.phase ?? 'none'}</strong></span
           >
-          <span>Selected: <strong>{viewModel.selectedActionId ?? '—'}</strong></span>
+          <span>Phase: <strong>{viewModel.dialoguePhase}</strong></span>
           <span>Streaming: <strong>{viewModel.isStreaming ? 'yes' : 'no'}</strong></span>
           <span>Resolving: <strong>{viewModel.isResolvingSkillCheck ? 'yes' : 'no'}</strong></span>
           {#if viewModel.generatedImageUrl}

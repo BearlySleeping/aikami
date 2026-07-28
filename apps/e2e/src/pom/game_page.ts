@@ -245,6 +245,39 @@ export class GamePage {
     await expect(dialogueOverlay).toBeVisible({ timeout: 10_000 });
   }
 
+  /** Assert free-text input is visible (C-371: replaces static verb menu). */
+  async expectFreeTextInput(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const input = this.page.locator('textarea, [data-testid="free-text-input"]');
+    await expect(input.first()).toBeVisible({ timeout: 10_000 });
+  }
+
+  /** Send a free-text message in the dialogue overlay (C-371). */
+  async sendFreeText(text: string): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const input = this.page.locator('textarea').first();
+    await expect(input).toBeVisible({ timeout: 5000 });
+    await input.fill(text);
+    await input.press('Enter');
+    await this.page.waitForTimeout(500);
+  }
+
+  /** Click a suggestion chip by label text (C-371). */
+  async clickChip(label: string): Promise<void> {
+    const chip = this.page.locator('[data-testid="suggestion-chips"] button', {
+      hasText: label,
+    });
+    await chip.click();
+    await this.page.waitForTimeout(500);
+  }
+
+  /** Assert suggestion chips are visible (C-371). */
+  async expectChipsVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const chips = this.page.locator('[data-testid="suggestion-chips"]');
+    await expect(chips).toBeVisible({ timeout: 10_000 });
+  }
+
   /** Select a dialogue choice by index (0-based). */
   async selectDialogueChoice(index: number): Promise<void> {
     const { expect } = await import('@playwright/test');

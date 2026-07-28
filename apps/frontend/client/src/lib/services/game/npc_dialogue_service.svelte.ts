@@ -13,19 +13,33 @@
 // precondition-derived whitelist before dispatch.
 //
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
+// Contract: C-371 Free-Text-First NPC Interaction — two-call pipeline
 
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { NpcDialogueAiEnvelopeSchema, NpcDialogueTurnSchema } from '@aikami/schemas';
+import {
+  NpcDialogueAiEnvelopeSchema,
+  NpcDialogueTurnSchema,
+  NpcIntentAnalysisInputSchema,
+  NpcIntentAnalysisOutputSchema,
+  NpcRollResolutionInputSchema,
+  NpcRollResolutionOutputSchema,
+} from '@aikami/schemas';
 import type {
   ContentPackItemEntry,
   NpcDialogueChoice,
   NpcDialogueCommand,
   NpcDialogueCommandKind,
   NpcDialogueTurn,
+  NpcIntentAnalysisInput,
+  NpcIntentAnalysisOutput,
+  NpcRollResolutionInput,
+  NpcRollResolutionOutput,
+  NpcSuggestionChip,
+  NpcStateDelta,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
@@ -145,11 +159,16 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   /**
    * Configures the orchestrator with its required dependencies.
    * Must be called once before {@link generateTurn}.
+   *
+   * @param options.useFreeTextFirst — When true (default), the two-call
+   *   pipeline (analyzeIntent → resolveRoll) is used. When false, the
+   *   legacy single-call generateTurn path is used for backward compat.
    */
   configure(options: {
     contentProvider: NpcDialogueContentProvider;
     textGenerator: NpcDialogueTextGenerator;
     executors: NpcDialogueExecutors;
+    useFreeTextFirst?: boolean;
   }): void;
 
   /**
@@ -238,6 +257,48 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>;
     command: NpcDialogueCommand;
   }): boolean;
+
+  /**
+   * Call #1 of the two-call pipeline: intent analysis.
+   *
+   * Projects NPC context + player context + recent history to the LLM
+   * and determines whether a mechanical roll is needed.
+   *
+   * @returns Validated {@link NpcIntentAnalysisOutput} — either from AI
+   *   or an authored/derived fallback when AI is unavailable.
+   */
+  analyzeIntent(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts?: string[];
+    playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+  }): Promise<NpcIntentAnalysisOutput>;
+
+  /**
+   * Call #2 of the two-call pipeline: roll resolution.
+   *
+   * Called AFTER the dice has been rolled. Sends the roll outcome to
+   * the LLM for narrative resolution + state delta proposals.
+   *
+   * @returns Validated {@link NpcRollResolutionOutput}.
+   */
+  resolveRoll(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts?: string[];
+    checkType: string;
+    difficultyClass: number;
+    rollTotal: number;
+    outcome: 'pass' | 'fail';
+    playerInput: string;
+  }): Promise<NpcRollResolutionOutput>;
+
+  /** Whether the two-call free-text-first pipeline is active. */
+  readonly useFreeTextFirst: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -252,6 +313,9 @@ export class NpcDialogueService
   private _textGenerator: NpcDialogueTextGenerator | undefined;
   private _executors: NpcDialogueExecutors | undefined;
   private _configured = false;
+
+  /** Feature flag — when false, legacy action menu path is used (C-371). */
+  private _useFreeTextFirst = true;
 
   /** Per-turn executed-command guard (keyed by turn message id). */
   private _executedCommands = new Map<string, NpcDialogueCommandKind>();
@@ -302,10 +366,12 @@ export class NpcDialogueService
     contentProvider: NpcDialogueContentProvider;
     textGenerator: NpcDialogueTextGenerator;
     executors: NpcDialogueExecutors;
+    useFreeTextFirst?: boolean;
   }): void {
     this._contentProvider = options.contentProvider;
     this._textGenerator = options.textGenerator;
     this._executors = options.executors;
+    this._useFreeTextFirst = options.useFreeTextFirst ?? true;
     this._configured = true;
   }
 
@@ -475,6 +541,111 @@ export class NpcDialogueService
       default:
         this.warn('executeCommand:unknown-kind', { kind });
         return false;
+    }
+  }
+
+  /** @inheritdoc */
+  get useFreeTextFirst(): boolean {
+    return this._useFreeTextFirst;
+  }
+
+  // ── Public: two-call pipeline (C-371) ─────────────────────────────────
+
+  /** @inheritdoc */
+  async analyzeIntent(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts?: string[];
+    playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+  }): Promise<NpcIntentAnalysisOutput> {
+    this._assertConfigured();
+
+    // Concurrency gate
+    if (this._activeAbortController) {
+      this._activeAbortController.abort();
+    }
+    const controller = new AbortController();
+    this._activeAbortController = controller;
+    const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+
+    try {
+      const npc = this._contentProvider!.getNpc(options.npcId);
+      const allowedCommands = this._deriveAllowedCommands(npc);
+
+      try {
+        return await this._analyzeIntent({
+          npcName: options.npcName,
+          allowedCommands,
+          messages: options.messages,
+          signal: linkedSignal,
+          gameStateFacts: options.gameStateFacts ?? [],
+          playerContext: options.playerContext ?? {
+            character_sheet_summary: 'Level 1 Fighter',
+            level: 1,
+            class_id: 'fighter',
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const cause = message.includes('abort') ? 'cancelled' : 'generation_failed';
+        this.warn('analyzeIntent:fallback', { cause, detail: message });
+        return this._deriveIntentFallback(options.npcName, allowedCommands);
+      }
+    } finally {
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
+    }
+  }
+
+  /** @inheritdoc */
+  async resolveRoll(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts?: string[];
+    checkType: string;
+    difficultyClass: number;
+    rollTotal: number;
+    outcome: 'pass' | 'fail';
+    playerInput: string;
+  }): Promise<NpcRollResolutionOutput> {
+    this._assertConfigured();
+
+    // Concurrency gate
+    if (this._activeAbortController) {
+      this._activeAbortController.abort();
+    }
+    const controller = new AbortController();
+    this._activeAbortController = controller;
+    const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+
+    try {
+      try {
+        return await this._resolveRoll({
+          npcId: options.npcId,
+          npcName: options.npcName,
+          messages: options.messages,
+          signal: linkedSignal,
+          gameStateFacts: options.gameStateFacts ?? [],
+          checkType: options.checkType,
+          difficultyClass: options.difficultyClass,
+          rollTotal: options.rollTotal,
+          outcome: options.outcome,
+          playerInput: options.playerInput,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.warn('resolveRoll:fallback', { detail: message });
+        return this._deriveRollFallback(options.outcome, options.checkType);
+      }
+    } finally {
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
     }
   }
 
@@ -1050,6 +1221,328 @@ export class NpcDialogueService
     if (!this._configured) {
       throw new Error('NpcDialogueService not configured — call configure() before use');
     }
+  }
+
+  // ── Private: two-call pipeline (C-371) ────────────────────────────────
+
+  /**
+   * Call #1: Intent analysis — determines if a mechanical roll is needed.
+   * Sends player text + NPC context + player context to the LLM.
+   */
+  private async _analyzeIntent(options: {
+    npcName: string;
+    allowedCommands: NpcDialogueCommandKind[];
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts: string[];
+    playerContext: { character_sheet_summary: string; level: number; class_id: string };
+  }): Promise<NpcIntentAnalysisOutput> {
+    this.debug('_analyzeIntent:start');
+
+    const { npcName, allowedCommands, messages, gameStateFacts, playerContext } = options;
+
+    // Build the input for the LLM
+    const input: NpcIntentAnalysisInput = {
+      player_input: messages.filter((m) => m.role === 'player').pop()?.content ?? '',
+      npc_context: {
+        name: npcName,
+        persona: `You are ${npcName}, a character in a fantasy world.`,
+        allowed_commands: allowedCommands,
+      },
+      player_context: playerContext,
+      recent_history: messages.slice(-10).map((m) => ({
+        role: m.role,
+        content: m.content.slice(0, 200),
+      })),
+      game_state_facts: gameStateFacts,
+    };
+
+    // Build system prompt for intent analysis
+    const systemPrompt = [
+      'You are a game master assistant analyzing player intent in an RPG dialogue.',
+      'Given the player\'s message and NPC context, determine:',
+      '1. Whether this action requires a skill check (dice roll).',
+      '2. If so, what skill to check, what difficulty class (5-20), and what stat modifier applies.',
+      '3. A short pre-roll narrative (the NPC\'s reaction before any dice).',
+      '4. 0-4 contextual suggestion chips for the player.',
+      '',
+      'Be conservative: only require a roll when the player is clearly attempting',
+      'persuasion, deception, intimidation, stealth, or another skill-based action.',
+      'Everyday conversation does NOT need a roll.',
+      '',
+      'Respond with a JSON object matching the NpcIntentAnalysisOutput schema.',
+    ].join('\n');
+
+    const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: JSON.stringify(input) },
+    ];
+
+    try {
+      const result = await this._textGenerator!({
+        messages: adapterMessages,
+        schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+        schemaName: 'NpcIntentAnalysisOutput',
+        signal: options.signal,
+      });
+
+      const rawOutput = result.structured ?? {};
+
+      // Validate against schema
+      if (Value.Check(NpcIntentAnalysisOutputSchema, rawOutput)) {
+        const output = rawOutput as NpcIntentAnalysisOutput;
+        this.debug('_analyzeIntent:complete', {
+          requires_roll: output.requires_roll,
+          check_type: output.check_type,
+          chip_count: output.suggested_chips.length,
+        });
+        return output;
+      }
+
+      // Repair attempt: salvage narrative from raw text
+      this.warn('_analyzeIntent:invalid-output');
+      return {
+        requires_roll: false,
+        check_type: undefined,
+        difficulty_class: undefined,
+        modifier_source: undefined,
+        narrative_pre_roll: result.text?.trim() || `*${npcName} considers your words.*`,
+        suggested_chips: [],
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Intent analysis failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Call #2: Roll resolution — sends dice outcome to LLM for narrative.
+   */
+  private async _resolveRoll(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+    gameStateFacts: string[];
+    checkType: string;
+    difficultyClass: number;
+    rollTotal: number;
+    outcome: 'pass' | 'fail';
+    playerInput: string;
+  }): Promise<NpcRollResolutionOutput> {
+    this.debug('_resolveRoll:start', {
+      checkType: options.checkType,
+      dc: options.difficultyClass,
+      outcome: options.outcome,
+    });
+
+    const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput } = options;
+
+    const input: NpcRollResolutionInput = {
+      check_type: checkType,
+      difficulty_class: difficultyClass,
+      roll_total: rollTotal,
+      outcome,
+      player_input: playerInput,
+    };
+
+    const systemPrompt = [
+      'You are a game master resolving a dice roll outcome in an RPG dialogue.',
+      'Given the skill check result, write a narrative NPC response and propose',
+      'any state changes (trust, flags, inventory).',
+      '',
+      'Respond with a JSON object matching the NpcRollResolutionOutput schema.',
+    ].join('\n');
+
+    const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`,
+      },
+    ];
+
+    try {
+      const result = await this._textGenerator!({
+        messages: adapterMessages,
+        schema: NpcRollResolutionOutputSchema as unknown as Record<string, unknown>,
+        schemaName: 'NpcRollResolutionOutput',
+        signal: options.signal,
+      });
+
+      const rawOutput = result.structured ?? {};
+
+      if (Value.Check(NpcRollResolutionOutputSchema, rawOutput)) {
+        const output = rawOutput as NpcRollResolutionOutput;
+
+        // Validate and apply state deltas
+        const validatedDeltas = this._validateAndApplyDeltas({
+          deltas: output.state_deltas,
+          npcId: options.npcId,
+        });
+        output.state_deltas = validatedDeltas;
+
+        this.debug('_resolveRoll:complete', {
+          narrative_length: output.narrative_result.length,
+          delta_count: validatedDeltas.length,
+          chip_count: output.suggested_chips.length,
+        });
+        return output;
+      }
+
+      this.warn('_resolveRoll:invalid-output');
+      return {
+        narrative_result: result.text?.trim() || `*${npcName} waits for your next move.*`,
+        state_deltas: [],
+        suggested_chips: [],
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Roll resolution failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Validates and applies state deltas proposed by the LLM.
+   * Invalid deltas are silently dropped and logged.
+   */
+  private _validateAndApplyDeltas(options: {
+    deltas: NpcStateDelta[];
+    npcId: string;
+  }): NpcStateDelta[] {
+    const valid: NpcStateDelta[] = [];
+
+    for (const delta of options.deltas) {
+      switch (delta.kind) {
+        case 'trust_change': {
+          if (delta.value !== undefined && delta.value >= -10 && delta.value <= 10) {
+            valid.push(delta);
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-trust', { delta });
+          }
+          break;
+        }
+        case 'flag_set':
+        case 'flag_clear': {
+          if (delta.label && delta.label.length > 0) {
+            valid.push(delta);
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
+          }
+          break;
+        }
+        case 'inventory_grant':
+        case 'inventory_remove': {
+          if (delta.target && delta.target.length > 0) {
+            valid.push(delta);
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
+          }
+          break;
+        }
+        case 'relationship_update': {
+          if (delta.label && delta.label.length > 0) {
+            valid.push(delta);
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-relationship', { delta });
+          }
+          break;
+        }
+        default: {
+          this.warn('_validateAndApplyDeltas:unknown-kind', { delta });
+          break;
+        }
+      }
+    }
+
+    return valid;
+  }
+
+  /**
+   * Derives suggestion chips from authored dialogue + NPC capabilities
+   * when AI is unavailable (fallback path).
+   */
+  private _deriveChips(options: {
+    npcName: string;
+    allowedCommands: NpcDialogueCommandKind[];
+  }): NpcSuggestionChip[] {
+    const { npcName, allowedCommands } = options;
+    const chips: NpcSuggestionChip[] = [];
+
+    // Derive chips from NPC capabilities
+    if (allowedCommands.includes('trade')) {
+      chips.push({
+        id: 'trade',
+        label: `Trade with ${npcName}`,
+        intent_type: 'trade',
+        prefill_text: `I'd like to see your wares.`,
+      });
+    }
+
+    if (allowedCommands.includes('offerQuest')) {
+      chips.push({
+        id: 'ask_quest',
+        label: 'Ask about work',
+        intent_type: 'quest',
+        prefill_text: `Do you have any work for me?`,
+      });
+    }
+
+    // Always add a talk chip
+    chips.push({
+      id: 'talk',
+      label: `Ask ${npcName} more`,
+      intent_type: 'dialogue',
+      prefill_text: `Tell me more.`,
+    });
+
+    // Always add a leave chip
+    if (chips.length < 4) {
+      chips.push({
+        id: 'leave',
+        label: 'Leave',
+        intent_type: 'dialogue',
+        prefill_text: `I must be going.`,
+      });
+    }
+
+    return chips.slice(0, 4);
+  }
+
+  /**
+   * Derives a fallback intent analysis output when AI is unavailable.
+   */
+  private _deriveIntentFallback(
+    npcName: string,
+    allowedCommands: NpcDialogueCommandKind[],
+  ): NpcIntentAnalysisOutput {
+    return {
+      requires_roll: false,
+      check_type: undefined,
+      difficulty_class: undefined,
+      modifier_source: undefined,
+      narrative_pre_roll: this._genericFallbackLine(npcName),
+      suggested_chips: this._deriveChips({ npcName, allowedCommands }),
+    };
+  }
+
+  /**
+   * Derives a fallback roll resolution output when call #2 fails.
+   */
+  private _deriveRollFallback(
+    outcome: 'pass' | 'fail',
+    checkType: string,
+  ): NpcRollResolutionOutput {
+    const narrative =
+      outcome === 'pass'
+        ? `*The attempt at ${checkType} succeeds.*`
+        : `*The attempt at ${checkType} falls short.*`;
+
+    return {
+      narrative_result: narrative,
+      state_deltas: [],
+      suggested_chips: [],
+    };
   }
 }
 

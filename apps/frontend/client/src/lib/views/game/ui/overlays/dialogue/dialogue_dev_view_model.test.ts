@@ -92,6 +92,23 @@ mock.module('$services', () => ({
   diceService: {
     rollD20: (_modifier: number) => ({ natural: 14, total: 14 }),
   },
+  imageGenerationService: {
+    get isGenerating() {
+      return mockImageGenIsGenerating;
+    },
+    get isReady() {
+      return mockImageGenIsReady;
+    },
+    generateImage: mock(async () => {
+      if (mockImageGenShouldThrow) {
+        throw mockImageGenShouldThrow;
+      }
+      return mockImageGenResult;
+    }),
+    isDemoMode: mock(() => mockImageGenResult.isDemo),
+    checkpoints: [],
+    selectedCheckpoint: '',
+  },
   routerService: {},
   SentenceBoundaryChunker: class {
     feed(_text: string) {}
