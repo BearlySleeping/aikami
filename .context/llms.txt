@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-28
-> Files: 299 across 12 categories
+> Files: 300 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -290,6 +290,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-344: Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle](contracts/C-344-complete-session-recaps-checkpoints-and-long-campaign-lifecy.md)
 - [Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure](contracts/C-345-add-a-campaigncontent-pack-browser-and-a-second-adventure.md)
 - [Contract C-370: Fix LPC Paperdoll Base Layering and Neck Alignment](contracts/C-370-fix-lpc-paperdoll-base-layering-and-neck-alignment.md)
+- [Contract C-371: NPC Interaction Refactor — Free-Text-First with Contextual Chips](contracts/C-371.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
