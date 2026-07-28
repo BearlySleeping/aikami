@@ -20,10 +20,10 @@ const sh = async (cmd: string): Promise<void> => {
 };
 
 // 1. Fix formatting + lint on affected staged files
-await sh('bunx moon run :fix --affected --status=staged');
+await sh('bunx moon run :fix --affected --status=staged --concurrency 8');
 
 // 2. Typecheck affected projects
-await sh('bunx moon run :typecheck --affected --status=staged');
+await sh('bunx moon run :typecheck --affected --status=staged --concurrency 8');
 
 if (!isWorktree) {
   // 3. Sync contract dashboard files (PROGRESS.md, PROMOTION.md)
@@ -40,5 +40,5 @@ if (!isWorktree) {
 await runStream([
   'sh',
   '-c',
-  'git diff -z --name-only --cached | xargs -0 git add 2>/dev/null || true',
+  'git diff -z --name-only --cached | xargs -0 -r git add 2>/dev/null || true',
 ]);

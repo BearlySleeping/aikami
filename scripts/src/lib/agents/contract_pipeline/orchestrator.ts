@@ -507,6 +507,9 @@ export const runContractPipeline = async (options: {
   /** When true, the writer stage runs in interactive TUI mode so the user
    *  can chat directly with the writer pi session. */
   interactiveWriter?: boolean;
+  /** When true, use the standard aikami-{mode} herdr workspace and
+   *  skip git worktree provisioning. All stages run from the repo root. */
+  rootMode?: boolean;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (opts: {
     repoRoot: string;
@@ -612,6 +615,7 @@ export const runContractPipeline = async (options: {
       runId: manifest.runId,
       contractId: manifest.contractId,
       interactiveWriter: options.interactiveWriter,
+      rootMode: options.rootMode,
     });
 
   try {

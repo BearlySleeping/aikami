@@ -174,6 +174,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    *  chat directly with the writer pi session to describe the feature. Other
    *  stages remain headless JSON. */
   private readonly _interactiveWriter: boolean;
+  /** When true, use the standard aikami-{mode} workspace and skip
+   *  git worktree provisioning. All stages run from the repo root. */
+  private readonly _rootMode: boolean;
   private _workspaceId = '';
   private _pipelinePaneId = '';
   private _workspacePath = '';
@@ -184,12 +187,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     contractId: string;
     headless?: boolean;
     interactiveWriter?: boolean;
+    rootMode?: boolean;
   }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
-    this._workspaceLabel = `aikami-contract-${options.contractId}`;
+    const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
+    this._workspaceLabel = options.rootMode
+      ? `aikami-${mode}`
+      : `aikami-contract-${options.contractId}`;
     this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS !== '0';
     this._interactiveWriter = options.interactiveWriter ?? false;
+    this._rootMode = options.rootMode ?? false;
   }
 
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
@@ -224,7 +232,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
             command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
           });
         }
-        this._provisionGitWorktree();
+        if (!this._rootMode) {
+          this._provisionGitWorktree();
+        }
         return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
       }
       const recovered = await herdrJson<TabCreateResult>([
@@ -247,7 +257,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         paneId: this._pipelinePaneId,
         command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
       });
-      this._provisionGitWorktree();
+      if (!this._rootMode) {
+        this._provisionGitWorktree();
+      }
       return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
     }
     const result = await herdrJson<WorkspaceCreateResult>([
@@ -269,7 +281,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       paneId: this._pipelinePaneId,
       command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
     });
-    this._provisionGitWorktree();
+    if (!this._rootMode) {
+      this._provisionGitWorktree();
+    }
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
 
@@ -284,6 +298,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }
 
   private _provisionGitWorktree(): void {
+    if (this._rootMode) {
+      this._workspacePath = '';
+      return;
+    }
     const { workspacePath, branchName, headCommit } = provisionGitWorktree({
       repoRoot: this._repoRoot,
       name: this._runId,
