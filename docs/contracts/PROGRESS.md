@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-27)
+## Status Summary (Auto-generated: 2026-07-28)
 
-**166 active (24 without contract file), 119 archived, 1 duplicates**
+**165 active (24 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -173,7 +173,6 @@
 | C-368 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
 | C-369 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
 | C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | — | v2 |
-| C-371 | C 371 | ✅ verified | — | v2 |
 
 ---
 

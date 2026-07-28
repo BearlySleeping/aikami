@@ -647,6 +647,7 @@ const main = async (): Promise<void> => {
     ready: cli.ready,
     yolo: cli.yolo,
     interactiveWriter,
+    rootMode: cli.root,
     onReady: cli.launcherToken
       ? (readyManifest) => {
           atomicWrite({
