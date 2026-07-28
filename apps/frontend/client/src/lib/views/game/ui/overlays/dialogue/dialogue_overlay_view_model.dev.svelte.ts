@@ -209,6 +209,8 @@ export class DialogueDevViewModel
     // Ensure phase matches initial interaction mode
     if (this.interactionMode === 'freeform') {
       this.dialoguePhase = 'CUSTOM_INPUT';
+    } else {
+      this.dialoguePhase = 'MENU';
     }
 
     // Apply initial NPC preset — overrides the default npcData from super()
@@ -373,8 +375,7 @@ export class DialogueDevViewModel
 
     // Clear dice overlay and return to menu
     this.skillCheckState = null;
-    this.selectedActionId = null;
-    this.dialoguePhase = 'MENU';
+    this.dialoguePhase = 'FREE_TEXT';
   }
 
   // ── Private: controlled roll ────────────────────────────────────────

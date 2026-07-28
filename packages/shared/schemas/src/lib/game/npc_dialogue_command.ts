@@ -9,6 +9,8 @@
 // `Value.Check` before any dispatch.
 //
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
+// Contract: C-371 Free-Text-First NPC Interaction — intent analysis + roll
+//   resolution + suggestion chips + state deltas
 
 import Type, { type Static } from 'typebox';
 
@@ -170,3 +172,168 @@ export const NpcDialogueAiEnvelopeSchema = Type.Object(
 );
 
 export type NpcDialogueAiEnvelope = Static<typeof NpcDialogueAiEnvelopeSchema>;
+
+// ---------------------------------------------------------------------------
+// Suggestion Chip — rendered below NPC messages (C-371)
+// ---------------------------------------------------------------------------
+
+/** Semantic intent type for a suggestion chip — drives icon + urgency. */
+export const NpcSuggestionChipIntentTypeSchema = Type.Union([
+  Type.Literal('dialogue'),
+  Type.Literal('skill_check'),
+  Type.Literal('combat'),
+  Type.Literal('trade'),
+  Type.Literal('quest'),
+]);
+
+export type NpcSuggestionChipIntentType = Static<typeof NpcSuggestionChipIntentTypeSchema>;
+
+/** One contextual suggestion chip rendered below NPC messages. */
+export const NpcSuggestionChipSchema = Type.Object(
+  {
+    /** Unique chip ID within this turn. */
+    id: Type.String({ minLength: 1 }),
+    /** Display label (e.g. "Ask about the stolen gems", "Intimidate"). */
+    label: Type.String({ minLength: 1 }),
+    /** Semantic intent tag — drives UI treatment (icons, urgency). */
+    intent_type: NpcSuggestionChipIntentTypeSchema,
+    /** Pre-filled text sent as the next player message when tapped. */
+    prefill_text: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcSuggestionChip = Static<typeof NpcSuggestionChipSchema>;
+
+// ---------------------------------------------------------------------------
+// State Delta — LLM proposes, game validates and applies (C-371)
+// ---------------------------------------------------------------------------
+
+/** A single state change proposed by the LLM. Game validates before applying. */
+export const NpcStateDeltaSchema = Type.Object(
+  {
+    /** What kind of state change this is. */
+    kind: Type.Union([
+      Type.Literal('trust_change'),
+      Type.Literal('flag_set'),
+      Type.Literal('flag_clear'),
+      Type.Literal('inventory_grant'),
+      Type.Literal('inventory_remove'),
+      Type.Literal('relationship_update'),
+    ]),
+    /** Target entity (NPC ID, player ID, item ID). */
+    target: Type.String({ minLength: 1 }),
+    /** Numeric value when applicable (trust delta, quantity). */
+    value: Type.Optional(Type.Number()),
+    /** String value when applicable (flag name, relationship label). */
+    label: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcStateDelta = Static<typeof NpcStateDeltaSchema>;
+
+// ---------------------------------------------------------------------------
+// Intent Analysis — Call #1 input + output (C-371)
+// ---------------------------------------------------------------------------
+
+/** Context projection for intent analysis — sent to LLM call #1. */
+export const NpcIntentAnalysisInputSchema = Type.Object(
+  {
+    /** The player's raw natural-language input. */
+    player_input: Type.String({ minLength: 1 }),
+    /** NPC identity and disposition. */
+    npc_context: Type.Object(
+      {
+        name: Type.String({ minLength: 1 }),
+        persona: Type.String({ minLength: 1 }),
+        /** Allowed command kinds for this NPC. */
+        allowed_commands: Type.Array(Type.String({ minLength: 1 })),
+      },
+      { additionalProperties: false },
+    ),
+    /** Player character sheet summary (stats, level, class). */
+    player_context: Type.Object(
+      {
+        character_sheet_summary: Type.String({ minLength: 1 }),
+        level: Type.Integer({ minimum: 1 }),
+        class_id: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
+    /** Recent conversation turns (player + NPC, newest last). */
+    recent_history: Type.Array(
+      Type.Object(
+        {
+          role: Type.Union([Type.Literal('player'), Type.Literal('npc')]),
+          content: Type.String(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    /** Read-only world facts (active quests, flags). */
+    game_state_facts: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcIntentAnalysisInput = Static<typeof NpcIntentAnalysisInputSchema>;
+
+/** LLM output from call #1 — determines if a mechanical roll is needed. */
+export const NpcIntentAnalysisOutputSchema = Type.Object(
+  {
+    /** Whether this player action requires a skill check / dice roll. */
+    requires_roll: Type.Boolean(),
+    /** The skill to check against (e.g. "Deception", "Persuasion"). Only set when requires_roll is true. */
+    check_type: Type.Optional(Type.String()),
+    /** Difficulty class (5–20). Only set when requires_roll is true. */
+    difficulty_class: Type.Optional(Type.Integer({ minimum: 5, maximum: 20 })),
+    /** Which player stat modifier applies (e.g. "CHA", "STR"). Only set when requires_roll is true. */
+    modifier_source: Type.Optional(Type.String()),
+    /** Short narrative that plays BEFORE any roll UI appears — the NPC's reaction to what was said. */
+    narrative_pre_roll: Type.String({ minLength: 1 }),
+    /** Suggested follow-up chips for this turn (0–4). */
+    suggested_chips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcIntentAnalysisOutput = Static<typeof NpcIntentAnalysisOutputSchema>;
+
+// ---------------------------------------------------------------------------
+// Roll Resolution — Call #2 input + output (C-371)
+// ---------------------------------------------------------------------------
+
+/** Sent to LLM call #2 — the outcome of the dice roll. */
+export const NpcRollResolutionInputSchema = Type.Object(
+  {
+    /** The skill that was checked. */
+    check_type: Type.String({ minLength: 1 }),
+    /** The difficulty class the GM set. */
+    difficulty_class: Type.Integer({ minimum: 5, maximum: 20 }),
+    /** The total roll (d20 + modifier). */
+    roll_total: Type.Integer(),
+    /** Whether the roll passed the DC. */
+    outcome: Type.Union([Type.Literal('pass'), Type.Literal('fail')]),
+    /** The player's original text (for context). */
+    player_input: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcRollResolutionInput = Static<typeof NpcRollResolutionInputSchema>;
+
+/** LLM output from call #2 — narrative resolution + state change proposals. */
+export const NpcRollResolutionOutputSchema = Type.Object(
+  {
+    /** The NPC's narrative response incorporating the roll outcome. */
+    narrative_result: Type.String({ minLength: 1 }),
+    /** State changes the LLM proposes. Game validates and applies each. */
+    state_deltas: Type.Array(NpcStateDeltaSchema),
+    /** Updated contextual chips for the next player turn (0–4). */
+    suggested_chips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcRollResolutionOutput = Static<typeof NpcRollResolutionOutputSchema>;
