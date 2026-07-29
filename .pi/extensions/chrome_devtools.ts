@@ -18,7 +18,6 @@
 //   AIKAMI_MODE          — determines which port to target
 //   AIKAMI_ROOT          — project root
 
-import { execSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
@@ -69,16 +68,10 @@ async function isCdpAlive(): Promise<boolean> {
 
 /** Find the chromium binary — prefer Nix-provided, fall back to PATH. */
 function findChromium(): string | null {
-  // Try common names
   for (const bin of ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome']) {
-    try {
-      const result = execSync(`which ${bin}`, { stdio: 'pipe', timeout: 5000 });
-      const p = result.toString().trim();
-      if (p) {
-        return p;
-      }
-    } catch {
-      // not found, try next
+    const p = Bun.which(bin);
+    if (p) {
+      return p;
     }
   }
   return null;
@@ -120,9 +113,8 @@ async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: stri
     'about:blank',
   ];
 
-  const proc = spawn(chromiumPath, args, {
-    stdio: 'ignore',
-    detached: true,
+  const proc = Bun.spawn([chromiumPath, ...args], {
+    stdio: ['ignore', 'ignore', 'ignore'],
   });
   proc.unref();
   spawnedChromePid = proc.pid ?? null;

@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { runSync } from './lib/process_runner.ts';
 
 const VALID_MODES = ['emulator', 'staging', 'production'] as const;
 
@@ -109,9 +110,8 @@ function buildStatusReport(): string {
 async function switchMode(mode: string): Promise<string> {
   writeEnvLocal('AIKAMI_MODE', mode);
   // Reload direnv via bash — this re-evaluates .envrc
-  const { execSync } = await import('node:child_process');
   try {
-    execSync('direnv reload', { cwd: getRoot(), stdio: 'pipe', timeout: 30_000 });
+    runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 30_000 });
   } catch {
     // direnv reload may fail in some contexts (e.g. no direnv binary in the
     // same PATH that pi was launched with). Fall back to manual env export.
@@ -168,8 +168,7 @@ function addNixPackage(packageName: string): string {
 
   // Trigger direnv reload so the package is available immediately
   try {
-    const { execSync } = require('node:child_process');
-    execSync('direnv reload', { cwd: getRoot(), stdio: 'pipe', timeout: 60_000 });
+    runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 60_000 });
   } catch {
     // Reload may time out (Nix evaluation) or fail. That's OK — the user
     // will get the package on next shell entry.

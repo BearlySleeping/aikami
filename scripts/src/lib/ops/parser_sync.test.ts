@@ -158,7 +158,8 @@ describe('Parser Sync (C-312 AC-4)', () => {
     expect(exists).toBe(true);
 
     const canonicalDoc = parseBacklog(REPO_ROOT);
-    expect(canonicalDoc.items.length).toBeGreaterThan(0);
+    // Backlog items now tracked in GitHub Issues + Project board, not inline in TODO.md
+    expect(Array.isArray(canonicalDoc.items)).toBe(true);
     expect(canonicalDoc.errors.length).toBe(0);
   });
 });

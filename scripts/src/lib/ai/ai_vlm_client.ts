@@ -147,9 +147,7 @@ const DEFAULT_TEMPERATURE = 0.1;
 /** Default model per provider. */
 const DEFAULT_MODELS: Record<VlmProviderType, string> = {
   openrouter: 'google/gemini-2.5-flash',
-  // biome-ignore lint/style/useNamingConvention: discriminant value
   local_ollama: 'llama3.2-vision:11b',
-  // biome-ignore lint/style/useNamingConvention: discriminant value
   local_llamaccp: 'llama-vision',
 };
 
@@ -239,7 +237,6 @@ const _callOpenRouter = async (options: {
         content: hasVision
           ? [
               { type: 'text', text: prompt },
-              // biome-ignore lint/style/useNamingConvention: OpenAI field
               { type: 'image_url', image_url: { url: imageDataUri } },
             ]
           : [
@@ -260,7 +257,6 @@ const _callOpenRouter = async (options: {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      // biome-ignore lint/style/useNamingConvention: HTTP header
       Authorization: `Bearer ${key}`,
       'HTTP-Referer': 'https://localhost:3000',
       'X-Title': 'Aikami',
@@ -312,9 +308,7 @@ const _callOllama = async (options: {
       stream: false,
       options: {
         temperature,
-        // biome-ignore lint/style/useNamingConvention: Ollama API field
         num_predict: OLLAMA_NUM_PREDICT,
-        // biome-ignore lint/style/useNamingConvention: Ollama API field
         num_ctx: OLLAMA_NUM_CTX,
       },
     }),
@@ -517,7 +511,6 @@ export const evaluateImage = async <T = Record<string, unknown>>(
       const responseFormat = schema
         ? {
             type: 'json_schema',
-            // biome-ignore lint/style/useNamingConvention: OpenAI field
             json_schema: {
               name: 'visual_evaluation',
               strict: true,

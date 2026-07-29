@@ -1,12 +1,15 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
+import { SKILL_STAT_MAP } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { NpcSuggestionChip } from '@aikami/types';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
+import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from '$services';
 import {
   buildGameStateFacts,
@@ -18,17 +21,13 @@ import {
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
-import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
 import type {
-  ActionOption,
   ConversationBranch,
   DialogueAddressMode,
   DialogueMessage,
   DialoguePhase,
+  ExpressionId,
 } from '$types';
-import type { NpcSuggestionChip } from '@aikami/types';
-import { SKILL_STAT_MAP } from '@aikami/constants';
-import type { ExpressionId } from '$types';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -290,7 +289,13 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly showPartyUi: boolean;
 
   /** Latest dice roll result banner (null when no banner to show). */
-  readonly rollResultBanner: { value: number; dc: number; checkType: string; isSuccess: boolean; afterMessageId: string } | null;
+  readonly rollResultBanner: {
+    value: number;
+    dc: number;
+    checkType: string;
+    isSuccess: boolean;
+    afterMessageId: string;
+  } | null;
 
   /** Whether the current turn offers a recruit action (C-340 AC-1). */
   readonly recruitAvailable: boolean;
@@ -586,7 +591,13 @@ class DialogueOverlayViewModel
   highlightSpeaker = $state<'npc' | 'player' | null>(null);
 
   /** Dice roll result banner — shown centered in chat after a roll resolves. */
-  rollResultBanner = $state<{ value: number; dc: number; checkType: string; isSuccess: boolean; afterMessageId: string } | null>(null);
+  rollResultBanner = $state<{
+    value: number;
+    dc: number;
+    checkType: string;
+    isSuccess: boolean;
+    afterMessageId: string;
+  } | null>(null);
 
   /** @inheritdoc */
   get imageProviderAvailable(): boolean {
@@ -674,8 +685,7 @@ class DialogueOverlayViewModel
 
     // Otherwise, pre-fill and send as a player message.
     // Use the label as fallback if the LLM's prefill_text is too short/nonsensical.
-    const messageText =
-      chip.prefill_text.length >= 10 ? chip.prefill_text : chip.label;
+    const messageText = chip.prefill_text.length >= 10 ? chip.prefill_text : chip.label;
     this.inputText = messageText;
     void this.sendMessage(messageText);
   }
@@ -704,7 +714,7 @@ class DialogueOverlayViewModel
 
     // Use a default skill check — persuasion vs DC 12
     const difficultyClass = 12;
-    const skillEntry = SKILL_STAT_MAP['persuasion'];
+    const skillEntry = SKILL_STAT_MAP.persuasion;
     const statModifier = skillEntry?.stat ?? '—';
     const statModifierValue = skillEntry?.defaultModifier ?? 0;
     const targetNumber = Math.max(1, difficultyClass - statModifierValue);
@@ -954,7 +964,7 @@ class DialogueOverlayViewModel
    * GM Mode: sends the player's message directly to the Game Master.
    * The GM responds as the dungeon master, not as an NPC.
    */
-  private async _sendToGameMaster(content: string): Promise<void> {
+  private async _sendToGameMaster(_content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
@@ -999,7 +1009,7 @@ class DialogueOverlayViewModel
    * Call #1 (analyzeIntent) → if roll needed: DECLARED_DC → dice → rollDice → call #2.
    * If no roll needed: display narrative + chips directly.
    */
-  private async _sendWithIntentAnalysis(content: string, npcMessageId?: string): Promise<void> {
+  private async _sendWithIntentAnalysis(_content: string, npcMessageId?: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
 
@@ -1719,7 +1729,9 @@ class DialogueOverlayViewModel
    * Runs expression detection on NPC response text and updates {@link npcExpression}.
    */
   protected async _detectExpression(text: string): Promise<void> {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      return;
+    }
 
     try {
       // Get available expressions for this NPC (overridable in subclasses like dev sandbox)

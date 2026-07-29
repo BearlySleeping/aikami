@@ -12,10 +12,9 @@
 //   - autoGenerateImage: auto-generate scene images on skill check resolution
 //   - generatedImageUrl: latest generated image URL (shown in inspector)
 
+import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
 import { diceService, imageGenerationService, ttsService } from '$services';
 import type { ExpressionId } from '$types';
-import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
-import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
 import {
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
@@ -82,7 +81,12 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   simulatePartyMessage(): void;
 
   /** Force a dice roll with test parameters. */
-  forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void;
+  forceDiceRoll(options: {
+    checkType: string;
+    difficultyClass: number;
+    statModifier: string;
+    statModifierValue: number;
+  }): void;
 };
 
 export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
@@ -329,7 +333,9 @@ export class DialogueDevViewModel
 
   /** @inheritdoc */
   simulatePartyMessage(): void {
-    if (!this.showPartyUi) return;
+    if (!this.showPartyUi) {
+      return;
+    }
     const lines = [
       '"I agree with that course of action."',
       '"Wait, I have an idea. *pulls out a map* We could take the mountain pass instead."',
@@ -359,7 +365,12 @@ export class DialogueDevViewModel
   }
 
   /** @inheritdoc */
-  forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void {
+  forceDiceRoll(options: {
+    checkType: string;
+    difficultyClass: number;
+    statModifier: string;
+    statModifierValue: number;
+  }): void {
     const targetNumber = Math.max(1, options.difficultyClass - options.statModifierValue);
     this.skillCheckState = {
       checkType: options.checkType,

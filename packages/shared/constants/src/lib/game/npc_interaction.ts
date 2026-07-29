@@ -27,7 +27,6 @@ export type SkillStatEntry = {
 export const SKILL_STAT_MAP: Record<string, SkillStatEntry> = {
   persuasion: { stat: 'CHA', defaultModifier: 2 },
   intimidation: { stat: 'STR', defaultModifier: 1 },
-  // biome-ignore lint/style/useNamingConvention: content pack skill key convention
   sleight_of_hand: { stat: 'DEX', defaultModifier: 1 },
   stealth: { stat: 'DEX', defaultModifier: 1 },
   insight: { stat: 'WIS', defaultModifier: 1 },

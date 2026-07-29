@@ -62,7 +62,7 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
       <div>
         <span class="text-[10px] font-mono uppercase text-base-content/40">Per-Image Tags</span>
         <div class="grid grid-cols-2 gap-1 mt-1">
-          {#each viewModel.activeProfilePerImageTags as [ key, value ]}
+          {#each viewModel.activeProfilePerImageTags as [key, value]}
             <span class="text-[10px] font-mono bg-base-300 rounded px-1 py-0.5">
               <span class="text-primary">{key}:</span> {value.slice(0, 30)}
             </span>

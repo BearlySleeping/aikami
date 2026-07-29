@@ -257,8 +257,8 @@ export default defineConfig({
         new URLSearchParams(
           buildLpcUrl({
             layers: [
-              { slotDefIndex: 1, variantIndex: 0 },  // head only
-              { slotDefIndex: 2, variantIndex: 6 },  // torso (chainmail) — creates neck gap
+              { slotDefIndex: 1, variantIndex: 0 }, // head only
+              { slotDefIndex: 2, variantIndex: 6 }, // torso (chainmail) — creates neck gap
             ],
             frame: 0,
             zoom: 4,
@@ -269,7 +269,7 @@ export default defineConfig({
         LPC_PROMPT,
         '',
         'CRITICAL CHECK (C-370): No transparent or background-colored pixels should be visible',
-        'between the character\'s chin and the top of the torso garment. The neck region must',
+        "between the character's chin and the top of the torso garment. The neck region must",
         'show continuous opaque skin/body pixels filling the gap from chin to garment neckline.',
         'A body layer should be visible beneath the torso chainmail.',
         '',

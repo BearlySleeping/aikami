@@ -7,9 +7,9 @@
 //   bun test scripts/voice_service.test.ts
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { $ } from 'bun';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { $ } from 'bun';
 
 // ── Paths ───────────────────────────────────────────────────
 
@@ -79,12 +79,19 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
       return;
     }
 
-    if (!wasEverReachable && !result.detail.includes('refused') && !result.detail.includes('Unable to connect')) {
+    if (
+      !wasEverReachable &&
+      !result.detail.includes('refused') &&
+      !result.detail.includes('Unable to connect')
+    ) {
       wasEverReachable = true;
     }
 
     if (result.detail !== lastDetail) {
-      if (wasEverReachable && (result.detail.includes('refused') || result.detail.includes('Unable to connect'))) {
+      if (
+        wasEverReachable &&
+        (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
+      ) {
         throw new Error('Kokoro crashed after becoming reachable — check herdr tab logs');
       }
       console.log(`  ... ${result.detail}`);
@@ -175,47 +182,51 @@ describe('Kokoro TTS voice service', () => {
     }
   });
 
-  test.skipIf(voicesAvailable.length === 0)('/v1/audio/speech synthesizes WAV audio (super lite)', async () => {
-    const voice = voicesAvailable[0].id;
-    const text = 'OK';
+  test.skipIf(voicesAvailable.length === 0)(
+    '/v1/audio/speech synthesizes WAV audio (super lite)',
+    async () => {
+      const voice = voicesAvailable[0].id;
+      const text = 'OK';
 
-    console.log(`  Voice:   ${voice}`);
-    console.log(`  Text:    "${text}"`);
+      console.log(`  Voice:   ${voice}`);
+      console.log(`  Text:    "${text}"`);
 
-    const t0 = Date.now();
-    const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'tts-1',
-        input: text,
-        voice,
-        response_format: 'wav',
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+      const t0 = Date.now();
+      const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice,
+          response_format: 'wav',
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      throw new Error(`Synthesis failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`);
-    }
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`Synthesis failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`);
+      }
 
-    const buffer = await response.arrayBuffer();
-    const wallMs = Date.now() - t0;
+      const buffer = await response.arrayBuffer();
+      const wallMs = Date.now() - t0;
 
-    expect(buffer.byteLength).toBeGreaterThan(0);
+      expect(buffer.byteLength).toBeGreaterThan(0);
 
-    // WAV header check: "RIFF" at offset 0 and "WAVE" FourCC at bytes 8-11
-    const headerRiff = new Uint8Array(buffer.slice(0, 4));
-    const riff = new TextDecoder().decode(headerRiff);
-    expect(riff).toBe('RIFF');
+      // WAV header check: "RIFF" at offset 0 and "WAVE" FourCC at bytes 8-11
+      const headerRiff = new Uint8Array(buffer.slice(0, 4));
+      const riff = new TextDecoder().decode(headerRiff);
+      expect(riff).toBe('RIFF');
 
-    const headerWave = new Uint8Array(buffer.slice(8, 12));
-    const wave = new TextDecoder().decode(headerWave);
-    expect(wave).toBe('WAVE');
+      const headerWave = new Uint8Array(buffer.slice(8, 12));
+      const wave = new TextDecoder().decode(headerWave);
+      expect(wave).toBe('WAVE');
 
-    console.log(`  Size:    ${buffer.byteLength} bytes`);
-    console.log(`  Format:  ${riff}...${wave} (valid WAV)`);
-    console.log(`  Wall:    ${wallMs}ms`);
-  }, 60_000);
+      console.log(`  Size:    ${buffer.byteLength} bytes`);
+      console.log(`  Format:  ${riff}...${wave} (valid WAV)`);
+      console.log(`  Wall:    ${wallMs}ms`);
+    },
+    60_000,
+  );
 });

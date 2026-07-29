@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// scripts/src/workspace_cleanup.ts
+// scripts/src/lib/ops/workspace_cleanup.ts
 //
 // User-controlled workspace cleanup. Run explicitly when:
 //   - A PR has been merged (the branch is on origin — safe to delete)

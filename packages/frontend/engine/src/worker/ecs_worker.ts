@@ -565,7 +565,8 @@ const WORKER_BODY_SLOT_INDEX = 0;
 const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
   const recipes: LpcLayerRecipe[] = [];
   for (let i = 0; i < layerIds.length; i++) {
-    const effectiveId = i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? DEFAULT_BODY_LAYER_ID : layerIds[i];
+    const effectiveId =
+      i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? DEFAULT_BODY_LAYER_ID : layerIds[i];
     if (effectiveId > 0) {
       recipes.push({
         slot: WORKER_SLOT_NAMES[i] ?? `layer_${i}`,

@@ -3,42 +3,36 @@
 
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { c } from '../cli_utils.ts';
 import type { BlackboxReport, SuiteResult } from './types.ts';
-
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const CYAN = '\x1b[36m';
-const BOLD = '\x1b[1m';
-const RESET = '\x1b[0m';
 
 export function printTerminalReport(results: SuiteResult[], duration: number): void {
   const passed = results.filter((r) => r.status === 'pass').length;
   const failed = results.filter((r) => r.status === 'fail').length;
   const skipped = results.filter((r) => r.status === 'skipped').length;
 
-  console.log(`\n${BOLD}══════════════════════════════════════${RESET}`);
-  console.log(`${BOLD}  Blackbox Test Results${RESET}`);
-  console.log(`${BOLD}══════════════════════════════════════${RESET}\n`);
+  console.log(`\n${c.bold}══════════════════════════════════════${c.reset}`);
+  console.log(`${c.bold}  Blackbox Test Results${c.reset}`);
+  console.log(`${c.bold}══════════════════════════════════════${c.reset}\n`);
 
   for (const r of results) {
     const icon =
       r.status === 'pass'
-        ? `${GREEN}✓${RESET}`
+        ? `${c.green}✓${c.reset}`
         : r.status === 'fail'
-          ? `${RED}✗${RESET}`
-          : `${YELLOW}⏭${RESET}`;
+          ? `${c.red}✗${c.reset}`
+          : `${c.yellow}⏭${c.reset}`;
     const dur = r.duration > 0 ? ` (${r.duration}ms)` : '';
     console.log(`  ${icon} ${r.name}${dur}`);
     if (r.error) {
-      console.log(`    ${RED}${r.error.slice(0, 120)}${RESET}`);
+      console.log(`    ${c.red}${r.error.slice(0, 120)}${c.reset}`);
     }
   }
 
   console.log(
-    `\n${BOLD}Summary:${RESET} ${GREEN}${passed} passed${RESET}, ${RED}${failed} failed${RESET}, ${YELLOW}${skipped} skipped${RESET}`,
+    `\n${c.bold}Summary:${c.reset} ${c.green}${passed} passed${c.reset}, ${c.red}${failed} failed${c.reset}, ${c.yellow}${skipped} skipped${c.reset}`,
   );
-  console.log(`Duration: ${CYAN}${(duration / 1000).toFixed(1)}s${RESET}\n`);
+  console.log(`Duration: ${c.cyan}${(duration / 1000).toFixed(1)}s${c.reset}\n`);
 }
 
 export function writeJsonReport(results: SuiteResult[], duration: number): void {

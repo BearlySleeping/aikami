@@ -100,12 +100,7 @@ export const acquireLock = async (options: {
     // Process is alive — check if its run is in a terminal state.
     // A blocked/merged/completed run no longer needs the lock.
     if (existing.runId) {
-      const manifestPath = join(
-        options.cwd,
-        RUNS_DIR,
-        existing.runId,
-        'manifest.json',
-      );
+      const manifestPath = join(options.cwd, RUNS_DIR, existing.runId, 'manifest.json');
       try {
         const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
           currentStage?: string;

@@ -303,7 +303,6 @@ export default function (pi: ExtensionAPI) {
       const PromotionIcons: Record<string, string> = {
         sandbox: '🧪',
         integrated: '🔗',
-        // biome-ignore lint/style/useNamingConvention: matches promotion state key
         release_verified: '🚀',
       };
 

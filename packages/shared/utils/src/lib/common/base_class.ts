@@ -1,3 +1,4 @@
+// packages/shared/utils/src/lib/common/base_class.ts
 import { type LogEntry, logger } from '$logger';
 import {
   createLiteObserver,
@@ -44,6 +45,7 @@ const EXCLUDED_PROXY_METHODS = new Set([
   'warn',
   'error',
   'log',
+  'spam',
   '_write',
   'dispose',
   'createObserver',
@@ -143,11 +145,14 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
             enumerable: descriptor.enumerable,
             writable: descriptor.writable,
             value: function (this: T, ...args: unknown[]) {
-              // 1. Auto-log the method execution
+              // 1. Auto-log the method execution (spam-deduped to avoid flooding at 60fps).
+              // The spam ID is class-qualified so methods with the same name on
+              // different classes are throttled independently.
+              const spamId = `${options.className}.${propKey}`;
               if (args.length > 0) {
-                this.debug(propKey, ...args);
+                BaseClass._logger.spam(spamId, ...args);
               } else {
-                this.debug(propKey);
+                BaseClass._logger.spam(spamId);
               }
 
               // 2. Execute the original method
@@ -200,6 +205,20 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
 
   protected log(...args: unknown[]): void {
     this._write({ logLevel: 'INFO', logType: 'log' }, ...args);
+  }
+
+  /**
+   * Spam-resistant debug logging. Delegates to the global logger's
+   * content-dedup engine — suppresses consecutive identical messages
+   * with the same `id` and prints a heartbeat every 10 s while
+   * suppression is active.
+   *
+   * Note: unlike {@link debug}, this does NOT route through
+   * `_write()` and therefore does NOT receive the `[ClassName]`
+   * prefix. Include the system name in the message if needed.
+   */
+  protected spam(id: string, ...args: unknown[]): void {
+    BaseClass._logger.spam(id, ...args);
   }
 
   // --- Protected Methods (Observers) ---

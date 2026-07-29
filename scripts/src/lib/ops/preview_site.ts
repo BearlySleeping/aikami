@@ -12,23 +12,9 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PORTS } from '@aikami/constants';
+import { c, error, info, ok } from '../cli_utils.ts';
 import type { AikamiMode } from '../herdr/session.ts';
 import { findWorkspace, isPortReady, resolveSessionName, startServices } from '../herdr/session.ts';
-
-// ── CLI colors ─────────────────────────────────────────────────────────────
-
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const BLUE = '\x1b[34m';
-const BOLD = '\x1b[1m';
-const RESET = '\x1b[0m';
-
-const log = (prefix: string, color: string, message: string) => {
-  console.log(`${color}${BOLD}[${prefix}]${RESET} ${message}`);
-};
-const info = (m: string) => log('info', BLUE, m);
-const ok = (m: string) => log('ok', GREEN, m);
-const error = (m: string) => log('error', RED, m);
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -112,7 +98,7 @@ const mode: AikamiMode =
     ? process.env.AIKAMI_MODE
     : 'emulator';
 
-console.log(`\n${BOLD}Aikami Site Preview${RESET}\n`);
+console.log(`\n${c.bold}Aikami Site Preview${c.reset}\n`);
 info(`Mode: ${mode}`);
 
 const port = await ensureSite(mode);

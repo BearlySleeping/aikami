@@ -11,10 +11,9 @@
 //
 // Contract: C-162 BG3 Action Menu & Dice
 
-import { browser } from '$app/environment';
 import { NpcIntentAnalysisOutputSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
-import { aiGatewayService } from '$services';
+import { browser } from '$app/environment';
 import {
   buildIntentAnalysisSystemPrompt,
   recoverIntentAnalysisOutput,
@@ -27,6 +26,7 @@ import {
   type DialogueDevViewModelInterface,
   type DiceOutcome,
 } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
+import { aiGatewayService } from '$services';
 
 /** Navigate back to sandbox index on End Chat / combat transition. */
 const goBack = () => {
@@ -104,38 +104,35 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         };
 
         const systemPrompt = buildIntentAnalysisSystemPrompt();
+        const result = await aiGatewayService.generateText({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: JSON.stringify(input) },
+          ],
+          schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+          schemaName: 'NpcIntentAnalysisOutput',
+          signal: opts.signal,
+        });
 
-        try {
-          const result = await aiGatewayService.generateText({
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: JSON.stringify(input) },
-            ],
-            schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
-            schemaName: 'NpcIntentAnalysisOutput',
-            signal: opts.signal,
-          });
-
-          const raw = result.structured ?? {};
-          if (Value.Check(NpcIntentAnalysisOutputSchema, raw)) {
-            return raw;
-          }
-
-          // Structured output failed — try to salvage narrative using shared helper
-          const recovered = recoverIntentAnalysisOutput(result.text?.trim(), NpcIntentAnalysisOutputSchema);
-
-          return {
-            requires_roll: false,
-            check_type: undefined,
-            difficulty_class: undefined,
-            modifier_source: undefined,
-            npc_response: recovered.npc_response,
-            suggested_chips: recovered.suggested_chips,
-          };
-        } catch (error) {
-          // Propagate the real error — never fake a response
-          throw error;
+        const raw = result.structured ?? {};
+        if (Value.Check(NpcIntentAnalysisOutputSchema, raw)) {
+          return raw;
         }
+
+        // Structured output failed — try to salvage narrative using shared helper
+        const recovered = recoverIntentAnalysisOutput(
+          result.text?.trim(),
+          NpcIntentAnalysisOutputSchema,
+        );
+
+        return {
+          requires_roll: false,
+          check_type: undefined,
+          difficulty_class: undefined,
+          modifier_source: undefined,
+          npc_response: recovered.npc_response,
+          suggested_chips: recovered.suggested_chips,
+        };
       }
 
       // ── Mock AI path ───────────────────────────────────────────
@@ -146,10 +143,21 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         check_type: undefined,
         difficulty_class: undefined,
         modifier_source: undefined,
-        npc_response: '*Elder Thrain strokes his beard thoughtfully.*\n"Ah, an interesting question indeed. The village has seen many travelers, but few with such curiosity."',
+        npc_response:
+          '*Elder Thrain strokes his beard thoughtfully.*\n"Ah, an interesting question indeed. The village has seen many travelers, but few with such curiosity."',
         suggested_chips: [
-          { id: 'talk', label: 'Ask about the ward', intent_type: 'dialogue' as const, prefill_text: 'Tell me about the village ward.' },
-          { id: 'quest', label: 'Offer to help', intent_type: 'quest' as const, prefill_text: 'Is there anything I can help with?' },
+          {
+            id: 'talk',
+            label: 'Ask about the ward',
+            intent_type: 'dialogue' as const,
+            prefill_text: 'Tell me about the village ward.',
+          },
+          {
+            id: 'quest',
+            label: 'Offer to help',
+            intent_type: 'quest' as const,
+            prefill_text: 'Is there anything I can help with?',
+          },
         ],
       };
     },
@@ -157,7 +165,8 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       // Simulate AI processing delay
       await new Promise((r) => setTimeout(r, 500 + Math.random() * 300));
       return {
-        narrative_result: '*Elder Thrain nods slowly.*\n"The dice have spoken. Fate has a way of guiding us, does it not?"',
+        narrative_result:
+          '*Elder Thrain nods slowly.*\n"The dice have spoken. Fate has a way of guiding us, does it not?"',
         state_deltas: [],
         suggested_chips: [],
       };
@@ -360,7 +369,7 @@ let devToolsOpen = $state(true);
             class="toggle toggle-sm toggle-info"
             checked={viewModel.showPartyUi}
             onchange={() => viewModel.togglePartyUi()}
-          />
+          >
           <span class="text-xs text-base-content/60">{viewModel.showPartyUi ? 'On' : 'Off'}</span>
         </div>
       </div>
@@ -372,37 +381,37 @@ let devToolsOpen = $state(true);
         >
         <div class="flex flex-col gap-1">
           <!-- Force Dice Roll -->
-        <div class="flex flex-col gap-1.5">
-          <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-            >🎲 Dice Roll Test</span
-          >
-          <button
-            type="button"
-            class="btn btn-xs btn-accent btn-outline"
-            onclick={() =>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+              >🎲 Dice Roll Test</span
+            >
+            <button
+              type="button"
+              class="btn btn-xs btn-accent btn-outline"
+              onclick={() =>
               viewModel.forceDiceRoll({
                 checkType: 'Persuasion',
                 difficultyClass: 12,
                 statModifier: 'CHA',
                 statModifierValue: 2,
               })}
-          >
-            🎲 Force Dice Roll (DC 12, CHA +2)
-          </button>
-        </div>
+            >
+              🎲 Force Dice Roll (DC 12, CHA +2)
+            </button>
+          </div>
 
-        <!-- Party Chime In (when party mode is on) -->
-        {#if viewModel.showPartyUi}
-          <button
-            type="button"
-            class="btn btn-xs btn-info btn-outline"
-            onclick={() => viewModel.simulatePartyMessage()}
-          >
-            💬 Companion Chimes In
-          </button>
-        {/if}
+          <!-- Party Chime In (when party mode is on) -->
+          {#if viewModel.showPartyUi}
+            <button
+              type="button"
+              class="btn btn-xs btn-info btn-outline"
+              onclick={() => viewModel.simulatePartyMessage()}
+            >
+              💬 Companion Chimes In
+            </button>
+          {/if}
 
-        <!-- Generate Scene Image -->
+          <!-- Generate Scene Image -->
           <button
             type="button"
             class="btn btn-xs btn-accent btn-outline"
