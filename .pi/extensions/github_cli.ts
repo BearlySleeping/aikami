@@ -194,15 +194,16 @@ const writeCommentCache = (cache: PrCommentCache, cwd: string): void => {
 };
 
 /**
- * Fetch PR comments + reviews from GitHub, returning a lightweight cacheable result.
- * Uses `gh pr view --json comments,reviews` for timeline comments + review bodies.
- * Does NOT fetch inline review comments (separate API endpoint).
+ * Fetch PR comments + reviews + inline review comments from GitHub.
+ * Uses `gh pr view --json comments,reviews` for timeline comments + review bodies,
+ * then ALSO fetches inline review comments via the API for per-line findings.
  */
 const fetchPrComments = async (
   pi: ExtensionAPI,
   prNumber: number,
   cwd: string,
   includeReviews: boolean,
+  includeInline: boolean,
 ): Promise<PrCommentCache> => {
   const jsonFields = includeReviews ? 'comments,reviews,updatedAt' : 'comments,updatedAt';
 
@@ -241,6 +242,44 @@ const fetchPrComments = async (
     url: String((c as Record<string, unknown>).url ?? ''),
   }));
 
+  // Fetch inline review comments (per-line findings from CodeRabbit etc.)
+  let inlineComments: CachedComment[] = [];
+  if (includeInline) {
+    const owner = process.env.GITHUB_REPOSITORY_OWNER ?? '';
+    const repo = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? '';
+    if (owner && repo) {
+      try {
+        const inlineResult = await runGh(
+          pi,
+          ['api', `repos/${owner}/${repo}/pulls/${prNumber}/comments`, '--paginate'],
+          { parseJson: true, cwd, timeout: 30_000 },
+        );
+        if (inlineResult.success && Array.isArray(inlineResult.json)) {
+          inlineComments = (inlineResult.json as Array<Record<string, unknown>>).map((c) => ({
+            id: String((c as Record<string, unknown>).id ?? ''),
+            body: [
+              `📄 \`${String((c as Record<string, unknown>).path ?? '?')}:${(c as Record<string, unknown>).line ?? (c as Record<string, unknown>).original_line ?? '?'}\``,
+              '',
+              String((c as Record<string, unknown>).body ?? ''),
+            ].join('\n'),
+            author:
+              (c as Record<string, unknown>).user &&
+              typeof (c as Record<string, unknown>).user === 'object'
+                ? String(
+                    ((c as Record<string, unknown>).user as Record<string, unknown>).login ?? '?',
+                  )
+                : '?',
+            createdAt: String((c as Record<string, unknown>).created_at ?? ''),
+            updatedAt: String((c as Record<string, unknown>).updated_at ?? (c as Record<string, unknown>).created_at ?? ''),
+            url: String((c as Record<string, unknown>).html_url ?? ''),
+          }));
+        }
+      } catch {
+        // Non-fatal — inline comments are best-effort
+      }
+    }
+  }
+
   const reviews: CachedReview[] = includeReviews
     ? rawReviews.map((r) => ({
         id: String((r as Record<string, unknown>).id ?? ''),
@@ -257,7 +296,7 @@ const fetchPrComments = async (
       }))
     : [];
 
-  return { prNumber, fetchedAt, prUpdatedAt, comments, reviews };
+  return { prNumber, fetchedAt, prUpdatedAt, comments: [...comments, ...inlineComments], reviews };
 };
 
 /** Format comments + reviews for display. */
@@ -299,8 +338,7 @@ const formatPrComments = (
   // Reviews first (most important — CodeRabbit findings)
   if (filterReviews.length > 0) {
     for (const r of filterReviews) {
-      const body = r.body.length > 3000 ? `${r.body.slice(0, 3000)}...` : r.body;
-      lines.push(`---`, `### Review by @${r.author} (${r.state})`, '', body);
+      lines.push(`---`, `### Review by @${r.author} (${r.state})`, '', r.body);
     }
   }
 
@@ -308,13 +346,12 @@ const formatPrComments = (
   if (filterComments.length > 0) {
     lines.push('', '---', '### Timeline comments', '');
     for (const c of filterComments) {
-      const body = c.body.length > 1500 ? `${c.body.slice(0, 1500)}...` : c.body;
       const created = c.createdAt.slice(0, 19).replace('T', ' ');
       const edited =
         c.updatedAt !== c.createdAt
           ? ` (edited ${c.updatedAt.slice(0, 19).replace('T', ' ')})`
           : '';
-      lines.push(`**@${c.author}** — ${created}${edited}`, '', body, '');
+      lines.push(`**@${c.author}** — ${created}${edited}`, '', c.body, '');
     }
   }
 
@@ -423,7 +460,7 @@ function formatPrSummary(data: Record<string, unknown>): string {
           r.author && typeof r.author === 'object'
             ? String((r.author as Record<string, unknown>).login ?? '?')
             : '?';
-        const truncated = rBody.length > 6000 ? `${rBody.slice(0, 6000)}...` : rBody;
+        const truncated = rBody.length > 50000 ? `${rBody.slice(0, 50000)}...` : rBody;
         lines.push('', `---`, `### Review by @${rAuthor}`, '', truncated);
       }
     }
@@ -442,7 +479,7 @@ function formatPrSummary(data: Record<string, unknown>): string {
                 ((c as Record<string, unknown>).author as Record<string, unknown>).login ?? '?',
               )
             : '?';
-        const truncated = cBody.length > 2000 ? `${cBody.slice(0, 2000)}...` : cBody;
+        const truncated = cBody.length > 50000 ? `${cBody.slice(0, 50000)}...` : cBody;
         lines.push('', `---`, `**@${cAuthor}:**`, '', truncated);
       }
     }
@@ -1979,15 +2016,17 @@ export default function (pi: ExtensionAPI) {
     name: 'gh_pr_comments',
     label: 'GitHub: PR Comments',
     description:
-      'Fetch PR comments (reviews + timeline) with timestamp-based caching. ' +
+      'Fetch PR comments (reviews + timeline + inline review comments) with timestamp-based caching. ' +
       'First call fetches all comments and caches them. Subsequent calls with ' +
       'the `since` parameter from the previous `fetchedAt` return only new/edited ' +
-      'comments. Use `force: true` to bypass cache.',
+      'comments. Use `force: true` to bypass cache. ' +
+      'Set `includeInline: true` to also fetch per-line review comments (CodeRabbit findings).',
     promptSnippet: 'Use gh_pr_comments to check for new PR comments since last fetch',
     promptGuidelines: [
       'On first call, omit `since` to get all comments and cache them.',
       'On subsequent calls, pass the `fetchedAt` value from the previous response as `since`.',
       'Pass `force: true` to re-fetch everything and refresh the cache.',
+      'Pass `includeInline: true` to also get per-line CodeRabbit review findings.',
       '🔴 For CodeRabbit AI reviews, prefer the `coderabbitai` MCP tools (get_coderabbit_reviews, get_review_details, get_review_comments) — they provide structured findings with per-comment resolution tracking. Use gh_pr_comments for human comments and general timeline history only.',
     ],
     parameters: Type.Object({
@@ -2013,6 +2052,13 @@ export default function (pi: ExtensionAPI) {
             'Include formal review bodies (CodeRabbit findings). Set false for timeline comments only.',
         }),
       ),
+      includeInline: Type.Optional(
+        Type.Boolean({
+          default: true,
+          description:
+            'Include per-line review comments from CodeRabbit (fetched via separate API). Default: true.',
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const selector = resolvePrSelector(params.pr);
@@ -2027,6 +2073,7 @@ export default function (pi: ExtensionAPI) {
 
       const cwd = ctx.cwd ?? process.cwd();
       const includeReviews = params.includeReviews ?? true;
+      const includeInline = params.includeInline ?? true;
 
       // Check cache first (unless forced)
       if (!params.force) {
@@ -2048,7 +2095,7 @@ export default function (pi: ExtensionAPI) {
 
       // Fetch from GitHub
       try {
-        const cache = await fetchPrComments(pi, prNumber, cwd, includeReviews);
+        const cache = await fetchPrComments(pi, prNumber, cwd, includeReviews, includeInline);
         writeCommentCache(cache, cwd);
 
         const formatted = formatPrComments(cache, params.since);
