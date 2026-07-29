@@ -117,12 +117,19 @@ class AiGatewayService
 
     const textAdapter = createOpenAiCompatibleTextAdapter({
       getApiKey: (provider) => this._getTextApiKey(provider),
-      supportsStructuredOutput: () => false,
+      supportsStructuredOutput: (provider) => this._supportsStructuredOutput(provider),
       getDefaultEndpoint: (provider) => this._getDefaultTextEndpoint(provider),
       onSchemaCacheSize: (size) => {
         (globalThis as Record<string, unknown>).__text_service_compiled_schema_cache_size = size;
       },
-      onEvent: (event, data) => this.debug(`textAdapter:${event}`, data),
+      onEvent: (event, data) => {
+        // Validation failures are warnings — the LLM returned data that didn't match the schema
+        if (event === 'validation-failed') {
+          this.warn(`textAdapter:${event}`, data);
+        } else {
+          this.debug(`textAdapter:${event}`, data);
+        }
+      },
     });
 
     // One transport serves both offline (local) and byok (cloud) text modes.
@@ -278,6 +285,20 @@ class AiGatewayService
       return undefined;
     }
     return config.chatTestUrl.replace(/\/chat\/completions$/, '');
+  }
+
+  /**
+   * Determines if a provider supports native json_schema structured output.
+   * Local providers (Ollama, Ooba) do not reliably support response_format,
+   * so the adapter must fall back to prompt-based extraction.
+   */
+  private _supportsStructuredOutput(provider: string): boolean {
+    // Offline/BYOK local providers (Ollama, Ooba) do not support response_format
+    if (LOCAL_TEXT_PROVIDERS.has(provider)) {
+      return false;
+    }
+    // Cloud providers with OpenAI-compatible endpoints support json_schema
+    return true;
   }
 
   /**

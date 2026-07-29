@@ -12,6 +12,13 @@
 // Contract: C-162 BG3 Action Menu & Dice
 
 import { browser } from '$app/environment';
+import { NpcIntentAnalysisOutputSchema } from '@aikami/schemas';
+import { Value } from 'typebox/value';
+import { aiGatewayService } from '$services';
+import {
+  buildIntentAnalysisSystemPrompt,
+  recoverIntentAnalysisOutput,
+} from '$lib/services/game/npc_dialogue_service.svelte.ts';
 import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
 import {
   type DevInteractionMode,
@@ -66,22 +73,95 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
     }),
     executeCommand: () => true,
-    analyzeIntent: async () => ({
-      requires_roll: false,
-      check_type: undefined,
-      difficulty_class: undefined,
-      modifier_source: undefined,
-      narrative_pre_roll: '[Dev mock intent analysis — no roll needed]',
-      suggested_chips: [
-        { id: 'talk', label: 'Ask more', intent_type: 'dialogue', prefill_text: 'Tell me more.' },
-        { id: 'leave', label: 'Leave', intent_type: 'dialogue', prefill_text: 'Goodbye.' },
-      ],
-    }),
-    resolveRoll: async () => ({
-      narrative_result: '[Dev mock roll resolution]',
-      state_deltas: [],
-      suggested_chips: [],
-    }),
+    analyzeIntent: async (opts: {
+      npcId: string;
+      npcName: string;
+      messages: Array<{ role: 'player' | 'npc'; content: string }>;
+      signal: AbortSignal;
+      gameStateFacts?: string[];
+      playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+    }) => {
+      if (!viewModel.useMockAi) {
+        // ── Real LLM path ────────────────────────────────────────
+        const playerMsg = opts.messages.filter((m) => m.role === 'player').pop();
+        const input = {
+          player_input: playerMsg?.content ?? '',
+          npc_context: {
+            name: opts.npcName,
+            persona: `You are ${opts.npcName}, a character in a fantasy world.`,
+            allowed_commands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+          },
+          player_context: opts.playerContext ?? {
+            character_sheet_summary: 'Level 1 Fighter',
+            level: 1,
+            class_id: 'fighter',
+          },
+          recent_history: opts.messages.slice(-10).map((m) => ({
+            role: m.role,
+            content: m.content.slice(0, 200),
+          })),
+          game_state_facts: opts.gameStateFacts ?? [],
+        };
+
+        const systemPrompt = buildIntentAnalysisSystemPrompt();
+
+        try {
+          const result = await aiGatewayService.generateText({
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: JSON.stringify(input) },
+            ],
+            schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+            schemaName: 'NpcIntentAnalysisOutput',
+            signal: opts.signal,
+          });
+
+          const raw = result.structured ?? {};
+          if (Value.Check(NpcIntentAnalysisOutputSchema, raw)) {
+            return raw;
+          }
+
+          // Structured output failed — try to salvage narrative using shared helper
+          const recovered = recoverIntentAnalysisOutput(result.text?.trim(), NpcIntentAnalysisOutputSchema);
+
+          return {
+            requires_roll: false,
+            check_type: undefined,
+            difficulty_class: undefined,
+            modifier_source: undefined,
+            npc_response: recovered.npc_response,
+            suggested_chips: recovered.suggested_chips,
+          };
+        } catch (error) {
+          // Propagate the real error — never fake a response
+          throw error;
+        }
+      }
+
+      // ── Mock AI path ───────────────────────────────────────────
+      // Simulate AI processing delay
+      await new Promise((r) => setTimeout(r, 600 + Math.random() * 400));
+      return {
+        requires_roll: false,
+        check_type: undefined,
+        difficulty_class: undefined,
+        modifier_source: undefined,
+        npc_response: '*Elder Thrain strokes his beard thoughtfully.*\n"Ah, an interesting question indeed. The village has seen many travelers, but few with such curiosity."',
+        suggested_chips: [
+          { id: 'talk', label: 'Ask about the ward', intent_type: 'dialogue' as const, prefill_text: 'Tell me about the village ward.' },
+          { id: 'quest', label: 'Offer to help', intent_type: 'quest' as const, prefill_text: 'Is there anything I can help with?' },
+        ],
+      };
+    },
+    resolveRoll: async () => {
+      // Simulate AI processing delay
+      await new Promise((r) => setTimeout(r, 500 + Math.random() * 300));
+      return {
+        narrative_result: '*Elder Thrain nods slowly.*\n"The dice have spoken. Fate has a way of guiding us, does it not?"',
+        state_deltas: [],
+        suggested_chips: [],
+      };
+    },
     useFreeTextFirst: true,
   },
   onStartCombat: () => {
@@ -90,7 +170,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   initialDiceOutcome: 'random',
   initialUseMockAi: true,
   initialNpcPreset: 'sage',
-  initialInteractionMode: 'menu',
+  initialInteractionMode: 'freeTextFirst',
 });
 
 // ── Devtool state ───────────────────────────────────────────────────
@@ -211,35 +291,33 @@ let devToolsOpen = $state(true);
         </div>
       </div>
 
-      <!-- Interaction Mode -->
+      <!-- GM Mode Toggle — break the fourth wall -->
       <div class="flex flex-col gap-1.5">
         <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-          >📋 Interaction Mode</span
+          >🎭 GM Mode</span
         >
         <div class="join">
           <button
             type="button"
-            class="btn btn-xs join-item {viewModel.interactionMode === 'menu'
-              ? 'btn-active btn-secondary'
-              : 'btn-ghost'}"
-            onclick={() => viewModel.setInteractionMode('menu' as DevInteractionMode)}
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'scene'}
+            class:btn-success={viewModel.addressMode === 'scene'}
+            onclick={() => viewModel.setAddressMode('scene')}
           >
-            📜 Action Menu
+            🎮 Scene
           </button>
           <button
             type="button"
-            class="btn btn-xs join-item {viewModel.interactionMode === 'freeform'
-              ? 'btn-active btn-accent'
-              : 'btn-ghost'}"
-            onclick={() => viewModel.setInteractionMode('freeform' as DevInteractionMode)}
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'gm'}
+            class:btn-warning={viewModel.addressMode === 'gm'}
+            onclick={() => viewModel.setAddressMode('gm')}
           >
-            ✏️ Freeform
+            🧙 GM
           </button>
         </div>
         <span class="text-xs text-base-content/40 italic">
-          {viewModel.interactionMode === 'menu'
-            ? 'C-162 BG3-style buttons'
-            : 'Legacy text input (C-128/C-157)'}
+          {viewModel.addressMode === 'gm' ? 'Messages go to the Game Master (fourth wall)' : 'Messages go to the scene (NPC dialogue)'}
         </span>
       </div>
 
@@ -271,13 +349,60 @@ let devToolsOpen = $state(true);
         {/if}
       </div>
 
+      <!-- Party UI Toggle -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+          >👥 Party</span
+        >
+        <div class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm toggle-info"
+            checked={viewModel.showPartyUi}
+            onchange={() => viewModel.togglePartyUi()}
+          />
+          <span class="text-xs text-base-content/60">{viewModel.showPartyUi ? 'On' : 'Off'}</span>
+        </div>
+      </div>
+
       <!-- Quick Actions -->
       <div class="flex flex-col gap-1.5">
         <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
           >⚡ Quick Actions</span
         >
         <div class="flex flex-col gap-1">
-          <!-- Generate Scene Image -->
+          <!-- Force Dice Roll -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >🎲 Dice Roll Test</span
+          >
+          <button
+            type="button"
+            class="btn btn-xs btn-accent btn-outline"
+            onclick={() =>
+              viewModel.forceDiceRoll({
+                checkType: 'Persuasion',
+                difficultyClass: 12,
+                statModifier: 'CHA',
+                statModifierValue: 2,
+              })}
+          >
+            🎲 Force Dice Roll (DC 12, CHA +2)
+          </button>
+        </div>
+
+        <!-- Party Chime In (when party mode is on) -->
+        {#if viewModel.showPartyUi}
+          <button
+            type="button"
+            class="btn btn-xs btn-info btn-outline"
+            onclick={() => viewModel.simulatePartyMessage()}
+          >
+            💬 Companion Chimes In
+          </button>
+        {/if}
+
+        <!-- Generate Scene Image -->
           <button
             type="button"
             class="btn btn-xs btn-accent btn-outline"
@@ -301,12 +426,33 @@ let devToolsOpen = $state(true);
               viewModel.setMockNpcPreset('sage');
               viewModel.setDiceOutcome('random');
               viewModel.setUseMockAi(true);
-              viewModel.setInteractionMode('menu');
+              viewModel.setInteractionMode('freeTextFirst' as DevInteractionMode);
             }}
           >
             🔄 Reset All
           </button>
         </div>
+      </div>
+
+      <!-- Expression (NPC avatar control) -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+          >😊 Expression</span
+        >
+        <div class="flex flex-wrap gap-1">
+          {#each viewModel.availableExpressions as expression}
+            <button
+              type="button"
+              class="btn btn-xs {viewModel.npcExpression === expression
+                ? 'btn-active btn-accent'
+                : 'btn-outline'}"
+              onclick={() => viewModel.setNpcExpression(expression)}
+            >
+              {expression}
+            </button>
+          {/each}
+        </div>
+        <span class="text-xs text-base-content/40 italic">NPC: {viewModel.npcExpression}</span>
       </div>
 
       <!-- State Inspector -->
@@ -320,18 +466,19 @@ let devToolsOpen = $state(true);
             >Dice:
             <strong class="text-accent">{viewModel.skillCheckState?.phase ?? 'none'}</strong></span
           >
-          <span>Phase: <strong>{viewModel.dialoguePhase}</strong></span>
           <span>Streaming: <strong>{viewModel.isStreaming ? 'yes' : 'no'}</strong></span>
           <span>Resolving: <strong>{viewModel.isResolvingSkillCheck ? 'yes' : 'no'}</strong></span>
-          {#if viewModel.generatedImageUrl}
-            <span class="text-success">Image:</span>
-            <a
-              href={viewModel.generatedImageUrl}
-              target="_blank"
-              class="text-xs text-info underline truncate"
-              rel="noreferrer"
-              >{viewModel.generatedImageUrl}</a
-            >
+          {#if viewModel.generatedImages.some((img) => img.status === 'done')}
+            <span class="text-success">Images:</span>
+            {#each viewModel.generatedImages.filter((img) => img.status === 'done' && img.url) as image (image.id)}
+              <a
+                href={image.url}
+                target="_blank"
+                class="text-xs text-info underline truncate"
+                rel="noreferrer"
+                >{image.url}</a
+              >
+            {/each}
           {/if}
           {#if viewModel.streamError}
             <span class="text-error">Error: {viewModel.streamError}</span>

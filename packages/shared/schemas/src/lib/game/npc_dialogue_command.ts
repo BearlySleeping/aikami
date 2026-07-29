@@ -197,8 +197,8 @@ export const NpcSuggestionChipSchema = Type.Object(
     label: Type.String({ minLength: 1 }),
     /** Semantic intent tag — drives UI treatment (icons, urgency). */
     intent_type: NpcSuggestionChipIntentTypeSchema,
-    /** Pre-filled text sent as the next player message when tapped. */
-    prefill_text: Type.String({ minLength: 1 }),
+    /** Pre-filled text sent as the next player message when tapped — MUST be a complete natural sentence, not a keyword. */
+    prefill_text: Type.String({ minLength: 10 }),
   },
   { additionalProperties: false },
 );
@@ -291,7 +291,15 @@ export const NpcIntentAnalysisOutputSchema = Type.Object(
     /** Which player stat modifier applies (e.g. "CHA", "STR"). Only set when requires_roll is true. */
     modifier_source: Type.Optional(Type.String()),
     /** Short narrative that plays BEFORE any roll UI appears — the NPC's reaction to what was said. */
-    narrative_pre_roll: Type.String({ minLength: 1 }),
+    npc_response: Type.String({
+      minLength: 20,
+      description:
+        "The NPC's complete spoken reply, first person, as a self-contained conversational turn. " +
+        'Must contain actual spoken dialogue in double quotes. Brief physical actions in ' +
+        '*asterisks* may accompany the dialogue, but an asterisk-only response is invalid. ' +
+        'Never write third-person narration about the NPC. When requires_roll is true, end at ' +
+        'the moment of the attempt without revealing its outcome.',
+    }),
     /** Suggested follow-up chips for this turn (0–4). */
     suggested_chips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
   },

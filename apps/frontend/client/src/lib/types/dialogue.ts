@@ -23,6 +23,8 @@ export type DialogueMessage = {
   canSwipeLeft: boolean;
   /** Whether swipe right (next alternative) is available. */
   canSwipeRight: boolean;
+  /** Optional sender display name — when set and different from main NPC, renders on the right. */
+  senderName?: string;
 };
 
 /** A forked conversation branch starting from a specific message. */

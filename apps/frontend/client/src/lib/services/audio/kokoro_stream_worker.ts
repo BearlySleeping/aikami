@@ -24,6 +24,10 @@
 
 import { ringBufferPush, type WaitFreeRingBuffer } from './wait_free_ring_buffer';
 
+// ── State ─────────────────────────────────────────────────────────────────
+
+let serverUrl = '/api/voice';
+
 // ── Ring buffer reference ────────────────────────────────────────────────
 
 const HEADER_FLOATS = 2;
@@ -138,8 +142,13 @@ const convertInt16ToFloat32 = (int16Data: Int16Array): Float32Array => {
 const handleInitialize = (options: {
   sharedBuffer: SharedArrayBuffer;
   sampleCapacity: number;
+  serverUrl?: string;
 }): void => {
   const { sharedBuffer, sampleCapacity } = options;
+
+  if (options.serverUrl) {
+    serverUrl = options.serverUrl;
+  }
 
   ring = reconstructRing(sharedBuffer, sampleCapacity);
 
@@ -169,7 +178,7 @@ const handleSynthesize = async (options: { text: string; voice: string }): Promi
   const { signal } = abortController;
 
   try {
-    const response = await fetch('http://localhost:8880/v1/audio/speech', {
+    const response = await fetch(`${serverUrl}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -345,6 +354,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
       handleInitialize({
         sharedBuffer: data.sharedBuffer,
         sampleCapacity: data.sampleCapacity,
+        serverUrl: data.serverUrl,
       });
       break;
 
