@@ -23,7 +23,7 @@
     "typecheck": "moon run :typecheck",
     "ci": "bun run validate && bun run test",
     "scripts": "bun run scripts/src/index.ts",
-    "setup": "bun run scripts/src/lib/setup/setup.ts",
+    "setup": "bun run scripts/src/lib/setup/index.ts",
     "dev:all": "bun run scripts/src/lib/ops/dev_all.ts",
     "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
     "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
@@ -60,7 +60,11 @@
     "validate:wgsl": "bun run scripts/src/lib/ops/validate_wgsl.ts",
     "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",
     "validate:shaders": "bun run validate:wgsl && bun run validate:gql",
-    "update:ai": "bun run scripts/src/lib/ops/update_ai.ts"
+    "update:ai": "bun run scripts/src/lib/ops/update_ai.ts",
+    "deploy": "bun run scripts/src/lib/deploy/index.ts",
+    "download-secrets": "bun run scripts/src/lib/ops/download_secrets.ts",
+    "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",
+    "sync-env": "bun run scripts/src/lib/ops/sync_env.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

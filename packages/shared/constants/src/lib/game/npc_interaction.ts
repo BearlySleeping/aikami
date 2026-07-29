@@ -27,7 +27,7 @@ export type SkillStatEntry = {
 export const SKILL_STAT_MAP: Record<string, SkillStatEntry> = {
   persuasion: { stat: 'CHA', defaultModifier: 2 },
   intimidation: { stat: 'STR', defaultModifier: 1 },
-  sleight_of_hand: { stat: 'DEX', defaultModifier: 1 },
+  'sleightOfHand': { stat: 'DEX', defaultModifier: 1 },
   stealth: { stat: 'DEX', defaultModifier: 1 },
   insight: { stat: 'WIS', defaultModifier: 1 },
   investigation: { stat: 'INT', defaultModifier: 0 },
@@ -49,7 +49,7 @@ export const SKILL_STAT_MAP: Record<string, SkillStatEntry> = {
 /** Maps a suggestion chip intent type to its emoji icon for UI rendering. */
 export const CHIP_INTENT_ICON_MAP: Record<string, string> = {
   dialogue: '💬',
-  skill_check: '🎲',
+  skillCheck: '🎲',
   combat: '⚔️',
   trade: '💰',
   quest: '📋',
@@ -58,7 +58,7 @@ export const CHIP_INTENT_ICON_MAP: Record<string, string> = {
 /** Human-readable labels for chip intent types. */
 export const CHIP_INTENT_LABEL_MAP: Record<string, string> = {
   dialogue: 'Dialogue',
-  skill_check: 'Skill Check',
+  skillCheck: 'Skill Check',
   combat: 'Combat',
   trade: 'Trade',
   quest: 'Quest',

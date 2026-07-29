@@ -34,7 +34,7 @@ const SCRIPT_MAP: Record<string, string> = {
   validate: 'ops/validate_all.ts',
 
   // Setup scripts
-  setup: 'setup/setup.ts',
+  setup: 'setup/index.ts',
 
   // Test scripts
   test_blackbox: 'test_blackbox/run.ts',

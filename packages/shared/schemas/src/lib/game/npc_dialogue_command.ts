@@ -196,9 +196,9 @@ export const NpcSuggestionChipSchema = Type.Object(
     /** Display label (e.g. "Ask about the stolen gems", "Intimidate"). */
     label: Type.String({ minLength: 1 }),
     /** Semantic intent tag — drives UI treatment (icons, urgency). */
-    intent_type: NpcSuggestionChipIntentTypeSchema,
+    intentType: NpcSuggestionChipIntentTypeSchema,
     /** Pre-filled text sent as the next player message when tapped — MUST be a complete natural sentence, not a keyword. */
-    prefill_text: Type.String({ minLength: 10 }),
+    prefillText: Type.String({ minLength: 10 }),
   },
   { additionalProperties: false },
 );
@@ -241,28 +241,28 @@ export type NpcStateDelta = Static<typeof NpcStateDeltaSchema>;
 export const NpcIntentAnalysisInputSchema = Type.Object(
   {
     /** The player's raw natural-language input. */
-    player_input: Type.String({ minLength: 1 }),
+    playerInput: Type.String({ minLength: 1 }),
     /** NPC identity and disposition. */
-    npc_context: Type.Object(
+    npcContext: Type.Object(
       {
         name: Type.String({ minLength: 1 }),
         persona: Type.String({ minLength: 1 }),
         /** Allowed command kinds for this NPC. */
-        allowed_commands: Type.Array(Type.String({ minLength: 1 })),
+        allowedCommands: Type.Array(Type.String({ minLength: 1 })),
       },
       { additionalProperties: false },
     ),
     /** Player character sheet summary (stats, level, class). */
-    player_context: Type.Object(
+    playerContext: Type.Object(
       {
-        character_sheet_summary: Type.String({ minLength: 1 }),
+        characterSheetSummary: Type.String({ minLength: 1 }),
         level: Type.Integer({ minimum: 1 }),
-        class_id: Type.String({ minLength: 1 }),
+        classId: Type.String({ minLength: 1 }),
       },
       { additionalProperties: false },
     ),
     /** Recent conversation turns (player + NPC, newest last). */
-    recent_history: Type.Array(
+    recentHistory: Type.Array(
       Type.Object(
         {
           role: Type.Union([Type.Literal('player'), Type.Literal('npc')]),
@@ -272,7 +272,7 @@ export const NpcIntentAnalysisInputSchema = Type.Object(
       ),
     ),
     /** Read-only world facts (active quests, flags). */
-    game_state_facts: Type.Array(Type.String()),
+    gameStateFacts: Type.Array(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -283,25 +283,25 @@ export type NpcIntentAnalysisInput = Static<typeof NpcIntentAnalysisInputSchema>
 export const NpcIntentAnalysisOutputSchema = Type.Object(
   {
     /** Whether this player action requires a skill check / dice roll. */
-    requires_roll: Type.Boolean(),
-    /** The skill to check against (e.g. "Deception", "Persuasion"). Only set when requires_roll is true. */
-    check_type: Type.Optional(Type.String()),
-    /** Difficulty class (5–20). Only set when requires_roll is true. */
-    difficulty_class: Type.Optional(Type.Integer({ minimum: 5, maximum: 20 })),
-    /** Which player stat modifier applies (e.g. "CHA", "STR"). Only set when requires_roll is true. */
-    modifier_source: Type.Optional(Type.String()),
+    requiresRoll: Type.Boolean(),
+    /** The skill to check against (e.g. "Deception", "Persuasion"). Only set when requiresRoll is true. */
+    checkType: Type.Optional(Type.String()),
+    /** Difficulty class (5–20). Only set when requiresRoll is true. */
+    difficultyClass: Type.Optional(Type.Integer({ minimum: 5, maximum: 20 })),
+    /** Which player stat modifier applies (e.g. "CHA", "STR"). Only set when requiresRoll is true. */
+    modifierSource: Type.Optional(Type.String()),
     /** Short narrative that plays BEFORE any roll UI appears — the NPC's reaction to what was said. */
-    npc_response: Type.String({
+    npcResponse: Type.String({
       minLength: 20,
       description:
         "The NPC's complete spoken reply, first person, as a self-contained conversational turn. " +
         'Must contain actual spoken dialogue in double quotes. Brief physical actions in ' +
         '*asterisks* may accompany the dialogue, but an asterisk-only response is invalid. ' +
-        'Never write third-person narration about the NPC. When requires_roll is true, end at ' +
+        'Never write third-person narration about the NPC. When requiresRoll is true, end at ' +
         'the moment of the attempt without revealing its outcome.',
     }),
     /** Suggested follow-up chips for this turn (0–4). */
-    suggested_chips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
+    suggestedChips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
   },
   { additionalProperties: false },
 );
@@ -316,15 +316,15 @@ export type NpcIntentAnalysisOutput = Static<typeof NpcIntentAnalysisOutputSchem
 export const NpcRollResolutionInputSchema = Type.Object(
   {
     /** The skill that was checked. */
-    check_type: Type.String({ minLength: 1 }),
+    checkType: Type.String({ minLength: 1 }),
     /** The difficulty class the GM set. */
-    difficulty_class: Type.Integer({ minimum: 5, maximum: 20 }),
+    difficultyClass: Type.Integer({ minimum: 5, maximum: 20 }),
     /** The total roll (d20 + modifier). */
-    roll_total: Type.Integer(),
+    rollTotal: Type.Integer(),
     /** Whether the roll passed the DC. */
     outcome: Type.Union([Type.Literal('pass'), Type.Literal('fail')]),
     /** The player's original text (for context). */
-    player_input: Type.String({ minLength: 1 }),
+    playerInput: Type.String({ minLength: 1 }),
   },
   { additionalProperties: false },
 );
@@ -335,11 +335,11 @@ export type NpcRollResolutionInput = Static<typeof NpcRollResolutionInputSchema>
 export const NpcRollResolutionOutputSchema = Type.Object(
   {
     /** The NPC's narrative response incorporating the roll outcome. */
-    narrative_result: Type.String({ minLength: 1 }),
+    narrativeResult: Type.String({ minLength: 1 }),
     /** State changes the LLM proposes. Game validates and applies each. */
-    state_deltas: Type.Array(NpcStateDeltaSchema),
+    stateDeltas: Type.Array(NpcStateDeltaSchema),
     /** Updated contextual chips for the next player turn (0–4). */
-    suggested_chips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
+    suggestedChips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
   },
   { additionalProperties: false },
 );

@@ -18,6 +18,7 @@ dependsOn:
   - 'constants'
   - 'schemas'
   - 'types'
+  - 'utils'
 
 fileGroups:
   sources:
@@ -50,3 +51,12 @@ tasks:
     preset: 'server'
   astro:
     command: 'bun run astro'
+  deploy:
+    command: 'bun run scripts/deploy.ts'
+    inputs:
+      - 'scripts/deploy.ts'
+      - 'firebase.json'
+      - '@group(sources)'
+    options:
+      cache: false
+      runInCI: true

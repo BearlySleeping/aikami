@@ -25,26 +25,26 @@ let generateTurnStub = mock(async () => ({
 }));
 
 let analyzeIntentStub = mock(async () => ({
-  requires_roll: false,
-  check_type: undefined,
-  difficulty_class: undefined,
-  modifier_source: undefined,
-  npc_response: 'The elder considers your words.',
-  suggested_chips: [
+  requiresRoll: false,
+  checkType: undefined,
+  difficultyClass: undefined,
+  modifierSource: undefined,
+  npcResponse: 'The elder considers your words.',
+  suggestedChips: [
     {
       id: 'talk',
       label: 'Ask about the ward',
-      intent_type: 'dialogue' as const,
-      prefill_text: 'Tell me about the ward.',
+      intentType: 'dialogue' as const,
+      prefillText: 'Tell me about the ward.',
     },
-    { id: 'leave', label: 'Leave', intent_type: 'dialogue' as const, prefill_text: 'Goodbye.' },
+    { id: 'leave', label: 'Leave', intentType: 'dialogue' as const, prefillText: 'Goodbye.' },
   ],
 }));
 
 const resolveRollStub = mock(async () => ({
-  narrative_result: 'The attempt succeeds.',
-  state_deltas: [],
-  suggested_chips: [],
+  narrativeResult: 'The attempt succeeds.',
+  stateDeltas: [],
+  suggestedChips: [],
 }));
 
 const mockNpcDialogueService = {
@@ -284,17 +284,17 @@ describe('DialogueOverlayViewModel', () => {
 
   test('npc message contains pre-roll narrative from intent analysis', async () => {
     analyzeIntentStub = mock(async () => ({
-      requires_roll: false,
-      check_type: undefined,
-      difficulty_class: undefined,
-      modifier_source: undefined,
-      npc_response: 'The elder strokes his beard. "The ward is failing."',
-      suggested_chips: [
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'The elder strokes his beard. "The ward is failing."',
+      suggestedChips: [
         {
           id: 'talk',
           label: 'Tell me more',
-          intent_type: 'dialogue' as const,
-          prefill_text: 'Tell me more.',
+          intentType: 'dialogue' as const,
+          prefillText: 'Tell me more.',
         },
       ],
     }));
@@ -314,23 +314,23 @@ describe('DialogueOverlayViewModel', () => {
 
   test('chips are populated from intent analysis', async () => {
     analyzeIntentStub = mock(async () => ({
-      requires_roll: false,
-      check_type: undefined,
-      difficulty_class: undefined,
-      modifier_source: undefined,
-      npc_response: 'Hello.',
-      suggested_chips: [
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'Hello.',
+      suggestedChips: [
         {
           id: 'quest',
           label: 'Ask about quests',
-          intent_type: 'quest' as const,
-          prefill_text: 'Do you have work?',
+          intentType: 'quest' as const,
+          prefillText: 'Do you have work?',
         },
         {
           id: 'trade',
           label: 'Trade',
-          intent_type: 'trade' as const,
-          prefill_text: 'Show me your wares.',
+          intentType: 'trade' as const,
+          prefillText: 'Show me your wares.',
         },
       ],
     }));
@@ -343,7 +343,7 @@ describe('DialogueOverlayViewModel', () => {
     await new Promise((r) => setTimeout(r, 50));
 
     expect(vm.suggestedChips.length).toBe(2);
-    expect(vm.suggestedChips[0].intent_type).toBe('quest');
+    expect(vm.suggestedChips[0].intentType).toBe('quest');
   });
 
   // ── C-371: Default phase is FREE_TEXT ─────────────────────────────────
@@ -360,8 +360,8 @@ describe('DialogueOverlayViewModel', () => {
     // Simulate chips being set (as from an analyzeIntent response)
     vm.inputText = '';
     vm.handleChipTap('talk');
-    // handleChipTap delegates to sendMessage with prefill_text
-    // The prefill_text from the mock is 'Tell me about the ward.'
+    // handleChipTap delegates to sendMessage with prefillText
+    // The prefillText from the mock is 'Tell me about the ward.'
     expect(vm.inputText).toBe('');
   });
 

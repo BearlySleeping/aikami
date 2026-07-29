@@ -82,3 +82,12 @@ tasks:
       - '@group(sources)'
       - '@group(srcTauri)'
       - '@group(configs)'
+  deploy:
+    command: 'bun run scripts/deploy.ts'
+    inputs:
+      - 'scripts/deploy.ts'
+      - 'firebase.json'
+      - '@group(sources)'
+    options:
+      cache: false
+      runInCI: true
