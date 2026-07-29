@@ -24,11 +24,13 @@ const { viewModel }: Props = $props();
  * - plain text → normal
  * - Unmatched `*` and `"` are captured as text
  */
-const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> => {
+const formatNpcText = (
+  text: string,
+): Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> => {
   const segments: Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> = [];
   const re = /(\*[^*]+\*)|("[^"]+")|([^*"]+)|(\*|")/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(text)) !== null) {
+  let match = re.exec(text);
+  while (match !== null) {
     if (match[1]) {
       // *action*
       segments.push({ type: 'action', content: match[1].replace(/^\*|\*$/g, '') });
@@ -42,9 +44,11 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
       // Unmatched delimiter (standalone * or ")
       segments.push({ type: 'text', content: match[4] });
     }
+    match = re.exec(text);
   }
   return segments;
-};</script>
+};
+</script>
 
 <div
   class="pointer-events-auto absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-base-300/60 to-transparent"
@@ -70,7 +74,9 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
   <!-- Avatar row — NPC left, Player + Party right -->
   <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
     <!-- NPC Avatar -->
-    <div class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200">
+    <div
+      class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
+    >
       <div
         class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc'
           ? 'border-warning shadow-warning/30'
@@ -81,7 +87,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
           alt={viewModel.npcName}
           class="h-full w-full object-contain"
           loading="lazy"
-        />
+        >
       </div>
     </div>
 
@@ -94,10 +100,12 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             alt="Companion"
             class="h-full w-full object-contain opacity-70"
             loading="lazy"
-          />
+          >
         </div>
       {/if}
-      <div class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200">
+      <div
+        class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200"
+      >
         <div
           class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
             ? 'border-primary shadow-primary/30'
@@ -108,7 +116,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             alt="You"
             class="h-full w-full object-contain"
             loading="lazy"
-          />
+          >
         </div>
       </div>
     </div>
@@ -120,7 +128,9 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
     style="height: 45vh;"
   >
     <!-- Header: NPC name + address mode + End Chat -->
-    <div class="flex shrink-0 items-center justify-between border-b border-base-content/10 px-4 py-2.5">
+    <div
+      class="flex shrink-0 items-center justify-between border-b border-base-content/10 px-4 py-2.5"
+    >
       <div class="flex items-center gap-2">
         <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
         {#if viewModel.isTtsSpeaking}
@@ -149,7 +159,12 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             <div class="skeleton h-48 w-64 rounded-xl"></div>
           {:else if image.status === 'done' && image.url}
             <div class="overflow-hidden rounded-xl shadow-md max-w-xs">
-              <img src={image.url} alt="Generated scene" class="w-full h-auto object-cover" loading="lazy" />
+              <img
+                src={image.url}
+                alt="Generated scene"
+                class="w-full h-auto object-cover"
+                loading="lazy"
+              >
             </div>
           {:else if image.status === 'error'}
             <span class="text-xs text-error italic">Image generation failed</span>
@@ -171,7 +186,6 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
         <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
           <!-- Bubble column -->
           <div class="flex max-w-[75%] flex-col gap-0.5">
-
             {#if viewModel.editingMessageId === message.id}
               <!-- Editing: inline textarea -->
               <div class="flex flex-col gap-1">
@@ -212,7 +226,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
                     alt={message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
                     class="h-5 w-5 rounded-full object-cover"
                     loading="lazy"
-                  />
+                  >
                   <span class="text-xs font-medium text-base-content/50">
                     {message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
                   </span>
@@ -240,9 +254,18 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
                   {/if}
                 {:else if viewModel.isStreaming && isLast}
                   <span class="inline-flex items-center gap-1">
-                    <span class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce" style="animation-delay: 0ms"></span>
-                    <span class="h-1.5 w-1.5 rounded-full bg-current opacity-65 animate-bounce" style="animation-delay: 150ms"></span>
-                    <span class="h-1.5 w-1.5 rounded-full bg-current opacity-85 animate-bounce" style="animation-delay: 300ms"></span>
+                    <span
+                      class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce"
+                      style="animation-delay: 0ms"
+                    ></span>
+                    <span
+                      class="h-1.5 w-1.5 rounded-full bg-current opacity-65 animate-bounce"
+                      style="animation-delay: 150ms"
+                    ></span>
+                    <span
+                      class="h-1.5 w-1.5 rounded-full bg-current opacity-85 animate-bounce"
+                      style="animation-delay: 300ms"
+                    ></span>
                   </span>
                 {/if}
               </div>
@@ -254,51 +277,83 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             >
               {#if !isPlayer && !isPartyMate}
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Copy" aria-label="Copy"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Copy"
+                  aria-label="Copy"
                   onclick={() => viewModel.copyMessage(message.content)}
-                >📋</button>
+                >
+                  📋
+                </button>
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Retry" aria-label="Retry"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Retry"
+                  aria-label="Retry"
                   disabled={viewModel.isStreaming}
                   onclick={() => viewModel.regenerateResponse(message.id)}
-                >🔄</button>
+                >
+                  🔄
+                </button>
                 {#if viewModel.streamingTtsEnabled}
                   <button
-                    type="button" class="btn btn-ghost btn-xs px-1"
-                    title="Speak" aria-label="Speak"
+                    type="button"
+                    class="btn btn-ghost btn-xs px-1"
+                    title="Speak"
+                    aria-label="Speak"
                     onclick={() => viewModel.speakMessage(message.content)}
-                  >🔊</button>
+                  >
+                    🔊
+                  </button>
                 {/if}
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Branch" aria-label="Branch"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
                   onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
-                >🌿</button>
+                >
+                  🌿
+                </button>
               {:else}
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Copy" aria-label="Copy"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Copy"
+                  aria-label="Copy"
                   onclick={() => viewModel.copyMessage(message.content)}
-                >📋</button>
+                >
+                  📋
+                </button>
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Edit" aria-label="Edit"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Edit"
+                  aria-label="Edit"
                   disabled={viewModel.isStreaming}
                   onclick={() => viewModel.startEdit(message.id)}
-                >✏️</button>
+                >
+                  ✏️
+                </button>
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Delete" aria-label="Delete"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Delete"
+                  aria-label="Delete"
                   disabled={viewModel.isStreaming}
                   onclick={() => viewModel.deleteMessage(message.id)}
-                >🗑️</button>
+                >
+                  🗑️
+                </button>
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
-                  title="Branch" aria-label="Branch"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
                   onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
-                >🌿</button>
+                >
+                  🌿
+                </button>
               {/if}
             </div>
 
@@ -306,18 +361,26 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             {#if !isPlayer && !isPartyMate && message.alternativeLabel}
               <div class="flex items-center justify-center gap-1 mt-0.5">
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
                   disabled={!message.canSwipeLeft}
                   onclick={() => viewModel.swipeAlternative(message.id, 'left')}
                   aria-label="Previous alternative"
-                >◀</button>
-                <span class="text-xs font-mono text-base-content/50">{message.alternativeLabel}</span>
+                >
+                  ◀
+                </button>
+                <span class="text-xs font-mono text-base-content/50"
+                  >{message.alternativeLabel}</span
+                >
                 <button
-                  type="button" class="btn btn-ghost btn-xs px-1"
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
                   disabled={!message.canSwipeRight}
                   onclick={() => viewModel.swipeAlternative(message.id, 'right')}
                   aria-label="Next alternative"
-                >▶</button>
+                >
+                  ▶
+                </button>
               </div>
             {/if}
           </div>
@@ -336,12 +399,18 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
                 ? 'bg-success/10 border border-success/30'
                 : 'bg-error/10 border border-error/30'}"
             >
-              <span class="text-xs text-base-content/50">{viewModel.rollResultBanner.checkType} Check</span>
+              <span class="text-xs text-base-content/50"
+                >{viewModel.rollResultBanner.checkType}
+                Check</span
+              >
               <div class="flex items-baseline gap-2">
-                <span class="text-2xl font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
+                <span
+                  class="text-2xl font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
                   >{viewModel.rollResultBanner.value}</span
                 >
-                <span class="text-sm text-base-content/50">vs DC {viewModel.rollResultBanner.dc}</span>
+                <span class="text-sm text-base-content/50"
+                  >vs DC {viewModel.rollResultBanner.dc}</span
+                >
               </div>
               <span
                 class="text-sm font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
@@ -358,9 +427,18 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
         <div class="flex gap-2">
           <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
             <span class="inline-flex items-center gap-1">
-              <span class="h-1.5 w-1.5 rounded-full bg-base-content/30 animate-bounce" style="animation-delay: 0ms"></span>
-              <span class="h-1.5 w-1.5 rounded-full bg-base-content/40 animate-bounce" style="animation-delay: 150ms"></span>
-              <span class="h-1.5 w-1.5 rounded-full bg-base-content/50 animate-bounce" style="animation-delay: 300ms"></span>
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-base-content/30 animate-bounce"
+                style="animation-delay: 0ms"
+              ></span>
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-base-content/40 animate-bounce"
+                style="animation-delay: 150ms"
+              ></span>
+              <span
+                class="h-1.5 w-1.5 rounded-full bg-base-content/50 animate-bounce"
+                style="animation-delay: 300ms"
+              ></span>
             </span>
           </div>
         </div>
@@ -400,16 +478,22 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
           <div class="flex items-center gap-1 text-xs">
             <span class="text-base-content/50">Branch:</span>
             <button
-              type="button" class="btn btn-xs"
+              type="button"
+              class="btn btn-xs"
               class:btn-active={viewModel.activeBranchId === null}
               onclick={() => viewModel.switchBranch(null)}
-            >Main</button>
+            >
+              Main
+            </button>
             {#each viewModel.branches as branch (branch.branchId)}
               <button
-                type="button" class="btn btn-xs"
+                type="button"
+                class="btn btn-xs"
                 class:btn-active={viewModel.activeBranchId === branch.branchId}
                 onclick={() => viewModel.switchBranch(branch.branchId)}
-              >{branch.label ?? 'Branch'}</button>
+              >
+                {branch.label ?? 'Branch'}
+              </button>
             {/each}
           </div>
         </div>
@@ -440,11 +524,16 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
               aria-label={chip.label}
             >
               <span>
-                {#if chip.intent_type === 'skill_check'}🎲
-                {:else if chip.intent_type === 'combat'}⚔️
-                {:else if chip.intent_type === 'trade'}💰
-                {:else if chip.intent_type === 'quest'}📋
-                {:else}💬
+                {#if chip.intent_type === 'skill_check'}
+                  🎲
+                {:else if chip.intent_type === 'combat'}
+                  ⚔️
+                {:else if chip.intent_type === 'trade'}
+                  💰
+                {:else if chip.intent_type === 'quest'}
+                  📋
+                {:else}
+                  💬
                 {/if}
               </span>
               {chip.label}
@@ -469,13 +558,19 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
           <p class="py-4 text-sm">This will remove the message and all subsequent replies.</p>
           <div class="modal-action">
             <button
-              type="button" class="btn btn-ghost btn-sm"
+              type="button"
+              class="btn btn-ghost btn-sm"
               onclick={() => viewModel.cancelDelete()}
-            >Cancel</button>
+            >
+              Cancel
+            </button>
             <button
-              type="button" class="btn btn-error btn-sm"
+              type="button"
+              class="btn btn-error btn-sm"
               onclick={() => viewModel.confirmDelete()}
-            >Delete</button>
+            >
+              Delete
+            </button>
           </div>
         </div>
       </div>
@@ -487,7 +582,8 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
         <div class="flex items-center justify-center gap-3">
           <div class="badge badge-success badge-lg gap-1">🤝 Recruitable</div>
           <button
-            type="button" class="btn btn-success btn-sm"
+            type="button"
+            class="btn btn-success btn-sm"
             onclick={() => viewModel.recruitCompanion()}
           >
             Recruit {viewModel.npcName}

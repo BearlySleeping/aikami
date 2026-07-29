@@ -7,9 +7,9 @@
 //   bun test scripts/image_service.test.ts
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { $ } from 'bun';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { $ } from 'bun';
 
 // ── Paths ───────────────────────────────────────────────────
 
@@ -90,12 +90,19 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
       return;
     }
 
-    if (!wasEverReachable && !result.detail.includes('refused') && !result.detail.includes('Unable to connect')) {
+    if (
+      !wasEverReachable &&
+      !result.detail.includes('refused') &&
+      !result.detail.includes('Unable to connect')
+    ) {
       wasEverReachable = true;
     }
 
     if (result.detail !== lastDetail) {
-      if (wasEverReachable && (result.detail.includes('refused') || result.detail.includes('Unable to connect'))) {
+      if (
+        wasEverReachable &&
+        (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
+      ) {
         throw new Error('ComfyUI crashed after becoming reachable — check herdr tab logs');
       }
       console.log(`  ... ${result.detail}`);
@@ -216,122 +223,128 @@ describe('ComfyUI image generation service', () => {
     }
   });
 
-  test.skipIf(checkpointsAvailable.length === 0)('/api/prompt generates an image (super lite)', async () => {
-    const checkpoint = checkpointsAvailable[0];
-    console.log(`  Checkpoint: ${checkpoint}`);
+  test.skipIf(checkpointsAvailable.length === 0)(
+    '/api/prompt generates an image (super lite)',
+    async () => {
+      const checkpoint = checkpointsAvailable[0];
+      console.log(`  Checkpoint: ${checkpoint}`);
 
-    // Minimal workflow: 1 step, 64×64, seed 42
-    const workflow = {
-      '1': {
-        inputs: { ckpt_name: checkpoint },
-        class_type: 'CheckpointLoaderSimple',
-      },
-      '2': {
-        inputs: { text: 'test', clip: ['1', 1] },
-        class_type: 'CLIPTextEncode',
-      },
-      '3': {
-        inputs: { text: '', clip: ['1', 1] },
-        class_type: 'CLIPTextEncode',
-      },
-      '4': {
-        inputs: { width: 64, height: 64, batch_size: 1 },
-        class_type: 'EmptyLatentImage',
-      },
-      '5': {
-        inputs: {
-          seed: 42,
-          steps: 1,
-          cfg: 1,
-          sampler_name: 'euler',
-          scheduler: 'normal',
-          denoise: 1,
-          model: ['1', 0],
-          positive: ['2', 0],
-          negative: ['3', 0],
-          latent_image: ['4', 0],
+      // Minimal workflow: 1 step, 64×64, seed 42
+      const workflow = {
+        '1': {
+          inputs: { ckpt_name: checkpoint },
+          class_type: 'CheckpointLoaderSimple',
         },
-        class_type: 'KSampler',
-      },
-      '6': {
-        inputs: { samples: ['5', 0], vae: ['1', 2] },
-        class_type: 'VAEDecode',
-      },
-      '7': {
-        inputs: { images: ['6', 0], filename_prefix: 'aikami_test' },
-        class_type: 'SaveImage',
-      },
-    };
+        '2': {
+          inputs: { text: 'test', clip: ['1', 1] },
+          class_type: 'CLIPTextEncode',
+        },
+        '3': {
+          inputs: { text: '', clip: ['1', 1] },
+          class_type: 'CLIPTextEncode',
+        },
+        '4': {
+          inputs: { width: 64, height: 64, batch_size: 1 },
+          class_type: 'EmptyLatentImage',
+        },
+        '5': {
+          inputs: {
+            seed: 42,
+            steps: 1,
+            cfg: 1,
+            sampler_name: 'euler',
+            scheduler: 'normal',
+            denoise: 1,
+            model: ['1', 0],
+            positive: ['2', 0],
+            negative: ['3', 0],
+            latent_image: ['4', 0],
+          },
+          class_type: 'KSampler',
+        },
+        '6': {
+          inputs: { samples: ['5', 0], vae: ['1', 2] },
+          class_type: 'VAEDecode',
+        },
+        '7': {
+          inputs: { images: ['6', 0], filename_prefix: 'aikami_test' },
+          class_type: 'SaveImage',
+        },
+      };
 
-    // Submit
-    const t0 = Date.now();
-    const promptResponse = await fetch(`${BASE_URL}/api/prompt`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: workflow }),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!promptResponse.ok) {
-      const errorBody = await promptResponse.text();
-      throw new Error(`Prompt submission failed (HTTP ${promptResponse.status}):\n${errorBody.slice(0, 300)}`);
-    }
-
-    const promptData = (await promptResponse.json()) as PromptResponse;
-    expect(promptData.prompt_id).toBeString();
-
-    if (promptData.error) {
-      throw new Error(`Prompt error: ${JSON.stringify(promptData.error)}`);
-    }
-
-    const promptId = promptData.prompt_id;
-    console.log(`  Prompt:   ${promptId}`);
-
-    // Poll for completion
-    const historyUrl = `${BASE_URL}/api/history/${promptId}`;
-    let entry: HistoryEntry | undefined;
-
-    for (let i = 0; i < 120; i++) {
-      const histResponse = await fetch(historyUrl, {
-        signal: AbortSignal.timeout(5000),
+      // Submit
+      const t0 = Date.now();
+      const promptResponse = await fetch(`${BASE_URL}/api/prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: workflow }),
+        signal: AbortSignal.timeout(10_000),
       });
 
-      if (!histResponse.ok) {
-        throw new Error(`History fetch failed: ${histResponse.status}`);
+      if (!promptResponse.ok) {
+        const errorBody = await promptResponse.text();
+        throw new Error(
+          `Prompt submission failed (HTTP ${promptResponse.status}):\n${errorBody.slice(0, 300)}`,
+        );
       }
 
-      const histData = (await histResponse.json()) as Record<string, HistoryEntry>;
-      entry = histData[promptId];
+      const promptData = (await promptResponse.json()) as PromptResponse;
+      expect(promptData.prompt_id).toBeString();
 
-      if (entry) {
-        if (entry.status.completed) {
-          break;
-        }
-        if (entry.status.status_str === 'error') {
-          throw new Error('Generation failed — check ComfyUI logs');
-        }
+      if (promptData.error) {
+        throw new Error(`Prompt error: ${JSON.stringify(promptData.error)}`);
       }
 
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+      const promptId = promptData.prompt_id;
+      console.log(`  Prompt:   ${promptId}`);
 
-    if (!entry) {
-      throw new Error('Generation timed out after 120s');
-    }
+      // Poll for completion
+      const historyUrl = `${BASE_URL}/api/history/${promptId}`;
+      let entry: HistoryEntry | undefined;
 
-    const wallMs = Date.now() - t0;
-    expect(entry.status.completed).toBe(true);
+      for (let i = 0; i < 120; i++) {
+        const histResponse = await fetch(historyUrl, {
+          signal: AbortSignal.timeout(5000),
+        });
 
-    // Verify output
-    const outputNodeIds = Object.keys(entry.outputs);
-    expect(outputNodeIds.length).toBeGreaterThan(0);
+        if (!histResponse.ok) {
+          throw new Error(`History fetch failed: ${histResponse.status}`);
+        }
 
-    const images = entry.outputs[outputNodeIds[0]].images;
-    expect(images.length).toBeGreaterThan(0);
-    expect(images[0].filename).toBeString();
-    expect(images[0].filename.length).toBeGreaterThan(0);
+        const histData = (await histResponse.json()) as Record<string, HistoryEntry>;
+        entry = histData[promptId];
 
-    console.log(`  Output:   ${images[0].filename}`);
-    console.log(`  Wall:     ${wallMs}ms`);
-  }, 180_000);
+        if (entry) {
+          if (entry.status.completed) {
+            break;
+          }
+          if (entry.status.status_str === 'error') {
+            throw new Error('Generation failed — check ComfyUI logs');
+          }
+        }
+
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      if (!entry) {
+        throw new Error('Generation timed out after 120s');
+      }
+
+      const wallMs = Date.now() - t0;
+      expect(entry.status.completed).toBe(true);
+
+      // Verify output
+      const outputNodeIds = Object.keys(entry.outputs);
+      expect(outputNodeIds.length).toBeGreaterThan(0);
+
+      const images = entry.outputs[outputNodeIds[0]].images;
+      expect(images.length).toBeGreaterThan(0);
+      expect(images[0].filename).toBeString();
+      expect(images[0].filename.length).toBeGreaterThan(0);
+
+      console.log(`  Output:   ${images[0].filename}`);
+      console.log(`  Wall:     ${wallMs}ms`);
+    },
+    180_000,
+  );
 });

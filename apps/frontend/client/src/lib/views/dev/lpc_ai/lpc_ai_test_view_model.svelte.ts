@@ -88,7 +88,9 @@ class LpcAiTestViewModel
   }
 
   get missingCount(): number {
-    return this.diagnostics.filter((d) => d.status === 'missing_asset' || d.status === 'missing_slot').length;
+    return this.diagnostics.filter(
+      (d) => d.status === 'missing_asset' || d.status === 'missing_slot',
+    ).length;
   }
 
   get hasRecipes(): boolean {

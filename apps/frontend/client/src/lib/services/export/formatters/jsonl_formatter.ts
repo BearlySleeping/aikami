@@ -8,7 +8,7 @@ import type { JsonlMessageLine } from '@aikami/types';
 
 /**
  * Normalized message input for all export formatters.
- * Abstracts away Firestore-specific types (Timestamps, metadata blobs).
+ * Abstracts away backend-specific types (timestamps, metadata blobs).
  */
 export type ExportMessage = {
   /** Message text content. */

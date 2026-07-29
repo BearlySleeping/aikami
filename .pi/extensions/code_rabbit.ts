@@ -8,9 +8,9 @@
 //
 // Call from the review session with: code_rabbit_autofix
 
-import { execSync } from 'node:child_process';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { runSyncOrThrow } from './lib/process_runner.ts';
 
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 15_000;
@@ -32,11 +32,7 @@ type AutofixCommentState =
 
 const gh = (args: string): string => {
   try {
-    return execSync(`gh ${args}`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: TIMEOUT,
-    }).trim();
+    return runSyncOrThrow('gh', args.split(/\s+/), { timeoutMs: TIMEOUT });
   } catch {
     return '';
   }
@@ -44,11 +40,7 @@ const gh = (args: string): string => {
 
 const ghJson = <T>(args: string): T | undefined => {
   try {
-    const raw = execSync(`gh ${args}`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: TIMEOUT,
-    }).trim();
+    const raw = runSyncOrThrow('gh', args.split(/\s+/), { timeoutMs: TIMEOUT });
     if (!raw) {
       return undefined;
     }
@@ -384,7 +376,6 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         Type.Boolean({ default: false, description: 'Auto-merge only if no findings' }),
       ),
     }),
-    // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
     async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
       _signal = signal;
       const num = prNumber(params.pr);
@@ -696,7 +687,6 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       pr: Type.String({ description: 'PR number' }),
     }),
-    // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
     async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
       _signal = signal;
       const num = prNumber(params.pr);
@@ -836,7 +826,6 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         Type.Number({ default: 15_000, description: 'Poll interval in ms' }),
       ),
     }),
-    // biome-ignore lint/suspicious/noExplicitAny: Pi SDK AgentToolResult is deep-generic
     async execute(_toolCallId, params, signal, _onUpdate, _ctx): Promise<any> {
       _signal = signal;
       const num = prNumber(params.pr);

@@ -96,7 +96,6 @@ function loadMocks(): void {
 
   const envFileValues = readEnvFile(mode);
   const mocks: Record<string, string> = {
-    // biome-ignore lint/style/useNamingConvention: env var name
     GEMINI_API_KEY: 'emulator-key',
   };
 

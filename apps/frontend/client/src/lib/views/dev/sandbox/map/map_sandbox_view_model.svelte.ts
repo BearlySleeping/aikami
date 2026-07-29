@@ -7,7 +7,7 @@
 //
 // Contracts: C-139 Task 2, C-178
 
-import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
 import {
   BaseDevViewModel,
@@ -212,7 +212,7 @@ class MapSandboxViewModel
 
       const EcsWorker = await _resolveEcsWorker();
       const tm = new TextureManager();
-      const paletteBytes = new Uint8Array(1024);
+      const _paletteBytes = new Uint8Array(1024);
 
       const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 

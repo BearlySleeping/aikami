@@ -15,6 +15,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { error, ok, warn } from '../cli_utils.ts';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -25,15 +26,7 @@ const PIXI_DEVTOOLS_RELEASE_URL =
 
 // ── Logging helpers ────────────────────────────────────────────────────────
 
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const RESET = '\x1b[0m';
-
 const info = (msg: string) => console.log(`  [pixi-devtools] ${msg}`);
-const ok = (msg: string) => console.log(`  ${GREEN}✓${RESET} ${msg}`);
-const warn = (msg: string) => console.warn(`  ${YELLOW}⚠${RESET} ${msg}`);
-const err = (msg: string) => console.error(`  ${RED}✗${RESET} ${msg}`);
 
 // ── Find manifest directory ────────────────────────────────────────────────
 
@@ -145,7 +138,7 @@ const downloadAndUnpack = (): string | null => {
     warn('Devtools archive unpacked but manifest.json not found');
     return null;
   } catch (e) {
-    err(`Download/unpack failed: ${e}`);
+    error(`Download/unpack failed: ${e}`);
     return null;
   } finally {
     // Clean up temp script

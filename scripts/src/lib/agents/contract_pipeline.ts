@@ -2,10 +2,11 @@
 // scripts/src/lib/agents/contract_pipeline.ts
 //
 // Contract Pipeline CLI — entry point for `bun run contract`.
-// Supports three --source modes:
-//   --source todo     (default) Parse docs/TODO.md and generate contract from backlog item
-//   --source roadmap  Fetch from GitHub Issue or Project v2 item and freeze into contract
-//   --source direct   Initiate interactive Pi session for conversational contract drafting
+// Default: interactive direct drafting. Use --issue to freeze from a GitHub Issue.
+//   bun run contract                    → interactive direct draft (default)
+//   bun run contract --issue #54        → freeze contract from GitHub Issue
+//   bun run contract --issue https://... → freeze from issue URL
+//   bun run contract --source todo C-370 → legacy: parse docs/TODO.md
 
 import { execFileSync, execSync, spawn } from 'node:child_process';
 import {
@@ -31,6 +32,7 @@ type ContractSource = 'todo' | 'roadmap' | 'direct';
 type CliArguments = {
   target?: string;
   source: ContractSource;
+  issueTarget?: string;
   resumeRunId?: string;
   background: boolean;
   dryRun: boolean;
@@ -51,7 +53,7 @@ const parseArguments = (): CliArguments => {
     return index >= 0 ? args[index + 1] : undefined;
   };
   const consumed = new Set<string>();
-  for (const flag of ['--resume', '--launcher-token', '--source']) {
+  for (const flag of ['--resume', '--launcher-token', '--source', '--issue']) {
     const value = valueAfter(flag);
     if (value) {
       consumed.add(value);
@@ -60,11 +62,12 @@ const parseArguments = (): CliArguments => {
 
   const sourceRaw = valueAfter('--source')?.toLowerCase();
   const source: ContractSource =
-    sourceRaw === 'roadmap' || sourceRaw === 'direct' ? sourceRaw : 'todo';
+    sourceRaw === 'todo' || sourceRaw === 'roadmap' ? sourceRaw : 'direct';
 
   return {
     target: args.find((value) => !value.startsWith('-') && !consumed.has(value)),
     source,
+    issueTarget: valueAfter('--issue'),
     resumeRunId: valueAfter('--resume'),
     launcherToken: valueAfter('--launcher-token'),
     background: args.includes('--background'),
@@ -82,27 +85,26 @@ const parseArguments = (): CliArguments => {
 const printHelp = (): void => {
   console.log(`
 Usage:
-  bun run contract [ID-or-Title] [--source <mode>] [options]
+  bun run contract [--issue <url|#>] [options]
 
-Source modes:
-  --source todo     (default) Parse docs/TODO.md and generate contract from backlog item
-  --source roadmap  Fetch from GitHub Issue or Project v2 item and freeze into contract
-  --source direct   Initiate interactive Pi session for conversational contract drafting
+Default: interactive direct drafting (describe your feature in the chat).
+Use --issue to freeze a contract from an existing GitHub Issue.
+Legacy --source modes are still supported.
 
 Examples:
-  bun run contract C-370
-  bun run contract C-370 --source todo
-  bun run contract "Fix LPC Paperdoll" --source todo
-  bun run contract #102 --source roadmap
-  bun run contract --source direct        # Auto-generate ID, launch writer pi session
-  bun run contract C-370 --root
-  bun run contract C-370 --root --dirty
-  bun run contract --source direct --root  # Direct draft + root branch
+  bun run contract                          # Interactive direct draft (default)
+  bun run contract --issue 54               # Freeze from Issue #54
+  bun run contract --issue https://github.com/BearlySleeping/aikami/issues/54
+  bun run contract --source todo C-370       # Legacy: parse docs/TODO.md
+  bun run contract --source direct           # Explicit direct draft
+  bun run contract --issue 54 --root         # Issue source + root branch
+  bun run contract --root                    # Direct draft + root branch
+  bun run contract --root --dirty            # Allow uncommitted changes
   bun run contract docs/contracts/C-xxx-....md
   bun run contract --resume <run-id>
 
 Options:
-  --source <mode>   Source for contract generation: todo, roadmap, direct (default: todo)
+  --source <mode>   Source for contract generation: todo, roadmap, direct (default: direct)
   --root, -r        Start work on branch contract/C-XXX in the root repo before launching pipeline
   --dirty           Allow branch switch with uncommitted changes (only with --root)
   --resume <run-id> Resume an incomplete v3 run
@@ -254,7 +256,10 @@ const handleRoadmapSource = (target: string): void => {
   }
 
   // Check if we found an existing contract — if so, reuse it
-  const existingContractFound = existsSync(contractPath!);
+  if (!contractPath) {
+    throw new Error('contractPath not set');
+  }
+  const existingContractFound = existsSync(contractPath);
   if (existingContractFound) {
     console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
@@ -303,7 +308,7 @@ const handleRoadmapSource = (target: string): void => {
       .replace(/issue_number:\s*null/, `issue_number: ${issueNum}`)
       .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
-    writeFileSync(contractPath!, finalContent);
+    writeFileSync(contractPath, finalContent);
     console.log(`✅ Contract frozen from roadmap: ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
@@ -366,9 +371,7 @@ const prepareDirectSource = (repoRoot: string): string => {
   // (foreground already created it). In foreground, always create fresh.
   const isBackground = process.argv.includes('--background');
   if (isBackground) {
-    const existingPlaceholder = existingContracts.find(
-      (f) => /^C-\d+\.md$/.test(f),
-    );
+    const existingPlaceholder = existingContracts.find((f) => /^C-\d+\.md$/.test(f));
     if (existingPlaceholder) {
       const id = existingPlaceholder.replace('.md', '');
       return id;
@@ -603,13 +606,19 @@ const main = async (): Promise<void> => {
     return;
   }
 
+  // --issue: freeze contract from GitHub Issue (no pipeline)
+  if (cli.issueTarget) {
+    handleRoadmapSource(cli.issueTarget);
+    return;
+  }
+
   // Handle --source modes that don't use the full pipeline
   if (cli.source === 'roadmap' && cli.target) {
     handleRoadmapSource(cli.target);
     return;
   }
 
-  // --source direct: generate contract ID + placeholder, then fall through
+  // Default (direct): generate contract ID + placeholder, then fall through
   // to the pipeline. The writer stage opens in interactive TUI mode.
   let interactiveWriter = false;
   if (cli.source === 'direct') {

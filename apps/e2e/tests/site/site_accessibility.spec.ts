@@ -16,6 +16,7 @@ test.describe('Accessibility — axe-core audit', () => {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
 
+      // @ts-expect-error - FIXME: playwright-core version mismatch (1.61.1 vs 1.62.0) in node_modules dedup
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
         .analyze();

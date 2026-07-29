@@ -88,7 +88,11 @@ class ExpressionService
     // ── Tier 1: Agent-based detection ──
     if (useAgent !== false) {
       try {
-        const agentResult = await this._runAgentDetection({ message, characters, availableExpressions });
+        const agentResult = await this._runAgentDetection({
+          message,
+          characters,
+          availableExpressions,
+        });
         if (agentResult) {
           return agentResult;
         }

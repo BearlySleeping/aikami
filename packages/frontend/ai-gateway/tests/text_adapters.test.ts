@@ -253,7 +253,7 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
 
   test('omits response_format for providers without structured support', async () => {
     const payload = JSON.stringify({ name: 'Gandalf' });
-    const { fetchFn, calls } = createSseFetchMock({ chunks: [sseChunk(payload), SSE_DONE] });
+    const { fetchFn, calls } = createJsonFetchMock({ content: payload });
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       supportsStructuredOutput: () => false,

@@ -75,7 +75,7 @@ const abilityNames: Record<string, string> = {
           <div class="col-span-2 mt-2">
             <strong>Abilities:</strong>
             <div class="grid grid-cols-3 gap-1 mt-1">
-              {#each Object.entries(stats.abilities) as [ ability, value ]}
+              {#each Object.entries(stats.abilities) as [ability, value]}
                 <div class="text-xs bg-base-300 p-1 rounded">
                   {abilityNames[ability] || ability}:
                   {value.score}

@@ -55,13 +55,11 @@ export const updateZoningSystem = (
 
   const transitionEntities = query(world, TRANSITION_QUERY_TERMS);
 
-  // Debug: log player position and zone count once per second
-  if (!_debugLogThrottle || performance.now() - _debugLogThrottle > 2000) {
-    _debugLogThrottle = performance.now();
-    logger.debug(
-      `[ZoningSystem] player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) zones=${transitionEntities.length}`,
-    );
-  }
+  // Debug: log player position and zone count (spam-deduped, at most every 500ms)
+  logger.spam(
+    'zoning.position',
+    `[ZoningSystem] player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) zones=${transitionEntities.length}`,
+  );
 
   for (const eid of transitionEntities) {
     // Skip already-triggered zones
@@ -94,7 +92,8 @@ export const updateZoningSystem = (
     const dy = Math.max(0, zoneMinY - playerPos.y, playerPos.y - zoneMaxY);
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 80) {
-      logger.debug(
+      logger.spam(
+        'zoning.nearZone',
         `[ZoningSystem] near zone eid=${eid} dist=${dist.toFixed(0)} ` +
           `player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) ` +
           `zone=[${zoneMinX.toFixed(0)}..${zoneMaxX.toFixed(0)}, ${zoneMinY.toFixed(0)}..${zoneMaxY.toFixed(0)}] ` +
@@ -116,6 +115,3 @@ export const updateZoningSystem = (
     }
   }
 };
-
-/** Throttle for per-second debug logs. */
-let _debugLogThrottle: number | undefined;

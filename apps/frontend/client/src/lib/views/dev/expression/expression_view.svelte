@@ -92,7 +92,7 @@ const { viewModel }: Props = $props();
             </tr>
           </thead>
           <tbody>
-            {#each Object.entries(viewModel.detectionResult.expressionMap) as [ char, expr ]}
+            {#each Object.entries(viewModel.detectionResult.expressionMap) as [char, expr]}
               <tr>
                 <td class="font-semibold">{char}</td>
                 <td>

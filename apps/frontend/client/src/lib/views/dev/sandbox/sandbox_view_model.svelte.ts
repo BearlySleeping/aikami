@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts
 
-import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import {
   BaseEngineClass,
   createEngineBridge,
@@ -141,7 +141,7 @@ class SandboxViewModel
 
       const tm = new TextureManager();
 
-      const paletteBytes = new Uint8Array(1024);
+      const _paletteBytes = new Uint8Array(1024);
 
       const { sandboxRecipeResolver } = await import('./shared/lpc_sandbox_resolver');
 

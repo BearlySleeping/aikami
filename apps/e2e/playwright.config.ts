@@ -227,7 +227,6 @@ export default defineConfig({
           ],
           // C-200 AC-1: Mesa software rasterization
           env: {
-            // biome-ignore lint/style/useNamingConvention: process env variable
             LIBGL_ALWAYS_SOFTWARE: '1',
           },
         },

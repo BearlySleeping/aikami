@@ -26,6 +26,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
+import { c, error, hasFlag, info, ok, parseArg, spawnLabeled, warn } from '../cli_utils.ts';
 import {
   buildSessionName,
   startServices,
@@ -33,23 +34,6 @@ import {
   workspaceExists,
 } from '../herdr/session.ts';
 import { ensureDevtools, getDevtoolsPath, updateDevtools } from './pixi_devtools.ts';
-
-// ── CLI colors ─────────────────────────────────────────────────────────────
-
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const BLUE = '\x1b[34m';
-const YELLOW = '\x1b[33m';
-const BOLD = '\x1b[1m';
-const RESET = '\x1b[0m';
-
-const log = (prefix: string, color: string, message: string): void => {
-  console.log(`${color}${BOLD}[${prefix}]${RESET} ${message}`);
-};
-const info = (m: string) => log('info', BLUE, m);
-const ok = (m: string) => log('ok', GREEN, m);
-const warn = (m: string) => log('warn', YELLOW, m);
-const error = (m: string) => log('error', RED, m);
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -82,36 +66,6 @@ const cleanDir = (dirPath: string, label: string): void => {
     info(`Cleaning ${label}…`);
     rmSync(dirPath, { recursive: true, force: true });
   }
-};
-
-const spawn = (cmd: string[], label: string): Promise<number> => {
-  return new Promise((resolvePromise) => {
-    info(`Running: ${cmd.join(' ')}`);
-    const proc = Bun.spawn({
-      cmd,
-      cwd: ROOT,
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
-    proc.exited.then((code) => {
-      if (code === 0) {
-        ok(`${label} — exit 0`);
-      } else {
-        error(`${label} — exit ${code}`);
-      }
-      resolvePromise(code);
-    });
-  });
-};
-
-const hasFlag = (args: string[], flag: string): boolean => args.includes(flag);
-
-const parseArg = (args: string[], flag: string): string | undefined => {
-  const idx = args.indexOf(flag);
-  if (idx !== -1 && idx + 1 < args.length) {
-    return args[idx + 1];
-  }
-  return undefined;
 };
 
 const parseMode = (raw: string | undefined): AikamiMode => {
@@ -204,7 +158,7 @@ const buildClient = async (mode: AikamiMode, force: boolean): Promise<boolean> =
     '--mode',
     mode,
   ];
-  const code = await spawn(buildArgs, `client:build (${mode})`);
+  const code = await spawnLabeled(buildArgs, `client:build (${mode})`, { cwd: ROOT });
   return code === 0;
 };
 
@@ -266,9 +220,10 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
 
   if (!lpcHasAssets && !lpcHasDownloaded) {
     warn('LPC assets not found — downloading…');
-    const lpcCode = await spawn(
+    const lpcCode = await spawnLabeled(
       ['bun', 'run', 'scripts/src/lib/ops/download_lpc_assets.ts', '--mode', mode],
       'download_lpc_assets',
+      { cwd: ROOT },
     );
     if (lpcCode !== 0) {
       warn('LPC asset download failed — sprites may not render in Tauri');
@@ -280,9 +235,10 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
   // Copy from src/lib/assets/lpc/ to static/game-data/lpc/ if needed
   if (!lpcHasAssets && existsSync(resolve(CLIENT_DIR, 'src/lib/assets/lpc'))) {
     info('Copying LPC assets to static/game-data/lpc/ for build…');
-    const copyCode = await spawn(
+    const copyCode = await spawnLabeled(
       ['cp', '-r', resolve(CLIENT_DIR, 'src/lib/assets/lpc'), resolve(CLIENT_DIR, 'static/lpc')],
       'copy_lpc_to_static',
+      { cwd: ROOT },
     );
     if (copyCode === 0) {
       ok('LPC assets copied to static/');
@@ -389,7 +345,7 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
 const args = process.argv.slice(2);
 const opts = parseOptions(args);
 
-console.log(`\n${BOLD}Aikami Client Preview${RESET}\n`);
+console.log(`\n${c.bold}Aikami Client Preview${c.reset}\n`);
 info(`Mode: ${opts.mode}`);
 
 // Handle --update-devtools (can be combined with other flags or standalone)

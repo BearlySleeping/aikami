@@ -8,17 +8,17 @@
 
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
-import type { EngineBridge, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
+import type { EngineBridge, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { Campaign, PersonaData } from '@aikami/types';
+import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { authService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
-import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_repository.svelte';

@@ -73,7 +73,6 @@ export default defineConfig({
   cases: [
     {
       name: 'Patrol vs Alert FOV',
-      // biome-ignore lint/style/useNamingConvention: URL query parameter names
       searchParams: { debug_vision: 'true' },
       prompt: VISION_PROMPT,
       schema: VisionConeSchema,

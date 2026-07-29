@@ -1,6 +1,5 @@
 // .pi/extensions/contract_pipeline.ts
 
-import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
@@ -20,6 +19,7 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../../scripts/src/lib/agents/git_worktree';
+import { runSyncOrThrow } from './lib/process_runner.ts';
 
 const MUTATING_GIT_RE =
   /\bgit\s+(?:add|commit|push|merge|rebase|reset|checkout|switch|clean|stash|tag)\b/i;
@@ -309,11 +309,11 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       let mergeWarning = '';
       if (params.decision === 'merge' && manifest.prUrl) {
         try {
-          const state = execSync(`gh pr view ${manifest.prUrl} --json state --jq '.state'`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: 10000,
-          }).trim();
+          const state = runSyncOrThrow(
+            'gh',
+            ['pr', 'view', manifest.prUrl, '--json', 'state', '--jq', '.state'],
+            { timeoutMs: 10000 },
+          );
           if (state === 'OPEN') {
             mergeWarning = [
               '',
@@ -429,12 +429,11 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
       // Check if the branch already exists on the remote.
       try {
-        const remoteCheck = execSync(`git ls-remote --heads origin refs/heads/${baseBranchName}`, {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          cwd,
-          timeout: 10000,
-        }).trim();
+        const remoteCheck = runSyncOrThrow(
+          'git',
+          ['ls-remote', '--heads', 'origin', `refs/heads/${baseBranchName}`],
+          { cwd, timeoutMs: 10000 },
+        );
         if (remoteCheck) {
           // Branch exists — append a short unique token to avoid collision
           const token = Date.now().toString(36).slice(-6);

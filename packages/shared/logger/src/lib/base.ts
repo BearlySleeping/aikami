@@ -1,3 +1,4 @@
+// packages/shared/logger/src/lib/base.ts
 import { LogLevelPriority } from '@aikami/constants';
 import type { LogEntry, LoggerInterface, LogLevel, LogSink, TimerInterface } from '@aikami/types';
 
@@ -5,6 +6,18 @@ import { Timer } from './timer.ts';
 
 export const isValidLogLevel = (logLevel?: string): logLevel is LogLevel =>
   !!logLevel && logLevel in LogLevelPriority;
+
+/** Internal bookkeeping for {@link BaseLoggerService.spam}. */
+type SpamEntry = {
+  lastContent: string;
+  lastEmitted: number;
+  suppressed: number;
+  suppressedSince: number;
+  lastAccess: number;
+};
+
+/** Minimum interval between emissions for the same spam ID (ms). */
+const SPAM_THROTTLE_MS = 500;
 
 export abstract class BaseLoggerService implements LoggerInterface {
   logLevel: LogLevel;
@@ -14,6 +27,10 @@ export abstract class BaseLoggerService implements LoggerInterface {
   private _lastLogSignature = '';
   private _logRepeatCount = 0;
   private _lastLogTimestamp = 0;
+
+  // --- Spam Dedup State ---
+  private _spamState = new Map<string, SpamEntry>();
+  private _lastSpamCleanup = 0;
 
   constructor(options?: { logLevel?: LogLevel | string }) {
     const logLevel = options?.logLevel?.toUpperCase();
@@ -119,6 +136,93 @@ export abstract class BaseLoggerService implements LoggerInterface {
       },
       ...args,
     );
+  }
+
+  spam(id: string, ...args: unknown[]): void {
+    const content = args
+      .map((a) => {
+        if (typeof a === 'string') {
+          return a;
+        }
+        try {
+          return JSON.stringify(a);
+        } catch {
+          return `[${typeof a}]`;
+        }
+      })
+      .join(' ');
+
+    const state = this._spamState.get(id);
+    const now = Date.now();
+
+    // Periodic cleanup: drop entries unused for > 60 s
+    this._cleanupSpamState(now);
+
+    if (!state) {
+      this._spamState.set(id, {
+        lastContent: content,
+        lastEmitted: now,
+        suppressed: 0,
+        suppressedSince: 0,
+        lastAccess: now,
+      });
+      this.debug(...args);
+      return;
+    }
+
+    state.lastAccess = now;
+
+    if (state.lastContent === content) {
+      state.suppressed++;
+      if (state.suppressedSince === 0) {
+        state.suppressedSince = now;
+      }
+
+      // Heartbeat every 10 s while suppressed
+      if (now - state.suppressedSince >= 10_000) {
+        this.debug(
+          `[spam:${id}] (suppressed ${state.suppressed} repeats in ${((now - state.suppressedSince) / 1000).toFixed(0)}s)`,
+        );
+        state.suppressed = 0;
+        state.suppressedSince = now;
+      }
+      return;
+    }
+
+    // Content changed — but throttle to SPAM_THROTTLE_MS floor
+    if (now - state.lastEmitted < SPAM_THROTTLE_MS) {
+      state.suppressed++;
+      if (state.suppressedSince === 0) {
+        state.suppressedSince = now;
+      }
+      return;
+    }
+
+    // Flush suppression tally, then emit new content
+    if (state.suppressed > 0) {
+      this.debug(`[spam:${id}] (suppressed ${state.suppressed} repeats)`);
+    }
+
+    state.lastContent = content;
+    state.lastEmitted = now;
+    state.suppressed = 0;
+    state.suppressedSince = 0;
+    this.debug(...args);
+  }
+
+  /** Drops spam-state entries that haven't been accessed in 60 s. */
+  private _cleanupSpamState(now: number): void {
+    // Only check every ~10 s to avoid per-call overhead
+    if (now - this._lastSpamCleanup < 10_000) {
+      return;
+    }
+    this._lastSpamCleanup = now;
+
+    for (const [id, entry] of this._spamState) {
+      if (now - entry.lastAccess > 60_000) {
+        this._spamState.delete(id);
+      }
+    }
   }
 
   protected getMessage(element: unknown): string {
