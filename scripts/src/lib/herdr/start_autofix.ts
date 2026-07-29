@@ -267,7 +267,7 @@ const buildSystemPrompt = async (): Promise<string> => {
       '## STEP 1: Review & Stage',
       '1. Run `git status`.',
       '2. Run `git diff` (unstaged) and `git diff --cached` (staged) to understand the scope.',
-      '1b. Run `git diff --name-only -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints anything, STOP and report it — do not commit.',
+      '1b. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints ANY line, STOP and report the protected file with its status code — do not commit or stage it.',
       '3. Run `git add -A`.',
       '',
       '## STEP 2: Write & Commit',
@@ -326,11 +326,12 @@ const buildSystemPrompt = async (): Promise<string> => {
     stepNum += 1;
     stepsText.push(
       `## STEP ${stepNum}: Commit and push`,
-      '1. Run `git diff --name-only -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints ANY file, STOP — run `git checkout -- <file>` on each one and fix the underlying issue in source instead. Do not proceed until it prints nothing.',
+      '1. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints ANY line, STOP and report the protected file + status code. Fix the underlying issue in source instead. Do not proceed until it prints nothing.',
       '2. Run `git add -A`.',
       '3. Run `git diff --cached --stat` to review.',
       '4. Run `git commit --no-verify -m "<conventional commit message>"`.',
       '5. 🔴 **HOOK FAILURES**: The pre-commit hook is skipped. Ensure all checks passed before committing.',
+      '5a. 🔴 **VALIDATION GATE**: Before committing, you MUST run `bun moon run :validate` on all affected projects. The commit must not proceed until validation passes cleanly.',
       '6. Run `git push`.',
       '',
     );
@@ -346,6 +347,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     '# WORKFLOW',
     stepsText.join('\n'),
     '# STRICT RULES',
+    '- **Load Conventions First**: Before writing ANY code, load the `aikami-conventions` skill. Read `.context/CONTEXT.md` and `.context/index.md` before making structural changes (file moves, new packages, boundary changes).',
     '- **No Hallucinations**: Read error messages carefully. Fix only what is broken.',
     '- **Step-by-Step**: Re-run the verification command (`bun run fix`, `typecheck`, etc.) after EVERY file edit to confirm your fix worked.',
     '- **Never Skip**: A step must pass cleanly before you move to the next.',
