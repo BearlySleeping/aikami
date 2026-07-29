@@ -10,8 +10,11 @@ export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
  * | App       | Location                        | Use Case                        |
  * |-----------|---------------------------------|---------------------------------|
  * | `firebase`| `apps/backend/firebase`         | Cloud Functions + Firestore     |
+ * | `image`   | `apps/backend/image`            | ComfyUI image generation        |
+ * | `text`    | `apps/backend/text`             | Ollama text generation          |
+ * | `voice`   | `apps/backend/voice`            | Kokoro voice synthesis          |
  */
-export const backendAppIds = ['firebase'] as const;
+export const backendAppIds = ['firebase', 'image', 'text', 'voice'] as const;
 
 /**
  * Aikami frontend application identifiers.
@@ -37,8 +40,8 @@ export const appIds = [...backendAppIds, ...frontendAppIds] as const;
  * Emulator mode uses the `demo-` prefix so Firebase doesn't attempt production project lookups.
  */
 export const MODE_PROJECT_MAP = {
-  staging: 'aikami-dev',
-  production: 'aikami-prod',
+  staging: 'aikami-staging',
+  production: 'aikami-production',
   emulator: 'demo-aikami-emulator',
   testing: 'demo-aikami-emulator',
 } as const satisfies Record<(typeof modes)[number], string>;

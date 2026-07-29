@@ -510,13 +510,13 @@ const formatNpcText = (
           {#each viewModel.suggestedChips as chip (chip.id)}
             <button
               type="button"
-              class="btn btn-xs gap-1 shrink-0 normal-case border-base-content/15 {chip.intent_type === 'combat'
+              class="btn btn-xs gap-1 shrink-0 normal-case border-base-content/15 {chip.intentType === 'combat'
                 ? 'btn-outline btn-error'
-                : chip.intent_type === 'skill_check'
+                : chip.intentType === 'skill_check'
                   ? 'btn-outline btn-accent'
-                  : chip.intent_type === 'trade'
+                  : chip.intentType === 'trade'
                     ? 'btn-outline btn-warning'
-                    : chip.intent_type === 'quest'
+                    : chip.intentType === 'quest'
                       ? 'btn-outline btn-info'
                       : 'btn-outline'}"
               disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
@@ -524,13 +524,13 @@ const formatNpcText = (
               aria-label={chip.label}
             >
               <span>
-                {#if chip.intent_type === 'skill_check'}
+                {#if chip.intentType === 'skill_check'}
                   🎲
-                {:else if chip.intent_type === 'combat'}
+                {:else if chip.intentType === 'combat'}
                   ⚔️
-                {:else if chip.intent_type === 'trade'}
+                {:else if chip.intentType === 'trade'}
                   💰
-                {:else if chip.intent_type === 'quest'}
+                {:else if chip.intentType === 'quest'}
                   📋
                 {:else}
                   💬

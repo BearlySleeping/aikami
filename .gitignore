@@ -292,3 +292,4 @@ apps/frontend/client/static/game-assets/
 apps/backend/image/src/user/comfyui.db.bkp
 .pi/autofix/system_prompt.md
 apps/frontend/client/.fast-check/
+firebase.deploy.json

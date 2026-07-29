@@ -1,0 +1,66 @@
+// scripts/src/lib/deploy/docker_release.ts
+/**
+ * Docker release strategy — for backend services that are self-hosted
+ * on GPU machines (ComfyUI image, Ollama text, Kokoro voice).
+ *
+ * Unlike Cloud Run, these services:
+ *   - Build Docker images and push to Artifact Registry
+ *   - Do NOT deploy to Cloud Run (GPU workloads, locally managed)
+ *   - The Docker images are pulled and run on dedicated GPU instances
+ *
+ * Path:
+ *  1. Checksum check (skip if unchanged)
+ *  2. Docker build from the service directory (uses its Dockerfile)
+ *  3. Push image to GCP Artifact Registry
+ *  4. Optionally tag as :latest for downstream consumers
+ */
+
+import { c, log, ok } from '../cli_utils';
+import { checkDeployCache, saveDeployCache } from './cache';
+import type { AppConfig } from './deployment_config';
+import { authenticateDocker, resolveProjectId, resolveRegion, run, shortSha } from './utils';
+
+export async function deployDockerRelease(
+  config: AppConfig,
+  appName: string,
+  mode: string,
+  rootDir: string,
+  isForce = false,
+): Promise<void> {
+  const projectId = resolveProjectId(mode);
+  const imageName = config.imageName ?? `aikami/${config.shortName}`;
+  const region = resolveRegion(mode, config.region);
+  const tag = `${region}-docker.pkg.dev/${projectId}/${imageName}:${shortSha()}`;
+  const dockerContext = rootDir; // Docker build context is the repo root (for monorepo deps)
+
+  log(`\n${c.bold}🐳 Releasing ${appName} Docker image${c.reset}`);
+  log(`  Project: ${projectId}`);
+  log(`  Image:   ${tag}`);
+  log(`  Context: ${dockerContext}\n`);
+
+  // 0. Checksum cache — skip if nothing changed
+  const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
+  if (cache.skip) {
+    ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
+    return;
+  }
+
+  // 1. Authenticate Docker with Artifact Registry
+  authenticateDocker();
+
+  // 2. Build & push Docker image with layer caching
+  log('🐳 Building & pushing Docker image (with layer cache)...');
+  const cacheRepo = `${region}-docker.pkg.dev/${projectId}/${imageName}`;
+  const cacheTag = `${cacheRepo}:latest`;
+  run(`docker pull ${cacheTag} 2>/dev/null || true`, { quiet: true });
+  run(`docker build -t ${tag} --cache-from=${cacheRepo} ${dockerContext}`);
+  run(`docker push ${tag}`);
+
+  // 3. Tag as latest for downstream consumers
+  run(`docker tag ${tag} ${cacheTag}`, { quiet: true });
+  run(`docker push ${cacheTag}`, { quiet: true });
+
+  // 4. Save checksum on success
+  await saveDeployCache(mode, appName, cache.checksum);
+  ok(`${appName} Docker image released — ${tag}`);
+}

@@ -152,23 +152,6 @@
           }
         }
       }
-    },
-    {
-      "includes": [
-        "packages/shared/schemas/src/lib/game/npc_dialogue_command.ts",
-        "packages/shared/constants/src/lib/game/npc_interaction.ts",
-        "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts",
-        "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts",
-        "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts",
-        "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
     }
   ]
 }

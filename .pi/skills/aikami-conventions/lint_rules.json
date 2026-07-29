@@ -354,6 +354,32 @@
           "message": "⚠️ Abbreviation in shared package — use full word (context not ctx, options not opts, function not fn, config not cfg, etc.)"
         }
       ]
+    },
+    {
+      "id": "NAM-002",
+      "name": "camelCase Identifier Naming",
+      "category": "naming",
+      "severity": "error",
+      "description": "Identifiers (variables, function names, object/interface keys, parameters, class members) must use camelCase. Snake_case in identifiers is forbidden. Enforced by Biome useNamingConvention.",
+      "biomeRule": "useNamingConvention",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "\\b(?:const|let|var)\\s+[a-z][a-z0-9]*_[a-z0-9]+\\s*[=:]|function\\s+[a-z][a-z0-9]*_[a-z0-9]+\\s*\\(|\\b[a-z][a-z0-9]*_[a-z0-9]+\\s*[=:]\\s*\\(",
+          "excludePatterns": [
+            "[A-Z][A-Z0-9_]*",
+            "^_[a-z]",
+            "packages/shared/schemas/",
+            "\\.test\\.",
+            "\\.spec\\.",
+            "__tests__/",
+            "process\\.env\\.",
+            "\\$env/",
+            "\\.env"
+          ],
+          "message": "🔴 snake_case identifier — use camelCase per aikami-conventions Rule 4b"
+        }
+      ]
     }
   ],
   "tier2": {

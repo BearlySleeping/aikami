@@ -1,5 +1,10 @@
-// apps/frontend/site/scripts/deploy.ts
-/** biome-ignore-all lint/suspicious/noConsole: This file will only be used in the deploy script */
+// apps/frontend/client/scripts/deploy.ts
+/**
+ * Firebase Hosting deploy script for the client app.
+ *
+ * Dynamically resolves the hosting site target from shared deployment config.
+ * Mirrors the pattern in apps/frontend/site/scripts/deploy.ts.
+ */
 
 import { parseArgs } from 'node:util';
 import { toMode } from '@aikami/utils';
@@ -19,7 +24,6 @@ const { values } = parseArgs({
   allowPositionals: true,
 });
 
-// Grab from CLI args FIRST, fallback to Environment Variable SECOND
 const mode = toMode(values.mode || process.env.MODE);
 
 if (!mode) {
@@ -35,11 +39,11 @@ if (!projectId) {
   process.exit(1);
 }
 
-// 3. Compute Firebase Hosting site ID from shared deployment config
-const targetSite = resolveHostingSiteId('site', projectId);
+// 3. Compute Firebase Hosting site ID
+const targetSite = resolveHostingSiteId('client', projectId);
 
 if (!targetSite) {
-  console.error('No hosting site ID configured for site');
+  console.error('No hosting site ID configured for client');
   process.exit(1);
 }
 
@@ -55,7 +59,6 @@ try {
     );
   }
 
-  // Parse the JSON safely
   const config = await firebaseJsonFile.json();
 
   // 5. Inject the target site dynamically
@@ -64,14 +67,14 @@ try {
   // Write a temporary configuration file for this deployment
   await Bun.write(deployConfigPath, JSON.stringify(config, null, 4));
 
-  // 6. Execute deployment using Bun Shell
+  // 6. Execute deployment
   await $`npx -y firebase-tools@latest deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
     process.cwd(),
   );
 } catch (_error) {
   process.exit(1);
 } finally {
-  // 7. Cleanup the temporary config file so we don't pollute the git workspace
+  // 7. Cleanup
   const tempFile = file(deployConfigPath);
   if (await tempFile.exists()) {
     await $`rm ${deployConfigPath}`;

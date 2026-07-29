@@ -4,6 +4,7 @@
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "strictNullChecks": true,
+    "rootDir": "../../..",
     "paths": {
       "$lib/*": ["./src/lib/*"],
       "$utils": ["./src/utils"],
@@ -11,9 +12,17 @@
       "$components/*": ["./src/components/*"],
       "$layouts/*": ["./src/layouts/*"],
       "$assets/*": ["./src/assets/*"],
-      "$pages/*": ["./src/pages/*"]
+      "$pages/*": ["./src/pages/*"],
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../../packages/shared/constants/src/*"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../../packages/shared/schemas/src/*"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../../packages/shared/types/src/*"],
+      "@aikami/utils": ["../../../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../../packages/shared/utils/src/*"]
     }
   },
-  "include": [".astro/types.d.ts", "src", "astro.config.ts"],
+  "include": [".astro/types.d.ts", "src", "scripts/**/*", "astro.config.ts"],
   "exclude": ["dist", "**/node_modules/**"]
 }

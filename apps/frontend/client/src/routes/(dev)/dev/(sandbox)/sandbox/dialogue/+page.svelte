@@ -79,28 +79,28 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       messages: Array<{ role: 'player' | 'npc'; content: string }>;
       signal: AbortSignal;
       gameStateFacts?: string[];
-      playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+      playerContext?: { characterSheetSummary: string; level: number; classId: string };
     }) => {
       if (!viewModel.useMockAi) {
         // ── Real LLM path ────────────────────────────────────────
         const playerMsg = opts.messages.filter((m) => m.role === 'player').pop();
         const input = {
-          player_input: playerMsg?.content ?? '',
-          npc_context: {
+          playerInput: playerMsg?.content ?? '',
+          npcContext: {
             name: opts.npcName,
             persona: `You are ${opts.npcName}, a character in a fantasy world.`,
-            allowed_commands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+            allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
           },
-          player_context: opts.playerContext ?? {
-            character_sheet_summary: 'Level 1 Fighter',
+          playerContext: opts.playerContext ?? {
+            characterSheetSummary: 'Level 1 Fighter',
             level: 1,
-            class_id: 'fighter',
+            classId: 'fighter',
           },
-          recent_history: opts.messages.slice(-10).map((m) => ({
+          recentHistory: opts.messages.slice(-10).map((m) => ({
             role: m.role,
             content: m.content.slice(0, 200),
           })),
-          game_state_facts: opts.gameStateFacts ?? [],
+          gameStateFacts: opts.gameStateFacts ?? [],
         };
 
         const systemPrompt = buildIntentAnalysisSystemPrompt();
@@ -126,12 +126,12 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         );
 
         return {
-          requires_roll: false,
-          check_type: undefined,
-          difficulty_class: undefined,
-          modifier_source: undefined,
-          npc_response: recovered.npc_response,
-          suggested_chips: recovered.suggested_chips,
+          requiresRoll: false,
+          checkType: undefined,
+          difficultyClass: undefined,
+          modifierSource: undefined,
+          npcResponse: recovered.npcResponse,
+          suggestedChips: recovered.suggestedChips,
         };
       }
 
@@ -139,24 +139,24 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       // Simulate AI processing delay
       await new Promise((r) => setTimeout(r, 600 + Math.random() * 400));
       return {
-        requires_roll: false,
-        check_type: undefined,
-        difficulty_class: undefined,
-        modifier_source: undefined,
-        npc_response:
+        requiresRoll: false,
+        checkType: undefined,
+        difficultyClass: undefined,
+        modifierSource: undefined,
+        npcResponse:
           '*Elder Thrain strokes his beard thoughtfully.*\n"Ah, an interesting question indeed. The village has seen many travelers, but few with such curiosity."',
-        suggested_chips: [
+        suggestedChips: [
           {
             id: 'talk',
             label: 'Ask about the ward',
-            intent_type: 'dialogue' as const,
-            prefill_text: 'Tell me about the village ward.',
+            intentType: 'dialogue' as const,
+            prefillText: 'Tell me about the village ward.',
           },
           {
             id: 'quest',
             label: 'Offer to help',
-            intent_type: 'quest' as const,
-            prefill_text: 'Is there anything I can help with?',
+            intentType: 'quest' as const,
+            prefillText: 'Is there anything I can help with?',
           },
         ],
       };
@@ -165,10 +165,10 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       // Simulate AI processing delay
       await new Promise((r) => setTimeout(r, 500 + Math.random() * 300));
       return {
-        narrative_result:
+        narrativeResult:
           '*Elder Thrain nods slowly.*\n"The dice have spoken. Fate has a way of guiding us, does it not?"',
-        state_deltas: [],
-        suggested_chips: [],
+        stateDeltas: [],
+        suggestedChips: [],
       };
     },
     useFreeTextFirst: true,
