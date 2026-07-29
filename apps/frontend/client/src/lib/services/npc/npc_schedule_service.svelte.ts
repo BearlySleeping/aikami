@@ -1,8 +1,8 @@
 // apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts
 //
 // NPC Schedule Service — manages per-NPC 7×24 availability schedules
-// persisted to Firestore. Provides CRUD, time-based status lookup,
-// and availability checks.
+// persisted to the local Turso/libSQL database. Provides CRUD,
+// time-based status lookup, and availability checks.
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
@@ -10,8 +10,6 @@ import {
   DEFAULT_ACTIVITY_LABEL,
   DEFAULT_COOLDOWN_MINUTES,
   DEFAULT_TALKATIVENESS,
-  NPC_SCHEDULE_DOC_ID,
-  NPC_SCHEDULE_SUBCOLLECTION,
 } from '@aikami/constants';
 import {
   BaseFrontendClass,
@@ -20,8 +18,7 @@ import {
 } from '@aikami/frontend/services';
 import { NpcScheduleSchema, schemaCheck } from '@aikami/schemas';
 import type { AvailabilityStatus, NpcSchedule } from '@aikami/types';
-
-type FirestoreModule = typeof import('@aikami/frontend/configs/firestore.ts');
+import { npcScheduleRepository } from './npc_schedule_repository.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -34,7 +31,7 @@ export type NpcScheduleServiceInterface = BaseFrontendClassInterface & {
   /** Retrieves the schedule for a given NPC, or the default if none exists. */
   getSchedule(npcId: string): Promise<NpcSchedule>;
 
-  /** Persists a schedule to Firestore. */
+  /** Persists a schedule to the local database. */
   setSchedule(npcId: string, schedule: NpcSchedule): Promise<void>;
 
   /** Looks up the NPC's current status based on local time. */
@@ -50,24 +47,7 @@ class NpcScheduleService
   extends BaseFrontendClass<BaseFrontendClassOptions>
   implements NpcScheduleServiceInterface
 {
-  private _firestoreModule: FirestoreModule | undefined;
   private _cache = new Map<string, NpcSchedule>();
-
-  // ── Firestore lazy loading ──────────────────────────────────────────
-
-  private async _getFirestore(): Promise<FirestoreModule> {
-    if (this._firestoreModule) {
-      return this._firestoreModule;
-    }
-    this._firestoreModule = await import('@aikami/frontend/configs/firestore.ts');
-    return this._firestoreModule;
-  }
-
-  // ── Schedule document path ──────────────────────────────────────────
-
-  private _getScheduleDocPath(npcId: string): string {
-    return `npcs/${npcId}/${NPC_SCHEDULE_SUBCOLLECTION}/${NPC_SCHEDULE_DOC_ID}`;
-  }
 
   // ── Default schedule factory ────────────────────────────────────────
 
@@ -100,18 +80,15 @@ class NpcScheduleService
       return cached;
     }
 
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, this._getScheduleDocPath(npcId));
-    const snapshot = await fs.getDoc(docRef);
+    const stored = await npcScheduleRepository.getByNpcId(npcId);
 
-    if (!snapshot.exists()) {
+    if (!stored) {
       const defaultSchedule = this._createDefaultSchedule(npcId);
       this._cache.set(npcId, defaultSchedule);
       return defaultSchedule;
     }
 
-    const data = snapshot.data() as Record<string, unknown>;
-    const valid = schemaCheck(NpcScheduleSchema, data);
+    const valid = schemaCheck(NpcScheduleSchema, stored);
     if (!valid) {
       this.warn('getSchedule:invalid-schema', { npcId });
       const defaultSchedule = this._createDefaultSchedule(npcId);
@@ -119,22 +96,18 @@ class NpcScheduleService
       return defaultSchedule;
     }
 
-    const schedule = data as unknown as NpcSchedule;
-    this._cache.set(npcId, schedule);
-    return schedule;
+    this._cache.set(npcId, stored);
+    return stored;
   }
 
   async setSchedule(npcId: string, schedule: NpcSchedule): Promise<void> {
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, this._getScheduleDocPath(npcId));
-
     const data = {
       ...schedule,
       npcId,
       updatedAt: new Date().toISOString(),
     };
 
-    await fs.setDoc(docRef, data);
+    await npcScheduleRepository.upsert({ npcId, schedule: data });
     this._cache.set(npcId, data);
   }
 

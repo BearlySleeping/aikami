@@ -5,7 +5,7 @@ description: >-
   Flow: plan → implement → QA (sandbox + E2E + visual) → validate → docs → handoff. Use when implementing features
   defined in docs/contracts/*.md. PROGRESS.md is auto-generated via `bun knowledge:sync`; INDEX.md is read-only;
   execution reports live at the bottom of individual contract files.
-  Also covers GitHub Roadmap integration via `bun run sync:roadmap` and PR-contract lifecycle linkage.
+  Also covers GitHub Roadmap integration via `bun run contract --issue` and PR-contract lifecycle linkage.
 ---
 
 # Contract Implementer
@@ -24,8 +24,8 @@ For the complete pipeline user guide (source modes, CLI options, workflows), see
 | `docs/contracts/INDEX.md` | Priority ranking | 🔴 READ-ONLY — never edit |
 | `docs/contracts/PROGRESS.md` | Status dashboard | 🔴 AUTO-GENERATED — run `bun knowledge:sync`, never hand-edit |
 | `docs/TODO.md` | Backlog ingestion buffer | ✅ (parsed by `parseBacklog`) |
-| GitHub Issues | Macro backlog authority | ✅ (sync via `bun run sync:todo`) |
-| GitHub Project #1 | Roadmap board | ✅ (sync via `bun run sync:contracts`) |
+| GitHub Issues | Macro backlog authority | ✅ (sync via `bun run contract --issue`) |
+| GitHub Project #1 | Roadmap board | ✅ (managed via contract pipeline) |
 
 ## Contract YAML Frontmatter
 
@@ -71,10 +71,7 @@ Contract statuses map to GitHub Project v2 roadmap columns:
 | `verification_failed` | **Implementing** (back to implement) |
 
 Sync commands:
-- `bun run sync:roadmap` — Full sync (todo + contracts + prs + issues)
-- `bun run sync:todo` — Backlog → GitHub Issues + Project #1
-- `bun run sync:contracts` — Contract status → Roadmap columns
-- `bun run sync:prs` — Check merged PRs → update contracts + close issues
+- `bun run contract` — Interactive contract pipeline (primary interface)
 
 ## PR & Issue Linkage
 

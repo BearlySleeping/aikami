@@ -133,6 +133,13 @@ export const AIKAMI_SCHEMA_DDL: readonly string[] = [
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
 
+  // ── NPC schedules (C-248 Turso migration) ──────────────────────────
+  `CREATE TABLE IF NOT EXISTS npc_schedules (
+    npc_id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+
   // ── Chat history ───────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS chat_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

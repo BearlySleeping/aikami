@@ -1,23 +1,12 @@
 // .pi/extensions/lib/process_runner.ts
 //
-// Deadlock-proof child process execution. Replaces pi.exec() for long-running
-// or test/build commands where the built-in executor's `close`-event wait can
-// hang due to inherited stdio handles from worker threads / daemon children.
+// Deadlock-proof child process execution using Bun.spawn.
+// Replaces pi.exec() for long-running or test/build commands where
+// the built-in executor can hang due to inherited stdio handles.
 //
-// Fixes applied:
-//   1. `exit` event (not `close`) — resolves when the main process terminates
-//   2. Forcible stdio destruction after exit — prevents background workers from
-//      keeping the tool invocation alive
-//   3. Process group cleanup — SIGTERM → 3s grace → SIGKILL on the whole group
-//   4. CI=true, FORCE_COLOR=1, GIT_TERMINAL_PROMPT=0 — non-interactive mode
-//   5. stdin closed immediately — prevents CLI tools from hanging on prompts
-//   6. Configurable timeout + AbortSignal support for session cancellation
+// Using Bun.spawn avoids Node.js child_process deadlock issues entirely.
 
-import { type ChildProcess, spawn } from 'node:child_process';
-
-// ── Types ─────────────────────────────────────────────────────────
-
-export interface RunCommandOptions {
+export type RunCommandOptions = {
   /** Working directory (default: process.cwd()) */
   cwd?: string;
   /** Extra env vars merged on top of process.env + CI defaults */
@@ -30,9 +19,9 @@ export interface RunCommandOptions {
   maxBufferBytes?: number;
   /** AbortSignal from Pi cancellation context. */
   signal?: AbortSignal;
-}
+};
 
-export interface RunCommandResult {
+export type RunCommandResult = {
   stdout: string;
   stderr: string;
   /** Exit code, or null if killed by signal. */
@@ -41,7 +30,7 @@ export interface RunCommandResult {
   killed: boolean;
   /** Wall-clock duration in milliseconds. */
   durationMs: number;
-}
+};
 
 // ── Default environment injected into every child ──────────────────
 
@@ -55,7 +44,61 @@ const DEFAULT_TIMEOUT_MS = 180_000; // 3 min
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024; // 10 MiB
 const SIGTERM_GRACE_MS = 3000; // wait 3 s after SIGTERM before SIGKILL
 
-// ── Implementation ─────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────
+
+function killProcessTree(pid: number | undefined): void {
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      // Already dead
+    }
+  }
+}
+
+function killProcessTreeForce(pid: number | undefined): void {
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already dead
+    }
+  }
+}
+
+async function readStream(
+  stream: ReadableStream<Uint8Array> | null,
+  onChunk: (text: string) => void,
+): Promise<void> {
+  if (!stream) {
+    return;
+  }
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      onChunk(decoder.decode(value, { stream: true }));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// ── Async run ─────────────────────────────────────────────────────
 
 export async function runCommand(
   command: string,
@@ -65,130 +108,162 @@ export async function runCommand(
   const startTime = Date.now();
   const timeoutMs = options.timeoutMs ?? options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBuffer = options.maxBufferBytes ?? MAX_BUFFER_BYTES;
+  const cwd = options.cwd ?? process.cwd();
+  const env = {
+    ...(process.env as Record<string, string>),
+    ...CI_ENV,
+    ...options.env,
+  };
 
   let stdout = '';
   let stderr = '';
   let killed = false;
-  let isResolved = false;
 
-  return new Promise<RunCommandResult>((resolve) => {
-    // ── Merge environment: process.env → CI overrides → caller overrides ──
-    const processEnv: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      ...CI_ENV,
-      ...options.env,
-    };
-
-    const child: ChildProcess = spawn(command, args, {
-      cwd: options.cwd ?? process.cwd(),
-      env: processEnv,
-      // detached on Unix so we can kill the whole process group (-pid)
-      detached: process.platform !== 'win32',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    // ── Close stdin immediately ─────────────────────────────────
-    child.stdin?.end();
-
-    // ── Drain stdout / stderr with buffer cap ────────────────────
-    const appendBuffer = (chunk: Buffer, isStderr: boolean) => {
-      const text = chunk.toString('utf8');
-      if (isStderr) {
-        if (stderr.length < maxBuffer) stderr += text;
-      } else {
-        if (stdout.length < maxBuffer) stdout += text;
-      }
-    };
-
-    child.stdout?.on('data', (chunk: Buffer) => appendBuffer(chunk, false));
-    child.stderr?.on('data', (chunk: Buffer) => appendBuffer(chunk, true));
-
-    // ── Single-shot resolution guard ────────────────────────────
-    const cleanupAndResolve = (code: number | null, _signal: string | null) => {
-      if (isResolved) return;
-      isResolved = true;
-
-      clearTimeout(timer);
-      if (options.signal) {
-        options.signal.removeEventListener('abort', handleAbort);
-      }
-
-      // 🔴 CRITICAL: destroy stdio streams so background worker threads
-      // that inherited the pipe handles cannot keep us alive.
-      child.stdout?.destroy();
-      child.stderr?.destroy();
-
-      resolve({
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        code,
-        killed,
-        durationMs: Date.now() - startTime,
-      });
-    };
-
-    // ── Process tree kill (graceful → forceful) ──────────────────
-    const killProcessTree = (sig: 'SIGTERM' | 'SIGKILL') => {
-      if (child.pid === undefined) return;
-      try {
-        if (process.platform === 'win32') {
-          spawn('taskkill', ['/pid', String(child.pid), '/T', '/F']);
-        } else {
-          // Negative PID kills the entire process group
-          process.kill(-child.pid, sig);
-        }
-      } catch {
-        // Fallback: kill just the direct child
-        try {
-          child.kill(sig);
-        } catch {
-          // Already dead — nothing to do
-        }
-      }
-    };
-
-    // ── Timeout handler ──────────────────────────────────────────
-    const timer = setTimeout(() => {
-      killed = true;
-      appendBuffer(Buffer.from(`\n[Process timed out after ${timeoutMs / 1000}s]`), true);
-      killProcessTree('SIGTERM');
-
-      // Escalate to SIGKILL if SIGTERM is ignored
-      setTimeout(() => {
-        if (!isResolved) {
-          killProcessTree('SIGKILL');
-          cleanupAndResolve(null, 'SIGKILL');
-        }
-      }, SIGTERM_GRACE_MS);
-    }, timeoutMs);
-
-    // ── AbortSignal / Pi session cancellation ────────────────────
-    const handleAbort = () => {
-      appendBuffer(Buffer.from('\n[Operation cancelled by user]'), true);
-      killProcessTree('SIGKILL');
-      cleanupAndResolve(null, 'SIGABRT');
-    };
-
-    if (options.signal) {
-      if (options.signal.aborted) {
-        handleAbort();
-        return;
-      }
-      options.signal.addEventListener('abort', handleAbort, { once: true });
+  const appendStdout = (text: string) => {
+    if (stdout.length < maxBuffer) {
+      stdout += text;
     }
+  };
+  const appendStderr = (text: string) => {
+    if (stderr.length < maxBuffer) {
+      stderr += text;
+    }
+  };
 
-    // ── 🔴 Listen to `exit` (NOT `close`) ───────────────────────
-    // `exit` fires when the main process terminates. `close` waits until
-    // ALL inherited stdio handles are released, which may never happen
-    // if worker threads / daemons hold them open.
-    child.on('exit', (code, exitSignal) => {
-      cleanupAndResolve(code, exitSignal);
-    });
-
-    // ── Process error (spawn failure) ────────────────────────────
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      appendBuffer(Buffer.from(`\n[Failed to start process: ${err.message}]`), true);
-      cleanupAndResolve(1, null);
-    });
+  const child = Bun.spawn([command, ...args], {
+    cwd,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    // Run in its own process group (via setsid) so killProcessTree /
+    // killProcessTreeForce can terminate the whole tree via `-pid`.
+    detached: true,
   });
+
+  // Close stdin immediately — prevents CLI tools from hanging on prompts
+  child.stdin?.end();
+
+  // Read stdout/stderr in background
+  const readPromise = Promise.all([
+    readStream(child.stdout, appendStdout),
+    readStream(child.stderr, appendStderr),
+  ]);
+
+  // ── Timeout handling ──────────────────────────────────────────
+  let timeoutHandle: Timer | undefined;
+  let escalateHandle: Timer | undefined;
+  let finished = false;
+
+  const onTimeout = () => {
+    if (finished) {
+      return;
+    }
+    killed = true;
+    appendStderr(`\n[Process timed out after ${timeoutMs / 1000}s]`);
+    killProcessTree(child.pid);
+
+    // Escalate to SIGKILL after grace period
+    escalateHandle = setTimeout(() => {
+      if (!finished) {
+        killProcessTreeForce(child.pid);
+      }
+    }, SIGTERM_GRACE_MS);
+  };
+
+  // ── AbortSignal / Pi cancellation ────────────────────────────
+  if (options.signal) {
+    if (options.signal.aborted) {
+      onTimeout();
+    } else {
+      options.signal.addEventListener('abort', onTimeout, { once: true });
+    }
+  }
+
+  // ── Timeout timer ────────────────────────────────────────────
+  if (!killed) {
+    timeoutHandle = setTimeout(onTimeout, timeoutMs);
+  }
+
+  // ── Wait for exit ────────────────────────────────────────────
+  const exitCode = await child.exited;
+  finished = true;
+
+  // Clean up timers
+  clearTimeout(timeoutHandle);
+  clearTimeout(escalateHandle);
+  if (options.signal) {
+    options.signal.removeEventListener('abort', onTimeout);
+  }
+
+  // Ensure stream reading completes
+  await readPromise;
+
+  return {
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+    code: exitCode,
+    killed,
+    durationMs: Date.now() - startTime,
+  };
+}
+
+// ── Sync run (for simple gh/git calls) ────────────────────────────
+
+export type RunSyncOptions = {
+  cwd?: string;
+  env?: Record<string, string>;
+  timeoutMs?: number;
+};
+
+export type RunSyncResult = {
+  stdout: string;
+  stderr: string;
+  code: number;
+};
+
+/**
+ * Run a command synchronously using Bun.spawnSync.
+ * Drop-in replacement for `execSync` from node:child_process.
+ */
+export function runSync(
+  command: string,
+  args: string[] = [],
+  options: RunSyncOptions = {},
+): RunSyncResult {
+  const cwd = options.cwd ?? process.cwd();
+  const env = {
+    ...(process.env as Record<string, string>),
+    ...CI_ENV,
+    ...options.env,
+  };
+
+  const result = Bun.spawnSync([command, ...args], {
+    cwd,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  });
+
+  const stdout = Buffer.from(result.stdout).toString('utf8').trim();
+  const stderr = Buffer.from(result.stderr).toString('utf8').trim();
+  const code = result.exitCode;
+
+  return { stdout, stderr, code };
+}
+
+/**
+ * Run a command synchronously, returning trimmed stdout.
+ * Throws on non-zero exit code (like execSync with stdio: 'pipe').
+ */
+export function runSyncOrThrow(
+  command: string,
+  args: string[] = [],
+  options: RunSyncOptions = {},
+): string {
+  const result = runSync(command, args, options);
+  if (result.code !== 0) {
+    throw new Error(
+      `Command failed: ${command} ${args.join(' ')} (exit ${result.code})\n${result.stderr}`,
+    );
+  }
+  return result.stdout;
 }

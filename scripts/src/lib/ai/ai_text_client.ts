@@ -165,7 +165,6 @@ const _readStream = async (options: {
           const parsed = JSON.parse(data) as {
             choices?: Array<{
               delta?: { content?: string };
-              // biome-ignore lint/style/useNamingConvention: API field
               finish_reason?: string | null;
             }>;
           };
@@ -304,7 +303,6 @@ export const streamChat = async (options: StreamChatOptions): Promise<void> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // biome-ignore lint/style/useNamingConvention: HTTP header
         ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
         ...(provider.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
       },
@@ -392,10 +390,8 @@ export const extractStructure = async (options: ExtractStructureOptions): Promis
     model: provider.model,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
-    // biome-ignore lint/style/useNamingConvention: OpenAI field
     response_format: {
       type: 'json_schema',
-      // biome-ignore lint/style/useNamingConvention: OpenAI field
       json_schema: {
         name: schemaName,
         schema,
@@ -408,7 +404,6 @@ export const extractStructure = async (options: ExtractStructureOptions): Promis
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      // biome-ignore lint/style/useNamingConvention: HTTP header
       ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
       ...(provider.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
     },

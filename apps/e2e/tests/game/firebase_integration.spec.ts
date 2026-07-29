@@ -36,7 +36,6 @@ test.describe('Firebase REST Integration', () => {
     const baseUrl = `http://localhost:${FIRESTORE_PORT}/v1/projects/demo-aikami-emulator/databases/(default)/documents`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      // biome-ignore lint/style/useNamingConvention: HTTP header name
       Authorization: 'Bearer owner',
     };
 

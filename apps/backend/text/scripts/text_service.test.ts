@@ -7,9 +7,9 @@
 //   bun test scripts/text_service.test.ts
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { $ } from 'bun';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { $ } from 'bun';
 
 // ── Paths ───────────────────────────────────────────────────
 
@@ -93,13 +93,22 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
       return;
     }
 
-    if (!wasEverReachable && !result.detail.includes('refused') && !result.detail.includes('Unable to connect')) {
+    if (
+      !wasEverReachable &&
+      !result.detail.includes('refused') &&
+      !result.detail.includes('Unable to connect')
+    ) {
       wasEverReachable = true;
     }
 
     if (result.detail !== lastDetail) {
-      if (wasEverReachable && (result.detail.includes('refused') || result.detail.includes('Unable to connect'))) {
-        throw new Error('Ollama crashed after becoming reachable — check herdr tab logs for the error');
+      if (
+        wasEverReachable &&
+        (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
+      ) {
+        throw new Error(
+          'Ollama crashed after becoming reachable — check herdr tab logs for the error',
+        );
       }
       console.log(`  ... ${result.detail}`);
       lastDetail = result.detail;
@@ -199,48 +208,54 @@ describe('Ollama text inference service', () => {
     }
   });
 
-  test.skipIf(modelsAvailable.length === 0)('/api/generate returns a response (super lite)', async () => {
-    // Prefer smallest model for fast test
-    const sorted = [...modelsAvailable].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
-    const model = sorted[0].name;
+  test.skipIf(modelsAvailable.length === 0)(
+    '/api/generate returns a response (super lite)',
+    async () => {
+      // Prefer smallest model for fast test
+      const sorted = [...modelsAvailable].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
+      const model = sorted[0].name;
 
-    console.log(`  Model:   ${model} (${(sorted[0].size / (1024 * 1024)).toFixed(0)} MB)`);
+      console.log(`  Model:   ${model} (${(sorted[0].size / (1024 * 1024)).toFixed(0)} MB)`);
 
-    const t0 = Date.now();
-    const response = await fetch(`${BASE_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        prompt: 'Say "OK"',
-        stream: false,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    const wallMs = Date.now() - t0;
+      const t0 = Date.now();
+      const response = await fetch(`${BASE_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: 'Say "OK"',
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const wallMs = Date.now() - t0;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Model '${model}' failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`);
-    }
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(
+          `Model '${model}' failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`,
+        );
+      }
 
-    const data = (await response.json()) as GenerateResponse;
+      const data = (await response.json()) as GenerateResponse;
 
-    if (data.error) {
-      throw new Error(`Model '${model}' error: ${data.error}`);
-    }
+      if (data.error) {
+        throw new Error(`Model '${model}' error: ${data.error}`);
+      }
 
-    expect(data.response).toBeString();
-    expect(data.response.length).toBeGreaterThan(0);
-    expect(data.done).toBe(true);
+      expect(data.response).toBeString();
+      expect(data.response.length).toBeGreaterThan(0);
+      expect(data.done).toBe(true);
 
-    console.log(`  Output:  "${data.response.trim()}"`);
-    console.log(`  Wall:    ${wallMs}ms`);
-    if (data.total_duration !== undefined) {
-      console.log(`  Server:  ${(data.total_duration / 1_000_000).toFixed(0)}ms`);
-    }
-    if (data.eval_count !== undefined) {
-      console.log(`  Tokens:  ${data.eval_count} generated`);
-    }
-  }, 120_000);
+      console.log(`  Output:  "${data.response.trim()}"`);
+      console.log(`  Wall:    ${wallMs}ms`);
+      if (data.total_duration !== undefined) {
+        console.log(`  Server:  ${(data.total_duration / 1_000_000).toFixed(0)}ms`);
+      }
+      if (data.eval_count !== undefined) {
+        console.log(`  Tokens:  ${data.eval_count} generated`);
+      }
+    },
+    120_000,
+  );
 });

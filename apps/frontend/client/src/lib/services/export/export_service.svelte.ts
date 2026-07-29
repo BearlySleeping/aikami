@@ -78,7 +78,8 @@ export type ExportServiceInterface = BaseFrontendClassInterface & {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Converts a Firestore Timestamp-like value to ISO-8601 string.
+ * Converts a timestamp-like value to ISO-8601 string.
+ * Handles Date objects, objects with toDate(), and ISO strings.
  */
 const _timestampToIso = (value: unknown): string => {
   if (!value) {
@@ -129,7 +130,7 @@ const _extractDiceRolls = (text: string): ExportMessage['diceRolls'] => {
 };
 
 /**
- * Converts Firestore MessageData to the normalized ExportMessage format.
+ * Converts MessageData to the normalized ExportMessage format.
  */
 const _messageToExport = (message: MessageData, _index: number): ExportMessage => {
   return {

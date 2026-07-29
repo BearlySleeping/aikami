@@ -86,7 +86,7 @@ const categories = $derived.by(() => {
     <div
       class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-72 z-50 max-h-64 overflow-y-auto"
     >
-      {#each categories as [ category, macros ]}
+      {#each categories as [category, macros]}
         <span
           class="menu-title text-xs uppercase tracking-wider text-base-content/40 px-3 pt-2 pb-1"
           >{category}</span

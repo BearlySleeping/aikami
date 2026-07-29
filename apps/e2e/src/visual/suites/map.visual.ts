@@ -150,7 +150,6 @@ export default defineConfig({
     //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Top-Left',
-      // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
       searchParams: { position_x: '16', position_y: '16', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-left', 'tile (0,0)'),
@@ -162,7 +161,6 @@ export default defineConfig({
     //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Top-Right',
-      // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
       searchParams: { position_x: '304', position_y: '16', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-right', 'tile (9,0)'),
@@ -174,7 +172,6 @@ export default defineConfig({
     //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Bottom-Left',
-      // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
       searchParams: { position_x: '16', position_y: '304', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-left', 'tile (0,9)'),
@@ -186,7 +183,6 @@ export default defineConfig({
     //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Bottom-Right',
-      // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
       searchParams: { position_x: '304', position_y: '304', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-right', 'tile (9,9)'),

@@ -39,8 +39,7 @@ const config = {
       '$lib/*': toSrcPath('lib/*'),
       $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
       $routes: toSrcPath('lib/constants/routes'),
-      $logger: toPackagesPath('shared/logger/src/lib/svelte_kit.ts'),
-      $loggerServer: toPackagesPath('shared/logger/src/lib/svelte_kit_server.ts'),
+      $logger: toPackagesPath('shared/logger/src/lib/logger_browser.ts'), //if we use ssr we should use svelte_kit, but since it is client only we can safely use logger_browser
       $services: toSrcPath('lib/services'),
       '$services/*': toSrcPath('lib/services/*'),
 

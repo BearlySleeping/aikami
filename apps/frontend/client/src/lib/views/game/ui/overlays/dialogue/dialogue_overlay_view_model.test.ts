@@ -31,12 +31,17 @@ let analyzeIntentStub = mock(async () => ({
   modifier_source: undefined,
   npc_response: 'The elder considers your words.',
   suggested_chips: [
-    { id: 'talk', label: 'Ask about the ward', intent_type: 'dialogue' as const, prefill_text: 'Tell me about the ward.' },
+    {
+      id: 'talk',
+      label: 'Ask about the ward',
+      intent_type: 'dialogue' as const,
+      prefill_text: 'Tell me about the ward.',
+    },
     { id: 'leave', label: 'Leave', intent_type: 'dialogue' as const, prefill_text: 'Goodbye.' },
   ],
 }));
 
-let resolveRollStub = mock(async () => ({
+const resolveRollStub = mock(async () => ({
   narrative_result: 'The attempt succeeds.',
   state_deltas: [],
   suggested_chips: [],
@@ -284,7 +289,14 @@ describe('DialogueOverlayViewModel', () => {
       difficulty_class: undefined,
       modifier_source: undefined,
       npc_response: 'The elder strokes his beard. "The ward is failing."',
-      suggested_chips: [{ id: 'talk', label: 'Tell me more', intent_type: 'dialogue' as const, prefill_text: 'Tell me more.' }],
+      suggested_chips: [
+        {
+          id: 'talk',
+          label: 'Tell me more',
+          intent_type: 'dialogue' as const,
+          prefill_text: 'Tell me more.',
+        },
+      ],
     }));
     mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
@@ -308,8 +320,18 @@ describe('DialogueOverlayViewModel', () => {
       modifier_source: undefined,
       npc_response: 'Hello.',
       suggested_chips: [
-        { id: 'quest', label: 'Ask about quests', intent_type: 'quest' as const, prefill_text: 'Do you have work?' },
-        { id: 'trade', label: 'Trade', intent_type: 'trade' as const, prefill_text: 'Show me your wares.' },
+        {
+          id: 'quest',
+          label: 'Ask about quests',
+          intent_type: 'quest' as const,
+          prefill_text: 'Do you have work?',
+        },
+        {
+          id: 'trade',
+          label: 'Trade',
+          intent_type: 'trade' as const,
+          prefill_text: 'Show me your wares.',
+        },
       ],
     }));
     mockNpcDialogueService.analyzeIntent = analyzeIntentStub;

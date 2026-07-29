@@ -2,39 +2,73 @@
 //
 // Unit tests for NpcScheduleService — CRUD, getCurrentStatus(),
 // isAvailable(), default schedule fallback, and cache behavior.
+// Updated for Turso/libSQL persistence (replaces Firestore).
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { NpcSchedule } from '@aikami/types';
 
-// Mock Firestore
-const mockSetDoc = vi.fn();
-const mockGetDoc = vi.fn();
-const mockDoc = vi.fn(() => 'doc-ref');
-const mockCollection = vi.fn(() => 'collection-ref');
+// ── Mock Date ────────────────────────────────────────────────────────────
 
-const mockFirestore = {
-  firestore: {} as unknown,
-  doc: mockDoc,
-  collection: mockCollection,
-  setDoc: mockSetDoc,
-  getDoc: mockGetDoc,
+// Friday (day 5), 14:30 local time — constructed from local components
+// to ensure consistent behavior across all timezones
+const MOCK_NOW = new Date(2026, 6, 10, 14, 30, 0); // July 10, 2026 is a Friday
+
+const OriginalDate = globalThis.Date;
+
+const installFakeDate = (): void => {
+  const FakeDate = function (this: Date, ...args: unknown[]) {
+    if (args.length === 0) {
+      return new OriginalDate(MOCK_NOW);
+    }
+    return new (OriginalDate as unknown as new (...a: unknown[]) => Date)(...args);
+  } as unknown as DateConstructor;
+  FakeDate.prototype = OriginalDate.prototype;
+  FakeDate.now = () => MOCK_NOW.getTime();
+  FakeDate.UTC = OriginalDate.UTC;
+  FakeDate.parse = OriginalDate.parse;
+  globalThis.Date = FakeDate;
 };
 
-vi.doMock('@aikami/frontend/configs/firestore.ts', () => ({
-  default: mockFirestore,
-  ...mockFirestore,
-}));
+const restoreRealDate = (): void => {
+  globalThis.Date = OriginalDate;
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Seeds a schedule row into the fake in-memory database provided by
+ * test_preload's mock of @aikami/frontend/repositories.
+ */
+const seedSchedule = async (npcId: string, schedule: NpcSchedule): Promise<void> => {
+  const repos = await import('@aikami/frontend/repositories');
+  const db = await repos.getLocalDatabase();
+  await db.execute({
+    sql: 'INSERT OR REPLACE INTO npc_schedules (npc_id, data, updated_at) VALUES (?, ?, ?)',
+    args: [npcId, JSON.stringify(schedule), schedule.updatedAt],
+  });
+};
+
+/**
+ * Resets the fake database tables between tests.
+ */
+const resetDb = async (): Promise<void> => {
+  const repos = await import('@aikami/frontend/repositories');
+  (repos as unknown as { resetLocalDatabase: () => void }).resetLocalDatabase();
+};
 
 describe('NpcScheduleService', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.setSystemTime(new Date('2026-07-10T14:30:00Z')); // Friday (5), 14:30
+  beforeEach(async () => {
+    await resetDb();
+    installFakeDate();
   });
 
-  it('should return default schedule when no Firestore document exists', async () => {
-    mockGetDoc.mockResolvedValue({ exists: () => false, data: () => undefined });
+  afterEach(() => {
+    restoreRealDate();
+  });
 
+  it('should return default schedule when no stored schedule exists', async () => {
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
     const schedule = await npcScheduleService.getSchedule('npc-123');
 
@@ -46,12 +80,10 @@ describe('NpcScheduleService', () => {
     expect(schedule.talkativeness).toBe(0.5);
     expect(schedule.cooldownMinutes).toBe(15);
     expect(schedule.generated).toBe(false);
-
-    vi.resetModules();
   });
 
-  it('should return persisted schedule from Firestore', async () => {
-    const storedSchedule = {
+  it('should return persisted schedule from the database', async () => {
+    const storedSchedule: NpcSchedule = {
       npcId: 'npc-456',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
@@ -68,10 +100,7 @@ describe('NpcScheduleService', () => {
       updatedAt: '2026-07-10T12:00:00Z',
     };
 
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      data: () => storedSchedule,
-    });
+    await seedSchedule('npc-456', storedSchedule);
 
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
     const schedule = await npcScheduleService.getSchedule('npc-456');
@@ -80,13 +109,9 @@ describe('NpcScheduleService', () => {
     expect(schedule.cooldownMinutes).toBe(10);
     expect(schedule.generated).toBe(true);
     expect(schedule.days[0].hours[0].status).toBe('offline');
-
-    vi.resetModules();
   });
 
-  it('should save schedule to Firestore via setSchedule', async () => {
-    mockGetDoc.mockResolvedValue({ exists: () => false, data: () => undefined });
-
+  it('should save schedule to the database via setSchedule', async () => {
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
     const schedule = await npcScheduleService.getSchedule('npc-789');
     schedule.talkativeness = 0.3;
@@ -94,17 +119,23 @@ describe('NpcScheduleService', () => {
 
     await npcScheduleService.setSchedule('npc-789', schedule);
 
-    expect(mockSetDoc).toHaveBeenCalledTimes(1);
-    const callArgs = mockSetDoc.mock.calls[0];
-    expect(callArgs[1].talkativeness).toBe(0.3);
-    expect(callArgs[1].generated).toBe(true);
+    // Verify persistence by reading from the database directly
+    const repos = await import('@aikami/frontend/repositories');
+    const db = await repos.getLocalDatabase();
+    const result = await db.query({
+      sql: 'SELECT data FROM npc_schedules WHERE npc_id = ?',
+      args: ['npc-789'],
+    });
 
-    vi.resetModules();
+    expect(result.rows).toHaveLength(1);
+    const stored = JSON.parse(result.rows[0].data as string) as Record<string, unknown>;
+    expect(stored.talkativeness).toBe(0.3);
+    expect(stored.generated).toBe(true);
   });
 
   it('should return current status based on local time', async () => {
-    // Friday (5) at 14:30 — slot for hour 14 on day 5
-    const storedSchedule = {
+    // Friday (5) at 14:30 — mock the date inside the imported module
+    const storedSchedule: NpcSchedule = {
       npcId: 'npc-abc',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
@@ -121,22 +152,17 @@ describe('NpcScheduleService', () => {
       updatedAt: '2026-07-10T12:00:00Z',
     };
 
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      data: () => storedSchedule,
-    });
+    await seedSchedule('npc-abc', storedSchedule);
 
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
     const status = await npcScheduleService.getCurrentStatus('npc-abc');
 
     expect(status.status).toBe('idle');
     expect(status.activity).toBe('Taking a break');
-
-    vi.resetModules();
   });
 
   it('should report availability correctly', async () => {
-    const storedSchedule = {
+    const storedSchedule: NpcSchedule = {
       npcId: 'npc-xyz',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
@@ -153,22 +179,17 @@ describe('NpcScheduleService', () => {
       updatedAt: '2026-07-10T12:00:00Z',
     };
 
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      data: () => storedSchedule,
-    });
+    await seedSchedule('npc-xyz', storedSchedule);
 
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
 
     // Friday 14:00 = DND → not available
     const available = await npcScheduleService.isAvailable('npc-xyz');
     expect(available).toBe(false);
-
-    vi.resetModules();
   });
 
   it('should default to online/available for missing day/hour slots', async () => {
-    const storedSchedule = {
+    const storedSchedule: NpcSchedule = {
       npcId: 'npc-gap',
       days: [
         { day: 0, hours: [] }, // Missing hours
@@ -180,17 +201,12 @@ describe('NpcScheduleService', () => {
       updatedAt: '2026-07-10T12:00:00Z',
     };
 
-    mockGetDoc.mockResolvedValue({
-      exists: () => true,
-      data: () => storedSchedule,
-    });
+    await seedSchedule('npc-gap', storedSchedule);
 
     const { npcScheduleService } = await import('../npc/npc_schedule_service.svelte.ts');
     const status = await npcScheduleService.getCurrentStatus('npc-gap');
 
     expect(status.status).toBe('online');
     expect(status.activity).toBe('Available');
-
-    vi.resetModules();
   });
 });

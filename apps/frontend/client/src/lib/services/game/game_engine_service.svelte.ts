@@ -1,17 +1,17 @@
 // apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts
 
+import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameCommand, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { PersonaData } from '@aikami/types';
+import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
 import { audioContextManager, audioService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
-import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -590,7 +590,7 @@ class GameEngineService
 
     const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
-    const SLOT_FALLBACKS: Record<string, number> = {
+    const SlotFallbacks: Record<string, number> = {
       body: 3,
       hair: 3,
       torso: 23,
@@ -603,21 +603,21 @@ class GameEngineService
     for (const slotName of EngineSlots) {
       const assetId = effectiveRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 1));
     }
     playerData.appearanceLayers = appearanceLayers;
 

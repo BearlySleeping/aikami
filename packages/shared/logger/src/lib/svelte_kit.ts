@@ -1,3 +1,4 @@
+// packages/shared/logger/src/lib/svelte_kit.ts
 import type { LogEntry, LoggerInterface, LogSink, TimerInterface } from '@aikami/types';
 import { isValidLogLevel } from './base.ts';
 
@@ -111,6 +112,9 @@ const _proxy: LoggerInterface = {
   error(...args) {
     _buffer.push({ method: 'error', args });
   },
+  spam(id, ...args) {
+    _buffer.push({ method: 'spam', args: [id, ...args] });
+  },
 };
 
 /**
@@ -159,5 +163,8 @@ export const logger: LoggerInterface = {
   },
   error(...args) {
     _ensureLoaded().error(...args);
+  },
+  spam(id, ...args) {
+    _ensureLoaded().spam(id, ...args);
   },
 };

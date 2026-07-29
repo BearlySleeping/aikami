@@ -1005,10 +1005,27 @@ export class GameOverlayService
     gameModeService.setMode('EXPLORE');
     void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._engineService?.resumeEngine();
+
+    // Resolve the map URL and spawn point from the active campaign's content pack
+    // (same pattern as game_boot_service._stageHydrateSnapshot fresh-spawn path).
+    const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
+    const { loadContentPack } = await import('@aikami/frontend/engine');
+    const pack = await loadContentPack({ packId: contentPackId });
+    const startingMap = pack.getStartingMap();
+
+    if (!startingMap) {
+      this.warn('respawnPlayer:no-spawn', { contentPackId });
+      return;
+    }
+
+    // Use boot fallback coordinates (160, 192) when default coordinates are undefined
+    const targetX = startingMap.defaultX ?? 160;
+    const targetY = startingMap.defaultY ?? 192;
+
     await this._engineService?.loadMap({
-      mapUrl: '/game-data/maps/sandbox_zone_a.json',
-      targetX: 160,
-      targetY: 192,
+      mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
+      targetX,
+      targetY,
       defeatedEnemies: [...worldStateService.defeatedEnemies],
       collectedPickups: [...worldStateService.collectedPickups],
     });

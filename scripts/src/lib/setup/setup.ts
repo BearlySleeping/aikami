@@ -13,54 +13,47 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { c } from '../cli_utils.ts';
 
 // ─── Constants ────────────────────────────────────────────────────────────
 const ROOT = join(import.meta.dir, '../../../..');
 const ENV_FILE = join(ROOT, '.env');
 const ENV_EXAMPLE = join(ROOT, '.env.example');
 
-const BOLD = '\x1b[1m';
-const GREEN = '\x1b[32m';
-const YELLOW = '\x1b[33m';
-const RED = '\x1b[31m';
-const CYAN = '\x1b[36m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-
 const isCI = process.env.CI === 'true';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 function header(text: string) {
-  console.log(`\n${BOLD}${CYAN}═══ ${text} ═══${RESET}\n`);
+  console.log(`\n${c.bold}${c.cyan}═══ ${text} ═══${c.reset}\n`);
 }
 
 function step(num: number, text: string) {
-  console.log(`\n${BOLD}${CYAN}[${num}]${RESET} ${text}`);
+  console.log(`\n${c.bold}${c.cyan}[${num}]${c.reset} ${text}`);
 }
 
 function ok(msg: string) {
-  console.log(`  ${GREEN}✓${RESET} ${msg}`);
+  console.log(`  ${c.green}✓${c.reset} ${msg}`);
 }
 
 function warn(msg: string) {
-  console.log(`  ${YELLOW}⚠${RESET} ${msg}`);
+  console.log(`  ${c.yellow}⚠${c.reset} ${msg}`);
 }
 
 function fail(msg: string) {
-  console.log(`  ${RED}✗${RESET} ${msg}`);
+  console.log(`  ${c.red}✗${c.reset} ${msg}`);
 }
 
 function info(msg: string) {
-  console.log(`  ${DIM}•${RESET} ${msg}`);
+  console.log(`  ${c.dim}•${c.reset} ${msg}`);
 }
 
 async function prompt(question: string, defaultVal?: string): Promise<string> {
   if (isCI && defaultVal !== undefined) {
-    info(`${question} ${DIM}(CI mode — using default: ${defaultVal})${RESET}`);
+    info(`${question} ${c.dim}(CI mode — using default: ${defaultVal})${c.reset}`);
     return defaultVal;
   }
   if (isCI) {
-    info(`${question} ${DIM}(CI mode — skipping)${RESET}`);
+    info(`${question} ${c.dim}(CI mode — skipping)${c.reset}`);
     return '';
   }
 
@@ -271,29 +264,31 @@ async function verifySetup(): Promise<boolean> {
 // ─── Step 5: Next Steps ───────────────────────────────────────────────────
 function printNextSteps() {
   header('Setup Complete!');
-  console.log(`${BOLD}Getting started:${RESET}\n`);
-  console.log(`  ${CYAN}bun run dev${RESET}              Start Client dev server`);
-  console.log(`  ${CYAN}bun run dev:all${RESET}           Start all services (firebase + client)`);
-  console.log(`  ${CYAN}bun run test${RESET}             Run all tests (requires firebase)`);
-  console.log(`  ${CYAN}bun run fix${RESET}              Auto-fix lint/format issues`);
-  console.log(`  ${CYAN}bun run typecheck${RESET}        Typecheck all projects`);
+  console.log(`${c.bold}Getting started:${c.reset}\n`);
+  console.log(`  ${c.cyan}bun run dev${c.reset}              Start Client dev server`);
   console.log(
-    `  ${CYAN}bun run validate${RESET}         Full validation (lint + format + typecheck)`,
+    `  ${c.cyan}bun run dev:all${c.reset}           Start all services (firebase + client)`,
   );
-  console.log(`  ${CYAN}bun run scripts${RESET}          Interactive script runner`);
-  console.log(`\n${BOLD}Documentation:${RESET}\n`);
-  console.log(`  ${DIM}.context/CONTEXT.md${RESET}      AI briefing — read this first`);
-  console.log(`  ${DIM}.context/llms.txt${RESET}         Full knowledge index`);
-  console.log(`  ${DIM}docs/contracts/INDEX.md${RESET}   Feature contracts`);
-  console.log(`  ${DIM}docs/guides/STACK.md${RESET}     Tech stack reference`);
+  console.log(`  ${c.cyan}bun run test${c.reset}             Run all tests (requires firebase)`);
+  console.log(`  ${c.cyan}bun run fix${c.reset}              Auto-fix lint/format issues`);
+  console.log(`  ${c.cyan}bun run typecheck${c.reset}        Typecheck all projects`);
+  console.log(
+    `  ${c.cyan}bun run validate${c.reset}         Full validation (lint + format + typecheck)`,
+  );
+  console.log(`  ${c.cyan}bun run scripts${c.reset}          Interactive script runner`);
+  console.log(`\n${c.bold}Documentation:${c.reset}\n`);
+  console.log(`  ${c.dim}.context/CONTEXT.md${c.reset}      AI briefing — read this first`);
+  console.log(`  ${c.dim}.context/llms.txt${c.reset}         Full knowledge index`);
+  console.log(`  ${c.dim}docs/contracts/INDEX.md${c.reset}   Feature contracts`);
+  console.log(`  ${c.dim}docs/guides/STACK.md${c.reset}     Tech stack reference`);
   console.log('');
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────
 async function main() {
-  console.log(`\n${BOLD}╔══════════════════════════════════════════╗${RESET}`);
-  console.log(`${BOLD}║     Aikami Developer Setup               ║${RESET}`);
-  console.log(`${BOLD}╚══════════════════════════════════════════╝${RESET}`);
+  console.log(`\n${c.bold}╔══════════════════════════════════════════╗${c.reset}`);
+  console.log(`${c.bold}║     Aikami Developer Setup               ║${c.reset}`);
+  console.log(`${c.bold}╚══════════════════════════════════════════╝${c.reset}`);
 
   if (isCI) {
     info('CI mode detected — running non-interactively');
@@ -332,6 +327,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`${RED}Setup failed with unexpected error:${RESET}`, err);
+  console.error(`${c.red}Setup failed with unexpected error:${c.reset}`, err);
   process.exit(1);
 });

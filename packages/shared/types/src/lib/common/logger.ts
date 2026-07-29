@@ -1,3 +1,4 @@
+// packages/shared/types/src/lib/common/logger.ts
 import type { LogLevelPriority } from '@aikami/constants';
 import type { DeviceData } from './device';
 
@@ -142,6 +143,20 @@ export type LoggerInterface = {
    * @public
    */
   error(...args: unknown[]): void;
+  /**
+   * Spam-resistant debug logging. The first call with a given `id` is
+   * always emitted (at DEBUG level). Subsequent calls are suppressed if
+   * the content is identical to the last emitted content for that `id`.
+   *
+   * A heartbeat summary is printed every 10 s while suppression is
+   * active, and a final tally is emitted when the content changes.
+   *
+   * @param id - Stable identifier for this log site (e.g.
+   *   `"zoning.nearZone"`).
+   * @param args - Arguments passed through to `debug()` when the message
+   *   is emitted.
+   */
+  spam(id: string, ...args: unknown[]): void;
 };
 
 /**

@@ -67,7 +67,6 @@ export default defineConfig({
   cases: [
     {
       name: 'Full Cycle Reaction',
-      // biome-ignore lint/style/useNamingConvention: URL query param
       searchParams: { test_integration: 'true' },
       prompt: EMERGENT_WORLD_PROMPT,
       schema: EmergentWorldSchema,

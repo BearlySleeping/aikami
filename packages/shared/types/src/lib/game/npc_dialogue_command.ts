@@ -17,7 +17,7 @@ export type {
   NpcIntentAnalysisOutput,
   NpcRollResolutionInput,
   NpcRollResolutionOutput,
+  NpcStateDelta,
   NpcSuggestionChip,
   NpcSuggestionChipIntentType,
-  NpcStateDelta,
 } from '@aikami/schemas';

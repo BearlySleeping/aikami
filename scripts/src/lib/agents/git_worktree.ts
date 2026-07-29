@@ -384,7 +384,6 @@ export const commitAll = (options: {
       : '';
 
   // Suppress knowledge:sync pre-commit hooks in worktrees.
-  // biome-ignore lint/style/useNamingConvention: env var name matches process.env key
   const env = { CONTRACT_PIPELINE_WORKTREE: '1' };
 
   // Stage all changes including untracked files.

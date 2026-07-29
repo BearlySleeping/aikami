@@ -2,8 +2,8 @@
 // Starts the Ollama text container via Podman.
 // Replaces the inline shell command in package.json dev:docker.
 
-import { $ } from 'bun';
 import { homedir } from 'node:os';
+import { $ } from 'bun';
 
 const IMAGE = 'ollama/ollama';
 const CONTAINER_NAME = 'aikami-text-dev';
@@ -14,10 +14,13 @@ const CONTAINER_PORT = 11434;
 const checkPort = await $`ss -tlnp src :${HOST_PORT} 2>/dev/null | grep -q LISTEN`.nothrow();
 if (checkPort.exitCode === 0) {
   // Verify it's actually Ollama by probing its API
-  const isOllama = await $`curl -sf --connect-timeout 5 --max-time 10 http://localhost:${HOST_PORT}/api/version 2>/dev/null`.nothrow();
+  const isOllama =
+    await $`curl -sf --connect-timeout 5 --max-time 10 http://localhost:${HOST_PORT}/api/version 2>/dev/null`.nothrow();
   if (isOllama.exitCode !== 0) {
     console.error(`❌ Port ${HOST_PORT} is already in use by another process (not Ollama).`);
-    console.error('   Please free the port or stop the conflicting service before running this script.');
+    console.error(
+      '   Please free the port or stop the conflicting service before running this script.',
+    );
     process.exit(1);
   }
   console.log(`Port ${HOST_PORT} is already in use — local Ollama detected.`);
@@ -35,7 +38,9 @@ if (checkPort.exitCode === 0) {
       console.log(`📋 Streaming via tail -f ${logFile}\n`);
       await $`tail -f ${logFile}`.nothrow();
     } else {
-      console.log('⚠ Could not find Ollama logs (not a systemd service, no ~/.ollama/logs/server.log).');
+      console.log(
+        '⚠ Could not find Ollama logs (not a systemd service, no ~/.ollama/logs/server.log).',
+      );
       console.log('Ollama is running — no automatic log source detected.');
       // Stay alive so the herdr tab doesn't close immediately.
       await $`echo 'Press Ctrl+C to stop watching.'; sleep infinity`.nothrow();

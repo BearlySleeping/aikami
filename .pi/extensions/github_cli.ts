@@ -643,7 +643,10 @@ export default function (pi: ExtensionAPI) {
                     yaml = yaml.replace(/^\s*pr_number:\s*.+/m, `${indent}pr_number: ${prNumber}`);
                   } else {
                     // Add pr_number after pr_url if missing
-                    yaml = yaml.replace(/(^\s*pr_url:\s*.+)/m, `$1\n${indent}pr_number: ${prNumber}`);
+                    yaml = yaml.replace(
+                      /(^\s*pr_url:\s*.+)/m,
+                      `$1\n${indent}pr_number: ${prNumber}`,
+                    );
                   }
                   const updated = content.replace(yamlMatch[1], yaml);
                   if (updated !== content) {
@@ -2200,7 +2203,11 @@ export default function (pi: ExtensionAPI) {
         );
 
         // If organization fails, fall back to user
-        if (!result.success || !result.json || !(result.json as any).data?.organization?.projectV2) {
+        if (
+          !result.success ||
+          !result.json ||
+          !(result.json as any).data?.organization?.projectV2
+        ) {
           result = await runGh(
             pi,
             [
@@ -2357,7 +2364,7 @@ export default function (pi: ExtensionAPI) {
             }
           `;
 
-          let allNodes: Array<{ id: string; content: { url?: string } }> = [];
+          const allNodes: Array<{ id: string; content: { url?: string } }> = [];
           let cursor: string | null = null;
           let hasNextPage = true;
 
@@ -2707,7 +2714,7 @@ export default function (pi: ExtensionAPI) {
           };
         };
 
-        let allItems: ProjectItemNode[] = [];
+        const allItems: ProjectItemNode[] = [];
         let cursor: string | null = null;
         let hasNextPage = true;
 
@@ -2781,7 +2788,9 @@ export default function (pi: ExtensionAPI) {
 
             if (!result.success || !result.json) {
               return {
-                content: [{ type: 'text', text: `❌ Failed to fetch project items: ${result.text}` }],
+                content: [
+                  { type: 'text', text: `❌ Failed to fetch project items: ${result.text}` },
+                ],
                 isError: true,
                 details: {},
               };
@@ -2815,7 +2824,9 @@ export default function (pi: ExtensionAPI) {
         }
 
         // Now search through all collected items
-        const match = params.url ? allItems.find((n) => n.content?.url === params.url) : allItems[0];
+        const match = params.url
+          ? allItems.find((n) => n.content?.url === params.url)
+          : allItems[0];
 
         if (!match) {
           return {

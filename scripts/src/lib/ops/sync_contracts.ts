@@ -23,10 +23,8 @@ const STATUS_LABELS: Record<string, string> = {
   // Active lifecycle
   draft: '📝 draft',
   approved: '👍 approved',
-  // biome-ignore lint/style/useNamingConvention: keys match contract status strings
   in_progress: '🔄 in_progress',
   implemented: '🛠️ implemented',
-  // biome-ignore lint/style/useNamingConvention: keys match contract status strings
   verification_failed: '❌ verification_failed',
   verified: '✅ verified',
   completed: '🏁 completed',
@@ -34,11 +32,8 @@ const STATUS_LABELS: Record<string, string> = {
   superseded: '👻 superseded',
 
   // Legacy (pre-V2)
-  // biome-ignore lint/style/useNamingConvention: legacy status key
   legacy_completed: '📦 legacy_completed',
-  // biome-ignore lint/style/useNamingConvention: keys match contract status strings
   not_started: '⏳ not_started',
-  // biome-ignore lint/style/useNamingConvention: descriptive key
   not_started_no_file: '⏳ not_started (no contract file)',
 
   // Archived (in docs/contracts/archived/)
@@ -48,7 +43,6 @@ const STATUS_LABELS: Record<string, string> = {
 const PROMOTION_LABELS: Record<string, string> = {
   sandbox: '🧪 sandbox',
   integrated: '🔗 integrated',
-  // biome-ignore lint/style/useNamingConvention: keys match promotion state strings
   release_verified: '🚀 release_verified',
 };
 
