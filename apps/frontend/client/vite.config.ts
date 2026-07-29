@@ -18,8 +18,10 @@ const rootDirectory = resolve(projectDirectory, '../../..');
 export default defineConfig(({ mode }) => {
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
 
-  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin. */
-  const crossOriginEmbedderPolicy = mode === 'emulator' ? undefined : 'require-corp';
+  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin.
+   * Using 'credentialless' enables crossOriginIsolated (SharedArrayBuffer for TTS) while
+   * allowing cross-origin subresources without CORS headers. */
+  const crossOriginEmbedderPolicy = mode === 'emulator' ? 'credentialless' : 'require-corp';
 
   const plugins: PluginOption[] = [
     tailwindcss(),

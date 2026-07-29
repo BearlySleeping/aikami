@@ -18,6 +18,7 @@ import {
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
+import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
 import type {
   ActionOption,
   ConversationBranch,
@@ -27,6 +28,7 @@ import type {
 } from '$types';
 import type { NpcSuggestionChip } from '@aikami/types';
 import { SKILL_STAT_MAP } from '@aikami/constants';
+import type { ExpressionId } from '$types';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +40,18 @@ import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 //
 // Contract: C-128 (origin), C-129 (polish), C-328 (orchestrator refactor)
 // ---------------------------------------------------------------------------
+
+/** A generated scene image anchored to a conversation message (C-162 devtools). */
+export type GeneratedImage = {
+  /** Unique image identifier. */
+  id: string;
+  /** The image URL, or null while generating. */
+  url: string | null;
+  /** Current generation status. */
+  status: 'generating' | 'done' | 'error';
+  /** Message this image was created after; null = created before any message. */
+  afterMessageId: string | null;
+};
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   /** NPC data from the ECS interaction event. */
@@ -73,6 +87,15 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** URL for the NPC's avatar image (LPC spritesheet or generated portrait). */
   readonly npcAvatarUrl: string;
+
+  /** Current expression ID for the NPC (updated by expression agent/keyword detection). */
+  readonly npcExpression: ExpressionId;
+
+  /** URL for the player character's avatar image. */
+  readonly playerAvatarUrl: string;
+
+  /** Which speaker is currently highlighted ('npc' while streaming, 'player' while typing). */
+  readonly highlightSpeaker: 'npc' | 'player' | null;
 
   /** Active choices from the most recent NPC turn. */
   readonly activeChoices: readonly { id: string; label: string }[];
@@ -257,6 +280,15 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Toggles streaming TTS on/off for this chat. */
   toggleStreamingTts(): void;
 
+  /**
+   * Generated scene images, ordered by creation.
+   * Each image lives at the message index where it was requested.
+   */
+  readonly generatedImages: readonly GeneratedImage[];
+
+  /** Latest dice roll result banner (null when no banner to show). */
+  readonly rollResultBanner: { value: number; dc: number; checkType: string; isSuccess: boolean; afterMessageId: string } | null;
+
   /** Whether the current turn offers a recruit action (C-340 AC-1). */
   readonly recruitAvailable: boolean;
 
@@ -432,6 +464,9 @@ class DialogueOverlayViewModel
   /** Whether streaming TTS is enabled for this conversation. */
   streamingTtsEnabled = $state(false);
 
+  /** Generated scene images, ordered by creation (C-162 devtools). */
+  generatedImages = $state<GeneratedImage[]>([]);
+
   // ── C-343 Rich Chat UX Promotion ───────────────────────────────
 
   /** Whether a draft was restored from IndexedDB on open. */
@@ -533,6 +568,20 @@ class DialogueOverlayViewModel
     return FALLBACK_AVATAR_URL;
   }
 
+  /** Current NPC expression — defaults to neutral, updated by detection. */
+  npcExpression = $state<ExpressionId>('neutral');
+
+  /** Player avatar URL (LPC default for now). */
+  get playerAvatarUrl(): string {
+    return FALLBACK_AVATAR_URL;
+  }
+
+  /** Which speaker is highlighted — derived from streaming/input state. */
+  highlightSpeaker = $state<'npc' | 'player' | null>(null);
+
+  /** Dice roll result banner — shown centered in chat after a roll resolves. */
+  rollResultBanner = $state<{ value: number; dc: number; checkType: string; isSuccess: boolean; afterMessageId: string } | null>(null);
+
   /** @inheritdoc */
   get imageProviderAvailable(): boolean {
     return this._imageProviderAvailable;
@@ -617,9 +666,12 @@ class DialogueOverlayViewModel
       return;
     }
 
-    // Otherwise, pre-fill and send as a player message
-    this.inputText = chip.prefill_text;
-    void this.sendMessage(chip.prefill_text);
+    // Otherwise, pre-fill and send as a player message.
+    // Use the label as fallback if the LLM's prefill_text is too short/nonsensical.
+    const messageText =
+      chip.prefill_text.length >= 10 ? chip.prefill_text : chip.label;
+    this.inputText = messageText;
+    void this.sendMessage(messageText);
   }
 
   /** @inheritdoc */
@@ -699,6 +751,15 @@ class DialogueOverlayViewModel
       ...revealState,
       phase: 'revealed',
       isSuccess,
+    };
+
+    // Show the result as a centered banner in chat
+    this.rollResultBanner = {
+      value: rollValue,
+      dc: revealState.difficultyClass,
+      checkType: revealState.checkType,
+      isSuccess,
+      afterMessageId: this.messages.at(-1)?.id ?? '',
     };
 
     await new Promise<void>((resolve) => setTimeout(resolve, 800));
@@ -884,6 +945,7 @@ class DialogueOverlayViewModel
    */
   private async _sendWithIntentAnalysis(content: string): Promise<void> {
     this.isStreaming = true;
+    this.highlightSpeaker = 'npc';
 
     const controller = new AbortController();
     this._activeAbortController = controller;
@@ -905,7 +967,10 @@ class DialogueOverlayViewModel
       });
 
       // Display the pre-roll narrative
-      this._appendNpcMessage(analysis.narrative_pre_roll);
+      this._appendNpcMessage(analysis.npc_response);
+
+      // Run expression detection on the NPC response
+      void this._detectExpression(analysis.npc_response);
 
       // Show suggestion chips
       this.suggestedChips = analysis.suggested_chips;
@@ -937,6 +1002,7 @@ class DialogueOverlayViewModel
       this.streamError = msg;
     } finally {
       this.isStreaming = false;
+      this.highlightSpeaker = null;
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
@@ -1040,10 +1106,16 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   speakMessage(text: string): void {
-    if (!text || ttsService.status !== 'ready') {
+    if (!text) {
+      this.debug('speakMessage:skipped-empty');
       return;
     }
-    void ttsService.synthesize({ text, voice: 'af_bella' });
+    if (ttsService.status !== 'ready') {
+      this.warn('speakMessage:skipped-not-ready', { status: ttsService.status });
+      return;
+    }
+    this.debug('speakMessage:speaking', { length: text.length });
+    void ttsService.speak({ text });
   }
 
   /** @inheritdoc */
@@ -1058,8 +1130,13 @@ class DialogueOverlayViewModel
 
     const currentText = this.messages[messageIndex].content;
 
+    // Find the last player message before this NPC message (what triggered it)
+    const lastPlayerMsg = this.messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((m) => m.role === 'player');
+
     // Generate replacement message ID before removing the old message
-    // so the alternative is stored under the same key that _delegateGenerateResponse will use
     const replacementMessageId = crypto.randomUUID();
 
     // Remove this NPC message and everything after it, then regenerate
@@ -1070,11 +1147,15 @@ class DialogueOverlayViewModel
     messageBranchStore.addAlternative({
       messageId: replacementMessageId,
       currentText,
-      newText: '', // placeholder — will be replaced when new response arrives
+      newText: '',
     });
 
-    // Trigger re-generation with the replacement ID
-    void this._delegateGenerateResponse({ npcMessageId: replacementMessageId });
+    // C-371: Route through the same pipeline as sendMessage
+    if (this._npcDialogueService.useFreeTextFirst && lastPlayerMsg) {
+      void this._sendWithIntentAnalysis(lastPlayerMsg.content);
+    } else {
+      void this._delegateGenerateResponse({ npcMessageId: replacementMessageId });
+    }
   }
 
   /** @inheritdoc */
@@ -1099,7 +1180,12 @@ class DialogueOverlayViewModel
     // Restore input draft to the edited text
     this.inputText = newText;
 
-    void this._delegateGenerateResponse();
+    // C-371: Route through the same pipeline as sendMessage
+    if (this._npcDialogueService.useFreeTextFirst) {
+      void this._sendWithIntentAnalysis(newText);
+    } else {
+      void this._delegateGenerateResponse();
+    }
   }
 
   /** @inheritdoc */
@@ -1571,6 +1657,32 @@ class DialogueOverlayViewModel
         canSwipeRight: false,
       },
     ];
+  }
+
+  /**
+   * Runs expression detection on NPC response text and updates {@link npcExpression}.
+   */
+  protected async _detectExpression(text: string): Promise<void> {
+    if (!text.trim()) return;
+
+    try {
+      const result = await expressionService.detectExpression({
+        message: text,
+        characters: [this._npcData.npcName],
+      });
+
+      const detectedExpression = result.expressionMap[this._npcData.npcName];
+      if (detectedExpression) {
+        this.npcExpression = detectedExpression;
+        this.debug('_detectExpression', {
+          npc: this._npcData.npcName,
+          expression: detectedExpression,
+          tier: result.detectionTier,
+        });
+      }
+    } catch {
+      // Expression detection is non-critical — silently skip failures
+    }
   }
 }
 

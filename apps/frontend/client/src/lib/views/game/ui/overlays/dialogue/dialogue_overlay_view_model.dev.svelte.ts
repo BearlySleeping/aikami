@@ -8,11 +8,14 @@
 //   - diceOutcome: 'random' | 'always_succeed' | 'always_fail'
 //   - useMockAi: toggle between mock narratives and real LLM extraction
 //   - mockNpcPersona: change the NPC persona on the fly
-//   - interactionMode: 'menu' (default action context) | 'freeform' (old text input)
+//   - interactionMode: 'menu' (C-162 action buttons) | 'freeform' (legacy) | 'freeTextFirst' (C-371)
 //   - autoGenerateImage: auto-generate scene images on skill check resolution
 //   - generatedImageUrl: latest generated image URL (shown in inspector)
 
-import { diceService, imageGenerationService } from '$services';
+import { diceService, imageGenerationService, ttsService } from '$services';
+import type { ExpressionId } from '$types';
+import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
+import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
 import {
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
@@ -27,7 +30,7 @@ import {
 export type DiceOutcome = 'random' | 'always_succeed' | 'always_fail';
 
 /** Interaction mode for the dialogue UI. */
-export type DevInteractionMode = 'menu' | 'freeform';
+export type DevInteractionMode = 'menu' | 'freeform' | 'freeTextFirst';
 
 /** NPC persona presets available in the devtools. */
 export type DevNpcPreset = 'sage' | 'guard' | 'innkeeper' | 'blacksmith' | 'bandit' | 'merchant';
@@ -42,7 +45,7 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   /** Current NPC persona preset. */
   readonly mockNpcPreset: DevNpcPreset;
 
-  /** Interaction mode: 'menu' (C-162 action context) or 'freeform' (old text). */
+  /** Interaction mode: 'menu' (C-162), 'freeform' (legacy), or 'freeTextFirst' (C-371). */
   readonly interactionMode: DevInteractionMode;
 
   /** Set dice outcome mode. */
@@ -60,14 +63,20 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   /** Whether auto image generation is enabled. */
   readonly autoGenerateImage: boolean;
 
-  /** The most recently generated image URL, or null. */
-  readonly generatedImageUrl: string | null;
-
   /** Toggle auto image generation on/off. */
   setAutoGenerateImage(enabled: boolean): void;
 
   /** Manually trigger a scene image generation based on current NPC + conversation. */
   generateSceneImage(): Promise<void>;
+
+  /** Available expression IDs for the current NPC sprite. */
+  readonly availableExpressions: readonly string[];
+
+  /** Force-change the NPC expression (devtools testing). */
+  setNpcExpression(expression: string): void;
+
+  /** Force a dice roll with test parameters. */
+  forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void;
 };
 
 export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
@@ -190,24 +199,49 @@ export class DialogueDevViewModel
 
   mockNpcPreset = $state<DevNpcPreset>('sage');
 
-  interactionMode = $state<DevInteractionMode>('menu');
+  interactionMode = $state<DevInteractionMode>('freeTextFirst');
 
   autoGenerateImage = $state<boolean>(false);
 
-  generatedImageUrl = $state<string | null>(null);
+  /** Current NPC sprite name (maps to /assets/npc/{name}/ directory). */
+  private _npcSpriteName = $state('gandalf');
 
-  /** Debounce guard — prevents concurrent image generations. */
-  private _imageGenerationInFlight = false;
+  /** Maps sandbox persona presets to NPC sprite folder names. */
+  private static readonly PERSONA_SPRITE_MAP: Record<DevNpcPreset, string> = {
+    sage: 'gandalf',
+    guard: 'aragon',
+    innkeeper: 'gandalf',
+    blacksmith: 'orc',
+    bandit: 'orc',
+    merchant: 'aragon',
+  };
+
+  /** Available expressions for the current NPC (derived from sprite folder). */
+  get availableExpressions(): string[] {
+    return NPC_SPRITE_EXPRESSIONS[this._npcSpriteName] ?? ['neutral'];
+  }
+
+  /** Override: returns expression-specific sprite URL. */
+  get npcAvatarUrl(): string {
+    return `/assets/npc/${this._npcSpriteName}/${this.npcExpression}.webp`;
+  }
+
+  /** Override: default player avatar (aragon neutral as placeholder fighter). */
+  get playerAvatarUrl(): string {
+    return '/assets/npc/aragon/neutral.webp';
+  }
 
   constructor(options: DialogueDevViewModelOptions) {
     super(options);
     this.diceOutcome = options.initialDiceOutcome ?? 'random';
     this.useMockAi = options.initialUseMockAi ?? true;
     this.mockNpcPreset = options.initialNpcPreset ?? 'sage';
-    this.interactionMode = options.initialInteractionMode ?? 'menu';
+    this.interactionMode = options.initialInteractionMode ?? 'freeTextFirst';
 
     // Ensure phase matches initial interaction mode
-    if (this.interactionMode === 'freeform') {
+    if (this.interactionMode === 'freeTextFirst') {
+      // Let the parent class default (FREE_TEXT) stand — C-371 two-call pipeline
+    } else if (this.interactionMode === 'freeform') {
       this.dialoguePhase = 'CUSTOM_INPUT';
     } else {
       this.dialoguePhase = 'MENU';
@@ -217,6 +251,11 @@ export class DialogueDevViewModel
     const initialPreset = options.initialNpcPreset;
     if (initialPreset && initialPreset !== 'sage') {
       this._applyNpcPreset(initialPreset);
+    }
+
+    // Initialize TTS for the sandbox (fire-and-forget)
+    if (ttsService.status === 'uninitialized') {
+      void ttsService.initialize();
     }
   }
 
@@ -235,6 +274,10 @@ export class DialogueDevViewModel
     self._npcData.npcName = info.name;
     self._npcData.dialog = info.dialog;
     self._npcData.personaId = info.personaId;
+
+    // Update sprite and reset expression
+    this._npcSpriteName = DialogueDevViewModel.PERSONA_SPRITE_MAP[preset] ?? 'gandalf';
+    this.npcExpression = 'neutral';
 
     self.messages = [
       {
@@ -267,7 +310,11 @@ export class DialogueDevViewModel
   setInteractionMode(mode: DevInteractionMode): void {
     this.interactionMode = mode;
     // Force the matching phase
-    this.dialoguePhase = mode === 'menu' ? 'MENU' : 'CUSTOM_INPUT';
+    if (mode === 'freeTextFirst') {
+      this.dialoguePhase = 'FREE_TEXT';
+    } else {
+      this.dialoguePhase = mode === 'menu' ? 'MENU' : 'CUSTOM_INPUT';
+    }
     this.inputText = '';
   }
 
@@ -277,49 +324,90 @@ export class DialogueDevViewModel
   }
 
   /** @inheritdoc */
-  async generateSceneImage(): Promise<void> {
-    // Debounce: skip if already generating or image service is busy
-    if (this._imageGenerationInFlight || imageGenerationService.isGenerating) {
-      this.debug('generateSceneImage:skipped', {
-        inFlight: this._imageGenerationInFlight,
-        serviceBusy: imageGenerationService.isGenerating,
+  setNpcExpression(expression: string): void {
+    this.npcExpression = expression as ExpressionId;
+  }
+
+  /** @inheritdoc */
+  forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void {
+    const targetNumber = Math.max(1, options.difficultyClass - options.statModifierValue);
+    this.skillCheckState = {
+      checkType: options.checkType,
+      difficultyClass: options.difficultyClass,
+      statModifier: options.statModifier,
+      statModifierValue: options.statModifierValue,
+      targetNumber,
+      rollValue: null,
+      phase: 'declared',
+      isSuccess: null,
+    };
+    this.dialoguePhase = 'DECLARED_DC';
+    this.debug('forceDiceRoll', options);
+  }
+
+  /**
+   * Override: passes available expressions as enum constraints to the expression agent.
+   */
+  protected override async _detectExpression(text: string): Promise<void> {
+    if (!text.trim()) return;
+    try {
+      const result = await expressionService.detectExpression({
+        message: text,
+        characters: [this.npcName],
+        availableExpressions: this.availableExpressions,
       });
+      const detected = result.expressionMap[this.npcName];
+      if (detected) this.npcExpression = detected;
+    } catch { /* non-critical */ }
+  }
+
+  /** @inheritdoc */
+  async generateSceneImage(): Promise<void> {
+    // Skip if the image service is already busy
+    if (imageGenerationService.isGenerating) {
+      this.debug('generateSceneImage:skipped-service-busy');
       return;
     }
 
     const npcName = this.npcName;
-    // Use the last few messages as context for the image prompt
     const recentMessages = this.messages
       .slice(-3)
       .map((m) => `${m.role}: ${m.content}`)
       .join(' | ');
     const prompt = `Fantasy RPG dialogue scene with ${npcName}. ${recentMessages}. Cinematic lighting, medieval fantasy art style.`;
 
-    this.debug('generateSceneImage', { prompt: prompt.slice(0, 120) });
-    this.generatedImageUrl = null;
+    const imageId = crypto.randomUUID();
+    const afterMessageId = this.messages.at(-1)?.id ?? null;
+
+    // Push a generating record so the View shows a skeleton immediately
+    this.generatedImages = [
+      ...this.generatedImages,
+      { id: imageId, url: null, status: 'generating', afterMessageId },
+    ];
+
+    this.debug('generateSceneImage', { imageId, prompt: prompt.slice(0, 120) });
 
     try {
-      const result = await imageGenerationService.generateImage({
-        prompt,
-      });
-      // Store URL — demo placeholders are safe; real blobs get auto-revoked after 30s
-      this.generatedImageUrl = result.url;
-      if (!result.isDemo) {
-        setTimeout(() => {
-          if (this.generatedImageUrl === result.url) {
-            URL.revokeObjectURL(result.url);
-            this.generatedImageUrl = null;
-          }
-        }, 30_000);
-      }
+      const result = await imageGenerationService.generateImage({ prompt });
+
+      // Update the record with the generated URL (never re-anchor)
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, url: result.url, status: 'done' as const } : img,
+      );
+
       this.debug('generateSceneImage:complete', {
-        url: this.generatedImageUrl?.slice(0, 80),
+        imageId,
+        url: result.url?.slice(0, 80),
         isDemo: result.isDemo,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.warn('generateSceneImage:failed', { message });
-      this.generatedImageUrl = null;
+      this.warn('generateSceneImage:failed', { imageId, message });
+
+      // Update the record with error status
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, status: 'error' as const } : img,
+      );
     }
   }
 
@@ -352,6 +440,15 @@ export class DialogueDevViewModel
 
     // Reveal the result
     this.skillCheckState = { ...state, rollValue, phase: 'revealed', isSuccess };
+
+    // Show the result as a centered banner in chat
+    this.rollResultBanner = {
+      value: rollValue,
+      dc: state.difficultyClass,
+      checkType: state.checkType,
+      isSuccess,
+      afterMessageId: this.messages.at(-1)?.id ?? '',
+    };
 
     // Brief pause so the player can absorb the outcome
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
@@ -423,26 +520,22 @@ export class DialogueDevViewModel
 
     const narrative = personaNarratives[Math.floor(Math.random() * personaNarratives.length)];
 
-    // Add a dev-tag header to the narrative
-    const devTag = `[Dev Mock: ${skill} check | DC ${difficultyClass} | Roll ${rollValue} | ${isSuccess ? '✅ SUCCESS' : '❌ FAILURE'}]`;
-    const fullNarrative = `${devTag}\n\n${narrative}`;
-
     this.debug('DialogueDevVM:_mockSkillCheckResolution', {
       skill,
       difficultyClass,
       rollValue,
       isSuccess,
-      narrativeLength: fullNarrative.length,
+      narrativeLength: narrative.length,
     });
 
     // Simulate LLM latency
     await new Promise<void>((resolve) => setTimeout(resolve, 800));
 
-    // Append the NPC's response
+    // Append the NPC's response (just the narrative, no dev tag in the bubble)
     const self = this as unknown as {
       _appendNpcMessage: (content: string) => void;
     };
-    self._appendNpcMessage(fullNarrative);
+    self._appendNpcMessage(narrative);
 
     // Auto-generate scene image if enabled (fire-and-forget)
     if (this.autoGenerateImage) {

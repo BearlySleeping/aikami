@@ -29,7 +29,7 @@ let analyzeIntentStub = mock(async () => ({
   check_type: undefined,
   difficulty_class: undefined,
   modifier_source: undefined,
-  narrative_pre_roll: 'The elder considers your words.',
+  npc_response: 'The elder considers your words.',
   suggested_chips: [
     { id: 'talk', label: 'Ask about the ward', intent_type: 'dialogue' as const, prefill_text: 'Tell me about the ward.' },
     { id: 'leave', label: 'Leave', intent_type: 'dialogue' as const, prefill_text: 'Goodbye.' },
@@ -115,6 +115,12 @@ mock.module('$services', () => ({
     status: 'uninitialized',
     speak: mock(async () => {}),
     isKokoroServerAvailable: false,
+  },
+  expressionService: {
+    detectExpression: mock(async () => ({
+      expressionMap: {},
+      detectionTier: 'keyword' as const,
+    })),
   },
   SentenceBoundaryChunker: class {
     onSentence = mock(() => {});
@@ -277,7 +283,7 @@ describe('DialogueOverlayViewModel', () => {
       check_type: undefined,
       difficulty_class: undefined,
       modifier_source: undefined,
-      narrative_pre_roll: 'The elder strokes his beard. "The ward is failing."',
+      npc_response: 'The elder strokes his beard. "The ward is failing."',
       suggested_chips: [{ id: 'talk', label: 'Tell me more', intent_type: 'dialogue' as const, prefill_text: 'Tell me more.' }],
     }));
     mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
@@ -298,7 +304,7 @@ describe('DialogueOverlayViewModel', () => {
       check_type: undefined,
       difficulty_class: undefined,
       modifier_source: undefined,
-      narrative_pre_roll: 'Hello.',
+      npc_response: 'Hello.',
       suggested_chips: [
         { id: 'quest', label: 'Ask about quests', intent_type: 'quest' as const, prefill_text: 'Do you have work?' },
         { id: 'trade', label: 'Trade', intent_type: 'trade' as const, prefill_text: 'Show me your wares.' },

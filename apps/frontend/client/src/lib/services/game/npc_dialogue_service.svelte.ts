@@ -1263,7 +1263,9 @@ export class NpcDialogueService
       'Given the player\'s message and NPC context, determine:',
       '1. Whether this action requires a skill check (dice roll).',
       '2. If so, what skill to check, what difficulty class (5-20), and what stat modifier applies.',
-      '3. A short pre-roll narrative (the NPC\'s reaction before any dice).',
+      '3. The NPC\'s spoken response — write in FIRST-PERSON as the NPC speaking directly to the player.',
+      '   Include actions in asterisks for flavor (e.g. *strokes beard* "Ah, a fine question!").',
+      '   NEVER write third-person narration like "The elder considers your words."',
       '4. 0-4 contextual suggestion chips for the player.',
       '',
       'Be conservative: only require a roll when the player is clearly attempting',
@@ -1301,13 +1303,59 @@ export class NpcDialogueService
 
       // Repair attempt: salvage narrative from raw text
       this.warn('_analyzeIntent:invalid-output');
+
+      const rawText = result.text?.trim();
+      let narrative = '';
+      let chips: NpcSuggestionChip[] = [];
+
+      // If the text looks like plain text (not JSON), use it directly as narrative
+      if (rawText && !rawText.startsWith('{') && !rawText.startsWith('```')) {
+        narrative = rawText;
+      } else if (rawText) {
+        try {
+          const cleaned = rawText
+            .replace(/^```(?:json)?\s*/i, '')
+            .replace(/```\s*$/, '')
+            .trim();
+          const parsed = JSON.parse(cleaned);
+          narrative =
+            parsed.npc_response ||
+            parsed.narrative_pre_roll ||
+            parsed.pre_roll_narrative ||
+            parsed.narrative_result ||
+            parsed.narrative ||
+            '';
+          const rawChips = parsed.suggested_chips || parsed.suggestion_chips || parsed.chips;
+          if (Array.isArray(rawChips)) {
+            chips = rawChips.slice(0, 4).map((c: unknown, i: number): NpcSuggestionChip => {
+              if (typeof c === 'string') {
+                return { id: `chip${i}`, label: c, intent_type: 'dialogue', prefill_text: c };
+              }
+              return {
+                id: (c as Record<string, unknown>).id as string || `chip${i}`,
+                label: ((c as Record<string, unknown>).label as string) || String(c),
+                intent_type: ((c as Record<string, unknown>).intent_type as NpcSuggestionChip['intent_type']) || 'dialogue',
+                prefill_text: ((c as Record<string, unknown>).prefill_text as string) || ((c as Record<string, unknown>).label as string) || String(c),
+              };
+            });
+          }
+        } catch {
+          // Not valid JSON — use raw text as-is
+        }
+      }
+
+      // If no narrative could be extracted, throw — don't fake a response
+      if (!narrative) {
+        throw new Error('Intent analysis produced invalid output with no narrative');
+      }
+
       return {
         requires_roll: false,
         check_type: undefined,
         difficulty_class: undefined,
         modifier_source: undefined,
-        narrative_pre_roll: result.text?.trim() || `*${npcName} considers your words.*`,
-        suggested_chips: [],
+        npc_response: narrative,
+        suggested_chips: chips,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -1521,7 +1569,7 @@ export class NpcDialogueService
       check_type: undefined,
       difficulty_class: undefined,
       modifier_source: undefined,
-      narrative_pre_roll: this._genericFallbackLine(npcName),
+      npc_response: this._genericFallbackLine(npcName),
       suggested_chips: this._deriveChips({ npcName, allowedCommands }),
     };
   }

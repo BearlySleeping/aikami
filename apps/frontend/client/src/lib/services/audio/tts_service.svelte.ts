@@ -183,6 +183,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   private _worker: Worker | null = null; // WebGPU kokoro-js worker (C-131)
   private _streamWorker: Worker | null = null; // Streaming pipeline worker (C-211)
+  private _kokoroServerUrl = '/api/voice'; // Discovered Kokoro server URL
   private _abortController: AbortController | undefined;
   private currentAudio: HTMLAudioElement | null = null;
 
@@ -510,6 +511,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     // Path 1: Streaming pipeline (C-211) — Kokoro server detected
     if (this._pipelineReady && this._streamWorker) {
+      // Resume AudioContext — user gesture (button click) makes this safe
+      const ctx = audioContextManager.context;
+      if (ctx.state !== 'running') {
+        await ctx.resume();
+        this.debug('synthesize:audio-context-resumed', { state: ctx.state });
+      }
+
       this._abortController = new AbortController();
       this.isSynthesizing = true;
 
@@ -569,6 +577,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         action: 'initialize',
         sharedBuffer: this._ringBuffer.sharedBuffer,
         sampleCapacity: this._ringBuffer.sampleCapacity,
+        serverUrl: this._kokoroServerUrl,
       });
 
       // 4. Load the AudioWorkletProcessor
@@ -577,6 +586,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       // 5. Create AudioWorkletNode
       this._audioWorkletNode = new AudioWorkletNode(ctx, 'kokoro-audio-processor');
+
+      // 5b. Send ring buffer to the worklet (it needs explicit init message)
+      this._audioWorkletNode.port.postMessage({
+        type: 'init',
+        sharedBuffer: this._ringBuffer.sharedBuffer,
+        sampleCapacity: this._ringBuffer.sampleCapacity,
+      });
 
       // 6. Send ring buffer to AudioWorklet
       this._audioWorkletNode.port.postMessage({
@@ -735,8 +751,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         });
 
         if (response.ok || response.status === 422) {
-          // 422 = validation error (empty text "test" may be too short),
-          // but this still proves the server is running.
+          this._kokoroServerUrl = url;
           this.isKokoroServerAvailable = true;
           this.debug('checkKokoroServer:found', { url });
           return;

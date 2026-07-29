@@ -117,12 +117,19 @@ class AiGatewayService
 
     const textAdapter = createOpenAiCompatibleTextAdapter({
       getApiKey: (provider) => this._getTextApiKey(provider),
-      supportsStructuredOutput: () => false,
+      supportsStructuredOutput: () => true,
       getDefaultEndpoint: (provider) => this._getDefaultTextEndpoint(provider),
       onSchemaCacheSize: (size) => {
         (globalThis as Record<string, unknown>).__text_service_compiled_schema_cache_size = size;
       },
-      onEvent: (event, data) => this.debug(`textAdapter:${event}`, data),
+      onEvent: (event, data) => {
+        // Validation failures are warnings — the LLM returned data that didn't match the schema
+        if (event === 'validation-failed') {
+          this.debug(`textAdapter:${event}`, data);
+        } else {
+          this.debug(`textAdapter:${event}`, data);
+        }
+      },
     });
 
     // One transport serves both offline (local) and byok (cloud) text modes.
