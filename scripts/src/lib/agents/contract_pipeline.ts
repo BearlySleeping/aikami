@@ -78,7 +78,7 @@ const parseArguments = (): CliArguments => {
     yolo: args.includes('--yolo'),
     root: args.includes('--root') || args.includes('-r'),
     dirty: args.includes('--dirty'),
-    help: args.length === 0 || args.includes('--help') || args.includes('-h'),
+    help: args.includes('--help') || args.includes('-h'),
   };
 };
 
@@ -133,7 +133,7 @@ const gh = (args: string[], options?: { timeout?: number }): string => {
  * Handle --source roadmap: fetch a GitHub Issue or Project v2 item
  * and freeze it into a contract file.
  */
-const handleRoadmapSource = (target: string): void => {
+const handleRoadmapSource = (target: string): string => {
   const repoRoot = process.cwd();
   const contractsDir = join(repoRoot, 'docs/contracts');
   const templatePath = join(contractsDir, 'TEMPLATE.md');
@@ -256,14 +256,15 @@ const handleRoadmapSource = (target: string): void => {
   }
 
   // Check if we found an existing contract — if so, reuse it
-  if (!contractPath) {
-    throw new Error('contractPath not set');
+  if (!contractPath || !contractId) {
+    throw new Error('contractPath or contractId not set');
   }
   const existingContractFound = existsSync(contractPath);
   if (existingContractFound) {
     console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
+    return contractId;
   } else {
     // Read template and generate new contract
     const template = readFileSync(templatePath, 'utf-8');
@@ -313,6 +314,8 @@ const handleRoadmapSource = (target: string): void => {
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
   }
+
+  return contractId;
 };
 
 /** Search for an issue in Project v2 by title match. */
@@ -608,7 +611,14 @@ const main = async (): Promise<void> => {
 
   // --issue: freeze contract from GitHub Issue (no pipeline)
   if (cli.issueTarget) {
-    handleRoadmapSource(cli.issueTarget);
+    const contractId = handleRoadmapSource(cli.issueTarget);
+    if (cli.root) {
+      setupRootBranch({
+        target: contractId,
+        allowDirty: cli.dirty,
+      });
+      console.log(`📁 Root checkout complete for ${contractId}.`);
+    }
     return;
   }
 

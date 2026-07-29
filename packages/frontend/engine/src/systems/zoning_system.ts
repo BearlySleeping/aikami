@@ -93,7 +93,7 @@ export const updateZoningSystem = (
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 80) {
       logger.spam(
-        'zoning.nearZone',
+        `zoning.nearZone.${eid}`,
         `[ZoningSystem] near zone eid=${eid} dist=${dist.toFixed(0)} ` +
           `player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) ` +
           `zone=[${zoneMinX.toFixed(0)}..${zoneMaxX.toFixed(0)}, ${zoneMinY.toFixed(0)}..${zoneMaxY.toFixed(0)}] ` +

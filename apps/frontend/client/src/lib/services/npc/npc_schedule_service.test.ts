@@ -11,7 +11,9 @@ import type { NpcSchedule } from '@aikami/types';
 
 // ── Mock Date ────────────────────────────────────────────────────────────
 
-const MOCK_NOW = new Date('2026-07-10T14:30:00Z'); // Friday (day 5), 14:30 UTC
+// Friday (day 5), 14:30 local time — constructed from local components
+// to ensure consistent behavior across all timezones
+const MOCK_NOW = new Date(2026, 6, 10, 14, 30, 0); // July 10, 2026 is a Friday
 
 const OriginalDate = globalThis.Date;
 

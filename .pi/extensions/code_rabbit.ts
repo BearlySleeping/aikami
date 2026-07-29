@@ -30,9 +30,59 @@ type AutofixCommentState =
   | 'autofix_failed' // CodeRabbit autofix could not resolve findings
   | 'autofix_rate_limited'; // CodeRabbit is rate-limited or quota-exhausted
 
+/** Tokenize shell-like arguments, respecting single and double quotes. */
+const tokenizeArgs = (args: string): string[] => {
+  const tokens: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escape = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const char = args[i];
+
+    if (escape) {
+      current += char;
+      escape = false;
+      continue;
+    }
+
+    if (char === '\\' && !inSingleQuote) {
+      escape = true;
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (/\s/.test(char) && !inSingleQuote && !inDoubleQuote) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens;
+};
+
 const gh = (args: string): string => {
   try {
-    return runSyncOrThrow('gh', args.split(/\s+/), { timeoutMs: TIMEOUT });
+    return runSyncOrThrow('gh', tokenizeArgs(args), { timeoutMs: TIMEOUT });
   } catch {
     return '';
   }
@@ -40,7 +90,7 @@ const gh = (args: string): string => {
 
 const ghJson = <T>(args: string): T | undefined => {
   try {
-    const raw = runSyncOrThrow('gh', args.split(/\s+/), { timeoutMs: TIMEOUT });
+    const raw = runSyncOrThrow('gh', tokenizeArgs(args), { timeoutMs: TIMEOUT });
     if (!raw) {
       return undefined;
     }

@@ -15,7 +15,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { error, ok, warn } from '../cli_utils.ts';
+import { error, info, ok, warn } from '../cli_utils.ts';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -23,10 +23,6 @@ const PIXI_DEVTOOLS_DIR = resolve(homedir(), '.local/share/aikami/pixi-devtools'
 const PIXI_DEVTOOLS_VERSION_FILE = join(PIXI_DEVTOOLS_DIR, '.version');
 const PIXI_DEVTOOLS_RELEASE_URL =
   'https://github.com/pixijs/devtools/releases/latest/download/chrome.zip';
-
-// ── Logging helpers ────────────────────────────────────────────────────────
-
-const info = (msg: string) => console.log(`  [pixi-devtools] ${msg}`);
 
 // ── Find manifest directory ────────────────────────────────────────────────
 

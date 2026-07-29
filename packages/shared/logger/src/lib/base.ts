@@ -152,11 +152,12 @@ export abstract class BaseLoggerService implements LoggerInterface {
       })
       .join(' ');
 
-    const state = this._spamState.get(id);
     const now = Date.now();
 
     // Periodic cleanup: drop entries unused for > 60 s
     this._cleanupSpamState(now);
+
+    const state = this._spamState.get(id);
 
     if (!state) {
       this._spamState.set(id, {

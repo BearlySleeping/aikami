@@ -45,6 +45,7 @@ const EXCLUDED_PROXY_METHODS = new Set([
   'warn',
   'error',
   'log',
+  'spam',
   '_write',
   'dispose',
   'createObserver',
@@ -144,11 +145,14 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
             enumerable: descriptor.enumerable,
             writable: descriptor.writable,
             value: function (this: T, ...args: unknown[]) {
-              // 1. Auto-log the method execution (spam-deduped to avoid flooding at 60fps)
+              // 1. Auto-log the method execution (spam-deduped to avoid flooding at 60fps).
+              // The spam ID is class-qualified so methods with the same name on
+              // different classes are throttled independently.
+              const spamId = `${options.className}.${propKey}`;
               if (args.length > 0) {
-                BaseClass._logger.spam(propKey, ...args);
+                BaseClass._logger.spam(spamId, ...args);
               } else {
-                BaseClass._logger.spam(propKey);
+                BaseClass._logger.spam(spamId);
               }
 
               // 2. Execute the original method

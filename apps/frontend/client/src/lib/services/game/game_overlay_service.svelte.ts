@@ -1013,15 +1013,19 @@ export class GameOverlayService
     const pack = await loadContentPack({ packId: contentPackId });
     const startingMap = pack.getStartingMap();
 
-    if (!startingMap || startingMap.defaultX === undefined || startingMap.defaultY === undefined) {
+    if (!startingMap) {
       this.warn('respawnPlayer:no-spawn', { contentPackId });
       return;
     }
 
+    // Use boot fallback coordinates (160, 192) when default coordinates are undefined
+    const targetX = startingMap.defaultX ?? 160;
+    const targetY = startingMap.defaultY ?? 192;
+
     await this._engineService?.loadMap({
       mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
-      targetX: startingMap.defaultX,
-      targetY: startingMap.defaultY,
+      targetX,
+      targetY,
       defeatedEnemies: [...worldStateService.defeatedEnemies],
       collectedPickups: [...worldStateService.collectedPickups],
     });

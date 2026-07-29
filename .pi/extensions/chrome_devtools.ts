@@ -116,6 +116,7 @@ async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: stri
   const proc = Bun.spawn([chromiumPath, ...args], {
     stdio: ['ignore', 'ignore', 'ignore'],
   });
+  proc.unref();
   spawnedChromePid = proc.pid ?? null;
 
   // Wait for CDP to become available (up to 10s)

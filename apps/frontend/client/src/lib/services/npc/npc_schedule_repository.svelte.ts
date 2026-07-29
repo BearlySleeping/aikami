@@ -56,7 +56,12 @@ class NpcScheduleRepository
       return undefined;
     }
 
-    return JSON.parse(result.rows[0].data as string) as NpcSchedule;
+    try {
+      return JSON.parse(result.rows[0].data as string) as NpcSchedule;
+    } catch (err) {
+      this.warn('getByNpcId:corrupt-json', { npcId, error: String(err) });
+      return undefined;
+    }
   }
 
   /** @inheritdoc */

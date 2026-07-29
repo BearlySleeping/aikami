@@ -134,6 +134,9 @@ export async function runCommand(
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Run in its own process group (via setsid) so killProcessTree /
+    // killProcessTreeForce can terminate the whole tree via `-pid`.
+    detached: true,
   });
 
   // Close stdin immediately — prevents CLI tools from hanging on prompts
