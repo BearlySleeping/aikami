@@ -62,7 +62,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
   <!-- d20 Skill Check Dice (C-157 / C-162) -->
   <GameDice dice={viewModel.diceState} />
 
-  <!-- Avatar row — NPC (left) + Player (right), above the chat -->
+  <!-- Avatar row — NPC left, Player right; party members between -->
   <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
     <!-- NPC Avatar -->
     <div class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200">
@@ -79,6 +79,23 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
         />
       </div>
     </div>
+
+    <!-- Party member (mock) -->
+    {#if viewModel.showPartyUi}
+      <div class="transition-transform duration-200">
+        <div class="h-24 w-24 overflow-hidden border-2 border-info/30 shadow-lg">
+          <img
+            src="/assets/npc/gandalf/neutral.webp"
+            alt="Companion"
+            class="h-full w-full object-contain opacity-70"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    {:else}
+      <!-- Spacer to keep justify-between when party is off -->
+      <div></div>
+    {/if}
 
     <!-- Player Avatar -->
     <div class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200">
@@ -111,26 +128,6 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
         {/if}
       </div>
       <div class="flex items-center gap-2">
-        <div class="join join-horizontal">
-          <button
-            type="button"
-            class="btn btn-xs join-item"
-            class:btn-active={viewModel.addressMode === 'scene'}
-            class:btn-success={viewModel.addressMode === 'scene'}
-            onclick={() => viewModel.setAddressMode('scene')}
-          >
-            Scene
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item"
-            class:btn-active={viewModel.addressMode === 'gm'}
-            class:btn-secondary={viewModel.addressMode === 'gm'}
-            onclick={() => viewModel.setAddressMode('gm')}
-          >
-            GM
-          </button>
-        </div>
         <button
           type="button"
           class="btn btn-ghost btn-xs text-error"

@@ -286,6 +286,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    */
   readonly generatedImages: readonly GeneratedImage[];
 
+  /** Party UI visibility toggle. */
+  readonly showPartyUi: boolean;
+
   /** Latest dice roll result banner (null when no banner to show). */
   readonly rollResultBanner: { value: number; dc: number; checkType: string; isSuccess: boolean; afterMessageId: string } | null;
 
@@ -466,6 +469,9 @@ class DialogueOverlayViewModel
 
   /** Generated scene images, ordered by creation (C-162 devtools). */
   generatedImages = $state<GeneratedImage[]>([]);
+
+  /** Party UI visibility toggle (default: hidden). */
+  showPartyUi = $state(false);
 
   // ── C-343 Rich Chat UX Promotion ───────────────────────────────
 
@@ -929,12 +935,55 @@ class DialogueOverlayViewModel
     };
     this.messages = [...this.messages, playerMessage];
 
+    // ── GM mode: send to Game Master instead of NPC ──────────────
+    if (this.addressMode === 'gm') {
+      await this._sendToGameMaster(content);
+      return;
+    }
+
     // ── C-371: Two-call pipeline ────────────────────────────────────
     if (this._npcDialogueService.useFreeTextFirst) {
       await this._sendWithIntentAnalysis(content);
     } else {
       // Legacy path — single-call generateTurn
       await this._delegateGenerateResponse();
+    }
+  }
+
+  /**
+   * GM Mode: sends the player's message directly to the Game Master.
+   * The GM responds as the dungeon master, not as an NPC.
+   */
+  private async _sendToGameMaster(content: string): Promise<void> {
+    this.isStreaming = true;
+    this.highlightSpeaker = 'npc';
+
+    try {
+      const gmResponse = await this._npcDialogueService.analyzeIntent({
+        npcId: this._npcData.npcId,
+        npcName: 'Game Master',
+        messages: this.messages.map((m) => ({
+          role: m.role === 'player' ? 'player' : ('npc' as const),
+          content: m.content,
+        })),
+        signal: new AbortController().signal,
+        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        playerContext: {
+          character_sheet_summary: 'Level 1 Fighter',
+          level: 1,
+          class_id: 'fighter',
+        },
+      });
+
+      this._appendNpcMessage(`🎭 *Game Master*\n${gmResponse.npc_response}`);
+      this.suggestedChips = gmResponse.suggested_chips;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.warn('_sendToGameMaster:failed', { msg });
+      this._appendNpcMessage('🎭 *The Game Master remains silent...*');
+    } finally {
+      this.isStreaming = false;
+      this.highlightSpeaker = null;
     }
   }
 

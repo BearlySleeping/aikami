@@ -291,46 +291,33 @@ let devToolsOpen = $state(true);
         </div>
       </div>
 
-      <!-- Interaction Mode -->
+      <!-- GM Mode Toggle — break the fourth wall -->
       <div class="flex flex-col gap-1.5">
         <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
-          >📋 Interaction Mode</span
+          >🎭 GM Mode</span
         >
-        <div class="flex flex-wrap gap-1">
+        <div class="join">
           <button
             type="button"
-            class="btn btn-xs {viewModel.interactionMode === 'freeTextFirst'
-              ? 'btn-active btn-primary'
-              : 'btn-outline'}"
-            onclick={() => viewModel.setInteractionMode('freeTextFirst' as DevInteractionMode)}
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'scene'}
+            class:btn-success={viewModel.addressMode === 'scene'}
+            onclick={() => viewModel.setAddressMode('scene')}
           >
-            💬 Free-Text-First (C-371)
+            🎮 Scene
           </button>
           <button
             type="button"
-            class="btn btn-xs {viewModel.interactionMode === 'menu'
-              ? 'btn-active btn-secondary'
-              : 'btn-outline'}"
-            onclick={() => viewModel.setInteractionMode('menu' as DevInteractionMode)}
+            class="btn btn-xs join-item"
+            class:btn-active={viewModel.addressMode === 'gm'}
+            class:btn-warning={viewModel.addressMode === 'gm'}
+            onclick={() => viewModel.setAddressMode('gm')}
           >
-            📜 Action Menu
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs {viewModel.interactionMode === 'freeform'
-              ? 'btn-active btn-accent'
-              : 'btn-outline'}"
-            onclick={() => viewModel.setInteractionMode('freeform' as DevInteractionMode)}
-          >
-            ✏️ Legacy Freeform
+            🧙 GM
           </button>
         </div>
         <span class="text-xs text-base-content/40 italic">
-          {viewModel.interactionMode === 'freeTextFirst'
-            ? 'C-371 two-call pipeline: free-text → chips → dice'
-            : viewModel.interactionMode === 'menu'
-              ? 'C-162 BG3-style buttons'
-              : 'Legacy text input (C-128/C-157)'}
+          {viewModel.addressMode === 'gm' ? 'Messages go to the Game Master (fourth wall)' : 'Messages go to the scene (NPC dialogue)'}
         </span>
       </div>
 
@@ -360,6 +347,22 @@ let devToolsOpen = $state(true);
             >Generates scene image on each skill check resolution</span
           >
         {/if}
+      </div>
+
+      <!-- Party UI Toggle -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+          >👥 Party</span
+        >
+        <div class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm toggle-info"
+            checked={viewModel.showPartyUi}
+            onchange={() => viewModel.togglePartyUi()}
+          />
+          <span class="text-xs text-base-content/60">{viewModel.showPartyUi ? 'On' : 'Off'}</span>
+        </div>
       </div>
 
       <!-- Quick Actions -->

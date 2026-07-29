@@ -30,7 +30,7 @@ import {
 export type DiceOutcome = 'random' | 'always_succeed' | 'always_fail';
 
 /** Interaction mode for the dialogue UI. */
-export type DevInteractionMode = 'menu' | 'freeform' | 'freeTextFirst';
+export type DevInteractionMode = 'freeTextFirst';
 
 /** NPC persona presets available in the devtools. */
 export type DevNpcPreset = 'sage' | 'guard' | 'innkeeper' | 'blacksmith' | 'bandit' | 'merchant';
@@ -45,7 +45,7 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   /** Current NPC persona preset. */
   readonly mockNpcPreset: DevNpcPreset;
 
-  /** Interaction mode: 'menu' (C-162), 'freeform' (legacy), or 'freeTextFirst' (C-371). */
+  /** Interaction mode: always 'freeTextFirst' (C-371). */
   readonly interactionMode: DevInteractionMode;
 
   /** Set dice outcome mode. */
@@ -74,6 +74,9 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
 
   /** Force-change the NPC expression (devtools testing). */
   setNpcExpression(expression: string): void;
+
+  /** Toggle party member UI visibility. */
+  togglePartyUi(): void;
 
   /** Force a dice roll with test parameters. */
   forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void;
@@ -203,6 +206,9 @@ export class DialogueDevViewModel
 
   autoGenerateImage = $state<boolean>(false);
 
+  /** Party UI toggle (C-340 placeholder). */
+  showPartyUi = $state(false);
+
   /** Current NPC sprite name (maps to /assets/npc/{name}/ directory). */
   private _npcSpriteName = $state('gandalf');
 
@@ -310,17 +316,18 @@ export class DialogueDevViewModel
   setInteractionMode(mode: DevInteractionMode): void {
     this.interactionMode = mode;
     // Force the matching phase
-    if (mode === 'freeTextFirst') {
-      this.dialoguePhase = 'FREE_TEXT';
-    } else {
-      this.dialoguePhase = mode === 'menu' ? 'MENU' : 'CUSTOM_INPUT';
-    }
+    this.dialoguePhase = 'FREE_TEXT';
     this.inputText = '';
   }
 
   /** @inheritdoc */
   setAutoGenerateImage(enabled: boolean): void {
     this.autoGenerateImage = enabled;
+  }
+
+  /** @inheritdoc */
+  togglePartyUi(): void {
+    this.showPartyUi = !this.showPartyUi;
   }
 
   /** @inheritdoc */

@@ -359,6 +359,7 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
     '--disable-gcm',
     '--disable-push-notifications',
     '--disable-features=PushMessaging,GCM',
+    '--test-type', // Silences "unsupported command-line flag" warning bars
   ];
 
   // Load extension if available
