@@ -15,6 +15,7 @@
  *  4. Optionally tag as :latest for downstream consumers
  */
 
+import { join } from 'node:path';
 import { c, log, ok } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
@@ -31,12 +32,15 @@ export async function deployDockerRelease(
   const imageName = config.imageName ?? `aikami/${config.shortName}`;
   const region = resolveRegion(mode, config.region);
   const tag = `${region}-docker.pkg.dev/${projectId}/${imageName}:${shortSha()}`;
-  const dockerContext = rootDir; // Docker build context is the repo root (for monorepo deps)
+  // Build context defaults to repo root (monorepo deps); Dockerfile lives in the app dir.
+  const dockerContext = config.dockerContext ? join(rootDir, config.dockerContext) : rootDir;
+  const dockerfile = join(rootDir, config.path, 'Dockerfile');
 
   log(`\n${c.bold}🐳 Releasing ${appName} Docker image${c.reset}`);
   log(`  Project: ${projectId}`);
   log(`  Image:   ${tag}`);
-  log(`  Context: ${dockerContext}\n`);
+  log(`  Context: ${dockerContext}`);
+  log(`  Dockerfile: ${dockerfile}\n`);
 
   // 0. Checksum cache — skip if nothing changed
   const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
@@ -53,7 +57,7 @@ export async function deployDockerRelease(
   const cacheRepo = `${region}-docker.pkg.dev/${projectId}/${imageName}`;
   const cacheTag = `${cacheRepo}:latest`;
   run(`docker pull ${cacheTag} 2>/dev/null || true`, { quiet: true });
-  run(`docker build -t ${tag} --cache-from=${cacheRepo} ${dockerContext}`);
+  run(`docker build -f ${dockerfile} -t ${tag} --cache-from=${cacheTag} ${dockerContext}`);
   run(`docker push ${tag}`);
 
   // 3. Tag as latest for downstream consumers
