@@ -289,10 +289,14 @@ async function main(): Promise<void> {
   // Docker builds, pushes, and gcloud deploys can still run in parallel (Phase 2).
   log(`\n${c.bold}Phase 1: Building apps (sequential)...${c.reset}`);
   const buildFailed = new Set<string>();
+  const results: AppResult[] = [];
+  const errors: string[] = [];
   for (const appName of appsToDeploy) {
     const config = APP_CONFIG[appName as keyof typeof APP_CONFIG];
     if (!config) {
       warn(`No config found for "${appName}" — skipping`);
+      errors.push(`No config found for ${appName}`);
+      results.push({ name: appName, type: 'unknown', result: 'failure' });
       continue;
     }
     const needsBuild =
@@ -314,14 +318,14 @@ async function main(): Promise<void> {
       } catch (err) {
         error(`  ${appName} build failed: ${(err as Error).message}`);
         buildFailed.add(appName);
+        errors.push(`Build failed for ${appName}: ${(err as Error).message}`);
+        results.push({ name: appName, type: config.serviceType, result: 'failure' });
       }
     }
   }
 
   // ── Phase 2: Parallel deploys (skip apps whose build failed) ───────────
   log(`\n${c.bold}Phase 2: Deploying apps (parallel)...${c.reset}`);
-  const results: AppResult[] = [];
-  const errors: string[] = [];
 
   const deployableApps = appsToDeploy.filter((a) => !buildFailed.has(a));
   if (deployableApps.length === 0) {

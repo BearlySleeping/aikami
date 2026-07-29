@@ -32,6 +32,15 @@ import {
 
 // ── Deduplication helpers ─────────────────────────────────────────────────
 
+/** Escape a value for safe use in --set-env-vars. Handles commas via gcloud's ^:^ delimiter. */
+function escapeEnvValue(value: string): string {
+  if (value.includes(',')) {
+    // gcloud supports ^:^ as an alternative delimiter for comma-containing values
+    return `^:^${value}^:^`;
+  }
+  return value;
+}
+
 /**
  * Remove env vars from the extra vars string that are already present
  * in the GSM --set-secrets argument. Cloud Run rejects deployments
@@ -148,7 +157,7 @@ export async function deployCloudRunSveltekit(
       ) {
         continue;
       }
-      extraEnvVars += `,${key}=${value}`;
+      extraEnvVars += `,${key}=${escapeEnvValue(value)}`;
     }
   }
 
