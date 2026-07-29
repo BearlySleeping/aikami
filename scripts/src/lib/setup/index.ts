@@ -218,4 +218,9 @@ async function main() {
   console.log(`${c.green}${c.bold}Done!${c.reset} Complete the manual steps above.\n`);
 }
 
-await main();
+try {
+  await main();
+} catch (err) {
+  console.error(fmt.err(err instanceof Error ? err.message : String(err)));
+  process.exit(1);
+}

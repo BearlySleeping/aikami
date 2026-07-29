@@ -227,6 +227,7 @@ let totalCreated = 0;
 let totalUpdated = 0;
 let totalUnchanged = 0;
 let totalSkipped = 0;
+let totalFailed = 0;
 
 for (const projectName of projectNames) {
   const config = PROJECT_ENV_CONFIG[projectName];
@@ -289,10 +290,11 @@ for (const projectName of projectNames) {
         `❌ Error processing "${secretName}":`,
         err instanceof Error ? err.message : err,
       );
+      totalFailed++;
     }
   }
 }
 
 console.log(
-  `\nDone! Created ${totalCreated}, updated ${totalUpdated}, unchanged ${totalUnchanged}, skipped ${totalSkipped}.`,
+  `\nDone! Created ${totalCreated}, updated ${totalUpdated}, unchanged ${totalUnchanged}, skipped ${totalSkipped}, failed ${totalFailed}.`,
 );

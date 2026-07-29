@@ -18,7 +18,11 @@ const FIREBASE_API = 'https://firebase.googleapis.com/v1beta1';
 const FIRESTORE_API = 'https://firestore.googleapis.com/v1';
 
 async function gcloudToken(): Promise<string> {
-  return (await run(['gcloud', 'auth', 'print-access-token', '--quiet'])).out;
+  const { out, code } = await run(['gcloud', 'auth', 'print-access-token', '--quiet']);
+  if (code !== 0 || !out) {
+    throw new Error('gcloud auth failed — run: gcloud auth login');
+  }
+  return out.trim();
 }
 
 const checkFirebase = async (projectId: string): Promise<boolean> => {

@@ -40,7 +40,7 @@ const getEnabledApis = async (projectId: string): Promise<Set<string>> => {
     '--format=value(config.name)',
   ]);
   if (code !== 0) {
-    return new Set();
+    throw new Error(`Failed to list enabled services for ${projectId} — check permissions.`);
   }
   return new Set(out.split('\n').filter(Boolean));
 };
@@ -112,7 +112,7 @@ export const setupGcpApis = async (
 
 if (import.meta.main) {
   const opts = parseCliArgs(Bun.argv.slice(2), {
-    mode: { type: 'string', map: {} },
+    mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
     'dry-run': { type: 'boolean' },
   });
   const mode = (opts.mode as string) ?? 'staging';

@@ -191,11 +191,20 @@ export function parseCliArgs<T extends Record<string, CliOption>>(
       continue;
     }
 
-    // -f short alias
-    if (arg.startsWith('-') && arg.length === 2 && !arg.startsWith('--')) {
-      const entry = flagMap.get(arg);
+    // -f short alias (optionally -f=value)
+    if (arg.startsWith('-') && !arg.startsWith('--') && arg.length >= 2) {
+      const aliasEq = arg.indexOf('=');
+      const flagName = aliasEq >= 2 ? arg.slice(0, aliasEq) : arg.slice(0, 2);
+      const entry = flagMap.get(flagName);
       if (entry) {
         const { key, opt } = entry;
+        // -f=value form
+        if (aliasEq >= 2) {
+          const rawValue = arg.slice(aliasEq + 1);
+          result[key] = opt.map?.[rawValue] ?? rawValue;
+          i++;
+          continue;
+        }
         if (opt.type === 'boolean' || !opt.type) {
           result[key] = true;
           i++;

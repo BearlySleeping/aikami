@@ -123,7 +123,7 @@ function isSecretKey(key: string): boolean {
 async function checkGcloudAvailable(): Promise<void> {
   try {
     const proc = Bun.spawn({
-      cmd: ['gcloud', 'auth', 'print-identity-token', '--quiet'],
+      cmd: ['gcloud', 'auth', 'print-access-token', '--quiet'],
       stdout: 'pipe',
       stderr: 'pipe',
     });

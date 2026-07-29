@@ -59,19 +59,24 @@ async function checkSecret(projectId: string, secretId: string): Promise<boolean
 }
 
 async function createSecretPlaceholder(projectId: string, secretId: string): Promise<boolean> {
-  const tmpFile = `/tmp/aikami-secret-${secretId}`;
-  await Bun.write(tmpFile, 'PLACEHOLDER');
-  const { code } = await run([
-    'gcloud',
-    'secrets',
-    'create',
-    secretId,
-    `--project=${projectId}`,
-    '--replication-policy=automatic',
-    `--data-file=${tmpFile}`,
-    '--quiet',
-  ]);
-  await Bun.$`rm -f ${tmpFile}`;
+  const proc = Bun.spawn({
+    cmd: [
+      'gcloud',
+      'secrets',
+      'create',
+      secretId,
+      `--project=${projectId}`,
+      '--replication-policy=automatic',
+      '--data-file=-',
+      '--quiet',
+    ],
+    stdin: 'pipe',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  await proc.stdin.write('PLACEHOLDER');
+  await proc.stdin.end();
+  const code = await proc.exited;
   return code === 0;
 }
 

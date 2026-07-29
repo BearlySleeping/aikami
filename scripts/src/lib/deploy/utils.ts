@@ -70,8 +70,7 @@ export function run(cmd: string, opts: { cwd?: string; quiet?: boolean } = {}): 
     return result?.trim() || '';
   } catch (e) {
     if (opts.quiet || _quiet) {
-      const err = e as { stderr?: string; stdout?: string };
-      return err.stderr?.trim() || err.stdout?.trim() || '';
+      return '';
     }
     error(`Command failed: ${cmd}`);
     throw e;

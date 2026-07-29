@@ -149,6 +149,7 @@ async function upstashGet(key: string): Promise<string | null> {
     const response = await fetch(`${baseUrl}/get/${key}`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) {
       return null;
@@ -171,6 +172,7 @@ async function upstashSet(key: string, value: string): Promise<void> {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: value,
+      signal: AbortSignal.timeout(5_000),
     });
   } catch {
     warn('Failed to update online deploy cache (Redis unreachable)');

@@ -52,7 +52,7 @@ export const setupArtifactRegistry = async (
             repoName,
             '--repository-format=docker',
             `--location=${region}`,
-            '--description="Docker repo for Aikami services"',
+            '--description=Docker repo for Aikami services',
             `--project=${projectId}`,
             '--quiet',
           ])

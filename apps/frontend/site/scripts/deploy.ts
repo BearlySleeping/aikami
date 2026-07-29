@@ -68,7 +68,8 @@ try {
   await $`npx -y firebase-tools@latest deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
     process.cwd(),
   );
-} catch (_error) {
+} catch (error) {
+  console.error(error);
   process.exit(1);
 } finally {
   // 7. Cleanup the temporary config file so we don't pollute the git workspace

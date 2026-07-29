@@ -369,7 +369,6 @@
           "excludePatterns": [
             "[A-Z][A-Z0-9_]*",
             "^_[a-z]",
-            "packages/shared/schemas/",
             "\\.test\\.",
             "\\.spec\\.",
             "__tests__/",

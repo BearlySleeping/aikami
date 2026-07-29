@@ -160,16 +160,14 @@ export type ProjectSecretConfig = SecretNameConfig & {
  * Derived secret-upload config from APP_CONFIG to keep a single source of truth.
  */
 export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> = Object.fromEntries(
-  Object.entries(APP_CONFIG)
-    .filter(([, config]) => config.enabled !== false)
-    .map(([key, config]) => [
-      key,
-      {
-        path: config.path,
-        prefix: config.prefix,
-        enabled: config.enabled ?? true,
-      } satisfies ProjectSecretConfig,
-    ]),
+  Object.entries(APP_CONFIG).map(([key, config]) => [
+    key,
+    {
+      path: config.path,
+      prefix: config.prefix,
+      enabled: config.enabled ?? true,
+    } satisfies ProjectSecretConfig,
+  ]),
 );
 
 /**
