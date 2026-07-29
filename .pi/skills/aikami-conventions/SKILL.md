@@ -370,6 +370,41 @@ All source files use `snake_case`. Enforced by Biome `useFilenamingConvention`.
 ❌ ViewModel.svelte.ts   ❌ BaseView.svelte
 ```
 
+### 4b. Variable & Property Naming: camelCase ONLY
+
+Rule 4 governs **file names only**. Identifiers — variables, function names,
+object/interface keys, parameters, and class members — are governed by this
+rule (4b) and must always be `camelCase`. Enforced by Biome
+`useNamingConvention`.
+
+```typescript
+// ✅ CORRECT — camelCase identifiers
+const userId = "abc123";
+const getUserName = (options: { displayName: string }): string => options.displayName;
+const config = { apiKey: "xyz", maxRetries: 3 };
+class UserService {
+  private readonly _userRepository: UserRepository;
+  async findById(id: string): Promise<User | undefined> { /* ... */ }
+}
+
+// ❌ WRONG — snake_case identifiers
+const user_id = "abc123";
+const get_user_name = (options: { display_name: string }): string => options.display_name;
+const config = { api_key: "xyz", max_retries: 3 };
+```
+
+**Exceptions**:
+
+- **UPPER_SNAKE_CASE / CONSTANT_CASE** — top-level constants use
+  `MAX_RETRIES`, `TEXT_PROVIDERS`, etc. (see Rule 5 and `as const`
+  patterns).
+- **Private member underscore prefix** — single leading `_` for private
+  class members per Rule 5 (e.g. `_userRepository`).
+- **Environment variable names** — `.env` keys, `process.env.X` access,
+  and values read via `$env/static/*` or `$env/dynamic/*` follow
+  `SCREAMING_SNAKE_CASE` by platform convention (`AIKAMI_MODE`,
+  `PUBLIC_FIREBASE_PROJECT_ID`) and are **exempt** from this rule.
+
 ### 5. Private Members: Underscore `_` Prefix
 
 All `private` class members (fields, methods, getters, setters) must use an

@@ -1,6 +1,6 @@
-// scripts/deployment-config.ts
+// scripts/src/lib/deploy/deployment_config.ts
 /**
- * Global deployment configuration for the monorepo.
+ * Global deployment configuration for the Aikami monorepo.
  *
  * Single source of truth for:
  * - App deployment metadata (service types, paths, names, regions, site IDs)
@@ -8,18 +8,24 @@
  *
  * Imports project IDs from shared constants (relative path, no alias)
  * to keep a single source of truth across all apps.
+ *
+ * Service types:
+ *   cloud-run-sveltekit  → Build + Docker + push → Cloud Run (client web)
+ *   tauri-release        → Build Tauri desktop app → release artifacts
+ *   firebase-hosting     → Build → Firebase Hosting (site, docs)
+ *   firebase-functions   → Deploy via firestack (firebase)
+ *   docker-release       → Docker build + push only (image, text, voice)
  */
-// We use relative import and not alias since
-// .pi/extensions/log-viewer.ts
-// uses this file as a one source of truth, and .pi does not support alias
+
 import { MODE_PROJECT_MAP } from '../../../../packages/shared/constants/src/lib/project.ts';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 
 export const ALL_SERVICE_TYPES = [
   'cloud-run-sveltekit',
-  'cloud-run-api',
+  'tauri-release',
   'firebase-hosting',
-  'firebase-backend',
+  'firebase-functions',
+  'docker-release',
 ] as const;
 
 export type ServiceType = (typeof ALL_SERVICE_TYPES)[number];
@@ -28,8 +34,10 @@ export type AppConfig = {
   serviceType: ServiceType;
   /** Relative path from repo root */
   path: string;
-  /** Short identifier used in docker tags, URLs, etc. */
+  /** Short identifier used in docker tags, URLs, etc. Empty string = default hosting. */
   shortName: string;
+  /** Set to false to exclude from deployment. Default: true. */
+  enabled?: boolean;
   /** Env var prefix for app-specific secrets in GCP Secret Manager */
   prefix?: string;
   /** Branches that are allowed to deploy this app. If omitted, all branches. */
@@ -38,48 +46,89 @@ export type AppConfig = {
   cloudRunServiceId?: string;
   /** GCP region override. Defaults to the global region variable. */
   region?: string;
-  /** Cloud Run CPU allocation (e.g. '1', '2', '4'). Default: not set (Cloud Run default). */
+  /** Cloud Run CPU allocation (e.g. '1', '2', '4'). Default: not set. */
   cpu?: string;
   /** Cloud Run memory allocation (e.g. '1Gi', '4Gi'). Default: '1Gi'. */
   memory?: string;
+  /** VPC connector name for Cloud SQL access. */
+  vpcConnector?: string;
+  /** Cloud SQL instance connection name. */
+  cloudSqlInstance?: string;
+  /** Whether to expect a dist/ directory after moon build. Default true. */
+  needsDist?: boolean;
+  /** Docker image name override. Defaults to aikami/${shortName}. */
+  imageName?: string;
+  /** Docker build context path override. Defaults to path. */
+  dockerContext?: string;
 };
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
   client: {
-    serviceType: 'cloud-run-sveltekit',
+    serviceType: 'firebase-hosting',
     path: 'apps/frontend/client',
     shortName: 'client',
     prefix: 'CLIENT',
-    cloudRunServiceId: 'client',
   },
   site: {
     serviceType: 'firebase-hosting',
     path: 'apps/frontend/site',
-    shortName: 'site',
+    shortName: '',
     prefix: 'SITE',
-    deployBranches: ['master', 'dev'],
-  },
-  firebase: {
-    serviceType: 'firebase-backend',
-    path: 'apps/backend/firebase',
-    shortName: 'firebase',
   },
   docs: {
     serviceType: 'firebase-hosting',
     path: 'apps/frontend/docs',
     shortName: 'docs',
-    prefix: 'Docs',
-    deployBranches: ['master', 'dev'],
+    prefix: 'DOCS',
+    enabled: false,
+  },
+  firebase: {
+    serviceType: 'firebase-functions',
+    path: 'apps/backend/firebase',
+    shortName: 'firebase',
+  },
+  image: {
+    serviceType: 'docker-release',
+    path: 'apps/backend/image',
+    shortName: 'image',
+    prefix: 'IMAGE',
+    needsDist: false,
+    memory: '8Gi',
+    cpu: '4',
+    enabled: false,
+  },
+  text: {
+    serviceType: 'docker-release',
+    path: 'apps/backend/text',
+    shortName: 'text',
+    prefix: 'TEXT',
+    needsDist: false,
+    memory: '8Gi',
+    cpu: '4',
+    enabled: false,
+  },
+  voice: {
+    serviceType: 'docker-release',
+    path: 'apps/backend/voice',
+    shortName: 'voice',
+    prefix: 'VOICE',
+    needsDist: false,
+    memory: '4Gi',
+    cpu: '2',
+    enabled: false,
   },
 };
 
-export const DEPLOYABLE_APPS = Object.keys(APP_CONFIG);
+export const DEPLOYABLE_APPS = Object.entries(APP_CONFIG)
+  .filter(([, config]) => config.enabled !== false)
+  .map(([key]) => key);
 
 // ---------------------------------------------------------------------------
 // Secret Management
 // ---------------------------------------------------------------------------
 
 export const APP_SPECIFIC_KEYS_FOR_PREFIX = new Set([
+  'PUBLIC_APP_ID',
   'PUBLIC_FIREBASE_APP_ID',
   'PUBLIC_FIREBASE_MEASUREMENT_ID',
   'PUBLIC_RECAPTCHA_SITE_KEY',
@@ -88,11 +137,15 @@ export const APP_SPECIFIC_KEYS_FOR_PREFIX = new Set([
   'PUBLIC_LOG_PERSIST_LEVEL',
   'LOG_PERSIST_LEVEL',
   'RECAPTCHA_SECRET_KEY',
-  'API_KEY',
+  'APP_ID',
 ]);
 
 /** Re-exported from shared constants for convenience. */
 export { MODE_PROJECT_MAP };
+
+/** Modes that deploy to live GCP (not emulator). */
+export const liveModes = ['staging', 'production'] as const;
+export type LiveMode = (typeof liveModes)[number];
 
 export type SecretNameConfig = {
   prefix?: string;
@@ -112,10 +165,16 @@ export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> =
     {
       path: config.path,
       prefix: config.prefix,
-      enabled: true,
+      enabled: config.enabled ?? true,
     } satisfies ProjectSecretConfig,
   ]),
 );
+
+/**
+ * GCP region where Cloud Functions and Cloud Run services are deployed.
+ * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
+ */
+export const CLOUD_FUNCTIONS_REGION = 'europe-west1' as const;
 
 export function resolveEnvFile(mode: string): string {
   return `.env.${mode}`;
@@ -135,6 +194,9 @@ export function resolveHostingSiteId(appId: AppId, projectId: string): string | 
   if (!config) {
     return undefined;
   }
+  if (!config.shortName) {
+    return projectId;
+  }
   return `${projectId}-${config.shortName}`;
 }
 
@@ -148,17 +210,18 @@ export function resolveCloudRunServiceId(appId: AppId): string | undefined {
 const BRANCH_MODE_MAP: Record<string, string> = {
   master: 'production',
   main: 'production',
+  staging: 'staging',
+  dev: 'staging',
 } as const;
 
 /**
  * Resolves the deployment mode from a git branch name.
- * Throws if the branch is not mapped to a known mode.
  */
 export function resolveMode(branchName: string): string {
   const mode = BRANCH_MODE_MAP[branchName];
   if (!mode) {
     throw new Error(
-      `Unknown branch "${branchName}". Expected one of: ${Object.keys(BRANCH_MODE_MAP).join(', ')} (maps to staging, production, or emulator)`,
+      `Unknown branch "${branchName}". Expected one of: ${Object.keys(BRANCH_MODE_MAP).join(', ')}`,
     );
   }
   return mode;

@@ -134,7 +134,7 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /**
    * Taps a suggestion chip — pre-fills the input with the chip's
-   * prefill_text and sends it as a player message.
+   * prefillText and sends it as a player message.
    *
    * Contract: C-371 Suggestion Chips
    */
@@ -675,17 +675,17 @@ class DialogueOverlayViewModel
       return;
     }
 
-    this.debug('handleChipTap', { chipId, intent_type: chip.intent_type });
+    this.debug('handleChipTap', { chipId, intentType: chip.intentType });
 
     // If the chip is a combat intent, trigger direct combat
-    if (chip.intent_type === 'combat') {
+    if (chip.intentType === 'combat') {
       void this._handleDirectCombat();
       return;
     }
 
     // Otherwise, pre-fill and send as a player message.
-    // Use the label as fallback if the LLM's prefill_text is too short/nonsensical.
-    const messageText = chip.prefill_text.length >= 10 ? chip.prefill_text : chip.label;
+    // Use the label as fallback if the LLM's prefillText is too short/nonsensical.
+    const messageText = chip.prefillText.length >= 10 ? chip.prefillText : chip.label;
     this.inputText = messageText;
     void this.sendMessage(messageText);
   }
@@ -907,8 +907,8 @@ class DialogueOverlayViewModel
         playerInput,
       });
 
-      this._appendNpcMessage(resolution.narrative_result);
-      this.suggestedChips = resolution.suggested_chips;
+      this._appendNpcMessage(resolution.narrativeResult);
+      this.suggestedChips = resolution.suggestedChips;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.warn('_executeRollResolution:failed', { msg });
@@ -983,14 +983,14 @@ class DialogueOverlayViewModel
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
         playerContext: {
-          character_sheet_summary: 'Level 1 Fighter',
+          characterSheetSummary: 'Level 1 Fighter',
           level: 1,
-          class_id: 'fighter',
+          classId: 'fighter',
         },
       });
 
-      this._appendNpcMessage(`🎭 *Game Master*\n${gmResponse.npc_response}`);
-      this.suggestedChips = gmResponse.suggested_chips;
+      this._appendNpcMessage(`🎭 *Game Master*\n${gmResponse.npcResponse}`);
+      this.suggestedChips = gmResponse.suggestedChips;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.warn('_sendToGameMaster:failed', { msg });
@@ -1033,23 +1033,23 @@ class DialogueOverlayViewModel
       });
 
       // Display the pre-roll narrative
-      this._appendNpcMessage(analysis.npc_response, npcMessageId);
+      this._appendNpcMessage(analysis.npcResponse, npcMessageId);
 
       // Run expression detection on the NPC response
-      void this._detectExpression(analysis.npc_response);
+      void this._detectExpression(analysis.npcResponse);
 
       // Show suggestion chips
-      this.suggestedChips = analysis.suggested_chips;
+      this.suggestedChips = analysis.suggestedChips;
 
-      if (analysis.requires_roll && analysis.check_type && analysis.difficulty_class) {
+      if (analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
         // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
-        const modSource = analysis.modifier_source ?? '—';
+        const modSource = analysis.modifierSource ?? '—';
         const modValue = 0; // TODO: read from character sheet when available
-        const targetNumber = Math.max(1, analysis.difficulty_class - modValue);
+        const targetNumber = Math.max(1, analysis.difficultyClass - modValue);
 
         this.skillCheckState = {
-          checkType: analysis.check_type,
-          difficultyClass: analysis.difficulty_class,
+          checkType: analysis.checkType,
+          difficultyClass: analysis.difficultyClass,
           statModifier: modSource,
           statModifierValue: modValue,
           targetNumber,

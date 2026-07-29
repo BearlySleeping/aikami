@@ -1,0 +1,261 @@
+# cloudbuild.yaml
+# ======================================================================================
+# CI/CD: Build & Deploy Aikami Monorepo to Google Cloud via Cloud Build
+# ======================================================================================
+#
+# Triggers (configured in GCP Console → Cloud Build → Triggers):
+#   Push to staging → _MODE=staging, deploys to aikami-staging
+#   Push to main    → _MODE=production, deploys to aikami-production
+#   PR to staging/main → _PR_NUMBER set, moon ci validation only (skip deploy)
+#
+# Pipeline:
+#   Step 1: Restore Bun + Moon cache from GCS
+#   Step 2: bun install --frozen-lockfile
+#   Step 3: Planning — parse commit message for deploy[...] overrides,
+#           fall back to moon query projects --affected.
+#           Export targets/flags to /workspace/ control files.
+#           If nothing to deploy (and not PR): touch .skip_deploy and exit 0.
+#   Step 4: Heavy provisioning → targeted secrets → deploy (or moon ci for PR).
+#           Skipped if .skip_deploy exists.
+#   Step 5: Save cache to GCS (with composite threshold).
+#
+# Commit override syntax:
+#   deploy[all]                     → deploy all apps
+#   deploy[client]                  → deploy client only
+#   deploy[client,site force]       → deploy client + site with --force
+#   deploy[all force]               → deploy all with --force
+#
+# The deploy[...] override takes priority over moon affected detection.
+# PR builds never deploy — they always run moon ci regardless of commit message.
+#
+# Substitutions:
+#   _MODE       — deployment mode (staging | production)
+#   _BASE_REF   — base branch for PR diff comparison (e.g. 'staging' or 'main')
+#   _PR_NUMBER  — set automatically by PR trigger, empty for push triggers
+#
+# Apps deployed (via unified deploy script — scripts/src/lib/deploy/index.ts):
+#   client              → Firebase Hosting (checksum → build → firebase deploy)
+#   site                → Firebase Hosting (checksum → build → firebase deploy)
+#   firebase            → Firebase Functions (firestack deploy)
+#   image, text, voice  → Docker Release (checksum → docker build → push)
+#
+# Caching:
+#   GCS bucket gs://${PROJECT_ID}-build-cache stores tar archives of:
+#     /workspace/.bun-cache        (Bun package cache, set via BUN_INSTALL_CACHE_DIR)
+#     /workspace/.moon/cache       (Moon task output cache)
+#
+#   Docker layer caching uses --cache-from pulling the :latest image from
+#   Artifact Registry before building.
+#
+#   Deployment-level checksums use Upstash Redis (online-first, single source
+#   of truth shared with local deploys). See scripts/src/lib/deploy/cache.ts.
+# ======================================================================================
+
+steps:
+  # ────────────────────────────────────────────────────────────────────────
+  # STEP 1: Restore build cache from GCS
+  # ────────────────────────────────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "--- Restoring build cache from gs://${PROJECT_ID}-build-cache ---"
+        gsutil cp "gs://${PROJECT_ID}-build-cache/cache.tar.gz" /tmp/cache.tar.gz 2>/dev/null || echo "(no cache found — first run)"
+        if [ -f /tmp/cache.tar.gz ]; then
+          cd / && tar xzf /tmp/cache.tar.gz
+          du -sh /workspace/.bun-cache /workspace/.moon/cache 2>/dev/null || true
+          echo "Cache restored"
+        fi
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STEP 2: Install dependencies (Bun)
+  # ────────────────────────────────────────────────────────────────────────
+  - name: 'oven/bun:1'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "--- Installing dependencies ---"
+        export BUN_INSTALL_CACHE_DIR=/workspace/.bun-cache
+        bun install --frozen-lockfile
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STEP 3: Planning & Strategy Phase
+  # ────────────────────────────────────────────────────────────────────────
+  # Parses commit message for deploy[...] overrides.
+  # Falls back to `moon query projects --affected` if no override found.
+  # Exports targets and flags to workspace control files.
+  # Early-exit: if nothing to deploy (and not a PR), touches .skip_deploy.
+  #
+  # Control files written to /workspace/:
+  #   deploy_targets.txt  — space-separated app names (e.g. "client site")
+  #   deploy_args.txt     — extra CLI args (e.g. "--force")
+  #   .skip_deploy        — marker: skip steps 4-5 (nothing to deploy)
+  # ────────────────────────────────────────────────────────────────────────
+  - name: 'oven/bun:1'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "--- Planning deployment targets ---"
+
+        # Clean any stale control files from previous builds
+        rm -f /workspace/deploy_targets.txt /workspace/deploy_args.txt /workspace/.skip_deploy
+
+        # ── Phase A: Parse commit message for deploy[...] override ──────────
+        apt-get update -qq && apt-get install -y -qq git 2>/dev/null || true
+        OVERRIDE_JSON=$(bun scripts/src/lib/deploy/commit_parser.ts 2>/dev/null || echo "")
+
+        if [ -n "$$OVERRIDE_JSON" ]; then
+          echo "✅ Commit override detected"
+          echo "   $${OVERRIDE_JSON}"
+
+          # Extract targets and force flag from JSON
+          TARGETS=$(echo "$$OVERRIDE_JSON" | bun -e "
+            const o = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            process.stdout.write(o.targets.join(' '));
+          ")
+          FORCE=$(echo "$$OVERRIDE_JSON" | bun -e "
+            const o = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            process.stdout.write(o.force ? 'true' : 'false');
+          ")
+
+          echo "$$TARGETS" > /workspace/deploy_targets.txt
+          if [ "$$FORCE" = "true" ]; then
+            echo "--force" > /workspace/deploy_args.txt
+          fi
+
+          echo "   Targets: $${TARGETS}"
+          echo "   Force:   $${FORCE}"
+          exit 0
+        fi
+
+        # ── Phase B: No override — run moon affected detection ──────────────
+        echo "--- No commit override — running moon affected detection ---"
+
+        # In PR context: moon ci handles validation; deploy step will detect PR
+        # and switch to moon ci mode. We still export affected for informational purposes.
+        if [ -z "${_PR_NUMBER}" ]; then
+          AFFECTED_JSON=$(bun moon query projects --affected 2>/dev/null || echo '[]')
+          AFFECTED_APPS=$(echo "$$AFFECTED_JSON" | bun -e "
+            const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+            const deployable = new Set(['client','site','firebase','image','text','voice']);
+            const ids = (Array.isArray(data) ? data : (data.projects || [])).map(p => typeof p === 'string' ? p : p.id).filter(id => deployable.has(id));
+            process.stdout.write(ids.join(' '));
+          ")
+
+          if [ -z "$$AFFECTED_APPS" ]; then
+            echo "--- No affected deployable apps — early exit (nothing to deploy) ---"
+            touch /workspace/.skip_deploy
+            exit 0
+          fi
+
+          echo "$$AFFECTED_APPS" > /workspace/deploy_targets.txt
+          echo "   Affected: $${AFFECTED_APPS}"
+        else
+          echo "   PR #${_PR_NUMBER} — deployment planning deferred to step 4 (moon ci)"
+        fi
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STEP 4: Heavy Provisioning → Targeted Secrets → Deploy (or moon ci)
+  # ────────────────────────────────────────────────────────────────────────
+  # Conditional: skipped if /workspace/.skip_deploy exists.
+  # For push builds: apt-get docker, download secrets for targets only, deploy.
+  # For PR builds: moon ci validation only (no secrets, no deploy).
+  # ────────────────────────────────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ -f /workspace/.skip_deploy ]; then
+          echo "--- Nothing to deploy — skipping heavy provisioning ---"
+          exit 0
+        fi
+
+        echo "--- Installing Bun + Docker ---"
+        apt-get update -qq && apt-get install -y -qq unzip ca-certificates docker.io 2>/dev/null || true
+        curl -fsSL https://bun.sh/install | bash
+        export BUN_PATH="$$HOME/.bun/bin"
+        export PATH="$$BUN_PATH:$$PATH"
+
+        if [ -z "${_PR_NUMBER}" ]; then
+          # ── Push build: deploy ─────────────────────────────────────────────
+
+          echo "--- Authenticating Docker with Artifact Registry ---"
+          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+          # ── Targeted secrets download ──────────────────────────────────────
+          # Only fetch secrets for the apps we're actually deploying.
+          echo "--- Downloading secrets from GSM → .env.${_MODE} files ---"
+          if [ -f /workspace/deploy_targets.txt ]; then
+            TARGET_APPS=$(cat /workspace/deploy_targets.txt)
+            echo "   Targeting: $${TARGET_APPS}"
+            bun scripts/src/lib/ops/download_secrets.ts --mode="${_MODE}" $$TARGET_APPS
+          else
+            echo "   (no targets file — falling back to all apps)"
+            bun scripts/src/lib/ops/download_secrets.ts --mode="${_MODE}"
+          fi
+
+          # ── Deploy ─────────────────────────────────────────────────────────
+          echo "--- Deploying to ${_MODE} ---"
+          DEPLOY_TARGETS=""
+          DEPLOY_ARGS=""
+          if [ -f /workspace/deploy_targets.txt ]; then
+            DEPLOY_TARGETS=$(cat /workspace/deploy_targets.txt)
+          fi
+          if [ -f /workspace/deploy_args.txt ]; then
+            DEPLOY_ARGS=$(cat /workspace/deploy_args.txt)
+          fi
+
+          if [ -n "$$DEPLOY_TARGETS" ]; then
+            echo "   Targets: $${DEPLOY_TARGETS}"
+            echo "   Args:    $${DEPLOY_ARGS}"
+            bun scripts/src/lib/deploy/index.ts --yes --mode="${_MODE}" $$DEPLOY_ARGS $$DEPLOY_TARGETS
+          else
+            echo "   (no targets — running affected-only deploy)"
+            bun scripts/src/lib/deploy/index.ts --yes --mode="${_MODE}"
+          fi
+        else
+          # ── PR build: validation only ──────────────────────────────────────
+          echo "--- PR validation — running moon ci ---"
+          export MOON_TOOLCHAIN_FORCE_GLOBALS=true
+          bun moon ci --base="origin/${_BASE_REF}"
+        fi
+
+  # ────────────────────────────────────────────────────────────────────────
+  # STEP 5: Save build cache to GCS
+  # ────────────────────────────────────────────────────────────────────────
+  # Uses gsutil -o to enable parallel composite uploads for the cache
+  # tarball (typically 300-500 MB). The threshold is set to 150 MB so
+  # the upload is automatically chunked into parallel composite parts.
+  # ────────────────────────────────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ -f /workspace/.skip_deploy ]; then
+          echo "--- Nothing to deploy — skipping cache save ---"
+          exit 0
+        fi
+        echo "--- Saving build cache ---"
+        cd / && tar czf /tmp/cache.tar.gz workspace/.bun-cache workspace/.moon/cache 2>/dev/null || echo "(no cache to save — skipping)"
+        gsutil -o 'GSUtil:parallel_composite_upload_threshold=150M' cp /tmp/cache.tar.gz "gs://${PROJECT_ID}-build-cache/cache.tar.gz"
+        echo "Cache saved"
+
+# ── Substitutions (defaults overridden by trigger config) ─────────────────
+
+substitutions:
+  _MODE: staging
+  _BASE_REF: staging
+  _PR_NUMBER: ''
+
+# ── Build options ─────────────────────────────────────────────────────────
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 3600s

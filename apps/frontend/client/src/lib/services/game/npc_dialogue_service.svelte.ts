@@ -272,7 +272,7 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     gameStateFacts?: string[];
-    playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+    playerContext?: { characterSheetSummary: string; level: number; classId: string };
   }): Promise<NpcIntentAnalysisOutput>;
 
   /**
@@ -557,7 +557,7 @@ export class NpcDialogueService
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     gameStateFacts?: string[];
-    playerContext?: { character_sheet_summary: string; level: number; class_id: string };
+    playerContext?: { characterSheetSummary: string; level: number; classId: string };
   }): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
@@ -581,9 +581,9 @@ export class NpcDialogueService
           signal: linkedSignal,
           gameStateFacts: options.gameStateFacts ?? [],
           playerContext: options.playerContext ?? {
-            character_sheet_summary: 'Level 1 Fighter',
+            characterSheetSummary: 'Level 1 Fighter',
             level: 1,
-            class_id: 'fighter',
+            classId: 'fighter',
           },
         });
       } catch (error) {
@@ -1234,7 +1234,7 @@ export class NpcDialogueService
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     gameStateFacts: string[];
-    playerContext: { character_sheet_summary: string; level: number; class_id: string };
+    playerContext: { characterSheetSummary: string; level: number; classId: string };
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
@@ -1242,18 +1242,18 @@ export class NpcDialogueService
 
     // Build the input for the LLM
     const input: NpcIntentAnalysisInput = {
-      player_input: messages.filter((m) => m.role === 'player').pop()?.content ?? '',
-      npc_context: {
+      playerInput: messages.filter((m) => m.role === 'player').pop()?.content ?? '',
+      npcContext: {
         name: npcName,
         persona: `You are ${npcName}, a character in a fantasy world.`,
-        allowed_commands: allowedCommands,
+        allowedCommands: allowedCommands,
       },
-      player_context: playerContext,
-      recent_history: messages.slice(-10).map((m) => ({
+      playerContext: playerContext,
+      recentHistory: messages.slice(-10).map((m) => ({
         role: m.role,
         content: m.content.slice(0, 200),
       })),
-      game_state_facts: gameStateFacts,
+      gameStateFacts: gameStateFacts,
     };
 
     // Build system prompt for intent analysis
@@ -1278,9 +1278,9 @@ export class NpcDialogueService
       if (Value.Check(NpcIntentAnalysisOutputSchema, rawOutput)) {
         const output = rawOutput as NpcIntentAnalysisOutput;
         this.debug('_analyzeIntent:complete', {
-          requires_roll: output.requires_roll,
-          check_type: output.check_type,
-          chip_count: output.suggested_chips.length,
+          requiresRoll: output.requiresRoll,
+          checkType: output.checkType,
+          chipCount: output.suggestedChips.length,
         });
         return output;
       }
@@ -1294,12 +1294,12 @@ export class NpcDialogueService
       );
 
       return {
-        requires_roll: false,
-        check_type: undefined,
-        difficulty_class: undefined,
-        modifier_source: undefined,
-        npc_response: recovered.npc_response,
-        suggested_chips: recovered.suggested_chips,
+        requiresRoll: false,
+        checkType: undefined,
+        difficultyClass: undefined,
+        modifierSource: undefined,
+        npcResponse: recovered.npcResponse,
+        suggestedChips: recovered.suggestedChips,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -1331,11 +1331,11 @@ export class NpcDialogueService
     const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput } = options;
 
     const _input: NpcRollResolutionInput = {
-      check_type: checkType,
-      difficulty_class: difficultyClass,
-      roll_total: rollTotal,
+      checkType: checkType,
+      difficultyClass: difficultyClass,
+      rollTotal: rollTotal,
       outcome,
-      player_input: playerInput,
+      playerInput: playerInput,
     };
 
     const systemPrompt = [
@@ -1369,24 +1369,24 @@ export class NpcDialogueService
 
         // Validate and apply state deltas
         const validatedDeltas = this._validateAndApplyDeltas({
-          deltas: output.state_deltas,
+          deltas: output.stateDeltas,
           npcId: options.npcId,
         });
-        output.state_deltas = validatedDeltas;
+        output.stateDeltas = validatedDeltas;
 
         this.debug('_resolveRoll:complete', {
-          narrative_length: output.narrative_result.length,
-          delta_count: validatedDeltas.length,
-          chip_count: output.suggested_chips.length,
+          narrativeLength: output.narrativeResult.length,
+          deltaCount: validatedDeltas.length,
+          chipCount: output.suggestedChips.length,
         });
         return output;
       }
 
       this.warn('_resolveRoll:invalid-output');
       return {
-        narrative_result: result.text?.trim() || `*${npcName} waits for your next move.*`,
-        state_deltas: [],
-        suggested_chips: [],
+        narrativeResult: result.text?.trim() || `*${npcName} waits for your next move.*`,
+        stateDeltas: [],
+        suggestedChips: [],
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -1466,8 +1466,8 @@ export class NpcDialogueService
       chips.push({
         id: 'trade',
         label: `Trade with ${npcName}`,
-        intent_type: 'trade',
-        prefill_text: `I'd like to see your wares.`,
+        intentType: 'trade',
+        prefillText: `I'd like to see your wares.`,
       });
     }
 
@@ -1475,8 +1475,8 @@ export class NpcDialogueService
       chips.push({
         id: 'ask_quest',
         label: 'Ask about work',
-        intent_type: 'quest',
-        prefill_text: `Do you have any work for me?`,
+        intentType: 'quest',
+        prefillText: `Do you have any work for me?`,
       });
     }
 
@@ -1484,8 +1484,8 @@ export class NpcDialogueService
     chips.push({
       id: 'talk',
       label: `Ask ${npcName} more`,
-      intent_type: 'dialogue',
-      prefill_text: `Tell me more.`,
+      intentType: 'dialogue',
+      prefillText: `Tell me more.`,
     });
 
     // Always add a leave chip
@@ -1493,8 +1493,8 @@ export class NpcDialogueService
       chips.push({
         id: 'leave',
         label: 'Leave',
-        intent_type: 'dialogue',
-        prefill_text: `I must be going.`,
+        intentType: 'dialogue',
+        prefillText: `I must be going.`,
       });
     }
 
@@ -1509,12 +1509,12 @@ export class NpcDialogueService
     allowedCommands: NpcDialogueCommandKind[],
   ): NpcIntentAnalysisOutput {
     return {
-      requires_roll: false,
-      check_type: undefined,
-      difficulty_class: undefined,
-      modifier_source: undefined,
-      npc_response: this._genericFallbackLine(npcName),
-      suggested_chips: this._deriveChips({ npcName, allowedCommands }),
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: this._genericFallbackLine(npcName),
+      suggestedChips: this._deriveChips({ npcName, allowedCommands }),
     };
   }
 
@@ -1531,9 +1531,9 @@ export class NpcDialogueService
         : `*The attempt at ${checkType} falls short.*`;
 
     return {
-      narrative_result: narrative,
-      state_deltas: [],
-      suggested_chips: [],
+      narrativeResult: narrative,
+      stateDeltas: [],
+      suggestedChips: [],
     };
   }
 }
@@ -1580,12 +1580,12 @@ export function buildIntentAnalysisSystemPrompt(): string {
  *
  * @param rawText - The raw text response from the LLM
  * @param schema - The expected TypeBox schema (for validation)
- * @returns Partial structured output with at least npc_response and suggested_chips
+ * @returns Partial structured output with at least npcResponse and suggestedChips
  */
 export function recoverIntentAnalysisOutput(
   rawText: string | undefined,
   _schema: typeof NpcIntentAnalysisOutputSchema,
-): Pick<NpcIntentAnalysisOutput, 'npc_response' | 'suggested_chips'> {
+): Pick<NpcIntentAnalysisOutput, 'npcResponse' | 'suggestedChips'> {
   let narrative = '';
   let chips: NpcSuggestionChip[] = [];
 
@@ -1612,10 +1612,10 @@ export function recoverIntentAnalysisOutput(
     const obj = parsed as Record<string, unknown>;
 
     // Try common field names for narrative - only accept runtime string values
-    const npcResponse = obj.npc_response;
-    const narrativePreRoll = obj.narrative_pre_roll;
-    const preRollNarrative = obj.pre_roll_narrative;
-    const narrativeResult = obj.narrative_result;
+    const npcResponse = obj.npcResponse;
+    const narrativePreRoll = obj['narrative_pre_roll'];
+    const preRollNarrative = obj['pre_roll_narrative'];
+    const narrativeResult = obj.narrativeResult;
     const narrativeField = obj.narrative;
     const response = obj.response;
 
@@ -1629,32 +1629,32 @@ export function recoverIntentAnalysisOutput(
       '';
 
     // Try common field names for chips
-    const rawChips = obj.suggested_chips || obj.suggestion_chips || obj.chips;
+    const rawChips = obj.suggestedChips || obj.suggestionChips || obj.chips;
     if (Array.isArray(rawChips)) {
       chips = rawChips
         .slice(0, 4)
         .map((c: unknown, i: number): NpcSuggestionChip | null => {
           if (typeof c === 'string') {
-            // String chip: must have enough length for prefill_text validation
+            // String chip: must have enough length for prefillText validation
             if (c.length < 10) {
               return null;
             }
-            return { id: `chip${i}`, label: c, intent_type: 'dialogue', prefill_text: c };
+            return { id: `chip${i}`, label: c, intentType: 'dialogue', prefillText: c };
           }
           if (typeof c === 'object' && c !== null) {
             const obj = c as Record<string, unknown>;
             const id = (obj.id as string) || `chip${i}`;
             const label = (obj.label as string) || String(c);
-            const intentType = (obj.intent_type as NpcSuggestionChip['intent_type']) || 'dialogue';
-            const prefillText = (obj.prefill_text as string) || (obj.label as string) || String(c);
+            const intentType = (obj.intentType as NpcSuggestionChip['intentType']) || 'dialogue';
+            const prefillText = (obj.prefillText as string) || (obj.label as string) || String(c);
 
-            // Reject chips with String(c) as label or prefill_text (invalid object coercion)
+            // Reject chips with String(c) as label or prefillText (invalid object coercion)
             if (label === String(c) || prefillText === String(c)) {
               return null;
             }
 
             // Validate with schema
-            const candidate = { id, label, intent_type: intentType, prefill_text: prefillText };
+            const candidate = { id, label, intentType: intentType, prefillText: prefillText };
             if (Value.Check(NpcSuggestionChipSchema, candidate)) {
               return candidate;
             }
@@ -1674,7 +1674,7 @@ export function recoverIntentAnalysisOutput(
   }
 
   return {
-    npc_response: narrative,
-    suggested_chips: chips,
+    npcResponse: narrative,
+    suggestedChips: chips,
   };
 }
