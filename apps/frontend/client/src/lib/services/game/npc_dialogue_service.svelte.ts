@@ -27,6 +27,7 @@ import {
   NpcIntentAnalysisOutputSchema,
   NpcRollResolutionInputSchema,
   NpcRollResolutionOutputSchema,
+  NpcSuggestionChipSchema,
 } from '@aikami/schemas';
 import type {
   ContentPackItemEntry,
@@ -1258,20 +1259,7 @@ export class NpcDialogueService
     };
 
     // Build system prompt for intent analysis
-    const systemPrompt = [
-      'You are a game master assistant analyzing player intent in an RPG dialogue.',
-      'Given the player\'s message and NPC context, determine:',
-      '1. Whether this action requires a skill check (dice roll).',
-      '2. If so, what skill to check, what difficulty class (5-20), and what stat modifier applies.',
-      '3. A short pre-roll narrative (the NPC\'s reaction before any dice).',
-      '4. 0-4 contextual suggestion chips for the player.',
-      '',
-      'Be conservative: only require a roll when the player is clearly attempting',
-      'persuasion, deception, intimidation, stealth, or another skill-based action.',
-      'Everyday conversation does NOT need a roll.',
-      '',
-      'Respond with a JSON object matching the NpcIntentAnalysisOutput schema.',
-    ].join('\n');
+    const systemPrompt = buildIntentAnalysisSystemPrompt();
 
     const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
@@ -1299,15 +1287,18 @@ export class NpcDialogueService
         return output;
       }
 
-      // Repair attempt: salvage narrative from raw text
+      // Repair attempt: salvage narrative from raw text using shared helper
       this.warn('_analyzeIntent:invalid-output');
+
+      const recovered = recoverIntentAnalysisOutput(result.text?.trim(), NpcIntentAnalysisOutputSchema);
+
       return {
         requires_roll: false,
         check_type: undefined,
         difficulty_class: undefined,
         modifier_source: undefined,
-        narrative_pre_roll: result.text?.trim() || `*${npcName} considers your words.*`,
-        suggested_chips: [],
+        npc_response: recovered.npc_response,
+        suggested_chips: recovered.suggested_chips,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -1521,7 +1512,7 @@ export class NpcDialogueService
       check_type: undefined,
       difficulty_class: undefined,
       modifier_source: undefined,
-      narrative_pre_roll: this._genericFallbackLine(npcName),
+      npc_response: this._genericFallbackLine(npcName),
       suggested_chips: this._deriveChips({ npcName, allowedCommands }),
     };
   }
@@ -1553,3 +1544,134 @@ export class NpcDialogueService
 export const npcDialogueService: NpcDialogueServiceInterface = NpcDialogueService.create({
   className: 'NpcDialogueService',
 });
+
+// ---------------------------------------------------------------------------
+// Exported helpers for intent analysis (C-371) — shared with sandbox
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the system prompt for intent analysis (call #1).
+ * Exported for use by dev sandbox and service internals.
+ */
+export function buildIntentAnalysisSystemPrompt(): string {
+  return [
+    'You are a game master assistant analyzing player intent in an RPG dialogue.',
+    "Given the player's message and NPC context, determine:",
+    '1. Whether this action requires a skill check (dice roll).',
+    '2. If so, what skill to check, what difficulty class (5-20), and what stat modifier applies.',
+    "3. The NPC's spoken response — write in FIRST-PERSON as the NPC speaking directly to the player.",
+    '   Include actions in asterisks for flavor (e.g. *strokes beard* "Ah, a fine question!").',
+    '   NEVER write third-person narration like "The elder considers your words."',
+    '4. 0-4 contextual suggestion chips for the player.',
+    '',
+    'Be conservative: only require a roll when the player is clearly attempting',
+    'persuasion, deception, intimidation, stealth, or another skill-based action.',
+    'Everyday conversation does NOT need a roll.',
+    '',
+    'Respond with a JSON object matching the NpcIntentAnalysisOutput schema.',
+  ].join('\n');
+}
+
+/**
+ * Attempts to recover structured output from raw text when schema validation fails.
+ * Handles fenced JSON, alternate narrative field names, chip extraction, and sanitization.
+ * Throws if no meaningful narrative can be extracted.
+ *
+ * @param rawText - The raw text response from the LLM
+ * @param schema - The expected TypeBox schema (for validation)
+ * @returns Partial structured output with at least npc_response and suggested_chips
+ */
+export function recoverIntentAnalysisOutput(
+  rawText: string | undefined,
+  schema: typeof NpcIntentAnalysisOutputSchema,
+): Pick<NpcIntentAnalysisOutput, 'npc_response' | 'suggested_chips'> {
+  let narrative = '';
+  let chips: NpcSuggestionChip[] = [];
+
+  if (!rawText) {
+    throw new Error('No raw text to recover');
+  }
+
+  const trimmed = rawText.trim();
+
+  // First attempt: parse as JSON (handle arrays and objects with/without fences)
+  let parsed: unknown = null;
+  try {
+    // Remove code fences if present
+    const cleaned = trimmed
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```\s*$/, '')
+      .trim();
+    parsed = JSON.parse(cleaned);
+  } catch {
+    // Not JSON — might be plain text
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+
+    // Try common field names for narrative - only accept runtime string values
+    const npc_response = obj.npc_response;
+    const narrative_pre_roll = obj.narrative_pre_roll;
+    const pre_roll_narrative = obj.pre_roll_narrative;
+    const narrative_result = obj.narrative_result;
+    const narrativeField = obj.narrative;
+    const response = obj.response;
+
+    narrative =
+      (typeof npc_response === 'string' ? npc_response : '') ||
+      (typeof narrative_pre_roll === 'string' ? narrative_pre_roll : '') ||
+      (typeof pre_roll_narrative === 'string' ? pre_roll_narrative : '') ||
+      (typeof narrative_result === 'string' ? narrative_result : '') ||
+      (typeof narrativeField === 'string' ? narrativeField : '') ||
+      (typeof response === 'string' ? response : '') ||
+      '';
+
+    // Try common field names for chips
+    const rawChips = obj.suggested_chips || obj.suggestion_chips || obj.chips;
+    if (Array.isArray(rawChips)) {
+      chips = rawChips
+        .slice(0, 4)
+        .map((c: unknown, i: number): NpcSuggestionChip | null => {
+          if (typeof c === 'string') {
+            // String chip: must have enough length for prefill_text validation
+            if (c.length < 10) return null;
+            return { id: `chip${i}`, label: c, intent_type: 'dialogue', prefill_text: c };
+          }
+          if (typeof c === 'object' && c !== null) {
+            const obj = c as Record<string, unknown>;
+            const id = (obj.id as string) || `chip${i}`;
+            const label = (obj.label as string) || String(c);
+            const intent_type = (obj.intent_type as NpcSuggestionChip['intent_type']) || 'dialogue';
+            const prefill_text = (obj.prefill_text as string) || (obj.label as string) || String(c);
+
+            // Reject chips with String(c) as label or prefill_text (invalid object coercion)
+            if (label === String(c) || prefill_text === String(c)) {
+              return null;
+            }
+
+            // Validate with schema
+            const candidate = { id, label, intent_type, prefill_text };
+            if (Value.Check(NpcSuggestionChipSchema, candidate)) {
+              return candidate;
+            }
+          }
+          return null;
+        })
+        .filter((c): c is NpcSuggestionChip => c !== null);
+    }
+  } else {
+    // Plain text (not JSON) — use directly as narrative
+    narrative = trimmed;
+  }
+
+  // Reject if narrative is too short (schema requires minLength: 20) or not a string
+  if (!narrative || typeof narrative !== 'string' || narrative.length < 20) {
+    throw new Error('Recovered narrative does not satisfy minimum length requirement');
+  }
+
+  return {
+    npc_response: narrative,
+    suggested_chips: chips,
+  };
+}

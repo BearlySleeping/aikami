@@ -83,6 +83,8 @@ export type DetectExpressionOptions = {
   characters?: string[];
   /** Whether to use Tier 1 (agent) detection. Falls back to Tier 2 if disabled. */
   useAgent?: boolean;
+  /** Available expression IDs to constrain the agent (enum). */
+  availableExpressions?: readonly string[];
 };
 
 /**

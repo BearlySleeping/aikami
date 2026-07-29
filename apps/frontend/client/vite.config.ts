@@ -18,7 +18,10 @@ const rootDirectory = resolve(projectDirectory, '../../..');
 export default defineConfig(({ mode }) => {
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
 
-  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin. */
+  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin.
+   * In emulator mode, COEP is unset (matching hooks.server.ts behavior) to allow the Firebase
+   * Auth popup/iframe relay to work. In other modes, 'require-corp' enables crossOriginIsolated
+   * (SharedArrayBuffer for TTS). */
   const crossOriginEmbedderPolicy = mode === 'emulator' ? undefined : 'require-corp';
 
   const plugins: PluginOption[] = [

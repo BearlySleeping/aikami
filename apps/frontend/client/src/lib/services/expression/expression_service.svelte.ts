@@ -83,12 +83,12 @@ class ExpressionService
   }
 
   async detectExpression(options: DetectExpressionOptions): Promise<DetectExpressionResult> {
-    const { message, characters, useAgent } = options;
+    const { message, characters, useAgent, availableExpressions } = options;
 
     // ── Tier 1: Agent-based detection ──
     if (useAgent !== false) {
       try {
-        const agentResult = await this._runAgentDetection({ message, characters });
+        const agentResult = await this._runAgentDetection({ message, characters, availableExpressions });
         if (agentResult) {
           return agentResult;
         }
@@ -125,8 +125,13 @@ class ExpressionService
   private async _runAgentDetection(options: {
     message: string;
     characters?: string[];
+    availableExpressions?: readonly string[];
   }): Promise<DetectExpressionResult | undefined> {
-    const { message, characters } = options;
+    const { message, characters, availableExpressions } = options;
+
+    const expressionSchema: Record<string, unknown> = availableExpressions?.length
+      ? { type: 'string', enum: [...availableExpressions] }
+      : { type: 'string' };
 
     const prompt = [
       'Analyze the following message and determine character expressions.',
@@ -147,7 +152,7 @@ class ExpressionService
               type: 'object',
               properties: {
                 name: { type: 'string' },
-                expression: { type: 'string' },
+                expression: expressionSchema,
               },
               required: ['name', 'expression'],
               additionalProperties: false,
