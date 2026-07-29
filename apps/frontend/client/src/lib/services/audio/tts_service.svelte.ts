@@ -511,14 +511,29 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     // Path 1: Streaming pipeline (C-211) — Kokoro server detected
     if (this._pipelineReady && this._streamWorker) {
+      // Initialize abort controller before async operations
+      this._abortController = new AbortController();
+      const signal = this._abortController.signal;
+
       // Resume AudioContext — user gesture (button click) makes this safe
       const ctx = audioContextManager.context;
       if (ctx.state !== 'running') {
-        await ctx.resume();
-        this.debug('synthesize:audio-context-resumed', { state: ctx.state });
+        try {
+          await ctx.resume();
+          this.debug('synthesize:audio-context-resumed', { state: ctx.state });
+        } catch (error) {
+          this.warn('synthesize:audio-context-resume-failed', error);
+          this._abortController = undefined;
+          return;
+        }
       }
 
-      this._abortController = new AbortController();
+      // Check if cancelled during resume
+      if (signal.aborted) {
+        this._abortController = undefined;
+        return;
+      }
+
       this.isSynthesizing = true;
 
       try {

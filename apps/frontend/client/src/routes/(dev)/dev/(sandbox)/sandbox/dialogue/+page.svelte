@@ -15,6 +15,10 @@ import { browser } from '$app/environment';
 import { NpcIntentAnalysisOutputSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { aiGatewayService } from '$services';
+import {
+  buildIntentAnalysisSystemPrompt,
+  recoverIntentAnalysisOutput,
+} from '$lib/services/game/npc_dialogue_service.svelte.ts';
 import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
 import {
   type DevInteractionMode,
@@ -99,22 +103,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
           game_state_facts: opts.gameStateFacts ?? [],
         };
 
-        const systemPrompt = [
-          'You are a game master assistant analyzing player intent in an RPG dialogue.',
-          'Given the player\'s message and NPC context, determine:',
-          '1. Whether this action requires a skill check (dice roll).',
-          '2. If so, what skill to check, what difficulty class (5-20), and what stat modifier applies.',
-          '3. The NPC\'s spoken response — write in FIRST-PERSON as the NPC speaking directly to the player.\n' +
-          '   Include actions in asterisks for flavor (e.g. *strokes beard* "Ah, a fine question!").\n' +
-          '   NEVER write third-person narration like "The elder considers your words."',
-          '4. 0-4 contextual suggestion chips for the player.',
-          '',
-          'Be conservative: only require a roll when the player is clearly attempting',
-          'persuasion, deception, intimidation, stealth, or another skill-based action.',
-          'Everyday conversation does NOT need a roll.',
-          '',
-          'Respond with a JSON object matching the NpcIntentAnalysisOutput schema.',
-        ].join('\n');
+        const systemPrompt = buildIntentAnalysisSystemPrompt();
 
         try {
           const result = await aiGatewayService.generateText({
@@ -132,64 +121,16 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
             return raw;
           }
 
-          // Structured output failed — try to salvage narrative from raw text
-          const rawText = result.text?.trim();
-          let narrative = rawText || '';
-          let chips: Array<{ id: string; label: string; intent_type: 'dialogue' | 'skill_check' | 'combat' | 'trade' | 'quest'; prefill_text: string }> = [];
-
-          // If the raw text looks like JSON, extract the narrative field
-          if (rawText) {
-            const trimmed = rawText.trim();
-            if (trimmed.startsWith('{') || trimmed.startsWith('```json') || trimmed.startsWith('```')) {
-              try {
-                const cleaned = trimmed
-                  .replace(/^```(?:json)?\s*/i, '')
-                  .replace(/```\s*$/, '')
-                  .trim();
-                const parsed = JSON.parse(cleaned);
-                // Try common field names for narrative
-                narrative =
-                  parsed.npc_response ||
-                  parsed.narrative_pre_roll ||
-                  parsed.pre_roll_narrative ||
-                  parsed.narrative_result ||
-                  parsed.narrative ||
-                  parsed.response ||
-                  '';
-                // Try common field names for chips
-                const rawChips = parsed.suggested_chips || parsed.suggestion_chips || parsed.chips;
-                if (Array.isArray(rawChips)) {
-                  chips = rawChips.slice(0, 4).map((c: unknown, i: number) => {
-                    const obj = c as Record<string, unknown>;
-                    if (typeof c === 'string') {
-                      return { id: `chip${i}`, label: c, intent_type: 'dialogue' as const, prefill_text: c };
-                    }
-                    return {
-                      id: (obj.id as string) || `chip${i}`,
-                      label: (obj.label as string) || String(c),
-                      intent_type: ((obj.intent_type as 'dialogue') || 'dialogue'),
-                      prefill_text: (obj.prefill_text as string) || (obj.label as string) || String(c),
-                    };
-                  });
-                }
-              } catch {
-                // Not valid JSON — use raw text as-is
-              }
-            }
-          }
-
-          // If we can't extract a meaningful narrative, throw — never fake a response
-          if (!narrative) {
-            throw new Error('LLM returned structured output that failed validation and contained no narrative');
-          }
+          // Structured output failed — try to salvage narrative using shared helper
+          const recovered = recoverIntentAnalysisOutput(result.text?.trim(), NpcIntentAnalysisOutputSchema);
 
           return {
             requires_roll: false,
             check_type: undefined,
             difficulty_class: undefined,
             modifier_source: undefined,
-            npc_response: narrative,
-            suggested_chips: chips,
+            npc_response: recovered.npc_response,
+            suggested_chips: recovered.suggested_chips,
           };
         } catch (error) {
           // Propagate the real error — never fake a response
