@@ -118,7 +118,7 @@ mock.module('$services', () => ({
   },
   expressionService: {
     detectExpression: mock(async () => ({
-      expressionMap: {},
+      expressionMap: { 'Elder Thrain': 'happy' },
       detectionTier: 'keyword' as const,
     })),
   },
@@ -296,6 +296,8 @@ describe('DialogueOverlayViewModel', () => {
 
     expect(vm.messages.length).toBe(3);
     expect(vm.messages[2].content).toBe('The elder strokes his beard. "The ward is failing."');
+    // Expression should be set from the mock
+    expect(vm.npcExpression).toBe('happy');
   });
 
   test('chips are populated from intent analysis', async () => {

@@ -1610,14 +1610,21 @@ export function recoverIntentAnalysisOutput(
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
 
-    // Try common field names for narrative
+    // Try common field names for narrative - only accept runtime string values
+    const npc_response = obj.npc_response;
+    const narrative_pre_roll = obj.narrative_pre_roll;
+    const pre_roll_narrative = obj.pre_roll_narrative;
+    const narrative_result = obj.narrative_result;
+    const narrativeField = obj.narrative;
+    const response = obj.response;
+
     narrative =
-      (obj.npc_response as string) ||
-      (obj.narrative_pre_roll as string) ||
-      (obj.pre_roll_narrative as string) ||
-      (obj.narrative_result as string) ||
-      (obj.narrative as string) ||
-      (obj.response as string) ||
+      (typeof npc_response === 'string' ? npc_response : '') ||
+      (typeof narrative_pre_roll === 'string' ? narrative_pre_roll : '') ||
+      (typeof pre_roll_narrative === 'string' ? pre_roll_narrative : '') ||
+      (typeof narrative_result === 'string' ? narrative_result : '') ||
+      (typeof narrativeField === 'string' ? narrativeField : '') ||
+      (typeof response === 'string' ? response : '') ||
       '';
 
     // Try common field names for chips
@@ -1658,8 +1665,8 @@ export function recoverIntentAnalysisOutput(
     narrative = trimmed;
   }
 
-  // Reject if narrative is too short (schema requires minLength: 20)
-  if (!narrative || narrative.length < 20) {
+  // Reject if narrative is too short (schema requires minLength: 20) or not a string
+  if (!narrative || typeof narrative !== 'string' || narrative.length < 20) {
     throw new Error('Recovered narrative does not satisfy minimum length requirement');
   }
 

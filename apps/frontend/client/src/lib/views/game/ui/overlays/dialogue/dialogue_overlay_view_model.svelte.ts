@@ -957,6 +957,10 @@ class DialogueOverlayViewModel
   private async _sendToGameMaster(content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
+    this.streamError = null;
+
+    const controller = new AbortController();
+    this._activeAbortController = controller;
 
     try {
       const gmResponse = await this._npcDialogueService.analyzeIntent({
@@ -966,7 +970,7 @@ class DialogueOverlayViewModel
           role: m.role === 'player' ? 'player' : ('npc' as const),
           content: m.content,
         })),
-        signal: new AbortController().signal,
+        signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
         playerContext: {
           character_sheet_summary: 'Level 1 Fighter',
@@ -984,6 +988,9 @@ class DialogueOverlayViewModel
     } finally {
       this.isStreaming = false;
       this.highlightSpeaker = null;
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
     }
   }
 
@@ -992,7 +999,7 @@ class DialogueOverlayViewModel
    * Call #1 (analyzeIntent) → if roll needed: DECLARED_DC → dice → rollDice → call #2.
    * If no roll needed: display narrative + chips directly.
    */
-  private async _sendWithIntentAnalysis(content: string): Promise<void> {
+  private async _sendWithIntentAnalysis(content: string, npcMessageId?: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
 
@@ -1016,7 +1023,7 @@ class DialogueOverlayViewModel
       });
 
       // Display the pre-roll narrative
-      this._appendNpcMessage(analysis.npc_response);
+      this._appendNpcMessage(analysis.npc_response, npcMessageId);
 
       // Run expression detection on the NPC response
       void this._detectExpression(analysis.npc_response);
@@ -1201,7 +1208,7 @@ class DialogueOverlayViewModel
 
     // C-371: Route through the same pipeline as sendMessage
     if (this._npcDialogueService.useFreeTextFirst && lastPlayerMsg) {
-      void this._sendWithIntentAnalysis(lastPlayerMsg.content);
+      void this._sendWithIntentAnalysis(lastPlayerMsg.content, replacementMessageId);
     } else {
       void this._delegateGenerateResponse({ npcMessageId: replacementMessageId });
     }
@@ -1226,11 +1233,11 @@ class DialogueOverlayViewModel
     this.messages = this.messages.slice(0, messageIndex + 1);
     this.editingMessageId = null;
 
-    // Restore input draft to the edited text
-    this.inputText = newText;
-
     // C-371: Route through the same pipeline as sendMessage
     if (this._npcDialogueService.useFreeTextFirst) {
+      // Clear input and draft after assigning newText
+      this.inputText = '';
+      void draftStore.clearDraft({ chatId: this._npcData.npcId });
       void this._sendWithIntentAnalysis(newText);
     } else {
       void this._delegateGenerateResponse();
@@ -1693,11 +1700,11 @@ class DialogueOverlayViewModel
   /**
    * Appends an NPC message to the conversation history.
    */
-  private _appendNpcMessage(content: string): void {
+  private _appendNpcMessage(content: string, messageId?: string): void {
     this.messages = [
       ...this.messages,
       {
-        id: crypto.randomUUID(),
+        id: messageId ?? crypto.randomUUID(),
         content,
         role: 'npc' as const,
         alternativeCount: 0,
@@ -1715,13 +1722,17 @@ class DialogueOverlayViewModel
     if (!text.trim()) return;
 
     try {
+      // Get available expressions for this NPC (overridable in subclasses like dev sandbox)
+      const availableExpressions = this._getAvailableExpressions();
+
       const result = await expressionService.detectExpression({
         message: text,
         characters: [this._npcData.npcName],
+        availableExpressions,
       });
 
       const detectedExpression = result.expressionMap[this._npcData.npcName];
-      if (detectedExpression) {
+      if (detectedExpression && availableExpressions.includes(detectedExpression)) {
         this.npcExpression = detectedExpression;
         this.debug('_detectExpression', {
           npc: this._npcData.npcName,
@@ -1732,6 +1743,14 @@ class DialogueOverlayViewModel
     } catch {
       // Expression detection is non-critical — silently skip failures
     }
+  }
+
+  /**
+   * Returns the list of available expressions for the current NPC.
+   * Overridable in subclasses (e.g., dev sandbox uses sprite-specific expressions).
+   */
+  protected _getAvailableExpressions(): string[] {
+    return ['neutral', 'happy', 'sad', 'angry', 'surprised'];
   }
 }
 

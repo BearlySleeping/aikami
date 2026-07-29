@@ -22,10 +22,11 @@ const { viewModel }: Props = $props();
  * - `*action*` → italic, muted
  * - `"dialogue"` → normal
  * - plain text → normal
+ * - Unmatched `*` and `"` are captured as text
  */
 const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> => {
   const segments: Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> = [];
-  const re = /(\*[^*]+\*)|("[^"]+")|([^*"]+)/g;
+  const re = /(\*[^*]+\*)|("[^"]+")|([^*"]+)|(\*|")/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     if (match[1]) {
@@ -35,7 +36,11 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
       // "dialogue"
       segments.push({ type: 'dialogue', content: match[2].replace(/^"|"$/g, '') });
     } else if (match[3]) {
+      // Plain text
       segments.push({ type: 'text', content: match[3] });
+    } else if (match[4]) {
+      // Unmatched delimiter (standalone * or ")
+      segments.push({ type: 'text', content: match[4] });
     }
   }
   return segments;
@@ -196,9 +201,14 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             {:else}
               <!-- Party mode: show avatar + name above bubble -->
               {#if viewModel.showPartyUi}
+                {@const avatarUrl = isPlayer
+                  ? viewModel.playerAvatarUrl
+                  : isPartyMate
+                    ? '/assets/npc/gandalf/neutral.webp'
+                    : viewModel.npcAvatarUrl}
                 <div class="flex items-center gap-1.5 mb-0.5">
                   <img
-                    src={isPlayer ? viewModel.playerAvatarUrl : viewModel.npcAvatarUrl}
+                    src={avatarUrl}
                     alt={message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
                     class="h-5 w-5 rounded-full object-cover"
                     loading="lazy"

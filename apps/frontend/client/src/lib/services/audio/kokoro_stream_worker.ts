@@ -354,6 +354,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
       handleInitialize({
         sharedBuffer: data.sharedBuffer,
         sampleCapacity: data.sampleCapacity,
+        serverUrl: data.serverUrl,
       });
       break;
 

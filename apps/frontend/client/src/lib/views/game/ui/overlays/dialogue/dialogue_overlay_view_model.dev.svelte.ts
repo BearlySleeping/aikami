@@ -8,7 +8,7 @@
 //   - diceOutcome: 'random' | 'always_succeed' | 'always_fail'
 //   - useMockAi: toggle between mock narratives and real LLM extraction
 //   - mockNpcPersona: change the NPC persona on the fly
-//   - interactionMode: 'menu' (C-162 action buttons) | 'freeform' (legacy) | 'freeTextFirst' (C-371)
+//   - interactionMode: 'freeTextFirst' (C-371) — the only supported mode
 //   - autoGenerateImage: auto-generate scene images on skill check resolution
 //   - generatedImageUrl: latest generated image URL (shown in inspector)
 
@@ -57,7 +57,7 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   /** Change the NPC persona preset. */
   setMockNpcPreset(preset: DevNpcPreset): void;
 
-  /** Switch between menu and freeform interaction modes. */
+  /** Set interaction mode (only 'freeTextFirst' is supported). */
   setInteractionMode(mode: DevInteractionMode): void;
 
   /** Whether auto image generation is enabled. */
@@ -248,13 +248,7 @@ export class DialogueDevViewModel
     this.interactionMode = options.initialInteractionMode ?? 'freeTextFirst';
 
     // Ensure phase matches initial interaction mode
-    if (this.interactionMode === 'freeTextFirst') {
-      // Let the parent class default (FREE_TEXT) stand — C-371 two-call pipeline
-    } else if (this.interactionMode === 'freeform') {
-      this.dialoguePhase = 'CUSTOM_INPUT';
-    } else {
-      this.dialoguePhase = 'MENU';
-    }
+    // Only 'freeTextFirst' is supported — let parent class default (FREE_TEXT) stand
 
     // Apply initial NPC preset — overrides the default npcData from super()
     const initialPreset = options.initialNpcPreset;
@@ -382,19 +376,10 @@ export class DialogueDevViewModel
   }
 
   /**
-   * Override: passes available expressions as enum constraints to the expression agent.
+   * Override: provides sprite-specific available expressions.
    */
-  protected override async _detectExpression(text: string): Promise<void> {
-    if (!text.trim()) return;
-    try {
-      const result = await expressionService.detectExpression({
-        message: text,
-        characters: [this.npcName],
-        availableExpressions: this.availableExpressions,
-      });
-      const detected = result.expressionMap[this.npcName];
-      if (detected) this.npcExpression = detected;
-    } catch { /* non-critical */ }
+  protected override _getAvailableExpressions(): string[] {
+    return this.availableExpressions;
   }
 
   /** @inheritdoc */
