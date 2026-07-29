@@ -78,6 +78,9 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   /** Toggle party member UI visibility. */
   togglePartyUi(): void;
 
+  /** Simulate a party companion sending a message. */
+  simulatePartyMessage(): void;
+
   /** Force a dice roll with test parameters. */
   forceDiceRoll(options: { checkType: string; difficultyClass: number; statModifier: string; statModifierValue: number }): void;
 };
@@ -328,6 +331,32 @@ export class DialogueDevViewModel
   /** @inheritdoc */
   togglePartyUi(): void {
     this.showPartyUi = !this.showPartyUi;
+  }
+
+  /** @inheritdoc */
+  simulatePartyMessage(): void {
+    if (!this.showPartyUi) return;
+    const lines = [
+      '"I agree with that course of action."',
+      '"Wait, I have an idea. *pulls out a map* We could take the mountain pass instead."',
+      '"Careful — I sense danger ahead."',
+      '*nods silently*',
+      '"I remember an old tale about this place..."',
+    ];
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content: line,
+        role: 'npc' as const,
+        senderName: 'Companion',
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
   }
 
   /** @inheritdoc */

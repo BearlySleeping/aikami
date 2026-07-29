@@ -62,7 +62,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
   <!-- d20 Skill Check Dice (C-157 / C-162) -->
   <GameDice dice={viewModel.diceState} />
 
-  <!-- Avatar row — NPC left, Player right; party members between -->
+  <!-- Avatar row — NPC left, Player + Party right -->
   <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
     <!-- NPC Avatar -->
     <div class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200">
@@ -80,10 +80,10 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
       </div>
     </div>
 
-    <!-- Party member (mock) -->
-    {#if viewModel.showPartyUi}
-      <div class="transition-transform duration-200">
-        <div class="h-24 w-24 overflow-hidden border-2 border-info/30 shadow-lg">
+    <!-- Right side: Player + Party members -->
+    <div class="flex items-end gap-2">
+      {#if viewModel.showPartyUi}
+        <div class="h-20 w-20 overflow-hidden border-2 border-info/30 shadow-lg">
           <img
             src="/assets/npc/gandalf/neutral.webp"
             alt="Companion"
@@ -91,25 +91,20 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             loading="lazy"
           />
         </div>
-      </div>
-    {:else}
-      <!-- Spacer to keep justify-between when party is off -->
-      <div></div>
-    {/if}
-
-    <!-- Player Avatar -->
-    <div class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200">
-      <div
-        class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
-          ? 'border-primary shadow-primary/30'
-          : 'border-base-content/10'}"
-      >
-        <img
-          src={viewModel.playerAvatarUrl}
-          alt="You"
-          class="h-full w-full object-contain"
-          loading="lazy"
-        />
+      {/if}
+      <div class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200">
+        <div
+          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
+            ? 'border-primary shadow-primary/30'
+            : 'border-base-content/10'}"
+        >
+          <img
+            src={viewModel.playerAvatarUrl}
+            alt="You"
+            class="h-full w-full object-contain"
+            loading="lazy"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -164,9 +159,11 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
 
       {#each viewModel.messages as message, i (message.id)}
         {@const isPlayer = message.role === 'player'}
+        {@const isPartyMate = message.senderName != null && message.senderName !== viewModel.npcName}
+        {@const alignRight = isPlayer || isPartyMate}
         {@const isLast = i === viewModel.messages.length - 1}
 
-        <div class="group flex gap-2 {isPlayer ? 'flex-row-reverse' : 'flex-row'}">
+        <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
           <!-- Bubble column -->
           <div class="flex max-w-[75%] flex-col gap-0.5">
 
@@ -197,11 +194,27 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
                 </div>
               </div>
             {:else}
+              <!-- Party mode: show avatar + name above bubble -->
+              {#if viewModel.showPartyUi}
+                <div class="flex items-center gap-1.5 mb-0.5">
+                  <img
+                    src={isPlayer ? viewModel.playerAvatarUrl : viewModel.npcAvatarUrl}
+                    alt={message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
+                    class="h-5 w-5 rounded-full object-cover"
+                    loading="lazy"
+                  />
+                  <span class="text-xs font-medium text-base-content/50">
+                    {message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
+                  </span>
+                </div>
+              {/if}
               <!-- Message bubble -->
               <div
                 class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {isPlayer
                   ? 'rounded-br-md bg-primary text-primary-content'
-                  : 'rounded-bl-md bg-base-100 text-base-content'}"
+                  : isPartyMate
+                    ? 'rounded-br-md bg-info/20 text-info-content border border-info/20'
+                    : 'rounded-bl-md bg-base-100 text-base-content'}"
               >
                 {#if message.content}
                   {#if isPlayer}
@@ -227,9 +240,9 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
 
             <!-- Message action buttons (hover-visible) -->
             <div
-              class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 {isPlayer ? 'justify-end' : 'justify-start'}"
+              class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
             >
-              {#if !isPlayer}
+              {#if !isPlayer && !isPartyMate}
                 <button
                   type="button" class="btn btn-ghost btn-xs px-1"
                   title="Copy" aria-label="Copy"
@@ -280,7 +293,7 @@ const formatNpcText = (text: string): Array<{ type: 'action' | 'dialogue' | 'tex
             </div>
 
             <!-- Swipe controls for AI messages with alternatives -->
-            {#if !isPlayer && message.alternativeLabel}
+            {#if !isPlayer && !isPartyMate && message.alternativeLabel}
               <div class="flex items-center justify-center gap-1 mt-0.5">
                 <button
                   type="button" class="btn btn-ghost btn-xs px-1"

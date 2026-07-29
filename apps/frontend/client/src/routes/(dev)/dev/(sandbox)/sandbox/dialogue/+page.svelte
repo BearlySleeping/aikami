@@ -391,6 +391,17 @@ let devToolsOpen = $state(true);
           </button>
         </div>
 
+        <!-- Party Chime In (when party mode is on) -->
+        {#if viewModel.showPartyUi}
+          <button
+            type="button"
+            class="btn btn-xs btn-info btn-outline"
+            onclick={() => viewModel.simulatePartyMessage()}
+          >
+            💬 Companion Chimes In
+          </button>
+        {/if}
+
         <!-- Generate Scene Image -->
           <button
             type="button"
