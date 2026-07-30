@@ -35,6 +35,8 @@ import { stdin as processStdin, stdout as processStdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
+import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
+import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudRunSveltekit } from './cloud_run';
 import {
   APP_CONFIG,
@@ -195,6 +197,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Load scripts/.env.{mode} into process.env (REDIS_URL, TELEGRAM_BOT_TOKEN, etc.)
+  initScriptsEnv(mode);
+
   const projectId = resolveProjectId(mode);
   const deployableSet = new Set(DEPLOYABLE_APPS);
 
@@ -284,19 +289,52 @@ async function main(): Promise<void> {
 
   authenticateDocker();
 
-  // ── Phase 1: Sequential moon builds (moon conflicts when run in parallel) ──
-  // Moon processes lock files in the workspace, so builds must be serialized.
-  // Docker builds, pushes, and gcloud deploys can still run in parallel (Phase 2).
-  log(`\n${c.bold}Phase 1: Building apps (sequential)...${c.reset}`);
-  const buildFailed = new Set<string>();
-  const results: AppResult[] = [];
-  const errors: string[] = [];
+  // ── Pre-flight: Check deployment caches (before any builds) ──
+  log(`\n${c.bold}Checking deployment caches...${c.reset}`);
+
+  const version = generateVersionString();
+  const cachedApps = new Set<string>();
+
   for (const appName of appsToDeploy) {
     const config = APP_CONFIG[appName as keyof typeof APP_CONFIG];
     if (!config) {
-      warn(`No config found for "${appName}" — skipping`);
-      errors.push(`No config found for ${appName}`);
-      results.push({ name: appName, type: 'unknown', result: 'failure' });
+      continue;
+    }
+
+    // firebase-functions doesn't use checksum caching — always deploy
+    if (config.serviceType === 'firebase-functions') {
+      continue;
+    }
+
+    const cache = await checkDeployCache(config, appName, mode, ROOT_DIR, isForce);
+    if (cache.skip) {
+      ok(`  ${appName} is up to date (cache hit: ${cache.source}). Skipping.`);
+      cachedApps.add(appName);
+    }
+  }
+
+  if (cachedApps.size > 0) {
+    appsToDeploy = appsToDeploy.filter((a) => !cachedApps.has(a));
+  }
+
+  if (appsToDeploy.length === 0) {
+    ok(`\n✨ All requested apps are up to date! Nothing to deploy.`);
+    process.exit(0);
+  }
+
+  // ── Phase 1: Sequential moon builds (deduplicated by build project) ──
+  // Moon processes lock files in the workspace, so builds must be serialized.
+  // Build targets are deduplicated so 'client' and 'client-tauri' (which both
+  // use buildProject 'client') only trigger a single moon build.
+  // Docker builds, pushes, and gcloud deploys can still run in parallel (Phase 2).
+  log(`\n${c.bold}Phase 1: Building apps (sequential)...${c.reset}`);
+
+  // Collect unique moon build targets
+  const targetsToBuild = new Map<string, string>(); // moonTarget → representative appName
+
+  for (const appName of appsToDeploy) {
+    const config = APP_CONFIG[appName as keyof typeof APP_CONFIG];
+    if (!config) {
       continue;
     }
     const needsBuild =
@@ -304,26 +342,42 @@ async function main(): Promise<void> {
       config.serviceType !== 'firebase-functions' &&
       config.needsDist !== false;
     if (needsBuild) {
-      try {
-        log(`  🏗️  ${appName}...`);
-        const ver = shortSha();
-        const needsModeFlag =
-          config.serviceType === 'cloud-run-sveltekit' || config.serviceType === 'firebase-hosting';
-        const modeFlag = needsModeFlag && mode !== 'production' ? ` -- --mode ${mode}` : '';
-        const forceFlag = isForce ? ' --force' : '';
-        const moonTarget = config.buildProject ?? appName;
-        // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
-        run(`bunx moon run ${moonTarget}:build${forceFlag}${modeFlag}`, {
-          cwd: ROOT_DIR,
-          env: { PUBLIC_APP_VERSION: ver },
-        });
-        ok(`  ${appName} built`);
-      } catch (err) {
-        error(`  ${appName} build failed: ${(err as Error).message}`);
-        buildFailed.add(appName);
-        errors.push(`Build failed for ${appName}: ${(err as Error).message}`);
-        results.push({ name: appName, type: config.serviceType, result: 'failure' });
+      const moonTarget = config.buildProject ?? appName;
+      if (!targetsToBuild.has(moonTarget)) {
+        targetsToBuild.set(moonTarget, appName);
       }
+    }
+  }
+
+  const buildFailed = new Set<string>();
+  const buildFailedTargets = new Set<string>();
+  const results: AppResult[] = [];
+  const errors: string[] = [];
+
+  for (const [moonTarget, appName] of targetsToBuild) {
+    try {
+      log(`  🏗️  Building ${c.cyan}${moonTarget}:build${c.reset} (for ${appName})...`);
+      const forceFlag = isForce ? ' --force' : '';
+      // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
+      run(`bunx moon run ${moonTarget}:build${forceFlag} -- --mode ${mode}`, {
+        cwd: ROOT_DIR,
+        env: { PUBLIC_APP_VERSION: version },
+      });
+      ok(`  ${moonTarget} built`);
+    } catch (err) {
+      error(`  ${moonTarget} build failed: ${(err as Error).message}`);
+      buildFailedTargets.add(moonTarget);
+    }
+  }
+
+  // Map target failures back to individual apps
+  for (const appName of appsToDeploy) {
+    const config = APP_CONFIG[appName as keyof typeof APP_CONFIG];
+    const target = config?.buildProject ?? appName;
+    if (buildFailedTargets.has(target)) {
+      buildFailed.add(appName);
+      errors.push(`Build failed for ${appName} (target ${target}:build)`);
+      results.push({ name: appName, type: config?.serviceType ?? 'unknown', result: 'failure' });
     }
   }
 
@@ -366,8 +420,8 @@ async function main(): Promise<void> {
 
   // ── Telegram Notification (if --notify flag) ──
   if (shouldNotify) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const botToken = getScriptsEnv('TELEGRAM_BOT_TOKEN');
+    const chatId = getScriptsEnv('TELEGRAM_CHAT_ID');
     if (botToken && chatId) {
       try {
         const notificationInput: NotificationInput = {

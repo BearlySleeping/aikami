@@ -10,6 +10,7 @@
 //   bun run scripts/src/lib/setup/cdn_hosting_setup.ts --mode=production --dry-run
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fmt, parseCliArgs, runStream } from '../cli_utils';
 import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
@@ -21,12 +22,12 @@ type ManualStep = { title: string; url?: string; commands?: string[]; detail?: s
 
 /** Canonical extension per platform — matches pickCanonical() in tauri_release.ts. */
 const PLATFORM_EXTENSIONS: Record<string, string> = {
-  linux: '.AppImage',
+  linux: '.deb',
   macos: '.dmg',
   windows: '.msi',
 };
 
-const CDN_PUBLIC_DIR = 'cdn-public';
+const CDN_PUBLIC_DIR = join(tmpdir(), 'aikami-cdn-public');
 
 /** Hosting site names per mode. */
 const CDN_SITE_SUFFIX = 'cdn';
@@ -92,7 +93,7 @@ const generateCdnFirebaseConfig = (): Record<string, unknown> => {
   return {
     hosting: {
       target: 'cdn',
-      public: CDN_PUBLIC_DIR,
+      public: '.',
       redirects,
     },
   };

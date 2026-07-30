@@ -19,21 +19,23 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { c, log, warn } from '../cli_utils';
+import { getScriptsEnv } from '../env/scripts_env';
 import type { AppConfig } from './deployment_config';
 import { dirtyTreeHash, run } from './utils';
 
 // ── Upstash Redis config ─────────────────────────────────────────────────
 
-const _resolveRedisUrl = (): string | undefined => process.env.REDIS_URL;
-const _resolveRedisToken = (): string | undefined => process.env.REDIS_TOKEN;
+const _resolveRedisUrl = (): string | undefined => getScriptsEnv('REDIS_URL');
+const _resolveRedisToken = (): string | undefined => getScriptsEnv('REDIS_TOKEN');
 
 const CACHE_PREFIX = 'cache-aikami-deploy';
 
 // ── Local file cache (fallback only — NEVER used when online is reachable)
 
-const LOCAL_CACHE_PATH = '.deploy-cache.json';
+const LOCAL_CACHE_PATH = join(tmpdir(), 'aikami-deploy-cache.json');
 
 type LocalCache = Record<string, string>; // key → checksum
 
@@ -72,9 +74,25 @@ function fileHash(filePath: string): string {
 
 /** Git tree hash for a directory — captures the state of all tracked files. */
 function gitTreeHash(dirPath: string): string {
-  return run(`git ls-tree HEAD -- ${dirPath} | sha256sum | cut -d' ' -f1`, {
-    quiet: true,
-  });
+  try {
+    const raw = run(`git ls-tree HEAD -- "${dirPath}"`, { quiet: true });
+    return sha256(raw);
+  } catch {
+    return '';
+  }
+}
+
+/** Generate a UTC datetime version string, chronologically orderable. */
+export function generateVersionString(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = now.getUTCFullYear();
+  const mm = pad(now.getUTCMonth() + 1);
+  const dd = pad(now.getUTCDate());
+  const hh = pad(now.getUTCHours());
+  const min = pad(now.getUTCMinutes());
+  const ss = pad(now.getUTCSeconds());
+  return `${yyyy}.${mm}.${dd}-${hh}${min}${ss}`;
 }
 
 // ── Checksum computation ─────────────────────────────────────────────────
@@ -275,7 +293,7 @@ export async function checkDeployCache(
 }
 
 /**
- * Store a successful deployment checksum in the online (Redis) cache.
+ * Store a successful deployment checksum and version in the online (Redis) cache.
  * Call this AFTER a successful deployment.
  */
 export async function saveDeployCache(
@@ -283,6 +301,11 @@ export async function saveDeployCache(
   appName: string,
   checksum: string,
 ): Promise<void> {
-  const key = `${CACHE_PREFIX}:${mode}:${appName}`;
-  await upstashSet(key, checksum);
+  const checksumKey = `${CACHE_PREFIX}:${mode}:${appName}`;
+  const versionKey = `${CACHE_PREFIX}:${mode}:${appName}:version`;
+  const version = generateVersionString();
+
+  await Promise.all([upstashSet(checksumKey, checksum), upstashSet(versionKey, version)]);
+
+  log(`  ${c.dim}Updated Redis cache & version (${version}) for ${appName}${c.reset}`);
 }

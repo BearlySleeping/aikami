@@ -32,7 +32,9 @@ export default defineConfig({
   server: {
     port,
   },
+
   env: {
+    validateSecrets: true,
     schema: {
       PUBLIC_GOOGLE_ANALYTICS_ID: envField.string({
         context: 'client',
@@ -86,15 +88,26 @@ export default defineConfig({
         access: 'public',
         optional: true,
       }),
+      PUBLIC_APP_ID: envField.string({
+        context: 'client',
+        access: 'public',
+        optional: false,
+      }),
       PUBLIC_MODE: envField.string({
         context: 'client',
         access: 'public',
-        optional: true,
+        optional: false,
       }),
       PUBLIC_SITE_URL: envField.string({
         context: 'client',
         access: 'public',
-        optional: true,
+        optional: false,
+      }),
+      PUBLIC_DOWNLOAD_BASE_URL: envField.string({
+        context: 'client',
+        access: 'public',
+        optional: false,
+        default: '',
       }),
     },
   },

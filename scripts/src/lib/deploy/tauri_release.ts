@@ -1,47 +1,11 @@
-// scripts/src/lib/deploy/tauri_release.ts
-/**
- * Tauri desktop release strategy — builds the client desktop app.
- *
- * Path:
- *  1. Checksum check (skip if unchanged)
- *  2. Build SvelteKit app for web (moon build)
- *  3. Build Tauri desktop app via bun run tauri build (native to whichever OS
- *     this runs on — no cross-compilation; use CI matrix for multi-platform)
- *  4. Collect ONLY final, installable release artifacts (.deb/.rpm/.AppImage/
- *     .msi/.exe/.dmg/.app.tar.gz/.sig) — everything else in target/release/bundle
- *     is intermediate packaging scaffolding and is deliberately discarded.
- *  5. Upload to Firebase Storage in a single batched, parallel gcloud call:
- *       gs://{projectId}.firebasestorage.app/tauri-releases/{appName}/{platform}/
- *
- * Multi-platform:
- *   Run on ubuntu-latest, windows-latest, and macos-latest to get all three
- *   natively. Tauri v2 does not reliably cross-compile GUI bundles, and macOS
- *   codesigning/notarization requires Apple toolchain regardless.
- *
- *   Set TAURI_TARGET (e.g. "universal-apple-darwin") to pass --target through
- *   to `tauri build` — used for macOS universal binaries in CI.
- *
- * Requires:
- *   - Rust toolchain (cargo, rustc)
- *   - Tauri CLI (@tauri-apps/cli via bun)
- *   - Platform-specific system deps (webkit2gtk, etc. on Linux)
- */
-
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { resolveChannel } from './deployment_config';
-import { resolveProjectId, run, shortSha } from './utils';
+import { resolveProjectId, run } from './utils';
 
 // ── Final-artifact detection ──────────────────────────────────────────────
-// tauri-bundler leaves a LOT of intermediate scaffolding under
-// target/release/bundle (exploded .deb staging trees, control/data tarball
-// components, AppDir contents used only to build other targets, etc). Only
-// files matching these extensions, sitting directly inside one of the known
-// target directories, are real installable outputs.
-
 const KNOWN_TARGET_DIRS = new Set([
   'deb',
   'rpm',
@@ -49,19 +13,20 @@ const KNOWN_TARGET_DIRS = new Set([
   'msi',
   'nsis', // windows
   'dmg',
-  'macos', // macos (macos/ holds .app.tar.gz + .sig updater artifacts)
+  'macos', // macos (.app.tar.gz + .sig updater artifacts)
   'updater', // auto-updater manifests
 ]);
 
 const FINAL_ARTIFACT_SUFFIXES = [
+  '.app.tar.gz',
   '.deb',
   '.rpm',
   '.appimage',
   '.msi',
   '.exe',
   '.dmg',
-  '.app.tar.gz',
   '.sig',
+  '.json',
 ] as const;
 
 const isFinalArtifact = (fileName: string): boolean => {
@@ -70,9 +35,7 @@ const isFinalArtifact = (fileName: string): boolean => {
 };
 
 /**
- * Walks target/release/bundle and returns only the final, distributable
- * artifacts — discarding intermediate staging files (control/data tarball
- * parts, exploded .deb trees, unused AppDir contents, etc).
+ * Walks target/release/bundle and returns only final distributable artifacts.
  */
 const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skipped: number } => {
   const kept: string[] = [];
@@ -104,7 +67,7 @@ const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skipped: nu
   return { kept, skipped };
 };
 
-/** linux / windows / macos, derived from the host running this script. */
+/** linux / windows / macos, derived from host OS */
 const currentPlatformDir = (): 'linux' | 'windows' | 'macos' => {
   if (process.platform === 'win32') {
     return 'windows';
@@ -116,17 +79,13 @@ const currentPlatformDir = (): 'linux' | 'windows' | 'macos' => {
 };
 
 /**
- * Picks the single best canonical artifact for a given platform.
- * Priority order per platform:
- *   linux:   AppImage > deb > rpm
- *   windows: msi > exe
- *   macos:   dmg
+ * Picks canonical release binary for a platform.
  */
 const pickCanonical = (artifacts: string[], platformDir: string): string | undefined => {
   const priorities: Record<string, string[]> = {
     linux: ['.appimage', '.deb', '.rpm'],
     windows: ['.msi', '.exe'],
-    macos: ['.dmg'],
+    macos: ['.dmg', '.app.tar.gz'],
   };
   const order = priorities[platformDir] ?? [];
   for (const ext of order) {
@@ -139,20 +98,16 @@ const pickCanonical = (artifacts: string[], platformDir: string): string | undef
 };
 
 /**
- * Uploads all artifacts in ONE batched `gcloud storage cp -m` call (chunked
- * defensively in case the artifact count ever grows large enough to hit a
- * command-line length limit — not a concern today at 2-4 files, but cheap to
- * guard against). `gcloud storage cp -m` auto-parallelizes multi-file transfers
- * across threads/processes.
+ * Safely extracts extensions including compound suffixes like .app.tar.gz
  */
-const uploadArtifacts = (artifacts: string[], destPrefix: string): void => {
-  const CHUNK_SIZE = 50;
-
-  for (let i = 0; i < artifacts.length; i += CHUNK_SIZE) {
-    const chunk = artifacts.slice(i, i + CHUNK_SIZE);
-    const sources = chunk.map((f) => `"${f}"`).join(' ');
-    run(`gcloud storage cp -m ${sources} "${destPrefix}/"`, { quiet: false });
+const getArtifactExtension = (filename: string): string => {
+  const lower = filename.toLowerCase();
+  const matched = FINAL_ARTIFACT_SUFFIXES.find((suffix) => lower.endsWith(suffix));
+  if (matched) {
+    return matched;
   }
+  const lastDot = filename.lastIndexOf('.');
+  return lastDot !== -1 ? filename.slice(lastDot) : '';
 };
 
 export async function deployTauriRelease(
@@ -166,8 +121,7 @@ export async function deployTauriRelease(
   const appRoot = join(rootDir, config.path);
   const tauriDir = join(appRoot, 'src-tauri');
   const platformDir = currentPlatformDir();
-  const releaseBucket = `gs://${projectId}.firebasestorage.app/tauri-releases/${appName}/${platformDir}`;
-  const latestBucket = `gs://${projectId}.firebasestorage.app/tauri-releases/${appName}/latest/${platformDir}`;
+  const basePath = `gs://${projectId}.firebasestorage.app/tauri-releases/${appName}`;
 
   log(`\n${c.bold}🖥️  Building ${appName} Tauri desktop release${c.reset}`);
   log(`  Project:  ${projectId}`);
@@ -175,7 +129,7 @@ export async function deployTauriRelease(
   log(`  App:      ${appRoot}`);
   log(`  Tauri:    ${tauriDir}\n`);
 
-  // 0. Checksum cache — skip if nothing changed
+  // 0. Checksum cache — skip if unchanged
   const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
   if (cache.skip) {
     ok(`${appName} Tauri release skipped (unchanged — cache hit: ${cache.source})`);
@@ -188,29 +142,15 @@ export async function deployTauriRelease(
     return;
   }
 
-  // 2. Build the web app first (Tauri needs the SvelteKit build output)
+  // 2. Verify web build exists (built in Phase 1)
   const buildDir = join(appRoot, 'build');
   if (!existsSync(buildDir)) {
-    log('🏗️  Building web app...');
-    const ver = shortSha();
-    const modeFlag = mode !== 'production' ? ` -- --mode ${mode}` : '';
-    const moonTarget = config.buildProject ?? appName;
-    // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
-    run(`bunx moon run ${moonTarget}:build${modeFlag}`, {
-      cwd: rootDir,
-      env: { PUBLIC_APP_VERSION: ver },
-    });
-
-    if (!existsSync(buildDir)) {
-      throw new Error(`Build directory not found: ${buildDir}. Build may have failed.`);
-    }
-  } else {
-    log('🏗️  Web build already done, skipping...');
+    throw new Error(
+      `Build directory not found at ${buildDir}. Ensure Phase 1 web build ran successfully.`,
+    );
   }
 
-  // 3. Build Tauri desktop app (native to whichever OS this script runs on).
-  //    TAURI_TARGET env var (e.g. "universal-apple-darwin") passes --target
-  //    through for macOS universal binary builds in CI.
+  // 3. Build Tauri desktop app
   log(`🦀 Building Tauri desktop app${platformDir === 'macos' ? ' (universal binary)' : ''}...`);
   const tauriTarget = process.env.TAURI_TARGET;
   const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
@@ -223,24 +163,20 @@ export async function deployTauriRelease(
     throw err;
   }
 
-  // 4. Collect ONLY final, installable artifacts — see collectFinalArtifacts()
+  // 4. Collect final artifacts
   const releaseDir = join(tauriDir, 'target/release');
   const bundleDir = join(releaseDir, 'bundle');
 
   if (!existsSync(bundleDir)) {
-    warn('No bundle directory found — Tauri build may have produced nothing.');
+    warn('No bundle directory found — Tauri build produced nothing.');
     return;
   }
 
   const { kept: artifacts, skipped } = collectFinalArtifacts(bundleDir);
 
   if (artifacts.length === 0) {
-    warn(
-      'No final release artifacts found after filtering — Tauri build may have produced nothing installable.',
-    );
-    warn(
-      `Check your tauri.conf.json "bundle.targets" — it must be "all" or list a target valid on ${platformDir}.`,
-    );
+    warn('No final release artifacts found after filtering.');
+    warn(`Check bundle.targets in tauri.conf.json for ${platformDir}.`);
     return;
   }
 
@@ -251,35 +187,60 @@ export async function deployTauriRelease(
     log(`  • ${art}`);
   }
 
-  // 5. Upload — single batched call with -m, gcloud auto-parallelizes
-  log(`📤 Uploading ${artifacts.length} artifact(s) to ${releaseBucket}...`);
-  uploadArtifacts(artifacts, releaseBucket);
-
-  // Also upload to 'latest' pointer for auto-updater / CI consumption
-  log(`🔄 Syncing artifacts to latest pointer: ${latestBucket}...`);
-  uploadArtifacts(artifacts, latestBucket);
-
-  // 5b. Upload canonical artifact to fixed channel path (stable/beta/alpha).
-  //     The channel path never changes — only the bytes behind it do — so
-  //     cdn.example.com/stable/linux always points to the latest production build.
-  const channel = resolveChannel(mode);
+  // 5. Upload canonical artifact with fixed name
   const canonical = pickCanonical(artifacts, platformDir);
-  if (canonical) {
-    const ext = canonical.slice(canonical.lastIndexOf('.'));
-    const channelDest = `gs://${projectId}.firebasestorage.app/tauri-releases/${appName}/channel/${channel}/${platformDir}${ext}`;
-    log(`📤 Uploading canonical artifact to ${channel} channel: ${channelDest}`);
-    // Upload directly to the exact channel destination path
-    run(`gcloud storage cp "${canonical}" "${channelDest}"`, { quiet: false });
-    // Apply content-disposition metadata to the uploaded object
+  if (!canonical) {
+    warn('No canonical artifact found for this platform — skipping upload.');
+    return;
+  }
+
+  const ext = getArtifactExtension(canonical);
+
+  // Read version from Cargo.toml
+  let ver = '0.0.0';
+  try {
+    const cargoToml = join(tauriDir, 'Cargo.toml');
+    const cargoContent = readFileSync(cargoToml, 'utf8');
+    const versionMatch = cargoContent.match(/version\s*=\s*"([^"]+)"/);
+    if (versionMatch?.[1]) {
+      ver = versionMatch[1];
+    }
+  } catch {
+    // Fallback — keep default
+  }
+
+  // Upload to versioned path
+  const versionDest = `${basePath}/versions/${ver}/${platformDir}${ext}`;
+  log(`📤 Versioned release: ${versionDest}`);
+  run(`gcloud storage cp "${canonical}" "${versionDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
+  run(
+    `gcloud storage objects update --content-disposition="attachment; filename=Aikami-${ver}${ext}" "${versionDest}"`,
+    {},
+  );
+
+  // Always update latest pointer
+  const latestDest = `${basePath}/latest/${platformDir}${ext}`;
+  log(`📤 Latest pointer: ${latestDest}`);
+  run(`gcloud storage cp "${canonical}" "${latestDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
+  run(
+    `gcloud storage objects update --content-disposition="attachment; filename=Aikami-latest${ext}" "${latestDest}"`,
+    {},
+  );
+
+  // Production deploys also update stable pointer
+  if (mode === 'production') {
+    const stableDest = `${basePath}/stable/${platformDir}${ext}`;
+    log(`📤 Stable pointer: ${stableDest}`);
+    run(`gcloud storage cp "${canonical}" "${stableDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
     run(
-      `gcloud storage objects update --content-disposition="attachment; filename=Aikami-Setup${ext}" "${channelDest}"`,
+      `gcloud storage objects update --content-disposition="attachment; filename=Aikami-stable${ext}" "${stableDest}"`,
       {},
     );
   }
 
-  // 6. Save checksum on success
+  // 6. Save cache on success
   await saveDeployCache(mode, appName, cache.checksum);
   ok(
-    `${appName} Tauri release complete — ${artifacts.length} artifact(s) uploaded (${skipped} intermediate file(s) skipped)`,
+    `${appName} Tauri release complete — v${ver} (${platformDir}${ext})`,
   );
 }
