@@ -4,7 +4,6 @@
  *
  * Produces:
  *   - docs/contracts/AUDIT_C-119_C-249.md — gap analysis report
- *   - Audit annotations in contract files (comment above first line)
  */
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';

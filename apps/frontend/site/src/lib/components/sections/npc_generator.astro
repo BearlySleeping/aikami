@@ -273,6 +273,15 @@ const getStatColor = (value: number): string => {
   return '#ef4444';
 };
 
+const escapeHtml = (unsafe: string): string => {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const renderNpcPreview = (npc: NpcPreview) => {
   const preview = document.getElementById('npc-preview-content');
   if (!preview) {
@@ -292,9 +301,9 @@ const renderNpcPreview = (npc: NpcPreview) => {
             </svg>
           </div>
           <div>
-            <h3 class="font-serif text-2xl leading-tight text-foreground">${npc.name}</h3>
-            <p class="text-sm text-rune font-mono mt-0.5">${npc.archetype}</p>
-            <p class="text-xs text-muted-foreground mt-2 leading-relaxed">${npc.appearance}</p>
+            <h3 class="font-serif text-2xl leading-tight text-foreground">${escapeHtml(npc.name)}</h3>
+            <p class="text-sm text-rune font-mono mt-0.5">${escapeHtml(npc.archetype)}</p>
+            <p class="text-xs text-muted-foreground mt-2 leading-relaxed">${escapeHtml(npc.appearance)}</p>
           </div>
         </div>
 
@@ -327,7 +336,7 @@ const renderNpcPreview = (npc: NpcPreview) => {
             ${npc.skills
               .map(
                 (s) => `
-              <span class="rounded-sm bg-rune/10 border border-rune/20 px-2 py-0.5 text-[10px] font-mono text-rune">${s}</span>
+              <span class="rounded-sm bg-rune/10 border border-rune/20 px-2 py-0.5 text-[10px] font-mono text-rune">${escapeHtml(s)}</span>
             `,
               )
               .join('')}
@@ -339,7 +348,7 @@ const renderNpcPreview = (npc: NpcPreview) => {
           ${npc.affinities
             .map(
               (a) => `
-            <span class="rounded-full bg-ember/5 border border-ember/20 px-2.5 py-0.5 text-[10px] font-mono text-ember/80">${a}</span>
+            <span class="rounded-full bg-ember/5 border border-ember/20 px-2.5 py-0.5 text-[10px] font-mono text-ember/80">${escapeHtml(a)}</span>
           `,
             )
             .join('')}
@@ -352,14 +361,14 @@ const renderNpcPreview = (npc: NpcPreview) => {
           <h4 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
             Auto-Generated Lorebook Snippet
           </h4>
-          <p class="text-sm text-muted-foreground leading-relaxed">${npc.lorebook}</p>
+          <p class="text-sm text-muted-foreground leading-relaxed">${escapeHtml(npc.lorebook)}</p>
         </div>
 
         <div class="glass-panel p-5 bg-ember/5 border-ember/30">
           <h4 class="font-mono text-[10px] uppercase tracking-widest text-ember mb-3">
             Sample Opening Dialogue
           </h4>
-          <p class="text-sm text-foreground leading-relaxed italic font-serif">${npc.dialogue}</p>
+          <p class="text-sm text-foreground leading-relaxed italic font-serif">${escapeHtml(npc.dialogue)}</p>
         </div>
 
         <p class="text-[10px] text-muted-foreground/50 text-center">

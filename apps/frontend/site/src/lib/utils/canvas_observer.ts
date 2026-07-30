@@ -17,35 +17,35 @@ export const observeCanvas = (options: {
   app: Application;
   container: HTMLElement;
 }): (() => void) => {
-  const prefersReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let isIntersecting = false;
+  let prefersReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // If user prefers reduced motion, keep ticker stopped entirely
-  if (prefersReducedMotion) {
-    options.app.ticker.stop();
+  // Update ticker based on both states
+  const updateTicker = () => {
+    if (prefersReducedMotion || !isIntersecting) {
+      options.app.ticker.stop();
+    } else {
+      options.app.ticker.start();
+    }
+  };
 
-    const mediaQuery = globalThis.matchMedia('(prefers-reduced-motion: reduce)');
-    const listener = (e: MediaQueryListEvent) => {
-      if (e.matches) {
-        options.app.ticker.stop();
-      } else {
-        options.app.ticker.start();
-      }
-    };
-    mediaQuery.addEventListener('change', listener);
+  // Initial state check
+  updateTicker();
 
-    return () => {
-      mediaQuery.removeEventListener('change', listener);
-    };
-  }
+  // Listen for reduced motion preference changes
+  const mediaQuery = globalThis.matchMedia('(prefers-reduced-motion: reduce)');
+  const mediaListener = (e: MediaQueryListEvent) => {
+    prefersReducedMotion = e.matches;
+    updateTicker();
+  };
+  mediaQuery.addEventListener('change', mediaListener);
 
+  // Listen for intersection changes
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (entry.isIntersecting) {
-          options.app.ticker.start();
-        } else {
-          options.app.ticker.stop();
-        }
+        isIntersecting = entry.isIntersecting;
+        updateTicker();
       }
     },
     { threshold: 0 },
@@ -54,6 +54,7 @@ export const observeCanvas = (options: {
   observer.observe(options.container);
 
   return () => {
+    mediaQuery.removeEventListener('change', mediaListener);
     observer.disconnect();
   };
 };

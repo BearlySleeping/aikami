@@ -267,13 +267,14 @@ export async function deployTauriRelease(
   if (canonical) {
     const ext = canonical.slice(canonical.lastIndexOf('.'));
     const channelDest = `gs://${projectId}.firebasestorage.app/tauri-releases/${appName}/channel/${channel}/${platformDir}${ext}`;
-    // User-friendly download filename: "Aikami-Setup.msi" instead of "Aikami_0.1.0_x64.msi"
+    log(`📤 Uploading canonical artifact to ${channel} channel: ${channelDest}`);
+    // Upload directly to the exact channel destination path
+    run(`gcloud storage cp "${canonical}" "${channelDest}"`, { quiet: false });
+    // Apply content-disposition metadata to the uploaded object
     run(
-      `gcloud storage objects update --content-disposition="attachment; filename=Aikami-Setup${ext}" "${canonical}"`,
+      `gcloud storage objects update --content-disposition="attachment; filename=Aikami-Setup${ext}" "${channelDest}"`,
       {},
     );
-    log(`📤 Uploading canonical artifact to ${channel} channel: ${channelDest}`);
-    uploadArtifacts([canonical], channelDest);
   }
 
   // 6. Save checksum on success
