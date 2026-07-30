@@ -94,7 +94,7 @@ describe('AC-1: High-Fidelity Gating', () => {
   let inactiveZoneEid: number;
   let activeAgentEid: number;
   let inactiveAgentEid: number;
-  let legacyEntityEid: number;
+  let entityWithoutMapLocation: number;
 
   beforeEach(() => {
     world = createTestWorld();
@@ -119,8 +119,8 @@ describe('AC-1: High-Fidelity Gating', () => {
     MapLocation.virtualGridX[inactiveAgentEid] = 5;
     MapLocation.virtualGridY[inactiveAgentEid] = 3;
 
-    // Legacy entity (no MapLocation) — should always be treated as active
-    legacyEntityEid = addEntity(world);
+    // Entity without MapLocation — should always be treated as active
+    entityWithoutMapLocation = addEntity(world);
   });
 
   afterEach(() => {
@@ -135,8 +135,8 @@ describe('AC-1: High-Fidelity Gating', () => {
     expect(isEntityOffscreen(inactiveAgentEid)).toBe(true);
   });
 
-  test('isEntityOffscreen returns false for entities with no MapLocation (legacy compat)', () => {
-    expect(isEntityOffscreen(legacyEntityEid)).toBe(false);
+  test('isEntityOffscreen returns false for entities with no MapLocation', () => {
+    expect(isEntityOffscreen(entityWithoutMapLocation)).toBe(false);
   });
 
   test('isEntityOffscreen returns false for invalid entity IDs', () => {

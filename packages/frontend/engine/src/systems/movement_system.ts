@@ -23,7 +23,7 @@ import { isEntityOffscreen } from './macro_simulation_system.ts';
 // Contract C-173: Collision detection upgraded to use spatial grid +
 // bitmask collision. isCellBlocked() checks the dense spatial grid with
 // intrusive linked list and CollisionData layer/mask bitwise AND.
-// Falls back to legacy isWalkable() when no spatial grid is active.
+// Falls back to isWalkable() when no spatial grid is active.
 // ---------------------------------------------------------------------------
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */

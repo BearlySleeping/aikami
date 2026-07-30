@@ -230,7 +230,7 @@ describe('WasmStorageAdapter (in-memory)', () => {
     expect(colNames).toContain('timestamp');
     expect(colNames).toContain('map_name');
     expect(colNames).toContain('payload');
-    // Legacy columns should be gone
+    // Columns from the prior schema should be absent
     expect(colNames).not.toContain('character_id');
     expect(colNames).not.toContain('name');
     expect(colNames).not.toContain('snapshot_json');

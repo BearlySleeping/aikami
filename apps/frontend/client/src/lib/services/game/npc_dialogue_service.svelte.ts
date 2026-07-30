@@ -161,7 +161,7 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
    *
    * @param options.useFreeTextFirst — When true (default), the two-call
    *   pipeline (analyzeIntent → resolveRoll) is used. When false, the
-   *   legacy single-call generateTurn path is used for backward compat.
+   *   single-call generateTurn path is used.
    */
   configure(options: {
     contentProvider: NpcDialogueContentProvider;
@@ -313,7 +313,7 @@ export class NpcDialogueService
   private _executors: NpcDialogueExecutors | undefined;
   private _configured = false;
 
-  /** Feature flag — when false, legacy action menu path is used (C-371). */
+  /** Feature flag — when false, action menu path is used (C-371). */
   private _useFreeTextFirst = true;
 
   /** Per-turn executed-command guard (keyed by turn message id). */
@@ -1092,7 +1092,7 @@ export class NpcDialogueService
       return undefined;
     }
 
-    // No active encounter — fall back to scanning all (legacy compat)
+    // No active encounter — fall back to scanning all
     const encounters = this._contentProvider!.getAllEncounters();
     for (const enc of encounters) {
       if (enc.encounterNpcIds?.includes(npcId) && enc.dialogueKey) {
@@ -1613,8 +1613,8 @@ export function recoverIntentAnalysisOutput(
 
     // Try common field names for narrative - only accept runtime string values
     const npcResponse = obj.npcResponse;
-    const narrativePreRoll = obj['narrative_pre_roll'];
-    const preRollNarrative = obj['pre_roll_narrative'];
+    const narrativePreRoll = obj.narrative_pre_roll;
+    const preRollNarrative = obj.pre_roll_narrative;
     const narrativeResult = obj.narrativeResult;
     const narrativeField = obj.narrative;
     const response = obj.response;

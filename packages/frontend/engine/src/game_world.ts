@@ -1538,7 +1538,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           });
         }
 
-        // Also notify legacy callback consumers (sandbox, interaction_bridge)
+        // Also notify callback consumers (sandbox, interaction_bridge)
         if (this._interactRequestCallback) {
           this._interactRequestCallback(npc);
         }
@@ -1652,8 +1652,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Called from the {@link EngineBridge} ZONE_TRIGGERED listener.
    *
    * @param options.mapUrl - URL to the new Tiled JSON tilemap.
-   * @param options.targetX - X pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
-   * @param options.targetY - Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
+   * @param options.targetX - X pixel coordinate for the player on the new map.
+   * @param options.targetY - Y pixel coordinate for the player on the new map.
    * @param options.defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
    * @param options.collectedPickups - Array of collected item pickup spawn IDs to suppress (C-331).
    * @param options.targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
@@ -2263,7 +2263,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
-      // Fall back to legacy getFrameAt when no spritesheet was created
+      // Fall back to getFrameAt when no spritesheet was created
       // (e.g., dimensions don't align to the 64×64 grid).
       if (layer.spritesheet) {
         const columns = Math.floor(layer.texture.width / 64);

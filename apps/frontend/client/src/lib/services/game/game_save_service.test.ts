@@ -211,17 +211,17 @@ describe('GameSaveService (C-334)', () => {
     expect(mockRestoreCalls).toBe(1);
   });
 
-  test('loadGame should accept plain ECS snapshot (legacy)', async () => {
+  test('loadGame should accept plain ECS snapshot', async () => {
     const { getLocalDatabase } = await import('@aikami/frontend/repositories');
     const db = await getLocalDatabase();
     await db.execute({
       sql: 'INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)',
-      args: ['aikami_save_legacy', 'legacy', null, Date.now(), 'Legacy', MOCK_SNAPSHOT_PAYLOAD],
+      args: ['aikami_save_plain', 'plain', null, Date.now(), 'Plain', MOCK_SNAPSHOT_PAYLOAD],
     });
 
     const service = await getService(bridge);
 
-    await service.loadGame('legacy');
+    await service.loadGame('plain');
     expect(mockRestoreCalls).toBe(1);
   });
 
@@ -358,7 +358,7 @@ describe('GameSaveService (C-334)', () => {
     expect(result.checksumValid).toBe(true); // v1 always valid
   });
 
-  test('parseSavePayloadEnvelope should handle legacy plain snapshot', async () => {
+  test('parseSavePayloadEnvelope should handle plain snapshot', async () => {
     const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
 
     const result = parseSavePayloadEnvelope('plain ecs data');

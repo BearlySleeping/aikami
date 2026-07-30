@@ -153,5 +153,5 @@ class DevViewModel extends BaseViewModel<DevViewModelOptions> implements DevView
 export const getDevViewModel = (options: DevViewModelOptions): DevViewModelInterface =>
   new DevViewModel(options);
 
-/** @deprecated Use {@link DevViewModelInterface.navItems} instead. */
+/** Use {@link DevViewModelInterface.navItems} instead. */
 export const NAV_ITEMS = _deriveNavItems();

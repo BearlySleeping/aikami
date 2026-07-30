@@ -7,10 +7,8 @@
  *   overridden here.
  * - Supports full lifecycle: draft, approved, in_progress, implemented,
  *   verification_failed, verified, completed, blocked, superseded.
- * - Shows legacy completion and verified completion distinctly.
+ * - Shows completed and verified completion distinctly.
  * - Rejects duplicate IDs.
- * - Version 1 contracts with completion markers but no execution reports
- *   display as "legacy_completed" to distinguish from verified contracts.
  */
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,8 +29,6 @@ const STATUS_LABELS: Record<string, string> = {
   blocked: '🚫 blocked',
   superseded: '👻 superseded',
 
-  // Legacy (pre-V2)
-  legacy_completed: '📦 legacy_completed',
   not_started: '⏳ not_started',
   not_started_no_file: '⏳ not_started (no contract file)',
 
@@ -68,25 +64,6 @@ const extractStatus = (content: string): string => {
     return (statusMatch[1] ?? '').trim();
   }
   return 'not_started';
-};
-
-/**
- * Detect if contract is legacy (v1 with completion marker but no modern evidence).
- */
-const isLegacyCompleted = (content: string): boolean => {
-  const hasCompletedMarker = /^<!--\s*completed:/.test(content);
-  const status = extractStatus(content);
-  const hasExecutionReport = /## Execution Report/i.test(content);
-  const hasVerificationReport = /## Verification Verdict/i.test(content);
-
-  // Legacy: has completion marker but status is not following V2 lifecycle
-  return (
-    hasCompletedMarker &&
-    !hasExecutionReport &&
-    !hasVerificationReport &&
-    status !== 'verified' &&
-    status !== 'completed'
-  );
 };
 
 /**
@@ -166,14 +143,7 @@ const readContractsFromDir = (
     const version = detectVersion(content);
     const name = slugToName(file);
 
-    let status: string;
-    if (archived) {
-      status = 'archived';
-    } else if (version === 1 && isLegacyCompleted(content)) {
-      status = 'legacy_completed';
-    } else {
-      status = extractStatus(content);
-    }
+    const status: string = archived ? 'archived' : extractStatus(content);
 
     const promotion = archived ? undefined : extractPromotion(content);
 

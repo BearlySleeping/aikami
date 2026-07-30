@@ -36,19 +36,22 @@ const tokenizeArgs = (args: string): string[] => {
   let current = '';
   let inSingleQuote = false;
   let inDoubleQuote = false;
-  let escape = false;
+  let isEscaped = false;
 
   for (let i = 0; i < args.length; i++) {
     const char = args[i];
+    if (char === undefined) {
+      continue;
+    }
 
-    if (escape) {
+    if (isEscaped) {
       current += char;
-      escape = false;
+      isEscaped = false;
       continue;
     }
 
     if (char === '\\' && !inSingleQuote) {
-      escape = true;
+      isEscaped = true;
       continue;
     }
 

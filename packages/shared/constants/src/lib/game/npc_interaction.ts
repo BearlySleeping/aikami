@@ -27,7 +27,7 @@ export type SkillStatEntry = {
 export const SKILL_STAT_MAP: Record<string, SkillStatEntry> = {
   persuasion: { stat: 'CHA', defaultModifier: 2 },
   intimidation: { stat: 'STR', defaultModifier: 1 },
-  'sleightOfHand': { stat: 'DEX', defaultModifier: 1 },
+  sleightOfHand: { stat: 'DEX', defaultModifier: 1 },
   stealth: { stat: 'DEX', defaultModifier: 1 },
   insight: { stat: 'WIS', defaultModifier: 1 },
   investigation: { stat: 'INT', defaultModifier: 0 },

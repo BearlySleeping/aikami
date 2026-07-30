@@ -88,7 +88,7 @@ class TextGenerationService
   private readonly _abortControllers = new Set<AbortController>();
   private _activeStreamCount = 0;
 
-  // ── Private: diagnostics globals (legacy debug hooks) ─────────────────
+  // ── Private: diagnostics globals ─────────────────────────────────────
 
   private _exposeRouting(resolution: AiModeResolution): void {
     const g = globalThis as Record<string, unknown>;

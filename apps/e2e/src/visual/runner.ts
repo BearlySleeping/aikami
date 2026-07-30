@@ -69,7 +69,7 @@ const loadSuites = async (): Promise<VisualTestSuite[]> => {
       const raw = mod.default;
 
       if (!raw) {
-        // Fallback: look for named exports (legacy pattern)
+        // Fallback: look for named exports
         for (const key of Object.keys(mod)) {
           const value = (mod as Record<string, unknown>)[key];
           if (

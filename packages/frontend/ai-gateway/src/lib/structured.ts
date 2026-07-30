@@ -21,7 +21,7 @@ export type SchemaCompiler = {
  * Creates a schema compiler with an internal cache keyed by schema name.
  *
  * @param options.onCacheSize - Debug hook invoked with the cache size after
- *   every compile (used to preserve legacy diagnostics globals).
+ *   every compile (used to preserve diagnostics globals).
  */
 export const createSchemaCompiler = (options?: {
   onCacheSize?: (size: number) => void;
@@ -168,7 +168,7 @@ export const sanitizeJsonResponse = (raw: string): string => {
 /**
  * Validates a parsed value against the original TypeBox schema.
  * Returns false on mismatch — callers decide whether to warn; the value
- * is still delivered (legacy lenient behavior).
+ * is still delivered (lenient behavior).
  */
 export const validateAgainstSchema = (options: {
   schema: Record<string, unknown>;

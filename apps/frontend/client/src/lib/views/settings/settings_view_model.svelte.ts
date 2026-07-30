@@ -64,10 +64,8 @@ import { SETTINGS_SECTIONS, type SettingsSection } from './settings_sections';
 // Types (backward-compatible aliases)
 // ---------------------------------------------------------------------------
 
-/** @deprecated — use SettingsSection instead. Kept for backward compat. */
 export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
-/** @deprecated — use SettingsSection instead. Kept for backward compat. */
 export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' | 'autonomous';
 
 // ---------------------------------------------------------------------------

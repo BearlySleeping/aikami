@@ -157,7 +157,7 @@ export const isWithinMapBounds = (pixelX: number, pixelY: number): boolean => {
  * Checks whether a pixel coordinate is walkable.
  *
  * First checks the spatial grid (C-173 bitmask collision), falls back
- * to the legacy boolean collision grid if no spatial grid is active.
+ * to the boolean collision grid if no spatial grid is active.
  *
  * @param pixelX - X position in pixels.
  * @param pixelY - Y position in pixels.
@@ -447,7 +447,7 @@ export const isCellBlocked = (destX: number, destY: number, moverMask: number): 
 
 /**
  * Populates the spatial grid with wall entities for solid tiles
- * from the legacy boolean collision grid.
+ * from the boolean collision grid.
  *
  * Wall entities receive `CollisionData { layer: CollisionLayer.wall, mask: 0 }`
  * and GridPosition at the tile coordinate. They live permanently in the
@@ -474,7 +474,7 @@ const _populateWallsFromCollisionGrid = (_world: World, grid: CollisionGrid): vo
         //
         // For proper bitmask collision, walls need real entities with
         // CollisionData. This is scaffolded for future wall entity creation.
-        _spatialGrid[flatIndex] = 0; // No wall entity — use legacy grid check
+        _spatialGrid[flatIndex] = 0; // No wall entity — use grid check
       }
     }
   }

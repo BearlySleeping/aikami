@@ -597,7 +597,7 @@ class GameBootService
 
     if (input.pendingSavePayload) {
       // Restore from save snapshot — the payload may be a full envelope
-      // ({ ecsSnapshot, serviceSnapshots }) or a legacy plain ECS snapshot.
+      // ({ ecsSnapshot, serviceSnapshots }) or a plain ECS snapshot.
       this.bootProgress.detail = 'Restoring saved world...';
       const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
       const { hydrateAllServices } = await import('./serializable_service');

@@ -5,12 +5,12 @@
 // Usage: bun run scripts/convert_logo_png_to_svg.ts
 
 import * as fs from 'node:fs';
-import { createRequire } from 'node:module';
 import * as path from 'node:path';
 
-const require = createRequire(import.meta.url);
-const ImageTracer = require('imagetracerjs');
-const PNGReader = require('../node_modules/imagetracerjs/nodecli/PNGReader.js');
+// @ts-expect-error - imagetracerjs has no ESM types
+import ImageTracer from 'imagetracerjs';
+// @ts-expect-error - internal CLI module, no ESM types
+import PNGReader from 'imagetracerjs/nodecli/PNGReader.js';
 
 const REFERENCE_PNG = path.resolve(import.meta.dir, '../src/lib/assets/logo.png');
 const OUTPUT_SVG = path.resolve(import.meta.dir, '../src/lib/assets/icons/logo.svg');

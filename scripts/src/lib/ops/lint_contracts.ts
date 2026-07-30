@@ -4,7 +4,7 @@
  * Modes:
  *   --contract C-XXX    Strict lint for one contract (CI gate)
  *   --changed [base]    Lint contracts changed from a Git base (default: HEAD~1)
- *   --all               Full audit, including legacy warnings (non-blocking)
+ *   --all               Full audit, including informational warnings (non-blocking)
  *   (no flag)           Per-contract mode if CONTRACT_LINT_ID env set; else --all audit
  *
  * Rules are STATUS-AWARE:
@@ -15,7 +15,6 @@
  *   verified:    All implemented reqs + Verification Report with PASS + fingerprint.
  *   completed:   All verified reqs + completion marker.
  *
- * Legacy (v1) contracts are grandfathered for missing modern reports.
  * Duplicate IDs are a global error for ALL versions.
  */
 
@@ -59,7 +58,7 @@ const VALID_STATUSES = new Set([
   'completed',
   'blocked',
   'superseded',
-  'not_started', // legacy
+  'not_started',
 ]);
 
 const IMPLEMENTED_OR_LATER = new Set(['implemented', 'verified', 'completed']);
@@ -261,7 +260,7 @@ const checkStatus = (info: ContractInfo): LintIssue[] => {
 
   // Marker/status consitency
   const marker = hasCompletedMarker(info.content);
-  if (marker && info.status !== 'completed' && info.status !== 'legacy_completed') {
+  if (marker && info.status !== 'completed') {
     issues.push({
       file: info.filename,
       severity: 'warning',
@@ -520,12 +519,6 @@ const lintContract = (info: ContractInfo): LintIssue[] => {
     issues.push(...checkVerificationReport(info));
   }
 
-  // Legacy v1: only check status validity
-  if (info.version === 1) {
-    // Status check already done above
-    // Skip modern report requirements for legacy
-  }
-
   return issues;
 };
 
@@ -717,7 +710,7 @@ const main = () => {
     `\n📊 ${targetContracts.length} files | ${errors.length} errors | ${warnings.length} warnings`,
   );
 
-  // In --all mode, errors are non-blocking for legacy contracts
+  // In --all mode, errors are non-blocking
   // In --contract and --changed mode, errors block
   if (opts.mode === 'all') {
     process.exit(0);

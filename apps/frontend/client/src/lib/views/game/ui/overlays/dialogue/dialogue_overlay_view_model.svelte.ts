@@ -955,7 +955,7 @@ class DialogueOverlayViewModel
     if (this._npcDialogueService.useFreeTextFirst) {
       await this._sendWithIntentAnalysis(content);
     } else {
-      // Legacy path — single-call generateTurn
+      // Single-call generateTurn
       await this._delegateGenerateResponse();
     }
   }

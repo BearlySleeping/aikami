@@ -18,7 +18,6 @@ export const CONSOLE_ERROR_ALLOWLIST: RegExp[] = [
   // ResizeObserver loop completed with undelivered notifications
   /ResizeObserver loop completed/,
 
-  // PixiJS known benign warnings about missing extensions
   /pixi\.js.*deprecated/i,
 
   // WebGL context loss warnings that resolve automatically

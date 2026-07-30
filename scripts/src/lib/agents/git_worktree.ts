@@ -2,9 +2,6 @@
 //
 // Git Worktree utilities used by the contract pipeline orchestrator,
 // herdr adapter, and Pi extensions. Single source of truth — do not fork.
-//
-// Replaces the deprecated jj.ts (Jujutsu). Uses Git Worktrees for
-// isolated agent workspaces — root repo stays untouched on dev/main.
 
 import { execSync } from 'node:child_process';
 import {

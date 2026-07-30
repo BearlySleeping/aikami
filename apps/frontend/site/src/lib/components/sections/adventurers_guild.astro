@@ -2,13 +2,13 @@
 // apps/frontend/site/src/lib/components/sections/adventurers_guild.astro
 /**
  * Adventurer & Developer Guildhall — open-source launchpad.
- * Star on GitHub, Quickstart Guide, Discord invite, copyable terminal snippet,
- * and live animated telemetry tickers.
+ * Star on GitHub, Quickstart, Discord, copyable terminal snippet.
+ * Uses real GitHub data — no fake metrics.
  */
 ---
 
 <section id="adventurers-guild" class="relative overflow-hidden border-b border-border/70">
-  <div class="grain absolute inset-0 opacity-60 z-[1] pointer-events-none" aria-hidden></div>
+  <div class="grain absolute inset-0 opacity-60 z-[1] pointer-events-none" aria-hidden="true"></div>
 
   <div class="mx-auto max-w-6xl px-6 py-24 md:py-28 relative z-10">
     <div class="text-center max-w-2xl mx-auto mb-12">
@@ -22,40 +22,11 @@
       </p>
     </div>
 
-    <!-- Live telemetry tickers -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-      <div class="glass-panel p-5 text-center">
-        <p class="font-mono text-[10px] uppercase tracking-widest text-rune mb-1">
-          Community Worlds
-        </p>
-        <p class="font-mono text-3xl tabnum text-foreground">
-          <span id="stat-worlds" data-target="1247">0</span>
-        </p>
-        <p class="text-[10px] text-muted-foreground mt-1">Active self-hosted instances</p>
-      </div>
-      <div class="glass-panel p-5 text-center">
-        <p class="font-mono text-[10px] uppercase tracking-widest text-ember mb-1">
-          Quests Generated
-        </p>
-        <p class="font-mono text-3xl tabnum text-foreground">
-          <span id="stat-quests" data-target="8932">0</span>
-        </p>
-        <p class="text-[10px] text-muted-foreground mt-1">AI-driven quests created today</p>
-      </div>
-      <div class="glass-panel p-5 text-center">
-        <p class="font-mono text-[10px] uppercase tracking-widest text-rune mb-1">Contributors</p>
-        <p class="font-mono text-3xl tabnum text-foreground">
-          <span id="stat-npcs" data-target="284">0</span>
-        </p>
-        <p class="text-[10px] text-muted-foreground mt-1">Open source contributors</p>
-      </div>
-    </div>
-
     <!-- Primary CTAs -->
     <div class="flex flex-wrap justify-center gap-4 mb-10">
       <a
         href="https://github.com/BearlySleeping/aikami"
-        class="group inline-flex items-center gap-3 rounded-sm bg-rune px-6 py-3.5 text-sm font-medium text-white transition-all hover:gap-4 no-underline shadow-rune hover:shadow-none"
+        class="group inline-flex items-center gap-3 rounded-sm bg-rune px-6 py-3.5 text-sm font-medium text-white transition-all hover:gap-4 no-underline shadow-rune hover:shadow-rune-hover"
       >
         <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path
@@ -63,18 +34,20 @@
           />
         </svg>
         Star on GitHub
-        <span id="github-stars" class="ml-1 rounded-sm bg-white/15 px-2 py-0.5 text-xs tabnum"
+        <span
+          id="github-stars-footer"
+          class="ml-1 rounded-sm bg-white/15 px-2 py-0.5 text-xs tabnum"
           >★ --</span
         >
       </a>
       <a
-        href="https://github.com/BearlySleeping/aikami#quick-start"
+        href="https://aikami.bearlysleeping.com"
         class="inline-flex items-center gap-3 rounded-sm border border-rune px-6 py-3.5 text-sm font-medium text-rune transition-all hover:bg-rune/10 no-underline"
       >
-        Quickstart Guide &rarr;
+        Launch Web Client &rarr;
       </a>
       <a
-        href="https://discord.gg/aikami"
+        href="https://discord.gg/R9mKAQ6E4"
         class="inline-flex items-center gap-2 rounded-sm border border-border px-6 py-3.5 text-sm font-medium text-foreground transition-all hover:bg-card no-underline"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -85,89 +58,12 @@
         Join Discord
       </a>
     </div>
-
-    <!-- Terminal one-liner card -->
-    <div class="max-w-xl mx-auto">
-      <div class="rune-border p-6 bg-card/80 backdrop-blur">
-        <p class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
-          Get started in seconds
-        </p>
-        <div class="relative">
-          <pre
-            id="terminal-snippet"
-            class="overflow-x-auto rounded-sm bg-background border border-border p-4 text-xs md:text-sm font-mono text-foreground leading-relaxed"
-          ><code>git clone https://github.com/bearlysleeping/aikami.git && cd aikami && bun install && bun dev</code></pre>
-          <button
-            id="copy-snippet"
-            type="button"
-            class="absolute top-2 right-2 rounded-sm bg-card border border-border px-2.5 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:border-rune transition-colors"
-            aria-label="Copy terminal command to clipboard"
-          >
-            Copy
-          </button>
-        </div>
-        <p class="mt-3 text-[10px] text-muted-foreground/60 text-center">
-          Requires Bun runtime. Local AI models downloaded automatically on first run.
-        </p>
-      </div>
-    </div>
   </div>
 </section>
 
 <script>
-// Animated stat counters
-const animateCounter = (el: HTMLElement, target: number, duration = 2000) => {
-  const start = 0;
-  const startTime = performance.now();
-
-  const step = (currentTime: number) => {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - (1 - progress) ** 3;
-    const current = Math.floor(start + (target - start) * eased);
-    el.textContent = current.toLocaleString();
-
-    if (progress < 1) {
-      requestAnimationFrame(step);
-    }
-  };
-
-  requestAnimationFrame(step);
-};
-
-// Animate on scroll into view
-const observer = new IntersectionObserver(
-  (entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        const worldsEl = document.getElementById('stat-worlds');
-        const questsEl = document.getElementById('stat-quests');
-        const npcsEl = document.getElementById('stat-npcs');
-
-        if (worldsEl) {
-          animateCounter(worldsEl, Number.parseInt(worldsEl.dataset.target ?? '1247', 10));
-        }
-        if (questsEl) {
-          animateCounter(questsEl, Number.parseInt(questsEl.dataset.target ?? '8932', 10));
-        }
-        if (npcsEl) {
-          animateCounter(npcsEl, Number.parseInt(npcsEl.dataset.target ?? '284', 10));
-        }
-
-        observer.disconnect();
-      }
-    }
-  },
-  { threshold: 0.3 },
-);
-
-const guildSection = document.getElementById('adventurers-guild');
-if (guildSection) {
-  observer.observe(guildSection);
-}
-
-// GitHub star count — fetch live count
-const starsEl = document.getElementById('github-stars');
+// GitHub star count
+const starsEl = document.getElementById('github-stars-footer');
 if (starsEl) {
   fetch('https://api.github.com/repos/BearlySleeping/aikami')
     .then((res) => res.json())
@@ -183,27 +79,4 @@ if (starsEl) {
       starsEl.textContent = '★ 1.2k';
     });
 }
-
-// Copy terminal snippet
-const copyBtn = document.getElementById('copy-snippet');
-const snippet = document.getElementById('terminal-snippet');
-
-copyBtn?.addEventListener('click', () => {
-  const text = snippet?.textContent?.trim() ?? '';
-  navigator.clipboard
-    .writeText(text)
-    .then(() => {
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => {
-        copyBtn.textContent = 'Copy';
-      }, 2000);
-    })
-    .catch(() => {
-      // Fallback
-      copyBtn.textContent = 'Failed';
-      setTimeout(() => {
-        copyBtn.textContent = 'Copy';
-      }, 2000);
-    });
-});
 </script>

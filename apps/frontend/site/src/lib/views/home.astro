@@ -1,20 +1,36 @@
 ---
 // apps/frontend/site/src/lib/views/home.astro
+
 import AdventurersGuildSection from '$sections/adventurers_guild.astro';
-import ConceptMagnetsSection from '$sections/concept_magnets.astro';
-import EncounterCardsSection from '$sections/encounter_cards.astro';
+import CharacterSheetSection from '$sections/character_sheet.astro';
+import CrossPlatformSection from '$sections/cross_platform.astro';
 import FeaturesSection from '$sections/features.astro';
 import HeroSection from '$sections/hero.astro';
 import MemoryGraphSection from '$sections/memory_graph.astro';
+import NpcGeneratorSection from '$sections/npc_generator.astro';
 import StoryletBrancherSection from '$sections/storylet_brancher.astro';
 import YourRealmSection from '$sections/your_realm.astro';
 ---
 
+<!-- Section 1: Hero — The Living World Engine -->
 <HeroSection />
+
+<!-- Section 2: Dynamic NPC & Lore Generation Showcase -->
+<NpcGeneratorSection />
+
+<!-- Section 3: RPG Mechanics Integration — D&D Sheets & Skill Checks -->
+<CharacterSheetSection />
+
+<!-- Section 4: Persistent Cognition & World State -->
 <FeaturesSection />
 <MemoryGraphSection />
 <StoryletBrancherSection />
-<ConceptMagnetsSection />
-<EncounterCardsSection />
+
+<!-- Section 5: Cross-Platform Architecture -->
+<CrossPlatformSection />
+
+<!-- Section 6: Open Source, Deployment & Dev Hub -->
 <YourRealmSection />
+
+<!-- Section 7: CTA Guildhall -->
 <AdventurersGuildSection />
