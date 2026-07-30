@@ -13,7 +13,6 @@ These files were consolidated from the root-level `docs/` directory:
 | `CI_CD.md` | CI/CD pipeline setup |
 | `CODING_STANDARDS.md` | Coding standards and conventions |
 | `FEATURES.md` | Feature specifications |
-| `GODOT.md` | Godot game engine integration |
 | `PLAYWRIGHT.md` | Playwright E2E testing setup |
 | `CLIENT_FEATURES.md` | client-specific features |
 | `STACK.md` | Technology stack reference |

@@ -524,17 +524,17 @@ Not yet started — `sprite_composer.ts` has the foundational SpriteComposer cla
 
 ### Findings
 - Updated all 7 target knowledge files (architecture.md, limitations.md, STACK.md, STRUCTURE.md, CODING_STANDARDS.md, index.md, CONTEXT.md) to reflect May 2026 Deep Research findings
-- architecture.md: Full rewrite — removed Godot/Genkit/Firestore as current, added PixiJS v8 + bitECS engine boundary diagram, Data Connect PostgreSQL, Valibot, TanStack DB + PowerSync, AiServiceInterface, BaseDatabaseService. Added migration status table.
-- limitations.md: Added 3 new sections — Svelte 5 Reactivity Boundary, Bridge Serialization Constraints, Deprecated Components table. Moved GodotJS to deprecated.
-- STACK.md: Replaced technology table with 19-row comprehensive table. Added architecture layer diagram, migration notes section. Godot/Genkit only in "Replaced by" context.
+- architecture.md: Full rewrite — removed Genkit/Firestore as current, added PixiJS v8 + bitECS engine boundary diagram, Data Connect PostgreSQL, Valibot, TanStack DB + PowerSync, AiServiceInterface, BaseDatabaseService. Added migration status table.
+- limitations.md: Added 3 new sections — Svelte 5 Reactivity Boundary, Bridge Serialization Constraints, Deprecated Components table.
+- STACK.md: Replaced technology table with 19-row comprehensive table. Added architecture layer diagram, migration notes section. Genkit only in "Replaced by" context.
 - STRUCTURE.md: Marked apps/frontend/gamejs/ as ⚠️ DEPRECATED with migration target. Added client/src/lib/game/ tree. Listed planned packages (valibot-schemas, tanstack-db). Added path aliases table.
 - CODING_STANDARDS.md: Appended "Strict AI Coding Rules" section with 4 sub-sections, each with ✅/❌ code examples: type>interface, arrow const>function, explicit braces, early escapes.
-- index.md: Updated project description with new stack. Zero Godot/Genkit references.
+- index.md: Updated project description with new stack. Zero Genkit references.
 - CONTEXT.md: Updated tech stack table and one-liner, project tree with deprecated marker and new engine path, engine boundary section, strict AI coding rules summary.
 - llms.txt: Regenerated (48 files, was 48 — 5 new doc files indexed).
 - Typecheck: 7 pre-existing errors, 9 pre-existing warnings in PWA — zero new errors from documentation changes.
 - All 6 AC grep-based verification checks passed.
-- GODOT.md preserved as-is per contract (frozen migration reference). Other guides (AI_RESEARCH.md, dev-workflow.md, etc.) left for future contracts.
+- Legacy migration guide preserved as-is per contract (frozen reference). Other guides (AI_RESEARCH.md, dev-workflow.md, etc.) left for future contracts.
 
 ### Files modified
 - knowledge/architecture/architecture.md — Full rewrite with engine boundary diagram, Data Connect, migration table
@@ -568,7 +568,7 @@ Not yet started — `sprite_composer.ts` has the foundational SpriteComposer cla
 - Cleanup script (scripts/src/lib/cleanup_vendor_dirs.ts) skipped — nothing to clean
 
 ### Note
-- godot-mcp/ exists at root as a separate git repo (Godot MCP plugin) — not an AI vendor dir, but could be moved later
+- mcp/ exists at root as a separate git repo — not an AI vendor dir, but could be moved later
 
 ---
 
@@ -598,7 +598,7 @@ Updated all knowledge files with current project state after full audit:
 - knowledge/llms.txt — regenerated (43 files, was 39)
 
 ### Key findings from audit
-- GameJS: GodotJS game client with Firebase auth, game state management, AI parsing tests
+- GameJS: Deprecated game client with Firebase auth, game state management, AI parsing tests
 - PWA: 6 authenticated routes (dashboard, chat, NPCs, personas, settings), ViewModel pattern
 - Functions: 5 controllers (auth created/deleted, prompt AI, generate image, daily scheduler)
 - Schemas: 17+ Firestore collections with full Zod schemas (D&D character sheets, NPCs, personas)
@@ -856,7 +856,7 @@ Updated all knowledge files with current project state after full audit:
 - CONTEXT.md already present and comprehensive — fixed stale AGENTS.md reference and updated contract statuses
 - guides/README.md updated with table of migrated docs
 - docs/ migrated to knowledge/guides/ and removed from root
-- examples/ kept as runnable code examples (SillyTavern, Godot)
+- examples/ kept as runnable code examples (SillyTavern)
 
 ### Files modified
 - knowledge/guides/README.md — updated with table of migrated docs

@@ -27,9 +27,9 @@ Testing approach for the Aikami monorepo.
 - Zod schema validation (packages/shared/schemas/src/lib/*.test.ts)
 - Business logic validation
 - Utility functions
-- AI response parsing (gamejs tests for OpenAI, ElevenLabs — ⚠️ LEGACY, see migration note below)
+- AI response parsing
 
-**Coverage:** Partial — schemas package has 15+ test files, functions have 1. `apps/frontend/gamejs/` has 5 legacy test files (deprecated).
+**Coverage:** Partial — schemas package has 15+ test files, functions have 1.
 
 ```bash
 bun run test              # All unit tests via moon
@@ -94,7 +94,6 @@ CI=true bun run test:blackbox
 | Layer | Coverage | Status |
 |-------|----------|--------|
 | Unit (schemas) | 15+ test files | ✅ Active |
-| Unit (gamejs) | 5 test files | ⚠️ Deprecated — Legacy GodotJS client |
 | Unit (functions) | 1 test file | ⚠️ Minimal |
 | Unit (Client) | None | ❌ Missing |
 | Unit (game engine) | None | ❌ Missing — Target: client/src/lib/game/ (C-016) |

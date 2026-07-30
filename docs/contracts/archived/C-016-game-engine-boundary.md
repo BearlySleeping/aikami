@@ -426,7 +426,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 - `apps/frontend/client/package.json` — add test script for game-specific tests (optional, `bun test` finds them automatically)
 
 ### Files to delete
-- None (existing Godot `apps/frontend/gamejs/` remains untouched — migration is incremental)
+- None
 
 ### Order of operations
 1. Create `$game` path alias in tsconfig + vite config

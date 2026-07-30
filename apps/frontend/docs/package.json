@@ -12,7 +12,7 @@
     "fix": "biome check --write src --error-on-warnings"
   },
   "devDependencies": {
-    "astro": "7.1.4"
+    "astro": "7.1.5"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

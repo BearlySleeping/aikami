@@ -6,11 +6,10 @@ This document summarizes the findings from AI tool and technology research condu
 
 1. [Database Options](#database-options)
 2. [AI API Providers](#ai-api-providers)
-3. [GodotJS Ecosystem](#godotjs-ecosystem)
-4. [Open-Source References](#open-source-references)
-5. [Cost Projections](#cost-projections)
-6. [Recommendations](#recommendations)
-7. [Next Steps](#next-steps)
+3. [Open-Source References](#open-source-references)
+4. [Cost Projections](#cost-projections)
+5. [Recommendations](#recommendations)
+6. [Next Steps](#next-steps)
 
 ---
 
@@ -72,31 +71,6 @@ Aikami uses **Google AI via Genkit**, which is functional but may not be the mos
 **Genkit** can handle intelligent routing with automatic fallbacks when rate limits are hit.
 
 ---
-
-## GodotJS Ecosystem
-
-### Current State
-
-Aikami uses **@godot-js/godot-ts** for TypeScript bindings in Godot.
-
-### Status Update
-
-| Item | Status |
-|------|--------|
-| **@godot-js/godot-ts** | Actively maintained (v1.0.0 - Feb 2025) |
-| V8 engine support | ✅ Stable |
-| Hot-reloading | ✅ Working |
-| Worker threads | ⚠️ Experimental |
-
-### Alternatives
-
-If GodotJS is abandoned:
-
-1. **C# (.NET)** - Primary production-ready alternative
-2. **GDExtension** - C++/Rust native extensions for intensive logic
-3. **GDScript** - Native but lacks TypeScript benefits
-
-**Recommendation**: GodotJS is safe to use for now.
 
 ---
 
@@ -163,13 +137,6 @@ From SillyTavern and related projects:
 | **Framework** | Keep Genkit | Handles routing/fallbacks automatically |
 | **Backup** | Gemini Flash-Lite | Reliability, cost efficiency |
 
-### GodotJS
-
-| Decision | Recommendation |
-|----------|----------------|
-| **Keep** | @godot-js/godot-ts v1.0.0 |
-| **Monitor** | Community activity for alternatives |
-
 ---
 
 ## Next Steps
@@ -184,7 +151,6 @@ From SillyTavern and related projects:
 
 - [ ] Prototype: PocketBase vs Firestore for game state
 - [ ] Evaluate Firebase Data Connect if SQL is needed
-- [ ] Test GodotJS v1.0.0 with current Godot 4.6
 
 ### Phase 3: Long-term (Next Quarter)
 

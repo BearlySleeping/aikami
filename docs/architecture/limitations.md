@@ -33,23 +33,23 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ### Planned but Not Implemented
 
-| Feature                             | Spec                              | Status                                 |
-| ----------------------------------- | --------------------------------- | -------------------------------------- |
-| Game Engine (PixiJS + bitECS)       | C-016 contract                    | Not started                            |
-| EngineBridge typed message channel  | C-016 contract                    | Not started                            |
-| Tauri v2 Desktop Export             | C-013 tooling setup               | Not started                            |
-| Database Abstraction (Data Connect) | C-014 contract                    | Not started                            |
-| AI Service Abstraction              | C-015 contract                    | Not started                            |
-| TanStack DB + PowerSync client sync | Planned                           | Not started                            |
-| Valibot client validation           | Planned                           | Not started                            |
-| Group Chats                         | Multiple NPCs in one conversation | Zod schema exists, no UI               |
-| Character Relationships             | Dynamic relationship tracking     | Schema exists, no logic                |
-| Knowledge Graphs                    | Connected world knowledge         | Schema stubbed                         |
-| Lorebook Integration                | World lore in chat context        | Schema exists, not wired               |
+| Feature                             | Spec                              | Status                                    |
+| ----------------------------------- | --------------------------------- | ----------------------------------------- |
+| Game Engine (PixiJS + bitECS)       | C-016 contract                    | Not started                               |
+| EngineBridge typed message channel  | C-016 contract                    | Not started                               |
+| Tauri v2 Desktop Export             | C-013 tooling setup               | Not started                               |
+| Database Abstraction (Data Connect) | C-014 contract                    | Not started                               |
+| AI Service Abstraction              | C-015 contract                    | Not started                               |
+| TanStack DB + PowerSync client sync | Planned                           | Not started                               |
+| Valibot client validation           | Planned                           | Not started                               |
+| Group Chats                         | Multiple NPCs in one conversation | Zod schema exists, no UI                  |
+| Character Relationships             | Dynamic relationship tracking     | Schema exists, no logic                   |
+| Knowledge Graphs                    | Connected world knowledge         | Schema stubbed                            |
+| Lorebook Integration                | World lore in chat context        | Schema exists, not wired                  |
 | Voice Synthesis (TTS)               | ElevenLabs integration            | gamejs tests exist, no Client integration |
-| Image Generation                    | AI avatar creation                | Callable function exists, no UI flow   |
-| NPC Forking                         | Copy/remix public NPCs            | Schema field exists, no UI             |
-| NPC Expressions                     | Multiple avatar images per NPC    | Schema field exists, no UI             |
+| Image Generation                    | AI avatar creation                | Callable function exists, no UI flow      |
+| NPC Forking                         | Copy/remix public NPCs            | Schema field exists, no UI                |
+| NPC Expressions                     | Multiple avatar images per NPC    | Schema field exists, no UI                |
 
 ### Partially Implemented
 
@@ -59,14 +59,6 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 | Personas       | CRUD + switching  | Import/export, persona sharing           |
 | NPCs           | CRUD + visibility | Public marketplace, forking, expressions |
 | World Building | World schema      | World creation UI, world-settings        |
-
-### Deprecated
-
-| Component                                     | Status         | Notes                                                                                                                                    |
-| --------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated  | Preserved for reference. Migration target: `client/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
-| Genkit AI Framework                           | Replaced       | Migrated to vendor-agnostic AiServiceInterface (C-015). Direct Genkit imports being refactored.                                          |
-| Firestore NoSQL                               | Being migrated | Target: Firebase Data Connect (PostgreSQL) per C-014. Existing Firestore repositories remain operational during incremental migration.   |
 
 ## Test Coverage Gaps
 

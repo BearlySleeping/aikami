@@ -4,7 +4,7 @@
 # This file is structured logically.
 # 1. Dependencies & Tool Caches
 # 2. General Build Outputs
-# 3. Project-Specific (SvelteKit, Astro, Godot, etc.)
+# 3. Project-Specific (SvelteKit, Astro, etc.)
 # 4. Logs, Runtime, and Temp Files
 # 5. Environment & Config
 # 6. Testing & Coverage
@@ -83,60 +83,11 @@ src/lib/paraglide
 ## 🖼️ Project: ComfyUI Image Microservice
 # Models and caches are too large; per-directory .gitignore keeps structure.
 
-## 🎮 Project: Godot
-# This is a pruned version of the standard Godot template,
 # as OS/IDE rules are already handled globally.
 
 # Build configuration
 /custom.py
 misc/hooks/pre-commit-custom-*
-
-# Godot generated files
-.import/
-/gdextension_interface.h
-extension_api.json
-bin/
-*.gen.*
-compile_commands.json
-platform/windows/godot_res.res
-build.ninja
-.ninja
-run_ninja_env.bat
-tests/data/*.translation
-tests/data/crypto/out*
-
-# Godot-specific build output (C/C++, Python, etc.)
-*.a
-*.ax
-*.d
-*.dll
-*.lib
-*.lo
-*.o
-*.os
-*.ox
-*.Plo
-*.so
-st[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]
-.venv
-venv
-__pycache__/
-*.pyc
-doc/_build/
-
-# Godot platform-specific builds
-.gradle/
-local.properties
-*.iml
-.gradletasknamecache
-project.properties
-platform/android/java/*/.cxx/
-platform/android/java/*/build/
-platform/android/java/*/libs/
-*.dSYM
-*.bc
-platform/web/node_modules/
-*.debug
 
 # --- 4. Logs, Runtime, and Temp Files ---
 ## 📜 Logs
