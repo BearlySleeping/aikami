@@ -20,7 +20,7 @@ export const QuestObjectiveStatusSchema = Type.Union([
 
 // ── Objective progress (extended for C-339) ──
 
-/** Legacy v0 objective progress — objectiveIndex + current only. */
+/** V0 objective progress — objectiveIndex + current only. */
 export const QuestObjectiveProgressSchema = Type.Object({
   objectiveIndex: Type.Integer({
     minimum: 0,
@@ -118,7 +118,7 @@ export const ActiveQuestStateSchema = Type.Object({
   ),
   activeQuests: Type.Array(QuestProgressSchema, { description: 'Currently tracked quests' }),
   completedQuestIds: Type.Array(Type.String(), {
-    description: 'Quest IDs completed (for dedup) — legacy, prefer completedQuests',
+    description: 'Quest IDs completed (for dedup)',
   }),
   completedQuests: Type.Array(QuestProgressSchema, {
     description: 'Completed quest progress records with metadata (C-329 code review fix)',

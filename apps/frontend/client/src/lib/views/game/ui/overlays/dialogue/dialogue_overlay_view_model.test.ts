@@ -2,7 +2,7 @@
 //
 // Unit tests for DialogueOverlayViewModel (C-328 refactor, C-371 free-text-first).
 // Tests delegation to NpcDialogueService (orchestrator) using the two-call
-// pipeline (analyzeIntent → resolveRoll) or legacy single-call (generateTurn).
+// pipeline (analyzeIntent → resolveRoll) or single-call (generateTurn).
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \

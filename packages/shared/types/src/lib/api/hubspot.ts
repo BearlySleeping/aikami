@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/style/useNamingConvention: HubSpot API uses snake_case fields */
 import type { UniversalValue } from './oauth2.ts';
-/** @see https://legacydocs.hubspot.com/docs/methods/crm-extensions/crm-extensions-overview#data-fetch-request */
+/** @see https://docs.hubspot.com/docs/methods/crm-extensions/crm-extensions-overview#data-fetch-request */
 export type HubSpotWebhookSearchParams = {
   /** Account id */
   userId: string;
@@ -230,7 +230,7 @@ export type HubSpotCreateEventResponse = {
 /**
  * This interface is used to create an engagement (activity) in HubSpot.
  *
- * @see https://legacydocs.hubspot.com/docs/methods/engagements/create_engagement
+ * @see https://docs.hubspot.com/docs/methods/engagements/create_engagement
  */
 export type HubspotActivityData = {
   /** The "engagement" field contains the metadata for the engagement. */

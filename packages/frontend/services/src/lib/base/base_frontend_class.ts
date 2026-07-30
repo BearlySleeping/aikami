@@ -42,7 +42,11 @@ export abstract class BaseFrontendClass<
   protected async openConfirmDialog(
     confirmDialog: Omit<ConfirmDialogData, 'resolve'>,
   ): Promise<boolean> {
-    return await dialogService.openConfirmDialog(confirmDialog);
+    const result = await dialogService.open<boolean>({
+      type: 'confirm',
+      props: confirmDialog as Record<string, unknown>,
+    });
+    return result ?? false;
   }
 
   protected setAppLoading(loading: boolean, label?: string): void {

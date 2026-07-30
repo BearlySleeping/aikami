@@ -475,9 +475,9 @@ export type GameEvent =
       type: 'ZONE_TRIGGERED';
       /** Target map filename or ID to load. */
       targetMap: string;
-      /** Target X pixel coordinate for the player on the new map (legacy — use targetSpawnHash). */
+      /** Target X pixel coordinate for the player on the new map. */
       targetX: number;
-      /** Target Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash). */
+      /** Target Y pixel coordinate for the player on the new map. */
       targetY: number;
       /** Numeric hash of the target spawn point ID on the destination map (C-172). */
       targetSpawnHash: number;
@@ -754,7 +754,7 @@ export type GameEvent =
        */
       type: 'ITEM_PICKED_UP';
       itemId: string;
-      /** Stack quantity picked up (defaults to 1 for legacy emitters). */
+      /** Stack quantity picked up (defaults to 1). */
       quantity?: number;
       /**
        * Tiled spawn-point ID for respawn suppression. Absent for

@@ -267,7 +267,7 @@ const buildSystemPrompt = async (): Promise<string> => {
       '## STEP 1: Review & Stage',
       '1. Run `git status`.',
       '2. Run `git diff` (unstaged) and `git diff --cached` (staged) to understand the scope.',
-      '1b. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints ANY line, STOP and report the protected file with its status code — do not commit or stage it.',
+      "1b. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc '**/tsconfig*.json' moon.yml '.pi/**' lint_rules.json`. If this prints ANY line, STOP and report the protected file with its status code — do not commit or stage it.",
       '3. Run `git add -A`.',
       '',
       '## STEP 2: Write & Commit',
@@ -326,7 +326,7 @@ const buildSystemPrompt = async (): Promise<string> => {
     stepNum += 1;
     stepsText.push(
       `## STEP ${stepNum}: Commit and push`,
-      '1. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc \'**/tsconfig*.json\' moon.yml \'.pi/**\' lint_rules.json`. If this prints ANY line, STOP and report the protected file + status code. Fix the underlying issue in source instead. Do not proceed until it prints nothing.',
+      "1. Run `git status --porcelain=v1 --untracked-files=all -- biome.json biome.jsonc '**/tsconfig*.json' moon.yml '.pi/**' lint_rules.json`. If this prints ANY line, STOP and report the protected file + status code. Fix the underlying issue in source instead. Do not proceed until it prints nothing.",
       '2. Run `git add -A`.',
       '3. Run `git diff --cached --stat` to review.',
       '4. Run `git commit --no-verify -m "<conventional commit message>"`.',

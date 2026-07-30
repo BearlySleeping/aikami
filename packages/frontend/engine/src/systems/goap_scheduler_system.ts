@@ -514,7 +514,7 @@ const _getMemberFactionIds = (world: World, eid: number): number[] => {
 };
 
 /**
- * Gets all faction entity IDs that the victim belongs to (for legacy API).
+ * Gets all faction entity IDs that the victim belongs to.
  *
  * @param world - The bitECS world.
  * @param eid - The victim entity ID.

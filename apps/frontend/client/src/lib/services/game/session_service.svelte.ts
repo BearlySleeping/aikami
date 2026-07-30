@@ -121,12 +121,6 @@ export type SessionServiceInterface = BaseFrontendClassInterface & {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** IndexedDB database name for legacy session storage (pre-C-344). */
-const LEGACY_DB_NAME = 'aikami_sessions';
-
-/** IndexedDB object store name for legacy sessions. */
-const LEGACY_STORE_NAME = 'sessions';
-
 /** Message count threshold for auto-summarization toast. */
 const AUTO_SUMMARY_THRESHOLD = 100;
 
@@ -135,9 +129,6 @@ const MIN_MESSAGES_FOR_SUMMARY = 10;
 
 /** Number of completed sessions before context compaction triggers. */
 const COMPACTION_THRESHOLD = 5;
-
-/** Meta key for IndexedDB → Turso migration marker. */
-const MIGRATION_META_KEY = 'sessions_migrated';
 
 // ---------------------------------------------------------------------------
 // Serialization snapshot
@@ -166,7 +157,6 @@ class SessionService
   checkpoints = $state<SessionCheckpoint[]>([]);
 
   private _toastDismissed = false;
-  private _migrationComplete = false;
 
   constructor(options: SessionServiceOptions) {
     super(options);
@@ -190,9 +180,6 @@ class SessionService
   /** @inheritdoc */
   async startSession(options: { gameId: string; campaignId?: string }): Promise<void> {
     const { gameId } = options;
-
-    // Ensure migration from IndexedDB on first load
-    await this._ensureMigration();
 
     const existingSessions = await this._getAll(gameId);
     const nextNumber =
@@ -362,7 +349,6 @@ class SessionService
   /** @inheritdoc */
   async loadSessions(options: { gameId: string }): Promise<void> {
     const { gameId } = options;
-    await this._ensureMigration();
     this.sessions = await this._getAll(gameId);
   }
 
@@ -913,8 +899,6 @@ class SessionService
    * sorted by sessionNumber descending.
    */
   private async _getAll(gameId: string): Promise<GameSession[]> {
-    await this._ensureMigration();
-
     const db = await getLocalDatabase();
     const result = await db.query({
       sql: `SELECT id, game_id, session_number, started_at, ended_at, is_active, summary_json,
@@ -950,8 +934,6 @@ class SessionService
    * Upserts a session document into the Turso sessions table.
    */
   private async _put(session: GameSession): Promise<void> {
-    await this._ensureMigration();
-
     const db = await getLocalDatabase();
     await db.execute({
       sql: `INSERT OR REPLACE INTO sessions
@@ -975,132 +957,6 @@ class SessionService
         JSON.stringify(session.checkpointIds),
         new Date().toISOString(),
       ],
-    });
-  }
-
-  // ── Private: IndexedDB → Turso Migration ────────────────────────────
-
-  /**
-   * Ensures the one-time migration from IndexedDB aikami_sessions to Turso
-   * sessions table has been run.
-   *
-   * Idempotent — checks for the migration marker in the meta table first.
-   * IndexedDB data is read-only — never deleted.
-   */
-  private async _ensureMigration(): Promise<void> {
-    if (this._migrationComplete) {
-      return;
-    }
-
-    // Check migration marker in Turso meta table
-    const db = await getLocalDatabase();
-    const metaResult = await db.query({
-      sql: 'SELECT value FROM meta WHERE key = ?',
-      args: [MIGRATION_META_KEY],
-    });
-
-    if (metaResult.rows.length > 0 && metaResult.rows[0].value === '1') {
-      this._migrationComplete = true;
-      return;
-    }
-
-    // Attempt migration from IndexedDB
-    try {
-      await this._migrateFromIndexedDB();
-    } catch (error) {
-      this.warn('_ensureMigration:indexeddb-unavailable', { error: String(error) });
-      // IndexedDB may not be available — mark as migrated so we don't retry
-    }
-
-    // Mark migration complete
-    await db.execute({
-      sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
-      args: [MIGRATION_META_KEY, '1'],
-    });
-    this._migrationComplete = true;
-    this.debug('migration:sessions:complete');
-  }
-
-  /**
-   * Migrates existing C-240 GameSession data from IndexedDB to Turso.
-   *
-   * Reads all entries from the legacy aikami_sessions IndexedDB database
-   * and writes them to the Turso sessions table. Source data is preserved.
-   */
-  private async _migrateFromIndexedDB(): Promise<void> {
-    const legacySessions = await this._readLegacyIndexedDB();
-
-    if (legacySessions.length === 0) {
-      return;
-    }
-
-    const db = await getLocalDatabase();
-    for (const session of legacySessions) {
-      await db.execute({
-        sql: `INSERT OR REPLACE INTO sessions
-              (id, game_id, session_number, started_at, ended_at, is_active, summary_json,
-               message_count, duration_minutes, character_snapshots_json,
-               recap_reviewed, edited_synopsis, checkpoint_ids_json)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, '[]')`,
-        args: [
-          session.id,
-          session.gameId,
-          session.sessionNumber,
-          session.startedAt,
-          session.endedAt ?? null,
-          session.isActive ? 1 : 0,
-          session.summary ? JSON.stringify(session.summary) : null,
-          session.messageCount,
-          session.durationMinutes ?? null,
-          JSON.stringify(session.characterSnapshots),
-        ],
-      });
-    }
-
-    this.debug('_migrateFromIndexedDB', { count: legacySessions.length });
-  }
-
-  /**
-   * Reads all GameSession documents from the legacy IndexedDB store.
-   */
-  private _readLegacyIndexedDB(): Promise<GameSession[]> {
-    return new Promise((resolve) => {
-      try {
-        const request = indexedDB.open(LEGACY_DB_NAME, 1);
-
-        request.onsuccess = (): void => {
-          const db = request.result;
-          try {
-            if (!db.objectStoreNames.contains(LEGACY_STORE_NAME)) {
-              db.close();
-              resolve([]);
-              return;
-            }
-            const transaction = db.transaction(LEGACY_STORE_NAME, 'readonly');
-            const store = transaction.objectStore(LEGACY_STORE_NAME);
-            const getAll = store.getAll();
-
-            getAll.onsuccess = (): void => {
-              resolve((getAll.result as GameSession[]) || []);
-              db.close();
-            };
-
-            getAll.onerror = (): void => {
-              db.close();
-              resolve([]);
-            };
-          } catch {
-            db.close();
-            resolve([]);
-          }
-        };
-
-        request.onerror = (): void => {
-          resolve([]);
-        };
-      } catch {
-        resolve([]);
-      }
     });
   }
 

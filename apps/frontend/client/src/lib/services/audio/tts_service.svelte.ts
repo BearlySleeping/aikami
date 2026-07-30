@@ -305,7 +305,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       ringBufferClear(this._ringBuffer);
     }
 
-    // Stop legacy HTMLAudioElement playback
+    // Stop HTMLAudioElement playback
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio = null;

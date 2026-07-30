@@ -515,15 +515,3 @@ export const CLASS_REGISTRY = {
   rogue: ROGUE,
   cleric: CLERIC,
 } as const satisfies Record<string, ClassDefinition>;
-
-// ---------------------------------------------------------------------------
-// Migration helpers
-// ---------------------------------------------------------------------------
-
-/** Case-insensitive map from legacy class name string to class ID. */
-export const LEGACY_CLASS_NAME_TO_ID: Record<string, string> = {
-  fighter: 'fighter',
-  wizard: 'wizard',
-  rogue: 'rogue',
-  cleric: 'cleric',
-};

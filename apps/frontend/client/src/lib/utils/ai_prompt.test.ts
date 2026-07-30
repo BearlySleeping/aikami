@@ -80,7 +80,7 @@ describe('ai_prompt — AC2: System Prompt Emotion Tag Instructions', () => {
     expect(emotionStart).toBeGreaterThan(charPromptEnd);
   });
 
-  test('formatCharacterPrompt should NOT include emotion tags (legacy contract)', () => {
+  test('formatCharacterPrompt should NOT include emotion tags', () => {
     const prompt = formatCharacterPrompt(sampleCharacter);
 
     // formatCharacterPrompt should remain pure — emotion injection happens

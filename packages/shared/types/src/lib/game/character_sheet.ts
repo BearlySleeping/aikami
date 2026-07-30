@@ -64,12 +64,6 @@ export const DEFAULT_TRAITS: CharacterTraits = {
   bonds: '',
   flaws: '',
 } as const;
-
-// ── Standard skills alias (pre-existing consumer compat) ───────────────
-
-/** @deprecated Use DEFAULT_SKILLS instead */
-export const STANDARD_SKILLS = DEFAULT_SKILLS;
-
 // ── Full Character Sheet (UI runtime type) ─────────────────────────────
 
 /**

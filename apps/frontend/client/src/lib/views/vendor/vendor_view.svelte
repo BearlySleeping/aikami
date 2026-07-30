@@ -22,6 +22,9 @@ let sellDialogElement = $state<HTMLDialogElement>();
 /** Reference to the triggering Sell button for focus restoration. */
 let lastSellButtonElement = $state<HTMLButtonElement>();
 
+/** Reference to the Confirm Sale button for focus management. */
+let confirmSaleButtonElement = $state<HTMLButtonElement>();
+
 /** Player's current haggling text. */
 let haggleInput = $state('');
 
@@ -161,6 +164,13 @@ $effect(() => {
   void haggling;
   if (messageContainer) {
     messageContainer.scrollTop = messageContainer.scrollHeight;
+  }
+});
+
+/** Focus the Confirm Sale button when the sell dialog opens. */
+$effect(() => {
+  if (viewModel.pendingSellItemId && confirmSaleButtonElement) {
+    confirmSaleButtonElement.focus();
   }
 });
 
@@ -529,16 +539,17 @@ const _itemIcon = (itemId: string): string => {
                   Cancel
                 </button>
                 <button
+                  bind:this={confirmSaleButtonElement}
                   type="button"
                   class="btn btn-sm btn-warning"
                   onclick={confirmSellWithDialog}
                   aria-label="Confirm sale of {viewModel.pendingSellLabel}"
-                  autofocus
                 >
                   Confirm Sale
                 </button>
               </div>
             </div>
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <form
               method="dialog"
               class="modal-backdrop"

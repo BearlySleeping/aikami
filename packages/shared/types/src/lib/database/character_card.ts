@@ -29,7 +29,7 @@ export type CharacterCardV2 = {
   data: Character;
 };
 
-/** Legacy V1 character card (subset of Character fields). */
+/** V1 character card (subset of Character fields). */
 export type CharacterCardV1 = {
   name: string;
   description: string;

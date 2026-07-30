@@ -152,7 +152,7 @@ describe('detectImageAvailability — parity with capability_service.detectImage
 });
 
 describe('detectVoiceAvailability — real engine status, optimistic-convertible', () => {
-  test('uninitialized WebGPU engine remains available (legacy optimistic snapshot)', async () => {
+  test('uninitialized WebGPU engine remains available (optimistic snapshot)', async () => {
     const result = await detectVoiceAvailability({
       getEngineStatus: () => ({ status: 'uninitialized', serverAvailable: false }),
     });

@@ -170,7 +170,7 @@ export type VoiceProvider = (typeof VOICE_PROVIDERS)[number]['id'];
 export type VoiceConfig = {
   /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
   provider: VoiceProvider;
-  /** Selected TTS engine (legacy — kept for migration, mirrors provider). */
+  /** Selected TTS engine (mirrors provider). */
   engine: string;
   /** Custom server URL for local providers (voicevox, etc.). */
   url?: string;
@@ -242,7 +242,7 @@ export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]['id'];
 export type ImageConfig = {
   /** Selected image generation provider. */
   provider: ImageProvider;
-  /** Selected image generation backend (legacy — kept for migration, mirrors provider). */
+  /** Selected image generation backend (mirrors provider). */
   backend: string;
   /** Custom server URL for local providers. */
   url?: string;

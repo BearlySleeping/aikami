@@ -231,7 +231,7 @@ export const writeManifest = (options: { manifest: RunManifest; cwd: string }): 
   renameSync(temporaryPath, filePath);
 };
 
-/** Read and validate a v3 manifest. Legacy or corrupt manifests return undefined. */
+/** Read and validate a v3 manifest. Corrupt manifests return undefined. */
 export const readManifest = (options: { runId: string; cwd: string }): RunManifest | undefined => {
   const filePath = join(options.cwd, RUNS_DIR, options.runId, 'manifest.json');
   try {

@@ -62,7 +62,11 @@
   --shadow-elegant:
     0 2px 4px oklch(0.2 0.04 250 / 0.06), 0 24px 48px -16px oklch(0.2 0.04 250 / 0.18);
   --shadow-rune: 0 0 12px oklch(0.65 0.2 285 / 0.3), 0 0 40px oklch(0.65 0.2 285 / 0.12);
+  --shadow-rune-hover: 0 0 20px oklch(0.65 0.2 285 / 0.45), 0 0 60px oklch(0.65 0.2 285 / 0.2);
   --shadow-card: 0 4px 24px oklch(0.1 0.02 270 / 0.4), 0 1px 2px oklch(0.3 0.02 270 / 0.3);
+  --shadow-card-hover:
+    0 8px 32px oklch(0.1 0.02 270 / 0.5), 0 2px 4px oklch(0.3 0.02 270 / 0.4),
+    0 0 16px oklch(0.65 0.2 285 / 0.2);
 }
 
 /* ── Light theme (parchment / warm slate) ── */
@@ -285,6 +289,43 @@
 
   .canvas-layer.interactive {
     pointer-events: auto;
+  }
+
+  /* ── Reduced motion support ── */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ── Hover rune glow for feature cards ── */
+  .hover\:shadow-rune-hover:hover {
+    box-shadow: var(--shadow-rune-hover);
+  }
+
+  /* ── Staggered fade-in entrance (scroll-triggered via IntersectionObserver) ── */
+  .stagger-entrance {
+    opacity: 0;
+    transform: translateY(16px);
+    transition:
+      opacity 0.5s ease,
+      transform 0.5s ease;
+  }
+  .stagger-entrance.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stagger-entrance {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
 
   /* ── Terminal text effect ── */

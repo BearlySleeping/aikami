@@ -29,11 +29,10 @@ const lastUserContent = (messages: AiChatMessage[]): string => {
 /**
  * Creates the `service`-mode text adapter over the hosted callable.
  *
- * Request mapping (preserves legacy `ai_service` behavior):
+ * Request mapping:
  * - schema/schemaName present → `createPersona` callable; the parsed persona
  *   is returned as `structured`.
- * - otherwise → `sendMessage` callable with an empty context (legacy calls
- *   always sent an empty history).
+ * - otherwise → `sendMessage` callable with an empty context.
  */
 export const createServiceTextAdapter = (options: { call: ServiceTextCallable }): AiTextAdapter => {
   const { call } = options;

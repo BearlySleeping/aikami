@@ -16,9 +16,9 @@ import { observe, onGet, onSet } from 'bitecs';
 export const Transition = {
   /** Target map filename or ID. */
   targetMap: [] as string[],
-  /** Target X pixel coordinate on the destination map (legacy — use targetSpawnHash). */
+  /** Target X pixel coordinate on the destination map. */
   targetX: [] as number[],
-  /** Target Y pixel coordinate on the destination map (legacy — use targetSpawnHash). */
+  /** Target Y pixel coordinate on the destination map. */
   targetY: [] as number[],
   /** Numeric hash of the target spawn point ID (C-172). */
   targetSpawnHash: [] as number[],

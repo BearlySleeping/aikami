@@ -7,7 +7,6 @@ import type {
 import type {
   AppLoadingData,
   ConditionalSnackbarData,
-  ConfirmDialogData,
   DialogState,
   SnackbarData,
 } from '../types/dialog.ts';
@@ -47,14 +46,6 @@ export type DialogServiceInterface = BaseFrontendClassInterface & {
   showSnackbar(snackbar: SnackbarData): void;
   showConditionalSnackbar(snackbar: ConditionalSnackbarData): void;
   hideSnackbar(): void;
-
-  // ── Legacy (backward-compat) ────────────────────────────
-
-  /** @deprecated Use `open({ type: 'confirm', props: ... })` instead. */
-  openConfirmDialog(confirmDialog: Omit<ConfirmDialogData, 'resolve'>): Promise<boolean>;
-
-  /** @deprecated Use `open({ type: 'invite-member' })` instead. */
-  openInviteDialog(): Promise<boolean>;
 };
 
 export class DialogService
@@ -110,21 +101,6 @@ export class DialogService
   hideSnackbar(): void {
     this.log('hideSnackbar');
     this.snackbar = undefined;
-  }
-
-  // ── Legacy (backward-compat) ───────────────────────────────
-
-  async openConfirmDialog(data: Omit<ConfirmDialogData, 'resolve'>): Promise<boolean> {
-    const result = await this.open<boolean>({
-      type: 'confirm',
-      props: data as Record<string, unknown>,
-    });
-    return result ?? false;
-  }
-
-  async openInviteDialog(): Promise<boolean> {
-    const result = await this.open<boolean>({ type: 'invite-member' });
-    return result ?? false;
   }
 }
 

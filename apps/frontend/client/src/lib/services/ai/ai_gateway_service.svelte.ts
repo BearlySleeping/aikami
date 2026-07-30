@@ -4,8 +4,7 @@
 // gateway core from @aikami/frontend/ai-gateway with:
 // - text adapters (offline = Ollama/local OpenAI-compatible, byok = cloud
 //   endpoints with vault keys) — one shared OpenAI-compatible transport;
-// - a `service` text adapter over the Firebase `ai` callable (legacy
-//   ai_service behavior);
+// - a `service` text adapter over the Firebase `ai` callable;
 // - image/voice adapters delegating to the existing ComfyUI and Kokoro
 //   services unchanged;
 // - detection wiring with the same ping semantics as capability_service.
@@ -136,9 +135,8 @@ class AiGatewayService
     registry.registerText({ mode: 'offline', adapter: textAdapter });
     registry.registerText({ mode: 'byok', adapter: textAdapter });
 
-    // `service` mode: wraps the existing Firebase callable path so legacy
-    // ai_service behavior is preserved. Selection via resolveMode stays
-    // guarded (mode_unavailable) until Phase 5 activation.
+    // `service` mode: wraps the existing Firebase callable path.
+    // Selection via resolveMode stays guarded (mode_unavailable) until Phase 5 activation.
     registry.registerText({
       mode: 'service',
       adapter: createServiceTextAdapter({
@@ -302,15 +300,15 @@ class AiGatewayService
   }
 
   /**
-   * Whether a cloud text provider is configured. Union of the legacy
-   * aiSettingsService shape and C-230 connections saved via Settings →
-   * Connections (C-322) — both read live per detection call, never cached.
+   * Whether a cloud text provider is configured. Checks C-230 connections
+   * saved via Settings → Connections (C-322) or the pre-C-230 config
+   * shape — both read live per detection call, never cached.
    */
   private _hasCloudTextConfig(): boolean {
     return this._hasLegacyCloudTextConfig() || this._hasCloudTextConnection();
   }
 
-  /** Legacy aiSettingsService text config (pre-C-230 installs). */
+  /** Pre-C-230 text config check. */
   private _hasLegacyCloudTextConfig(): boolean {
     try {
       const { textProvider } = aiSettingsService;

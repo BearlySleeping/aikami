@@ -42,7 +42,7 @@ export type DialogState<T = unknown> = {
   resolve?: (value: T) => void;
 };
 
-// ── Legacy types (kept for ConfirmDialog-specific styling) ──
+// ── ConfirmDialog-specific types (kept for styling) ──
 
 export type ResolveDialogData = {
   resolve?: (value: boolean) => void;
@@ -59,8 +59,4 @@ export type ConfirmDialogData = ResolveDialogData & {
   hideDisagreeButton?: boolean;
 };
 
-/**
- * @deprecated Use `open({ type: 'invite-member' })` via the generic DialogState.
- * Kept for backward-compatibility with existing code.
- */
 export type InviteDialogData = ResolveDialogData;

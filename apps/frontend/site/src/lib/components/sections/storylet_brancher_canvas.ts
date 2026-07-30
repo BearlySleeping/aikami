@@ -5,6 +5,7 @@
  * Click nodes to preview alternate storyline outcomes.
  */
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { observeCanvas } from '../../utils/canvas_observer';
 
 /* ── Types ── */
 
@@ -173,6 +174,8 @@ export const initStoryletBrancher = async (containerId: string): Promise<() => v
   });
 
   container.appendChild(app.canvas);
+
+  const observerCleanup = observeCanvas({ app, container });
 
   const { width, height } = app.screen;
 
@@ -404,6 +407,7 @@ export const initStoryletBrancher = async (containerId: string): Promise<() => v
   });
 
   return () => {
+    observerCleanup();
     app.ticker.stop();
     app.destroy(true, { children: true });
   };

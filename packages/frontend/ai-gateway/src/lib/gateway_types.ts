@@ -33,7 +33,7 @@ export type AiTextGenerationOptions = {
   /** Cancellation signal — propagated to the upstream provider fetch. */
   signal?: AbortSignal;
   /**
-   * Explicit adapter-family override. Used by legacy `service`-mode callers
+   * Explicit adapter-family override. Used by `service`-mode callers
    * (e.g. the Firebase callable path) that must bypass per-capability
    * resolution. Selecting a mode with no registered adapter raises
    * `mode_unavailable`.

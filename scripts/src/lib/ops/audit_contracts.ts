@@ -4,7 +4,6 @@
  *
  * Produces:
  *   - docs/contracts/AUDIT_C-119_C-249.md — gap analysis report
- *   - Audit annotations in legacy contract files (comment above first line)
  */
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -15,8 +14,6 @@ const REPO_ROOT = join(import.meta.dir, '../../../..');
 const CONTRACTS_DIR = join(REPO_ROOT, 'docs/contracts');
 const AUDIT_OUTPUT = join(REPO_ROOT, 'docs/contracts/AUDIT_C-119_C-249.md');
 
-const LEGACY_AUDIT_MARKER = '<!-- audit: legacy — no execution report -->';
-
 type AuditEntry = {
   id: string;
   fileName: string;
@@ -24,7 +21,6 @@ type AuditEntry = {
   hasAcStatusTable: boolean;
   hasEvidenceLinks: boolean;
   templateVersion: string;
-  hasLegacyMarker: boolean;
   reportCompleteness: 'full' | 'partial' | 'missing';
   gaps: string[];
 };
@@ -76,14 +72,12 @@ const detectTemplateVersion = (content: string): string => {
   if (versionMatch) {
     return (versionMatch[1] ?? '').trim();
   }
-  // Check for legacy contract format (no metadata table)
+  // Check for contract format (no metadata table)
   if (/^<!--\s*completed:/.test(content) && !/\|\s*\*\*Status\*\*\s*\|/i.test(content)) {
     return 'pre-v1';
   }
   return 'unknown';
 };
-
-const hasLegacyCompletedMarker = (content: string): boolean => /^<!--\s*completed:/.test(content);
 
 const assessCompleteness = (
   entry: Omit<AuditEntry, 'reportCompleteness' | 'gaps'>,
@@ -112,23 +106,6 @@ const assessCompleteness = (
   return { completeness: 'missing', gaps };
 };
 
-const annotateLegacyContract = (content: string): string => {
-  // Only annotate if it doesn't already have the marker
-  if (content.includes(LEGACY_AUDIT_MARKER)) {
-    return content;
-  }
-
-  // Insert audit marker after the first line (legacy marker or heading)
-  const lines = content.split('\n');
-  const insertAt = 1; // after first line
-  const modified = [
-    ...lines.slice(0, insertAt),
-    LEGACY_AUDIT_MARKER,
-    ...lines.slice(insertAt),
-  ].join('\n');
-  return modified;
-};
-
 const auditContracts = () => {
   logger.info('auditContracts:start', { range: 'C-119–C-249' });
 
@@ -152,7 +129,6 @@ const auditContracts = () => {
     });
 
   const entries: AuditEntry[] = [];
-  let legacyCount = 0;
   let reportCount = 0;
 
   for (const { file, id } of inRange) {
@@ -163,7 +139,6 @@ const auditContracts = () => {
     const acTable = hasAcStatusTable(content);
     const evidence = hasEvidenceLinks(content);
     const templateVersion = detectTemplateVersion(content);
-    const legacyMarker = hasLegacyCompletedMarker(content);
 
     const base = {
       id: id.toUpperCase(),
@@ -172,7 +147,6 @@ const auditContracts = () => {
       hasAcStatusTable: acTable,
       hasEvidenceLinks: evidence,
       templateVersion,
-      hasLegacyMarker: legacyMarker,
     };
 
     const { completeness, gaps } = assessCompleteness(base);
@@ -182,14 +156,6 @@ const auditContracts = () => {
 
     if (reportPresent) {
       reportCount++;
-    } else {
-      legacyCount++;
-      // Annotate legacy contract
-      const annotated = annotateLegacyContract(content);
-      if (annotated !== content) {
-        writeFileSync(filePath, annotated);
-        logger.debug('auditContracts:annotated', { file, id });
-      }
     }
   }
 
@@ -204,7 +170,6 @@ const auditContracts = () => {
     '',
     `**Total**: ${entries.length} contracts`,
     `- **With execution reports**: ${reportCount}`,
-    `- **Without execution reports (legacy)**: ${legacyCount}`,
     '',
     '### Completeness Breakdown',
     '',
@@ -230,25 +195,16 @@ const auditContracts = () => {
     );
   }
 
-  lines.push('');
-  lines.push('### Legacy Contracts Annotated');
-  lines.push('');
-  lines.push(`${legacyCount} legacy contracts annotated with \`${LEGACY_AUDIT_MARKER}\` comment.`);
-  lines.push('');
-
   const output = `${lines.join('\n')}\n`;
   writeFileSync(AUDIT_OUTPUT, output);
 
   logger.info('auditContracts:complete', {
     total: entries.length,
     withReports: reportCount,
-    withoutReports: legacyCount,
     outputPath: 'docs/contracts/AUDIT_C-119_C-249.md',
   });
 
-  console.log(
-    `✅ Audit complete: ${entries.length} contracts (${reportCount} with reports, ${legacyCount} legacy)`,
-  );
+  console.log(`✅ Audit complete: ${entries.length} contracts (${reportCount} with reports)`);
   console.log(`📄 Report: ${AUDIT_OUTPUT}`);
 };
 

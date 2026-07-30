@@ -60,6 +60,10 @@ export type AppConfig = {
   imageName?: string;
   /** Docker build context path override. Defaults to path. */
   dockerContext?: string;
+  /** Moon project ID override for the build phase. Defaults to the app name itself.
+   *  Used when the deploy app (e.g. 'client-tauri') isn't a standalone moon project
+   *  but reuses another project's build (e.g. 'client'). */
+  buildProject?: string;
 };
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
@@ -68,6 +72,14 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     path: 'apps/frontend/client',
     shortName: 'client',
     prefix: 'CLIENT',
+  },
+  /** Tauri desktop release — reuses the client moon project for web build, then runs cargo tauri build. */
+  'client-tauri': {
+    serviceType: 'tauri-release',
+    path: 'apps/frontend/client',
+    shortName: 'client-desktop',
+    prefix: 'CLIENT',
+    buildProject: 'client',
   },
   site: {
     serviceType: 'firebase-hosting',
@@ -146,6 +158,23 @@ export { MODE_PROJECT_MAP };
 /** Modes that deploy to live GCP (not emulator). */
 export const liveModes = ['staging', 'production'] as const;
 export type LiveMode = (typeof liveModes)[number];
+
+/**
+ * Maps deployment modes to release channels.
+ *  - production → stable  (public download page)
+ *  - staging    → beta    (testers)
+ *  - emulator   → alpha   (internal dev builds)
+ */
+export const CHANNEL_MAP: Readonly<Record<string, string>> = {
+  production: 'stable',
+  staging: 'beta',
+  emulator: 'alpha',
+} as const;
+
+export type Channel = (typeof CHANNEL_MAP)[keyof typeof CHANNEL_MAP];
+
+/** Resolves the release channel name from a deployment mode. */
+export const resolveChannel = (mode: string): string => CHANNEL_MAP[mode] ?? 'alpha';
 
 export type SecretNameConfig = {
   prefix?: string;

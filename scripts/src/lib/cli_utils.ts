@@ -234,8 +234,6 @@ export function parseCliArgs<T extends Record<string, CliOption>>(
   return { ...result, _: positionals } as CliResult<T>;
 }
 
-// ── Legacy helpers (thin wrappers, kept for backward compat) ──────────────
-
 export const getArg = (args: string[], name: string): string | undefined => {
   const arg = args.find((a) => a.startsWith(`--${name}=`));
   return arg ? arg.split('=').slice(1).join('=') : undefined;

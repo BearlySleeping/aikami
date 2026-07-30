@@ -119,7 +119,7 @@ const sha256 = async (filePath: string): Promise<string> => {
  * Load cached results from a previous report.json (if it exists).
  *
  * Builds a map: recipeId → { checksum, result } for fast lookup.
- * Results with missing checksum fields are skipped (legacy reports).
+ * Results with missing checksum fields are skipped.
  */
 const loadCache = (): Map<string, LpcVisualResult> => {
   const cache = new Map<string, LpcVisualResult>();

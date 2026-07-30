@@ -110,8 +110,9 @@ export async function deployCloudRunSveltekit(
     const ver = versionSha();
     const modeFlag = mode !== 'production' ? ` -- --mode ${mode}` : '';
     const forceFlag = isForce ? ' --force' : '';
-    run(`PUBLIC_APP_VERSION=${ver} bunx moon run ${appName}:build${forceFlag}${modeFlag}`, {
+    run(`bunx moon run ${appName}:build${forceFlag}${modeFlag}`, {
       cwd: rootDir,
+      env: { PUBLIC_APP_VERSION: ver },
     });
 
     if (!existsSync(buildDir)) {

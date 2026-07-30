@@ -16,4 +16,6 @@ export default defineConfig(() => ({
   minify: true,
   sourcemap: true,
   cloudCacheFileName: 'functions_cache.ts',
+  // temporary disable dataconnect (we don't want to pay for it)
+  dataconnectDirectory: '_EXCLUDE_',
 }));
