@@ -1,6 +1,6 @@
 specVersion: "v1"
 serviceId: "firebase"
-location: "us-east4"
+location: "europe-west4"
 schemas:
   - source: "./schema"
     datasource:
