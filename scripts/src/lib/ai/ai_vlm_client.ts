@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { getScriptsEnv } from '../env/scripts_env';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -222,7 +223,7 @@ const _callOpenRouter = async (options: {
 }): Promise<string> => {
   const { imageDataUri, prompt, model, responseFormat } = options;
 
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = getScriptsEnv('OPENROUTER_API_KEY');
   if (!key) {
     throw new Error('OPENROUTER_API_KEY not set');
   }
@@ -441,20 +442,19 @@ const _buildFallbackChain = (
  */
 export const getVlmConfig = (): VlmRuntimeConfig => {
   const provider: VlmProviderType =
-    (process.env.VLM_PROVIDER as VlmProviderType | undefined) ?? 'openrouter';
+    (getScriptsEnv('VLM_PROVIDER') as VlmProviderType | undefined) ?? 'openrouter';
+  const modelSlug = getScriptsEnv('VLM_MODEL') || DEFAULT_MODELS[provider];
+  const temperatureRaw = getScriptsEnv('VLM_TEMPERATURE');
+  const numPredictRaw = getScriptsEnv('VLM_NUM_PREDICT');
 
   return {
     provider,
-    modelSlug: process.env.VLM_MODEL || DEFAULT_MODELS[provider],
+    modelSlug,
     temperature:
-      process.env.VLM_TEMPERATURE !== undefined
-        ? Number.parseFloat(process.env.VLM_TEMPERATURE)
-        : DEFAULT_TEMPERATURE,
+      temperatureRaw !== undefined ? Number.parseFloat(temperatureRaw) : DEFAULT_TEMPERATURE,
     numPredict:
-      process.env.VLM_NUM_PREDICT !== undefined
-        ? Number.parseInt(process.env.VLM_NUM_PREDICT, 10)
-        : OLLAMA_NUM_PREDICT,
-    endpoint: process.env.VLM_ENDPOINT,
+      numPredictRaw !== undefined ? Number.parseInt(numPredictRaw, 10) : OLLAMA_NUM_PREDICT,
+    endpoint: getScriptsEnv('VLM_ENDPOINT'),
   };
 };
 

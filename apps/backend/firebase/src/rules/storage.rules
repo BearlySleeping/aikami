@@ -58,6 +58,14 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Tauri desktop releases — public read (download page), admin-only write
+    // ═══════════════════════════════════════════════════════════════
+    match /tauri-releases/{appName}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Default deny — explicit catch-all at the end
     // ═══════════════════════════════════════════════════════════════
     match /{allPaths=**} {

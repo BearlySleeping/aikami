@@ -1,0 +1,93 @@
+name: Deploy Release
+
+# ── Config ──────────────────────────────────────────────────────────────
+# Change DEPLOY_APPS to add/remove apps from the deploy pipeline.
+#   "client-tauri" → Tauri desktop release only
+#   "client client-tauri site firebase" → full web + desktop + backend
+#   "all" → everything in DEPLOYABLE_APPS
+# ────────────────────────────────────────────────────────────────────────
+env:
+  DEPLOY_APPS: "client-tauri"
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Deployment Target Environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+      force:
+        description: "Bypass Redis checksum cache (--force)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy Apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+      - name: Restore Bun & Moon build caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            .moon/cache
+          key: ${{ runner.os }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download Secrets from GCP Secret Manager
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          # Always include 'scripts' — REDIS_URL, REDIS_TOKEN, TELEGRAM are needed
+          # regardless of which apps are being deployed.
+          if [ "$DEPLOY_APPS" = "all" ]; then
+            bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE"
+          else
+            bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts $DEPLOY_APPS
+          fi
+        env:
+          DEPLOY_APPS: ${{ env.DEPLOY_APPS }}
+
+      - name: Run Deploy Pipeline
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
+
+          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG $DEPLOY_APPS
+        env:
+          CI: "true"
+          DEPLOY_APPS: ${{ env.DEPLOY_APPS }}

@@ -10,6 +10,7 @@
 //   bun run scripts/src/lib/setup/cdn_hosting_setup.ts --mode=production --dry-run
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fmt, parseCliArgs, runStream } from '../cli_utils';
 import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
@@ -21,12 +22,12 @@ type ManualStep = { title: string; url?: string; commands?: string[]; detail?: s
 
 /** Canonical extension per platform — matches pickCanonical() in tauri_release.ts. */
 const PLATFORM_EXTENSIONS: Record<string, string> = {
-  linux: '.AppImage',
+  linux: '.deb',
   macos: '.dmg',
   windows: '.msi',
 };
 
-const CDN_PUBLIC_DIR = 'cdn-public';
+const CDN_PUBLIC_DIR = join(tmpdir(), 'aikami-cdn-public');
 
 /** Hosting site names per mode. */
 const CDN_SITE_SUFFIX = 'cdn';
@@ -92,7 +93,7 @@ const generateCdnFirebaseConfig = (): Record<string, unknown> => {
   return {
     hosting: {
       target: 'cdn',
-      public: CDN_PUBLIC_DIR,
+      public: '.',
       redirects,
     },
   };
@@ -165,7 +166,7 @@ export const setupCdnHosting = async (
 
   // ── 2. Generate firebase.json with redirects ─────────────────────────
   console.log(fmt.section('CDN firebase.json'));
-  const cdnDir = join(process.cwd(), CDN_PUBLIC_DIR);
+  const cdnDir = CDN_PUBLIC_DIR;
   if (!existsSync(cdnDir)) {
     if (!dryRun) {
       mkdirSync(cdnDir, { recursive: true });
@@ -178,7 +179,7 @@ export const setupCdnHosting = async (
   }
 
   const config = generateCdnFirebaseConfig();
-  const configPath = join(process.cwd(), CDN_PUBLIC_DIR, 'firebase.json');
+  const configPath = join(CDN_PUBLIC_DIR, 'firebase.json');
   if (!dryRun) {
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     console.log(fmt.ok(`Generated ${CDN_PUBLIC_DIR}/firebase.json`));

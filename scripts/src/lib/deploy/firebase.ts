@@ -17,6 +17,7 @@ export async function deployFirebaseHosting(
   appName: string,
   mode: string,
   rootDir: string,
+  version: string,
   isForce = false,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
@@ -46,7 +47,7 @@ export async function deployFirebaseHosting(
   run(`bunx moon run ${appName}:deploy -- --mode ${mode}`, { cwd: rootDir });
 
   // Save checksum on success
-  await saveDeployCache(mode, appName, cache.checksum);
+  await saveDeployCache(mode, appName, cache.checksum, version);
   ok(`${appName} deployed to Firebase Hosting`);
 }
 

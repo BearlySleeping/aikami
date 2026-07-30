@@ -79,6 +79,7 @@ export async function deployCloudRunSveltekit(
   appName: string,
   mode: string,
   rootDir: string,
+  version: string,
   isForce = false,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
@@ -169,6 +170,6 @@ export async function deployCloudRunSveltekit(
   run(buildGcloudRunArgs(config, serviceId, tag, projectId, mode, envVars, secretArgs));
 
   // 7. Save checksum on success
-  await saveDeployCache(mode, appName, cache.checksum);
+  await saveDeployCache(mode, appName, cache.checksum, version);
   ok(`${appName} deployed to Cloud Run`);
 }
