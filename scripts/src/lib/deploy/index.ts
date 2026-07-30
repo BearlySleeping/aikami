@@ -23,7 +23,7 @@
  *
  * What it does for each app type:
  *   Cloud Run SvelteKit (client)     → checksum → build → prepare package → docker → push → deploy
- *   Tauri Release (client)           → checksum → build web → cargo tauri build → upload to GCS
+ *   Tauri Release (client-tauri)      → checksum → build web → cargo tauri build → upload to GCS
  *   Firebase Hosting (site, docs)    → checksum → build (moon) → deploy via moon
  *   Firebase Functions (firebase)    → deploy via moon (firestack)
  *   Docker Release (image,text,voice)→ checksum → docker build → push
@@ -311,8 +311,11 @@ async function main(): Promise<void> {
           config.serviceType === 'cloud-run-sveltekit' || config.serviceType === 'firebase-hosting';
         const modeFlag = needsModeFlag && mode !== 'production' ? ` -- --mode ${mode}` : '';
         const forceFlag = isForce ? ' --force' : '';
-        run(`PUBLIC_APP_VERSION=${ver} bunx moon run ${appName}:build${forceFlag}${modeFlag}`, {
+        const moonTarget = config.buildProject ?? appName;
+        // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
+        run(`bunx moon run ${moonTarget}:build${forceFlag}${modeFlag}`, {
           cwd: ROOT_DIR,
+          env: { PUBLIC_APP_VERSION: ver },
         });
         ok(`  ${appName} built`);
       } catch (err) {

@@ -64,7 +64,7 @@ mock.module('$logger', () => ({
 // Mocks for the AI gateway's heavy client adapters (C-322)
 // ---------------------------------------------------------------------------
 // The connection-visibility tests below import the real aiGatewayService.
-// Its composition pulls in TTS / image / legacy-settings singletons that
+// Its composition pulls in TTS / image singletons that
 // are irrelevant here — stub them with alias-path module mocks.
 
 mock.module('$lib/services/audio/tts_service.svelte.ts', () => ({
@@ -83,8 +83,8 @@ mock.module('$lib/services/image/image_generation_service.svelte.ts', () => ({
   __esModule: true,
 }));
 
-// No legacy aiSettingsService text config — AC-2 requires the gateway to
-// see C-230 connections without any legacy shape populated.
+// AC-2 requires the gateway to
+// see C-230 connections without AI settings populated.
 mock.module('$lib/services/settings/ai_settings.svelte.ts', () => ({
   aiSettingsService: {
     get textProvider() {

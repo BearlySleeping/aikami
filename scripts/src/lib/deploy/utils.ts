@@ -51,7 +51,10 @@ export function isQuiet(): boolean {
   return _quiet;
 }
 
-export function run(cmd: string, opts: { cwd?: string; quiet?: boolean } = {}): string {
+export function run(
+  cmd: string,
+  opts: { cwd?: string; quiet?: boolean; env?: Record<string, string> } = {},
+): string {
   // verbose → inherit (direct terminal output, raw)
   // quiet   → pipe, suppress everything (no prefix, no output)
   // default → pipe, show only the command prefix
@@ -63,6 +66,7 @@ export function run(cmd: string, opts: { cwd?: string; quiet?: boolean } = {}): 
     }
     const result = execSync(cmd, {
       cwd: opts.cwd,
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
       encoding: 'utf-8',
       stdio,
       maxBuffer: 100 * 1024 * 1024, // 100MB — client build produces ~29k file listings

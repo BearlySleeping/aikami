@@ -6,7 +6,7 @@
 //   bun run contract                    → interactive direct draft (default)
 //   bun run contract --issue #54        → freeze contract from GitHub Issue
 //   bun run contract --issue https://... → freeze from issue URL
-//   bun run contract --source todo C-370 → legacy: parse docs/TODO.md
+//   bun run contract --source todo C-370 → parse docs/TODO.md
 
 import { execFileSync, execSync, spawn } from 'node:child_process';
 import {

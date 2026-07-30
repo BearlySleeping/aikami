@@ -6,6 +6,7 @@
  * Click nodes to inspect agent state.
  */
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { observeCanvas } from '../../utils/canvas_observer';
 
 /* ── Types ── */
 
@@ -167,6 +168,8 @@ export const initMemoryGraph = async (containerId: string): Promise<() => void> 
   });
 
   container.appendChild(app.canvas);
+
+  const observerCleanup = observeCanvas({ app, container });
 
   const { width, height } = app.screen;
 
@@ -392,6 +395,7 @@ export const initMemoryGraph = async (containerId: string): Promise<() => void> 
   });
 
   return () => {
+    observerCleanup();
     app.ticker.stop();
     app.destroy(true, { children: true });
   };

@@ -270,7 +270,11 @@ const fetchPrComments = async (
                   )
                 : '?',
             createdAt: String((c as Record<string, unknown>).created_at ?? ''),
-            updatedAt: String((c as Record<string, unknown>).updated_at ?? (c as Record<string, unknown>).created_at ?? ''),
+            updatedAt: String(
+              (c as Record<string, unknown>).updated_at ??
+                (c as Record<string, unknown>).created_at ??
+                '',
+            ),
             url: String((c as Record<string, unknown>).html_url ?? ''),
           }));
         }

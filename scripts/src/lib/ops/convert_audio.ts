@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 // scripts/src/lib/ops/convert_audio.ts
 //
-// Converts sample audio from the Godot asset directory to the formats
-// required by C-150 (Audio System):
+// Converts sample audio to the formats required by C-150 (Audio System):
 //   BGM: .ogg (Vorbis) → .webm (Opus, 48kHz stereo)
 //   SFX: .wav/.ogg/.mp3 → .wav (PCM S16LE, 44.1kHz mono)
 //
@@ -12,8 +11,8 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-const SOURCE_MUSIC = 'examples/aikami-v1-godot/assets/audio/music';
-const SOURCE_SFX = 'examples/aikami-v1-godot/assets/audio/sfx';
+const SOURCE_MUSIC = 'examples/old-assets/audio/music';
+const SOURCE_SFX = 'examples/old-assets/audio/sfx';
 const TARGET_MUSIC = 'apps/frontend/client/static/assets/audio/music';
 const TARGET_SFX = 'apps/frontend/client/static/assets/audio/sfx';
 

@@ -4,6 +4,7 @@
  * Renders spell combination visual effects when two cards are slotted together.
  */
 import { Application, Container, Graphics } from 'pixi.js';
+import { observeCanvas } from '../../utils/canvas_observer';
 
 /* ── Effect types ── */
 
@@ -64,6 +65,8 @@ export const triggerComboEffect = async (
 
   container.innerHTML = '';
   container.appendChild(app.canvas);
+
+  const observerCleanup = observeCanvas({ app, container });
 
   const { width, height } = app.screen;
   const effectLayer = new Container();
@@ -154,6 +157,7 @@ export const triggerComboEffect = async (
 
       // Fade out and destroy
       setTimeout(() => {
+        observerCleanup();
         app.destroy(true, { children: true });
       }, 500);
     }

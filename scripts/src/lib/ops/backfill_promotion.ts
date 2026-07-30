@@ -6,7 +6,7 @@
  *   - Has execution report + visual tests + verified ACs → release_verified
  *   - Has execution report + E2E tests → integrated
  *   - Has execution report only → integrated (minimum)
- *   - Legacy (no execution report) → unassessed (no Promotion field)
+ *   - No execution report → unassessed (no Promotion field)
  *   - Contracts with execution report but ambiguous → sandbox
  *
  * Writes the **Promotion** row into each contract's Metadata table.
@@ -78,7 +78,7 @@ const hasPromotionField = (content: string): boolean =>
 
 const determinePromotion = (content: string): string | null => {
   if (!hasExecutionReport(content)) {
-    return null; // legacy — unassessed
+    return null; // unassessed
   }
 
   const hasVisual = hasVisualTests(content);
@@ -147,7 +147,7 @@ const backfillPromotion = () => {
         id: id.toUpperCase(),
         fileName: file,
         promotion: '—',
-        inferredFrom: 'no metadata table (legacy format)',
+        inferredFrom: 'no metadata table',
       });
       logger.debug('backfillPromotion:skip:no-metadata', { id, file });
       continue;
@@ -160,7 +160,7 @@ const backfillPromotion = () => {
         id: id.toUpperCase(),
         fileName: file,
         promotion: '—',
-        inferredFrom: 'no execution report (legacy)',
+        inferredFrom: 'no execution report',
       });
       continue;
     }

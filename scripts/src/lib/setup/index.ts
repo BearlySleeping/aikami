@@ -22,8 +22,8 @@
 import { c, fmt, parseCliArgs } from '../cli_utils';
 import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from '../deploy/deployment_config';
 import { setupArtifactRegistry } from './artifact_registry';
+import { setupCdnHosting } from './cdn_hosting_setup';
 import { setupFirebaseHosting } from './firebase_hosting_setup';
-import { setupFirebase } from './firebase_setup';
 import { setupGcpApis } from './gcp_apis';
 import { setupSecrets } from './secrets_manager';
 
@@ -113,35 +113,35 @@ async function main() {
   const allChecks: Check[] = [];
   const allManualSteps: ManualStep[] = [];
 
-  // ── 1. GCP APIs ─────────────────────────────────────────────────────
+  // ── GCP APIs ─────────────────────────────────────────────────────
   {
     const { checks } = await setupGcpApis(projectId, DRY_RUN);
     allChecks.push(...checks);
   }
 
-  // ── 2. Firebase (Firestore, Storage) ─────────────────────────────────
-  {
-    const { checks, manualSteps } = await setupFirebase(projectId, DRY_RUN);
-    allChecks.push(...checks);
-    allManualSteps.push(...manualSteps);
-  }
-
-  // ── 3. Artifact Registry ─────────────────────────────────────────────
+  // ── Artifact Registry ─────────────────────────────────────────────
   {
     const { checks } = await setupArtifactRegistry(projectId, CLOUD_FUNCTIONS_REGION, DRY_RUN);
     allChecks.push(...checks);
   }
 
-  // ── 4. Secret Manager ────────────────────────────────────────────────
+  // ── Secret Manager ────────────────────────────────────────────────
   {
     const { checks, manualSteps } = await setupSecrets(projectId, DRY_RUN);
     allChecks.push(...checks);
     allManualSteps.push(...manualSteps);
   }
 
-  // ── 5. Firebase Hosting Sites ────────────────────────────────────────
+  // ── Firebase Hosting Sites ────────────────────────────────────────
   {
     const { checks, manualSteps } = await setupFirebaseHosting(projectId, DRY_RUN);
+    allChecks.push(...checks);
+    allManualSteps.push(...manualSteps);
+  }
+
+  // ── CDN Hosting (Tauri download redirects) ────────────────────────
+  {
+    const { checks, manualSteps } = await setupCdnHosting(DRY_RUN);
     allChecks.push(...checks);
     allManualSteps.push(...manualSteps);
   }

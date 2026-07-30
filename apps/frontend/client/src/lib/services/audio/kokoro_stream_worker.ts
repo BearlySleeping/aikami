@@ -53,6 +53,7 @@ type InitializeMessage = {
   action: 'initialize';
   sharedBuffer: SharedArrayBuffer;
   sampleCapacity: number;
+  serverUrl?: string;
 };
 
 type SynthesizeMessage = {

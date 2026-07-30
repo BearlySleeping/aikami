@@ -7,7 +7,7 @@ import { buildTilemapChunks, frustumCullChunks } from '../rendering/tilemap_chun
 // ---------------------------------------------------------------------------
 // Tilemap Rendering System — WebGPU chunk-based Mesh pipeline
 //
-// Contract C-171: Replaces the legacy RenderTexture baking system with a
+// Contract C-171: Replaces the RenderTexture baking system with a
 // spatial chunking architecture. The map is divided into 32×32 tile chunks,
 // each rendered as a single PixiJS `Mesh` backed by `Float32Array` vertex/UV
 // buffers and `Uint32Array` index buffers.

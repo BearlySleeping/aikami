@@ -3,7 +3,7 @@
 // ViewModel for the isolated Map & Zoning sandbox route.
 // Creates a GameWorld bound to a canvas and loads the debug JTON
 // tilemap for visual pipeline validation (C-178). Zone B falls back
-// to the legacy sandbox_zone_b.json.
+// to the sandbox_zone_b.json.
 //
 // Contracts: C-139 Task 2, C-178
 
@@ -54,7 +54,7 @@ export type MapSandboxViewModelInterface = BaseDevViewModelInterface & {
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
   /** Loads debug_map.jton via the engine's loadMap. Optional spawn coords. */
   loadZoneA: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
-  /** Loads sandbox_zone_b.json via the engine's loadMap (legacy fallback). */
+  /** Loads sandbox_zone_b.json via the engine's loadMap. */
   loadZoneB: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
   /** Loads sandbox_textured.jton — example tileset with real grass + brick textures. */
   loadZoneC: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;

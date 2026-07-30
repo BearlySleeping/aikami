@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck: Legacy browser detection logic with various global checks.
+// @ts-nocheck: Browser detection logic with various global checks.
 import { type Browser as DetectBrowser, detect, type OperatingSystem } from 'detect-browser';
 import { isbot } from 'isbot';
 

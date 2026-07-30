@@ -25,8 +25,9 @@ export const backendAppIds = ['firebase', 'image', 'text', 'voice'] as const;
  * | `game`       | `apps/frontend/game`        | game rendering engine               |
  * | `site`         | `apps/frontend/site`           | Public marketing site                 |
  * | `client`       | `apps/frontend/client`           | Main client app (characters, chat, settings) |
+ * | `client-tauri` | `apps/frontend/client`           | Tauri desktop release (same source, different deploy target) |
  */
-export const frontendAppIds = ['docs', 'site', 'client'] as const;
+export const frontendAppIds = ['docs', 'site', 'client', 'client-tauri'] as const;
 
 /**
  * All Aikami application identifiers (backend + frontend).

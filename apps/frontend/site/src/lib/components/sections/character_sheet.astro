@@ -1,0 +1,88 @@
+---
+// apps/frontend/site/src/lib/components/sections/character_sheet.astro
+/**
+ * RPG Mechanics Integration — Dynamic D&D Character Sheets & LPC Sprites.
+ * Every NPC is generated with a full D&D character sheet: ability scores,
+ * skills, HP, and procedurally assembled LPC sprite visuals.
+ */
+---
+
+<section id="rpg-mechanics" class="border-b border-border/70 bg-card">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow text-ember">AI Game Master</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
+        Roleplay with consequences.
+      </h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Aikami's AI Game Master orchestrates every encounter. It determines when an attribute check
+        is required, when a battle should begin, and how NPCs react — all driven by procedurally
+        generated D&amp;D character sheets. Every NPC has ability scores, skill proficiencies, and
+        HP. These stats aren't cosmetic. An NPC with high Wisdom will see through your bluffs. One
+        with low Charisma stumbles over their words. The AI GM uses these stats to drive every
+        interaction, making each encounter feel grounded in tabletop mechanics.
+      </p>
+    </div>
+
+    <div class="mt-10 max-w-2xl">
+      <!-- Dynamic D&D Sheet Explanation -->
+      <div class="flex flex-col gap-5">
+        <div class="glass-panel p-6 flex-1">
+          <h3 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-4">
+            Dynamic D&amp;D Character Sheet
+          </h3>
+          <p class="text-sm text-muted-foreground leading-relaxed mb-4">
+            Every NPC in Aikami is assigned a full set of D&amp;D ability scores — Strength,
+            Dexterity, Constitution, Intelligence, Wisdom, and Charisma — generated procedurally
+            based on their archetype. A tavern owner might have high Wisdom (Insight) and Charisma
+            (Persuasion), while a goblin scout has high Dexterity (Stealth) and low Intelligence.
+          </p>
+          <p class="text-sm text-muted-foreground leading-relaxed mb-4">
+            These scores feed directly into the AI's decision-making — and your own character sheet
+            matters just as much. When you try to intimidate an NPC, the AI GM evaluates both your
+            Charisma modifier and their Wisdom score against the context. A high-Wisdom character
+            sees through bluffs. A low-Charisma character stumbles and reveals more than they
+            intended. Every interaction is a two-way negotiation between your stats and theirs.
+          </p>
+          <div class="grid grid-cols-3 gap-3 mt-4">
+            <div class="text-center p-3 rounded-sm bg-rune/5 border border-rune/10">
+              <div class="font-mono text-[9px] uppercase tracking-wider text-rune mb-1">
+                Ability Scores
+              </div>
+              <div class="text-xs text-muted-foreground">
+                STR, DEX, CON, INT, WIS, CHA — 3-18 range, procedurally assigned
+              </div>
+            </div>
+            <div class="text-center p-3 rounded-sm bg-ember/5 border border-ember/10">
+              <div class="font-mono text-[9px] uppercase tracking-wider text-ember mb-1">
+                Skills
+              </div>
+              <div class="text-xs text-muted-foreground">
+                Auto-generated proficiencies matching archetype + backstory
+              </div>
+            </div>
+            <div class="text-center p-3 rounded-sm bg-indigo-400/5 border border-indigo-400/10">
+              <div class="font-mono text-[9px] uppercase tracking-wider text-indigo-400 mb-1">
+                HP &amp; Combat
+              </div>
+              <div class="text-xs text-muted-foreground">
+                Hit points, AC, attack bonuses derived from stats
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-panel p-5 bg-rune/5 border-rune/30">
+          <p class="text-xs text-muted-foreground leading-relaxed">
+            <span class="text-rune font-medium">The AI GM orchestrates everything.</span>
+            It decides when an attribute check is required, when a battle should begin, what music
+            fits the mood, and which NPC expression or situational image to generate. When you try
+            to persuade a guard, the engine evaluates your approach against that specific NPC's
+            Wisdom score, Charisma modifier, current mood, faction standing, and memory of past
+            interactions. Every outcome is computed, not pre-written.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

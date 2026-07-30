@@ -29,7 +29,6 @@ const parseArg = (args: string[], flag: string): string | undefined => {
 
 const cliArgs = argv.slice(2);
 const PORT = Number(parseArg(cliArgs, '--port') ?? '5280');
-const _MODE = parseArg(cliArgs, '--mode') ?? 'emulator';
 const URL_PATH = parseArg(cliArgs, '--path') ?? '/';
 const ROOT = resolve(import.meta.dir, '..');
 

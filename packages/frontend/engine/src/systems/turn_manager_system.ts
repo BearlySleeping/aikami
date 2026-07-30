@@ -1644,7 +1644,7 @@ const _processSupportEnemyTurn = (
 };
 
 // ---------------------------------------------------------------------------
-// Internal — legacy + enemy attack helpers
+// Internal — enemy attack helpers
 // ---------------------------------------------------------------------------
 
 const _processLegacyEnemyAttack = (

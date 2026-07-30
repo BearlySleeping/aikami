@@ -56,7 +56,7 @@ const SKILL_SOURCES: SkillSource[] = [
   {
     name: 'Herdr',
     repoUrl: 'https://github.com/ogulcancelik/herdr.git',
-    sourceSubdir: '.',
+    sourceSubdir: 'skills/herdr',
     targetSubdir: 'herdr',
     files: ['SKILL.md'],
   },
@@ -79,6 +79,9 @@ const SKILL_SOURCES: SkillSource[] = [
       'firebase-app-hosting-basics',
       'firebase-remote-config-basics',
       'firebase-ai-logic-basics',
+      'extension-to-functions-codebase',
+      'firebase-basics',
+      'firebase-hosting-basics',
     ],
   },
 ];

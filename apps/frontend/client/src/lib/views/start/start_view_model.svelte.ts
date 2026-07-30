@@ -73,7 +73,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Continue the most recent saved game. */
   continueGame(): Promise<void>;
 
-  /** @deprecated Use {@link startNewGame} instead. */
   startGame(): Promise<void>;
 
   /** Signs in with Google (optional). Updates to "Sign Out" when logged in. */
@@ -308,7 +307,6 @@ class StartViewModel
     }
   }
 
-  /** @inheritdoc @deprecated */
   async startGame(): Promise<void> {
     return this.startNewGame();
   }

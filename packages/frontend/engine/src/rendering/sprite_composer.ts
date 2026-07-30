@@ -459,7 +459,7 @@ const createPaletteFilter = (paletteTexture: Texture): Filter => {
  * Each entity that has an `Appearance` component gets a PixiJS `Container`
  * managed by this composer. Layer composition supports two paths:
  *
- * 1. **Basic** (legacy): Layer textures loaded by ID, composited into a
+ * 1. **Basic**: Layer textures loaded by ID, composited into a
  *    flat cached GPU texture via `cacheAsTexture`.
  *
  * 2. **Palette-mapped** (LPC pipeline): A grayscale base sheet receives a

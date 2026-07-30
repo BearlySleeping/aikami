@@ -103,7 +103,7 @@ export const getMacroClock = (): number => {
 export const isEntityOffscreen = (eid: number): boolean => {
   const zoneEid = MapLocation.currentZoneId[eid];
   if (zoneEid === undefined || zoneEid === 0) {
-    return false; // No zone assignment = active (legacy compat)
+    return false; // No zone assignment = active
   }
   return ZoneStatus.isActive[zoneEid] !== 1;
 };

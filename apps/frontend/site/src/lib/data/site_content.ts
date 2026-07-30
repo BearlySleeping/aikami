@@ -37,8 +37,9 @@ export const site = {
 export const siteContent = {
   site,
   nav: [
-    { label: 'Features', href: '/#features' },
-    { label: 'AI Engine', href: '/#ai-cognition' },
+    { label: 'Features', href: '/#cognition' },
+    { label: 'NPC Engine', href: '/#npc-generator' },
+    { label: 'RPG Mechanics', href: '/#rpg-mechanics' },
     { label: 'Self-Host', href: '/#your-realm' },
     { label: 'Guild', href: '/#adventurers-guild' },
   ],

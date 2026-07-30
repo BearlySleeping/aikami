@@ -46,7 +46,7 @@ export const SAVE_ENVELOPE_VERSION = 2;
 /**
  * Parses a raw save payload into its envelope parts.
  *
- * Handles v2 envelopes (with version/checksum), legacy v1 envelopes
+ * Handles v2 envelopes (with version/checksum), v1 envelopes
  * ({ ecsSnapshot, serviceSnapshots }), and plain ECS snapshots.
  * Exposed so the game boot pipeline can hydrate domain services on Continue
  * (C-331 AC-2) and validate checksums (C-334 AC-4).
@@ -98,7 +98,7 @@ export const parseSavePayloadEnvelope = (
       storedChecksum: envelope.checksum,
     };
   } catch {
-    // Not valid JSON — treat as legacy plain ECS snapshot
+    // Not valid JSON — treat as plain ECS snapshot
   }
   return { ecsSnapshot: raw, version: undefined, checksumValid: true };
 };

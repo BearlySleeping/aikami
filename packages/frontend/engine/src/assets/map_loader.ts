@@ -99,9 +99,9 @@ export type TransitionZone = {
   height: number;
   /** Target map filename or ID to transition to. */
   targetMap: string;
-  /** Target X pixel coordinate on the destination map (legacy — use targetSpawnId). */
+  /** Target X pixel coordinate on the destination map. */
   targetX: number;
-  /** Target Y pixel coordinate on the destination map (legacy — use targetSpawnId). */
+  /** Target Y pixel coordinate on the destination map. */
   targetY: number;
   /**
    * String identifier of the spawn point on the destination map (C-172).

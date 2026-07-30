@@ -450,8 +450,7 @@ class InventoryService
 
   /**
    * Starts listening for ITEM_PICKED_UP / INVENTORY_FULL delta events from
-   * the ECS via the EngineBridge (C-331 — additive semantics; the legacy
-   * INVENTORY_UPDATED replace-array listener was removed).
+   * the ECS via the EngineBridge (C-331 — additive semantics).
    * Idempotent — only starts once per lifecycle.
    */
   async startListening(): Promise<void> {

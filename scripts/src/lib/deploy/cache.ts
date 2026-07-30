@@ -26,9 +26,8 @@ import { dirtyTreeHash, run } from './utils';
 
 // ── Upstash Redis config ─────────────────────────────────────────────────
 
-const _resolveRedisUrl = (): string =>
-  process.env.REDIS_URL || 'https://famous-tarpon-106347.upstash.io';
-const _resolveRedisToken = (): string => process.env.REDIS_TOKEN || '';
+const _resolveRedisUrl = (): string | undefined => process.env.REDIS_URL;
+const _resolveRedisToken = (): string | undefined => process.env.REDIS_TOKEN;
 
 const CACHE_PREFIX = 'cache-aikami-deploy';
 
@@ -139,25 +138,34 @@ export function computeAppChecksum(
 
 // ── Upstash Redis cache (authoritative) ──────────────────────────────────
 
-async function upstashGet(key: string): Promise<string | null> {
+type UpstashResult =
+  | { ok: true; value: string | null } // value is null when key doesn't exist
+  | { ok: false }; // Redis unreachable
+
+async function upstashGet(key: string): Promise<UpstashResult> {
   try {
     const baseUrl = _resolveRedisUrl();
     const token = _resolveRedisToken();
-    if (!token) {
-      return null;
+    if (!baseUrl || !token) {
+      warn('REDIS_URL or REDIS_TOKEN not set');
+      return { ok: false };
     }
+
     const response = await fetch(`${baseUrl}/get/${key}`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5_000),
     });
+
     if (!response.ok) {
-      return null;
+      warn(`Upstash GET returned ${response.status}: ${response.statusText}`);
+      return { ok: false };
     }
     const data = (await response.json()) as { result: string | null };
-    return data.result ?? null;
-  } catch {
-    return null;
+    return { ok: true, value: data.result ?? null };
+  } catch (err) {
+    warn(`Upstash GET failed: ${err instanceof Error ? err.message : String(err)}`);
+    return { ok: false };
   }
 }
 
@@ -165,7 +173,8 @@ async function upstashSet(key: string, value: string): Promise<void> {
   try {
     const baseUrl = _resolveRedisUrl();
     const token = _resolveRedisToken();
-    if (!token) {
+    if (!baseUrl || !token) {
+      warn('REDIS_URL or REDIS_TOKEN not set');
       return;
     }
     await fetch(`${baseUrl}/set/${key}`, {
@@ -174,14 +183,16 @@ async function upstashSet(key: string, value: string): Promise<void> {
       body: value,
       signal: AbortSignal.timeout(5_000),
     });
-  } catch {
-    warn('Failed to update online deploy cache (Redis unreachable)');
+  } catch (err) {
+    warn(
+      `Failed to update online deploy cache: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
 /**
  * Check online cache.
- * Returns the cached checksum, or null if Redis is unreachable or key not found.
+ * Returns 'hit', 'miss', or null (Redis unreachable).
  */
 async function checkOnlineCache(
   mode: string,
@@ -189,11 +200,12 @@ async function checkOnlineCache(
   currentChecksum: string,
 ): Promise<'hit' | 'miss' | null> {
   const key = `${CACHE_PREFIX}:${mode}:${appName}`;
-  const online = await upstashGet(key);
-  if (online === null) {
+  const result = await upstashGet(key);
+  if (!result.ok) {
     return null; // Redis unreachable
   }
-  return online === currentChecksum ? 'hit' : 'miss';
+  // Key not found (value is null) → miss; value matches → hit; value differs → miss
+  return result.value === currentChecksum ? 'hit' : 'miss';
 }
 
 // ── Public API ───────────────────────────────────────────────────────────

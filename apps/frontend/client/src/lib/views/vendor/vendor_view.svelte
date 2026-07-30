@@ -533,12 +533,12 @@ const _itemIcon = (itemId: string): string => {
                   class="btn btn-sm btn-warning"
                   onclick={confirmSellWithDialog}
                   aria-label="Confirm sale of {viewModel.pendingSellLabel}"
-                  autofocus
                 >
                   Confirm Sale
                 </button>
               </div>
             </div>
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <form
               method="dialog"
               class="modal-backdrop"

@@ -4,6 +4,7 @@
  * realign based on semantic affinity when released.
  */
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { observeCanvas } from '../../utils/canvas_observer';
 
 /* ── Types ── */
 
@@ -234,6 +235,8 @@ export const initConceptMagnets = async (containerId: string): Promise<() => voi
   });
 
   container.appendChild(app.canvas);
+
+  const observerCleanup = observeCanvas({ app, container });
 
   const { width, height } = app.screen;
   const padding = 60;
@@ -609,6 +612,7 @@ export const initConceptMagnets = async (containerId: string): Promise<() => voi
   });
 
   return () => {
+    observerCleanup();
     app.ticker.stop();
     app.destroy(true, { children: true });
   };

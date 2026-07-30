@@ -56,9 +56,9 @@ export type ActionOption = {
  * - `DECLARED_DC`: DC declaration shown after intent analysis determines a roll. (C-371)
  * - `DICE`: Dice interactive — roll, animation, reveal. (C-162/C-371)
  * - `CHIPS`: Post-response state — suggestion chips shown below messages. (C-371)
- * - `MENU`: LEGACY — BG3-style action menu. Used when feature flag is off.
- * - `CUSTOM_INPUT`: LEGACY — freeform text after selecting "Custom" action.
- * - `CHAT`: LEGACY — standard chat phase.
+ * - `MENU`: BG3-style action menu. Used when feature flag is off.
+ * - `CUSTOM_INPUT`: Freeform text after selecting "Custom" action.
+ * - `CHAT`: Standard chat phase.
  */
 export type DialoguePhase =
   | 'FREE_TEXT'

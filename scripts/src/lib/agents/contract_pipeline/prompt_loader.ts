@@ -287,7 +287,7 @@ export const loadReviewPrompt = (options: {
     if (isFallback) {
       return FALLBACK_RECOVERY_INJECT;
     }
-    // Default: no profile inject — legacy bare prompt (manual review with draft=true).
+    // Default: no profile inject — bare prompt (manual review with draft=true).
     return [
       '',
       '## 📋 Manual Review Mode',

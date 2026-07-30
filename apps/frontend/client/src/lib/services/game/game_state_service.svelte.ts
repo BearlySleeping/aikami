@@ -59,7 +59,7 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
 
   // ── World Generation (C-233) ──
 
-  /** Generated world output, or a minimal default for legacy saves. */
+  /** Generated world output, or a minimal default. */
   readonly worldGenOutput: WorldGenOutput;
 
   /** Sets the generated world output after wizard completion. */

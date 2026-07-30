@@ -943,7 +943,7 @@ const tickLoop = (): void => {
     // Step 6: Resolution — movement + collision
     //
     // Axis-independent continuous movement with bitmask collision via
-    // the dense spatial grid (isCellBlocked) and legacy boolean grid
+    // the dense spatial grid (isCellBlocked) and boolean grid
     // fallback (isWalkable). MoveIntents are resolved against spatial
     // grid occupancy after velocities settle.
     // ────────────────────────────────────────────────────────────────────────
@@ -1643,7 +1643,7 @@ self.onmessage = (event: MessageEvent): void => {
 
           // ── C-172: Resolve spawn coordinates ──
           // If a targetSpawnHash is provided, resolve it via a staging world.
-          // Otherwise fall back to legacy targetX/targetY.
+          // Otherwise fall back to targetX/targetY.
           let resolvedX = targetX as number;
           let resolvedY = targetY as number;
 
