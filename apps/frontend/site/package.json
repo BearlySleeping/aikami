@@ -35,11 +35,11 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
-    "@astrojs/mdx": "7.0.4",
+    "@astrojs/mdx": "7.0.5",
     "@astrojs/partytown": "2.1.7",
     "@astrojs/sitemap": "3.7.3",
     "@tailwindcss/vite": "4.3.3",
-    "astro": "7.1.4",
+    "astro": "7.1.5",
     "astro-compress": "2.4.1",
     "astro-robots-txt": "1.0.0",
     "firebase-tools": "15.24.0",

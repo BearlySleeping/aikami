@@ -2,13 +2,12 @@
 # Contract: C-213 Environment, Time, and Weather Core System
 
 ## Metadata
-- Source: examples/aikami-v1-godot/core/managers/time_manager.gd
 - Target: packages/frontend/engine/src/environment/
 - Priority: P2 (QoL & Tooling)
 - Depends On: C-210, C-211
 
 ## Overview & Design Reference
-[cite_start]This contract implements the time simulation clock, day/night color-mix cycles, and procedural weather overlays in the WebGPU engine pipeline[cite: 2, 4]. [cite_start]It replaces the legacy Godot scene tree timers with a pure bitECS-driven system tick and maps state transformations directly into a shared uniform buffer object (UBO)[cite: 4, 23]. [cite_start]Diurnal color grading and weather animations are processed using a single forward rendering pass to eliminate texture cache thrashing and preserve draw call batching on target devices[cite: 7, 15, 117].
+[cite_start]This contract implements the time simulation clock, day/night color-mix cycles, and procedural weather overlays in the WebGPU engine pipeline[cite: 2, 4]. [cite_start]It replaces scene tree timers with a pure bitECS-driven system tick and maps state transformations directly into a shared uniform buffer object (UBO)[cite: 4, 23]. [cite_start]Diurnal color grading and weather animations are processed using a single forward rendering pass to eliminate texture cache thrashing and preserve draw call batching on target devices[cite: 7, 15, 117].
 
 ## Changes Detail
 

@@ -60,5 +60,4 @@ This document details the primary technologies, frameworks, and services used in
 
 - **Firestore NoSQL** → Replaced by **Firebase Data Connect (PostgreSQL)** for operations-based pricing and relational query support (pgvector, recursive CTEs).
 - **Genkit** → Replaced by vendor-agnostic **AiServiceInterface** (C-015) supporting OpenAI and Gemini providers.
-- **Godot Engine** → Replaced by **PixiJS v8 + bitECS** game engine running inside the SvelteKit Client (C-016). Exported to desktop via Tauri v2.
 - **Client-side Zod** → Replaced by **Valibot** for perimeter validation (1.5KB vs ~12KB bundle saving, 16× faster parsing).

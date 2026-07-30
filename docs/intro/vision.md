@@ -11,7 +11,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - **AI-Driven NPCs**: Every NPC has a unique personality, system prompt, and first message. AI generates dynamic responses based on the character's traits and the conversation context.
 - **D&D-Style Character Sheets**: Full ability scores, skills, saving throws, appearance, hit points — the complete tabletop RPG experience in a chat interface.
 - **Rich World Building**: Lorebooks, knowledge graphs, character relationships, and world state that persist and evolve.
-- **Cross-Platform**: Client for web/mobile, Godot game client for immersive 2D experience, Firebase real-time sync between all platforms.
+- **Cross-Platform**: PWA for web/mobile, desktop via Tauri.
 
 ## User Experience
 
@@ -26,7 +26,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - **Monorepo architecture**: All code in one place, shared packages, consistent tooling
 - **Firebase backend**: Serverless, real-time, globally scalable
 - **SvelteKit Client**: Modern, fast, installable on any device
-- **Godot Game Client**: Native 2D RPG experience with TypeScript game logic
+- **Desktop**: Native 2D RPG experience via Tauri v2
 - **AI Integration**: Direct AI API calls for dialogue generation and image creation
 
 ## Current Status (May 2026)
@@ -37,7 +37,6 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - ✅ Client with auth, personas, NPCs, chat, dashboard
 - ✅ Firebase backend (auth triggers, callable functions, scheduled jobs)
 - ✅ 17+ Firestore collections with full Zod schemas
-- ✅ GodotJS game client with Firebase integration
 - ✅ Landing page and docs site
 - ✅ 22-project monorepo with moon task orchestration
 - ✅ Blackbox testing infrastructure

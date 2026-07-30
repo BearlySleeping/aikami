@@ -3,17 +3,17 @@
 # Contract C-028: Game Firebase REST Integration & Client Auth Handoff
 
 ## Core Objective
-Establish a lightweight, REST-driven Firebase client within the PixiJS + bitECS game frontend (`apps/frontend/game`), bypassing the heavyweight Firebase JS SDK. Implement a "Device Flow" style authentication handoff to the Client (`apps/frontend/client`), and scaffold an automated blackbox testing pipeline via `herdr` and Playwright.
+Establish a lightweight, REST-driven Firebase client within the PixiJS + bitECS game frontend (`packages/frontend/engine`), bypassing the heavyweight Firebase JS SDK. Implement a "Device Flow" style authentication handoff to the Client (`apps/frontend/client`), and scaffold an automated blackbox testing pipeline via `herdr` and Playwright.
 
 ## Design References
 - **Target App**: `apps/frontend/game/`
 - **Client Auth Endpoint**: `apps/frontend/client/src/routes/(public)/auth/game/+page.svelte`
-- **Lightweight Firebase Ref**: `examples/aikami-v2-godotjs/src/core/firebase/`
+- **Lightweight Firebase Ref**: `packages/frontend/engine/src/core/firebase/`
 - **Testing Infrastructure**: `scripts/src/lib/test_blackbox/`
 
 ## Detailed Changes
 1. **Lightweight Firebase SDK Migration**:
-   - Port the existing REST/WebSocket Firebase abstractions from the `godotjs` example to `apps/frontend/game/src/core/firebase/`.
+   - Create REST/WebSocket Firebase abstractions in `packages/frontend/engine/src/core/firebase/`.
    - Update `http_client`, `auth`, `firestore`, `storage`, and `functions` to run within standard browser/WebGL contexts using `fetch`.
 2. **Client Auth Handoff (Device Flow)**:
    - **Game**: Generates a temporary `auth_code` and prompts the user to visit `PWA_URL/auth/game?code=XYZ`. Begins polling a public Firebase Realtime Database/Firestore node for token validation.

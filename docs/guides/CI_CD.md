@@ -9,7 +9,6 @@ The CI/CD pipeline is composed of several workflows, which are defined in the `.
 -   `deploy.yml`: This workflow deploys the backend to Google Cloud Run and the frontend to Firebase Hosting.
 -   `ci.yml`: This workflow runs on every push and pull request to the `main` and `develop` branches. It runs tests, linting, and formatting checks.
 -   `generic-checks.yml`: This workflow runs on every push and pull request to the `main` and `develop` branches. It runs generic checks, such as checking for large files and spelling errors.
--   `godot-checks.yml`: This workflow runs on every push and pull request to the `main` and `develop` branches. It runs checks specific to the Godot game client.
 -   `pr-notifications.yml`: This workflow sends notifications when a pull request is opened or updated.
 -   `publish-notifications.yml`: This workflow sends notifications when a new version is published.
 -   `publish.yml`: This workflow publishes new versions of the packages to the npm registry.

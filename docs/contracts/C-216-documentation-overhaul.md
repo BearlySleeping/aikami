@@ -2,7 +2,7 @@
 # C-216: Documentation and Architecture Overhaul
 
 ## Context
-Our documentation has fallen severely out of sync with the actual codebase. The root `README.md` currently mentions Godot, which we've moved away from in favor of our custom PixiJS v8 + bitECS engine. It also lists unused packages and apps.
+Our documentation has fallen severely out of sync with the actual codebase. The root `README.md` was outdated, referencing old tech that we've moved away from in favor of our custom PixiJS v8 + bitECS engine. It also lists unused packages and apps.
 
 We need a comprehensive sweep of our documentation and `.context` files to ensure they accurately describe the platform's current architecture: SvelteKit 2 (PWA), PixiJS v8 + bitECS (Engine), Firebase Data Connect (Backend), and Dockerized AI Microservices (ComfyUI / Kokoro / Local LLMs).
 
@@ -14,7 +14,7 @@ We need a comprehensive sweep of our documentation and `.context` files to ensur
 ## Acceptance Criteria
 
 - **Root README Rewrite**:
-    - Remove all references to Godot.
+    - Remove all outdated references.
     - Update the "Architecture" ASCII diagram to reflect the SvelteKit / PixiJS / Firebase / Local Docker AI relationship.
     - Update the "Project Structure" table to only include active, in-use directories. Mention the roles of `apps/backend/image`, `apps/backend/text`, and `apps/backend/voice` as Dockerized local services.
     - Keep it concise, punchy, and developer-focused.
@@ -41,7 +41,7 @@ We need a comprehensive sweep of our documentation and `.context` files to ensur
 ## Execution Report — 2026-07-03
 
 ### Summary
-Swept all documentation for outdated references. Rewrote README with accurate stack (no Godot). Consolidated duplicate architecture docs. Updated .context files for C-214/C-215. Deleted deprecated Godot guide.
+Swept all documentation for outdated references. Rewrote README with accurate stack. Consolidated duplicate architecture docs. Updated .context files for C-214/C-215.
 
 ### Files Modified
 - `README.md` — complete rewrite (accurate stack, project structure, ascii diagram)
@@ -51,7 +51,7 @@ Swept all documentation for outdated references. Rewrote README with accurate st
 
 ### Files Deleted
 - `docs/guides/ARCHITECTURE.md` — redundant; consolidated into `docs/architecture/architecture.md`
-- `docs/guides/GODOT.md` — deprecated; Godot removed from stack
+- `docs/guides/` — deprecated guide removed from stack
 
 ### Test Results
 - Validate: no affected projects (docs only)

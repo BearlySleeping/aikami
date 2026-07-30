@@ -13,7 +13,7 @@
 
 ## Overview
 
-Formal refactoring of the `knowledge/` documentation folder to align with the May 2026 Deep Research findings. This contract removes all vestigial Godot Engine / GodotJS references from architecture docs, documents the new web-native stack (PixiJS v8 + bitECS game engine inside SvelteKit, exported to desktop via Tauri v2), replaces Firestore NoSQL with Firebase Data Connect (managed PostgreSQL) across all architecture descriptions, adds structural limitations discovered during the engine-boundary research (C-016), updates the technology and structure guides to reflect Valibot, TanStack DB + PowerSync, and the new package layout, and codifies strict AI coding rules discovered during C-014/C-015/C-016 implementation. No engine code is written — this is purely a documentation update contract.
+Formal refactoring of the `knowledge/` documentation folder to align with the May 2026 Deep Research findings. This contract removes all vestigial references from architecture docs, documents the new web-native stack (PixiJS v8 + bitECS game engine inside SvelteKit, exported to desktop via Tauri v2), replaces Firestore NoSQL with Firebase Data Connect (managed PostgreSQL) across all architecture descriptions, adds structural limitations discovered during the engine-boundary research (C-016), updates the technology and structure guides to reflect Valibot, TanStack DB + PowerSync, and the new package layout, and codifies strict AI coding rules discovered during C-014/C-015/C-016 implementation. No engine code is written — this is purely a documentation update contract.
 
 ## Design Reference
 
@@ -23,20 +23,18 @@ Formal refactoring of the `knowledge/` documentation folder to align with the Ma
 
 **Existing coding standards**: `knowledge/guides/CODING_STANDARDS.md` — Google TypeScript Style Guide basis, already covers `const`/`let`, modules, naming, JSDoc. Needs the 6 AI coding rules from C-014/C-016 appended.
 
-**Existing stack doc**: `knowledge/guides/STACK.md` — one-page technology table. Currently lists Godot, Firestore, Genkit — all to be updated.
+**Existing stack doc**: `knowledge/guides/STACK.md` — one-page technology table. Currently lists Firestore, Genkit — all to be updated.
 
-**Existing structure doc**: `knowledge/guides/STRUCTURE.md` — monorepo directory tree with `apps/frontend/gamejs/` (GodotJS). Needs deprecation marker and new game engine path.
+**Existing structure doc**: `knowledge/guides/STRUCTURE.md` — monorepo directory tree. Needs new game engine path.
 
 ## Changes Detail
 
 ### 1. Rewrite `knowledge/architecture/architecture.md`
 
 **Remove:**
-- All references to Godot Engine, GodotJS, C# bindings, GDScript
 - Firestore NoSQL as the database engine (post-migration to Data Connect)
 - Genkit as AI framework (replaced by vendor-agnostic `AiServiceInterface` per C-015)
 - `packages/backend/database/` described as "Firestore repository pattern"
-- `apps/frontend/gamejs/` as active game client
 
 **Add:**
 - **New game engine section**: PixiJS v8 rendering + bitECS 0.4.0 ECS, running inside `apps/frontend/client/src/lib/game/` (per C-016).
@@ -116,7 +114,7 @@ Add a second diagram showing the **Engine Boundary Pattern** (from C-016):
 | Tauri v2 Desktop Export | C-013 tooling setup | Not started |
 | TanStack DB + PowerSync client sync | Planned | Not started |
 | Valibot client validation | Planned | Not started |
-| GodotJS Game Client | Deprecated | Legacy, awaiting migration |
+
 
 **Update Database limitation**: Firestore NoSQL limitations → Firebase Data Connect (PostgreSQL) limitations — cold start latency, schema migration tooling, GraphQL query complexity.
 
@@ -147,7 +145,6 @@ Add a second diagram showing the **Engine Boundary Pattern** (from C-016):
 | Testing | Playwright + Vitest + Blackbox runner | E2E, unit, integration |
 
 **Remove from stack:**
-- Godot Engine
 - Genkit (replaced by AiServiceInterface)
 - Firestore (replaced by Data Connect)
 
@@ -172,9 +169,6 @@ apps/
 │   │           └── client/      # Client-side services
 │   ├── site/                     # Public site (Astro)
 │   ├── docs/                    # Documentation site (Astro)
-│   └── gamejs/                  # ⚠️ DEPRECATED — Legacy GodotJS client
-│                                #    Migration target: client/src/lib/game/
-│                                #    Keep for reference until C-016 complete.
 └── backend/
     └── functions/               # Firebase Cloud Functions
 ```
@@ -193,8 +187,7 @@ packages/
     └── ...                      # (existing)
 ```
 
-**Add a migration note block:**
-> **⚠️ Legacy Code Notice:** `apps/frontend/gamejs/` is the deprecated GodotJS game client. All new game engine development happens in `apps/frontend/client/src/lib/game/` using PixiJS v8 + bitECS. The GodotJS codebase is preserved for reference only and will be archived once C-016 is complete.
+
 
 ### 5. Update `knowledge/guides/CODING_STANDARDS.md`
 
@@ -271,7 +264,7 @@ AI service abstraction (C-015), database abstraction (C-014), and engine boundar
 ### 7. Update `knowledge/CONTEXT.md`
 
 **Update the "What We're Building" table:**
-- Replace "GodotJS game (TypeScript)" → "PixiJS v8 + bitECS game engine in Client"
+- Replace game engine entry with "PixiJS v8 + bitECS game engine in Client"
 - Replace "Firestore" → "Data Connect (PostgreSQL)"
 - Add Tauri v2 desktop export
 - Add TanStack DB + PowerSync client sync
@@ -282,7 +275,6 @@ Bun × SvelteKit 2 × PixiJS v8 × bitECS × Firebase Data Connect × Tauri v2 �
 ```
 
 **Update the project structure tree** to match the new STRUCTURE.md:
-- Mark `apps/frontend/gamejs/` as "⚠️ DEPRECATED — Legacy GodotJS"
 - Add `apps/frontend/client/src/lib/game/` — PixiJS v8 + bitECS engine
 - Add `packages/backend/ai/` — AI service abstraction
 - Add `packages/frontend/tanstack-db/` — PowerSync client
@@ -303,10 +295,9 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ### AC-1: Architecture Doc Reflects New Stack
 **Given** the May 2026 Deep Research findings
 **When** `knowledge/architecture/architecture.md` is updated
-**Then** it contains zero references to Godot, GodotJS, C#, GDScript, Genkit, and Firestore NoSQL as the primary database; and it documents PixiJS v8 + bitECS, Tauri v2, Firebase Data Connect, AiServiceInterface, BaseDatabaseService, Valibot, and TanStack DB + PowerSync.
+**Then** it contains zero references to Genkit and Firestore NoSQL as the primary database; and it documents PixiJS v8 + bitECS, Tauri v2, Firebase Data Connect, AiServiceInterface, BaseDatabaseService, Valibot, and TanStack DB + PowerSync.
 
 **Test Hooks:**
-- Unit: `grep -i "godot\|godotjs\|c#\|gdscript" knowledge/architecture/architecture.md` returns empty
 - Unit: `grep -i "genkit" knowledge/architecture/architecture.md` returns empty (or explicitly marked as replaced by AiServiceInterface)
 - Unit: `grep -i "firestore" knowledge/architecture/architecture.md` — if present, must be in context of "replaced by Data Connect" not as current database
 - Unit: `grep -i "pixijs\|bitecs\|tauri.*v2\|data connect\|valibot\|tans\|powersync" knowledge/architecture/architecture.md` returns non-empty for each term
@@ -325,7 +316,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 **Test Hooks:**
 - Unit: `grep -i "high.frequency\|60fps\|requestAnimationFrame" knowledge/architecture/limitations.md` returns non-empty (Svelte reactivity constraint documented)
 - Unit: `grep -i "serializ\|plain.*object\|bridge" knowledge/architecture/limitations.md` returns non-empty (serialization rules documented)
-- Unit: `grep -i "gamejs\|godot.*deprecated\|godot.*legacy" knowledge/architecture/limitations.md` returns non-empty (deprecation noted)
+
 - Unit: Feature gaps table lists "Game Engine (PixiJS + bitECS)" with status "Not started"
 
 **Watch Points:**
@@ -335,11 +326,11 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ### AC-3: STACK.md Lists New Technologies
 **Given** the new web-native stack
 **When** `knowledge/guides/STACK.md` is updated
-**Then** it lists PixiJS v8, bitECS 0.4.0, Tauri v2, Firebase Data Connect, Valibot, TanStack DB, PowerSync, AiServiceInterface, BaseDatabaseService — and does NOT list Godot, Genkit, or Firestore as current technologies.
+**Then** it lists PixiJS v8, bitECS 0.4.0, Tauri v2, Firebase Data Connect, Valibot, TanStack DB, PowerSync, AiServiceInterface, BaseDatabaseService — and does NOT list Genkit or Firestore as current technologies.
 
 **Test Hooks:**
 - Unit: `grep -i "pixijs\|bitecs\|tauri\|data connect\|valibot\|tans\|powersync" knowledge/guides/STACK.md` returns non-empty for each term
-- Unit: `grep -i "godot\|genkit" knowledge/guides/STACK.md` returns empty (or marked as replaced)
+- Unit: `grep -i "genkit" knowledge/guides/STACK.md` returns empty (or marked as replaced)
 - Unit: `grep -i "firestore" knowledge/guides/STACK.md` returns empty (or marked as replaced by Data Connect)
 - Unit: Technology table has rows for both "Server Validation (Zod)" and "Client Validation (Valibot)" — clear separation
 
@@ -384,16 +375,16 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ### AC-6: INDEX.md, CONTEXT.md, and llms.txt Are Consistent
 **Given** the updated knowledge documents
 **When** `knowledge/index.md`, `knowledge/CONTEXT.md`, and `knowledge/llms.txt` are updated
-**Then** all three reflect the new stack consistently — no stale Godot/Firestore references, new technologies documented, deprecated components marked.
+**Then** all three reflect the new stack consistently — no stale references, new technologies documented, deprecated components marked.
 
 **Test Hooks:**
-- Unit: `grep -i "godot\|godotjs\|genkit" knowledge/index.md` returns empty
-- Unit: `grep -i "godot\|godotjs\|genkit" knowledge/CONTEXT.md` returns empty (or marked as replaced)
+- Unit: `grep -i "genkit" knowledge/index.md` returns empty
+- Unit: `grep -i "genkit" knowledge/CONTEXT.md` returns empty (or marked as replaced)
 - Unit: `grep "pixijs\|bitecs\|tauri\|data connect" knowledge/index.md` returns non-empty
 - Unit: `grep "pixijs\|bitecs\|tauri\|data connect" knowledge/CONTEXT.md` returns non-empty
 - Unit: `knowledge/llms.txt` file exists and its mod time is newer than the last doc edit
 - Unit: `grep "pixijs\|bitecs" knowledge/llms.txt` returns non-empty (new docs indexed)
-- Unit: `grep "DEPRECATED\|Legacy.*Godot" knowledge/llms.txt` returns non-empty or the file reflects `gamejs` as deprecated
+
 
 **Watch Points:**
 - `knowledge/llms.txt` is auto-generated — do NOT edit it manually. Run `bun run scripts -- generate_llms` after all other docs are updated
@@ -419,7 +410,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ## Implementation Notes
 
 ### Files to modify
-- `knowledge/architecture/architecture.md` — Full rewrite: remove Godot, add PixiJS/bitECS/Tauri/Data Connect/Valibot/TanStack/PowerSync, update diagrams
+- `knowledge/architecture/architecture.md` — Full rewrite: update to PixiJS/bitECS/Tauri/Data Connect/Valibot/TanStack/PowerSync, update diagrams
 - `knowledge/architecture/limitations.md` — Add engine boundary constraints, serialization rules, deprecation notice
 - `knowledge/guides/STACK.md` — Replace technology table with new stack
 - `knowledge/guides/STRUCTURE.md` — Update directory tree, mark gamejs deprecated, add new packages
@@ -450,7 +441,6 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 
 ### Verification
 - `bun run typecheck` — zero new errors
-- `grep -ri "godot" knowledge/` — only in DEPRECATED/legacy context
 - `grep -ri "firestore" knowledge/` — only in migration/replacement context, not current database
 - `knowledge/llms.txt` — regenerated and reflects all updated files
 - Manual visual check of `knowledge/architecture/architecture.md` — ASCII diagrams render correctly
@@ -459,7 +449,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ## Edge Cases & Gotchas
 
 - **Firestore still in use during migration**: The actual codebase still uses Firestore (C-014 is not_started). The documentation says "Data Connect (PostgreSQL)" because that's the target architecture. Distinguish between "current state" (Firestore in code, Data Connect in docs as target) and "documented target" (Data Connect). Add an explicit migration timeline note if needed.
-- **`knowledge/guides/GODOT.md` exists:** This file documents the legacy GodotJS setup. Do NOT delete it — it serves as migration reference. Do NOT update it either — it's frozen. The STRUCTURE.md deprecation notice is sufficient.
+
 - **`knowledge/CONTEXT.md` and `knowledge/llms.txt` duplication:** CONTEXT.md is manually maintained; llms.txt is auto-generated. They serve different purposes (AI briefing vs file index). Both must be consistent but not identical.
 - **TypeScript code blocks in markdown:** Ensure code blocks in CODING_STANDARDS.md and architecture.md use ` ```typescript ` fences — never ` ```ts ` — to avoid confusion with file extensions.
 - **PowerSync vs TanStack DB naming:** TanStack DB is the query layer; PowerSync is the sync engine. In documentation, use "TanStack DB + PowerSync" as the combined term.
