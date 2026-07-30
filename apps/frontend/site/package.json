@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --mode emulator",
     "dev:emulator": "astro dev --mode emulator",
     "dev:staging": "astro dev --mode staging",
     "dev:production": "astro dev --mode production",

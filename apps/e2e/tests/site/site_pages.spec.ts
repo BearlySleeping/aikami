@@ -15,6 +15,10 @@ const PAGES = [
   },
 ];
 
+const SECTIONS = [
+  { id: 'download', label: 'Download Section', criticalText: ['Get the desktop client'] },
+];
+
 test.describe('Site pages — render and content', () => {
   for (const pageDef of PAGES) {
     test(`${pageDef.path} renders correctly`, async ({ page }) => {
@@ -113,4 +117,44 @@ test.describe('Site pages — no layout overlap', () => {
       expect(navBox.y + navBox.height).toBeLessThanOrEqual(contentBox.y + 5);
     }
   });
+});
+
+test.describe('Site pages — download section', () => {
+  for (const section of SECTIONS) {
+    test(`${section.label} renders and is interactive`, async ({ page }) => {
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+
+      const container = page.locator(`#${section.id}`);
+      await expect(container).toBeVisible();
+
+      for (const text of section.criticalText) {
+        await expect(container.getByText(text).first()).toBeVisible();
+      }
+
+      // Verify channel toggle buttons exist
+      const stableBtn = container.locator('.download-channel-btn').first();
+      await expect(stableBtn).toBeVisible();
+
+      // Verify platform cards are present
+      const cards = container.locator('.download-card');
+      const cardCount = await cards.count();
+      expect(cardCount).toBe(3); // linux, macos, windows
+
+      // Linux card should exist (only platform with builds initially)
+      const linuxCard = container.locator('[data-platform="linux"]');
+      await expect(linuxCard).toBeVisible();
+
+      // Click latest channel — UI should update without error
+      const latestBtn = container.locator('[data-channel="latest"]');
+      if (await latestBtn.isVisible()) {
+        await latestBtn.click();
+        await page.waitForTimeout(500);
+        // Verify stable button now has secondary style (not primary)
+        const stableBtnClass = await stableBtn.getAttribute('class');
+        expect(stableBtnClass).toContain('border border-border');
+        expect(stableBtnClass).not.toContain('bg-primary text-primary-foreground');
+      }
+    });
+  }
 });

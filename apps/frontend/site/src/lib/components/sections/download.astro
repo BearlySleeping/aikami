@@ -1,0 +1,301 @@
+---
+// apps/frontend/site/src/lib/components/sections/download.astro
+/**
+ * Download Section — Tauri desktop release downloads.
+ *
+ * Client-side: auto-detects OS, pings URLs to check availability,
+ * and shows download buttons for stable/latest channels.
+ * Platforms without builds (Windows, macOS currently) are gracefully
+ * shown as "coming soon" until artifacts are uploaded.
+ */
+
+import { PUBLIC_DOWNLOAD_BASE_URL } from 'astro:env/client';
+
+const BASE = PUBLIC_DOWNLOAD_BASE_URL || '';
+
+type PlatformDef = {
+  id: string;
+  label: string;
+  ext: string;
+  icon: string;
+};
+
+const PLATFORMS: PlatformDef[] = [
+  { id: 'linux', label: 'Linux', ext: '.deb', icon: 'linux' },
+  { id: 'macos', label: 'macOS', ext: '.dmg', icon: 'apple' },
+  { id: 'windows', label: 'Windows', ext: '.msi', icon: 'windows' },
+] as const;
+
+const CHANNELS = [
+  { id: 'stable', label: 'Stable', description: 'Production releases' },
+  { id: 'latest', label: 'Latest', description: 'Dev builds' },
+] as const;
+---
+
+<section id="download" class="border-b border-border/70 bg-card">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
+    <div class="max-w-2xl">
+      <span class="eyebrow text-emerald-400">Download</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
+        Get the desktop client.
+      </h2>
+      <p class="mt-5 text-muted-foreground leading-relaxed">
+        Download the native Tauri desktop app for Linux, macOS, or Windows.
+        Same world, same NPCs — with full offline support and local AI.
+      </p>
+    </div>
+
+    <!-- Channel Toggle -->
+    <div id="download-root" class="mt-10" data-base-url={BASE}>
+      <div class="flex justify-center gap-2 mb-8">
+        {CHANNELS.map((ch) => (
+          <button
+            type="button"
+            class={`download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors ${ch.id === 'stable' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
+            data-channel={ch.id}
+          >
+            {ch.label}
+          </button>
+        ))}
+      </div>
+
+      <!-- Platform Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto" id="download-cards">
+        {PLATFORMS.map((p) => (
+          <div
+            class={`download-card rune-border p-6 bg-background/50 text-center transition-opacity ${p.id === 'linux' ? '' : 'opacity-50'}`}
+            data-platform={p.id}
+            data-ext={p.ext}
+          >
+            <!-- OS icon -->
+            <div class="flex items-center justify-center mb-4">
+              {p.id === 'linux' ? (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--rune)" stroke-width="1.2" aria-hidden="true">
+                  <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                  <path d="M9 9h.01M15 9h.01"/>
+                  <circle cx="7.5" cy="10.5" r="1.5"/><circle cx="16.5" cy="10.5" r="1.5"/>
+                </svg>
+              ) : p.id === 'macos' ? (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--ember)" stroke-width="1.2" aria-hidden="true">
+                  <path d="M12 2c-.9 2.5-2 5-2 8 0 2 1 4 2 4s2-2 2-4c0-3-1.1-5.5-2-8z"/>
+                  <path d="M17.5 6.5C15.5 8 14 11 14 14c0 2 1 4 2 4s2-2 2-4c0-2-.2-5.5-.5-7.5z"/>
+                  <path d="M6.5 6.5C8.5 8 10 11 10 14c0 2-1 4-2 4s-2-2-2-4c0-2 .2-5.5.5-7.5z"/>
+                </svg>
+              ) : (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--ember)" stroke-width="1.2" aria-hidden="true">
+                  <rect x="1" y="3" width="22" height="14" rx="1"/>
+                  <path d="M6 21h12M12 17v4"/>
+                </svg>
+              )}
+            </div>
+
+            <p class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+              {p.label}
+            </p>
+
+            <!-- Download button — rendered by JS -->
+            <a
+              href="#"
+              class={`download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full ${p.id === 'linux' ? 'bg-primary text-primary-foreground hover:opacity-90' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
+              data-platform={p.id}
+            >
+              <span class="download-label">Download</span>
+            </a>
+
+            <p class="download-status mt-3 text-xs text-muted-foreground">
+              {p.id === 'linux' ? 'Checking...' : 'Coming soon'}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <!-- Detected OS badge -->
+      <p id="download-os-badge" class="text-center mt-6 text-xs text-muted-foreground hidden">
+        Detected OS: <span id="download-os-name" class="font-mono text-rune"></span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<script>
+  // apps/frontend/site/src/lib/components/sections/download.astro (client script)
+
+  const BASE_URL = (document.getElementById('download-root') as HTMLElement)?.dataset.baseUrl || '';
+
+  // Split into build-time and runtime sections to avoid type clashes
+
+  type Platform = { id: string; label: string; ext: string };
+
+  const PLATFORM_DEFS: Platform[] = [
+    { id: 'linux', label: 'Linux', ext: '.deb' },
+    { id: 'macos', label: 'macOS', ext: '.dmg' },
+    { id: 'windows', label: 'Windows', ext: '.msi' },
+  ];
+
+  /** Detect the user's OS from navigator.userAgent. */
+  function detectOS(): string {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('win')) return 'windows';
+    if (ua.includes('mac')) return 'macos';
+    return 'linux';
+  }
+
+  /** Build the full download URL for a platform + channel. */
+  function buildUrl(base: string, channel: string, platform: Platform): string {
+    const cleanBase = base.replace(/\/+$/, '');
+    return `${cleanBase}/${channel}/${platform.id}${platform.ext}`;
+  }
+
+  /**
+   * Check if a URL is reachable and get file size via Content-Length.
+   * Uses a real fetch (no no-cors) — bucket must have CORS configured.
+   */
+  async function checkUrl(url: string): Promise<{ ok: boolean; size?: number }> {
+    try {
+      const res = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (res.ok) {
+        const size = res.headers.get('content-length');
+        return { ok: true, size: size ? Number.parseInt(size, 10) : undefined };
+      }
+      return { ok: false };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /** Main init — runs on DOMContentLoaded. */
+  async function init() {
+    console.debug('[download] BASE_URL:', BASE_URL || '(empty)');
+
+    if (!BASE_URL) {
+      console.debug('[download] No PUBLIC_DOWNLOAD_BASE_URL configured — showing unavailable state');
+      for (const card of document.querySelectorAll<HTMLElement>('.download-card')) {
+        card.style.opacity = '0.4';
+        const label = card.querySelector<HTMLElement>('.download-label');
+        const status = card.querySelector<HTMLElement>('.download-status');
+        if (label) label.textContent = 'Unavailable';
+        if (status) status.textContent = 'Not configured';
+      }
+      return;
+    }
+
+    const userOS = detectOS();
+    console.debug('[download] Detected OS:', userOS);
+
+    const osBadge = document.getElementById('download-os-badge');
+    const osName = document.getElementById('download-os-name');
+    if (osBadge && osName) {
+      osBadge.classList.remove('hidden');
+      osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
+    }
+
+    // Probe both channels — default to the one with available artifacts
+    const channelResults: Record<string, boolean> = {};
+    for (const ch of ['stable', 'latest']) {
+      const probeUrl = buildUrl(BASE_URL, ch, PLATFORM_DEFS[0]!);
+      const result = await checkUrl(probeUrl);
+      channelResults[ch] = result.ok;
+      console.debug(`[download] ${ch} channel probe:`, result);
+    }
+
+    let activeChannel: string;
+    if (channelResults.stable) {
+      activeChannel = 'stable';
+    } else if (channelResults.latest) {
+      activeChannel = 'latest';
+    } else {
+      activeChannel = 'latest';
+    }
+
+    // Update channel button UI to match
+    if (activeChannel === 'latest') {
+      const stableBtn = document.querySelector<HTMLButtonElement>('[data-channel="stable"]');
+      const latestBtn = document.querySelector<HTMLButtonElement>('[data-channel="latest"]');
+      if (stableBtn) {
+        stableBtn.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+      }
+      if (latestBtn) {
+        latestBtn.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+      }
+    }
+
+    console.debug(`[download] Active channel: ${activeChannel}`);
+
+    // Channel toggle buttons
+    document.querySelectorAll<HTMLButtonElement>('.download-channel-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeChannel = btn.dataset.channel ?? 'stable';
+        document.querySelectorAll<HTMLButtonElement>('.download-channel-btn').forEach((b) => {
+          if (b.dataset.channel === activeChannel) {
+            b.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+          } else {
+            b.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+          }
+        });
+        updateCards();
+      });
+    });
+
+    // Check all platform URLs for initial channel
+    async function updateCards() {
+      const cards = document.querySelectorAll<HTMLElement>('.download-card');
+      for (const card of cards) {
+        const platformId = card.dataset.platform ?? '';
+        const platform = PLATFORM_DEFS.find((p) => p.id === platformId);
+        if (!platform) continue;
+
+        const url = buildUrl(BASE_URL, activeChannel, platform);
+        console.debug(`[download] Checking ${activeChannel}/${platformId}:`, url);
+
+        const link = card.querySelector<HTMLAnchorElement>('.download-link');
+        const label = card.querySelector<HTMLElement>('.download-label');
+        const status = card.querySelector<HTMLElement>('.download-status');
+
+        // Check fresh for the active channel
+        const result = await checkUrl(url);
+        console.debug(`[download] Result ${platformId}/${activeChannel}:`, result);
+
+        if (link) {
+          link.href = url;
+          link.setAttribute('download', '');
+          link.className = link.className.replace(/pointer-events-none/, '');
+
+          if (result.ok) {
+            card.style.opacity = '1';
+            if (label) {
+              label.textContent = result.size ? `Download (${formatSize(result.size)})` : 'Download';
+            }
+            if (status) {
+              status.textContent = activeChannel;
+            }
+            // Highlight detected OS
+            if (platformId === userOS) {
+              link.className = link.className
+                .replace(/bg-card/, 'bg-primary')
+                .replace(/text-foreground/, 'text-primary-foreground')
+                .replace(/hover:bg-muted/, 'hover:opacity-90');
+            }
+          } else {
+            card.style.opacity = '0.5';
+            if (label) label.textContent = 'Coming soon';
+            if (status) status.textContent = 'Not yet available';
+          }
+        }
+      }
+    }
+
+    // Initial render
+    await updateCards();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>

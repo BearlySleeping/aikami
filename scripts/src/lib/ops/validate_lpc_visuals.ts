@@ -32,10 +32,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { convertToWebp, evaluateImage, toBase64DataUri } from '../ai';
+import { getScriptsEnv } from '../env/scripts_env';
 
 // ── Configuration ──────────────────────────────────────────────────────
 
-const MODEL = process.env.VLM_MODEL || 'google/gemini-2.5-flash';
+const MODEL = getScriptsEnv('VLM_MODEL') || 'google/gemini-2.5-flash';
 
 /** Directory containing Playwright LPC screenshots (relative to monorepo root). */
 const SCREENSHOT_DIR = resolve(join('apps', 'e2e', 'test-results', 'lpc-visual'));

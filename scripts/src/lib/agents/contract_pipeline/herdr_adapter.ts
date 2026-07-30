@@ -4,6 +4,7 @@
 import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { getScriptsEnv } from '../../env/scripts_env';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { provisionGitWorktree } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
@@ -417,7 +418,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const wsEnv = this._workspacePath
       ? `CONTRACT_PIPELINE_WORKSPACE_PATH=${shellQuote(this._workspacePath)}`
       : '';
-    const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const ghToken = getScriptsEnv('GH_TOKEN') || getScriptsEnv('GITHUB_TOKEN');
     const ghEnv = ghToken ? `GH_TOKEN=${shellQuote(ghToken)}` : '';
     const env = [
       `CONTRACT_PIPELINE_RUN_ID=${shellQuote(request.runId)}`,
@@ -671,7 +672,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     mkdirSync(dirname(options.reviewDecisionPath), { recursive: true });
     atomicWrite({ path: promptPath, content: options.prompt });
 
-    const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const ghToken = getScriptsEnv('GH_TOKEN') || getScriptsEnv('GITHUB_TOKEN');
     const environment = [
       `CONTRACT_PIPELINE_RUN_ID=${shellQuote(this._runId)}`,
       'CONTRACT_PIPELINE_ROLE=review',

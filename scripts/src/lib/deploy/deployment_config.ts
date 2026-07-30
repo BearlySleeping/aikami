@@ -187,17 +187,26 @@ export type ProjectSecretConfig = SecretNameConfig & {
 
 /**
  * Derived secret-upload config from APP_CONFIG to keep a single source of truth.
+ * 'scripts' is added manually — it's not a deployable app but has its own secrets
+ * (REDIS_URL, REDIS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
  */
-export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> = Object.fromEntries(
-  Object.entries(APP_CONFIG).map(([key, config]) => [
-    key,
-    {
-      path: config.path,
-      prefix: config.prefix,
-      enabled: config.enabled ?? true,
-    } satisfies ProjectSecretConfig,
-  ]),
-);
+export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> = {
+  ...Object.fromEntries(
+    Object.entries(APP_CONFIG).map(([key, config]) => [
+      key,
+      {
+        path: config.path,
+        prefix: config.prefix,
+        enabled: config.enabled ?? true,
+      } satisfies ProjectSecretConfig,
+    ]),
+  ),
+  scripts: {
+    path: 'scripts',
+    prefix: 'SCRIPTS',
+    enabled: true,
+  } satisfies ProjectSecretConfig,
+};
 
 /**
  * GCP region where Cloud Functions and Cloud Run services are deployed.
