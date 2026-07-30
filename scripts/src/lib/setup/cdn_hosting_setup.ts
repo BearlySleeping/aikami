@@ -166,7 +166,7 @@ export const setupCdnHosting = async (
 
   // ── 2. Generate firebase.json with redirects ─────────────────────────
   console.log(fmt.section('CDN firebase.json'));
-  const cdnDir = join(process.cwd(), CDN_PUBLIC_DIR);
+  const cdnDir = CDN_PUBLIC_DIR;
   if (!existsSync(cdnDir)) {
     if (!dryRun) {
       mkdirSync(cdnDir, { recursive: true });
@@ -179,7 +179,7 @@ export const setupCdnHosting = async (
   }
 
   const config = generateCdnFirebaseConfig();
-  const configPath = join(process.cwd(), CDN_PUBLIC_DIR, 'firebase.json');
+  const configPath = join(CDN_PUBLIC_DIR, 'firebase.json');
   if (!dryRun) {
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     console.log(fmt.ok(`Generated ${CDN_PUBLIC_DIR}/firebase.json`));

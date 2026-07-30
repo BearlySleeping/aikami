@@ -116,23 +116,24 @@ async function deployApp(
   appName: string,
   mode: string,
   rootDir: string,
+  version: string,
   isForce = false,
 ): Promise<'success' | 'failure'> {
   switch (config.serviceType) {
     case 'cloud-run-sveltekit':
-      await deployCloudRunSveltekit(config, appName, mode, rootDir, isForce);
+      await deployCloudRunSveltekit(config, appName, mode, rootDir, version, isForce);
       return 'success';
     case 'tauri-release':
-      await deployTauriRelease(config, appName, mode, rootDir, isForce);
+      await deployTauriRelease(config, appName, mode, rootDir, version, isForce);
       return 'success';
     case 'firebase-hosting':
-      await deployFirebaseHosting(config, appName, mode, rootDir, isForce);
+      await deployFirebaseHosting(config, appName, mode, rootDir, version, isForce);
       return 'success';
     case 'firebase-functions':
       await deployFirebaseFunctions(config, appName, mode, rootDir, isForce);
       return 'success';
     case 'docker-release':
-      await deployDockerRelease(config, appName, mode, rootDir, isForce);
+      await deployDockerRelease(config, appName, mode, rootDir, version, isForce);
       return 'success';
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
@@ -398,7 +399,7 @@ async function main(): Promise<void> {
       return;
     }
     try {
-      const result = await deployApp(config, appName, mode, ROOT_DIR, isForce);
+      const result = await deployApp(config, appName, mode, ROOT_DIR, version, isForce);
       results.push({ name: appName, type: config.serviceType, result });
     } catch (err) {
       errors.push(`Deploy failed for ${appName}: ${(err as Error).message}`);

@@ -115,6 +115,7 @@ export async function deployTauriRelease(
   appName: string,
   mode: string,
   rootDir: string,
+  version: string,
   isForce = false,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
@@ -212,18 +213,18 @@ export async function deployTauriRelease(
   // Upload to versioned path
   const versionDest = `${basePath}/versions/${ver}/${platformDir}${ext}`;
   log(`📤 Versioned release: ${versionDest}`);
-  run(`gcloud storage cp "${canonical}" "${versionDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
+  run(`gcloud storage cp "${canonical}" "${versionDest}"`, { quiet: false });
   run(
-    `gcloud storage objects update --content-disposition="attachment; filename=Aikami-${ver}${ext}" "${versionDest}"`,
+    `gcloud storage objects update "${versionDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-${ver}${ext}"`,
     {},
   );
 
   // Always update latest pointer
   const latestDest = `${basePath}/latest/${platformDir}${ext}`;
   log(`📤 Latest pointer: ${latestDest}`);
-  run(`gcloud storage cp "${canonical}" "${latestDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
+  run(`gcloud storage cp "${canonical}" "${latestDest}"`, { quiet: false });
   run(
-    `gcloud storage objects update --content-disposition="attachment; filename=Aikami-latest${ext}" "${latestDest}"`,
+    `gcloud storage objects update "${latestDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-latest${ext}"`,
     {},
   );
 
@@ -231,15 +232,15 @@ export async function deployTauriRelease(
   if (mode === 'production') {
     const stableDest = `${basePath}/stable/${platformDir}${ext}`;
     log(`📤 Stable pointer: ${stableDest}`);
-    run(`gcloud storage cp "${canonical}" "${stableDest}" --add-acl-grant=entity=allUsers,role=READER`, { quiet: false });
+    run(`gcloud storage cp "${canonical}" "${stableDest}"`, { quiet: false });
     run(
-      `gcloud storage objects update --content-disposition="attachment; filename=Aikami-stable${ext}" "${stableDest}"`,
+      `gcloud storage objects update "${stableDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-stable${ext}"`,
       {},
     );
   }
 
-  // 6. Save cache on success
-  await saveDeployCache(mode, appName, cache.checksum);
+  // 6. Save cache on success (use Cargo.toml version for Tauri releases)
+  await saveDeployCache(mode, appName, cache.checksum, ver);
   ok(
     `${appName} Tauri release complete — v${ver} (${platformDir}${ext})`,
   );

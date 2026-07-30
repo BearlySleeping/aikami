@@ -92,16 +92,19 @@ export default defineConfig({
         context: 'client',
         access: 'public',
         optional: false,
+        min: 1,
       }),
       PUBLIC_MODE: envField.string({
         context: 'client',
         access: 'public',
         optional: false,
+        min: 1,
       }),
       PUBLIC_SITE_URL: envField.string({
         context: 'client',
         access: 'public',
         optional: false,
+        min: 1,
       }),
       PUBLIC_DOWNLOAD_BASE_URL: envField.string({
         context: 'client',

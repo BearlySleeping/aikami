@@ -26,16 +26,24 @@ const _scriptDir = dirname(_filename);
 // scripts/src/lib/env/scripts_env.ts → go up 4 levels to repo root
 const ROOT_DIR = resolve(_scriptDir, '../../../..');
 
-let _loaded = false;
+let _loadedMode: string | null = null;
 const _envCache = new Map<string, string>();
 
 /**
  * Load scripts/.env.{mode} into the cache (and process.env for values not
- * already set). Safe to call multiple times — only loads once.
+ * already set). Safe to call multiple times with the same mode — reloads if
+ * mode changes.
  */
 export function initScriptsEnv(mode: string): void {
-  if (_loaded) {
+  if (_loadedMode === mode) {
     return;
+  }
+
+  if (_loadedMode !== null && _loadedMode !== mode) {
+    console.warn(
+      `[scripts_env] Mode change detected: ${_loadedMode} → ${mode}. Reloading env vars.`,
+    );
+    _envCache.clear();
   }
 
   const envPath = join(ROOT_DIR, 'scripts', `.env.${mode}`);
@@ -66,7 +74,7 @@ export function initScriptsEnv(mode: string): void {
     }
   }
 
-  _loaded = true;
+  _loadedMode = mode;
 }
 
 /**
@@ -81,7 +89,7 @@ export function initScriptsEnv(mode: string): void {
  * process.env.AIKAMI_MODE so standalone scripts don't need explicit setup.
  */
 export function getScriptsEnv(key: string): string | undefined {
-  if (!_loaded) {
+  if (_loadedMode === null) {
     const mode = process.env.AIKAMI_MODE || 'emulator';
     initScriptsEnv(mode);
   }

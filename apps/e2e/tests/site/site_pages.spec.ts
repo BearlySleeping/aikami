@@ -145,13 +145,15 @@ test.describe('Site pages — download section', () => {
       const linuxCard = container.locator('[data-platform="linux"]');
       await expect(linuxCard).toBeVisible();
 
-      // Click beta channel — UI should update without error
-      const betaBtn = container.locator('[data-channel="beta"]');
-      if (await betaBtn.isVisible()) {
-        await betaBtn.click();
+      // Click latest channel — UI should update without error
+      const latestBtn = container.locator('[data-channel="latest"]');
+      if (await latestBtn.isVisible()) {
+        await latestBtn.click();
         await page.waitForTimeout(500);
-        // Verify stable button is now secondary style
-        await expect(stableBtn).toBeVisible();
+        // Verify stable button now has secondary style (not primary)
+        const stableBtnClass = await stableBtn.getAttribute('class');
+        expect(stableBtnClass).toContain('border border-border');
+        expect(stableBtnClass).not.toContain('bg-primary text-primary-foreground');
       }
     });
   }

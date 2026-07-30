@@ -26,6 +26,7 @@ export async function deployDockerRelease(
   appName: string,
   mode: string,
   rootDir: string,
+  version: string,
   isForce = false,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
@@ -65,6 +66,6 @@ export async function deployDockerRelease(
   run(`docker push ${cacheTag}`, { quiet: true });
 
   // 4. Save checksum on success
-  await saveDeployCache(mode, appName, cache.checksum);
+  await saveDeployCache(mode, appName, cache.checksum, version);
   ok(`${appName} Docker image released — ${tag}`);
 }

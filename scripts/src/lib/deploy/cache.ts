@@ -300,10 +300,10 @@ export async function saveDeployCache(
   mode: string,
   appName: string,
   checksum: string,
+  version: string,
 ): Promise<void> {
   const checksumKey = `${CACHE_PREFIX}:${mode}:${appName}`;
   const versionKey = `${CACHE_PREFIX}:${mode}:${appName}:version`;
-  const version = generateVersionString();
 
   await Promise.all([upstashSet(checksumKey, checksum), upstashSet(versionKey, version)]);
 
