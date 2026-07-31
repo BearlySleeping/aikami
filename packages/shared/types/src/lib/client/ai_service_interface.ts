@@ -8,7 +8,7 @@ import type {
   ClassificationResult,
   CompletionOptions,
   EmbeddingOptions,
-} from '../endpoints/ai';
+} from '../ai/service_types';
 
 /**
  * Vendor-agnostic AI service contract.

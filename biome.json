@@ -68,11 +68,9 @@
           "level": "error",
           "options": {
             "paths": {
-              "@aikami/backend-ai": "Use @aikami/backend/ai instead",
               "@aikami/backend-auth": "Use @aikami/backend/auth instead",
               "@aikami/backend-configs": "Use @aikami/backend/configs instead",
               "@aikami/backend-database": "Use @aikami/backend/database instead",
-              "@aikami/backend-chat": "Use @aikami/backend/chat instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",
               "@aikami/frontend-dataconnect": "Use @aikami/frontend/dataconnect instead",

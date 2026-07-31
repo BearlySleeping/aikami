@@ -99,6 +99,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // --------------------------------------------------------------------------
 
   override async initialize(): Promise<void> {
+    // Anti-FOUC: unhide the body once the SPA mounts (see app.html inline style).
+    document.body.classList.add('app-mounted');
+
     // 0. Bootstrap AI settings from environment defaults (e.g. OpenRouter
     //    API key / model from .env) so text providers are available before
     //    the start screen checks for them.

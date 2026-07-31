@@ -10,8 +10,8 @@
  *
  *   --mode    Target environment (default: emulator).
  *             emulator    → local storage emulator (port 9198, no auth)
- *             staging     → aikami-dev.firebasestorage.app
- *             production  → aikami-prod.firebasestorage.app
+ *             staging     → aikami-staging.firebasestorage.app
+ *             production  → aikami-production.firebasestorage.app
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -39,8 +39,8 @@ const EMULATOR_PROJECT_ID = 'demo-aikami-emulator';
 
 const PROJECT_MAP = {
   emulator: EMULATOR_PROJECT_ID,
-  staging: 'aikami-dev',
-  production: 'aikami-prod',
+  staging: 'aikami-staging',
+  production: 'aikami-production',
 } as const;
 
 /** Maximum parallel uploads. */

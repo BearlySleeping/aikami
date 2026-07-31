@@ -21,7 +21,7 @@ Firestack is a TypeScript-first CLI for Firebase Cloud Functions v2. This skill 
 
 1. **One Function Per File** — Every `.ts` file in `functionsDirectory` must contain exactly one `export default` of a trigger wrapper. No named exports, no multiple functions per file.
 2. **Auto-Derived Names** — The deployed function name comes from the file path: `api/hello.ts` → `hello`, `firestore/users/[uid]/created.ts` → `users_created`. Override with `functionName` in options.
-3. **Always check `firestack.config.ts` (or `firestack.json`)** before running any command. If neither exists, offer to run `/firestack setup config` first.
+3. **Always check `firestack.config.ts` (or `firestack.json`)** before running any command. If neither exists, offer to run `/firestack setup config` first. `firestack.config.ts` is the recommended format — use `defineConfig` for TypeScript support.
 
 ## Post-Task Workflow
 
@@ -42,11 +42,16 @@ If any step fails, fix it before marking the task complete. Pre-existing unrelat
 
 | Command | Description | Reference |
 |---|---|---|
-| `deploy [mode]` | Build and deploy functions/rules to Firebase | [references/deploy.md](references/deploy.md) |
-| `dataconnect [mode]` | Deploy Data Connect schema and connectors | [references/dataconnect.md](references/dataconnect.md) |
+| `deploy [mode]` | Build and deploy functions/rules/dataconnect to Firebase | [references/deploy.md](references/deploy.md) |
 | `emulate [mode]` | Start Firebase emulators with live reload | [references/emulate.md](references/emulate.md) |
-| `sync [mode]` | Sync Firestore/Storage rules and indexes from Firebase | [references/sync.md](references/sync.md) |
+| `build [mode]` | Build functions locally without deploying | [references/build.md](references/build.md) |
+| `dataconnect [mode]` | Deploy Data Connect schema and connectors | [references/dataconnect.md](references/dataconnect.md) |
+| `sync [mode]` | Pull Firestore/Storage rules and indexes from Firebase | [references/sync.md](references/sync.md) |
+| `rules [mode]` | Deploy only rules and indexes (skip functions) | [references/rules.md](references/rules.md) |
 | `generate` | Generate Data Connect SDKs from local schema | [references/generate.md](references/generate.md) |
+| `logs [mode]` | Fetch and display recent Cloud Function logs | [references/logs.md](references/logs.md) |
+| `scripts [name]` | Run a custom script from the scripts directory | [references/scripts.md](references/scripts.md) |
+| `delete [mode]` | Delete deployed functions from Firebase | [references/delete.md](references/delete.md) |
 | `create api <name>` | Scaffold a new HTTP function | [references/create.md](references/create.md) |
 | `create callable <name>` | Scaffold a new callable function | [references/create.md](references/create.md) |
 | `create firestore <path> <event>` | Scaffold a Firestore trigger | [references/create.md](references/create.md) |
@@ -63,6 +68,7 @@ If any step fails, fix it before marking the task complete. Pre-existing unrelat
 | `create alerts <type> <name>` | Scaffold an Alerts trigger | [references/create.md](references/create.md) |
 | `create ai <event>` | Scaffold an AI blocking trigger | [references/create.md](references/create.md) |
 | `test rules` | Run Firestore/Storage security rule tests | [references/test.md](references/test.md) |
+| `test:rules` | Same as `test rules` | [references/test.md](references/test.md) |
 | `setup config` | Create or update `firestack.json` | [references/setup.md](references/setup.md) |
 | `setup testing` | Initialize rules testing infrastructure | [references/setup.md](references/setup.md) |
 | `setup emulate` | Create `scripts/on_emulate.ts` seed script | [references/setup.md](references/setup.md) |
@@ -78,7 +84,7 @@ If any step fails, fix it before marking the task complete. Pre-existing unrelat
 
 When executing any Firestack command, the agent should:
 
-1. Read `firestack.config.ts` (or `firestack.json`) to understand the project configuration.
+1. Read `firestack.config.ts` (or `firestack.json`) to understand the project configuration. `firestack.config.ts` is the recommended format with `defineConfig` from `@snorreks/firestack`.
 2. Read `package.json` to check if `@snorreks/firestack` is installed.
 3. Use the `functionsDirectory` (default: `src/controllers`) as the root for all function scaffolding. Sub-directories map to trigger types: `api/`, `callable/`, `firestore/`, `auth/`, `identity/`, `storage/`, `scheduler/`, `database/`, `pubsub/`, `tasks/`, `eventarc/`, `test_lab/`, `remote_config/`, `alerts/`, `ai/`.
 4. Use the `scriptsDirectory` (default: `scripts`) for custom scripts and `on_emulate.ts`.

@@ -521,7 +521,7 @@ class ImageViewModel
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // biome-ignore lint/style/useNamingConvention: API contract field name
-      body: JSON.stringify({ client_id: `aikami-dev-${Date.now()}`, prompt: workflow }),
+      body: JSON.stringify({ client_id: `aikami-staging-${Date.now()}`, prompt: workflow }),
       signal,
     });
 
@@ -628,8 +628,15 @@ class ImageViewModel
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
       // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
+      '9': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
+        class_type: 'SaveImage',
+        inputs: {
+          // biome-ignore lint/style/useNamingConvention: API contract field name
+          filename_prefix: 'aikami-staging',
+          images: ['8', 0],
+        },
+      },
     };
   }
 
@@ -686,8 +693,15 @@ class ImageViewModel
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
       // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
+      '9': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
+        class_type: 'SaveImage',
+        inputs: {
+          // biome-ignore lint/style/useNamingConvention: API contract field name
+          filename_prefix: 'aikami-staging',
+          images: ['8', 0],
+        },
+      },
       // biome-ignore lint/style/useNamingConvention: API contract field name
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
       // biome-ignore lint/style/useNamingConvention: API contract field name

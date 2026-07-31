@@ -35,7 +35,7 @@ The workflow has the following jobs:
 
 The CI/CD pipeline has two environments:
 
--   **Development:** The development environment (`aikami-dev`) is used for testing and QA. It is deployed to on every push to the `main` branch.
+-   **Development:** The development environment (`aikami-staging`) is used for testing and QA. It is deployed to on every push to the `main` branch.
 -   **Production:** The production environment is the live environment that is used by end-users. It is deployed to when a new version is tagged.
 
 ### Secrets

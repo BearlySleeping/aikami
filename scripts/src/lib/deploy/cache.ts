@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { c, log, warn } from '../cli_utils';
 import { getScriptsEnv } from '../env/scripts_env';
 import type { AppConfig } from './deployment_config';
-import { dirtyTreeHash, run } from './utils';
+import { dirtyTreeHash, isVerbose, run } from './utils';
 
 // ── Upstash Redis config ─────────────────────────────────────────────────
 
@@ -150,6 +150,16 @@ export function computeAppChecksum(
   // don't appear in git ls-tree but DO affect the Docker build.
   const dirtyHash = dirtyTreeHash();
 
+  if (isVerbose()) {
+    log(`  Checksum inputs for ${appName}:`);
+    log(`    source (git tree):    ${sourceHash.slice(0, 16)}...`);
+    log(`    dirty tree:           ${dirtyHash ? `${dirtyHash.slice(0, 16)}...` : '(clean)'}`);
+    log(`    dockerfile:           ${dockerfileHash.slice(0, 16)}...`);
+    log(`    deploy config:        ${sha256(deployConfig).slice(0, 16)}...`);
+    log(`    .env.${mode}:            ${modeEnvHash ? `${modeEnvHash.slice(0, 16)}...` : '(missing)'}`);
+    log(`    build target:         ${buildTarget}`);
+  }
+
   const combined = `${sourceHash}:${dirtyHash}:${dockerfileHash}:${sha256(deployConfig)}:${modeEnvHash}:${buildTarget}`;
   return sha256(combined);
 }
@@ -218,9 +228,22 @@ async function checkOnlineCache(
   currentChecksum: string,
 ): Promise<'hit' | 'miss' | null> {
   const key = `${CACHE_PREFIX}:${mode}:${appName}`;
+  if (isVerbose()) {
+    log(`  querying Redis: ${key}`);
+  }
   const result = await upstashGet(key);
   if (!result.ok) {
+    if (isVerbose()) {
+      log(`  Redis unreachable — check REDIS_URL / REDIS_TOKEN in scripts/.env.${mode}`);
+    }
     return null; // Redis unreachable
+  }
+  if (isVerbose()) {
+    if (result.value === null) {
+      log(`  Redis returned: key not found (first deploy?)`);
+    } else {
+      log(`  Redis returned: ${result.value.slice(0, 16)}... (local: ${currentChecksum.slice(0, 16)}...)`);
+    }
   }
   // Key not found (value is null) → miss; value matches → hit; value differs → miss
   return result.value === currentChecksum ? 'hit' : 'miss';

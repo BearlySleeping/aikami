@@ -104,6 +104,10 @@ export type PersonaCreateViewModelInterface = BaseViewModelInterface & {
   regenerateAvatar(): Promise<void>;
   /** Saves the persona locally and optionally to Firebase. */
   saveCharacter(): Promise<void>;
+  /** Whether the character has been saved in this session. */
+  readonly characterSaved: boolean;
+  /** Message shown after successful save. */
+  readonly characterSavedMessage: string;
   /** Saves the persona and navigates to /game to start playing. */
   enterWorld(): Promise<void>;
   /** Uploads an avatar image file for the persona. */
@@ -150,6 +154,11 @@ export class PersonaCreateViewModel
 
   // LPC sprite recipe from extraction
   lpcRecipe: Record<string, string> | null = $state(null);
+
+  /** Whether the character has been saved in this session. */
+  characterSaved = $state(false);
+  /** Message shown after successful save. */
+  characterSavedMessage = $state('');
 
   private static readonly _SCORE_LABELS: readonly ScoreLabel[] = [
     { key: 'strength', label: 'STR', desc: 'Strength' },
@@ -455,11 +464,8 @@ export class PersonaCreateViewModel
 
   async saveCharacter(): Promise<void> {
     await this._persistCharacter();
-    // Redirect to persona list
-    await routerService.goToRoute('personas', {
-      pathParameters: undefined,
-      queryParameters: undefined,
-    });
+    this.characterSaved = true;
+    this.characterSavedMessage = 'Persona saved to your device.';
   }
 
   async enterWorld(): Promise<void> {

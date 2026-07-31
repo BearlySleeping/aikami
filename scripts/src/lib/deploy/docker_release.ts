@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { c, log, ok } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { authenticateDocker, resolveProjectId, resolveRegion, run, shortSha } from './utils';
+import { authenticateDocker, resolveProjectId, resolveRegion, run, shortSha, isVerbose } from './utils';
 
 export async function deployDockerRelease(
   config: AppConfig,
@@ -28,6 +28,7 @@ export async function deployDockerRelease(
   rootDir: string,
   version: string,
   isForce = false,
+  preflightChecksum?: string,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
   const imageName = config.imageName ?? `aikami/${config.shortName}`;
@@ -43,11 +44,20 @@ export async function deployDockerRelease(
   log(`  Context: ${dockerContext}`);
   log(`  Dockerfile: ${dockerfile}\n`);
 
-  // 0. Checksum cache — skip if nothing changed
-  const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
-  if (cache.skip) {
-    ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
-    return;
+  // 0. Checksum cache — use pre-flight checksum when available
+  let checksum: string;
+  if (preflightChecksum !== undefined) {
+    checksum = preflightChecksum;
+    if (isVerbose()) {
+      log(`  Using pre-flight checksum: ${checksum.slice(0, 16)}...`);
+    }
+  } else {
+    const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
+    if (cache.skip) {
+      ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
+      return;
+    }
+    checksum = cache.checksum;
   }
 
   // 1. Authenticate Docker with Artifact Registry
@@ -65,7 +75,7 @@ export async function deployDockerRelease(
   run(`docker tag ${tag} ${cacheTag}`, { quiet: true });
   run(`docker push ${cacheTag}`, { quiet: true });
 
-  // 4. Save checksum on success
-  await saveDeployCache(mode, appName, cache.checksum, version);
+  // 4. Save checksum on success — use the pre-build consistent checksum
+  await saveDeployCache(mode, appName, checksum, version);
   ok(`${appName} Docker image released — ${tag}`);
 }

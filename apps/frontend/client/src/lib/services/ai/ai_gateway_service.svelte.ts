@@ -4,7 +4,6 @@
 // gateway core from @aikami/frontend/ai-gateway with:
 // - text adapters (offline = Ollama/local OpenAI-compatible, byok = cloud
 //   endpoints with vault keys) — one shared OpenAI-compatible transport;
-// - a `service` text adapter over the Firebase `ai` callable;
 // - image/voice adapters delegating to the existing ComfyUI and Kokoro
 //   services unchanged;
 // - detection wiring with the same ping semantics as capability_service.
@@ -26,7 +25,6 @@ import {
   createDelegatingImageAdapter,
   createDelegatingVoiceAdapter,
   createOpenAiCompatibleTextAdapter,
-  createServiceTextAdapter,
   detectImageAvailability,
   detectTextAvailability,
   detectVoiceAvailability,
@@ -35,14 +33,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  firebaseFunctionsService,
 } from '@aikami/frontend/services';
-import type {
-  AIMessageData,
-  AiCapability,
-  AiDetectionResult,
-  AiModeResolution,
-} from '@aikami/types';
+import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
 import {
   aiSettingsService,
   configService,
@@ -134,20 +126,6 @@ class AiGatewayService
     // One transport serves both offline (local) and byok (cloud) text modes.
     registry.registerText({ mode: 'offline', adapter: textAdapter });
     registry.registerText({ mode: 'byok', adapter: textAdapter });
-
-    // `service` mode: wraps the existing Firebase callable path.
-    // Selection via resolveMode stays guarded (mode_unavailable) until Phase 5 activation.
-    registry.registerText({
-      mode: 'service',
-      adapter: createServiceTextAdapter({
-        call: async (data) => {
-          // The gateway's generic callable shape narrows to the typed Firebase
-          // `ai` payload contract at this boundary.
-          const response = await firebaseFunctionsService.call('ai', data as AIMessageData);
-          return response as Record<string, unknown>;
-        },
-      }),
-    });
 
     registry.registerImage({
       mode: 'offline',
@@ -269,8 +247,17 @@ class AiGatewayService
 
   /** Reads the API key for the given provider from ConfigService. */
   private _getTextApiKey(provider: string): string | undefined {
-    const keys = configService.state.text.apiKeys;
-    return keys[provider as keyof typeof keys];
+    // 1. Active text connection's apiKey (C-230 connections, set via capability screen)
+    const connections = configService.state.connections ?? [];
+    const defaultId = configService.state.defaultConnectionId;
+    const conn = defaultId
+      ? connections.find((c) => c.id === defaultId)
+      : connections.find((c) => (c.capability ?? 'text') === 'text' && c.provider === provider);
+    if (conn?.apiKey) {
+      return conn.apiKey;
+    }
+
+    return undefined;
   }
 
   /**
@@ -305,17 +292,7 @@ class AiGatewayService
    * shape — both read live per detection call, never cached.
    */
   private _hasCloudTextConfig(): boolean {
-    return this._hasLegacyCloudTextConfig() || this._hasCloudTextConnection();
-  }
-
-  /** Pre-C-230 text config check. */
-  private _hasLegacyCloudTextConfig(): boolean {
-    try {
-      const { textProvider } = aiSettingsService;
-      return Boolean(textProvider.apiKey || (textProvider.endpoint && textProvider.model));
-    } catch {
-      return false;
-    }
+    return this._hasCloudTextConnection();
   }
 
   /**
@@ -327,7 +304,7 @@ class AiGatewayService
    */
   private _hasCloudTextConnection(): boolean {
     try {
-      const { connections, text } = configService.state;
+      const { connections } = configService.state;
       if (!Array.isArray(connections) || connections.length === 0) {
         return false;
       }
@@ -335,7 +312,7 @@ class AiGatewayService
         if (LOCAL_TEXT_PROVIDERS.has(connection.provider)) {
           return false;
         }
-        const apiKey = connection.apiKey || text.apiKeys[connection.provider];
+        const apiKey = connection.apiKey;
         return Boolean(apiKey || (connection.baseUrl && connection.model));
       });
     } catch {

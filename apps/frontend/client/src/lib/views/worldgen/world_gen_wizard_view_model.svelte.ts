@@ -58,6 +58,8 @@ export type WorldGenWizardViewModelInterface = BaseViewModelInterface & {
   readonly isGenerating: boolean;
   /** Error message from the last generation attempt. */
   readonly generationError: string | undefined;
+  /** Progress message shown during auto-retry. */
+  readonly retryStatus: string | undefined;
   /** Whether the current step can advance to the next. */
   readonly canAdvance: boolean;
   /** Whether the wizard is on the first step (no going back). */
@@ -89,6 +91,8 @@ export type WorldGenWizardViewModelInterface = BaseViewModelInterface & {
   // ── Generation ──
   generateWorld(): Promise<void>;
   retryGeneration(): Promise<void>;
+  /** Navigates to /capability to change the AI connection. */
+  changeConnection(): Promise<void>;
   acceptWorld(): Promise<void>;
 
   // ── Surprise Me ──
@@ -175,6 +179,8 @@ export class WorldGenWizardViewModel
   private _generationError = $state<string | undefined>();
   private _retriesRemaining = $state(MAX_RETRIES);
   private _isSurpriseMode = $state(false);
+  /** Progress message during auto-retry (e.g. "Retrying... (2/3)"). */
+  private _retryStatus = $state<string | undefined>();
 
   // ── Getters ──
 
@@ -216,6 +222,11 @@ export class WorldGenWizardViewModel
 
   get generationError(): string | undefined {
     return this._generationError;
+  }
+
+  /** Progress message shown during auto-retry attempts. */
+  get retryStatus(): string | undefined {
+    return this._retryStatus;
   }
 
   get canAdvance(): boolean {
@@ -336,6 +347,7 @@ export class WorldGenWizardViewModel
   async generateWorld(): Promise<void> {
     this._isGenerating = true;
     this._generationError = undefined;
+    this._retryStatus = undefined;
     this._retriesRemaining = MAX_RETRIES;
 
     // Advance to generating step
@@ -345,15 +357,24 @@ export class WorldGenWizardViewModel
   }
 
   async retryGeneration(): Promise<void> {
-    if (this._retriesRemaining <= 0) {
+    if (this._retriesRemaining <= 0 || this._isGenerating) {
       return;
     }
 
     this._retriesRemaining--;
     this._generationError = undefined;
+    this._retryStatus = undefined;
     this._isGenerating = true;
 
     await this._performGeneration();
+  }
+
+  /** Navigates back to capability screen to change the AI connection. */
+  async changeConnection(): Promise<void> {
+    await routerService.goToRoute('capability', {
+      queryParameters: { reason: 'generation-failed' },
+      pathParameters: undefined,
+    });
   }
 
   async acceptWorld(): Promise<void> {
@@ -452,38 +473,40 @@ export class WorldGenWizardViewModel
       const input = this._buildInput();
       const prompt = this._assembleGmPrompt();
 
-      // Attempt to call the text generation service
       const rawOutput = await this._callLlm(input, prompt);
 
       if (!rawOutput) {
         throw new Error('LLM returned empty response');
       }
 
-      // Parse the LLM response as JSON
       const parsed: WorldGenOutput = JSON.parse(rawOutput);
 
-      // Basic structural validation: ensure required fields exist
       if (!parsed.worldName || !parsed.worldDescription || !Array.isArray(parsed.npcs)) {
         throw new Error('LLM response missing required fields');
       }
 
       this._worldOutput = parsed;
       this._isGenerating = false;
+      this._retryStatus = undefined;
 
-      // Advance to preview step
       const previewIndex = STEPS.indexOf('preview');
       if (previewIndex >= 0) {
         this._currentStepIndex = previewIndex;
       }
     } catch (error) {
-      this.debug('_performGeneration:error', { error });
+      this.warn('_performGeneration:failed', error);
+
+      const reason = error instanceof Error ? error.message : 'Unknown error';
 
       if (this._retriesRemaining > 0) {
         this._retriesRemaining--;
+        const attempt = MAX_RETRIES - this._retriesRemaining;
+        this._retryStatus = `Failed: ${reason}. Retrying... (${attempt}/${MAX_RETRIES})`;
         await this._performGeneration();
       } else {
-        this._generationError = error instanceof Error ? error.message : 'World generation failed';
+        this._generationError = reason;
         this._isGenerating = false;
+        this._retryStatus = undefined;
       }
     }
   }

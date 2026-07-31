@@ -36,12 +36,10 @@ const CHANNELS = [
   <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
     <div class="max-w-2xl">
       <span class="eyebrow text-emerald-400">Download</span>
-      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
-        Get the desktop client.
-      </h2>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">Get the desktop client.</h2>
       <p class="mt-5 text-muted-foreground leading-relaxed">
-        Download the native Tauri desktop app for Linux, macOS, or Windows.
-        Same world, same NPCs — with full offline support and local AI.
+        Download the native Tauri desktop app for Linux, macOS, or Windows. Same world, same NPCs —
+        with full offline support and local AI.
       </p>
     </div>
 
@@ -67,7 +65,6 @@ const CHANNELS = [
             data-platform={p.id}
             data-ext={p.ext}
           >
-            <!-- OS icon -->
             <div class="flex items-center justify-center mb-4">
               {p.id === 'linux' ? (
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--rune)" stroke-width="1.2" aria-hidden="true">
@@ -94,9 +91,8 @@ const CHANNELS = [
               {p.label}
             </p>
 
-            <!-- Download button — rendered by JS -->
             <a
-              href="#"
+              href="/download"
               aria-label={`Download Aikami desktop client for ${p.label}${p.id !== 'linux' ? ' — Coming soon' : ''}`}
               class={`download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full ${p.id === 'linux' ? 'bg-primary text-primary-foreground hover:opacity-90' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
               data-platform={p.id}
@@ -120,187 +116,205 @@ const CHANNELS = [
 </section>
 
 <script>
-  // apps/frontend/site/src/lib/components/sections/download.astro (client script)
+// apps/frontend/site/src/lib/components/sections/download.astro (client script)
 
-  const BASE_URL = (document.getElementById('download-root') as HTMLElement)?.dataset.baseUrl || '';
+const BASE_URL = (document.getElementById('download-root') as HTMLElement)?.dataset.baseUrl || '';
 
-  // Split into build-time and runtime sections to avoid type clashes
+// Split into build-time and runtime sections to avoid type clashes
 
-  type Platform = { id: string; label: string; ext: string };
+type Platform = { id: string; label: string; ext: string };
 
-  const PLATFORM_DEFS: Platform[] = [
-    { id: 'linux', label: 'Linux', ext: '.deb' },
-    { id: 'macos', label: 'macOS', ext: '.dmg' },
-    { id: 'windows', label: 'Windows', ext: '.msi' },
-  ];
+const PLATFORM_DEFS: Platform[] = [
+  { id: 'linux', label: 'Linux', ext: '.deb' },
+  { id: 'macos', label: 'macOS', ext: '.dmg' },
+  { id: 'windows', label: 'Windows', ext: '.msi' },
+];
 
-  /** Detect the user's OS from navigator.userAgent. */
-  function detectOS(): string {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes('win')) return 'windows';
-    if (ua.includes('mac')) return 'macos';
-    return 'linux';
+/** Detect the user's OS from navigator.userAgent. */
+function detectOS(): string {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('win')) {
+    return 'windows';
   }
-
-  /** Build the full download URL for a platform + channel. */
-  function buildUrl(base: string, channel: string, platform: Platform): string {
-    const cleanBase = base.replace(/\/+$/, '');
-    return `${cleanBase}/${channel}/${platform.id}${platform.ext}`;
+  if (ua.includes('mac')) {
+    return 'macos';
   }
+  return 'linux';
+}
 
-  /**
-   * Check if a URL is reachable and get file size via Content-Length.
-   * Uses a real fetch (no no-cors) — bucket must have CORS configured.
-   */
-  async function checkUrl(url: string): Promise<{ ok: boolean; size?: number }> {
-    try {
-      const res = await fetch(url, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (res.ok) {
-        const size = res.headers.get('content-length');
-        return { ok: true, size: size ? Number.parseInt(size, 10) : undefined };
-      }
-      return { ok: false };
-    } catch {
-      return { ok: false };
-    }
-  }
+/** Build the full download URL for a platform + channel. */
+function buildUrl(base: string, channel: string, platform: Platform): string {
+  const cleanBase = base.replace(/\/+$/, '');
+  return `${cleanBase}/${channel}/${platform.id}${platform.ext}`;
+}
 
-  function formatSize(bytes: number): string {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  /** Main init — runs on DOMContentLoaded. */
-  async function init() {
-    console.debug('[download] BASE_URL:', BASE_URL || '(empty)');
-
-    if (!BASE_URL) {
-      console.debug('[download] No PUBLIC_DOWNLOAD_BASE_URL configured — showing unavailable state');
-      for (const card of document.querySelectorAll<HTMLElement>('.download-card')) {
-        card.style.opacity = '0.4';
-        const label = card.querySelector<HTMLElement>('.download-label');
-        const status = card.querySelector<HTMLElement>('.download-status');
-        if (label) label.textContent = 'Unavailable';
-        if (status) status.textContent = 'Not configured';
-      }
-      return;
-    }
-
-    const userOS = detectOS();
-    console.debug('[download] Detected OS:', userOS);
-
-    const osBadge = document.getElementById('download-os-badge');
-    const osName = document.getElementById('download-os-name');
-    if (osBadge && osName) {
-      osBadge.classList.remove('hidden');
-      osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
-    }
-
-    // Probe both channels — default to the one with available artifacts
-    const channelResults: Record<string, boolean> = {};
-    for (const ch of ['stable', 'latest']) {
-      const probeUrl = buildUrl(BASE_URL, ch, PLATFORM_DEFS[0]!);
-      const result = await checkUrl(probeUrl);
-      channelResults[ch] = result.ok;
-      console.debug(`[download] ${ch} channel probe:`, result);
-    }
-
-    let activeChannel: string;
-    if (channelResults.stable) {
-      activeChannel = 'stable';
-    } else if (channelResults.latest) {
-      activeChannel = 'latest';
-    } else {
-      activeChannel = 'latest';
-    }
-
-    // Update channel button UI to match
-    if (activeChannel === 'latest') {
-      const stableBtn = document.querySelector<HTMLButtonElement>('[data-channel="stable"]');
-      const latestBtn = document.querySelector<HTMLButtonElement>('[data-channel="latest"]');
-      if (stableBtn) {
-        stableBtn.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-      }
-      if (latestBtn) {
-        latestBtn.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-      }
-    }
-
-    console.debug(`[download] Active channel: ${activeChannel}`);
-
-    // Channel toggle buttons
-    document.querySelectorAll<HTMLButtonElement>('.download-channel-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        activeChannel = btn.dataset.channel ?? 'stable';
-        document.querySelectorAll<HTMLButtonElement>('.download-channel-btn').forEach((b) => {
-          if (b.dataset.channel === activeChannel) {
-            b.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-          } else {
-            b.className = 'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-          }
-        });
-        updateCards();
-      });
+/**
+ * Check if a URL is reachable and get file size via Content-Length.
+ * Uses a real fetch (no no-cors) — bucket must have CORS configured.
+ */
+async function checkUrl(url: string): Promise<{ ok: boolean; size?: number }> {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5_000),
     });
+    if (res.ok) {
+      const size = res.headers.get('content-length');
+      return { ok: true, size: size ? Number.parseInt(size, 10) : undefined };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
 
-    // Check all platform URLs for initial channel
-    async function updateCards() {
-      const cards = document.querySelectorAll<HTMLElement>('.download-card');
-      for (const card of cards) {
-        const platformId = card.dataset.platform ?? '';
-        const platform = PLATFORM_DEFS.find((p) => p.id === platformId);
-        if (!platform) continue;
+function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
-        const url = buildUrl(BASE_URL, activeChannel, platform);
-        console.debug(`[download] Checking ${activeChannel}/${platformId}:`, url);
+/** Main init — runs on DOMContentLoaded. */
+async function init() {
+  if (!BASE_URL) {
+    for (const card of document.querySelectorAll<HTMLElement>('.download-card')) {
+      card.style.opacity = '0.4';
+      const label = card.querySelector<HTMLElement>('.download-label');
+      const status = card.querySelector<HTMLElement>('.download-status');
+      if (label) {
+        label.textContent = 'Unavailable';
+      }
+      if (status) {
+        status.textContent = 'Not configured';
+      }
+    }
+    return;
+  }
 
-        const link = card.querySelector<HTMLAnchorElement>('.download-link');
-        const label = card.querySelector<HTMLElement>('.download-label');
-        const status = card.querySelector<HTMLElement>('.download-status');
+  const userOS = detectOS();
 
-        // Check fresh for the active channel
-        const result = await checkUrl(url);
-        console.debug(`[download] Result ${platformId}/${activeChannel}:`, result);
+  const osBadge = document.getElementById('download-os-badge');
+  const osName = document.getElementById('download-os-name');
+  if (osBadge && osName) {
+    osBadge.classList.remove('hidden');
+    osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
+  }
 
-        if (link) {
-          link.href = url;
-          link.setAttribute('download', '');
-          link.className = link.className.replace(/pointer-events-none/, '');
+  // Probe both channels — default to the one with available artifacts
+  const channelResults: Record<string, boolean> = {};
+  for (const ch of ['stable', 'latest']) {
+    const firstPlatform = PLATFORM_DEFS[0];
+    if (!firstPlatform) {
+      continue;
+    }
+    const probeUrl = buildUrl(BASE_URL, ch, firstPlatform);
+    const result = await checkUrl(probeUrl);
+    channelResults[ch] = result.ok;
+  }
 
-          if (result.ok) {
-            card.style.opacity = '1';
-            if (label) {
-              label.textContent = result.size ? `Download (${formatSize(result.size)})` : 'Download';
-            }
-            if (link) {
-              const platformLabel = PLATFORM_DEFS.find((p) => p.id === platformId)?.label ?? platformId;
-              link.setAttribute('aria-label', `Download Aikami desktop client for ${platformLabel}`);
-            }
-            if (status) {
-              status.textContent = activeChannel;
-            }
-            // Highlight detected OS
-            if (platformId === userOS) {
-              link.className = link.className
-                .replace(/bg-card/, 'bg-primary')
-                .replace(/text-foreground/, 'text-primary-foreground')
-                .replace(/hover:bg-muted/, 'hover:opacity-90');
-            }
-          } else {
-            card.style.opacity = '0.5';
-            if (label) label.textContent = 'Coming soon';
-            if (status) status.textContent = 'Not yet available';
+  let activeChannel: string;
+  if (channelResults.stable) {
+    activeChannel = 'stable';
+  } else if (channelResults.latest) {
+    activeChannel = 'latest';
+  } else {
+    activeChannel = 'latest';
+  }
+
+  // Update channel button UI to match
+  if (activeChannel === 'latest') {
+    const stableBtn = document.querySelector<HTMLButtonElement>('[data-channel="stable"]');
+    const latestBtn = document.querySelector<HTMLButtonElement>('[data-channel="latest"]');
+    if (stableBtn) {
+      stableBtn.className =
+        'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+    }
+    if (latestBtn) {
+      latestBtn.className =
+        'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+    }
+  }
+
+  // Channel toggle buttons
+  const channelButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
+  for (const btn of channelButtons) {
+    btn.addEventListener('click', () => {
+      activeChannel = btn.dataset.channel ?? 'stable';
+      const allButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
+      for (const b of allButtons) {
+        if (b.dataset.channel === activeChannel) {
+          b.className =
+            'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+        } else {
+          b.className =
+            'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+        }
+      }
+      updateCards();
+    });
+  }
+
+  // Check all platform URLs for initial channel
+  async function updateCards() {
+    const cards = document.querySelectorAll<HTMLElement>('.download-card');
+    for (const card of cards) {
+      const platformId = card.dataset.platform ?? '';
+      const platform = PLATFORM_DEFS.find((p) => p.id === platformId);
+      if (!platform) {
+        continue;
+      }
+
+      const url = buildUrl(BASE_URL, activeChannel, platform);
+
+      const link = card.querySelector<HTMLAnchorElement>('.download-link');
+      const label = card.querySelector<HTMLElement>('.download-label');
+      const status = card.querySelector<HTMLElement>('.download-status');
+
+      // Check fresh for the active channel
+      const result = await checkUrl(url);
+
+      if (link) {
+        link.href = url;
+        link.setAttribute('download', '');
+        link.className = link.className.replace(/pointer-events-none/, '');
+
+        if (result.ok) {
+          card.style.opacity = '1';
+          if (label) {
+            label.textContent = result.size ? `Download (${formatSize(result.size)})` : 'Download';
+          }
+          if (link) {
+            const platformLabel =
+              PLATFORM_DEFS.find((p) => p.id === platformId)?.label ?? platformId;
+            link.setAttribute('aria-label', `Download Aikami desktop client for ${platformLabel}`);
+          }
+          if (status) {
+            status.textContent = activeChannel;
+          }
+          // Highlight detected OS
+          if (platformId === userOS) {
+            link.className = link.className
+              .replace(/bg-card/, 'bg-primary')
+              .replace(/text-foreground/, 'text-primary-foreground')
+              .replace(/hover:bg-muted/, 'hover:opacity-90');
+          }
+        } else {
+          card.style.opacity = '0.5';
+          if (label) {
+            label.textContent = 'Coming soon';
+          }
+          if (status) {
+            status.textContent = 'Not yet available';
           }
         }
       }
     }
-
-    // Initial render
-    await updateCards();
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // Initial render
+  await updateCards();
+}
+
+document.addEventListener('DOMContentLoaded', init);
 </script>

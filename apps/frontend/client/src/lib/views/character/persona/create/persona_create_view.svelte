@@ -525,9 +525,19 @@ function handleAvatarUpload(event: Event) {
             <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
               ← Back to Chat
             </button>
-            <button type="button" class="btn btn-outline" onclick={() => viewModel.saveCharacter()}>
-              💾 Save Persona
+            <button
+              type="button"
+              class="btn btn-outline"
+              disabled={viewModel.characterSaved}
+              onclick={() => viewModel.saveCharacter()}
+            >
+              {viewModel.characterSaved ? '✅ Persona Saved' : '💾 Save Persona'}
             </button>
+            {#if viewModel.characterSavedMessage}
+              <span class="text-success text-sm self-center"
+                >{viewModel.characterSavedMessage}</span
+              >
+            {/if}
             <button type="button" class="btn btn-primary" onclick={() => viewModel.enterWorld()}>
               ⚔️ Enter World
             </button>

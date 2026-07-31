@@ -13,9 +13,7 @@
  *   PWACalls['email-connections'][1]  → response shape
  */
 
-import type { AIMessageData, AIMessageResponse } from './ai.ts';
 import type { AuthMessageData, AuthMessageResponse } from './auth.ts';
-import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
 
 export type PWACallEndpoint = keyof PWACalls;
 
@@ -45,6 +43,4 @@ export type PWACallResponse<T extends PWACallEndpoint = PWACallEndpoint> = PWACa
 export type PWACalls = {
   auth: [AuthMessageData, AuthMessageResponse];
   'auth/session': [{ token?: string }, undefined];
-  chat: [ChatMessageData, ChatMessageResponse];
-  ai: [AIMessageData, AIMessageResponse];
 };

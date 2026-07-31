@@ -53,7 +53,6 @@ const config = {
       '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
       '@aikami/backend/onboarding': toPackagesPath('backend/onboarding/src'),
       '@aikami/backend/agent': toPackagesPath('backend/agent/src'),
-      '@aikami/backend/chat': toPackagesPath('backend/chat/src'),
       '@aikami/backend/knowledge': toPackagesPath('backend/knowledge/src'),
       '@aikami/backend/team': toPackagesPath('backend/team/src'),
       '@aikami/backend/admin': toPackagesPath('backend/admin/src'),

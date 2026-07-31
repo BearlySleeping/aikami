@@ -67,6 +67,12 @@ const SKILL_SOURCES: SkillSource[] = [
     targetSubdir: 'coderabbit',
   },
   {
+    name: 'Firestack',
+    repoUrl: 'https://github.com/snorreks/firestack.git',
+    sourceSubdir: '.agents/skills/firestack',
+    targetSubdir: 'firestack',
+  },
+  {
     name: 'Firebase',
     repoUrl: 'https://github.com/firebase/agent-skills.git',
     sourceSubdir: 'skills',

@@ -5,12 +5,7 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
-import {
-  BUILT_IN_PRESETS,
-  type GenParamPreset,
-  TEXT_PROVIDERS,
-  type TextProvider,
-} from '@aikami/constants';
+import { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -34,23 +29,16 @@ import {
 // Re-exports from @aikami/constants for backward compatibility
 // ---------------------------------------------------------------------------
 
-export { TEXT_PROVIDERS, type TextProvider } from '@aikami/constants';
+export { TEXT_PROVIDERS } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
-// Text AI providers (re-exported from @aikami/constants)
+// Legacy TextConfig — kept as a stub for backward compatibility.
+// All provider configuration now lives in `connections[]`.
 // ---------------------------------------------------------------------------
 
-/** Map of provider → API key string. */
-export type ApiKeys = Record<string, string>;
-
-/** Text generation subsystem configuration. */
+/** @deprecated Use `connections[]` instead. */
 export type TextConfig = {
-  /** Selected text generation provider. */
-  provider: TextProvider;
-  /** API keys per provider (encrypted at rest). */
-  apiKeys: ApiKeys;
-  /** Custom endpoint URL (for ollama, ooba, custom). */
-  url?: string;
+  provider: string;
 };
 
 /** Memory subsystem configuration. */
@@ -378,12 +366,8 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   /** Clears all stored config. */
   reset(): Promise<void>;
 
-  /** Updates the text provider selection. */
-  setTextProvider(provider: TextProvider): void;
-  /** Updates the API key for the given text provider. */
-  setTextApiKey(provider: string, key: string): void;
-  /** Updates the custom URL for the text provider. */
-  setTextUrl(url: string): void;
+  /** Updates the text provider selection (legacy — prefer connections). */
+  setTextProvider(provider: string): void;
   /** Sets the preferred model identifier. */
   setPreferredModel(model: string): void;
   /** Replaces the full models array. */
@@ -484,10 +468,7 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_API_KEYS: ApiKeys = {};
-
 const DEFAULT_TEXT_CONFIG: TextConfig = {
-  apiKeys: {},
   provider: 'openrouter',
 };
 
@@ -588,40 +569,40 @@ class ConfigService
   state = $state<ConfigState>({ ...DEFAULT_STATE });
   isLoaded = $state(false);
 
-  private _envDefaultsInjected = false;
-
   // ── Persistence ───────────────────────────────────────────────────────
 
   async load(pin?: string): Promise<void> {
     logger.debug('ConfigService.load');
 
-    // 1. Load API keys + text provider + connections from encrypted vault
+    // 1. Load connections from encrypted vault
     const raw = await decrypt({ pin });
     if (raw) {
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
-        const apiKeys: ApiKeys =
-          vault.apiKeys && typeof vault.apiKeys === 'object'
-            ? { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }
-            : { ...DEFAULT_API_KEYS };
-        const rawProvider = typeof vault.textProvider === 'string' ? vault.textProvider : '';
-        const validIds: readonly string[] = TEXT_PROVIDERS.map((p) => p.id);
-        const provider: TextProvider =
-          rawProvider && validIds.includes(rawProvider)
-            ? (rawProvider as TextProvider)
-            : this.state.text.provider;
-        const url: string | undefined =
-          typeof vault.textUrl === 'string' ? vault.textUrl : this.state.text.url;
-        this.state.text = {
-          ...DEFAULT_TEXT_CONFIG,
-          apiKeys,
-          provider,
-          url,
-        };
 
         // Load connections from vault (C-230)
         if (Array.isArray(vault.connections)) {
-          this.state.connections = vault.connections as Connection[];
+          // Prune stale auto-seeded connections:
+          // - env-seeded with no API key (phantom from old _seedConnectionsFromEnv bug)
+          // - detected connections from previous sessions (re-detected on every capability scan)
+          const cleaned = (vault.connections as Connection[]).filter(
+            (c) =>
+              // Keep manually created/stored connections
+              c.source === 'stored' ||
+              (c.source === 'env' &&
+                // Keep env connections that have a real API key
+                ((c.apiKey && c.apiKey.length > 0) ||
+                  // Or local providers (Ollama, etc.) which don't need API keys
+                  c.provider === 'ollama' ||
+                  c.provider === 'ooba')) ||
+              // Keep detected connections ONLY if they're local providers
+              (c.source === 'detected' &&
+                (c.provider === 'ollama' ||
+                  c.provider === 'ooba' ||
+                  c.provider === 'comfyui' ||
+                  c.provider === 'kokoro')),
+          );
+          this.state.connections = cleaned;
         }
         if (typeof vault.defaultConnectionId === 'string' || vault.defaultConnectionId === null) {
           this.state.defaultConnectionId = vault.defaultConnectionId as ConnectionId | null;
@@ -699,21 +680,15 @@ class ConfigService
       }
     }
 
-    // 3. Inject env defaults when no user config is present
-    this._injectEnvDefaults();
-
     this.isLoaded = true;
   }
 
   async save(): Promise<void> {
     logger.debug('ConfigService.save');
 
-    // Encrypt sensitive data: text config + connections (API keys)
+    // Encrypt sensitive data: connections (API keys)
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
     const vaultPayload = JSON.stringify({
-      apiKeys: this.state.text.apiKeys,
-      textProvider: this.state.text.provider,
-      textUrl: this.state.text.url,
       connections: this.state.connections,
       defaultConnectionId: this.state.defaultConnectionId,
       userPresets,
@@ -745,18 +720,33 @@ class ConfigService
     localStorage.removeItem(PLAIN_CONFIG_KEY);
   }
 
+  /** Returns a fresh deep copy of the default state (no shared references). */
+  private _makeDefaultState(): ConfigState {
+    return {
+      activeLorebookIds: [],
+      advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
+      auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
+      connections: [],
+      defaultConnectionId: null,
+      defaultByCapability: {},
+      emotion: { ...DEFAULT_EMOTION_CONFIG },
+      generationParams: { ...DEFAULT_GENERATION_PARAMS },
+      image: { ...DEFAULT_IMAGE_CONFIG },
+      instructTemplate: DEFAULT_TEMPLATE,
+      lorebooks: [],
+      memory: { ...DEFAULT_MEMORY_CONFIG },
+      models: [],
+      preferredModel: '',
+      presets: [...BUILT_IN_PRESETS],
+      text: { provider: 'openrouter' },
+      voice: { ...DEFAULT_VOICE_CONFIG },
+    };
+  }
+
   // ── Mutators ──────────────────────────────────────────────────────────
 
-  setTextProvider(provider: TextProvider): void {
+  setTextProvider(provider: string): void {
     this.state.text.provider = provider;
-  }
-
-  setTextApiKey(provider: string, key: string): void {
-    this.state.text.apiKeys = { ...this.state.text.apiKeys, [provider]: key };
-  }
-
-  setTextUrl(url: string): void {
-    this.state.text.url = url;
   }
 
   setPreferredModel(model: string): void {
@@ -809,14 +799,7 @@ class ConfigService
   // ── Text provider resolution ─────────────────────────────────────────
 
   getActiveTextProvider(): ResolvedTextProvider {
-    // Lazy env injection — ensures defaults are available even if load()
-    // hasn't been called yet (e.g. first render before Config dashboard opens).
-    if (!this._envDefaultsInjected) {
-      this._envDefaultsInjected = true;
-      this._injectEnvDefaults();
-    }
-
-    const { text, connections: allConnections = [], defaultConnectionId } = this.state;
+    const { connections: allConnections = [], defaultConnectionId } = this.state;
 
     // Only consider text connections — voice/image connections are irrelevant
     // for text provider resolution and can cause the wrong provider (e.g.,
@@ -831,7 +814,7 @@ class ConfigService
           model: conn.model,
           provider: conn.provider,
           endpoint: conn.baseUrl || '',
-          apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+          apiKey: conn.apiKey || '',
         };
       }
     }
@@ -843,288 +826,14 @@ class ConfigService
         model: conn.model,
         provider: conn.provider,
         endpoint: conn.baseUrl || '',
-        apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+        apiKey: conn.apiKey || '',
       };
     }
 
-    // ── Priority 3: Legacy provider config (no connections created) ──
-    // Validate that the stored provider is actually a text provider.
-    // Corrupt vaults may contain voice/image provider IDs (e.g., 'kokoro')
-    // that were accidentally written to the text provider field.
-    const validIds: readonly string[] = TEXT_PROVIDERS.map((p) => p.id);
-    const provider = validIds.includes(text.provider as string)
-      ? (text.provider as TextProvider)
-      : 'openrouter';
-    const { preferredModel, models } = this.state;
-
-    let endpoint = text.url ?? '';
-    let model = preferredModel;
-
-    if (!model && models.length > 0) {
-      const match = models.find((m) => m.provider === provider);
-      if (match) {
-        model = match.model;
-        endpoint = endpoint || match.endpoint || '';
-      } else {
-        model = models[0].model;
-        endpoint = endpoint || models[0].endpoint || '';
-      }
-    }
-
-    if (model && !endpoint && models.length > 0) {
-      const match = models.find((m) => m.model === model);
-      if (match) {
-        endpoint = match.endpoint || '';
-      }
-    }
-
-    if (!endpoint) {
-      if (provider === 'ollama') {
-        endpoint = 'http://localhost:11434/v1';
-      } else if (provider === 'ooba') {
-        endpoint = 'http://localhost:5000/v1';
-      }
-    }
-
-    if (!model) {
-      if (provider === 'ollama') {
-        model = 'llama3.2';
-      } else if (provider === 'openai') {
-        model = 'gpt-4o-mini';
-      } else if (provider === 'anthropic') {
-        model = 'claude-3-haiku-20240307';
-      } else if (provider === 'deepseek') {
-        model = 'deepseek-chat';
-      } else {
-        throw new Error(
-          'No text generation provider configured. ' +
-            'Create a Connection in Settings or set PUBLIC_OPENROUTER_MODEL in your .env file.',
-        );
-      }
-    }
-
-    return {
-      model,
-      provider,
-      endpoint,
-      apiKey: text.apiKeys[provider],
-    };
-  }
-
-  // ── Private: connection seeding from env ──────────────────────────
-
-  /**
-   * Seeds connections from environment variables when no connections
-   * have been created yet. This provides a zero-config onboarding path
-   * while keeping Connections as the primary configuration surface.
-   *
-   * Supports both PUBLIC_* (Vite) and bare (Tauri/desktop) env var formats.
-   * Each provider with an API key or model env var gets a connection with
-   * source: 'env' so the UI can show a (✓ env: KEY_NAME) badge.
-   */
-  private _seedConnectionsFromEnv(): void {
-    if (this.state.connections && this.state.connections.length > 0) {
-      return;
-    }
-
-    if (!this.state.connections) {
-      this.state.connections = [];
-    }
-
-    const now = new Date().toISOString();
-    const seeded: Connection[] = [];
-
-    // Provider→env var mapping. Each entry defines how to detect a provider
-    // from env vars and what default model + display name to use.
-    const ProviderEnvMap = [
-      {
-        provider: 'ollama',
-        label: 'Ollama (local)',
-        apiKeyEnv: undefined, // Ollama doesn't need an API key
-        modelEnv: ['PUBLIC_OLLAMA_MODEL', 'OLLAMA_MODEL'],
-        urlEnv: ['PUBLIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'],
-        defaultModel: '',
-        defaultUrl: 'http://localhost:11434/v1',
-        isLocal: true,
-      },
-      {
-        provider: 'openrouter',
-        label: 'OpenRouter',
-        apiKeyEnv: ['PUBLIC_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'],
-        modelEnv: ['PUBLIC_OPENROUTER_MODEL', 'OPENROUTER_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'openrouter/auto',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'openai',
-        label: 'OpenAI',
-        apiKeyEnv: ['PUBLIC_OPENAI_API_KEY', 'OPENAI_API_KEY'],
-        modelEnv: ['PUBLIC_OPENAI_MODEL', 'OPENAI_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'gpt-4o-mini',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'anthropic',
-        label: 'Anthropic',
-        apiKeyEnv: ['PUBLIC_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'],
-        modelEnv: ['PUBLIC_ANTHROPIC_MODEL', 'ANTHROPIC_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'claude-3-haiku-20240307',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'deepseek',
-        label: 'DeepSeek',
-        apiKeyEnv: ['PUBLIC_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
-        modelEnv: ['PUBLIC_DEEPSEEK_MODEL', 'DEEPSEEK_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'deepseek-chat',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'google',
-        label: 'Google (Gemini)',
-        apiKeyEnv: ['PUBLIC_GEMINI_API_KEY', 'GEMINI_API_KEY'],
-        modelEnv: ['PUBLIC_GEMINI_MODEL', 'GEMINI_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'gemini-2.0-flash',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'mistral',
-        label: 'Mistral AI',
-        apiKeyEnv: ['PUBLIC_MISTRAL_API_KEY', 'MISTRAL_API_KEY'],
-        modelEnv: ['PUBLIC_MISTRAL_MODEL', 'MISTRAL_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'mistral-small-latest',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-      {
-        provider: 'cohere',
-        label: 'Cohere',
-        apiKeyEnv: ['PUBLIC_COHERE_API_KEY', 'COHERE_API_KEY'],
-        modelEnv: ['PUBLIC_COHERE_MODEL', 'COHERE_MODEL'],
-        urlEnv: undefined,
-        defaultModel: 'command-r',
-        defaultUrl: undefined,
-        isLocal: false,
-      },
-    ] as const;
-
-    for (const entry of ProviderEnvMap) {
-      const apiKey = entry.apiKeyEnv ? this._readEnvFirst(entry.apiKeyEnv) : undefined;
-      const model =
-        (entry.modelEnv ? this._readEnvFirst(entry.modelEnv) : undefined) ??
-        (entry.provider === 'ollama' ? undefined : entry.defaultModel);
-      const url = entry.urlEnv ? this._readEnvFirst(entry.urlEnv) : undefined;
-
-      // Skip providers without an env key or model unless they're local
-      if (!entry.isLocal && !apiKey && !model) {
-        continue;
-      }
-
-      // For local providers (Ollama), skip if no model configured
-      if (entry.isLocal && !model) {
-        continue;
-      }
-
-      seeded.push({
-        id: crypto.randomUUID(),
-        name: entry.label,
-        provider: entry.provider,
-        capability: 'text',
-        apiKey: apiKey ?? '',
-        baseUrl: url ?? entry.defaultUrl ?? '',
-        model: model ?? entry.defaultModel,
-        generationParams: {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          repetitionPenalty: 1,
-          presencePenalty: 0,
-          maxTokens: 1024,
-          contextSize: 4096,
-        },
-        isDefault: seeded.length === 0,
-        source: 'env',
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    if (seeded.length > 0) {
-      this.state.connections = seeded;
-      this.state.defaultConnectionId = seeded[0].id;
-    }
-  }
-
-  // ── Private: env helpers ─────────────────────────────────────────────
-
-  /** Returns a fresh deep copy of the default state (no shared references). */
-  private _makeDefaultState(): ConfigState {
-    return {
-      activeLorebookIds: [],
-      advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
-      auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
-      connections: [],
-      defaultConnectionId: null,
-      defaultByCapability: {},
-      emotion: { ...DEFAULT_EMOTION_CONFIG },
-      generationParams: { ...DEFAULT_GENERATION_PARAMS },
-      image: { ...DEFAULT_IMAGE_CONFIG },
-      instructTemplate: DEFAULT_TEMPLATE,
-      lorebooks: [],
-      memory: { ...DEFAULT_MEMORY_CONFIG },
-      models: [],
-      preferredModel: '',
-      presets: [...BUILT_IN_PRESETS],
-      text: { apiKeys: {}, provider: 'openrouter' },
-      voice: { ...DEFAULT_VOICE_CONFIG },
-    };
-  }
-
-  /**
-   * Injects defaults from environment variables. The preferred model is
-   * only injected when no user configuration exists in localStorage, but
-   * the API key is always injected from env if available and not already
-   * set — this ensures the key survives stale vaults and model-only saves.
-   */
-  private _injectEnvDefaults(): void {
-    // Seed connections from env vars when none exist (zero-config onboarding)
-    this._seedConnectionsFromEnv();
-
-    // Inject API keys from env for all providers (always available as fallback).
-    // Both PUBLIC_* (Vite) and bare (Tauri/desktop) env var names are checked.
-    const ProviderKeyEnvMap: ReadonlyArray<{
-      provider: string;
-      envNames: readonly string[];
-    }> = [
-      { provider: 'openrouter', envNames: ['PUBLIC_OPENROUTER_API_KEY', 'OPENROUTER_API_KEY'] },
-      { provider: 'openai', envNames: ['PUBLIC_OPENAI_API_KEY', 'OPENAI_API_KEY'] },
-      { provider: 'anthropic', envNames: ['PUBLIC_ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY'] },
-      { provider: 'deepseek', envNames: ['PUBLIC_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'] },
-      { provider: 'google', envNames: ['PUBLIC_GEMINI_API_KEY', 'GEMINI_API_KEY'] },
-      { provider: 'mistral', envNames: ['PUBLIC_MISTRAL_API_KEY', 'MISTRAL_API_KEY'] },
-      { provider: 'cohere', envNames: ['PUBLIC_COHERE_API_KEY', 'COHERE_API_KEY'] },
-    ];
-
-    for (const entry of ProviderKeyEnvMap) {
-      const envKey = this._readEnvFirst(entry.envNames);
-      if (envKey && !this.state.text.apiKeys[entry.provider]) {
-        this.state.text = {
-          ...this.state.text,
-          apiKeys: { ...this.state.text.apiKeys, [entry.provider]: envKey },
-        };
-      }
-    }
+    throw new Error(
+      'No text generation provider configured. ' +
+        'Create a Connection in Settings or add a provider on the capability screen.',
+    );
   }
 
   // ── Connection management (C-230) ──────────────────────────────────
@@ -1397,32 +1106,6 @@ class ConfigService
 
   setActiveLorebookIds(options: { ids: string[] }): void {
     this.state.activeLorebookIds = options.ids;
-  }
-
-  /** Safely reads a Vite PUBLIC_* or bare env var. Returns undefined in tests. */
-  private _readEnv(name: string): string | undefined {
-    try {
-      const env = import.meta.env as Record<string, string | undefined>;
-      // Try the exact name first (e.g. PUBLIC_OPENROUTER_API_KEY)
-      const value = env[name];
-      return value && value.length > 0 ? value : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Tries multiple env var names in order, returning the first non-empty
-   * value. Used to fall back from PUBLIC_* (Vite) to bare names (Tauri).
-   */
-  private _readEnvFirst(names: readonly string[]): string | undefined {
-    for (const name of names) {
-      const value = this._readEnv(name);
-      if (value) {
-        return value;
-      }
-    }
-    return undefined;
   }
 }
 

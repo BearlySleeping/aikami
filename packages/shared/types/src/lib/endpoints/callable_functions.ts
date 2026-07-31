@@ -1,10 +1,7 @@
-// packages/shared/types/src/lib/api/callable_functions.ts
+// packages/shared/types/src/lib/endpoints/callable_functions.ts
 // biome-ignore-all lint/style/useNamingConvention: Firestack derives Cloud Function names from file names, which must be snake_case. Keys in this type map match those file names.
 
-import type { AIMessageData, AIMessageResponse } from './ai.ts';
 import type { AuthMessageData, AuthMessageResponse } from './auth.ts';
-import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
-import type { ImageMessageData, ImageMessageResponse } from './image.ts';
 
 /**
  * All registered callable functions. Each key maps to [Payload, Response].
@@ -15,10 +12,7 @@ import type { ImageMessageData, ImageMessageResponse } from './image.ts';
  * not `unknown`.
  */
 export type CallableFunctions = {
-  ai: [AIMessageData, AIMessageResponse];
   auth: [AuthMessageData, AuthMessageResponse];
-  chat: [ChatMessageData, ChatMessageResponse];
-  image: [ImageMessageData, ImageMessageResponse];
 };
 
 export type CallableFunction = keyof CallableFunctions;

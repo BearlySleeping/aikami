@@ -209,6 +209,6 @@ Key structural elements:
 - **`toAppError` signature change**: Existing callers in Aikami that use positional args must be updated. The `environment.ts` already uses the object form; `app.ts` uses positional and must be updated as part of the rewrite.
 - **Circular dependency on `app_check.ts`**: The App Check module imports `app` from `app.ts`, and `app.ts` dynamically imports `app_check.ts`. This must use `void import('./app_check.ts')` (not a synchronous `import`) to avoid the cycle.
 - **`PUBLIC_MODE` vs `PUBLIC_FLAVOR`**: All references to `PUBLIC_FLAVOR` in env files and consuming code must be migrated to `PUBLIC_MODE`. This contract covers the configs module; downstream migration is tracked separately.
-- **`MODE_PROJECT_MAP` for Aikami**: Uses `aikami-dev`, `aikami-prod`, `demo-aikami-emulator` — project-specific, not copied verbatim from Aikami.
+- **`MODE_PROJECT_MAP` for Aikami**: Uses `aikami-staging`, `aikami-production`, `demo-aikami-emulator` — project-specific, not copied verbatim from Aikami.
 - **`frontendAppIds` for Aikami**: `['docs', 'site', 'client']` — matches actual Aikami apps.
 - **Emulator port consistency**: All ports must match what the Firebase emulator suite actually uses (defined in `firebase.json`). These are standardized and identical to Aikami.

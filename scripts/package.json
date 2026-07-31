@@ -18,6 +18,9 @@
     "@aikami/types": "workspace:*"
   },
   "devDependencies": {
-    "firebase-tools": "15.20.0"
+    "firebase-tools": "15.20.0",
+    "imagetracerjs": "^1.2.6",
+    "png-to-ico": "3.0.2",
+    "sharp": "0.35.3"
   }
 }

@@ -1,8 +1,8 @@
-// apps/frontend/site/scripts/convert_logo_png_to_svg.ts
+// scripts/src/lib/ops/convert_logo_png_to_svg.ts
 /** biome-ignore-all lint/suspicious/noAssignInExpressions: Node.js stream processing pattern */
 // Converts a raster logo PNG → cropped vector SVG using imagetracerjs.
 //
-// Usage: bun run scripts/convert_logo_png_to_svg.ts
+// Usage: bun run scripts/src/lib/ops/convert_logo_png_to_svg.ts [--input <png>] [--output <svg>]
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -12,8 +12,9 @@ import ImageTracer from 'imagetracerjs';
 // @ts-expect-error - internal CLI module, no ESM types
 import PNGReader from 'imagetracerjs/nodecli/PNGReader.js';
 
-const REFERENCE_PNG = path.resolve(import.meta.dir, '../src/lib/assets/logo.png');
-const OUTPUT_SVG = path.resolve(import.meta.dir, '../src/lib/assets/icons/logo.svg');
+const ROOT = path.resolve(import.meta.dir, '../../../..');
+const DEFAULT_INPUT = path.join(ROOT, 'assets/logo.png');
+const DEFAULT_OUTPUT = path.join(ROOT, 'assets/logo.svg');
 
 const TRACE_OPTIONS = {
   ltres: 1,
@@ -35,6 +36,22 @@ const TRACE_OPTIONS = {
   blurradius: 0,
   blurdelta: 0,
 } as const;
+
+const parseArgs = (): { input: string; output: string } => {
+  const raw = process.argv.slice(2);
+  let input = DEFAULT_INPUT;
+  let output = DEFAULT_OUTPUT;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '--input' && raw[i + 1]) {
+      input = path.resolve(raw[i + 1]!);
+      i++;
+    } else if (raw[i] === '--output' && raw[i + 1]) {
+      output = path.resolve(raw[i + 1]!);
+      i++;
+    }
+  }
+  return { input, output };
+};
 
 /**
  * Compute content bounding box from visible path coordinates.
@@ -114,45 +131,52 @@ const cropSvgToContent = (svg: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const outDir = path.dirname(OUTPUT_SVG);
+  const { input, output } = parseArgs();
+
+  if (!fs.existsSync(input)) {
+    console.error(`Source PNG not found: ${input}`);
+    process.exit(1);
+  }
+
+  const outDir = path.dirname(output);
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  if (!fs.existsSync(REFERENCE_PNG)) {
-    console.error(`Source PNG not found: ${REFERENCE_PNG}`);
-    console.error('Place a logo PNG at src/lib/assets/logo.png before running this script.');
-    process.exit(1);
-  }
-
-  const bytes = fs.readFileSync(REFERENCE_PNG);
+  const bytes = fs.readFileSync(input);
 
   const reader = new PNGReader(bytes);
 
-  reader.parse((err: Error | null, png: { width: number; height: number; pixels: Uint8Array }) => {
-    if (err) {
-      console.error('PNG parse error:', err);
-      process.exit(1);
-    }
+  reader.parse(
+    (err: Error | null, png: { width: number; height: number; pixels: Uint8Array }) => {
+      if (err) {
+        console.error('PNG parse error:', err);
+        process.exit(1);
+      }
 
-    const imageData = {
-      width: png.width,
-      height: png.height,
-      data: new Uint8ClampedArray(png.pixels.buffer, png.pixels.byteOffset, png.pixels.byteLength),
-    };
-    let svgString = ImageTracer.imagedataToSVG(imageData, TRACE_OPTIONS);
-    svgString = svgString.trim();
+      const imageData = {
+        width: png.width,
+        height: png.height,
+        data: new Uint8ClampedArray(
+          png.pixels.buffer,
+          png.pixels.byteOffset,
+          png.pixels.byteLength,
+        ),
+      };
+      let svgString = ImageTracer.imagedataToSVG(imageData, TRACE_OPTIONS);
+      svgString = svgString.trim();
 
-    svgString = cropSvgToContent(svgString);
+      svgString = cropSvgToContent(svgString);
 
-    if (!svgString.startsWith('<?xml')) {
-      svgString = `<?xml version="1.0" encoding="UTF-8"?>\n${svgString}`;
-    }
-    svgString += '\n';
+      if (!svgString.startsWith('<?xml')) {
+        svgString = `<?xml version="1.0" encoding="UTF-8"?>\n${svgString}`;
+      }
+      svgString += '\n';
 
-    fs.writeFileSync(OUTPUT_SVG, svgString, 'utf-8');
-    console.log(`Logo SVG written to ${OUTPUT_SVG}`);
-  });
+      fs.writeFileSync(output, svgString, 'utf-8');
+      console.log(`Logo SVG written to ${output}`);
+    },
+  );
 };
 
 main();

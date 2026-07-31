@@ -1,10 +1,10 @@
 # Firestack Configuration
 
-Firestack supports two configuration formats: `firestack.config.ts` (recommended) and `firestack.json`.
+Firestack supports two configuration formats: `firestack.config.ts` (recommended) and `firestack.json`. Always prefer `firestack.config.ts` for TypeScript support, path alias resolution, and dynamic config callbacks.
 
 ## `firestack.config.ts` (Recommended)
 
-Use this format when you need dynamic configuration or TypeScript path aliases from `tsconfig.json`.
+Accepts a static config object or a callback `({ mode }) => config`:
 
 ```ts
 // firestack.config.ts
@@ -102,6 +102,9 @@ If you prefer a static config file:
 | `external`           | `string[]`                                       | `[]`              | Dependencies to treat as external (installed in the function env at deploy time).                                                                                                            |
 | `includeFilePath`    | `string`                                         | `src/logger.ts`   | Relative path to a file that is auto-imported at the top of every generated function index. Useful for initializing logging, OpenTelemetry, or Sentry. Only imported if the file exists.     |
 | `artifactRetentionDays` | `number`                                      | —                 | Number of days to retain deployed container images in Artifact Registry before automatic deletion. When set, Firestack runs `firebase functions:artifacts:setpolicy --days <N>` after each deployment.         |
+| `concurrency`        | `number`                                        | `5`               | Number of functions to deploy in parallel. |
+| `retryAmount`        | `number`                                        | `0`               | Number of times to retry a failed deployment. |
+| `deployEngine`       | `"firebase-tools" \| "gcloud"`                 | `firebase-tools`  | Deployment engine. `gcloud` uses `gcloud functions deploy` directly for HTTP/callable, Firestore, Storage, RTDB, PubSub, Scheduler, and Tasks triggers. Unsupported triggers (Auth, Identity, Eventarc, Alerts, AI, TestLab, RemoteConfig) fall back to firebase-tools. |
 | `dataconnectDirectory` | `string`                                       | `dataconnect`     | Directory containing the Data Connect configuration (`dataconnect.yaml`). Relative to the project root. Auto-detected when `dataconnect/dataconnect.yaml` exists. |
 | `emulators`          | `FirebaseEmulator[]`                             | `[]`              | Explicit list of emulators to enable. Available: `auth`, `functions`, `firestore`, `database`, `hosting`, `pubsub`, `storage`, `eventarc`, `extensions`, `ui`, `hub`, `logging`, `appcheck`, `dataconnect`. |
 | `emulatorPorts`      | `Record<FirebaseEmulator, number>`               | —                 | Custom ports for individual emulators (e.g., `{ "auth": 9099 }`).                                                                                                                            |

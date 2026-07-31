@@ -58,7 +58,7 @@ export function run(
   // verbose → inherit (direct terminal output, raw)
   // quiet   → pipe, suppress everything (no prefix, no output)
   // default → pipe, show only the command prefix
-  const stdio: 'pipe' | 'inherit' = _verbose ? 'inherit' : 'pipe';
+  const stdio: 'pipe' | 'inherit' = _verbose && !opts.quiet ? 'inherit' : 'pipe';
   const suppressPrefix = _quiet || opts.quiet === true;
   try {
     if (!suppressPrefix && !_verbose) {

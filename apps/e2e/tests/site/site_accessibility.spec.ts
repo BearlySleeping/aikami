@@ -16,6 +16,9 @@ test.describe('Accessibility — axe-core audit', () => {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
 
+      // The @axe-core/playwright package bundles a newer Playwright Page type than our
+      // project's @playwright/test version. The runtime API is compatible.
+      // @ts-expect-error - Playwright Page type version mismatch between axe-core and @playwright/test
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
         .analyze();

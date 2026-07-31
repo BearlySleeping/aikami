@@ -68,8 +68,8 @@ use flake
 
 declare -A _AIKAMI_PROJECT_MAP=(
   [emulator]="demo-aikami-emulator"
-  [staging]="aikami-dev"
-  [production]="aikami-prod"
+  [staging]="aikami-staging"
+  [production]="aikami-production"
 )
 
 _aikami_load_mode() {

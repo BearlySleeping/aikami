@@ -24,7 +24,7 @@ Create or update `firestack.config.ts` (or `firestack.json`) in the project root
    - Scripts directory (suggest `scripts`)
    - Node version (suggest `22`)
    - Engine (suggest `bun`)
-3. Recommend `firestack.config.ts` for dynamic config with tsconfig path alias support:
+3. Always create `firestack.config.ts` (not `firestack.json`) for new projects:
 
 ```ts
 // firestack.config.ts

@@ -20,8 +20,15 @@ Parse the command:
 - `create scheduler <name>` → Scheduled function in `scheduler/<name>.ts`
 - `create storage <event>` → Storage trigger in `storage/<event>.ts`
 - `create database <ref> <event>` → RTDB trigger in `database/<ref>/<event>.ts`
+- `create pubsub <name>` → Pub/Sub trigger in `pubsub/<name>.ts`
+- `create tasks <name>` → Task Queue trigger in `tasks/<name>.ts`
+- `create eventarc <name>` → Eventarc trigger in `eventarc/<name>.ts`
+- `create testLab <name>` → Test Lab trigger in `test_lab/<name>.ts`
+- `create remoteConfig <name>` → Remote Config trigger in `remote_config/<name>.ts`
+- `create alerts <type> <name>` → Alerts trigger in `alerts/<name>.ts`
+- `create ai <event>` → AI blocking trigger in `ai/<event>.ts`
 
-Read `firestack.json` to get `functionsDirectory` (default: `src/controllers`).
+Read `firestack.config.ts` (or `firestack.json`) to get `functionsDirectory` (default: `src/controllers`).
 
 ### Step 2: Check for Conflicts
 

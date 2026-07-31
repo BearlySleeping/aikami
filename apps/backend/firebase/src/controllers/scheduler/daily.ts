@@ -17,8 +17,5 @@ export default onSchedule(
   },
   {
     schedule: 'every day 00:00',
-    region: 'us-central1',
-    memory: '256MiB',
-    timeoutSeconds: 540,
   },
 );
