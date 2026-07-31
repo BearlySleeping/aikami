@@ -122,8 +122,8 @@
   --slate-light: oklch(0.48 0.01 260);
   --obsidian: oklch(0.14 0.01 260);
   --ember: oklch(0.65 0.18 48);
-  --rune: oklch(0.54 0.22 285);
-  --rune-glow: oklch(0.6 0.2 285 / 0.5);
+  --rune: oklch(0.65 0.22 285);
+  --rune-glow: oklch(0.60 0.20 285 / 0.5);
   --parchment: oklch(0.85 0.04 85);
   --magic-dust: oklch(0.68 0.18 285 / 0.2);
 
@@ -368,12 +368,15 @@
 }
 
 /* ── Font metric overrides — reduce CLS during web font swap ── */
-/* These @font-face rules merge with Fontsource declarations to add size-adjust. */
+/* These @font-face rules provide metric overrides for the fonts imported from Fontsource. */
 /* Inter: match system-ui metrics at 400 weight (body text) */
 @font-face {
-  font-family: "Inter";
+  font-family: Inter;
+  src: url('@fontsource/inter/files/inter-latin-400-normal.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
   size-adjust: 105%;
   ascent-override: 94%;
   descent-override: 25%;
@@ -381,9 +384,12 @@
 
 /* Instrument Serif: match Georgia metrics at 400 weight (headings) */
 @font-face {
-  font-family: "Instrument Serif";
+  font-family: Instrument Serif;
+  src: url('@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
   size-adjust: 97%;
   ascent-override: 89%;
   descent-override: 23%;
