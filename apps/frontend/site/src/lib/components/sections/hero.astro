@@ -137,12 +137,21 @@ const initWhenReady = () => {
   if (disposed) {
     return;
   }
-  import('./hero_d20').then(async ({ initHeroD20 }) => {
-    if (disposed) {
-      return;
-    }
-    cleanup = await initHeroD20(containerId);
-  });
+  import('./hero_d20')
+    .then(async ({ initHeroD20 }) => {
+      if (disposed) {
+        return;
+      }
+      const cleanupFn = await initHeroD20(containerId);
+      if (disposed) {
+        cleanupFn();
+      } else {
+        cleanup = cleanupFn;
+      }
+    })
+    .catch((err) => {
+      console.error('Failed to load hero_d20 canvas:', err);
+    });
 };
 
 if ('requestIdleCallback' in globalThis) {

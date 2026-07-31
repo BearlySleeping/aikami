@@ -80,6 +80,11 @@ const setupLinuxdeployWrappers = (): void => {
       }
     }
 
+    // Only create wrapper if .real exists (cold cache: linuxdeploy will bootstrap it)
+    if (!existsSync(real)) {
+      continue;
+    }
+
     // Create wrapper script
     writeFileSync(
       wrapper,
@@ -203,7 +208,17 @@ export async function deployTauriRelease(
   const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
   // TAURI_BUNDLE_TARGETS env var overrides bundle targets (e.g. "appimage,deb,rpm" on CI)
   const bundleTargets = process.env.TAURI_BUNDLE_TARGETS;
-  const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
+  let bundlesFlag = '';
+  if (bundleTargets) {
+    // Validate bundle targets to prevent shell injection
+    const validTargets = /^[a-z0-9_-]+(?:,\s*[a-z0-9_-]+)*$/i;
+    if (!validTargets.test(bundleTargets)) {
+      throw new Error(
+        `Invalid TAURI_BUNDLE_TARGETS format: "${bundleTargets}". Must be comma-separated list of alphanumeric/dash/underscore target names.`,
+      );
+    }
+    bundlesFlag = ` --bundles ${bundleTargets}`;
+  }
 
   // On NixOS, Tauri's AppImage bundler hardcodes /usr/bin/xdg-open.
   // steam-run provides an FHS-compatible environment where it exists.

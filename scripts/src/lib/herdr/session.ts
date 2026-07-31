@@ -350,14 +350,77 @@ export const isPortReady = async (port: number): Promise<boolean> => {
 /** Kill any process occupying a port so the next bind succeeds deterministically. */
 export const killPort = (port: number): Promise<void> =>
   new Promise((resolveK) => {
-    const proc = spawn('fuser', ['-k', '-n', 'tcp', String(port)], {
-      stdio: 'ignore',
+    // First, identify the PID listening on the port
+    const lsofProc = spawn('lsof', ['-ti', `tcp:${port}`], {
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
-    proc.on('close', () => {
-      // fuser returns non-zero if nothing was on the port — that's fine
-      resolveK();
+
+    let pidOutput = '';
+    lsofProc.stdout?.on('data', (chunk) => {
+      pidOutput += chunk.toString();
     });
-    proc.on('error', () => resolveK()); // fuser not available — skip
+
+    lsofProc.on('close', (code) => {
+      if (code !== 0 || !pidOutput.trim()) {
+        // Port not in use or lsof unavailable — nothing to kill
+        resolveK();
+        return;
+      }
+
+      const pid = pidOutput.trim().split('\n')[0];
+      if (!/^\d+$/.test(pid)) {
+        resolveK();
+        return;
+      }
+
+      // Verify the process is one we expect (node, bun, vite, uwsgi, etc.)
+      // by checking its command line. If it's unrelated, don't kill it.
+      const psProc = spawn('ps', ['-p', pid, '-o', 'comm='], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+
+      let psOutput = '';
+      psProc.stdout?.on('data', (chunk) => {
+        psOutput += chunk.toString();
+      });
+
+      psProc.on('close', (psCode) => {
+        if (psCode !== 0) {
+          // Process already gone or ps failed
+          resolveK();
+          return;
+        }
+
+        const comm = psOutput.trim().toLowerCase();
+        const expectedProcs = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase'];
+        const isExpected = expectedProcs.some((name) => comm.includes(name));
+
+        if (!isExpected) {
+          // Port is occupied by an unrelated process — don't kill it
+          console.warn(
+            `Port ${port} is busy with unrelated process (PID ${pid}, ${comm}). Not killing.`,
+          );
+          resolveK();
+          return;
+        }
+
+        // Safe to kill — it's one of our dev server processes
+        const killProc = spawn('kill', [pid], { stdio: 'ignore' });
+        killProc.on('close', () => {
+          resolveK();
+        });
+        killProc.on('error', () => resolveK());
+      });
+    });
+
+    lsofProc.on('error', () => {
+      // lsof not available — fall back to fuser (less safe, but original behavior)
+      const fuserProc = spawn('fuser', ['-k', '-n', 'tcp', String(port)], {
+        stdio: 'ignore',
+      });
+      fuserProc.on('close', () => resolveK());
+      fuserProc.on('error', () => resolveK());
+    });
   });
 
 // ── Direnv wrapper ─────────────────────────────────────────

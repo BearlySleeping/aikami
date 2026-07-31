@@ -48,7 +48,12 @@ if (magnetsEl) {
               if (disposed) {
                 return;
               }
-              cleanup = await initConceptMagnets('concept-magnets-canvas');
+              const cleanupFn = await initConceptMagnets('concept-magnets-canvas');
+              if (disposed) {
+                cleanupFn();
+              } else {
+                cleanup = cleanupFn;
+              }
             })
             .catch(() => {
               /* noop — canvas is optional for SEO */

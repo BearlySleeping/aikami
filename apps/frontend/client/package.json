@@ -2,7 +2,7 @@
   "name": "@aikami/client",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --mode emulator",
     "dev:staging": "vite dev --mode staging",
     "dev:emulator": "vite dev --mode emulator",
     "dev:production": "vite dev --mode production",

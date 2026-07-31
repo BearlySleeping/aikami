@@ -319,6 +319,32 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
 
 // ── Chromium launch ────────────────────────────────────────────────────────
 
+const findChromiumExecutable = (): string | null => {
+  // Prefer env var if set
+  const envPath = process.env.CHROMIUM_EXECUTABLE || process.env.CHROME_EXECUTABLE;
+  if (envPath) {
+    return envPath;
+  }
+
+  // Try common chromium binaries
+  const candidates = ['chromium', 'chromium-unwrapped', 'chromium-browser', 'google-chrome'];
+  for (const bin of candidates) {
+    try {
+      const result = Bun.spawnSync(['which', bin], { stdout: 'pipe', stderr: 'ignore' });
+      if (result.exitCode === 0) {
+        const path = result.stdout.toString().trim();
+        if (path) {
+          return bin;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+};
+
 const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => {
   // Ensure devtools are installed
   let devtoolsPath: string | null = getDevtoolsPath();
@@ -336,8 +362,17 @@ const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => 
 
   const clientUrl = getClientUrl(mode, live);
 
+  // Find chromium executable
+  const chromiumExe = findChromiumExecutable();
+  if (!chromiumExe) {
+    error(
+      'Chromium not found. Install chromium or set CHROMIUM_EXECUTABLE env var to the path of your chromium binary.',
+    );
+    process.exit(1);
+  }
+
   const chromiumArgs: string[] = [
-    'chromium-unwrapped', // Bypasses flake.nix wrapper that forces --enable-automation
+    chromiumExe,
     `--user-data-dir=${CHROMIUM_PROFILE_DIR}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -368,6 +403,18 @@ const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => 
 
   const proc = Bun.spawn(chromiumArgs, {
     stdio: ['ignore', 'inherit', 'inherit'],
+  });
+
+  proc.exited.then((exitCode) => {
+    if (exitCode !== 0) {
+      warn(`Chromium exited with code ${exitCode}`);
+    }
+  });
+
+  // Handle spawn errors
+  proc.on?.('error', (err: Error) => {
+    error(`Failed to launch Chromium: ${err.message}`);
+    process.exit(1);
   });
 
   await proc.exited;

@@ -141,46 +141,49 @@ export default defineConfig(({ mode }) => {
       },
       port,
       strictPort: true,
-      proxy: {
-        // Proxy Firebase Auth emulator through the dev server so the
-        // popup, relay iframe, and main page all share localhost:5274.
-        // This fixes the "No matching frame" error in signInWithPopup.
-        '/emulator/auth': {
-          target: `http://localhost:${PORTS.emulator.auth}`,
-          changeOrigin: true,
-        },
-        // Proxy Firebase Auth REST API calls to the emulator.
-        // The SDK calls identitytoolkit + securetoken endpoints to
-        // exchange OAuth credentials for Firebase tokens.
-        '/identitytoolkit.googleapis.com': {
-          target: `http://localhost:${PORTS.emulator.auth}`,
-          changeOrigin: true,
-        },
-        '/securetoken.googleapis.com': {
-          target: `http://localhost:${PORTS.emulator.auth}`,
-          changeOrigin: true,
-        },
-        '/api/voice': {
-          target: `http://localhost:${PORTS.emulator.voice}`,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/voice/, ''),
-        },
-        '/api/text': {
-          target: `http://localhost:${PORTS.emulator.text}`,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/text/, ''),
-        },
-        '/api/image': {
-          target: `http://localhost:${PORTS.emulator.image}`,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/image/, ''),
-        },
-        '/api/kokoro-tts': {
-          target: 'http://localhost:8880',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/kokoro-tts/, ''),
-        },
-      },
+      proxy:
+        mode === 'emulator'
+          ? {
+              // Proxy Firebase Auth emulator through the dev server so the
+              // popup, relay iframe, and main page all share localhost:5274.
+              // This fixes the "No matching frame" error in signInWithPopup.
+              '/emulator/auth': {
+                target: `http://localhost:${PORTS.emulator.auth}`,
+                changeOrigin: true,
+              },
+              // Proxy Firebase Auth REST API calls to the emulator.
+              // The SDK calls identitytoolkit + securetoken endpoints to
+              // exchange OAuth credentials for Firebase tokens.
+              '/identitytoolkit.googleapis.com': {
+                target: `http://localhost:${PORTS.emulator.auth}`,
+                changeOrigin: true,
+              },
+              '/securetoken.googleapis.com': {
+                target: `http://localhost:${PORTS.emulator.auth}`,
+                changeOrigin: true,
+              },
+              '/api/voice': {
+                target: `http://localhost:${PORTS.emulator.voice}`,
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/voice/, ''),
+              },
+              '/api/text': {
+                target: `http://localhost:${PORTS.emulator.text}`,
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/text/, ''),
+              },
+              '/api/image': {
+                target: `http://localhost:${PORTS.emulator.image}`,
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/image/, ''),
+              },
+              '/api/kokoro-tts': {
+                target: 'http://localhost:8880',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/kokoro-tts/, ''),
+              },
+            }
+          : {},
       watch: {
         ignored: [
           // 1. Tooling & OS Caches (The biggest culprits)
