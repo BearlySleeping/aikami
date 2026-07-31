@@ -278,6 +278,8 @@ const buildSystemPrompt = async (): Promise<string> => {
       '## STEP 3: Push',
       'Run `git push origin HEAD` to push the commit to the CURRENT branch. You are done.',
       '',
+      '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
+      '',
       '# STRICT RULES',
       '- Do NOT ask questions or wait for human approval.',
       '- Do NOT modify .pi/, node_modules/, or generated files.',
@@ -332,7 +334,7 @@ const buildSystemPrompt = async (): Promise<string> => {
       '4. Run `git commit --no-verify -m "<conventional commit message>"`.',
       '5. 🔴 **HOOK FAILURES**: The pre-commit hook is skipped. Ensure all checks passed before committing.',
       '5a. 🔴 **VALIDATION GATE**: Before committing, you MUST run `bun moon run :validate` on all affected projects. The commit must not proceed until validation passes cleanly.',
-      '6. Run `git push origin HEAD`. 🔴 **NEVER `git push` alone** — it may push to the wrong branch if upstream tracking differs from the current branch. Always use `git push origin HEAD` to push to the CURRENT branch.',,
+      '6. Run `git push origin HEAD`. 🔴 **NEVER `git push` alone** — it may push to the wrong branch if upstream tracking differs from the current branch. Always use `git push origin HEAD` to push to the CURRENT branch.',
       '',
     );
   }
@@ -418,7 +420,9 @@ const buildTaskText = async (): Promise<string> => {
       'Review pending changes and commit them.',
       '',
       '1. `git status` + `git diff`',
-      '2. `git add -A && git commit --no-verify -m "..." && git push origin HEAD`',,
+      '2. `git add -A && git commit --no-verify -m "..." && git push origin HEAD`',
+      '',
+      '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
       '',
       '> ⚠️ Pre-commit hook is skipped. Ensure all checks passed.',
     ].join('\n');
