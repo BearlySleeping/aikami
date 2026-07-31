@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { resolveProjectId, run, isVerbose } from './utils';
+import { isVerbose, resolveProjectId, run } from './utils';
 
 // ── Final-artifact detection ──────────────────────────────────────────────
 const KNOWN_TARGET_DIRS = new Set([
@@ -32,6 +34,59 @@ const FINAL_ARTIFACT_SUFFIXES = [
 const isFinalArtifact = (fileName: string): boolean => {
   const lower = fileName.toLowerCase();
   return FINAL_ARTIFACT_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+};
+
+/**
+ * Creates wrapper scripts for Tauri's cached linuxdeploy AppImages.
+ * On NixOS + steam-run, the wrappers ensure APPIMAGE_EXTRACT_AND_RUN=1
+ * is set and shebangs use /usr/bin/env (steam-run lacks /bin/sh).
+ * Safe to call repeatedly — skips if wrappers are already in place.
+ */
+const LINUXDEPLOY_WRAPPER_MARKER = '#!/usr/bin/env sh';
+
+const setupLinuxdeployWrappers = (): void => {
+  const cacheDir = join(homedir(), '.cache', 'tauri');
+  const appImages = ['linuxdeploy-x86_64.AppImage', 'linuxdeploy-plugin-appimage.AppImage'];
+
+  for (const name of appImages) {
+    const wrapper = join(cacheDir, name);
+    const real = join(cacheDir, `${name}.real`);
+
+    // Already wrapped — skip
+    if (existsSync(wrapper)) {
+      try {
+        const head = readFileSync(wrapper, 'utf8').slice(0, LINUXDEPLOY_WRAPPER_MARKER.length);
+        if (head === LINUXDEPLOY_WRAPPER_MARKER) {
+          continue;
+        }
+      } catch {
+        // Corrupt — recreate below
+      }
+    }
+
+    // If .real doesn't exist yet, rename the original
+    if (existsSync(wrapper) && !existsSync(real)) {
+      const head = readFileSync(wrapper, 'utf8').slice(0, 2);
+      if (head === '#!') {
+        // Already a wrapper but with wrong shebang — fix it
+      } else {
+        // Original AppImage — move aside
+        try {
+          execSync(`mv "${wrapper}" "${real}"`, { stdio: 'ignore' });
+        } catch {
+          // mv failed — skip this one
+          continue;
+        }
+      }
+    }
+
+    // Create wrapper script
+    writeFileSync(
+      wrapper,
+      `${LINUXDEPLOY_WRAPPER_MARKER}\nexport APPIMAGE_EXTRACT_AND_RUN=1\nexec "$(dirname "$0")/${name}.real" "$@"\n`,
+      { mode: 0o755 },
+    );
+  }
 };
 
 /**
@@ -76,25 +131,6 @@ const currentPlatformDir = (): 'linux' | 'windows' | 'macos' => {
     return 'macos';
   }
   return 'linux';
-};
-
-/**
- * Picks canonical release binary for a platform.
- */
-const pickCanonical = (artifacts: string[], platformDir: string): string | undefined => {
-  const priorities: Record<string, string[]> = {
-    linux: ['.appimage', '.deb', '.rpm'],
-    windows: ['.msi', '.exe'],
-    macos: ['.dmg', '.app.tar.gz'],
-  };
-  const order = priorities[platformDir] ?? [];
-  for (const ext of order) {
-    const found = artifacts.find((a) => a.toLowerCase().endsWith(ext));
-    if (found) {
-      return found;
-    }
-  }
-  return undefined;
 };
 
 /**
@@ -165,8 +201,33 @@ export async function deployTauriRelease(
   log(`🦀 Building Tauri desktop app${platformDir === 'macos' ? ' (universal binary)' : ''}...`);
   const tauriTarget = process.env.TAURI_TARGET;
   const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
+  // TAURI_BUNDLE_TARGETS env var overrides bundle targets (e.g. "appimage,deb,rpm" on CI)
+  const bundleTargets = process.env.TAURI_BUNDLE_TARGETS;
+  const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
+
+  // On NixOS, Tauri's AppImage bundler hardcodes /usr/bin/xdg-open.
+  // steam-run provides an FHS-compatible environment where it exists.
+  // We also create wrapper scripts for cached linuxdeploy AppImages whose
+  // shebangs need /usr/bin/env (not /bin/sh) inside steam-run.
+  const xdgOpenPath = '/usr/bin/xdg-open';
+  const needsXdgWrapper = platformDir === 'linux' && !existsSync(xdgOpenPath);
+  let tauriBuildCmd = `bun run tauri build${targetFlag}${bundlesFlag}`;
+  let tauriEnv: Record<string, string> | undefined;
+  if (needsXdgWrapper) {
+    try {
+      execSync('which steam-run', { encoding: 'utf8', stdio: 'ignore' });
+      setupLinuxdeployWrappers();
+      tauriBuildCmd = `steam-run ${tauriBuildCmd}`;
+      tauriEnv = { APPIMAGE_EXTRACT_AND_RUN: '1' };
+      log(`  🐧 NixOS: wrapping with steam-run to provide ${xdgOpenPath}`);
+    } catch {
+      warn(`  ${xdgOpenPath} not found and steam-run unavailable.`);
+      warn('  Install steam-run or run: sudo ln -sf $(which xdg-open) /usr/bin/xdg-open');
+    }
+  }
+
   try {
-    run(`bun run tauri build${targetFlag}`, { cwd: appRoot });
+    run(tauriBuildCmd, { cwd: appRoot, env: tauriEnv });
   } catch (err) {
     warn(`Tauri build failed: ${(err as Error).message}`);
     warn('Make sure Rust toolchain and system deps are installed.');
@@ -198,15 +259,7 @@ export async function deployTauriRelease(
     log(`  • ${art}`);
   }
 
-  // 5. Upload canonical artifact with fixed name
-  const canonical = pickCanonical(artifacts, platformDir);
-  if (!canonical) {
-    warn('No canonical artifact found for this platform — skipping upload.');
-    return;
-  }
-
-  const ext = getArtifactExtension(canonical);
-
+  // 5. Upload all final artifacts
   // Read version from Cargo.toml
   let ver = '0.0.0';
   try {
@@ -220,38 +273,42 @@ export async function deployTauriRelease(
     // Fallback — keep default
   }
 
-  // Upload to versioned path
-  const versionDest = `${basePath}/versions/${ver}/${platformDir}${ext}`;
-  log(`📤 Versioned release: ${versionDest}`);
-  run(`gcloud storage cp "${canonical}" "${versionDest}"`, { quiet: false });
-  run(
-    `gcloud storage objects update "${versionDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-${ver}${ext}"`,
-    {},
-  );
+  for (const artifact of artifacts) {
+    const ext = getArtifactExtension(artifact);
 
-  // Always update latest pointer
-  const latestDest = `${basePath}/latest/${platformDir}${ext}`;
-  log(`📤 Latest pointer: ${latestDest}`);
-  run(`gcloud storage cp "${canonical}" "${latestDest}"`, { quiet: false });
-  run(
-    `gcloud storage objects update "${latestDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-latest${ext}"`,
-    {},
-  );
-
-  // Production deploys also update stable pointer
-  if (mode === 'production') {
-    const stableDest = `${basePath}/stable/${platformDir}${ext}`;
-    log(`📤 Stable pointer: ${stableDest}`);
-    run(`gcloud storage cp "${canonical}" "${stableDest}"`, { quiet: false });
+    // Upload to versioned path
+    const versionDest = `${basePath}/versions/${ver}/${platformDir}${ext}`;
+    log(`📤 Versioned release: ${versionDest}`);
+    run(`gcloud storage cp "${artifact}" "${versionDest}"`, { quiet: false });
     run(
-      `gcloud storage objects update "${stableDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-stable${ext}"`,
+      `gcloud storage objects update "${versionDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-${ver}${ext}"`,
       {},
     );
+
+    // Always update latest pointer
+    const latestDest = `${basePath}/latest/${platformDir}${ext}`;
+    log(`📤 Latest pointer: ${latestDest}`);
+    run(`gcloud storage cp "${artifact}" "${latestDest}"`, { quiet: false });
+    run(
+      `gcloud storage objects update "${latestDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-latest${ext}"`,
+      {},
+    );
+
+    // Production deploys also update stable pointer
+    if (mode === 'production') {
+      const stableDest = `${basePath}/stable/${platformDir}${ext}`;
+      log(`📤 Stable pointer: ${stableDest}`);
+      run(`gcloud storage cp "${artifact}" "${stableDest}"`, { quiet: false });
+      run(
+        `gcloud storage objects update "${stableDest}" --add-acl-grant=entity=allUsers,role=READER --content-disposition="attachment; filename=Aikami-stable${ext}"`,
+        {},
+      );
+    }
   }
 
   // 6. Save cache on success (use Cargo.toml version for Tauri releases)
   await saveDeployCache(mode, appName, checksum, ver);
   ok(
-    `${appName} Tauri release complete — v${ver} (${platformDir}${ext})`,
+    `${appName} Tauri release complete — v${ver} (${platformDir}, ${artifacts.length} artifact(s))`,
   );
 }

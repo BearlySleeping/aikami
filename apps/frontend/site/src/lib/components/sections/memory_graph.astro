@@ -73,7 +73,9 @@ if (memoryEl) {
         if (entry.isIntersecting) {
           observer?.disconnect();
           import('./memory_graph_canvas').then(async ({ initMemoryGraph }) => {
-            if (disposed) return;
+            if (disposed) {
+              return;
+            }
             cleanup = await initMemoryGraph('memory-graph-canvas');
           });
         }

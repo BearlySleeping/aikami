@@ -21,7 +21,7 @@ type PlatformDef = {
 };
 
 const PLATFORMS: PlatformDef[] = [
-  { id: 'linux', label: 'Linux', ext: '.deb', icon: 'linux' },
+  { id: 'linux', label: 'Linux', ext: '.appimage', icon: 'linux' },
   { id: 'macos', label: 'macOS', ext: '.dmg', icon: 'apple' },
   { id: 'windows', label: 'Windows', ext: '.msi', icon: 'windows' },
 ] as const;
@@ -93,7 +93,7 @@ const CHANNELS = [
 
             <a
               href="/download"
-              aria-label={`${p.id !== 'linux' ? 'Unavailable — Coming soon' : 'Download Aikami desktop client for ' + p.label}`}
+              aria-label={`${p.id !== 'linux' ? 'Unavailable — Coming soon' : `Download Aikami desktop client for ${p.label}`}`}
               class={`download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full ${p.id === 'linux' ? 'bg-primary text-primary-foreground hover:opacity-90' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
               data-platform={p.id}
             >
@@ -125,7 +125,7 @@ const BASE_URL = (document.getElementById('download-root') as HTMLElement)?.data
 type Platform = { id: string; label: string; ext: string };
 
 const PLATFORM_DEFS: Platform[] = [
-  { id: 'linux', label: 'Linux', ext: '.deb' },
+  { id: 'linux', label: 'Linux', ext: '.appimage' },
   { id: 'macos', label: 'macOS', ext: '.dmg' },
   { id: 'windows', label: 'Windows', ext: '.msi' },
 ];
@@ -201,7 +201,6 @@ async function init() {
     osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
   }
 
-<<<<<<< HEAD
   // Probe both channels — default to the one with available artifacts
   const channelResults: Record<string, boolean> = {};
   for (const ch of ['stable', 'latest']) {
@@ -285,8 +284,7 @@ async function init() {
           if (label) {
             label.textContent = result.size ? `Download (${formatSize(result.size)})` : 'Download';
           }
-          const platformLabel =
-            PLATFORM_DEFS.find((p) => p.id === platformId)?.label ?? platformId;
+          const platformLabel = PLATFORM_DEFS.find((p) => p.id === platformId)?.label ?? platformId;
           link.setAttribute('aria-label', `Download Aikami desktop client for ${platformLabel}`);
           if (status) {
             status.textContent = activeChannel;
@@ -302,9 +300,13 @@ async function init() {
           link.removeAttribute('href');
           link.removeAttribute('download');
           card.style.opacity = '0.5';
-          if (label) { label.textContent = 'Coming soon'; }
+          if (label) {
+            label.textContent = 'Coming soon';
+          }
           link.setAttribute('aria-label', 'Unavailable — Coming soon');
-          if (status) { status.textContent = 'Not yet available'; }
+          if (status) {
+            status.textContent = 'Not yet available';
+          }
         }
       }
     }

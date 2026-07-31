@@ -3,11 +3,11 @@
 // from the canonical root assets/logo.png.
 //
 // Usage: bun run scripts/src/lib/ops/generate_brand_assets.ts [--skip-svg]
-//   --skip-svg   Skip the imagetracerjs PNG→SVG conversion (faster iteration)
+//   --skip-svg   Skip the PNG→SVG conversion (faster iteration)
 
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 import pngToIco from 'png-to-ico';
 import sharp from 'sharp';
 
@@ -19,14 +19,14 @@ const ROOT = path.resolve(import.meta.dir, '../../../..');
 const SOURCE_LOGO = path.join(ROOT, 'assets/logo.png');
 const SOURCE_SVG = path.join(ROOT, 'assets/logo.svg');
 
-interface FrontendTarget {
+type FrontendTarget = {
   /** Human-readable name */
   name: string;
   /** Public/static directory where assets are placed */
   publicDir: string;
   /** Subdirectory within publicDir for images (e.g. 'images' or '') */
   imagesSubdir: string;
-}
+};
 
 const TARGETS: FrontendTarget[] = [
   {
@@ -50,13 +50,13 @@ const TARGETS: FrontendTarget[] = [
 // Branding (editable — keep in sync with site_content.ts)
 // ---------------------------------------------------------------------------
 
-interface Branding {
+type Branding = {
   name: string;
   shortName: string;
   description: string;
   themeColor: string;
   backgroundColor: string;
-}
+};
 
 const BRANDING: Branding = {
   name: 'Aikami',
@@ -71,10 +71,10 @@ const BRANDING: Branding = {
 // Icon sizes to generate
 // ---------------------------------------------------------------------------
 
-interface IconSpec {
+type IconSpec = {
   name: string;
   size: number;
-}
+};
 
 const ICONS: IconSpec[] = [
   { name: 'favicon-16x16.png', size: 16 },
@@ -245,7 +245,9 @@ const main = async (): Promise<void> => {
     process.exit(1);
   }
 
-  console.log(`${dim('Source:')} ${path.relative(ROOT, SOURCE_LOGO)} (${(fs.statSync(SOURCE_LOGO).size / 1024).toFixed(0)} KB)`);
+  console.log(
+    `${dim('Source:')} ${path.relative(ROOT, SOURCE_LOGO)} (${(fs.statSync(SOURCE_LOGO).size / 1024).toFixed(0)} KB)`,
+  );
 
   // Step 1: PNG → SVG
   await convertPngToSvg(skipSvg);

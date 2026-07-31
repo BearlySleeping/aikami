@@ -9,7 +9,7 @@
     "build": "firestack deploy --dry-run",
     "deploy": "firestack deploy",
     "deploy:local": "node ../../../../firestack/dist/main.js deploy",
-    "emulate": "firestack emulate --mode emulator --force",
+    "emulate": "firestack emulate --force",
     "emulate:local": "node ../../../../firestack/dist/main.js emulate",
     "sync": "firestack sync",
     "rules": "firestack rules",

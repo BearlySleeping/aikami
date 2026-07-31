@@ -773,15 +773,10 @@ export default function (pi: ExtensionAPI) {
           const wsId = await findWorkspace(workspaceLabel);
           if (wsId) {
             const tabNames = await getWorkspaceTabNames(wsId);
-            if (
-              tabNames.includes(svc.name) &&
-              svc.readyPort &&
-              (await isPortReady(svc.readyPort))
-            ) {
+            const port = svc.readyPort?.(mode);
+            if (tabNames.includes(svc.name) && port && (await isPortReady(port))) {
               return {
-                content: [
-                  { type: 'text', text: `✅ ${svc.name} already running (port :${svc.readyPort})` },
-                ],
+                content: [{ type: 'text', text: `✅ ${svc.name} already running (port :${port})` }],
                 details: {},
               };
             }
@@ -798,7 +793,7 @@ export default function (pi: ExtensionAPI) {
               services: [params.service as DevService],
               projectRoot: process.cwd(),
             });
-            const port = svc.readyPort;
+            const port = svc.readyPort?.(mode);
             return {
               content: [
                 { type: 'text', text: `✅ ${svc.name} running${port ? ` (port :${port})` : ''}` },
@@ -839,7 +834,7 @@ export default function (pi: ExtensionAPI) {
               services: [params.service as DevService],
               projectRoot: process.cwd(),
             });
-            const port = svc.readyPort;
+            const port = svc.readyPort?.(mode);
             return {
               content: [
                 { type: 'text', text: `✅ ${svc.name} restarted${port ? ` (port :${port})` : ''}` },
@@ -921,8 +916,8 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const ready = svc.readyPort ? await isPortReady(svc.readyPort) : true;
-          const port = svc.readyPort;
+          const port = svc.readyPort?.(mode);
+          const ready = port ? await isPortReady(port) : true;
           return {
             content: [
               {

@@ -50,6 +50,14 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // LPC character spritesheets — public read, admin-only write
+    // ═══════════════════════════════════════════════════════════════
+    match /lpc/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Public assets — public read, authenticated write
     // ═══════════════════════════════════════════════════════════════
     match /public/{allPaths=**} {

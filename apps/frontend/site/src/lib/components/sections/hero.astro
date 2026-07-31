@@ -134,9 +134,13 @@ let timeoutHandle: number | undefined;
 let disposed = false;
 
 const initWhenReady = () => {
-  if (disposed) return;
+  if (disposed) {
+    return;
+  }
   import('./hero_d20').then(async ({ initHeroD20 }) => {
-    if (disposed) return;
+    if (disposed) {
+      return;
+    }
     cleanup = await initHeroD20(containerId);
   });
 };
@@ -149,8 +153,12 @@ if ('requestIdleCallback' in globalThis) {
 
 document.addEventListener('astro:before-swap', () => {
   disposed = true;
-  if (idleHandle !== undefined) cancelIdleCallback(idleHandle);
-  if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  if (idleHandle !== undefined) {
+    cancelIdleCallback(idleHandle);
+  }
+  if (timeoutHandle !== undefined) {
+    clearTimeout(timeoutHandle);
+  }
   cleanup?.();
 });
 </script>

@@ -216,6 +216,7 @@ test-results/
 examples
 .direnv/
 apps/frontend/client/src-tauri/target/
+apps/frontend/client/src-tauri/gen/
 scripts/lpc/.lpc_manifest.json
 
 # LPC assets — canonical source is Firebase Storage
@@ -245,3 +246,4 @@ apps/backend/image/src/user/comfyui.db.bkp
 .pi/autofix/system_prompt.md
 apps/frontend/client/.fast-check/
 firebase.deploy.json
+Aikami-x86_64.AppImage

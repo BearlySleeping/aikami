@@ -140,6 +140,7 @@ export default defineConfig(({ mode }) => {
           : {}),
       },
       port,
+      strictPort: true,
       proxy: {
         // Proxy Firebase Auth emulator through the dev server so the
         // popup, relay iframe, and main page all share localhost:5274.
@@ -226,6 +227,7 @@ export default defineConfig(({ mode }) => {
     // can target a single port regardless of dev vs preview mode.
     preview: {
       port,
+      strictPort: true,
       headers: {
         // Required for SharedArrayBuffer (crossOriginIsolated).
         // Without these, the worker falls back to N-buffer mode which

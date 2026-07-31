@@ -156,7 +156,9 @@ export function computeAppChecksum(
     log(`    dirty tree:           ${dirtyHash ? `${dirtyHash.slice(0, 16)}...` : '(clean)'}`);
     log(`    dockerfile:           ${dockerfileHash.slice(0, 16)}...`);
     log(`    deploy config:        ${sha256(deployConfig).slice(0, 16)}...`);
-    log(`    .env.${mode}:            ${modeEnvHash ? `${modeEnvHash.slice(0, 16)}...` : '(missing)'}`);
+    log(
+      `    .env.${mode}:            ${modeEnvHash ? `${modeEnvHash.slice(0, 16)}...` : '(missing)'}`,
+    );
     log(`    build target:         ${buildTarget}`);
   }
 
@@ -242,7 +244,9 @@ async function checkOnlineCache(
     if (result.value === null) {
       log(`  Redis returned: key not found (first deploy?)`);
     } else {
-      log(`  Redis returned: ${result.value.slice(0, 16)}... (local: ${currentChecksum.slice(0, 16)}...)`);
+      log(
+        `  Redis returned: ${result.value.slice(0, 16)}... (local: ${currentChecksum.slice(0, 16)}...)`,
+      );
     }
   }
   // Key not found (value is null) → miss; value matches → hit; value differs → miss

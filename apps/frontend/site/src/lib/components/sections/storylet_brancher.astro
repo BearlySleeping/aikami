@@ -61,7 +61,9 @@ if (storyletEl) {
         if (entry.isIntersecting) {
           observer?.disconnect();
           import('./storylet_brancher_canvas').then(async ({ initStoryletBrancher }) => {
-            if (disposed) return;
+            if (disposed) {
+              return;
+            }
             cleanup = await initStoryletBrancher('storylet-canvas');
           });
         }

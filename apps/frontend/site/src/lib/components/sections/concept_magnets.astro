@@ -43,10 +43,16 @@ if (magnetsEl) {
       for (const entry of entries) {
         if (entry.isIntersecting) {
           observer?.disconnect();
-          import('./concept_magnets_canvas').then(async ({ initConceptMagnets }) => {
-            if (disposed) return;
-            cleanup = await initConceptMagnets('concept-magnets-canvas');
-          });
+          import('./concept_magnets_canvas')
+            .then(async ({ initConceptMagnets }) => {
+              if (disposed) {
+                return;
+              }
+              cleanup = await initConceptMagnets('concept-magnets-canvas');
+            })
+            .catch(() => {
+              /* noop — canvas is optional for SEO */
+            });
         }
       }
     },

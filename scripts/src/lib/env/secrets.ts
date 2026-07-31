@@ -132,7 +132,9 @@ function writeServiceAccountKey(value: string): void {
   try {
     JSON.parse(value);
   } catch {
-    process.stderr.write(`  ⚠️  FIREBASE_SERVICE_ACCOUNT is not valid JSON — skipping gcloud auth setup\n`);
+    process.stderr.write(
+      `  ⚠️  FIREBASE_SERVICE_ACCOUNT is not valid JSON — skipping gcloud auth setup\n`,
+    );
     return;
   }
 
