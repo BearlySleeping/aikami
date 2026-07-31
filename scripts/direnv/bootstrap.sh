@@ -271,7 +271,7 @@ if _aikami_is_bash_or_zsh; then
     local do_test="${1:-}"
     echo "🔍 Validating affected projects..."
     echo ""
-    export CI=true
+    local -x CI=true
 
     echo "── Fix ──"
     bunx moon run :fix --affected < /dev/null || { echo "❌ Fix failed"; return 1; }
