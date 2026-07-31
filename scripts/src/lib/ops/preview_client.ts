@@ -8,6 +8,8 @@
 //   bun run scripts -- preview --build                   # build + vite preview
 //   bun run scripts -- preview --tauri                   # build + tauri launch
 //   bun run scripts -- preview --mode staging            # staging mode
+//   bun run scripts -- preview --mode staging --live     # live staging (no local server)
+//   bun run scripts -- preview --mode production --live  # live production
 //   bun run scripts -- preview --no-devtools             # skip devtools
 //   bun run scripts -- preview --update-devtools         # force devtools re-download
 //   bun run scripts -- preview --no-dev                  # skip herdr dev server
@@ -16,6 +18,7 @@
 //   --build               Build client + vite preview server
 //   --tauri               Build client + cargo + run Tauri desktop
 //   --mode <mode>         emulator (default), staging, production
+//   --live                Launch against deployed live URL (staging/production only)
 //   --dev                 (default) Ensure client running in herdr
 //   --no-dev              Skip herdr dev server (use with --build)
 //   --devtools            (default, non-tauri) Launch Chromium with PixiJS DevTools
@@ -43,6 +46,7 @@ type PreviewOptions = {
   build: boolean;
   tauri: boolean;
   mode: AikamiMode;
+  live: boolean;
   dev: boolean;
   devtools: boolean;
   updateDevtools: boolean;
@@ -80,29 +84,52 @@ const parseMode = (raw: string | undefined): AikamiMode => {
 
 const getClientPort = (mode: AikamiMode): number => PORTS[mode].client;
 
-const getClientUrl = (mode: AikamiMode): string =>
-  `http://localhost:${getClientPort(mode)}/dev/sandbox`;
+// ── Live URLs ──────────────────────────────────────────────────────────────
+
+const LIVE_URLS: Record<'staging' | 'production', string> = {
+  staging: 'https://aikami.stg.bearlysleeping.com',
+  production: 'https://aikami.bearlysleeping.com',
+} as const;
+
+const getLiveUrl = (mode: AikamiMode): string | null => {
+  if (mode === 'emulator') {
+    return null;
+  }
+  return `${LIVE_URLS[mode]}/dev/sandbox`;
+};
+
+const getClientUrl = (mode: AikamiMode, live = false): string => {
+  if (live) {
+    const liveUrl = getLiveUrl(mode);
+    if (liveUrl) {
+      return liveUrl;
+    }
+  }
+  return `http://localhost:${getClientPort(mode)}/dev/sandbox`;
+};
 
 // ── Arg parsing ────────────────────────────────────────────────────────────
 
 const parseOptions = (args: string[]): PreviewOptions => {
-  const build = hasFlag(args, '--build');
-  const tauri = hasFlag(args, '--tauri');
-  const noDev = hasFlag(args, '--no-dev');
-  const noDevtools = hasFlag(args, '--no-devtools');
-  const updateDevtoolsFlag = hasFlag(args, '--update-devtools');
-  const force = hasFlag(args, '--force');
+  const build = hasFlag(args, 'build');
+  const tauri = hasFlag(args, 'tauri');
+  const live = hasFlag(args, 'live');
+  const noDev = hasFlag(args, 'no-dev');
+  const noDevtools = hasFlag(args, 'no-devtools');
+  const updateDevtoolsFlag = hasFlag(args, 'update-devtools');
+  const force = hasFlag(args, 'force');
 
   const rawMode = parseArg(args, '--mode');
   const mode = parseMode(rawMode);
 
   // Defaults:
-  //   --dev is default (unless --no-dev or --build-or-tauri overrides it)
+  //   --dev is default (unless --no-dev, --live, or --build overrides it)
   //   --devtools is default (unless --tauri or --no-devtools)
-  const dev = !noDev;
+  //   --live implies --no-dev (no herdr server needed for deployed URLs)
+  const dev = !noDev && !live;
   const devtools = !tauri && !noDevtools;
 
-  return { build, tauri, mode, dev, devtools, updateDevtools: updateDevtoolsFlag, force };
+  return { build, tauri, mode, live, dev, devtools, updateDevtools: updateDevtoolsFlag, force };
 };
 
 // ── Herdr dev server ────────────────────────────────────────────────────────
@@ -110,10 +137,16 @@ const parseOptions = (args: string[]): PreviewOptions => {
 const ensureDevServer = async (mode: AikamiMode): Promise<void> => {
   const wsName = buildSessionName(mode);
 
+  // Emulator: firebase + client. Staging/production: client only (backend is deployed).
+  const services: ('firebase' | 'client')[] =
+    mode === 'emulator' ? ['firebase', 'client'] : ['client'];
+
   if (!(await workspaceExists(wsName))) {
-    info(`Starting ${mode} herdr workspace with client…`);
-    await startServices({ mode, services: ['firebase', 'client'] });
-    await waitForReady({ services: ['firebase'], mode }, 60_000);
+    info(`Starting ${mode} herdr workspace with ${services.join(' + ')}…`);
+    await startServices({ mode, services });
+    if (mode === 'emulator') {
+      await waitForReady({ services: ['firebase'], mode }, 60_000);
+    }
   } else {
     // Ensure client tab exists
     await startServices({ mode, services: ['client'] });
@@ -286,7 +319,33 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
 
 // ── Chromium launch ────────────────────────────────────────────────────────
 
-const launchChromium = async (mode: AikamiMode): Promise<void> => {
+const findChromiumExecutable = (): string | null => {
+  // Prefer env var if set
+  const envPath = process.env.CHROMIUM_EXECUTABLE || process.env.CHROME_EXECUTABLE;
+  if (envPath) {
+    return envPath;
+  }
+
+  // Try common chromium binaries
+  const candidates = ['chromium', 'chromium-unwrapped', 'chromium-browser', 'google-chrome'];
+  for (const bin of candidates) {
+    try {
+      const result = Bun.spawnSync(['which', bin], { stdout: 'pipe', stderr: 'ignore' });
+      if (result.exitCode === 0) {
+        const path = result.stdout.toString().trim();
+        if (path) {
+          return bin;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+};
+
+const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => {
   // Ensure devtools are installed
   let devtoolsPath: string | null = getDevtoolsPath();
   if (!devtoolsPath) {
@@ -301,10 +360,19 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
   // Ensure persistent profile directory exists
   mkdirSync(CHROMIUM_PROFILE_DIR, { recursive: true });
 
-  const clientUrl = getClientUrl(mode);
+  const clientUrl = getClientUrl(mode, live);
+
+  // Find chromium executable
+  const chromiumExe = findChromiumExecutable();
+  if (!chromiumExe) {
+    error(
+      'Chromium not found. Install chromium or set CHROMIUM_EXECUTABLE env var to the path of your chromium binary.',
+    );
+    process.exit(1);
+  }
 
   const chromiumArgs: string[] = [
-    'chromium',
+    chromiumExe,
     `--user-data-dir=${CHROMIUM_PROFILE_DIR}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -337,6 +405,18 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
     stdio: ['ignore', 'inherit', 'inherit'],
   });
 
+  proc.exited.then((exitCode) => {
+    if (exitCode !== 0) {
+      warn(`Chromium exited with code ${exitCode}`);
+    }
+  });
+
+  // Handle spawn errors
+  proc.on?.('error', (err: Error) => {
+    error(`Failed to launch Chromium: ${err.message}`);
+    process.exit(1);
+  });
+
   await proc.exited;
 };
 
@@ -358,7 +438,7 @@ if (opts.updateDevtools) {
     error('Failed to update PixiJS DevTools');
   }
   // If --update-devtools was the only action, exit
-  if (!opts.build && !opts.tauri && !opts.dev && !opts.devtools) {
+  if (!opts.build && !opts.tauri && !opts.live && !opts.dev && !opts.devtools) {
     process.exit(result ? 0 : 1);
   }
 }
@@ -369,6 +449,19 @@ if (opts.tauri) {
   // --dev flag controls whether to open at /dev/sandbox route
   await launchTauri(opts.mode, opts.force, opts.dev);
   ok('Tauri exited.');
+  process.exit(0);
+}
+
+// ── Live mode — skip herdr, launch Chromium against deployed URL ──
+if (opts.live) {
+  const liveUrl = getLiveUrl(opts.mode);
+  if (!liveUrl) {
+    error(`--live only works with staging or production mode (got: ${opts.mode})`);
+    process.exit(1);
+  }
+  ok(`Targeting live deployment: ${liveUrl}`);
+  await launchChromium(opts.mode, true);
+  ok('Done.');
   process.exit(0);
 }
 
@@ -390,7 +483,7 @@ if (opts.build) {
 
 // ── Chromium with devtools ────────────────────────
 if (opts.devtools) {
-  await launchChromium(opts.mode);
+  await launchChromium(opts.mode, false);
 } else if (!opts.build) {
   // If not building and not launching browser, just print the URL
   const clientUrl = getClientUrl(opts.mode);

@@ -33,7 +33,7 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import { EMULATOR_PORTS } from '../../../../packages/shared/constants/src/index';
+import { PORTS } from '../../../../packages/shared/constants/src/index';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -55,9 +55,9 @@ export type ServiceInput = DevService | 'all';
 
 export type ServiceDef = {
   name: string;
-  command: string;
+  command: (mode: AikamiMode) => string;
   cwd: (root: string) => string;
-  readyPort?: number;
+  readyPort?: (mode: AikamiMode) => number | undefined;
 };
 
 export type SessionConfig = {
@@ -89,48 +89,48 @@ export type SessionInfo = {
 export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   firebase: {
     name: 'firebase',
-    command: 'bun run emulate',
+    command: (mode) => `bun run emulate -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/backend/firebase'),
-    readyPort: EMULATOR_PORTS.auth,
+    readyPort: (mode) => (mode === 'emulator' ? PORTS.emulator.auth : undefined),
   },
   client: {
     name: 'client',
-    command: 'bun run dev',
+    command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/client'),
-    readyPort: EMULATOR_PORTS.client,
+    readyPort: (mode) => PORTS[mode].client,
   },
   voice: {
     name: 'voice',
-    command: 'bun run dev',
+    command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/voice'),
-    readyPort: EMULATOR_PORTS.voice,
+    readyPort: (mode) => PORTS[mode].voice,
   },
   image: {
     name: 'image',
-    command: 'bun run dev',
+    command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/image'),
-    readyPort: EMULATOR_PORTS.image,
+    readyPort: (mode) => PORTS[mode].image,
   },
   text: {
     name: 'text',
-    command: 'bun run dev',
+    command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/text'),
-    readyPort: EMULATOR_PORTS.text,
+    readyPort: (mode) => PORTS[mode].text,
   },
   'preview-client': {
     name: 'preview-client',
-    command: 'bun run scripts/src/lib/ops/preview_client.ts',
+    command: () => 'bun run scripts/src/lib/ops/preview_client.ts',
     cwd: (root) => root,
   },
   site: {
     name: 'site',
-    command: 'bun run dev',
+    command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/site'),
-    readyPort: EMULATOR_PORTS.site,
+    readyPort: (mode) => PORTS[mode].site,
   },
   'preview-site': {
     name: 'preview-site',
-    command: 'bun run scripts/src/lib/ops/preview_site.ts',
+    command: () => 'bun run scripts/src/lib/ops/preview_site.ts',
     cwd: (root) => root,
   },
 };
@@ -347,6 +347,82 @@ export const isPortReady = async (port: number): Promise<boolean> => {
   }
 };
 
+/** Kill any process occupying a port so the next bind succeeds deterministically. */
+export const killPort = (port: number): Promise<void> =>
+  new Promise((resolveK) => {
+    // First, identify the PID listening on the port
+    const lsofProc = spawn('lsof', ['-ti', `tcp:${port}`], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    let pidOutput = '';
+    lsofProc.stdout?.on('data', (chunk) => {
+      pidOutput += chunk.toString();
+    });
+
+    lsofProc.on('close', (code) => {
+      if (code !== 0 || !pidOutput.trim()) {
+        // Port not in use or lsof unavailable — nothing to kill
+        resolveK();
+        return;
+      }
+
+      const pid = pidOutput.trim().split('\n')[0];
+      if (!/^\d+$/.test(pid)) {
+        resolveK();
+        return;
+      }
+
+      // Verify the process is one we expect (node, bun, vite, uwsgi, etc.)
+      // by checking its command line. If it's unrelated, don't kill it.
+      const psProc = spawn('ps', ['-p', pid, '-o', 'comm='], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+
+      let psOutput = '';
+      psProc.stdout?.on('data', (chunk) => {
+        psOutput += chunk.toString();
+      });
+
+      psProc.on('close', (psCode) => {
+        if (psCode !== 0) {
+          // Process already gone or ps failed
+          resolveK();
+          return;
+        }
+
+        const comm = psOutput.trim().toLowerCase();
+        const expectedProcs = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase'];
+        const isExpected = expectedProcs.some((name) => comm.includes(name));
+
+        if (!isExpected) {
+          // Port is occupied by an unrelated process — don't kill it
+          console.warn(
+            `Port ${port} is busy with unrelated process (PID ${pid}, ${comm}). Not killing.`,
+          );
+          resolveK();
+          return;
+        }
+
+        // Safe to kill — it's one of our dev server processes
+        const killProc = spawn('kill', [pid], { stdio: 'ignore' });
+        killProc.on('close', () => {
+          resolveK();
+        });
+        killProc.on('error', () => resolveK());
+      });
+    });
+
+    lsofProc.on('error', () => {
+      // lsof not available — fall back to fuser (less safe, but original behavior)
+      const fuserProc = spawn('fuser', ['-k', '-n', 'tcp', String(port)], {
+        stdio: 'ignore',
+      });
+      fuserProc.on('close', () => resolveK());
+      fuserProc.on('error', () => resolveK());
+    });
+  });
+
 // ── Direnv wrapper ─────────────────────────────────────────
 
 export const wrapCommand = (command: string): string =>
@@ -506,7 +582,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     // Rename initial tab and run command
     const rootPaneId = r.result.root_pane.pane_id;
     await herdr(['tab', 'rename', `${workspaceId}:1`, svc.name]);
-    await herdr(['pane', 'run', rootPaneId, wrapCommand(svc.command)]);
+    await herdr(['pane', 'run', rootPaneId, wrapCommand(svc.command(mode))]);
     console.log(`  ✓ Tab: ${svc.name}`);
 
     // Add remaining services as new tabs
@@ -524,7 +600,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         '--no-focus',
       ]);
       if (tabR?.result) {
-        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(s.command)]);
+        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(s.command(mode))]);
         console.log(`  ✓ Tab: ${s.name}`);
       }
     }
@@ -542,7 +618,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
           if (servicePane && (await isPaneIdle(servicePane.pane_id))) {
             console.log(`  ↻ Tab: ${svc.name} idle, restarting...`);
-            await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command)]);
+            await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command(mode))]);
             continue;
           }
         }
@@ -561,7 +637,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         '--no-focus',
       ]);
       if (tabR?.result) {
-        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(svc.command)]);
+        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(svc.command(mode))]);
         console.log(`  ✓ Tab: ${svc.name}`);
       }
     }
@@ -646,6 +722,16 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
     const running = services.filter((s) => tabNames.includes(SERVICE_DEFS[s].name));
     if (running.length > 0) {
       await stopServices({ mode, services: running });
+    }
+  }
+
+  // Force-kill any stale processes on the target ports so the cooldown
+  // isn't defeated by orphaned Vite/uwsgi processes from prior runs.
+  for (const service of services) {
+    const def = SERVICE_DEFS[service];
+    const port = def.readyPort?.(mode);
+    if (port !== undefined) {
+      await killPort(port);
     }
   }
 
@@ -768,7 +854,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
         service: svc,
         name: def.name,
         running,
-        readyPort: def.readyPort,
+        readyPort: def.readyPort ? def.readyPort(wsMode) : undefined,
         portOpen: false,
       };
     });
@@ -861,19 +947,20 @@ export const waitForReady = async (
 
   await Promise.allSettled(
     targets.map(async (svc) => {
-      if (svc.readyPort === undefined) {
+      const port = svc.readyPort?.(mode);
+      if (port === undefined) {
         console.log(`  ✓ ${svc.name} (no port check)`);
         return;
       }
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
-        if (await isPortReady(svc.readyPort)) {
-          console.log(`  ✓ ${svc.name} ready on :${svc.readyPort}`);
+        if (await isPortReady(port)) {
+          console.log(`  ✓ ${svc.name} ready on :${port}`);
           return;
         }
         await new Promise((r) => setTimeout(r, 1000));
       }
-      console.error(`  ✗ ${svc.name} timed out on :${svc.readyPort}`);
+      console.error(`  ✗ ${svc.name} timed out on :${port}`);
     }),
   );
 };

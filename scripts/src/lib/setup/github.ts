@@ -115,8 +115,10 @@ export const setupGitHub = async (
   // Read FIREBASE_SERVICE_ACCOUNT
   const sa = await readServiceAccount(mode);
   if (!sa) {
-    console.log(fmt.err(`FIREBASE_SERVICE_ACCOUNT not found in apps/backend/firebase/.env.${mode}`));
-    console.log(fmt.note('Run: bun run scripts/src/lib/ops/download_secrets.ts --mode=' + mode));
+    console.log(
+      fmt.err(`FIREBASE_SERVICE_ACCOUNT not found in apps/backend/firebase/.env.${mode}`),
+    );
+    console.log(fmt.note(`Run: bun run scripts/src/lib/ops/download_secrets.ts --mode=${mode}`));
     checks.push({ name: 'FIREBASE_SERVICE_ACCOUNT', status: 'missing' });
     return { checks, uploaded: false };
   }

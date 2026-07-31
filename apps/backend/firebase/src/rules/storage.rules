@@ -26,6 +26,10 @@ service firebase.storage {
       return request.resource.size <= 5 * 1024 * 1024; // 5MB
     }
 
+    function isValidLPCImageType() {
+      return request.resource.contentType in ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // User avatars and uploads — owner only
     // ═══════════════════════════════════════════════════════════════
@@ -47,6 +51,15 @@ service firebase.storage {
     // ═══════════════════════════════════════════════════════════════
     match /saves/{uid}/{allPaths=**} {
       allow read, write: if isOwner(uid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LPC character spritesheets — public read, admin-only write
+    // ═══════════════════════════════════════════════════════════════
+    match /lpc/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidLPCImageType() && isValidFileSize();
     }
 
     // ═══════════════════════════════════════════════════════════════

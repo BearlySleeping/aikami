@@ -124,6 +124,69 @@ import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 // Startup sentinel — confirms the worker module loaded and executed.
 logger.info('worker', 'Module loaded, ready for INITIALIZE_ENGINE');
 
+// ── Catch ALL errors BEFORE anything can overwrite onerror ──
+// Using addEventListener so later self.onerror assignments can't clobber us.
+self.addEventListener('error', (event: ErrorEvent): void => {
+  logger.error('worker:addEventListener-error', {
+    message: event.message || String(event),
+    filename: event.filename || '(unknown)',
+    lineno: event.lineno,
+    colno: event.colno,
+    errorMessage:
+      event.error instanceof Error ? event.error.message : String(event.error ?? 'no error obj'),
+    errorStack: event.error instanceof Error ? event.error.stack : undefined,
+    errorConstructor: event.error?.constructor?.name ?? 'none',
+  });
+  // Post ENGINE_ERROR so the main thread gets details
+  try {
+    postMessage({
+      type: 'ENGINE_ERROR',
+      message: `Worker error: ${event.message || String(event)} @ ${event.filename}:${event.lineno}`,
+    });
+  } catch {
+    // postMessage might fail too — nothing we can do
+  }
+});
+
+// Also set onerror as a backup
+self.onerror = (message, source, lineno, colno, error): boolean => {
+  logger.error('worker:onerror', {
+    message: String(message),
+    source: String(source),
+    lineno,
+    colno,
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorStack: error instanceof Error ? error.stack : undefined,
+    errorConstructor: error?.constructor?.name,
+  });
+  return false;
+};
+
+// ── Monkey-patch postMessage to catch serialization errors ──
+const _originalPostMessage = self.postMessage.bind(self);
+self.postMessage = ((message: unknown, transfer?: Transferable[]) => {
+  try {
+    _originalPostMessage(message, transfer);
+  } catch (err) {
+    logger.error('worker:postMessage-error', {
+      type: (message as Record<string, unknown>)?.type,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      errorConstructor: (err as Error)?.constructor?.name,
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    throw err;
+  }
+}) as typeof self.postMessage;
+
+// ── Catch unhandled rejections ──
+self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
+  const reason = event.reason;
+  logger.error('worker:unhandled-rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+};
+
 // -- Worker-global state ----------------------------------------------------
 
 /** The bitECS world — created once per INITIALIZE_ENGINE. */
@@ -719,6 +782,16 @@ const initializeEngine = (
   // C-329: Hardcoded dummy quests removed — quest state is now owned by
   // QuestStateService in the frontend and emitted via QUESTS_UPDATED from
   // the service layer, not the ECS worker.
+
+  // Diagnostic: verify worker event loop survives init
+  setTimeout(() => {
+    logger.info('worker', 'init-setTimeout-fired — event loop alive');
+    try {
+      postMessage({ type: 'DIAGNOSTIC_PING' });
+    } catch (err) {
+      logger.error('worker:diag-ping-failed', err);
+    }
+  }, 100);
 };
 
 // -- Tick loop --------------------------------------------------------------
@@ -1259,39 +1332,6 @@ const serializeEntityStates = (_w: World, view: Float32Array): void => {
 };
 
 // -- Message handler --------------------------------------------------------
-
-// -- Error handling (worker-side) --------------------------------------------
-
-/**
- * Worker-level error handler — catches unhandled exceptions inside the
- * worker and posts them back to the main thread for debugging.
- */
-self.onerror = (event: string | Event): void => {
-  const evt = event instanceof ErrorEvent ? event : undefined;
-  const detail = {
-    message: evt?.message || String(event),
-    filename: evt?.filename || '(unknown)',
-    lineno: evt?.lineno,
-    colno: evt?.colno,
-  };
-  logger.error('worker', 'Unhandled error', detail);
-  postMessage({
-    type: 'ENGINE_ERROR',
-    message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}`,
-  });
-};
-
-/**
- * Catch unhandled promise rejections inside the worker.
- */
-self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
-  const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
-  logger.error('worker', `Unhandled rejection: ${message}`, event.reason);
-  postMessage({
-    type: 'ENGINE_ERROR',
-    message: `Worker rejection: ${message}`,
-  });
-};
 
 // ---------------------------------------------------------------------------
 // Staging world spawn resolution (C-172)

@@ -1,6 +1,8 @@
 // packages/frontend/engine/src/systems/macro_simulation_system.ts
+
 import type { World } from 'bitecs';
 import { query } from 'bitecs';
+import { logger } from '$logger';
 import { GoapAgent } from '../components/goap_agent.ts';
 import { MapLocation } from '../components/map_location.ts';
 import { ZoneStatus } from '../components/zone_status.ts';
@@ -66,7 +68,11 @@ export const startMacroSimulation = (): void => {
     return;
   }
   _macroIntervalId = setInterval(() => {
-    _macroTick();
+    try {
+      _macroTick();
+    } catch (err) {
+      logger.error('_macroTick:crash', err);
+    }
   }, MACRO_INTERVAL_MS);
 };
 

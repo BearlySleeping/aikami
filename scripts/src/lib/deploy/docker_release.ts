@@ -19,7 +19,14 @@ import { join } from 'node:path';
 import { c, log, ok } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { authenticateDocker, resolveProjectId, resolveRegion, run, shortSha, isVerbose } from './utils';
+import {
+  authenticateDocker,
+  isVerbose,
+  resolveProjectId,
+  resolveRegion,
+  run,
+  shortSha,
+} from './utils';
 
 export async function deployDockerRelease(
   config: AppConfig,

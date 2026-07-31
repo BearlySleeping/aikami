@@ -21,6 +21,7 @@ import { buildSecretArgsFromEnvFile } from './secrets';
 import {
   authenticateDocker,
   buildGcloudRunArgs,
+  isVerbose,
   parseEnvKeys,
   resolveCloudRunServiceName,
   resolveProjectId,
@@ -28,7 +29,6 @@ import {
   run,
   shortSha,
   versionSha,
-  isVerbose,
 } from './utils';
 
 // ── Deduplication helpers ─────────────────────────────────────────────────

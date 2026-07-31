@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { c, log, ok } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { resolveProjectId, run, isVerbose } from './utils';
+import { isVerbose, resolveProjectId, run } from './utils';
 
 // ── Firebase Hosting (site, docs) ────────────────────────────────────────
 
