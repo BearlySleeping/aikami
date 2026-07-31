@@ -34,12 +34,12 @@ const identity = {
   url: site.url,
   ...(site.email && { email: site.email }),
   ...(site.telephone && { telephone: site.telephone }),
-  ...(site.address && {
+  ...(site.address && (site.address.street || site.address.locality || site.address.country) && {
     address: {
       '@type': 'PostalAddress',
-      streetAddress: site.address.street,
-      addressLocality: site.address.locality,
-      addressCountry: site.address.country,
+      ...(site.address.street && { streetAddress: site.address.street }),
+      ...(site.address.locality && { addressLocality: site.address.locality }),
+      ...(site.address.country && { addressCountry: site.address.country }),
     },
   }),
   sameAs: sameAs,

@@ -129,20 +129,28 @@ import { discordInviteLink } from '$data/site_content';
 /** Defer PixiJS init to avoid blocking LCP — load after idle callback or short delay. */
 const containerId = 'hero-canvas';
 let cleanup: (() => void) | undefined;
+let idleHandle: number | undefined;
+let timeoutHandle: number | undefined;
+let disposed = false;
 
 const initWhenReady = () => {
+  if (disposed) return;
   import('./hero_d20').then(async ({ initHeroD20 }) => {
+    if (disposed) return;
     cleanup = await initHeroD20(containerId);
   });
 };
 
 if ('requestIdleCallback' in globalThis) {
-  requestIdleCallback(initWhenReady, { timeout: 2000 });
+  idleHandle = requestIdleCallback(initWhenReady, { timeout: 2000 });
 } else {
-  setTimeout(initWhenReady, 200);
+  timeoutHandle = setTimeout(initWhenReady, 200);
 }
 
 document.addEventListener('astro:before-swap', () => {
+  disposed = true;
+  if (idleHandle !== undefined) cancelIdleCallback(idleHandle);
+  if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   cleanup?.();
 });
 </script>
