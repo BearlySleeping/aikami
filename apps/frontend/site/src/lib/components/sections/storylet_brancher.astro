@@ -72,8 +72,8 @@ if (storyletEl) {
                 cleanup = cleanupFn;
               }
             })
-            .catch((err) => {
-              console.error('Failed to load storylet_brancher canvas:', err);
+            .catch(() => {
+              // Canvas initialization failed — no fallback needed
             });
         }
       }

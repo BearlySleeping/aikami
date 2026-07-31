@@ -39,7 +39,7 @@ If connection is refused, wait 10s and retry (max 3 times). If still refused, ru
 4. Run `git commit --no-verify -m "<conventional commit message>"`.
 5. 🔴 **HOOK FAILURES**: The pre-commit hook is skipped. Ensure all checks passed before committing.
 5a. 🔴 **VALIDATION GATE**: Before committing, you MUST run `bun moon run :validate` on all affected projects. The commit must not proceed until validation passes cleanly.
-6. Run `git push`.
+6. Run `git push origin HEAD`. 🔴 **NEVER `git push` alone** — it may push to the wrong branch if upstream tracking differs from the current branch. Always use `git push origin HEAD` to push to the CURRENT branch.
 
 # STRICT RULES
 - **Load Conventions First**: Before writing ANY code, load the `aikami-conventions` skill. Read `.context/CONTEXT.md` and `.context/index.md` before making structural changes (file moves, new packages, boundary changes).
@@ -48,6 +48,7 @@ If connection is refused, wait 10s and retry (max 3 times). If still refused, ru
 - **Never Skip**: A step must pass cleanly before you move to the next.
 - **No Human Intervention**: Do NOT ask questions. If you are entirely blocked, explain why and stop.
 - **Forbidden Paths**: Do NOT modify .pi/, node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/.
+- **🔴 BRANCH SAFETY — NEVER `git push` alone**: Always use `git push origin HEAD`. Plain `git push` may target the wrong branch if the local branch tracks a different remote branch (e.g. `origin/main` instead of the current feature branch). `git push origin HEAD` ALWAYS pushes to the current branch. If you see an upstream mismatch error, do NOT fall back to `git push origin HEAD:main` — push to the CURRENT branch.
 - **NO `as`, `any`, or `unknown`**: Never use type assertions or `any`/`unknown`.
 
 ## LINTER & ERROR RESOLUTION — FIX, NEVER SUPPRESS

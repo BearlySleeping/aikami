@@ -1,0 +1,48 @@
+name: PR Checks
+
+# Now that cloudbuild.yaml is retired, this workflow is the sole home for
+# PR validation. Runs `moon ci` against the base branch — build, lint,
+# test for everything affected by the PR's diff. Never deploys anything.
+on:
+  pull_request:
+    branches: [main, staging]
+
+concurrency:
+  # Unlike the release workflow, it's safe (and desirable) to cancel a
+  # stale in-progress check when a new commit lands on the same PR.
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Moon CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # moon needs history to diff against the base branch
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Restore Bun & Moon build caches
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.bun/install/cache
+            .moon/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-build-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Moon CI
+        run: |
+          export MOON_TOOLCHAIN_FORCE_GLOBALS=true
+          bun moon ci --base="origin/${{ github.event.pull_request.base.ref }}"

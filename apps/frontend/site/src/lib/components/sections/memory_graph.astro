@@ -84,8 +84,8 @@ if (memoryEl) {
                 cleanup = cleanupFn;
               }
             })
-            .catch((err) => {
-              console.error('Failed to load memory_graph canvas:', err);
+            .catch(() => {
+              // Canvas initialization failed — no fallback needed
             });
         }
       }
