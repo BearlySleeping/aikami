@@ -63,14 +63,17 @@
 /** Defer PixiJS init until section scrolls into view. */
 const memoryEl = document.getElementById('memory-graph-canvas');
 let cleanup: (() => void) | undefined;
+let observer: IntersectionObserver | undefined;
+let disposed = false;
 
 if (memoryEl) {
-  const observer = new IntersectionObserver(
+  observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          observer.disconnect();
+          observer?.disconnect();
           import('./memory_graph_canvas').then(async ({ initMemoryGraph }) => {
+            if (disposed) return;
             cleanup = await initMemoryGraph('memory-graph-canvas');
           });
         }
@@ -82,6 +85,8 @@ if (memoryEl) {
 }
 
 document.addEventListener('astro:before-swap', () => {
+  disposed = true;
+  observer?.disconnect();
   cleanup?.();
 });
 </script>
