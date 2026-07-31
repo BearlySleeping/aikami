@@ -222,7 +222,7 @@ describeIntegration('FirebaseDataConnectService (integration)', () => {
       serviceId: 'aikami-db',
       connectorId: 'aikami-connector',
       location: 'us-central1',
-      projectId: 'aikami-dev',
+      projectId: 'aikami-staging',
       useEmulator: true,
     });
   });
@@ -241,7 +241,7 @@ describeIntegration('FirebaseDataConnectService (integration)', () => {
         serviceId: 'aikami-db',
         connectorId: 'aikami-connector',
         location: 'us-central1',
-        projectId: 'aikami-dev',
+        projectId: 'aikami-staging',
         useEmulator: true,
       }),
   );

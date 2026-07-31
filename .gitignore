@@ -238,6 +238,7 @@ apps/frontend/client/static/lpc/**/*
 .pi/MARKER_*
 .pi/architect_plan_*.md
 tmp/
+.gcloud/
 apps/frontend/client/static/game-assets/
 .pi/github/
 apps/backend/image/src/user/comfyui.db.bkp

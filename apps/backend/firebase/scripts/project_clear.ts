@@ -9,7 +9,7 @@ import firebase from 'firebase-tools';
  *
  * If it fails use
  *
- * firebase firestore:delete --all-collections --project aikami-dev
+ * firebase firestore:delete --all-collections --project aikami-staging
  *
  * instead
  */

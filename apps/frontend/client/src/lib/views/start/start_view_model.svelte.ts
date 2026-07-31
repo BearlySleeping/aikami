@@ -11,6 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
+import { isAiTextProviderRequiredError } from '@aikami/utils';
 import {
   authService,
   campaignService,
@@ -622,6 +623,15 @@ class StartViewModel
         pathParameters: undefined,
       });
     } catch (error) {
+      if (isAiTextProviderRequiredError(error)) {
+        this.warn('_proceedWithPack:no-text-provider', { error: String(error) });
+        await routerService.goToRoute('capability', {
+          queryParameters: { reason: 'text-provider-required' },
+          pathParameters: undefined,
+        });
+        return;
+      }
+
       this.error('_proceedWithPack:failed', error);
       this.errorMessage = 'Failed to start campaign. Try starting a new game.';
     }

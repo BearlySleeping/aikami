@@ -17,6 +17,7 @@
  *   bun run scripts/src/lib/setup/firebase_hosting_setup.ts --mode=staging
  *   bun run scripts/src/lib/setup/artifact_registry.ts --mode=staging
  *   bun run scripts/src/lib/setup/secrets_manager.ts --mode=staging
+ *   bun run scripts/src/lib/setup/github.ts --mode=staging
  */
 
 import { c, fmt, parseCliArgs } from '../cli_utils';

@@ -153,6 +153,8 @@ export const createOpenAiCompatibleTextAdapter = (
     const { resolution, messages } = options2;
     // Ollama native /api/chat works best with stream: false.
     // stream: true returns NDJSON which the SSE parser can't handle.
+    // Also disable streaming when response_format is used — many providers
+    // (DeepSeek, etc.) reject stream:true + response_format with 400.
     const stream = resolution.provider !== 'ollama';
     return {
       model: resolution.model,
@@ -319,6 +321,10 @@ export const createOpenAiCompatibleTextAdapter = (
 
     const body = buildBody({ resolution, messages: structuredMessages });
 
+    // Structured output is incompatible with streaming on many providers
+    // (DeepSeek, etc. return 400). Disable streaming for structured requests.
+    body.stream = false;
+
     // Only send response_format for providers that support OpenAI-compatible
     // structured output. Local providers (Ollama, Ooba) ignore it and return
     // plain text.
@@ -329,7 +335,6 @@ export const createOpenAiCompatibleTextAdapter = (
         json_schema: {
           name: schemaName,
           schema: compiledSchema,
-          strict: true,
         },
       };
     }
@@ -358,8 +363,20 @@ export const createOpenAiCompatibleTextAdapter = (
           throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
         }
 
-        // Ollama native /api/chat with stream: false returns a plain JSON
-        // response, not SSE. Parse it directly instead of streaming.
+        // When stream: false (structured output), the response is plain JSON,
+        // not SSE. Parse it directly — don't try to read it as an SSE stream.
+        if (!body.stream) {
+          const data = (await response.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+            message?: { content?: string };
+          };
+          const text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+          deliver(text);
+          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+          return {};
+        }
+
+        // Ollama native /api/chat with stream: false also returns plain JSON.
         if (resolution.provider === 'ollama') {
           const data = (await response.json()) as {
             message?: { content?: string };

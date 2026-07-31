@@ -141,25 +141,62 @@ const { viewModel }: Props = $props();
       </div>
     {:else if viewModel.currentStep === 'generating'}
       <div class="flex flex-col items-center justify-center py-16">
-        <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-        <p class="text-lg font-medium">Generating your world...</p>
-        <p class="text-sm text-base-content/50 mt-2">
-          The AI is building NPCs, locations, story arcs, and more.
-        </p>
+        {#if viewModel.isGenerating && !viewModel.generationError}
+          <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+          <p class="text-lg font-medium">Generating your world...</p>
+          <p class="text-sm text-base-content/50 mt-2">
+            The AI is building NPCs, locations, story arcs, and more.
+          </p>
+        {/if}
+        {#if viewModel.retryStatus}
+          <div class="alert alert-warning mt-6 max-w-md">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span>{viewModel.retryStatus}</span>
+          </div>
+        {/if}
         {#if viewModel.generationError}
           <div class="alert alert-error mt-6 max-w-md">
-            <span>{viewModel.generationError}</span>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6 shrink-0 stroke-current"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <title>Error</title>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div>
+              <h3 class="font-bold">Generation Failed</h3>
+              <p class="text-sm">{viewModel.generationError}</p>
+            </div>
           </div>
-          {#if viewModel.retriesRemaining > 0}
+          <div class="flex gap-2 mt-4">
             <button
               type="button"
-              class="btn btn-warning mt-4"
+              class="btn btn-warning"
+              disabled={viewModel.retriesRemaining <= 0 || viewModel.isGenerating}
               onclick={() => viewModel.retryGeneration()}
             >
-              Retry ({viewModel.retriesRemaining}
-              left)
+              🔄 Retry
+              {#if viewModel.retriesRemaining > 0}
+                ({viewModel.retriesRemaining}
+                left)
+              {/if}
             </button>
-          {/if}
+            <button
+              type="button"
+              class="btn btn-outline"
+              onclick={() => viewModel.changeConnection()}
+            >
+              ⚙️ Change Connection
+            </button>
+          </div>
         {/if}
       </div>
     {:else if viewModel.currentStep === 'preview'}

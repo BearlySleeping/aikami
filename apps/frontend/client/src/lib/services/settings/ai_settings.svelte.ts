@@ -115,10 +115,14 @@ class AISettingsService
     await configService.load();
 
     // Sync provider configs from the central config state
-    if (configService.state.text.apiKeys.openrouter) {
+    // Legacy: text.apiKeys was removed in C-230 connections migration.
+    const apiKeys = (configService.state.text as Record<string, unknown>).apiKeys as
+      | Record<string, string>
+      | undefined;
+    if (apiKeys?.openrouter) {
       this.textProvider = {
         ...this.textProvider,
-        apiKey: configService.state.text.apiKeys.openrouter,
+        apiKey: apiKeys.openrouter,
       };
     }
     if (configService.state.preferredModel) {
@@ -130,10 +134,8 @@ class AISettingsService
   }
 
   async saveToVault(_pin?: string): Promise<void> {
-    // Sync provider API keys back to central config
-    if (this.textProvider.apiKey) {
-      configService.setTextApiKey('openrouter', this.textProvider.apiKey);
-    }
+    // API keys are now stored in connections (C-230), not in legacy text.apiKeys.
+    // Skip the legacy apiKey sync — setTextApiKey was removed.
     if (this.textProvider.model) {
       configService.setPreferredModel(this.textProvider.model);
     }

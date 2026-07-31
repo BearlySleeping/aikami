@@ -70,8 +70,6 @@ export const resizeLanczos = async (options: {
 
   try {
     // Dynamic import — sharp is an optional peer dependency not declared in package.json
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error - sharp is loaded dynamically at runtime
     const sharpModule = await import('sharp');
     const sharp = sharpModule?.default ?? sharpModule;
     if (!sharp || typeof sharp !== 'function') {

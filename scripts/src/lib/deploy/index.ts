@@ -118,22 +118,23 @@ async function deployApp(
   rootDir: string,
   version: string,
   isForce = false,
+  preflightChecksum?: string,
 ): Promise<'success' | 'failure'> {
   switch (config.serviceType) {
     case 'cloud-run-sveltekit':
-      await deployCloudRunSveltekit(config, appName, mode, rootDir, version, isForce);
+      await deployCloudRunSveltekit(config, appName, mode, rootDir, version, isForce, preflightChecksum);
       return 'success';
     case 'tauri-release':
-      await deployTauriRelease(config, appName, mode, rootDir, version, isForce);
+      await deployTauriRelease(config, appName, mode, rootDir, version, isForce, preflightChecksum);
       return 'success';
     case 'firebase-hosting':
-      await deployFirebaseHosting(config, appName, mode, rootDir, version, isForce);
+      await deployFirebaseHosting(config, appName, mode, rootDir, version, isForce, preflightChecksum);
       return 'success';
     case 'firebase-functions':
       await deployFirebaseFunctions(config, appName, mode, rootDir, isForce);
       return 'success';
     case 'docker-release':
-      await deployDockerRelease(config, appName, mode, rootDir, version, isForce);
+      await deployDockerRelease(config, appName, mode, rootDir, version, isForce, preflightChecksum);
       return 'success';
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
@@ -295,6 +296,7 @@ async function main(): Promise<void> {
 
   const version = generateVersionString();
   const cachedApps = new Set<string>();
+  const preflightChecksums = new Map<string, string>();
 
   for (const appName of appsToDeploy) {
     const config = APP_CONFIG[appName as keyof typeof APP_CONFIG];
@@ -311,6 +313,10 @@ async function main(): Promise<void> {
     if (cache.skip) {
       ok(`  ${appName} is up to date (cache hit: ${cache.source}). Skipping.`);
       cachedApps.add(appName);
+    } else {
+      // Store pre-flight checksum — this is the checksum the NEXT deploy will
+      // compute (pre-build state), so it must match what we save post-deploy.
+      preflightChecksums.set(appName, cache.checksum);
     }
   }
 
@@ -399,7 +405,7 @@ async function main(): Promise<void> {
       return;
     }
     try {
-      const result = await deployApp(config, appName, mode, ROOT_DIR, version, isForce);
+      const result = await deployApp(config, appName, mode, ROOT_DIR, version, isForce, preflightChecksums.get(appName));
       results.push({ name: appName, type: config.serviceType, result });
     } catch (err) {
       errors.push(`Deploy failed for ${appName}: ${(err as Error).message}`);

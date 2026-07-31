@@ -12,7 +12,7 @@
  * Replaces: scripts/direnv/secrets.sh
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ── Configuration ────────────────────────────────────────────────────
@@ -124,6 +124,26 @@ function loadMocks(): void {
 
 // ── Live mode — load from .env.{mode} ─────────────────────────────────
 
+const GCLOUD_DIR = join(root, '.gcloud');
+const SA_KEY_FILE = join(GCLOUD_DIR, 'service-account.json');
+
+function writeServiceAccountKey(value: string): void {
+  // Validate JSON before writing
+  try {
+    JSON.parse(value);
+  } catch {
+    process.stderr.write(`  ⚠️  FIREBASE_SERVICE_ACCOUNT is not valid JSON — skipping gcloud auth setup\n`);
+    return;
+  }
+
+  mkdirSync(GCLOUD_DIR, { recursive: true });
+  writeFileSync(SA_KEY_FILE, value, { mode: 0o600 });
+
+  // Export GOOGLE_APPLICATION_CREDENTIALS so gcloud CLI and SDKs use this SA
+  emitExport('GOOGLE_APPLICATION_CREDENTIALS', SA_KEY_FILE);
+  process.stderr.write(`  🔑 gcloud: using service account from ${SA_KEY_FILE}\n`);
+}
+
 function loadFromEnvFile(): void {
   const envFileValues = readEnvFile(mode);
 
@@ -136,6 +156,11 @@ function loadFromEnvFile(): void {
   for (const [key, value] of envFileValues) {
     emitExport(key, value);
     loaded++;
+
+    // When FIREBASE_SERVICE_ACCOUNT is loaded, also set it up for gcloud
+    if (key === 'FIREBASE_SERVICE_ACCOUNT') {
+      writeServiceAccountKey(value);
+    }
   }
 
   process.stderr.write(`  ✅ Secrets: loaded ${loaded} from .env.${mode}\n`);

@@ -81,4 +81,13 @@ The emulator runs in the foreground. To stop it:
 | `--projectId <id>` | Override Firebase project ID. |
 | `--only <services>` | Limited services (e.g., `functions,firestore`). |
 | `--tsconfig <path>` | Path to a custom `tsconfig.json` (e.g., `tsconfig.app.json`). |
+| `--emulators <list>` | Comma-separated list of emulators to enable. |
+| `--dataconnectDirectory <dir>` | Override dataconnect directory. |
+| `--includeFilePath <path>` | File auto-imported into every function index. |
+| `--minify` / `--no-minify` | Minify function output (default from config). |
+| `--sourcemap` / `--no-sourcemap` | Generate sourcemaps (default from config). |
+| `--polling` / `--no-polling` | Chokidar polling for file watch. Auto-detects inotify limits on Linux. |
+| `--debug` | Enable debug mode (keeps temporary build files). |
 | `--verbose` | Stream full emulator logs. |
+| `--dry-run` | Build functions and rules but don't start emulator. |
+| `--silent` | Suppress non-error output. |

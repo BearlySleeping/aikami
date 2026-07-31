@@ -14,7 +14,6 @@ project:
   owner: 'Backend Team'
 
 dependsOn:
-  - 'backend-chat'
   - 'backend-configs'
   - 'backend-utils'
   - 'backend-database'

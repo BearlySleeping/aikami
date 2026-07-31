@@ -104,14 +104,19 @@ export const detectTextAvailability = async (options?: {
       signal,
     });
     if (response.ok) {
-      return {
-        capability: 'text',
-        available: true,
-        mode: 'offline',
-        provider: 'ollama',
-        detail: 'Ollama reachable via dev proxy',
-        checkedAt: nowIso(),
-      };
+      // Guard against SPA fallback: /api/text/ on a static host returns
+      // index.html (200 OK) — check Content-Type to avoid false positives.
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        return {
+          capability: 'text',
+          available: true,
+          mode: 'offline',
+          provider: 'ollama',
+          detail: 'Ollama reachable via dev proxy',
+          checkedAt: nowIso(),
+        };
+      }
     }
   } catch {
     // Proxy unavailable — fall through to native ping.
@@ -188,14 +193,20 @@ export const detectImageAvailability = async (options?: {
   try {
     const response = await fetchWithTimeout({ url: pingUrl, timeoutMs, fetchFn, signal });
     if (response.ok) {
-      return {
-        capability: 'image',
-        available: true,
-        mode: 'offline',
-        provider: 'comfyui',
-        detail: 'ComfyUI reachable',
-        checkedAt: nowIso(),
-      };
+      // Guard against SPA fallback: on static hosts (Firebase Hosting),
+      // /api/image/object_info returns index.html (200 OK). Verify the
+      // response is actually JSON from ComfyUI, not the SPA shell.
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        return {
+          capability: 'image',
+          available: true,
+          mode: 'offline',
+          provider: 'comfyui',
+          detail: 'ComfyUI reachable',
+          checkedAt: nowIso(),
+        };
+      }
     }
   } catch {
     // Connection refused — expected when ComfyUI is not running.
@@ -222,11 +233,11 @@ export const detectVoiceAvailability = async (options?: {
     serverAvailable: false,
   };
 
-  if (engine.status === 'error') {
+  if (engine.status === 'error' || engine.status === 'uninitialized') {
     return {
       capability: 'voice',
       available: false,
-      detail: 'Kokoro engine error',
+      detail: engine.status === 'error' ? 'Kokoro engine error' : 'Kokoro not initialized',
       checkedAt: nowIso(),
     };
   }

@@ -132,30 +132,38 @@ class CapabilityViewModel
 
   // ── Derived ──────────────────────────────────────────────────────────
 
-  /** Tabs with per-tab checkmark when at least one provider exists. */
+  /** Tabs with per-tab checkmark when at least one usable provider exists. */
   get tabs(): readonly { id: ConnectionCapability; label: string; hasProvider: boolean }[] {
-    const connections = configService.state.connections ?? [];
+    const connections = (configService.state.connections ?? []).filter((c) =>
+      this._isUsableConnection(c),
+    );
     return CAPABILITY_TABS.map((tab) => ({
       ...tab,
       hasProvider: connections.some((c) => (c.capability ?? 'text') === tab.id),
     }));
   }
 
-  /** True when at least one text connection exists — required to start. */
+  /** True when at least one usable text connection exists. */
   get hasTextProvider(): boolean {
-    const connections = configService.state.connections ?? [];
+    const connections = (configService.state.connections ?? []).filter((c) =>
+      this._isUsableConnection(c),
+    );
     return connections.some((c) => (c.capability ?? 'text') === 'text');
   }
 
-  /** True when at least one image connection exists. */
+  /** True when at least one usable image connection exists. */
   get hasImageProvider(): boolean {
-    const connections = configService.state.connections ?? [];
+    const connections = (configService.state.connections ?? []).filter((c) =>
+      this._isUsableConnection(c),
+    );
     return connections.some((c) => (c.capability ?? 'text') === 'image');
   }
 
-  /** True when at least one voice connection exists. */
+  /** True when at least one usable voice connection exists. */
   get hasVoiceProvider(): boolean {
-    const connections = configService.state.connections ?? [];
+    const connections = (configService.state.connections ?? []).filter((c) =>
+      this._isUsableConnection(c),
+    );
     return connections.some((c) => (c.capability ?? 'text') === 'voice');
   }
 
@@ -170,6 +178,7 @@ class CapabilityViewModel
 
     return connections
       .filter((c) => (c.capability ?? 'text') === this.activeTab)
+      .filter((c) => this._isUsableConnection(c))
       .map((connection) => {
         const isDefault = connection.id === capDefault;
         return {
@@ -280,7 +289,9 @@ class CapabilityViewModel
     let changed = false;
 
     for (const capability of CAPABILITY_TABS) {
-      const capConnections = connections.filter((c) => (c.capability ?? 'text') === capability.id);
+      const capConnections = connections.filter(
+        (c) => (c.capability ?? 'text') === capability.id && this._isUsableConnection(c),
+      );
       if (capConnections.length === 0) {
         continue;
       }
@@ -322,6 +333,20 @@ class CapabilityViewModel
 
   // ── Private: source badges ───────────────────────────────────────────
 
+  /**
+   * Filters out phantom connections that appear usable but have no actual
+   * credentials. Cloud providers seeded from env with empty API keys are
+   * hidden until the user provides a real key.
+   */
+  private _isUsableConnection(connection: Connection): boolean {
+    // Local providers don't need API keys — always show them
+    if (LOCAL_PROVIDERS.has(connection.provider)) {
+      return true;
+    }
+    // Cloud providers require a real API key
+    return connection.apiKey && connection.apiKey.length > 0;
+  }
+
   private _sourceBadge(connection: Connection): string | undefined {
     switch (connection.source) {
       case 'detected':
@@ -357,7 +382,22 @@ class CapabilityViewModel
 
   // ── Private: auto-seed detected connections ──────────────────────────
 
+  /**
+   * Prunes stale auto-seeded connections from previous sessions and seeds
+   * fresh connections for currently detected providers. Source 'detected'
+   * connections represent auto-discovery — if the provider is no longer
+   * reachable, the connection should be removed.
+   */
   private _seedDetectedConnections(result: CapabilitySnapshot): void {
+    // 1. Remove ALL stale auto-seeded connections first.
+    //    These are connections created by previous detection runs that may
+    //    no longer be valid (e.g., Ollama was running before but isn't now).
+    const fresh = configService.state.connections.filter((c) => c.source !== 'detected');
+    if (fresh.length !== configService.state.connections.length) {
+      configService.state.connections = fresh;
+    }
+
+    // 2. Seed connections for currently detected providers.
     if (result.textStatus === 'detected' && result.textProviderId === 'ollama') {
       this._seedConnection({
         capability: 'text',

@@ -13,34 +13,27 @@ import { logger } from '$logger';
  * the shared `handleAuthEndpoint` from @aikami/backend-auth.
  * The authenticated user is extracted from the Firebase callable context.
  */
-export default onCall<CallableFunctions, 'auth'>(
-  async (request) => {
-    const data = request.data;
-    if (!data || typeof data.type !== 'string') {
-      logger.warn('callable/auth: invalid request — missing type');
-      throw toAppError({
-        errorType: 'invalid-argument',
-        errorMessage: 'Missing or invalid type field',
-      });
-    }
-
-    logger.debug('callable/auth', { type: data.type });
-
-    // Extract user claims from the Firebase Auth context (available in callable functions)
-    const authUser = request.auth;
-    const currentUser = authUser
-      ? { id: authUser.uid, email: authUser.token.email ?? undefined }
-      : undefined;
-
-    return await handleAuthEndpoint({
-      currentUser,
-      payload: data.payload,
-      type: data.type,
+export default onCall<CallableFunctions, 'auth'>(async (request) => {
+  const data = request.data;
+  if (!data || typeof data.type !== 'string') {
+    logger.warn('callable/auth: invalid request — missing type');
+    throw toAppError({
+      errorType: 'invalid-argument',
+      errorMessage: 'Missing or invalid type field',
     });
-  },
-  {
-    region: 'europe-west1',
-    memory: '256MiB',
-    timeoutSeconds: 60,
-  },
-);
+  }
+
+  logger.debug('callable/auth', { type: data.type });
+
+  // Extract user claims from the Firebase Auth context (available in callable functions)
+  const authUser = request.auth;
+  const currentUser = authUser
+    ? { id: authUser.uid, email: authUser.token.email ?? undefined }
+    : undefined;
+
+  return await handleAuthEndpoint({
+    currentUser,
+    payload: data.payload,
+    type: data.type,
+  });
+});

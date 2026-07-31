@@ -51,4 +51,4 @@ export const MODE_PROJECT_MAP = {
  * GCP region where Cloud Functions and Cloud Run services are deployed.
  * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
  */
-export const CLOUD_FUNCTIONS_REGION = 'europe-west1' as const;
+export const CLOUD_FUNCTIONS_REGION = 'europe-west4' as const;

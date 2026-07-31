@@ -20,13 +20,8 @@ reviews:
     # Path_filters must be under 'reviews'
     path_filters:
         # Exclusions (Blocklist)
-        - "!bun.lock"
-        - "!node_modules/**"
         - "!dist/**"
         - "!.pi/generated-skills/**"
-        - "!.pi/sounds/**" # Skip audio generation files
-        - "!**/*.webm" # Skip media files
-        - "!**/*.wav"
         - "!.moon/**"
         - "!.context/**"
         - "!docs/contracts/**"

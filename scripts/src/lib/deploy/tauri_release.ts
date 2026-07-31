@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, saveDeployCache } from './cache';
 import type { AppConfig } from './deployment_config';
-import { resolveProjectId, run } from './utils';
+import { resolveProjectId, run, isVerbose } from './utils';
 
 // ── Final-artifact detection ──────────────────────────────────────────────
 const KNOWN_TARGET_DIRS = new Set([
@@ -115,8 +115,9 @@ export async function deployTauriRelease(
   appName: string,
   mode: string,
   rootDir: string,
-  version: string,
+  _version: string,
   isForce = false,
+  preflightChecksum?: string,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
   const appRoot = join(rootDir, config.path);
@@ -130,11 +131,20 @@ export async function deployTauriRelease(
   log(`  App:      ${appRoot}`);
   log(`  Tauri:    ${tauriDir}\n`);
 
-  // 0. Checksum cache — skip if unchanged
-  const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
-  if (cache.skip) {
-    ok(`${appName} Tauri release skipped (unchanged — cache hit: ${cache.source})`);
-    return;
+  // 0. Checksum cache — use pre-flight checksum when available
+  let checksum: string;
+  if (preflightChecksum !== undefined) {
+    checksum = preflightChecksum;
+    if (isVerbose()) {
+      log(`  Using pre-flight checksum: ${checksum.slice(0, 16)}...`);
+    }
+  } else {
+    const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
+    if (cache.skip) {
+      ok(`${appName} Tauri release skipped (unchanged — cache hit: ${cache.source})`);
+      return;
+    }
+    checksum = cache.checksum;
   }
 
   // 1. Verify Tauri directory exists
@@ -240,7 +250,7 @@ export async function deployTauriRelease(
   }
 
   // 6. Save cache on success (use Cargo.toml version for Tauri releases)
-  await saveDeployCache(mode, appName, cache.checksum, ver);
+  await saveDeployCache(mode, appName, checksum, ver);
   ok(
     `${appName} Tauri release complete — v${ver} (${platformDir}${ext})`,
   );

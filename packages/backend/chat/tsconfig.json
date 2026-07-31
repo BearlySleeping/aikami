@@ -5,8 +5,6 @@
   "compilerOptions": {
     "rootDir": "../../..",
     "paths": {
-      "@aikami/backend/ai": ["../ai/src/index.ts"],
-      "@aikami/backend/ai/*": ["../ai/src/lib/*"],
       "@aikami/constants": ["../../shared/constants/src/index.ts"],
       "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
       "@aikami/schemas": ["../../shared/schemas/src/index.ts"],

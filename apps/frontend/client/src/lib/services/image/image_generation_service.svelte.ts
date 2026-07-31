@@ -121,6 +121,15 @@ export class ImageGenerationService
     if (this.checkpoints.length > 0 && this.selectedCheckpoint.length > 0) {
       return true;
     }
+    // Check if there's actually a configured image connection with a usable provider.
+    // A persisted checkpoint alone does not mean the service is reachable.
+    const connections = configService.state.connections ?? [];
+    const hasImageConn = connections.some(
+      (c) => (c.capability ?? 'text') === 'image' && (c.apiKey || c.provider === 'comfyui'),
+    );
+    if (!hasImageConn) {
+      return false;
+    }
     // Fallback: if a checkpoint was persisted in config, it was verified
     const persisted = this._readPersistedCheckpoint();
     return persisted.length > 0;
@@ -216,7 +225,7 @@ export class ImageGenerationService
       // Step 1 — queue the prompt
       const queueResponse = await this._post<ComfyUiQueueResponse>('/prompt', {
         // biome-ignore lint/style/useNamingConvention: API contract field name
-        client_id: `aikami-dev-${Date.now()}`,
+        client_id: `aikami-staging-${Date.now()}`,
         prompt: this._buildWorkflow({ prompt, checkpoint: effectiveCheckpoint }),
       });
 
@@ -330,7 +339,7 @@ export class ImageGenerationService
         // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'SaveImage',
         // biome-ignore lint/style/useNamingConvention: API contract field name
-        inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] },
+        inputs: { filename_prefix: 'aikami-staging', images: ['8', 0] },
       },
     };
   }

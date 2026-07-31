@@ -28,6 +28,7 @@ import {
   run,
   shortSha,
   versionSha,
+  isVerbose,
 } from './utils';
 
 // ── Deduplication helpers ─────────────────────────────────────────────────
@@ -81,6 +82,7 @@ export async function deployCloudRunSveltekit(
   rootDir: string,
   version: string,
   isForce = false,
+  preflightChecksum?: string,
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
   const serviceId = resolveCloudRunServiceName(config, appName);
@@ -96,11 +98,21 @@ export async function deployCloudRunSveltekit(
   log(`  Image:   ${tag}`);
   log(`  Context: ${appRoot}\n`);
 
-  // 0. Checksum cache — skip if nothing changed
-  const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
-  if (cache.skip) {
-    ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
-    return;
+  // 0. Checksum cache — use pre-flight checksum when available (avoids
+  //    recomputing after build, which may have a different dirty hash).
+  let checksum: string;
+  if (preflightChecksum !== undefined) {
+    checksum = preflightChecksum;
+    if (isVerbose()) {
+      log(`  Using pre-flight checksum: ${checksum.slice(0, 16)}...`);
+    }
+  } else {
+    const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
+    if (cache.skip) {
+      ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
+      return;
+    }
+    checksum = cache.checksum;
   }
 
   // 1. Build — skip if already built in Phase 1 (parallel deploy safety)
@@ -169,7 +181,7 @@ export async function deployCloudRunSveltekit(
   envVars = deduplicateEnvVars(envVars, secretArgs);
   run(buildGcloudRunArgs(config, serviceId, tag, projectId, mode, envVars, secretArgs));
 
-  // 7. Save checksum on success
-  await saveDeployCache(mode, appName, cache.checksum, version);
+  // 7. Save checksum on success — use the pre-build consistent checksum
+  await saveDeployCache(mode, appName, checksum, version);
   ok(`${appName} deployed to Cloud Run`);
 }
