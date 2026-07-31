@@ -2,11 +2,20 @@
 // apps/frontend/site/src/lib/components/layout/head/socials.astro
 import { site } from '$data/site_content';
 
+/**
+ * Generates meta tags for social media sharing (Open Graph and Twitter Cards).
+ * This helps social media platforms display rich previews of the page.
+ */
 type Props = {
+  /** The canonical URL of the page. Required. */
   canonicalURL: string;
+  /** The meta description of the page. Required. */
   description: string;
+  /** The main image for the page. Required. */
   image: string;
+  /** The title of the page. Required. */
   title: string;
+  /** The type of page. Required. */
   type: 'website' | 'article';
 };
 
