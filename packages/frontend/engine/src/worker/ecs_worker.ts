@@ -166,7 +166,7 @@ self.onerror = (message, source, lineno, colno, error): boolean => {
 const _originalPostMessage = self.postMessage.bind(self);
 self.postMessage = ((message: unknown, transfer?: Transferable[]) => {
   try {
-    _originalPostMessage(message, transfer);
+    _originalPostMessage(message, { transfer });
   } catch (err) {
     logger.error('worker:postMessage-error', {
       type: (message as Record<string, unknown>)?.type,

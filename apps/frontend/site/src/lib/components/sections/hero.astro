@@ -130,7 +130,7 @@ import { discordInviteLink } from '$data/site_content';
 const containerId = 'hero-canvas';
 let cleanup: (() => void) | undefined;
 let idleHandle: number | undefined;
-let timeoutHandle: number | undefined;
+let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 
 const initWhenReady = () => {
@@ -149,8 +149,8 @@ const initWhenReady = () => {
         cleanup = cleanupFn;
       }
     })
-    .catch((err) => {
-      console.error('Failed to load hero_d20 canvas:', err);
+    .catch(() => {
+      // Canvas initialization failed — no fallback needed
     });
 };
 

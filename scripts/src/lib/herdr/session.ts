@@ -368,7 +368,7 @@ export const killPort = (port: number): Promise<void> =>
       }
 
       const pid = pidOutput.trim().split('\n')[0];
-      if (!/^\d+$/.test(pid)) {
+      if (pid === undefined || !/^\d+$/.test(pid)) {
         resolveK();
         return;
       }
