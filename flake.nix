@@ -101,7 +101,7 @@
           libayatana-appindicator
           google-cloud-sdk
           xdg-utils
-        ];
+];
 
         # nix-direnv location — used by .envrc on subsequent loads to
         # source direnvrc without re-evaluating nixpkgs

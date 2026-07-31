@@ -62,6 +62,7 @@
     "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",
     "validate:shaders": "bun run validate:wgsl && bun run validate:gql",
     "update:ai": "bun run scripts/src/lib/ops/update_ai.ts",
+    "switch": "bun run scripts/src/lib/ops/switch_mode.ts",
     "deploy": "bun run scripts/src/lib/deploy/index.ts",
     "download-secrets": "bun run scripts/src/lib/ops/download_secrets.ts",
     "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",

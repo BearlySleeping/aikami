@@ -37,7 +37,7 @@
     "@types/node": "26.1.2",
     "@types/png-chunks-extract": "1.0.2",
     "@types/text-encoding": "0.0.40",
-    "daisyui": "5.7.8",
+    "daisyui": "5.7.9",
     "rollup-plugin-visualizer": "7.0.1",
     "svelte": "5.56.8",
     "svelte-check": "4.7.4",

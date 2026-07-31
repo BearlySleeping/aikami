@@ -31,7 +31,6 @@ export default defineConfig({
   output: 'static',
   server: {
     port,
-    strictPort: true,
   },
 
   env: {

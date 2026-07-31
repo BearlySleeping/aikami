@@ -337,9 +337,7 @@ const findChromiumExecutable = (): string | null => {
           return bin;
         }
       }
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   return null;
@@ -409,12 +407,6 @@ const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => 
     if (exitCode !== 0) {
       warn(`Chromium exited with code ${exitCode}`);
     }
-  });
-
-  // Handle spawn errors
-  proc.on?.('error', (err: Error) => {
-    error(`Failed to launch Chromium: ${err.message}`);
-    process.exit(1);
   });
 
   await proc.exited;

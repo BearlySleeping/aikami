@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@aikami/frontend-dataconnect": "workspace:*",
-    "@tursodatabase/database": "0.7.1",
+    "@tursodatabase/database": "0.7.2",
     "@aikami/frontend/configs": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
