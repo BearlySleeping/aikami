@@ -1,41 +1,19 @@
 // scripts/src/lib/ops/convert_logo_png_to_svg.ts
-/** biome-ignore-all lint/suspicious/noAssignInExpressions: Node.js stream processing pattern */
-// Converts a raster logo PNG → cropped vector SVG using imagetracerjs.
+// Converts a raster logo PNG → compact SVG favicon with embedded base64 PNG.
+// Replaces the previous imagetracerjs approach which produced ~1.2 MB SVGs.
 //
 // Usage: bun run scripts/src/lib/ops/convert_logo_png_to_svg.ts [--input <png>] [--output <svg>]
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-// @ts-expect-error - imagetracerjs has no ESM types
-import ImageTracer from 'imagetracerjs';
-// @ts-expect-error - internal CLI module, no ESM types
-import PNGReader from 'imagetracerjs/nodecli/PNGReader.js';
+import sharp from 'sharp';
 
 const ROOT = path.resolve(import.meta.dir, '../../../..');
 const DEFAULT_INPUT = path.join(ROOT, 'assets/logo.png');
 const DEFAULT_OUTPUT = path.join(ROOT, 'assets/logo.svg');
 
-const TRACE_OPTIONS = {
-  ltres: 1,
-  qtres: 1,
-  pathomit: 4,
-  colorsampling: 2,
-  numberofcolors: 16,
-  mincolorratio: 0.02,
-  colorquantcycles: 3,
-  layering: 0,
-  strokewidth: 0,
-  linefilter: true,
-  scale: 1,
-  roundcoords: 2,
-  viewbox: true,
-  desc: false,
-  lcpr: 0,
-  qcpr: 0,
-  blurradius: 0,
-  blurdelta: 0,
-} as const;
+/** Target size for the embedded PNG in the SVG. */
+const EMBED_SIZE = 128;
 
 const parseArgs = (): { input: string; output: string } => {
   const raw = process.argv.slice(2);
@@ -43,91 +21,20 @@ const parseArgs = (): { input: string; output: string } => {
   let output = DEFAULT_OUTPUT;
   for (let i = 0; i < raw.length; i++) {
     if (raw[i] === '--input' && raw[i + 1]) {
-      input = path.resolve(raw[i + 1]!);
+      const nextIndex = i + 1;
+      if (raw[nextIndex] !== undefined) {
+        input = path.resolve(raw[nextIndex]);
+      }
       i++;
     } else if (raw[i] === '--output' && raw[i + 1]) {
-      output = path.resolve(raw[i + 1]!);
+      const nextIndex2 = i + 1;
+      if (raw[nextIndex2] !== undefined) {
+        output = path.resolve(raw[nextIndex2]);
+      }
       i++;
     }
   }
   return { input, output };
-};
-
-/**
- * Compute content bounding box from visible path coordinates.
- * Skips paths with opacity="0" (usually a full-canvas background filler).
- */
-const computeContentBBox = (
-  svg: string,
-): {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-} => {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  const pathRegex = /<path([^>]*)\/>/g;
-  let match: RegExpExecArray | null;
-  while ((match = pathRegex.exec(svg)) !== null) {
-    const attrs = match[1];
-    if (attrs === undefined) {
-      continue;
-    }
-    if (attrs.includes('opacity="0"')) {
-      continue;
-    }
-
-    const dMatch = attrs.match(/d="([^"]+)"/);
-    if (!dMatch || dMatch[1] === undefined) {
-      continue;
-    }
-
-    const nums = dMatch[1].match(/[-]?\d+\.?\d*/g);
-    if (!nums) {
-      continue;
-    }
-
-    const coords = nums.map(Number);
-    for (let i = 0; i < coords.length - 1; i += 2) {
-      const x = coords[i];
-      const y = coords[i + 1];
-      if (x === undefined || y === undefined) {
-        continue;
-      }
-      if (x < minX) {
-        minX = x;
-      }
-      if (x > maxX) {
-        maxX = x;
-      }
-      if (y < minY) {
-        minY = y;
-      }
-      if (y > maxY) {
-        maxY = y;
-      }
-    }
-  }
-
-  return { minX, minY, maxX, maxY };
-};
-
-/**
- * Crop SVG viewBox to content + padding, removing dead canvas space.
- */
-const cropSvgToContent = (svg: string): string => {
-  const bbox = computeContentBBox(svg);
-  const pad = 30;
-  const vbx = Math.round(bbox.minX - pad);
-  const vby = Math.round(bbox.minY - pad);
-  const vbw = Math.round(bbox.maxX - bbox.minX + pad * 2);
-  const vbh = Math.round(bbox.maxY - bbox.minY + pad * 2);
-
-  return svg.replace(/viewBox="[^"]*"/, `viewBox="${vbx} ${vby} ${vbw} ${vbh}"`);
 };
 
 const main = async (): Promise<void> => {
@@ -143,40 +50,33 @@ const main = async (): Promise<void> => {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  const bytes = fs.readFileSync(input);
+  // Resize PNG to favicon-friendly dimensions and encode as base64 data URI
+  const pngBuffer = await sharp(input)
+    .resize(EMBED_SIZE, EMBED_SIZE, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
 
-  const reader = new PNGReader(bytes);
+  const base64 = pngBuffer.toString('base64');
+  const mimeType = 'image/png';
 
-  reader.parse(
-    (err: Error | null, png: { width: number; height: number; pixels: Uint8Array }) => {
-      if (err) {
-        console.error('PNG parse error:', err);
-        process.exit(1);
-      }
+  // Minimal SVG wrapper — modern browsers render this as a favicon without issues
+  const svg = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${EMBED_SIZE} ${EMBED_SIZE}">`,
+    '  <title>Logo</title>',
+    `  <image width="${EMBED_SIZE}" height="${EMBED_SIZE}" href="data:${mimeType};base64,${base64}"/>`,
+    '</svg>',
+    '',
+  ].join('\n');
 
-      const imageData = {
-        width: png.width,
-        height: png.height,
-        data: new Uint8ClampedArray(
-          png.pixels.buffer,
-          png.pixels.byteOffset,
-          png.pixels.byteLength,
-        ),
-      };
-      let svgString = ImageTracer.imagedataToSVG(imageData, TRACE_OPTIONS);
-      svgString = svgString.trim();
-
-      svgString = cropSvgToContent(svgString);
-
-      if (!svgString.startsWith('<?xml')) {
-        svgString = `<?xml version="1.0" encoding="UTF-8"?>\n${svgString}`;
-      }
-      svgString += '\n';
-
-      fs.writeFileSync(output, svgString, 'utf-8');
-      console.log(`Logo SVG written to ${output}`);
-    },
-  );
+  fs.writeFileSync(output, svg, 'utf-8');
+  console.log(`Logo SVG written to ${output} (${(svg.length / 1024).toFixed(0)} KB)`);
 };
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

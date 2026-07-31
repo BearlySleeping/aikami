@@ -3,7 +3,10 @@
 import starlight from '@astrojs/starlight';
 import { defineConfig, passthroughImageService } from 'astro/config';
 
+import { PORTS } from '../../../packages/shared/constants/src/index';
+
 const monorepoRoot = new URL('../../..', import.meta.url).pathname;
+const port = Number(process.env.PORT || PORTS.emulator.client + 10 || 5284);
 
 // https://astro.build/config
 export default defineConfig({
@@ -44,6 +47,8 @@ export default defineConfig({
         // (This fixes the ".../dev-toolbar/entrypoint.js" error)
         allow: [monorepoRoot],
       },
+      port,
+      strictPort: true,
     },
   },
 });

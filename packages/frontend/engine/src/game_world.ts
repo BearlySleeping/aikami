@@ -508,6 +508,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * leaks and orphaned animation frames.
    */
   destroy(): void {
+    // Diagnostic: trace who calls destroy
+    this.error('[GameWorld] destroy:called', { stack: new Error().stack });
     // Stop the render loop
     this._running = false;
 

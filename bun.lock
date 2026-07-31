@@ -153,10 +153,7 @@
         "astro-compress": "2.4.1",
         "astro-robots-txt": "1.0.0",
         "firebase-tools": "15.25.0",
-        "imagetracerjs": "^1.2.6",
         "lighthouse": "13.4.1",
-        "png-to-ico": "3.0.2",
-        "sharp": "0.35.3",
         "tailwindcss": "4.3.3",
         "vite": "8.1.5",
       },
@@ -406,7 +403,6 @@
       },
       "devDependencies": {
         "firebase-tools": "15.20.0",
-        "imagetracerjs": "^1.2.6",
         "png-to-ico": "3.0.2",
         "sharp": "0.35.3",
       },
@@ -3005,8 +3001,6 @@
     "ignore": ["ignore@7.0.6", "", {}, "sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw=="],
 
     "image-ssim": ["image-ssim@0.2.0", "", {}, "sha512-W7+sO6/yhxy83L0G7xR8YAc5Z5QFtYEXXRV6EaE8tuYBZJnA3gVgp3q7X7muhLZVodeb9UfvjSbwt9VJwjIYAg=="],
-
-    "imagetracerjs": ["imagetracerjs@1.2.6", "", {}, "sha512-LKJlnKmXFzDdh6IZtXTyBxXcCLTAkwgKYS+NMiPXiXVnlTLjQC8fq7U89laUSgHtypJB3TdMMDK4ecG5NI/Cgw=="],
 
     "immediate": ["immediate@3.0.6", "", {}, "sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ=="],
 
