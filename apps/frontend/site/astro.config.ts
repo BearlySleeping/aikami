@@ -16,8 +16,8 @@ const _mode = (process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mod
 const port = Number(process.env.PORT || PORTS[_mode].site);
 
 const SITE_URL_MAP: Record<string, string> = {
-  production: 'https://nordclaw.eu',
-  staging: 'https://stg.nordclaw.eu',
+  production: 'https://bearlysleeping.com',
+  staging: 'https://stg.bearlysleeping.com',
   emulator: `http://localhost:${port}`,
 };
 const site =

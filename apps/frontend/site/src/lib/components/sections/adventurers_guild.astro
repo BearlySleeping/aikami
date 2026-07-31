@@ -5,6 +5,8 @@
  * Star on GitHub, Quickstart, Discord, copyable terminal snippet.
  * Uses real GitHub data — no fake metrics.
  */
+
+import { discordInviteLink } from '$data/site_content';
 ---
 
 <section id="adventurers-guild" class="relative overflow-hidden border-b border-border/70">
@@ -14,7 +16,7 @@
     <div class="text-center max-w-2xl mx-auto mb-12">
       <span class="eyebrow text-ember">Open Source Guildhall</span>
       <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
-        Join the guild. Build the realm.
+        Open-Source Community. Self-Host Your AI RPG.
       </h2>
       <p class="mt-5 text-muted-foreground leading-relaxed">
         Aikami is free, open-source, and self-hosted. Clone the repo, spin up local AI, and start
@@ -47,7 +49,7 @@
         Launch Web Client &rarr;
       </a>
       <a
-        href="https://discord.gg/R9mKAQ6E4"
+        href={discordInviteLink}
         class="inline-flex items-center gap-2 rounded-sm border border-border px-6 py-3.5 text-sm font-medium text-foreground transition-all hover:bg-card no-underline"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

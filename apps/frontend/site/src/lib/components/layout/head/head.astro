@@ -8,20 +8,49 @@ import Favicons from './favicons.astro';
 import Schema from './schema.astro';
 import Socials from './socials.astro';
 
+/**
+ * Manages the document head, including meta tags for SEO, social media, and other metadata.
+ */
 type Props = {
+  /**
+   * Meta description for SEO.
+   * @default `site.description`
+   */
   description?: string;
+  /**
+   * The image to use for social media previews.
+   * @default '/images/site_image.jpg'
+   */
   image?: string;
+  /**
+   * If true, adds a "noindex, nofollow" robots meta tag.
+   * @default false
+   */
   noindex?: boolean;
+  /**
+   * The publication date of the page, used for schema markup.
+   */
   publishDate?: string;
+  /**
+   * The document title for SEO.
+   * @default `site.name`
+   */
   title?: string;
+  /**
+   * The type of page, used for social media and schema markup.
+   * @default 'website'
+   */
   type?: 'website' | 'article';
+  /**
+   * The last update date of the page, used for schema markup.
+   */
   updateDate?: string;
 };
 
 const {
   title = site.name,
   description = site.description,
-  image = '/images/site_image.jpg',
+  image = '/images/site_image_cta.webp',
   type = 'website',
   publishDate,
   updateDate,
@@ -36,6 +65,8 @@ const pageTitle = title === site.name ? site.name : `${title} | ${site.name}`;
 ---
 
 <script is:inline>
+// This script is inlined in the <head> to prevent FOUC.
+// It checks for a forced theme, then local storage, then the user's OS preference.
 const forcedTheme = document.documentElement.dataset.theme;
 const theme =
   forcedTheme ||

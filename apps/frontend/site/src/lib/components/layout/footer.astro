@@ -1,5 +1,6 @@
 ---
 // apps/frontend/site/src/lib/components/layout/footer.astro
+import { discordInviteLink } from '$data/site_content';
 ---
 
 <!-- Dark-Fantasy Atmospheric Footer -->
@@ -31,7 +32,7 @@
             </svg>
           </a>
           <a
-            href="https://discord.gg/R9mKAQ6E4"
+            href={discordInviteLink}
             aria-label="Discord"
             class="text-muted-foreground hover:text-rune transition-colors"
           >
@@ -47,7 +48,7 @@
 
       <!-- App Links -->
       <div>
-        <h4 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-4">App</h4>
+        <h3 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-4">App</h3>
         <ul class="space-y-2.5">
           <li>
             <a
@@ -75,11 +76,11 @@
 
       <!-- Community Links -->
       <div>
-        <h4 class="font-mono text-[10px] uppercase tracking-widest text-ember mb-4">Community</h4>
+        <h3 class="font-mono text-[10px] uppercase tracking-widest text-ember mb-4">Community</h3>
         <ul class="space-y-2.5">
           <li>
             <a
-              href="https://discord.gg/R9mKAQ6E4"
+              href={discordInviteLink}
               class="text-sm text-muted-foreground hover:text-foreground no-underline transition-colors"
               >Discord</a
             >
@@ -103,9 +104,9 @@
 
       <!-- Development Links -->
       <div>
-        <h4 class="font-mono text-[10px] uppercase tracking-widest text-emerald-400 mb-4">
+        <h3 class="font-mono text-[10px] uppercase tracking-widest text-emerald-400 mb-4">
           Development
-        </h4>
+        </h3>
         <ul class="space-y-2.5">
           <li>
             <a

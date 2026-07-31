@@ -1,5 +1,6 @@
 ---
 // apps/frontend/site/src/lib/components/sections/hero.astro
+import { discordInviteLink } from '$data/site_content';
 ---
 
 <!-- Canvas layer — ambient PixiJS D20 + particles -->
@@ -27,7 +28,7 @@
         <h1
           class="font-serif text-5xl leading-[1.02] tracking-tight md:text-7xl lg:text-[5rem] max-w-2xl"
         >
-          Living Worlds.<br>
+          Open-Source AI RPG.<br>
           <span class="text-rune">Emergent NPCs.</span><br>
           <span class="italic text-muted-foreground">Infinite RPG Roleplay.</span>
         </h1>
@@ -60,7 +61,7 @@
             Self-Host / GitHub
           </a>
           <a
-            href="https://discord.gg/R9mKAQ6E4"
+            href={discordInviteLink}
             class="inline-flex items-center gap-2 rounded-sm border border-border px-6 py-3.5 text-sm font-medium text-foreground transition-all hover:bg-card hover:border-rune/40 no-underline"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -125,12 +126,23 @@
 </section>
 
 <script>
-import { initHeroD20 } from './hero_d20';
-
+/** Defer PixiJS init to avoid blocking LCP — load after idle callback or short delay. */
 const containerId = 'hero-canvas';
-const cleanup = await initHeroD20(containerId);
+let cleanup: (() => void) | undefined;
+
+const initWhenReady = () => {
+  import('./hero_d20').then(async ({ initHeroD20 }) => {
+    cleanup = await initHeroD20(containerId);
+  });
+};
+
+if ('requestIdleCallback' in globalThis) {
+  requestIdleCallback(initWhenReady, { timeout: 2000 });
+} else {
+  setTimeout(initWhenReady, 200);
+}
 
 document.addEventListener('astro:before-swap', () => {
-  cleanup();
+  cleanup?.();
 });
 </script>

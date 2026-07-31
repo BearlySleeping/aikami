@@ -34,6 +34,8 @@ export const site = {
   ],
 };
 
+export const discordInviteLink = 'https://discord.gg/XuuhWvSxHH';
+
 export const siteContent = {
   site,
   nav: [
