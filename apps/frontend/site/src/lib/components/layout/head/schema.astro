@@ -2,41 +2,57 @@
 // apps/frontend/site/src/lib/components/layout/head/schema.astro
 import { site } from '$data/site_content';
 
+/**
+ * Generates JSON-LD schema markup for SEO purposes.
+ * This helps search engines understand the content and context of the page.
+ */
 type Props = {
+  /** The canonical URL of the page. Required. */
   canonicalURL: string;
+  /** The meta description of the page. Required. */
   description: string;
+  /** The main image for the page. Required. */
   image: string;
+  /** The publication date of the article. Required for 'article' type. */
   publishDate?: string;
+  /** The title of the page. Required. */
   title: string;
+  /** The type of page. Required. */
   type: 'website' | 'article';
+  /** The last update date of the article. */
   updateDate?: string;
 };
 
 const { title, description, image, canonicalURL, type, publishDate, updateDate } = Astro.props;
 
+// 1. Build the Identity
 const sameAs = Object.values(site.social).filter((url) => url && url.length > 0);
 
 const identity = {
   '@type': 'Organization',
   name: site.name,
   url: site.url,
-  ...(site.email ? { email: site.email } : {}),
-  ...(site.telephone ? { telephone: site.telephone } : {}),
-  ...(site.address.street
-    ? {
-        address: {
-          '@type': 'PostalAddress',
-          streetAddress: site.address.street,
-          addressLocality: site.address.locality,
-          addressCountry: site.address.country,
-        },
-      }
-    : {}),
-  sameAs,
+  ...(site.email && { email: site.email }),
+  ...(site.telephone && { telephone: site.telephone }),
+  ...(site.address && {
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: site.address.street,
+      addressLocality: site.address.locality,
+      addressCountry: site.address.country,
+    },
+  }),
+  sameAs: sameAs,
 };
 
-type SchemaGraph = { '@context': string; '@graph': Record<string, unknown>[] };
+// 2. Define the Type (The Fix)
+// This tells TS: "schema contains a @graph property which is an Array of Objects"
+type SchemaGraph = {
+  '@context': string;
+  '@graph': Record<string, unknown>[];
+};
 
+// 3. Initialize Schema
 const schema: SchemaGraph = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -60,13 +76,14 @@ const schema: SchemaGraph = {
   ],
 };
 
+// 4. Push Dynamic Content (Now strictly typed)
 if (type === 'article') {
   schema['@graph'].push({
     '@type': 'BlogPosting',
     '@id': `${canonicalURL}/#article`,
     headline: title,
-    description,
-    image,
+    description: description,
+    image: image,
     datePublished: publishDate,
     dateModified: updateDate || publishDate,
     author: {
@@ -84,7 +101,7 @@ if (type === 'article') {
     '@id': canonicalURL,
     url: canonicalURL,
     name: title,
-    description,
+    description: description,
     isPartOf: { '@id': `${site.url}/#website` },
     about: { '@id': `${site.url}/#identity` },
   });
