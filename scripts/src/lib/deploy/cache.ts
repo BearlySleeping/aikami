@@ -54,8 +54,9 @@ function saveLocalCache(cache: LocalCache): void {
   writeFileSync(LOCAL_CACHE_PATH, `${JSON.stringify(cache, null, 2)}\n`);
 }
 
-function localCacheKey(mode: string, appName: string): string {
-  return `${CACHE_PREFIX}:${mode}:${appName}`;
+function localCacheKey(mode: string, appName: string, releaseTag?: string): string {
+  const suffix = releaseTag ? `:release:${releaseTag}` : '';
+  return `${CACHE_PREFIX}:${mode}:${appName}${suffix}`;
 }
 
 // ── Hashing helpers ──────────────────────────────────────────────────────
@@ -228,8 +229,9 @@ async function checkOnlineCache(
   mode: string,
   appName: string,
   currentChecksum: string,
+  releaseTag?: string,
 ): Promise<'hit' | 'miss' | null> {
-  const key = `${CACHE_PREFIX}:${mode}:${appName}`;
+  const key = localCacheKey(mode, appName, releaseTag);
   if (isVerbose()) {
     log(`  querying Redis: ${key}`);
   }
@@ -280,9 +282,10 @@ export async function checkDeployCache(
   mode: string,
   rootDir: string,
   isForce: boolean,
+  releaseTag?: string,
 ): Promise<CacheResult> {
   const checksum = computeAppChecksum(config, appName, mode, rootDir);
-  const cacheKey = localCacheKey(mode, appName);
+  const cacheKey = localCacheKey(mode, appName, releaseTag);
 
   if (isForce) {
     log(`  ${c.dim}--force: bypassing cache check${c.reset}`);
@@ -290,7 +293,7 @@ export async function checkDeployCache(
   }
 
   // 1. Online cache (authoritative — single source of truth)
-  const onlineResult = await checkOnlineCache(mode, appName, checksum);
+  const onlineResult = await checkOnlineCache(mode, appName, checksum, releaseTag);
 
   if (onlineResult === 'hit') {
     log(`  ${c.dim}Cache hit (online): ${checksum.slice(0, 8)}...${c.reset}`);
@@ -328,9 +331,10 @@ export async function saveDeployCache(
   appName: string,
   checksum: string,
   version: string,
+  releaseTag?: string,
 ): Promise<void> {
-  const checksumKey = `${CACHE_PREFIX}:${mode}:${appName}`;
-  const versionKey = `${CACHE_PREFIX}:${mode}:${appName}:version`;
+  const checksumKey = localCacheKey(mode, appName, releaseTag);
+  const versionKey = `${checksumKey}:version`;
 
   await Promise.all([upstashSet(checksumKey, checksum), upstashSet(versionKey, version)]);
 

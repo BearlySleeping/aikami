@@ -62,7 +62,23 @@ function readCurrentMode(root: string): Mode | null {
 }
 
 function writeMode(root: string, mode: Mode): void {
-  writeFileSync(getEnvLocal(root), `AIKAMI_MODE=${mode}\n`);
+  const file = getEnvLocal(root);
+  let content = '';
+
+  if (existsSync(file)) {
+    content = readFileSync(file, 'utf-8');
+  }
+
+  // Replace existing AIKAMI_MODE line or append if not found
+  const modePattern = /^AIKAMI_MODE=.*$/m;
+  if (modePattern.test(content)) {
+    content = content.replace(modePattern, `AIKAMI_MODE=${mode}`);
+  } else {
+    // Append to existing content, ensuring a newline separator if content exists
+    content = content.trim() ? `${content.trim()}\nAIKAMI_MODE=${mode}\n` : `AIKAMI_MODE=${mode}\n`;
+  }
+
+  writeFileSync(file, content);
 }
 
 async function reloadDirenv(root: string): Promise<boolean> {

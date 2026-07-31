@@ -98,6 +98,9 @@ export async function deployTauriRelease(
   log(`  Tauri:    ${tauriDir}\n`);
 
   // 0. Checksum cache — use pre-flight checksum when available
+  // Extract RELEASE_TAG early for cache key consistency
+  const releaseTag = process.env.RELEASE_TAG?.trim();
+
   let checksum: string;
   if (preflightChecksum !== undefined) {
     checksum = preflightChecksum;
@@ -105,7 +108,7 @@ export async function deployTauriRelease(
       log(`  Using pre-flight checksum: ${checksum.slice(0, 16)}...`);
     }
   } else {
-    const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
+    const cache = await checkDeployCache(config, appName, mode, rootDir, isForce, releaseTag);
     if (cache.skip) {
       ok(`${appName} Tauri release skipped (unchanged — cache hit: ${cache.source})`);
       return;
@@ -187,7 +190,6 @@ export async function deployTauriRelease(
   // workflow_dispatch / staging runs have no tag to attach to; the
   // workflow's own actions/upload-artifact step is the distribution path
   // for those (see .github/workflows/release.yml).
-  const releaseTag = process.env.RELEASE_TAG?.trim();
 
   if (releaseTag) {
     log(`\n📤 Publishing to GitHub Release ${c.cyan}${releaseTag}${c.reset}...`);
@@ -196,16 +198,16 @@ export async function deployTauriRelease(
     // warn-and-continue like the build step above — a failed upload here
     // means the release silently ships with no desktop binaries attached,
     // which should fail the job loudly, not degrade quietly.
-    try {
-      for (const artifact of artifacts) {
-        // --clobber makes this idempotent: safe to re-run the same release
-        // (e.g. after a --force rebuild) without a "asset already exists" error.
+    for (const artifact of artifacts) {
+      // --clobber makes this idempotent: safe to re-run the same release
+      // (e.g. after a --force rebuild) without a "asset already exists" error.
+      try {
         run(`gh release upload "${releaseTag}" "${artifact}" --clobber`, { quiet: false });
+      } catch (err) {
+        throw new Error(
+          `Failed to upload artifact to GitHub Release ${releaseTag}: ${artifact}\n${(err as Error).message}`,
+        );
       }
-    } catch (err) {
-      throw new Error(
-        `Failed to upload artifact(s) to GitHub Release ${releaseTag}: ${(err as Error).message}`,
-      );
     }
     ok(`  Uploaded ${artifacts.length} artifact(s) to release ${releaseTag}`);
   } else if (process.env.CI === 'true') {
@@ -219,7 +221,7 @@ export async function deployTauriRelease(
   }
 
   // 6. Save cache on success (use Cargo.toml version for Tauri releases)
-  await saveDeployCache(mode, appName, checksum, ver);
+  await saveDeployCache(mode, appName, checksum, ver, releaseTag);
   ok(
     `${appName} Tauri release complete — v${ver} (${platformDir}, ${artifacts.length} artifact(s))`,
   );
