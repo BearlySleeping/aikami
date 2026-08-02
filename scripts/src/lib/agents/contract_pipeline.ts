@@ -2,11 +2,10 @@
 // scripts/src/lib/agents/contract_pipeline.ts
 //
 // Contract Pipeline CLI — entry point for `bun run contract`.
-// Default: interactive direct drafting. Use --issue to freeze from a GitHub Issue.
-//   bun run contract                    → interactive direct draft (default)
-//   bun run contract --issue #54        → freeze contract from GitHub Issue
-//   bun run contract --issue https://... → freeze from issue URL
-//   bun run contract --source todo C-370 → parse docs/TODO.md
+//   bun run contract                       → prompt source (interactive writer draft)
+//   bun run contract C-370                 → existing contract (path source, default)
+//   bun run contract --source issue #54    → freeze contract from a GitHub Issue
+//   bun run contract --source todo C-370   → parse docs/TODO.md (legacy)
 
 import { execFileSync, execSync, spawn } from 'node:child_process';
 import {
@@ -17,17 +16,19 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parseBacklog } from '../ops/parse_backlog.ts';
+import { resolveContract } from './contract_pipeline/contract_resolver.ts';
 import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-/** Valid source modes for contract generation */
-type ContractSource = 'todo' | 'roadmap' | 'direct';
+/** Valid source modes for contract generation. */
+type ContractSource = 'prompt' | 'issue' | 'todo' | 'path';
 
 type CliArguments = {
   target?: string;
@@ -44,6 +45,9 @@ type CliArguments = {
   help: boolean;
   root: boolean;
   dirty: boolean;
+  /** Internal — forwarded by the launcher to the background child so the
+   *  writer stage stays interactive (user describes the feature in the TUI). */
+  interactiveWriter: boolean;
 };
 
 const parseArguments = (): CliArguments => {
@@ -60,12 +64,40 @@ const parseArguments = (): CliArguments => {
     }
   }
 
-  const sourceRaw = valueAfter('--source')?.toLowerCase();
-  const source: ContractSource =
-    sourceRaw === 'todo' || sourceRaw === 'roadmap' ? sourceRaw : 'direct';
+  const positionalTarget = args.find((value) => !value.startsWith('-') && !consumed.has(value));
+
+  // Resolve the source mode. The --source value is either a keyword
+  // (prompt|issue|todo|path) or a contract path/ID (e.g. docs/contracts/C-372.md).
+  const sourceRaw = valueAfter('--source')?.trim();
+  const sourceKey = sourceRaw?.toLowerCase();
+
+  let source: ContractSource;
+  let target = positionalTarget;
+  if (sourceKey === 'issue' || sourceKey === 'roadmap') {
+    // roadmap → issue (renamed). Both freeze a contract from GitHub.
+    source = 'issue';
+  } else if (sourceKey === 'todo') {
+    source = 'todo';
+  } else if (sourceKey === 'path') {
+    source = 'path';
+  } else if (sourceKey === 'prompt' || sourceKey === 'direct') {
+    // direct → prompt (renamed). Both open the interactive writer.
+    source = 'prompt';
+  } else if (sourceRaw) {
+    // --source <path-or-ID>: the value IS the contract → path mode.
+    source = 'path';
+    target = sourceRaw;
+  } else if (target) {
+    // No --source flag but a target was passed (C-XXX or a contract path) →
+    // default to using the existing contract.
+    source = 'path';
+  } else {
+    // No --source flag and no target → interactive direct draft.
+    source = 'prompt';
+  }
 
   return {
-    target: args.find((value) => !value.startsWith('-') && !consumed.has(value)),
+    target,
     source,
     issueTarget: valueAfter('--issue'),
     resumeRunId: valueAfter('--resume'),
@@ -78,6 +110,7 @@ const parseArguments = (): CliArguments => {
     yolo: args.includes('--yolo'),
     root: args.includes('--root') || args.includes('-r'),
     dirty: args.includes('--dirty'),
+    interactiveWriter: args.includes('--interactive-writer'),
     help: args.includes('--help') || args.includes('-h'),
   };
 };
@@ -85,35 +118,52 @@ const parseArguments = (): CliArguments => {
 const printHelp = (): void => {
   console.log(`
 Usage:
-  bun run contract [--issue <url|#>] [options]
+  bun run contract [target] [--source <mode>] [options]
 
-Default: interactive direct drafting (describe your feature in the chat).
-Use --issue to freeze a contract from an existing GitHub Issue.
-Legacy --source modes are still supported.
+Modes (--source):
+  prompt   Open the interactive writer — you describe the feature in the chat
+           and the writer drafts the contract (default when no target is given).
+  issue    Freeze a contract from a GitHub Issue/Roadmap item. Requires a
+           target: issue number (#54), URL, or C-XXX with a linked issue.
+  <path>   Use an existing contract: a file path (docs/contracts/C-372.md) or
+           a bare ID (C-372, looked up in docs/contracts/). Skips the writer
+           and critique stages — starts at implementation/verification.
+  todo     Legacy: parse docs/TODO.md for the backlog item.
+
+Targets:
+  C-XXX                  Look up an existing contract in docs/contracts/ (default).
+  docs/contracts/C-XXX-slug.md   Path to an existing contract file.
+  #54 | issue URL        With --source issue: the GitHub Issue to freeze.
+
+Defaults:
+  bun run contract                     → prompt source (new contract, interactive writer)
+  bun run contract C-370               → path source (existing contract)
+  bun run contract --source direct ... → prompt (legacy alias)
+  bun run contract --source roadmap .. → issue (legacy alias)
 
 Examples:
-  bun run contract                          # Interactive direct draft (default)
-  bun run contract --issue 54               # Freeze from Issue #54
-  bun run contract --issue https://github.com/BearlySleeping/aikami/issues/54
-  bun run contract --source todo C-370       # Legacy: parse docs/TODO.md
-  bun run contract --source direct           # Explicit direct draft
-  bun run contract --issue 54 --root         # Issue source + root branch
-  bun run contract --root                    # Direct draft + root branch
-  bun run contract --root --dirty            # Allow uncommitted changes
-  bun run contract docs/contracts/C-xxx-....md
+  bun run contract                          # Interactive direct draft
+  bun run contract --source prompt --root   # Same, but on a root branch
+  bun run contract --source issue 54        # Freeze from Issue #54
+  bun run contract --source issue https://github.com/BearlySleeping/aikami/issues/54
+  bun run contract C-370 --root             # Run an existing contract on a root branch
+  bun run contract docs/contracts/C-370-fix-lpc-paperdoll-....md
+  bun run contract --source todo C-370      # Legacy: parse docs/TODO.md
   bun run contract --resume <run-id>
 
 Options:
-  --source <mode>   Source for contract generation: todo, roadmap, direct (default: direct)
-  --root, -r        Start work on branch contract/C-XXX in the root repo before launching pipeline
-  --dirty           Allow branch switch with uncommitted changes (only with --root)
-  --resume <run-id> Resume an incomplete v3 run
-  --dry-run          Resolve and create the manifest without starting Herdr/Pi
-  --background       Internal/background mode; do not attach Herdr
-  --fresh            Start a brand-new run (skip auto-resume)
-  --no-attach        Run pipeline in background without attaching to herdr
-  --ready            Create PR as ready-for-review (skip draft); triggers CodeRabbit immediately
-  -h, --help         Show this help
+  --issue <url|#>      Alias for --source issue.
+  --source <mode>      prompt (default), issue, todo, or a contract path/ID.
+  --root, -r           Start work on branch contract/C-XXX in the root repo.
+  --dirty              Allow branch switch with uncommitted changes (only with --root).
+  --resume <run-id>    Resume an incomplete run.
+  --fresh              Start a brand-new run (skip auto-resume).
+  --dry-run            Resolve and create the manifest without starting Herdr/Pi.
+  --background         Internal/background mode; do not attach Herdr.
+  --no-attach          Run pipeline in background without attaching to herdr.
+  --ready              Create PR as ready-for-review (skip draft); triggers CodeRabbit immediately.
+  --yolo               Fully automated pipeline — no human in the review loop.
+  -h, --help           Show this help.
 `);
 };
 
@@ -130,10 +180,10 @@ const gh = (args: string[], options?: { timeout?: number }): string => {
 };
 
 /**
- * Handle --source roadmap: fetch a GitHub Issue or Project v2 item
+ * Handle --source issue: fetch a GitHub Issue or Project v2 item
  * and freeze it into a contract file.
  */
-const handleRoadmapSource = (target: string): string => {
+const handleIssueSource = (target: string): string => {
   const repoRoot = process.cwd();
   const contractsDir = join(repoRoot, 'docs/contracts');
   const templatePath = join(contractsDir, 'TEMPLATE.md');
@@ -274,7 +324,7 @@ const handleRoadmapSource = (target: string): string => {
     const contractContent = template
       .replace(/{FEATURE_CODE}/g, contractId)
       .replace(/{TITLE}/g, issueData.title)
-      .replace(/{source}/g, 'roadmap')
+      .replace(/{source}/g, 'issue')
       .replace(/{created_at}/g, now)
       .replace(/{reference_description}/g, `GitHub Issue [#${issueNum}](${issueUrl})`)
       .replace(/{path}/g, 'TBD — determined during implementation')
@@ -310,7 +360,7 @@ const handleRoadmapSource = (target: string): string => {
       .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
     writeFileSync(contractPath, finalContent);
-    console.log(`✅ Contract frozen from roadmap: ${contractFileName}`);
+    console.log(`✅ Contract frozen from issue: ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
   }
@@ -354,7 +404,7 @@ const resolveIssueFromProject = (searchTitle: string): number | undefined => {
 };
 
 /**
- * Prepare a --source direct contract pipeline run.
+ * Prepare a --source prompt (direct draft) contract pipeline run.
  *
  * Generates the next available contract ID, creates a minimal placeholder
  * contract on disk, and returns the ID. The pipeline writer stage then opens
@@ -364,21 +414,38 @@ const prepareDirectSource = (repoRoot: string): string => {
   const contractsDir = join(repoRoot, 'docs/contracts');
 
   // Determine next contract ID from existing files on disk.
-  // Check for existing direct-draft placeholders first (idempotent
-  // across foreground+background process launches).
+  // 🔴 This runs in the FOREGROUND only. The background child receives the
+  // resolved ID from the launcher (forwarded as a positional arg) and never
+  // re-derives it — re-deriving here picks the first C-XXX.md placeholder
+  // alphabetically (e.g. a stale C-371.md), not the one just created.
   const existingContracts = existsSync(contractsDir)
     ? readdirSync(contractsDir).filter((f) => /^C-\d+/.test(f) && f.endsWith('.md'))
     : [];
 
-  // Reuse an existing placeholder if running in background mode
-  // (foreground already created it). In foreground, always create fresh.
-  const isBackground = process.argv.includes('--background');
-  if (isBackground) {
-    const existingPlaceholder = existingContracts.find((f) => /^C-\d+\.md$/.test(f));
-    if (existingPlaceholder) {
-      const id = existingPlaceholder.replace('.md', '');
-      return id;
-    }
+  // Reuse an orphaned placeholder from an interrupted direct-draft run — but
+  // ONLY when it is still a genuine placeholder (heading "Direct Draft" +
+  // the source marker). Real contracts (e.g. C-371.md with a real title)
+  // are never reused. Newest first, so a fresh orphan wins over an old one.
+  const stalePlaceholders = existingContracts
+    .filter((f) => /^C-\d+\.md$/.test(f))
+    .map((f) => join(contractsDir, f))
+    .filter((p) => {
+      try {
+        const content = readFileSync(p, 'utf-8');
+        return (
+          /^#\s+Contract\s+C-\d+:\s*Direct Draft/m.test(content) &&
+          (content.includes('Placeholder created by `--source prompt`') ||
+            content.includes('Placeholder created by `--source direct`'))
+        );
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  if (stalePlaceholders[0]) {
+    const reusedId = basename(stalePlaceholders[0], '.md');
+    console.log(`♻️  Reusing orphaned placeholder: ${reusedId}.md`);
+    return reusedId;
   }
 
   const maxId = existingContracts.reduce((max: number, f: string) => {
@@ -388,15 +455,15 @@ const prepareDirectSource = (repoRoot: string): string => {
   const contractId = `C-${maxId + 1}`;
 
   // Create a minimal placeholder so resolveContract() can find it.
-  // The writer pi session will call contract_generate to create the
-  // full v2 contract shell and fill it in based on user input.
+  // The interactive writer pi session waits for the user's feature
+  // description, then renames this to C-XXX-<slug>.md and fills it in.
   const placeholderPath = join(contractsDir, `${contractId}.md`);
   const placeholder = [
     `# Contract ${contractId}: Direct Draft`,
     '',
-    '> ⚠️ Placeholder created by `--source direct`. The writer will call',
-    '> `contract_generate` to create the full contract shell, then complete',
-    '> every section based on the feature you describe in the chat.',
+    '> ⚠️ Placeholder created by `--source prompt`. The writer will rename',
+    `> this file to \`${contractId}-<slug>.md\` and complete every section`,
+    '> based on the feature you describe in the chat.',
     '',
     '| **Status** | draft |',
     '',
@@ -414,7 +481,7 @@ const prepareDirectSource = (repoRoot: string): string => {
       '',
       'A writer pi session will open in a moment.',
       'Describe your feature in the chat and the writer',
-      'will create the full contract specification.',
+      `will write the contract to docs/contracts/${contractId}-<slug>.md.`,
       '',
       '═══════════════════════════════════════════',
       '',
@@ -425,6 +492,57 @@ const prepareDirectSource = (repoRoot: string): string => {
 };
 
 // ── Root Branch Checkout ────────────────────────────────────
+
+/**
+ * Detect uncommitted changes in the working tree.
+ * Only modifications, staged changes, and conflicts count — untracked
+ * files (??) don't block branch switches.
+ */
+const detectDirty = (): boolean => {
+  try {
+    const status = execSync('git status --porcelain', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    return status.split('\n').some((line) => line.length > 2 && !line.startsWith('??'));
+  } catch {
+    throw new Error('Not a git repository. --root requires a git working tree.');
+  }
+};
+
+/** Reconstruct the current command with --dirty appended (retry hint). */
+const retryWithDirtyHint = (): string => {
+  const args = process.argv.slice(2).filter((value) => value !== '--dry-run');
+  return `bun run contract ${args.join(' ')} --dirty`.replace(/\s+/g, ' ').trim();
+};
+
+/**
+ * Fail fast when --root would switch a dirty tree. Run BEFORE any file is
+ * created (placeholder, frozen contract) so the user isn't left with a
+ * half-created contract when the branch switch would have been blocked.
+ */
+const assertRootTreeClean = (options: { allowDirty: boolean }): void => {
+  if (options.allowDirty) {
+    return;
+  }
+  if (!detectDirty()) {
+    return;
+  }
+  console.error(
+    [
+      '❌ Error: Working directory is dirty.',
+      '',
+      'Uncommitted changes: run `git status` to review.',
+      '',
+      'Options:',
+      '  1. Commit or stash your changes: `git stash`',
+      '  2. Re-run with --dirty to continue with uncommitted changes:',
+      `     ${retryWithDirtyHint()}`,
+      '',
+    ].join('\n'),
+  );
+  process.exit(1);
+};
 
 /**
  * Set up a root-directory branch for contract work instead of a worktree.
@@ -450,17 +568,10 @@ const setupRootBranch = (options: {
   // and conflicts count. Untracked files (??) don't block branch switches.
   let wasDirty = false;
   try {
-    const status = execSync('git status --porcelain', {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    // Filter out untracked files — only staged/modified/conflict lines matter
-    const dirtyLines = status
-      .split('\n')
-      .filter((line) => line.length > 2 && !line.startsWith('??'));
-    wasDirty = dirtyLines.length > 0;
-  } catch {
-    throw new Error('Not a git repository. --root requires a git working tree.');
+    wasDirty = detectDirty();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(msg);
   }
 
   if (wasDirty && !options.allowDirty) {
@@ -472,8 +583,8 @@ const setupRootBranch = (options: {
         '',
         'Options:',
         '  1. Commit or stash your changes: `git stash`',
-        '  2. Re-run with --dirty to switch branches with uncommitted changes:',
-        `     bun run contract ${options.target} --root --dirty`,
+        '  2. Re-run with --dirty to continue with uncommitted changes:',
+        `     ${retryWithDirtyHint()}`,
         '',
       ].join('\n'),
     );
@@ -539,26 +650,43 @@ const atomicWrite = (options: { path: string; value: unknown }): void => {
   renameSync(temporaryPath, options.path);
 };
 
-const launchBackground = async (options: { noAttach: boolean }): Promise<void> => {
+const launchBackground = async (options: {
+  noAttach: boolean;
+  /** Resolved direct-draft contract ID (e.g. C-372) to forward to the child. */
+  target?: string;
+  /** Forward so the child keeps the writer stage interactive. */
+  interactiveWriter?: boolean;
+}): Promise<void> => {
   const token = `launch-${Date.now().toString(36)}-${process.pid}`;
   const runsDirectory = join(process.cwd(), '.pi/contract-runs');
   mkdirSync(runsDirectory, { recursive: true });
   const readyPath = join(runsDirectory, `${token}.json`);
   const launcherLogPath = join(runsDirectory, `${token}.log`);
   const descriptor = openSync(launcherLogPath, 'a');
+  // Forward ALL user args (including --root/--dirty) so the background child
+  // runs with the same configuration. setupRootBranch is idempotent — the
+  // child detects it is already on the branch and proceeds. Only the
+  // launcher-only flags are stripped.
   const forwarded = process.argv
     .slice(2)
-    .filter(
-      (value) =>
-        value !== '--background' &&
-        value !== '--no-attach' &&
-        value !== '--root' &&
-        value !== '-r' &&
-        value !== '--dirty',
-    );
+    .filter((value) => value !== '--background' && value !== '--no-attach');
+  // 🔴 Forward the resolved direct-draft target so the child uses the EXACT
+  // same contract ID instead of re-deriving a placeholder (which could pick
+  // a stale file and start the pipeline at the wrong stage).
+  const targetArgs = options.target && !forwarded.includes(options.target) ? [options.target] : [];
+  const writerArgs = options.interactiveWriter ? ['--interactive-writer'] : [];
   const child = spawn(
     'bun',
-    ['run', import.meta.path, ...forwarded, '--background', '--launcher-token', token],
+    [
+      'run',
+      import.meta.path,
+      ...forwarded,
+      ...targetArgs,
+      ...writerArgs,
+      '--background',
+      '--launcher-token',
+      token,
+    ],
     {
       cwd: process.cwd(),
       detached: true,
@@ -609,9 +737,18 @@ const main = async (): Promise<void> => {
     return;
   }
 
+  // 🔴 Fail fast BEFORE creating any placeholder or contract file: --root
+  // switches branches, so a dirty working tree blocks unless --dirty is
+  // passed. Checking up front means a failed run leaves no C-XXX.md behind.
+  // setupRootBranch re-checks later (idempotent), and the background child
+  // inherits the same flags from the launcher.
+  if (cli.root) {
+    assertRootTreeClean({ allowDirty: cli.dirty });
+  }
+
   // --issue: freeze contract from GitHub Issue (no pipeline)
   if (cli.issueTarget) {
-    const contractId = handleRoadmapSource(cli.issueTarget);
+    const contractId = handleIssueSource(cli.issueTarget);
     if (cli.root) {
       setupRootBranch({
         target: contractId,
@@ -622,19 +759,63 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  // Handle --source modes that don't use the full pipeline
-  if (cli.source === 'roadmap' && cli.target) {
-    handleRoadmapSource(cli.target);
+  // Handle --source modes that don't use the full pipeline: --source issue
+  // freezes a contract from GitHub (same as --issue).
+  if (cli.source === 'issue') {
+    if (!cli.target) {
+      console.error(
+        '❌ --source issue requires a target: an issue number (#54), a URL, or a C-XXX with a linked issue.',
+      );
+      process.exit(1);
+    }
+    handleIssueSource(cli.target);
     return;
   }
 
-  // Default (direct): generate contract ID + placeholder, then fall through
-  // to the pipeline. The writer stage opens in interactive TUI mode.
+  // ── Prompt source: fresh direct draft → interactive writer ──
+  // The default when no target is given. Creates a placeholder contract and
+  // opens the writer pi session in interactive TUI mode so the user can
+  // describe the feature in the chat.
+  //
+  // 🔴 Only the foreground derives a fresh ID. The background child receives
+  // the resolved target + --interactive-writer from the launcher and never
+  // re-runs prepareDirectSource (that would pick the wrong placeholder).
   let interactiveWriter = false;
-  if (cli.source === 'direct') {
-    cli.target = prepareDirectSource(process.cwd());
+  let skipAuthoring = false;
+  if (cli.source === 'prompt' && !cli.resumeRunId) {
+    if (!cli.target) {
+      cli.target = prepareDirectSource(process.cwd());
+    }
     interactiveWriter = true;
+  } else if (cli.source === 'path') {
+    // Existing contract passed by path or bare C-XXX. Skip the contract-
+    // authoring stages (writer + critique) and start at implementation
+    // (or later, per the contract's status). The contract must already
+    // exist on disk — path mode does not fall back to the backlog.
+    skipAuthoring = true;
+    if (!cli.target) {
+      console.error(
+        '❌ --source path requires a contract path or ID (e.g. docs/contracts/C-370.md).',
+      );
+      process.exit(1);
+    }
+    try {
+      const resolved = resolveContract({ target: cli.target, repoRoot: process.cwd() });
+      if (!existsSync(resolved.path)) {
+        console.error(`❌ Contract not found on disk: ${resolved.path}`);
+        console.error('   Create it first with `bun run contract` (interactive writer)');
+        console.error('   or `bun run contract --source issue <#|url>` (freeze from GitHub).');
+        process.exit(1);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ ${msg}`);
+      process.exit(1);
+    }
   }
+  // The background child inherits the interactive flag from the launcher
+  // (target was forwarded, so the branch above does not re-derive).
+  interactiveWriter = interactiveWriter || (cli.interactiveWriter && cli.source === 'prompt');
 
   // --root mode: switch branch directly in root repo instead of using worktrees
   if (cli.root) {
@@ -653,7 +834,11 @@ const main = async (): Promise<void> => {
   }
 
   if (!cli.background && !cli.dryRun) {
-    await launchBackground({ noAttach: cli.noAttach });
+    await launchBackground({
+      noAttach: cli.noAttach,
+      target: cli.target,
+      interactiveWriter,
+    });
     return;
   }
 
@@ -666,6 +851,7 @@ const main = async (): Promise<void> => {
     ready: cli.ready,
     yolo: cli.yolo,
     interactiveWriter,
+    skipAuthoring,
     rootMode: cli.root,
     onReady: cli.launcherToken
       ? (readyManifest) => {

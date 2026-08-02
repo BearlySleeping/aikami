@@ -507,6 +507,10 @@ export const runContractPipeline = async (options: {
   /** When true, the writer stage runs in interactive TUI mode so the user
    *  can chat directly with the writer pi session. */
   interactiveWriter?: boolean;
+  /** When true, skip the contract-authoring stages (writer + critique) and
+   *  start at implementation (or later, per the contract's status). Used
+   *  when the contract already exists and is passed by path or bare C-XXX. */
+  skipAuthoring?: boolean;
   /** When true, use the standard aikami-{mode} herdr workspace and
    *  skip git worktree provisioning. All stages run from the repo root. */
   rootMode?: boolean;
@@ -538,7 +542,12 @@ export const runContractPipeline = async (options: {
     manifest.blockedReason = undefined;
 
     const cs = readContractStatus(manifest.contractPath);
-    const contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
+    let contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
+    // Path-sourced contracts skip authoring — a draft contract resumes at
+    // implementation, not back to the writer.
+    if (options.skipAuthoring && contractStage === 'write_contract') {
+      contractStage = 'implement';
+    }
     const stageOrder: ContractPipelineStage[] = [
       'write_contract',
       'critique',
@@ -577,12 +586,17 @@ export const runContractPipeline = async (options: {
       throw new Error('A contract ID or path is required for a new run.');
     }
     const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
+    const baseStart = STATUS_TO_START_STAGE[contract.status] ?? 'write_contract';
+    // Path-sourced contracts (existing contract by path or bare C-XXX) skip
+    // the authoring stages — draft contracts start at implementation.
+    const startStage =
+      options.skipAuthoring && baseStart === 'write_contract' ? 'implement' : baseStart;
     manifest = createManifest({
       contractId: contract.id,
       contractPath: contract.path,
       baseCommit: currentCommit(options.repoRoot),
       baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
-      startStage: STATUS_TO_START_STAGE[contract.status] ?? 'write_contract',
+      startStage,
     });
     writeManifest({ manifest, cwd: options.repoRoot });
   }
@@ -668,17 +682,10 @@ export const runContractPipeline = async (options: {
         });
         const after = captureGitState(cwdForGit);
 
-        if (
-          wPath &&
-          (stage === 'write_contract' || stage === 'critique') &&
-          existsSync(manifest.contractPath)
-        ) {
-          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
-          try {
-            mkdirSync(dirname(wcp), { recursive: true });
-            copyFileSync(manifest.contractPath, wcp);
-          } catch {}
-        }
+        // Direct-draft placeholder rename: the writer creates the real contract
+        // at docs/contracts/C-XXX-<slug>.md. Discover it, drop the stale
+        // placeholder, and point the manifest at the real file BEFORE syncing
+        // to the worktree (so implementers read the real contract).
         if (stage === 'write_contract' && outcome.result.status === 'passed') {
           const cd = resolve(options.repoRoot, 'docs/contracts');
           if (existsSync(cd)) {
@@ -690,8 +697,25 @@ export const runContractPipeline = async (options: {
             );
             if (discovered) {
               manifest.contractPath = join(cd, discovered);
+              const placeholderPath = join(cd, `${manifest.contractId}.md`);
+              if (placeholderPath !== manifest.contractPath && existsSync(placeholderPath)) {
+                try {
+                  unlinkSync(placeholderPath);
+                } catch {}
+              }
             }
           }
+        }
+        if (
+          wPath &&
+          (stage === 'write_contract' || stage === 'critique') &&
+          existsSync(manifest.contractPath)
+        ) {
+          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
+          try {
+            mkdirSync(dirname(wcp), { recursive: true });
+            copyFileSync(manifest.contractPath, wcp);
+          } catch {}
         }
 
         // Postcondition validation — catches agents crossing role boundaries.
