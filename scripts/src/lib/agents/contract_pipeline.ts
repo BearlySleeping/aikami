@@ -656,6 +656,8 @@ const launchBackground = async (options: {
   target?: string;
   /** Forward so the child keeps the writer stage interactive. */
   interactiveWriter?: boolean;
+  /** Resolved CLI source mode (prompt/issue/path) to forward to the child. */
+  source?: ContractSource;
 }): Promise<void> => {
   const token = `launch-${Date.now().toString(36)}-${process.pid}`;
   const runsDirectory = join(process.cwd(), '.pi/contract-runs');
@@ -675,6 +677,10 @@ const launchBackground = async (options: {
   // a stale file and start the pipeline at the wrong stage).
   const targetArgs = options.target && !forwarded.includes(options.target) ? [options.target] : [];
   const writerArgs = options.interactiveWriter ? ['--interactive-writer'] : [];
+  // 🔴 Forward the resolved source mode so the child re-parses as source='prompt'
+  // for default prompt runs, preserving interactiveWriter and preventing
+  // skipAuthoring from advancing directly to implementation.
+  const sourceArgs = options.source ? ['--source', options.source] : [];
   const child = spawn(
     'bun',
     [
@@ -683,6 +689,7 @@ const launchBackground = async (options: {
       ...forwarded,
       ...targetArgs,
       ...writerArgs,
+      ...sourceArgs,
       '--background',
       '--launcher-token',
       token,
@@ -838,6 +845,7 @@ const main = async (): Promise<void> => {
       noAttach: cli.noAttach,
       target: cli.target,
       interactiveWriter,
+      source: cli.source,
     });
     return;
   }

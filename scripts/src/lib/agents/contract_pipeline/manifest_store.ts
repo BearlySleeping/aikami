@@ -249,6 +249,7 @@ export const createManifest = (options: {
   baseCommit: string;
   baselineFingerprint: string;
   startStage: ContractPipelineStage;
+  skipAuthoring?: boolean;
 }): RunManifest => {
   const timestamp = new Date().toISOString();
   return {
@@ -265,6 +266,7 @@ export const createManifest = (options: {
     attempts: [],
     usage: {},
     autofixCycles: 0,
+    skipAuthoring: options.skipAuthoring,
   };
 };
 

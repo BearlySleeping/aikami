@@ -544,8 +544,11 @@ export const runContractPipeline = async (options: {
     const cs = readContractStatus(manifest.contractPath);
     let contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
     // Path-sourced contracts skip authoring — a draft contract resumes at
-    // implementation, not back to the writer.
-    if (options.skipAuthoring && contractStage === 'write_contract') {
+    // implementation, not back to the writer. Use the persisted skipAuthoring
+    // decision from the manifest so a draft path-sourced run resumed by run ID
+    // without a target remains at implement instead of being reset to write_contract.
+    const skipAuthoring = options.skipAuthoring ?? manifest.skipAuthoring;
+    if (skipAuthoring && contractStage === 'write_contract') {
       contractStage = 'implement';
     }
     const stageOrder: ContractPipelineStage[] = [
@@ -597,6 +600,7 @@ export const runContractPipeline = async (options: {
       baseCommit: currentCommit(options.repoRoot),
       baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
       startStage,
+      skipAuthoring: options.skipAuthoring,
     });
     writeManifest({ manifest, cwd: options.repoRoot });
   }
