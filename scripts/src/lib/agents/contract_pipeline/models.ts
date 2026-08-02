@@ -10,7 +10,8 @@ export type ModelTier = 'pro' | 'flash' | 'free';
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 const TIERS = {
-  pro: 'deepseek/deepseek-v4-pro',
+  // the new DeepSeek-V4-Flash-0731 is better than pro
+  pro: 'deepseek/deepseek-v4-flash',
   flash: 'deepseek/deepseek-v4-flash',
   free: 'opencode/big-pickle',
 } as const;
