@@ -5,7 +5,14 @@ name: PR Checks
 # test for everything affected by the PR's diff. Never deploys anything.
 on:
   pull_request:
-    branches: [main, staging]
+    # `[_]` (match every branch) is intentional: `moon ci` runs `:build` for
+    # affected projects, and the client build compiles Tauri (Rust + full app
+    # bundle). That is very expensive on GitHub Actions, and we are on free
+    # credits — we cannot afford a Tauri build consuming minutes per PR when
+    # there are many PRs. Until the Tauri build is moved out of `moon ci`
+    # (or gated behind a label/path filter), keep this wildcard so we can
+    # control when the full build runs.
+    branches: [_] #[main, staging]
 
 concurrency:
   # Unlike the release workflow, it's safe (and desirable) to cancel a

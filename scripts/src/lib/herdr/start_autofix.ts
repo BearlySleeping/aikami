@@ -67,7 +67,7 @@ const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck', 'commit'];
 
 const PI_WORKSPACE = 'aikami-pi';
 const AUTOFIX_TAB = 'autofix';
-const DEFAULT_MODEL = 'deepseek/deepseek-v4-pro';
+const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 const DEFAULT_THINKING = 'high';
 const CLIENT_PORT = 5274;
 const FB_AUTH_PORT = 9098;
