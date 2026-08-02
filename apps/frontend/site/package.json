@@ -42,7 +42,7 @@
     "astro": "7.1.6",
     "astro-compress": "2.4.1",
     "astro-robots-txt": "1.0.0",
-    "firebase-tools": "15.25.0",
+    "firebase-tools": "15.25.1",
     "tailwindcss": "4.3.3",
     "lighthouse": "13.4.1",
     "@unlighthouse/cli": "0.18.0",

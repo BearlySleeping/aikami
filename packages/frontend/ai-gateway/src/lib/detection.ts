@@ -233,11 +233,14 @@ export const detectVoiceAvailability = async (options?: {
     serverAvailable: false,
   };
 
-  if (engine.status === 'error' || engine.status === 'uninitialized') {
+  // Optimistic snapshot (C-320 AC-5): an uninitialized Kokoro WebGPU
+  // engine is still available — it initializes lazily on first use.
+  // Only a hard engine error makes voice unavailable.
+  if (engine.status === 'error') {
     return {
       capability: 'voice',
       available: false,
-      detail: engine.status === 'error' ? 'Kokoro engine error' : 'Kokoro not initialized',
+      detail: 'Kokoro engine error',
       checkedAt: nowIso(),
     };
   }

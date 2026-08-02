@@ -19,6 +19,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "@astrojs/starlight": "0.41.5"
+    "@astrojs/starlight": "0.41.6"
   }
 }

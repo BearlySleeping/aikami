@@ -48,7 +48,13 @@ describe('detectTextAvailability — parity with capability_service.detectText',
       fetchFn: routedFetch([
         {
           match: '/api/text/',
-          respond: () => Promise.resolve(new Response('ok', { status: 200 })),
+          respond: () =>
+            Promise.resolve(
+              new Response('ok', {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            ),
         },
       ]),
     });
@@ -107,7 +113,13 @@ describe('detectTextAvailability — parity with capability_service.detectText',
       fetchFn: routedFetch([
         {
           match: '/api/text/',
-          respond: () => Promise.resolve(new Response('ok', { status: 200 })),
+          respond: () =>
+            Promise.resolve(
+              new Response('ok', {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            ),
         },
       ]),
     });
@@ -133,7 +145,13 @@ describe('detectImageAvailability — parity with capability_service.detectImage
       fetchFn: routedFetch([
         {
           match: 'object_info',
-          respond: () => Promise.resolve(new Response('{}', { status: 200 })),
+          respond: () =>
+            Promise.resolve(
+              new Response('{}', {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            ),
         },
       ]),
     });

@@ -231,7 +231,9 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
 
   test('extracts a structured object with native response_format', async () => {
     const payload = JSON.stringify({ name: 'Aragorn', level: 5 });
-    const { fetchFn, calls } = createSseFetchMock({ chunks: [sseChunk(payload), SSE_DONE] });
+    // Structured requests are stream: false — the provider returns plain JSON,
+    // not SSE. Mock updated to match the non-streaming transport.
+    const { fetchFn, calls } = createJsonFetchMock({ content: payload });
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       supportsStructuredOutput: () => true,
@@ -272,14 +274,9 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
   });
 
   test('strips markdown fences and surrounding prose from the response', async () => {
-    const { fetchFn } = createSseFetchMock({
-      chunks: [
-        sseChunk('Here you go: ```json\n'),
-        sseChunk(JSON.stringify({ name: 'Gimli' })),
-        sseChunk('\n```'),
-        SSE_DONE,
-      ],
-    });
+    // Structured requests are stream: false — plain JSON transport.
+    const fenced = `Here you go: \`\`\`json\n${JSON.stringify({ name: 'Gimli' })}\n\`\`\``;
+    const { fetchFn } = createJsonFetchMock({ content: fenced });
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     const result = await adapter.generateText({
@@ -296,7 +293,8 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
   test('enforces additionalProperties: false and caches compiled schemas', async () => {
     const sizes: number[] = [];
     const payload = JSON.stringify({ name: 'Test' });
-    const { fetchFn, calls } = createSseFetchMock({ chunks: [sseChunk(payload), SSE_DONE] });
+    // Structured requests are stream: false — plain JSON transport.
+    const { fetchFn, calls } = createJsonFetchMock({ content: payload });
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       supportsStructuredOutput: () => true,
@@ -375,5 +373,75 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
 
     expect(callCount).toBe(2);
     expect(result.structured).toEqual({ name: 'Boromir' });
+  });
+
+  test('handles structured response with choices[0].message.content shape', async () => {
+    const payload = JSON.stringify({ name: 'Frodo', level: 10 });
+    // Mock response using OpenAI's full response shape
+    const fetchFn = ((_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: payload } }],
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+    }) as typeof fetch;
+
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      supportsStructuredOutput: () => true,
+    });
+
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract a character' }],
+      schema: characterSchema,
+      schemaName: 'ChoicesMessageShape',
+    });
+
+    expect(result.structured).toEqual({ name: 'Frodo', level: 10 });
+  });
+
+  test('exercises non-json-200 fallback path for structured requests', async () => {
+    let callCount = 0;
+    // First call: 200 with non-JSON content (triggers fallback)
+    const fetchFn = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve(
+          new Response('This is plain text, not JSON', {
+            status: 200,
+            headers: { 'Content-Type': 'text/plain' },
+          }),
+        );
+      }
+      // Second call: streaming fallback
+      const { fetchFn: fallbackFetch } = createSseFetchMock({
+        chunks: [sseChunk(JSON.stringify({ name: 'Sam' })), SSE_DONE],
+      });
+      return fallbackFetch(input, init);
+    }) as typeof fetch;
+
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      supportsStructuredOutput: () => true,
+    });
+
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract' }],
+      schema: characterSchema,
+      schemaName: 'NonJson200Fallback',
+    });
+
+    expect(callCount).toBe(2);
+    expect(result.structured).toEqual({ name: 'Sam' });
   });
 });
