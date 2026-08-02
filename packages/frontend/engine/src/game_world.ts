@@ -522,7 +522,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._running = false;
 
     // ── Clear any pending worker promise so timeouts don't fire after teardown ──
-    this._pendingWorkerReject = undefined;
+    // Reject any in-flight restoreWorld/postLoadMap operations before clearing
+    if (this._pendingWorkerReject) {
+      this._pendingWorkerReject(new Error('GameWorld destroyed during pending worker operation'));
+      this._pendingWorkerReject = undefined;
+    }
 
     // ── C-332: Stop worker heartbeat ──
     this._stopHeartbeat();

@@ -375,7 +375,11 @@ export const createOpenAiCompatibleTextAdapter = (
               message?: { content?: string };
             };
             text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
-          } catch {
+          } catch (err) {
+            // Rethrow abort/timeout errors so cancellation propagates correctly
+            if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
+              throw err;
+            }
             // Provider returned 200 but the body wasn't JSON — it likely
             // ignored stream:false. Fall back to the system-prompt approach.
             return { fallback: 'non-json-200' };

@@ -25,22 +25,14 @@ self.addEventListener('error', (event: ErrorEvent): void => {
       type: 'ENGINE_ERROR',
       message: `Worker bootstrap error: ${JSON.stringify(detail)}`,
     });
+    // Mark error as handled where supported
+    if ('returnValue' in event) {
+      event.returnValue = true;
+    }
   } catch {
     // If even postMessage fails, nothing we can do
   }
 });
-
-self.onerror = (message, source, lineno, colno, _error): boolean => {
-  try {
-    postMessage({
-      type: 'ENGINE_ERROR',
-      message: `Worker onerror: ${String(message)} @ ${String(source)}:${lineno}:${colno}`,
-    });
-  } catch {
-    // silent
-  }
-  return false;
-};
 
 self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
   try {

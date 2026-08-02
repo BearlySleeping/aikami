@@ -105,6 +105,9 @@ class GameBootService
   /** Cancellation token — set to true to abort the current boot. */
   private _cancelled = false;
 
+  /** Generation token for the current boot attempt — incremented on each new boot. */
+  private _bootGeneration = 0;
+
   /** The current boot input — valid only during a boot attempt. */
   private _input: GameBootInput | undefined;
 
@@ -134,6 +137,7 @@ class GameBootService
 
     this.isBooting = true;
     this._cancelled = false;
+    this._bootGeneration++;
     this._input = input;
     this._resetProgress();
 
@@ -290,8 +294,14 @@ class GameBootService
    * boot pipeline doesn't hang forever.
    */
   private async _runStageWithTimeout(stage: GameBootStage): Promise<void> {
+    // Capture the current boot generation to detect stale operations
+    const generation = this._bootGeneration;
+
     return new Promise<void>((resolve, reject) => {
+      let timedOut = false;
+
       const timeout = setTimeout(() => {
+        timedOut = true;
         reject(
           new Error(
             `Boot stage "${stage}" timed out after ${STAGE_TIMEOUT_MS / 1000}s — the stage never completed`,
@@ -299,21 +309,27 @@ class GameBootService
         );
       }, STAGE_TIMEOUT_MS);
 
-      this._runStage(stage).then(
+      this._runStage(stage, generation).then(
         () => {
           clearTimeout(timeout);
-          resolve();
+          // Only resolve if timeout hasn't fired and generation is still current
+          if (!timedOut && generation === this._bootGeneration) {
+            resolve();
+          }
         },
         (err) => {
           clearTimeout(timeout);
-          reject(err);
+          // Always propagate errors if generation is current
+          if (generation === this._bootGeneration) {
+            reject(err);
+          }
         },
       );
     });
   }
 
   /** Executes a single pipeline stage. */
-  private async _runStage(stage: GameBootStage): Promise<void> {
+  private async _runStage(stage: GameBootStage, generation: number): Promise<void> {
     const input = this._input;
     if (!input) {
       throw new Error('Boot input not set');
@@ -321,28 +337,28 @@ class GameBootService
 
     switch (stage) {
       case 'loading_campaign':
-        await this._stageLoadCampaign(input);
+        await this._stageLoadCampaign(input, generation);
         break;
       case 'validating_save':
-        await this._stageValidateSave(input);
+        await this._stageValidateSave(input, generation);
         break;
       case 'preloading_content':
-        await this._stagePreloadContent(input);
+        await this._stagePreloadContent(input, generation);
         break;
       case 'creating_engine':
-        await this._stageCreateEngine(input);
+        await this._stageCreateEngine(input, generation);
         break;
       case 'hydrating_snapshot':
-        await this._stageHydrateSnapshot(input);
+        await this._stageHydrateSnapshot(input, generation);
         break;
       case 'spawning_entities':
-        await this._stageSpawnEntities();
+        await this._stageSpawnEntities(generation);
         break;
     }
   }
 
   /** Stage: resolve campaign + persona. */
-  private async _stageLoadCampaign(input: GameBootInput): Promise<void> {
+  private async _stageLoadCampaign(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
     // Resolve campaign
@@ -351,6 +367,11 @@ class GameBootService
       // Load specific campaign via repository
       const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
       campaign = await campaignRepository.getById(input.campaignId);
+    }
+
+    // Check generation after async operation
+    if (generation !== this._bootGeneration) {
+      return;
     }
 
     if (!campaign) {
@@ -372,7 +393,10 @@ class GameBootService
     if (campaign) {
       if (campaign.state === 'playing') {
         this.debug('stage:loading_campaign:already-playing');
-        this._campaign = campaign;
+        // Only mutate if generation is current
+        if (generation === this._bootGeneration) {
+          this._campaign = campaign;
+        }
       } else {
         try {
           // Validate transition is legal from current state
@@ -384,19 +408,28 @@ class GameBootService
           const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
           campaign = { ...campaign, state: loadingState, updatedAt: new Date().toISOString() };
           await campaignRepository.update(campaign);
-          this._campaign = campaign;
+          // Only mutate if generation is still current after await
+          if (generation === this._bootGeneration) {
+            this._campaign = campaign;
+          }
         } catch (error) {
           this.warn('stage:loading_campaign:transition-failed', {
             currentState: campaign.state,
             error: String(error),
           });
-          this._campaign = campaign;
+          if (generation === this._bootGeneration) {
+            this._campaign = campaign;
+          }
         }
       }
     }
 
     // Resolve persona — prefer campaign.personaId, then active persona, then localStorage
     const persona = await this._resolvePersona(campaign);
+    // Check generation after async operation
+    if (generation !== this._bootGeneration) {
+      return;
+    }
     this._persona = persona;
     if (persona) {
       this.debug('stage:loading_campaign:persona-resolved', { personaId: persona.id });
@@ -404,7 +437,9 @@ class GameBootService
 
     // Override content pack ID from campaign if available
     if (campaign?.contentPackId && campaign.contentPackId !== input.contentPackId) {
-      this._input = { ...input, contentPackId: campaign.contentPackId };
+      if (generation === this._bootGeneration) {
+        this._input = { ...input, contentPackId: campaign.contentPackId };
+      }
       this.debug('stage:loading_campaign:contentPackId-override', {
         from: input.contentPackId,
         to: campaign.contentPackId,
@@ -416,7 +451,7 @@ class GameBootService
   }
 
   /** Stage: validate/migrate pending save. */
-  private async _stageValidateSave(input: GameBootInput): Promise<void> {
+  private async _stageValidateSave(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
     // If a payload is already provided (e.g., from main menu), validate it
@@ -427,6 +462,10 @@ class GameBootService
       const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
         './game_save_service.svelte.ts'
       );
+      // Check generation after async import
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum } = parseSavePayloadEnvelope(
         input.pendingSavePayload,
       );
@@ -437,6 +476,10 @@ class GameBootService
           serviceSnapshots,
           storedChecksum,
         });
+        // Check generation after async validation
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         if (!valid) {
           // C-334 AC-4: Distinct corruption error (not "Save not found")
           throw new Error(`Save is corrupted: checksum mismatch`);
@@ -463,8 +506,16 @@ class GameBootService
       const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
         './game_save_service.svelte.ts'
       );
+      // Check generation after async import
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       // Raw envelope — hydration stage splits it into ECS + service snapshots (C-331)
       const payload = await gameSaveService.getRawSavePayload(slotId);
+      // Check generation after async load
+      if (generation !== this._bootGeneration) {
+        return;
+      }
 
       // C-334 AC-4: Validate checksum for v2+ payloads
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
@@ -476,15 +527,27 @@ class GameBootService
           serviceSnapshots,
           storedChecksum,
         });
+        // Check generation after async validation
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         if (!valid) {
           // Attempt recovery: find previous valid save for this campaign
           const recoverySlotId = await this._findRecoverySave();
+          // Check generation after async recovery search
+          if (generation !== this._bootGeneration) {
+            return;
+          }
           if (recoverySlotId) {
             this.warn('stage:validating_save:corrupt-recovered', {
               corruptSlot: slotId,
               recoverySlot: recoverySlotId,
             });
             const recoveryPayload = await gameSaveService.getRawSavePayload(recoverySlotId);
+            // Check generation before mutating input
+            if (generation !== this._bootGeneration) {
+              return;
+            }
             input.pendingSavePayload = recoveryPayload;
             this._input = input;
 
@@ -501,8 +564,11 @@ class GameBootService
       }
 
       // Validation passed — store payload for hydration stage
-      input.pendingSavePayload = payload;
-      this._input = input;
+      // Check generation before mutating input
+      if (generation === this._bootGeneration) {
+        input.pendingSavePayload = payload;
+        this._input = input;
+      }
       this.debug('stage:validating_save:valid', { slotId, bytes: payload.length });
     } catch (error) {
       // Save not found or corrupt — do NOT overwrite the save slot.
@@ -516,16 +582,24 @@ class GameBootService
   }
 
   /** Stage: preload content pack manifest + asset bundles. */
-  private async _stagePreloadContent(input: GameBootInput): Promise<void> {
+  private async _stagePreloadContent(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
     const { loadContentPack, clearContentPackCache } = await import('@aikami/frontend/engine');
+    // Check generation after async import
+    if (generation !== this._bootGeneration) {
+      return;
+    }
 
     // AC-5: Clear stale pack cache before loading a new pack to prevent
     // asset/state leakage when switching between campaigns with different packs.
     clearContentPackCache();
 
     const pack = await loadContentPack({ packId: input.contentPackId });
+    // Check generation after async load
+    if (generation !== this._bootGeneration) {
+      return;
+    }
     this._clearContentPackCache = clearContentPackCache;
 
     // Validate pack has a starting map
@@ -545,6 +619,10 @@ class GameBootService
     const mapUrl = pack.resolveMapUrl(pack.manifest.startingMapId);
     this.bootProgress.detail = mapUrl;
     await this._preloadAsset(mapUrl);
+    // Check generation after async preload
+    if (generation !== this._bootGeneration) {
+      return;
+    }
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
       elapsedMs: elapsed,
@@ -553,12 +631,16 @@ class GameBootService
   }
 
   /** Stage: create PixiJS engine + ECS world. */
-  private async _stageCreateEngine(input: GameBootInput): Promise<void> {
+  private async _stageCreateEngine(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
     const { createEngineBridge, GameWorld, TextureManager } = await import(
       '@aikami/frontend/engine'
     );
+    // Check generation after async import
+    if (generation !== this._bootGeneration) {
+      return;
+    }
 
     this._bridge = createEngineBridge();
     const textureManager = new TextureManager();
@@ -568,6 +650,10 @@ class GameBootService
     const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
       '$lib/data/lpc_asset_catalog_generated'
     );
+    // Check generation after async imports
+    if (generation !== this._bootGeneration) {
+      return;
+    }
 
     const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
       generatedLpcSlots,
@@ -596,11 +682,21 @@ class GameBootService
       playerData,
       rendererPreference: input.rendererPreference,
     });
+    // Check generation after async initialization
+    if (generation !== this._bootGeneration) {
+      // Clean up world that was created by a timed-out stage
+      this._gameWorld.destroy();
+      this._gameWorld = undefined;
+      return;
+    }
 
     // ── C-332: Bind GameWorld to GameEngineService so pauseEngine/resumeEngine
     // reach the worker. Without this, all overlay close/resume calls silently
     // no-op with :no-world log. ──
-    gameEngineService.registerWorld(this._gameWorld);
+    // Only register if generation is still current
+    if (generation === this._bootGeneration) {
+      gameEngineService.registerWorld(this._gameWorld);
+    }
 
     // Lock input immediately after initialization
     this._gameWorld.setInputLocked(true);
@@ -619,7 +715,7 @@ class GameBootService
   }
 
   /** Stage: hydrate snapshot or start fresh. */
-  private async _stageHydrateSnapshot(input: GameBootInput): Promise<void> {
+  private async _stageHydrateSnapshot(input: GameBootInput, generation: number): Promise<void> {
     if (!this._gameWorld) {
       throw new Error('Engine not initialized');
     }
@@ -632,6 +728,10 @@ class GameBootService
       this.bootProgress.detail = 'Restoring saved world...';
       const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
       const { hydrateAllServices } = await import('./serializable_service');
+      // Check generation after async imports
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       const { ecsSnapshot, serviceSnapshots } = parseSavePayloadEnvelope(input.pendingSavePayload);
 
       // Hydrate domain services FIRST so world flags (collected pickups,
@@ -644,6 +744,10 @@ class GameBootService
       }
 
       await this._gameWorld.restoreWorld(ecsSnapshot);
+      // Check generation after async restore
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       this.debug('stage:hydrating_snapshot:restored', {
         bytes: input.pendingSavePayload.length,
       });
@@ -651,7 +755,15 @@ class GameBootService
       // Fresh spawn — load the pack's declared starting map
       const packId = input.contentPackId;
       const { loadContentPack } = await import('@aikami/frontend/engine');
+      // Check generation after async import
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       const pack = await loadContentPack({ packId });
+      // Check generation after async load
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       const startingMap = pack.getStartingMap();
 
       if (startingMap.defaultX === undefined || startingMap.defaultY === undefined) {
@@ -663,6 +775,10 @@ class GameBootService
       this.bootProgress.detail = `Loading map: ${pack.manifest.startingMapId}`;
 
       const { worldStateService } = await import('./world_state_service.svelte');
+      // Check generation after async import
+      if (generation !== this._bootGeneration) {
+        return;
+      }
       await this._gameWorld.loadMap({
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX,
@@ -670,6 +786,10 @@ class GameBootService
         defeatedEnemies: [...worldStateService.defeatedEnemies],
         collectedPickups: [...worldStateService.collectedPickups],
       });
+      // Check generation after async loadMap
+      if (generation !== this._bootGeneration) {
+        return;
+      }
 
       this.debug('stage:hydrating_snapshot:fresh', {
         mapId: pack.manifest.startingMapId,
@@ -686,9 +806,14 @@ class GameBootService
   }
 
   /** Stage: unlock input, finalize. */
-  private async _stageSpawnEntities(): Promise<void> {
+  private async _stageSpawnEntities(generation: number): Promise<void> {
     if (!this._gameWorld) {
       throw new Error('Engine not initialized');
+    }
+
+    // Check generation before final mutations
+    if (generation !== this._bootGeneration) {
+      return;
     }
 
     const t0 = performance.now();

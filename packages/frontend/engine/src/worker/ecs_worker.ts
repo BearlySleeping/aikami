@@ -205,15 +205,6 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 // -- Worker-global state ----------------------------------------------------
 
-// ── MODULE-LOAD DIAGNOSTIC: confirm the worker script evaluated ──
-// This MUST be the first postMessage so the main thread knows the
-// worker module loaded successfully (before any logger or imports could fail).
-try {
-  postMessage({ type: 'DIAGNOSTIC_MODULE_LOADED', timestamp: Date.now() });
-} catch {
-  // If even postMessage fails, nothing we can do — the worker is dead.
-}
-
 /** The bitECS world — created once per INITIALIZE_ENGINE. */
 let world: World | undefined;
 

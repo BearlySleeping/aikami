@@ -69,6 +69,13 @@ function findCurrentPlaywrightVersion(): string {
 
 const currentVersion = findCurrentPlaywrightVersion();
 
+// Validate currentVersion before using it in shell commands
+if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(currentVersion)) {
+  throw new Error(
+    `Invalid Playwright version detected: "${currentVersion}". Expected semver format (e.g., "1.59.1").`,
+  );
+}
+
 // Packages that depend on @playwright/test (check both for devDependency)
 const playwrightDirs = ['apps/frontend/client', 'apps/e2e'].filter((dir) => {
   const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');

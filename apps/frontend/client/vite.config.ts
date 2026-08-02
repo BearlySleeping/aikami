@@ -122,10 +122,10 @@ export default defineConfig(({ mode }) => {
     },
 
     worker: {
-      // Vite 8 default format ('es') — generates module workers.
-      // Previously 'iife' for Tauri classic workers, but Vite 8's ?worker
-      // wrapper always uses type: 'module' regardless of format setting,
-      // causing silent worker load failures in dev.
+      // Vite's default format is 'iife', but we override to 'es' because
+      // ecs_worker_bootstrap.ts uses import('./ecs_worker.ts'), which requires
+      // ES module format. IIFE/UMD worker builds do not support code-splitting
+      // dynamic imports.
       format: 'es',
     },
 
