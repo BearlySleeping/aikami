@@ -122,11 +122,11 @@ export default defineConfig(({ mode }) => {
     },
 
     worker: {
-      // iife format produces classic worker scripts (no type: 'module' needed).
-      // Tauri's webview cannot load ES module workers — they fail with
-      // "SyntaxError: Unexpected token '{'. Expected 'from' before imported module name"
-      // because the build output bundles dynamic imports that confuse the module parser.
-      format: 'iife',
+      // Vite 8 default format ('es') — generates module workers.
+      // Previously 'iife' for Tauri classic workers, but Vite 8's ?worker
+      // wrapper always uses type: 'module' regardless of format setting,
+      // causing silent worker load failures in dev.
+      format: 'es',
     },
 
     server: {

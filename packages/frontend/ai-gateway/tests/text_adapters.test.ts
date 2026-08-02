@@ -231,7 +231,9 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
 
   test('extracts a structured object with native response_format', async () => {
     const payload = JSON.stringify({ name: 'Aragorn', level: 5 });
-    const { fetchFn, calls } = createSseFetchMock({ chunks: [sseChunk(payload), SSE_DONE] });
+    // Structured requests are stream: false — the provider returns plain JSON,
+    // not SSE. Mock updated to match the non-streaming transport.
+    const { fetchFn, calls } = createJsonFetchMock({ content: payload });
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       supportsStructuredOutput: () => true,
@@ -272,14 +274,9 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
   });
 
   test('strips markdown fences and surrounding prose from the response', async () => {
-    const { fetchFn } = createSseFetchMock({
-      chunks: [
-        sseChunk('Here you go: ```json\n'),
-        sseChunk(JSON.stringify({ name: 'Gimli' })),
-        sseChunk('\n```'),
-        SSE_DONE,
-      ],
-    });
+    // Structured requests are stream: false — plain JSON transport.
+    const fenced = `Here you go: \`\`\`json\n${JSON.stringify({ name: 'Gimli' })}\n\`\`\``;
+    const { fetchFn } = createJsonFetchMock({ content: fenced });
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     const result = await adapter.generateText({
@@ -296,7 +293,8 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
   test('enforces additionalProperties: false and caches compiled schemas', async () => {
     const sizes: number[] = [];
     const payload = JSON.stringify({ name: 'Test' });
-    const { fetchFn, calls } = createSseFetchMock({ chunks: [sseChunk(payload), SSE_DONE] });
+    // Structured requests are stream: false — plain JSON transport.
+    const { fetchFn, calls } = createJsonFetchMock({ content: payload });
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       supportsStructuredOutput: () => true,

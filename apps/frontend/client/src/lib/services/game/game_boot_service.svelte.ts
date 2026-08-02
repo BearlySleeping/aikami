@@ -34,6 +34,9 @@ const bootStageOrder: readonly GameBootStage[] = [
   'spawning_entities',
 ];
 
+/** Maximum time a single boot stage may take before timing out (ms). */
+const STAGE_TIMEOUT_MS = 30_000;
+
 /** Stage labels for the loading UI — displayed during each stage. */
 const bootStageLabels: Record<GameBootStage, string> = {
   idle: 'Preparing...',
@@ -153,7 +156,7 @@ class GameBootService
       this._setStage(stage, i);
 
       try {
-        await this._runStage(stage);
+        await this._runStageWithTimeout(stage);
 
         // Check cancellation immediately after each stage completes
         if (this._cancelled) {
@@ -280,6 +283,34 @@ class GameBootService
   }
 
   // ── Stage runners ──
+
+  /**
+   * Runs a stage with a timeout. If the stage doesn't complete within
+   * {@link STAGE_TIMEOUT_MS}, rejects with a descriptive error so the
+   * boot pipeline doesn't hang forever.
+   */
+  private async _runStageWithTimeout(stage: GameBootStage): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(
+          new Error(
+            `Boot stage "${stage}" timed out after ${STAGE_TIMEOUT_MS / 1000}s — the stage never completed`,
+          ),
+        );
+      }, STAGE_TIMEOUT_MS);
+
+      this._runStage(stage).then(
+        () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+      );
+    });
+  }
 
   /** Executes a single pipeline stage. */
   private async _runStage(stage: GameBootStage): Promise<void> {

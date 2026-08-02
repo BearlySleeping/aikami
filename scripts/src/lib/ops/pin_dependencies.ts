@@ -85,6 +85,20 @@ const playwrightDirs = ['apps/frontend/client', 'apps/e2e'].filter((dir) => {
 
 console.log(`🔒 Pinning @playwright/test to ${currentVersion}`);
 
+// Packages that also depend on `playwright` (the CLI/driver package)
+const playwrightCliDirs = ['apps/e2e'].filter((dir) => {
+  const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
+  if (!existsSync(pkgPath)) {
+    return false;
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return 'playwright' in (pkg.devDependencies || {});
+  } catch {
+    return false;
+  }
+});
+
 let hasError = false;
 for (const dir of playwrightDirs) {
   const absDir = resolve(MONOREPO_ROOT, dir);
@@ -97,6 +111,25 @@ for (const dir of playwrightDirs) {
   } catch (err) {
     console.error(
       `⚠️  Failed to pin @playwright/test in ${dir}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    hasError = true;
+  }
+}
+
+// Pin `playwright` CLI package to the same version as @playwright/test
+console.log(`🔒 Pinning playwright to ${currentVersion}`);
+for (const dir of playwrightCliDirs) {
+  const absDir = resolve(MONOREPO_ROOT, dir);
+  try {
+    execSync(`bun add -d playwright@${currentVersion} --exact`, {
+      cwd: absDir,
+      stdio: 'inherit',
+    });
+    console.log(`✅ Pinned playwright@${currentVersion} in ${dir}`);
+  } catch (err) {
+    console.error(
+      `⚠️  Failed to pin playwright in ${dir}:`,
       err instanceof Error ? err.message : String(err),
     );
     hasError = true;

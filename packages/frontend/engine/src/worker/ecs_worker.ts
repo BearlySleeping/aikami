@@ -122,10 +122,26 @@ import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 // ---------------------------------------------------------------------------
 
 // Startup sentinel — confirms the worker module loaded and executed.
+//
+// NOTE: This runs AFTER all 56 static imports have resolved. If any
+// import throws during module evaluation, we never reach this line.
+// That's why ecs_worker_bootstrap.ts exists — it registers error
+// handlers FIRST (zero imports), then dynamic-imports this module.
+// See: packages/frontend/engine/src/worker/ecs_worker_bootstrap.ts
 logger.info('worker', 'Module loaded, ready for INITIALIZE_ENGINE');
 
-// ── Catch ALL errors BEFORE anything can overwrite onerror ──
-// Using addEventListener so later self.onerror assignments can't clobber us.
+// ── Confirm full import graph evaluated successfully ──
+// Distinct from ecs_worker_bootstrap.ts's DIAGNOSTIC_MODULE_LOADED
+// (phase 1: bootstrap alive) — this signals phase 2: all 56 imports OK.
+try {
+  postMessage({ type: 'DIAGNOSTIC_WORKER_EVALUATED', timestamp: Date.now() });
+} catch {
+  // silent
+}
+
+// ── Error handlers — registered after imports, so they only catch
+// runtime errors (tick loop crashes, message handler errors, etc.).
+// Module-level import errors are caught by ecs_worker_bootstrap.ts. ──
 self.addEventListener('error', (event: ErrorEvent): void => {
   logger.error('worker:addEventListener-error', {
     message: event.message || String(event),
@@ -188,6 +204,15 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 };
 
 // -- Worker-global state ----------------------------------------------------
+
+// ── MODULE-LOAD DIAGNOSTIC: confirm the worker script evaluated ──
+// This MUST be the first postMessage so the main thread knows the
+// worker module loaded successfully (before any logger or imports could fail).
+try {
+  postMessage({ type: 'DIAGNOSTIC_MODULE_LOADED', timestamp: Date.now() });
+} catch {
+  // If even postMessage fails, nothing we can do — the worker is dead.
+}
 
 /** The bitECS world — created once per INITIALIZE_ENGINE. */
 let world: World | undefined;
@@ -1411,13 +1436,23 @@ self.onmessage = (event: MessageEvent): void => {
           activeBufferIndex = 0;
         }
 
-        initializeEngine(
-          canvasWidth as number,
-          canvasHeight as number,
-          loadPayload as string | undefined,
-          playerData as PlayerCreateOptions | undefined,
-          collisionGrid as CollisionGrid | undefined,
-        );
+        // ── Wrap initializeEngine in explicit try/catch so any sync
+        // error is reported as ENGINE_ERROR instead of a silent worker crash. ──
+        try {
+          initializeEngine(
+            canvasWidth as number,
+            canvasHeight as number,
+            loadPayload as string | undefined,
+            playerData as PlayerCreateOptions | undefined,
+            collisionGrid as CollisionGrid | undefined,
+          );
+        } catch (err) {
+          logger.error('worker', 'initializeEngine:crashed', err);
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: `initializeEngine crashed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
         break;
       }
 

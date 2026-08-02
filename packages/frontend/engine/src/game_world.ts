@@ -30,7 +30,8 @@ import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
-import EcsWorker from './worker/ecs_worker.ts?worker';
+// @ts-expect-error — Vite ?worker&inline import for bootstrap entry point
+import EcsWorker from './worker/ecs_worker_bootstrap.ts?worker&inline';
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -224,6 +225,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Weather overlay quad for procedural rain/fog (C-213). */
   private _weatherOverlay: WeatherOverlay | undefined;
+
+  /**
+   * Rejects the pending _postLoadMap or restoreWorld promise when the
+   * worker crashes. Set by _postLoadMap / restoreWorld, cleared on
+   * resolve/reject. Prevents the boot pipeline from hanging forever.
+   */
+  private _pendingWorkerReject: ((reason: Error) => void) | undefined;
 
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
@@ -513,6 +521,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Stop the render loop
     this._running = false;
 
+    // ── Clear any pending worker promise so timeouts don't fire after teardown ──
+    this._pendingWorkerReject = undefined;
+
     // ── C-332: Stop worker heartbeat ──
     this._stopHeartbeat();
 
@@ -656,19 +667,66 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('spawnWorker:using-workerFactory');
       this._worker = this._workerFactory();
     } else {
-      // Vite's ?worker import provides a Worker constructor that handles
-      // both dev (transpiled TS) and prod (bundled JS) correctly.
       this._worker = new EcsWorker();
       this.debug('spawnWorker:created', { name: EcsWorker.name });
     }
 
-    // Send initialization message with buffers
     const worker = this._worker;
     if (!worker) {
       this.error('spawnWorker: worker is undefined after creation');
       return;
     }
 
+    // ── Set up error handler BEFORE postMessage so any synchronous
+    // module-evaluation error in the worker is captured. ──
+    worker.onerror = (error: ErrorEvent): void => {
+      const detail = {
+        message: error.message || '(no message)',
+        filename: error.filename || '(unknown)',
+        lineno: error.lineno,
+        colno: error.colno,
+        errorMessage:
+          error.error instanceof Error ? error.error.message : String(error.error ?? 'none'),
+        errorStack: error.error instanceof Error ? error.error.stack : undefined,
+        errorConstructor: error.error?.constructor?.name ?? 'none',
+      };
+      this.error('[GameWorld] Worker error', detail);
+
+      // Mark worker as dead so pending operations fail fast
+
+      // Reject any pending load/restore promise so the boot pipeline
+      // doesn't hang forever waiting for a crashed worker.
+      if (this._pendingWorkerReject) {
+        this._pendingWorkerReject(
+          new Error(`Worker crashed: ${detail.message} @ ${detail.filename}:${detail.lineno}`),
+        );
+        this._pendingWorkerReject = undefined;
+      }
+
+      this._bridge.emit({
+        type: 'GAME_ERROR',
+        message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}:${detail.colno}`,
+      });
+    };
+
+    // ── C-332: Handle worker message serialization errors ──
+    worker.onmessageerror = (event: MessageEvent): void => {
+      this.error('[GameWorld] Worker message serialization error', {
+        data: typeof event.data,
+      });
+      if (this._pendingWorkerReject) {
+        this._pendingWorkerReject(
+          new Error('Worker message serialization error — data could not be deserialized'),
+        );
+        this._pendingWorkerReject = undefined;
+      }
+      this._bridge.emit({
+        type: 'GAME_ERROR',
+        message: 'Worker message serialization error — data could not be deserialized',
+      });
+    };
+
+    // Send initialization message with buffers
     worker.postMessage(
       {
         type: 'INITIALIZE_ENGINE',
@@ -695,31 +753,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Set up message listener for worker → main communication
     worker.onmessage = (event: MessageEvent): void => {
       this._handleWorkerMessage(event.data);
-    };
-
-    worker.onerror = (error: ErrorEvent): void => {
-      const detail = {
-        message: error.message || '(no message)',
-        filename: error.filename || '(unknown)',
-        lineno: error.lineno,
-        colno: error.colno,
-      };
-      this.error('[GameWorld] Worker error', detail);
-      this._bridge.emit({
-        type: 'GAME_ERROR',
-        message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}:${detail.colno}`,
-      });
-    };
-
-    // ── C-332: Handle worker message serialization errors ──
-    worker.onmessageerror = (event: MessageEvent): void => {
-      this.error('[GameWorld] Worker message serialization error', {
-        data: typeof event.data,
-      });
-      this._bridge.emit({
-        type: 'GAME_ERROR',
-        message: 'Worker message serialization error — data could not be deserialized',
-      });
     };
 
     // Forward bridge commands to the worker
@@ -760,6 +793,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       case 'ENGINE_READY': {
+        this._pendingWorkerReject = undefined;
         this._bridge.emit({ type: 'GAME_READY' });
         break;
       }
@@ -777,12 +811,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       case 'ENGINE_ERROR': {
-        // ── RC-2 FIX: ENGINE_ERROR is recoverable — do NOT destroy ──
-        // Non-fatal errors (autosave serialization hiccup, map-load
-        // warning, snapshot failure) should surface via GAME_ERROR
-        // without terminating the engine. Only ENGINE_FATAL warrants
-        // worker termination (detached buffer cascades, unrecoverable
-        // corruption).
+        if (this._pendingWorkerReject) {
+          this._pendingWorkerReject(new Error(message.message as string));
+          this._pendingWorkerReject = undefined;
+        }
         this._bridge.emit({
           type: 'GAME_ERROR',
           message: message.message as string,
@@ -803,6 +835,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         // This stops the postMessage flood so the browser event loop
         // can recover.
         this.destroy();
+        break;
+      }
+
+      case 'DIAGNOSTIC_PING': {
+        // Worker module loaded and event loop is alive — confirm liveness.
+        this.debug('[GameWorld] worker diagnostic ping received — event loop alive');
+        break;
+      }
+
+      case 'DIAGNOSTIC_MODULE_LOADED': {
+        // Phase 1: bootstrap loaded (ecs_worker_bootstrap.ts)
+        this.debug('[GameWorld] worker bootstrap loaded', {
+          timestamp: message.timestamp as number,
+        });
+        break;
+      }
+
+      case 'DIAGNOSTIC_WORKER_EVALUATED': {
+        // Phase 2: all 56 ECS worker imports resolved successfully
+        this.debug('[GameWorld] worker fully evaluated — all imports OK', {
+          timestamp: message.timestamp as number,
+        });
         break;
       }
 
@@ -1606,6 +1660,35 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
 
+      // ═══ Timeout: 15s max wait for worker response ═══
+      const RestoreTimeoutMs = 15_000;
+      let settled = false;
+
+      const finish = (fn: () => void): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        this._worker?.removeEventListener('message', handler);
+        this._pendingWorkerReject = undefined;
+        fn();
+      };
+
+      const timeout = setTimeout(() => {
+        this.error('restoreWorld:timeout', { timeoutMs: RestoreTimeoutMs });
+        finish(() =>
+          reject(
+            new Error('Worker did not respond to LOAD_GAME within 15s — worker may have crashed'),
+          ),
+        );
+      }, RestoreTimeoutMs);
+
+      // Store reject so worker onerror can also reject
+      this._pendingWorkerReject = (reason: Error): void => {
+        finish(() => reject(reason));
+      };
+
       // Clear all existing render entries (PixiJS display objects)
       for (const entry of this._renderEntries.values()) {
         entry.displayObject.destroy({ children: true });
@@ -1619,8 +1702,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const message = event.data;
 
         if (message.type === 'ENGINE_ERROR') {
-          this._worker?.removeEventListener('message', handler);
-          reject(new Error(message.message as string));
+          finish(() => reject(new Error(message.message as string)));
           return;
         }
 
@@ -1628,8 +1710,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           return;
         }
 
-        this._worker?.removeEventListener('message', handler);
-        resolve();
+        finish(() => resolve());
       };
 
       this._worker.addEventListener('message', handler);
@@ -1848,12 +1929,44 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
 
+      // ── Worker is in bootstrap phase — dynamic import may be in-flight.
+      // Don't fail fast here; the 15s timeout covers the waiting period.
+      // ENGINE_ERROR from bootstrap will reject via the handler below.
+
+      // ═══ Timeout: 15s max wait for worker response ═══
+      const LoadMapTimeoutMs = 15_000;
+      let settled = false;
+
+      const finish = (fn: () => void): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        this._worker?.removeEventListener('message', handler);
+        this._pendingWorkerReject = undefined;
+        fn();
+      };
+
+      const timeout = setTimeout(() => {
+        this.error('_postLoadMap:timeout', { timeoutMs: LoadMapTimeoutMs });
+        finish(() =>
+          reject(
+            new Error('Worker did not respond to LOAD_MAP within 15s — worker may have crashed'),
+          ),
+        );
+      }, LoadMapTimeoutMs);
+
+      // Store reject so worker onerror can also reject
+      this._pendingWorkerReject = (reason: Error): void => {
+        finish(() => reject(reason));
+      };
+
       const handler = (event: MessageEvent): void => {
         const message = event.data;
 
         if (message.type === 'ENGINE_ERROR') {
-          this._worker?.removeEventListener('message', handler);
-          reject(new Error(message.message as string));
+          finish(() => reject(new Error(message.message as string)));
           return;
         }
 
@@ -1861,8 +1974,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           return;
         }
 
-        this._worker?.removeEventListener('message', handler);
-        resolve();
+        finish(() => resolve());
       };
 
       this._worker.addEventListener('message', handler);
