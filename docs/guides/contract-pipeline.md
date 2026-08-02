@@ -10,81 +10,75 @@ Source → Write → Critique → Implement → Verify → Review → Merge
   │        │         │           │          │         │
   │    draft    approved    in_progress  implemented  verified
   │                                                     │
-  └── todo / roadmap / direct ──────────────────────────┘
+  └── prompt / issue / todo / existing contract ────────┘
 ```
 
 ## Quick Start
 
 ```bash
-# Chat-draft a new feature (auto-generates contract ID, no worktree):
-bun run contract --source direct --root
+# Chat-draft a new feature (auto-generates contract ID, opens the writer):
+bun run contract --source prompt --root
 
-# From the backlog (requires the item in docs/TODO.md):
+# Run an existing contract (skips writer + critique, starts implementation):
 bun run contract C-370 --root
 
 # From a GitHub Issue:
-bun run contract #102 --source roadmap
+bun run contract --source issue #102
 
 # Resume a previous run:
 bun run contract --resume <run-id>
 ```
 
-## Source Modes — Four Ways to Start
+## Source Modes — How to Start a Contract
 
-### 1. Direct (`--source direct`) — Chat Drafting
+The `--source` flag picks the source of the contract. If omitted, the mode is
+inferred from the target: **no target → `prompt`**, a bare `C-XXX` or path →
+**existing contract**.
+
+### 1. Prompt (`--source prompt`, default with no target) — Chat Drafting
 
 Best for **new ideas and exploratory features**. Pi auto-generates the next
 `C-XXX` ID, creates a placeholder contract, and opens an interactive writer pi
-session. You describe the feature in natural language and the writer fills out
-every section of the contract template.
+session. You describe the feature in natural language and the writer renames
+the placeholder to `C-XXX-<slug>.md` and fills out every section of the
+contract template.
 
 ```bash
-bun run contract --source direct --root
+bun run contract --source prompt --root
+# or simply:
+bun run contract
 ```
 
 **What happens:**
-1. Auto-generates `C-NNN` (next available number)
-2. Creates a minimal placeholder at `docs/contracts/C-NNN.md`
-3. Switches to branch `contract/C-NNN` (with `--root`)
-4. Opens a writer pi session in **interactive TUI mode**
-5. You type your feature description — the writer generates the full contract
-6. Pipeline continues: critique → implement → verify → review
+1. Auto-generates `C-NNN` (next available number) and creates a placeholder at `docs/contracts/C-NNN.md`
+2. Switches to branch `contract/C-NNN` (with `--root`)
+3. Opens a writer pi session in **interactive TUI mode**
+4. You type your feature description — the writer creates `docs/contracts/C-NNN-<slug>.md`
+   (the placeholder is removed automatically) and completes the full contract
+5. Pipeline continues: critique → implement → verify → review
 
 **No `--root`?** The pipeline creates a Git worktree at `.pi/workspaces/` instead
 of switching your current branch. Worktrees isolate file changes from your
 working tree — useful for background/CI runs.
 
-### 2. TODO Backlog (`--source todo`, default)
-
-Start from an item in `docs/TODO.md`. Every TODO item has a stable `C-XXX` ID.
-
-```bash
-bun run contract C-370            # implicitly --source todo
-bun run contract "Fix LPC Paperdoll" --source todo
-```
-
-The writer inspects the TODO item, reads the codebase, and fills in:
-- Problem & baseline evidence (what's broken today)
-- Architecture directives (which files/packages to change)
-- Acceptance criteria with concrete Given/When/Then
-- Implementation sequence with moon task references
-
-### 3. Roadmap — From GitHub Issues (`--source roadmap`)
+### 2. Issue (`--source issue`) — From GitHub Issues / Roadmap
 
 Freeze a GitHub Issue into a contract. The issue body becomes the problem
-baseline; the writer expands it into a full specification.
+baseline; the writer expands it into a full specification. `--issue` is an
+alias for `--source issue`.
 
 ```bash
-bun run contract #102 --source roadmap
-bun run contract C-370 --source roadmap    # lookup from backlog reference
-bun run contract "Fix auth" --source roadmap  # search Project v2 by title
+bun run contract --source issue #102
+bun run contract --source issue https://github.com/BearlySleeping/aikami/issues/102
+bun run contract --source issue C-370    # lookup from backlog reference
+bun run contract --issue 54              # alias
 ```
 
 **What it does:**
 - Fetches the GitHub Issue via `gh issue view`
 - Generates a contract from `TEMPLATE.md` populated with issue metadata
 - Links `issue_number` and `issue_url` in YAML frontmatter
-- Sets `source: roadmap`
+- Sets `source: issue`
 
 The contract file is created immediately (no writer stage). To run it through
 the full pipeline:
@@ -93,14 +87,44 @@ the full pipeline:
 bun run contract C-XXX --root
 ```
 
-### 4. GitHub Issues (No CLI) — Manual Entry
+### 3. Existing Contract (`--source <path|C-XXX>`, default with a target)
 
-If an issue already exists on GitHub and you want to keep it as the source of
-truth, you can:
+Use a contract that already exists on disk. The **writer and critique stages are
+skipped** — the pipeline starts at implementation (or later, depending on the
+contract's status). This is the default when you pass a bare ID or a path:
 
-1. Create the contract manually from `docs/contracts/TEMPLATE.md`
-2. Fill in the YAML frontmatter with `source: roadmap` and the `issue_number`
-3. Run through the pipeline: `bun run contract C-XXX --root`
+```bash
+bun run contract C-370 --root           # look up docs/contracts/C-370*.md
+bun run contract docs/contracts/C-370-fix-lpc-paperdoll-base-layering-and-neck-alignment.md
+bun run contract --source path C-370    # explicit
+```
+
+**Stage start depends on the contract status:**
+
+| Contract status | Pipeline starts at |
+|---|---|
+| `draft` / `approved` / `in_progress` / `verification_failed` | `implement` |
+| `implemented` | `verify` |
+| `verified` / `completed` | `review` |
+
+If the ID cannot be found on disk (and is not in `docs/TODO.md`), the command
+errors out with a clear message.
+
+### 4. TODO Backlog (`--source todo`, legacy)
+
+Start from an item in `docs/TODO.md`. Every TODO item has a stable `C-XXX` ID.
+Unlike path mode, the writer stage runs to author the contract from the backlog
+item.
+
+```bash
+bun run contract --source todo C-370
+```
+
+The writer inspects the TODO item, reads the codebase, and fills in:
+- Problem & baseline evidence (what's broken today)
+- Architecture directives (which files/packages to change)
+- Acceptance criteria with concrete Given/When/Then
+- Implementation sequence with moon task references
 
 ## Pipeline Stages
 
@@ -109,7 +133,7 @@ automatically — a stage calls `contract_stage_complete` to hand off to the nex
 
 | # | Stage | Role | What It Does |
 |---|-------|------|-------------|
-| 1 | **Write** | `writer` | Reads the source (TODO/Issue/direct chat), inspects the codebase, fills every section of `TEMPLATE.md`. Ends at status `draft`. |
+| 1 | **Write** | `writer` | Reads the source (prompt/Issue/backlog), inspects the codebase, fills every section of `TEMPLATE.md`. Ends at status `draft`. |
 | 2 | **Critique** | `critic` | Adversarial review. Fixes typos and underspecified ACs directly. Blocks only for fundamentally wrong scope or missing critical details. Advances status to `approved`. |
 | 3 | **Implement** | `implementer` | Writes the actual code. Runs moon tasks, creates views/viewmodels, adds tests. Ends at `implemented`. |
 | 4 | **Verify** | `verifier` | Independent verification against every AC. Runs `validate({ test: true })`, blackbox tests, visual validation. If ACs fail → back to implementer. If all pass → `verified`. |
@@ -140,13 +164,29 @@ isolation — all file changes are visible in your working tree.
 
 ```bash
 bun run contract C-370 --root
-bun run contract --source direct --root
+bun run contract --source prompt --root
 ```
 
 **Behavior:**
 - Creates or switches to branch `contract/C-XXX`
 - Refuses to switch if the working directory is dirty (uncommitted changes)
 - Use `--dirty` to carry changes over: `bun run contract C-370 --root --dirty`
+
+### Starting With Uncommitted Changes (`--dirty`)
+
+`--root` refuses to switch branches when your working tree has uncommitted
+changes (staged or modified files). `--dirty` tells the pipeline to switch
+anyway and carry your changes onto the `contract/C-XXX` branch:
+
+```bash
+# You have edits in progress but want to start a contract run anyway:
+bun run contract C-370 --root --dirty
+bun run contract --source prompt --root --dirty
+```
+
+This is useful mid-feature when you want to spin up a related contract without
+stashing. Your uncommitted changes ride along on the new branch and are visible
+to the pipeline agents.
 
 ### Worktree Mode (default)
 
@@ -177,14 +217,15 @@ bun workspace:list
 ## CLI Options — Full Reference
 
 ```
-bun run contract [ID-or-Title] [--source <mode>] [options]
+bun run contract [target] [--source <mode>] [options]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--source todo` | Parse `docs/TODO.md` for the backlog item (default) |
-| `--source roadmap` | Fetch from GitHub Issue or Project v2 |
-| `--source direct` | Auto-generate C-XXX, launch interactive writer session |
+| `--source prompt` | Open the interactive writer — you describe the feature in the chat (default with no target) |
+| `--source issue` | Freeze a contract from a GitHub Issue/Roadmap item (alias: `--issue <#\|url>`) |
+| `--source <path\|C-XXX>` | Use an existing contract — skip writer + critique, start at implementation |
+| `--source todo` | Legacy: parse `docs/TODO.md` for the backlog item |
 | `--root, -r` | Work on branch `contract/C-XXX` in the repo root |
 | `--dirty` | Allow branch switch with uncommitted changes (only with `--root`) |
 | `--resume <run-id>` | Resume an incomplete pipeline run |
@@ -241,7 +282,7 @@ implementer + verifier quality.
 
 ```bash
 # 1. Chat-draft the contract
-bun run contract --source direct --root
+bun run contract --source prompt --root
 
 # 2. Describe your feature in the writer pi session
 #    "I want a crafting system where players combine items..."
@@ -255,13 +296,13 @@ bun run contract --source direct --root
 # 5. The orchestrator merges and cleans up.
 ```
 
-### Workflow 2: Backlog Item
+### Workflow 2: Existing Contract
 
 ```bash
-# 1. Pick from TODO.md
+# 1. You already have a contract (e.g. from a previous writer session)
 bun run contract C-370 --root
 
-# 2. Pipeline runs: write → critique → implement → verify → review
+# 2. Pipeline skips writer + critique and runs: implement → verify → review
 
 # 3. At review, if you want changes:
 #    "needs changes" → back to implementer for fixes
@@ -273,7 +314,7 @@ bun run contract C-370 --root
 
 ```bash
 # 1. Freeze the issue as a contract
-bun run contract #102 --source roadmap
+bun run contract --source issue #102
 
 # 2. Run through the pipeline
 bun run contract C-XXX --root
@@ -288,7 +329,7 @@ bun run contract C-XXX --root
 
 ```bash
 # Small bug fix, well-understood scope
-bun run contract --source direct --root --yolo
+bun run contract --source prompt --root --yolo
 
 # Describe the bug → pipeline auto-runs through merge
 # No human review needed — CodeRabbit handles it.
@@ -331,7 +372,7 @@ docs/
 
 Contracts live in `docs/contracts/` (a separate repo, gitignored inside main).
 
-- **Creating**: Use `bun run contract --source direct` or write manually from `TEMPLATE.md`
+- **Creating**: Use `bun run contract` (interactive writer), `bun run contract --source issue <#|url>`, or write manually from `TEMPLATE.md`
 - **Reading**: `INDEX.md` for priority order, `PROGRESS.md` for status dashboard
 - **Syncing**: `bun run sync:roadmap` syncs contract statuses to GitHub Project #1
 
@@ -343,6 +384,9 @@ C-370-lpc-paperdoll-rendering.md
 │     └─ Slug derived from title (lowercase, hyphenated, ≤60 chars)
 └─ Stable ID (never reused even if the contract is superseded)
 ```
+
+Direct-draft placeholders are named `C-XXX.md` (no slug) until the writer
+renames them to `C-XXX-<slug>.md`.
 
 ## GitHub Integration
 
@@ -362,7 +406,7 @@ Sync with: `bun run sync:contracts`
 ### PR → Issue Linkage
 
 When the review captain creates a PR:
-- PR body includes `Closes #<issue_number>` for roadmap-sourced contracts
+- PR body includes `Closes #<issue_number>` for issue-sourced contracts
 - The contract's `github.pr_url` is set in YAML frontmatter
 - The roadmap item transitions to **In Review**
 
@@ -416,9 +460,10 @@ bun workspace:cleanup     # Remove all
 
 ### Contract not found error
 
-The contract ID must match a file in `docs/contracts/` or an item in
-`docs/TODO.md`. For direct mode, the ID is auto-generated — you should never
-hit this.
+`bun run contract C-999` errors when the ID has no file in `docs/contracts/` and
+no entry in `docs/TODO.md`. Create the contract first with `bun run contract`
+(interactive writer) or `bun run contract --source issue <#|url>` (freeze from
+GitHub).
 
 ## Reference
 

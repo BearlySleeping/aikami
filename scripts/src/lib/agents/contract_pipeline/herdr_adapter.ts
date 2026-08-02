@@ -566,15 +566,24 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
               `👋 Welcome to direct contract drafting for ${contractId}.`,
               '',
               'The user will describe their feature in this chat. Wait for their',
-              'description, then create a complete contract specification:',
+              'description before doing any work — do NOT write the contract yet.',
               '',
-              '1. Call `contract_generate` with the feature code to create the v2 shell',
-              '2. Read `docs/contracts/TEMPLATE.md` for the required sections',
-              '3. Inspect the codebase to fill in architecture directives, data models,',
-              '   and baseline evidence',
-              '4. Write concrete Given/When/Then acceptance criteria',
-              '5. Fill every section — no TBD or placeholders',
-              '6. Set status to `draft` and call `contract_stage_complete`',
+              'Once the user has described the feature:',
+              '',
+              '1. Derive a short slug from the described feature (lowercase, hyphens,',
+              '   max ~60 chars, e.g. "npc-free-text-dialogue").',
+              `2. Create the real contract at \`docs/contracts/${contractId}-<slug>.md\`.`,
+              `   This renames the placeholder \`docs/contracts/${contractId}.md\``,
+              '   (the pipeline removes the placeholder file automatically).',
+              '3. Read `docs/contracts/TEMPLATE.md` — the canonical v2.0.0 template.',
+              '   Direct drafts have NO docs/TODO.md entry, so do NOT call',
+              '   `contract_generate` (it only works for backlog IDs).',
+              '4. Inspect the codebase to fill in architecture directives, data models,',
+              '   and baseline evidence.',
+              '5. Write concrete Given/When/Then acceptance criteria. Fill every',
+              '   section — no TBD or placeholders.',
+              '6. Set status to `draft` and call `contract_stage_complete` with',
+              '   status `passed`.',
               '',
               '🔴 Your LAST action MUST call contract_stage_complete.',
             ].join('\n')
@@ -614,7 +623,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       if (isRetry) {
         taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`;
       } else if (isInteractiveWriter) {
-        taskText = `👋 Welcome to direct contract drafting for ${contractId}! Describe your feature and I'll create the full contract specification.`;
+        taskText = `👋 Welcome to direct contract drafting for ${contractId}! Tell me what you want this contract to be and I'll write the full specification. Read your full task brief at ${taskMessagePath} for the workflow.`;
       } else {
         taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
       }

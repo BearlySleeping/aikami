@@ -127,6 +127,10 @@ export type RunManifest = {
   blockedReason?: string;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
+  /** When true, contract-authoring stages (writer + critique) were skipped.
+   *  Used during resume to prevent a draft path-sourced run from being reset
+   *  to write_contract when resumed by run ID without a target. */
+  skipAuthoring?: boolean;
 };
 
 /** Request passed to the Herdr worker launcher. */
