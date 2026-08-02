@@ -59,13 +59,13 @@ Quick start:
 
 ```bash
 # Chat-draft a new feature (auto-generates contract, no worktree):
-bun run contract --source direct --root
+bun run contract --source prompt --root
 
-# From the TODO backlog:
+# Run an existing contract (skips writer + critique, starts implementation):
 bun run contract C-370 --root
 
 # From a GitHub Issue:
-bun run contract #102 --source roadmap
+bun run contract --source issue #102
 ```
 
 The pipeline orchestrates: **Write → Critique → Implement → Verify → Review → Merge**,

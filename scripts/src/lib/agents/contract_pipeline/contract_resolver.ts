@@ -56,7 +56,7 @@ export const resolveContract = (options: { target: string; repoRoot: string }): 
     if (existingFile) {
       return parseContract(join(contractsDirectory, existingFile));
     }
-    // Second: look for a placeholder (C-XXX.md, no slug — from --source direct)
+    // Second: look for a placeholder (C-XXX.md, no slug — from --source prompt)
     const placeholderFile = readdirSync(contractsDirectory).find(
       (file) => file === `${identifier}.md`,
     );
@@ -68,7 +68,7 @@ export const resolveContract = (options: { target: string; repoRoot: string }): 
   const backlog = parseBacklog(options.repoRoot);
   const item = backlog.items.find((candidate) => candidate.id === identifier);
   if (!item) {
-    throw new Error(`${identifier} not found in docs/TODO.md.`);
+    throw new Error(`${identifier} not found in docs/contracts/ or docs/TODO.md.`);
   }
 
   // Contract does not exist on disk yet — the writer Pi session will create it
