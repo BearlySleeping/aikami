@@ -18,7 +18,8 @@
       "!**/tmp/*",
       "!**/dist/*",
       "!**/build/*",
-      "!apps/frontend/client/static/game-data/manifest.json"
+      "!apps/frontend/client/static/game-data/manifest.json",
+      "!apps/frontend/client/static/game-data/asset_hashes.json"
     ]
   },
   "formatter": {

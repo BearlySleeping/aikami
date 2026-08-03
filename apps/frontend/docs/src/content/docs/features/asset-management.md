@@ -32,9 +32,25 @@ Access the asset browser from the **Dev Sandbox** at `/dev/asset-browser`. It pr
 
 Scene backgrounds transition smoothly using a 500ms alpha crossfade. Call `setBackground(tag)` on the game world to load and crossfade between background images through the PixiJS render pipeline.
 
+## Offline Asset Cache (C-373)
+
+Once assets have been fetched, the game runs **fully offline**: every sprite, LPC layer, and audio file is served from a local content-hash-keyed cache with zero network round-trips.
+
+How it works:
+
+1. `scan_assets.ts` additionally emits `asset_hashes.json` — the SHA-256 + size of every file, alongside `manifest.json`.
+2. On boot, the `initializing_asset_registry` stage seeds a local Turso registry (`assets`, `asset_sources`, `install_state` tables) from the manifest + sidecar. Seeding is idempotent — later boots only run a meta guard check.
+3. The **AssetManager** resolves each tag through registry → cache → sources. On a miss it fetches from the bundled source, **verifies the SHA-256 against the registry hash before writing or serving**, and records the install state.
+4. Binaries are stored hash-named in OPFS (Web/PWA) or the Tauri native disk cache (Desktop). Writes go to a temporary file first and are atomically renamed into place, so readers never observe a partially-written entry; reads verify the file's SHA-256 again before serving (a corrupted entry is discarded and re-fetched). Cached assets resolve to `blob:` object URLs — PixiJS loads them transparently via a registered blob-URL loader.
+5. When a new game build bumps an asset's hash, the old binary is **automatically evicted** and re-fetched on the next request; interrupted downloads are reconciled at boot.
+
+Missing or optional assets degrade gracefully to the existing fallbacks with a logged warning — never a crash.
+
 ## Source
 
 - Engine scanner: `packages/frontend/engine/src/assets/asset_manifest.ts`
 - CLI scanner: `scripts/src/lib/ops/scan_assets.ts`
+- Registry: `packages/frontend/repositories/src/lib/assets.ts`
+- Cache + manager: `apps/frontend/client/src/lib/services/assets/`
 - UI: `apps/frontend/client/src/lib/views/asset-browser/`
 - Store: `apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts`

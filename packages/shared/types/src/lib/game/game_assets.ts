@@ -93,3 +93,64 @@ export type AssetTreeNode = {
   isDirectory: boolean;
   children: AssetTreeNode[];
 };
+
+// ---------------------------------------------------------------------------
+// Asset Registry & Local Cache (C-373)
+// ---------------------------------------------------------------------------
+
+/** Installation status of a single asset in the local cache. */
+export type AssetCacheStatus = 'not_downloaded' | 'downloading' | 'cached' | 'stale';
+
+/** Row shape of the `assets` registry table (snake_case column → camelCase). */
+export type AssetRecord = {
+  id: string;
+  packId: string;
+  category: string;
+  hash: string;
+  version: number;
+  sizeBytes: number;
+  license: string;
+  attribution?: string;
+  tags?: string[];
+};
+
+/** Row shape of the `asset_sources` table — a candidate download origin. */
+export type AssetSource = {
+  assetId: string;
+  backend: 'bundled' | 'firebase-storage' | 'r2' | 'self-hosted';
+  url: string;
+  priority: number;
+};
+
+/** Row shape of the `install_state` table — per-asset cache bookkeeping. */
+export type InstallStateRecord = {
+  assetId: string;
+  status: AssetCacheStatus;
+  localPath?: string;
+  cachedHash?: string;
+  downloadedAt?: string;
+};
+
+/**
+ * Content-hash provenance for a single manifest tag — SHA-256 + size in bytes.
+ * Emitted by the manifest scanner as part of the `asset_hashes.json` sidecar
+ * (C-373). Keeps `AssetEntry`/`AssetManifest` frozen (C-372 resolution).
+ */
+export type AssetHashEntry = {
+  /** Hex-encoded SHA-256 digest of the asset file bytes. */
+  hash: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+};
+
+/**
+ * Sidecar file emitted alongside `manifest.json` by `scan_assets.ts`.
+ * Maps every manifest tag to its content hash + size so the local asset
+ * registry can seed `assets.hash` without modifying the manifest shape.
+ */
+export type AssetHashesFile = {
+  /** ISO timestamp of the scan — mirrors `AssetManifest.scannedAt`. */
+  scannedAt: string;
+  /** Tag → hash provenance (all keys must exist in the manifest). */
+  hashes: Record<string, AssetHashEntry>;
+};
