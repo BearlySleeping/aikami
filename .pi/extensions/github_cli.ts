@@ -672,11 +672,23 @@ export default function (pi: ExtensionAPI) {
           const contractsDir = join(cwd, 'docs/contracts');
           try {
             if (existsSync(contractsDir)) {
-              const files = readdirSync(contractsDir).filter(
+              // Resolution order matches contract_resolver.ts:
+              // 1. Full-slug files (C-XXX-slug.md)
+              const fullSlugFiles = readdirSync(contractsDir).filter(
                 (f: string) => f.startsWith(`${contractId}-`) && f.endsWith('.md'),
               );
-              if (files.length === 1 && files[0]) {
-                const contractPath = join(contractsDir, files[0]);
+              // 2. Placeholder files (C-XXX.md)
+              const placeholderFile = `${contractId}.md`;
+              const placeholderExists = existsSync(join(contractsDir, placeholderFile));
+
+              let contractPath: string | undefined;
+              if (fullSlugFiles.length === 1 && fullSlugFiles[0]) {
+                contractPath = join(contractsDir, fullSlugFiles[0]);
+              } else if (fullSlugFiles.length === 0 && placeholderExists) {
+                contractPath = join(contractsDir, placeholderFile);
+              }
+
+              if (contractPath) {
                 const content = readFileSync(contractPath, 'utf-8');
                 const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
                 if (yamlMatch?.[1]) {

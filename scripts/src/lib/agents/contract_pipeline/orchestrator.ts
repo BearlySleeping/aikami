@@ -694,7 +694,7 @@ export const runContractPipeline = async (options: {
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
 
-        const interactiveStage = !!options.interactiveWriter && stage === 'write_contract';
+        const interactiveStage = !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
         const outcome = await runStage({
           repoRoot: options.repoRoot,
           runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
