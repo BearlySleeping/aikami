@@ -13,7 +13,7 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 // ── Svelte 5 runes polyfill (matches test_preload.ts) ────────────────
 
@@ -92,6 +92,33 @@ mock.module('$lib/data/lpc_models', () => ({
     Down: 2,
     Right: 3,
   },
+}));
+
+// C-372: the preview VM now resolves sheets through the manifest-aware
+// renderer + catalog — mock them so the test stays hermetic (no pixi.js
+// import, no assetStore/fetch side effects at module load).
+mock.module('$logger', () => ({
+  logger: {
+    debug: mock(() => {}),
+    info: mock(() => {}),
+    warn: mock(() => {}),
+    error: mock(() => {}),
+  },
+}));
+
+mock.module('$lib/data/lpc_tags', () => ({
+  lpcStateSuffix: () => 'walk',
+  lpcTag: () => 'lpc:test:walk',
+}));
+
+mock.module('$lib/data/lpc_renderer', () => ({
+  loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+  setLpcUrlResolver: () => {},
+}));
+
+mock.module('$lib/data/lpc_asset_catalog', () => ({
+  wireLpcUrlResolver: () => {},
+  getLpcAssetPath: () => '/game-data/lpc/test.walk.webp',
 }));
 
 // PixiJS facade mock — all classes are empty shells

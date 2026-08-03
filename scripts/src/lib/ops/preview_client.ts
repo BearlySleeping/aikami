@@ -243,15 +243,16 @@ const startVitePreview = async (): Promise<void> => {
 
 const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean): Promise<void> => {
   // Ensure LPC assets are available before building for Tauri.
-  // The download_lpc_assets script puts them in src/lib/assets/lpc/,
-  // but the app references them at /lpc/ URLs (served from static/).
-  // We need them in static/game-data/lpc/ so Vite copies them into the build output.
-  const lpcSrcDir = resolve(CLIENT_DIR, 'src/lib/assets/lpc/body/male');
-  const lpcStaticDir = resolve(CLIENT_DIR, 'static/game-data/lpc/body/male');
-  const lpcHasAssets = existsSync(lpcStaticDir) && existsSync(resolve(lpcStaticDir, 'walk.png'));
-  const lpcHasDownloaded = existsSync(lpcSrcDir) && existsSync(resolve(lpcSrcDir, 'walk.png'));
+  // The download_lpc_assets script writes the canonical tree directly to
+  // static/game-data/lpc/ so Vite copies it into the build output and the
+  // manifest resolver can serve it at /game-data/lpc/... URLs.
+  const lpcStaticDir = resolve(CLIENT_DIR, 'static/game-data/lpc');
+  // Validate a required LPC asset file (AC-1 canonical path) rather than only
+  // the body directory — an empty or partial static/game-data/lpc tree must
+  // leave lpcHasAssets false so the download step runs.
+  const lpcHasAssets = existsSync(resolve(lpcStaticDir, 'body', 'bodies_male.walk.webp'));
 
-  if (!lpcHasAssets && !lpcHasDownloaded) {
+  if (!lpcHasAssets) {
     warn('LPC assets not found — downloading…');
     const lpcCode = await spawnLabeled(
       ['bun', 'run', 'scripts/src/lib/ops/download_lpc_assets.ts', '--mode', mode],
@@ -261,20 +262,7 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
     if (lpcCode !== 0) {
       warn('LPC asset download failed — sprites may not render in Tauri');
     } else {
-      ok('LPC assets downloaded');
-    }
-  }
-
-  // Copy from src/lib/assets/lpc/ to static/game-data/lpc/ if needed
-  if (!lpcHasAssets && existsSync(resolve(CLIENT_DIR, 'src/lib/assets/lpc'))) {
-    info('Copying LPC assets to static/game-data/lpc/ for build…');
-    const copyCode = await spawnLabeled(
-      ['cp', '-r', resolve(CLIENT_DIR, 'src/lib/assets/lpc'), resolve(CLIENT_DIR, 'static/lpc')],
-      'copy_lpc_to_static',
-      { cwd: ROOT },
-    );
-    if (copyCode === 0) {
-      ok('LPC assets copied to static/');
+      ok('LPC assets downloaded to static/game-data/lpc/');
     }
   }
 

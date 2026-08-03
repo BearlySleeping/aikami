@@ -10,7 +10,7 @@
  * WebP in parallel using ImageMagick via xargs -P.
  *
  * Output:
- *   apps/frontend/client/src/lib/assets/lpc/{slot}/{type}.webp   (images via phase 2)
+ *   apps/frontend/client/static/game-data/lpc/{slot}/{type}.webp   (images via phase 2)
  *   apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts  (catalog)
  *
  * Usage:
@@ -43,9 +43,8 @@ const OUTPUT_ASSETS_DIR = join(
   'apps',
   'frontend',
   'client',
-  'src',
-  'lib',
-  'assets',
+  'static',
+  'game-data',
   'lpc',
 );
 const OUTPUT_CATALOG = join(

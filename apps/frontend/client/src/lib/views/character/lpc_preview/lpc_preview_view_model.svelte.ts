@@ -11,10 +11,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { loadLpcSheet } from '$lib/data/lpc_renderer';
+import { lpcStateSuffix } from '$lib/data/lpc_tags';
 import {
   Application,
-  Assets,
   Container,
   Graphics,
   type PixiApplication,
@@ -24,13 +26,6 @@ import {
 } from './lpc_preview_pixi_facade';
 
 // ── Constants ────────────────────────────────────────────────────────────
-
-/** Import LPC asset URLs via Vite glob */
-const LPC_ASSET_URLS = import.meta.glob('/src/lib/assets/lpc/**/*.webp', {
-  query: '?url',
-  import: 'default',
-  eager: false,
-}) as Record<string, () => Promise<string>>;
 
 /** Canonical Aikami z-order offsets for each slot. */
 const SLOT_Z_ORDER: Record<string, number> = {
@@ -56,16 +51,6 @@ const DEFAULT_CANVAS_HEIGHT = 256;
 
 /** Default background color (dark navy). */
 const DEFAULT_BG_COLOR = 0x0d0d1a;
-
-/** Animation state → spritesheet filename suffix. */
-const STATE_SUFFIX: Record<number, string> = {
-  [LpcAnimationState.Walk]: 'walk',
-  [LpcAnimationState.Spellcast]: 'spellcast',
-  [LpcAnimationState.Thrust]: 'thrust',
-  [LpcAnimationState.Slash]: 'slash',
-  [LpcAnimationState.Shoot]: 'shoot',
-  [LpcAnimationState.Die]: 'hurt',
-};
 
 /** Frame counts per animation state. */
 const FRAME_COUNTS: Record<number, number> = {
@@ -195,6 +180,10 @@ class LpcPreviewViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
+    // is loaded before any layer lookup (idempotent).
+    await wireLpcUrlResolver();
+
     this.registerEffectRoot(() => {
       // Reactively initialize PixiJS when canvasElement becomes available
       $effect(() => {
@@ -324,9 +313,8 @@ class LpcPreviewViewModel
         const assetId = recipe.assetId;
         const hexPalette = recipe.hexPalette;
 
-        const stateSuffix = STATE_SUFFIX[currentState] ?? 'walk';
-        const sheetKey = `${assetId}.${stateSuffix}`;
-        const texture = await this._loadSheetTexture(assetId, stateSuffix);
+        const sheetKey = `${assetId}.${lpcStateSuffix(currentState)}`;
+        const texture = await this._loadSheetTexture(assetId, currentState);
 
         if (!texture || texture === Texture.EMPTY) {
           this.warn('lpcPreview.missingAsset', { slot: slotName, assetId, sheetKey });
@@ -442,7 +430,8 @@ class LpcPreviewViewModel
 
   // ── Private: texture loading ──────────────────────────────────────
 
-  private async _loadSheetTexture(assetId: string, stateSuffix: string): Promise<Texture> {
+  private async _loadSheetTexture(assetId: string, state: LpcAnimationState): Promise<Texture> {
+    const stateSuffix = lpcStateSuffix(state);
     const cacheKey = `__lpc_preview__${assetId}.${stateSuffix}`;
 
     const cached = this._sheetCache.get(cacheKey);
@@ -456,28 +445,21 @@ class LpcPreviewViewModel
     }
 
     const promise = (async () => {
-      try {
-        // Look up asset URL from the import.meta.glob map
-        const assetPath = `/src/lib/assets/lpc/${assetId}.${stateSuffix}.webp`;
-        const urlLoader = LPC_ASSET_URLS[assetPath];
-
-        if (!urlLoader) {
-          this._sheetCache.set(cacheKey, Texture.EMPTY);
-          return Texture.EMPTY;
-        }
-
-        const url = await urlLoader();
-        const texture = await Assets.load(url);
-        texture.source.scaleMode = 'nearest';
+      const texture = await loadLpcSheet(assetId, state);
+      // Only cache successful textures — transient EMPTY must be retried on a
+      // later call (the renderer only permanently caches genuinely unmapped
+      // assets once the manifest is loaded).
+      if (texture !== Texture.EMPTY) {
         this._sheetCache.set(cacheKey, texture);
-        return texture;
-      } catch {
-        this._sheetCache.set(cacheKey, Texture.EMPTY);
-        return Texture.EMPTY;
       }
+      return texture;
     })();
 
     this._sheetPromises.set(cacheKey, promise);
+    void promise.finally(() => {
+      // Release the in-flight entry once settled so EMPTY results can retry.
+      this._sheetPromises.delete(cacheKey);
+    });
     return promise;
   }
 

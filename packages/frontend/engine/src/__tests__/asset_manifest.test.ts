@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetManifest } from '@aikami/types';
 import {
   buildAssetTagList,
@@ -125,6 +126,86 @@ describe('ensureAssetDirs', () => {
     // Check nested subdirs
     const s = await stat(join(dirs, 'sprites', 'generic-fantasy'));
     expect(s.isDirectory()).toBe(true);
+
+    await rm(dirs, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// splitStateSegments (C-372)
+// ---------------------------------------------------------------------------
+
+describe('splitStateSegments', () => {
+  test('splits trailing state token for lpc category', () => {
+    expect(splitStateSegments('lpc/body/bodies_male.walk.webp', 'lpc')).toBe(
+      'lpc/body/bodies_male/walk',
+    );
+  });
+
+  test('leaves non-state dotted names unchanged', () => {
+    expect(splitStateSegments('lpc/body/weird_name.v1.webp', 'lpc')).toBe(
+      'lpc/body/weird_name.v1.webp',
+    );
+  });
+
+  test('leaves non-lpc categories unchanged', () => {
+    expect(splitStateSegments('sprites/generic-fantasy/elf-male.png', 'sprites')).toBe(
+      'sprites/generic-fantasy/elf-male.png',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildManifest — lpc category (C-372)
+// ---------------------------------------------------------------------------
+
+describe('buildManifest lpc category', () => {
+  test('indexes lpc spritesheets with colon-separated state tags', async () => {
+    const dirs = join(testDir, 'lpc-scan-test');
+    await ensureAssetDirs(dirs);
+
+    await writeTestFile(join(dirs, 'lpc/body/bodies_male.walk.webp').replace(`${testDir}/`, ''));
+    await writeTestFile(
+      join(dirs, 'lpc/hair/bangslong2/bg_adult.walk.webp').replace(`${testDir}/`, ''),
+    );
+    await writeTestFile(
+      join(dirs, 'lpc/head/heads/human_male.walk.webp').replace(`${testDir}/`, ''),
+    );
+
+    const manifest = await buildManifest(dirs);
+
+    expect(manifest.count).toBe(3);
+
+    // Tag shape: lpc:<slot>:<variant>:<state>
+    const bodyEntry = manifest.assets['lpc:body:bodies_male:walk'];
+    expect(bodyEntry).toBeDefined();
+    expect(bodyEntry?.path).toBe('lpc/body/bodies_male.walk.webp');
+    expect(bodyEntry?.category).toBe('lpc');
+    expect(bodyEntry?.subcategory).toBe('body');
+    expect(bodyEntry?.ext).toBe('.webp');
+
+    // Deep sub-slot files keep the state as the final tag segment
+    const hairEntry = manifest.assets['lpc:hair:bangslong2:bg_adult:walk'];
+    expect(hairEntry).toBeDefined();
+    expect(hairEntry?.path).toBe('lpc/hair/bangslong2/bg_adult.walk.webp');
+
+    // byCategory.lpc is populated
+    expect(manifest.byCategory.lpc).toBeDefined();
+    expect(manifest.byCategory.lpc?.length).toBe(3);
+
+    await rm(dirs, { recursive: true, force: true });
+  });
+
+  test('does not emit dotted-state tags for lpc files', async () => {
+    const dirs = join(testDir, 'lpc-scan-dot-test');
+    await ensureAssetDirs(dirs);
+
+    await writeTestFile(join(dirs, 'lpc/body/bodies_male.walk.webp').replace(`${testDir}/`, ''));
+
+    const manifest = await buildManifest(dirs);
+
+    expect(manifest.assets['lpc:body:bodies_male.walk']).toBeUndefined();
+    expect(manifest.assets['lpc:body:bodies_male:walk']).toBeDefined();
 
     await rm(dirs, { recursive: true, force: true });
   });

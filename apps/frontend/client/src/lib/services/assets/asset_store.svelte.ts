@@ -58,7 +58,14 @@ class AssetStoreImpl implements AssetStore {
             scannedAt: new Date().toISOString(),
             count: 0,
             assets: {},
-            byCategory: { music: [], sfx: [], ambient: [], sprites: [], backgrounds: [] },
+            byCategory: {
+              music: [],
+              sfx: [],
+              ambient: [],
+              sprites: [],
+              backgrounds: [],
+              lpc: [],
+            },
           };
           return;
         }

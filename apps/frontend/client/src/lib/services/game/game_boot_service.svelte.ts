@@ -646,7 +646,11 @@ class GameBootService
     const textureManager = new TextureManager();
 
     // Build LPC pipeline
-    const { getLpcAssetPath } = await import('$lib/data/lpc_asset_catalog');
+    const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
+    // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
+    // is loaded before the engine boots (idempotent — catalog module scope
+    // also wires it).
+    await wireLpcUrlResolver();
     const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
       '$lib/data/lpc_asset_catalog_generated'
     );
@@ -882,10 +886,10 @@ class GameBootService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string,
+    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
   ): {
     recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
-    assetUrlResolver: (_slot: string, assetId: string, state: string) => string;
+    assetUrlResolver: (_slot: string, assetId: string, state: string) => string | null;
   } {
     this._cachedLpcSlots = generatedLpcSlots;
 
@@ -954,7 +958,7 @@ class GameBootService
       return recipes;
     };
 
-    const assetUrlResolver = (_slot: string, assetId: string, state: string): string => {
+    const assetUrlResolver = (_slot: string, assetId: string, state: string): string | null => {
       return getLpcAssetPath(_slot, assetId, state);
     };
 

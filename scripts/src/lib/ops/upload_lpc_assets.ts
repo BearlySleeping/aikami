@@ -2,7 +2,7 @@
 /**
  * Upload LPC assets to Firebase Storage.
  *
- * Walks apps/frontend/client/src/lib/assets/lpc and uploads every .webp file
+ * Walks apps/frontend/client/static/game-data/lpc and uploads every .webp file
  * to Firebase Storage under the `lpc/` prefix, preserving directory structure.
  *
  * Usage:
@@ -26,9 +26,8 @@ const LPC_ASSETS_DIR = join(
   'apps',
   'frontend',
   'client',
-  'src',
-  'lib',
-  'assets',
+  'static',
+  'game-data',
   'lpc',
 );
 
