@@ -63,6 +63,52 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Audio assets (music / sfx / ambient) — public read (C-373 AssetManager
+    // fallback origin), admin-only write
+    // ═══════════════════════════════════════════════════════════════
+    match /music/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidFileSize();
+    }
+    match /sfx/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidFileSize();
+    }
+    match /ambient/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidFileSize();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Sprite / background image assets — public read (C-373 AssetManager
+    // fallback origin), admin-only write
+    // ═══════════════════════════════════════════════════════════════
+    match /sprites/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidImageType() && isValidFileSize();
+    }
+    match /backgrounds/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidImageType() && isValidFileSize();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Online registry seed (manifest.json + asset_hashes.json) — public
+    // read so clients can discover the available-asset catalog, admin-only
+    // write
+    // ═══════════════════════════════════════════════════════════════
+    match /game-data/{allPaths=**} {
+      allow read: if true;
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Public assets — public read, authenticated write
     // ═══════════════════════════════════════════════════════════════
     match /public/{allPaths=**} {

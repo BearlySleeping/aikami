@@ -7,14 +7,23 @@
 // headers for Web Audio API playback. Without this, audio elements and
 // AudioContext.decodeAudioData() silently fail on iOS.
 //
-// This worker intercepts requests to /assets/audio/ and:
+// This worker intercepts requests to /game-data/{music,sfx,ambient}/ and:
 // 1. Fetches the full asset if not cached
 // 2. Reads the ArrayBuffer from the response
 // 3. Slices it according to the Range header
 // 4. Returns a 206 Partial Content response
 
-/** Base path for audio assets to intercept. */
-const AUDIO_PATH_PREFIX = '/assets/audio/';
+/** Base paths for audio assets to intercept. */
+const AUDIO_PATH_PREFIXES = ['/game-data/music/', '/game-data/sfx/', '/game-data/ambient/'];
+
+/**
+ * Whether a URL path is an audio asset request handled by this worker.
+ * @param {string} pathname — URL pathname (e.g. '/game-data/music/exploration/Chainsmoker.mp3')
+ * @returns {boolean}
+ */
+const isAudioPath = (pathname) => {
+  return AUDIO_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+};
 
 /**
  * Opens (or creates) a dedicated cache for audio assets.
@@ -70,7 +79,11 @@ const handleRangeRequest = async (request) => {
   const rangeHeader = request.headers.get('Range');
   if (!rangeHeader) {
     // No Range header — return full response
-    const contentType = url.endsWith('.webm') ? 'audio/webm; codecs=opus' : 'audio/wav';
+    const contentType = url.endsWith('.webm')
+      ? 'audio/webm; codecs=opus'
+      : url.endsWith('.mp3')
+        ? 'audio/mpeg'
+        : 'audio/wav';
     return new Response(arrayBuffer, {
       status: 200,
       headers: {
@@ -98,7 +111,11 @@ const handleRangeRequest = async (request) => {
   }
 
   const sliced = arrayBuffer.slice(start, end + 1);
-  const contentType = url.endsWith('.webm') ? 'audio/webm; codecs=opus' : 'audio/wav';
+  const contentType = url.endsWith('.webm')
+    ? 'audio/webm; codecs=opus'
+    : url.endsWith('.mp3')
+      ? 'audio/mpeg'
+      : 'audio/wav';
 
   return new Response(sliced, {
     status: 206,
@@ -125,8 +142,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Only intercept GET requests to /assets/audio/
-  if (event.request.method !== 'GET' || !url.pathname.startsWith(AUDIO_PATH_PREFIX)) {
+  // Only intercept GET requests to audio asset paths
+  if (event.request.method !== 'GET' || !isAudioPath(url.pathname)) {
     return;
   }
 

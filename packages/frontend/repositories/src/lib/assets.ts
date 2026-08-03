@@ -155,6 +155,66 @@ export class AssetRegistryRepository {
     return result.rows.map(_rowToAssetSource);
   }
 
+  /**
+   * Adds a `firebase-storage` fallback download origin for every seeded asset
+   * (C-373 `asset_sources`): the Firebase Storage download URL mirroring the
+   * bundled `/game-data/<path>` source. Idempotent — `INSERT OR REPLACE` on the
+   * (asset_id, backend) primary key.
+   *
+   * The AssetManager tries sources by priority: bundled (0) first, then the
+   * Firebase Storage mirror (1) when the bundled path is unavailable. Assets
+   * must be uploaded to the bucket under their manifest path (e.g.
+   * `music/exploration/Chainsmoker.mp3`, `lpc/body/bodies_male.walk.webp`)
+   * — see `scripts/src/lib/ops/upload_audio_assets.ts` / `upload_lpc_assets.ts`.
+   *
+   * @param storageBucket - Firebase Storage bucket, e.g. `aikami-staging.firebasestorage.app`.
+   * @returns The number of source rows written.
+   */
+  async addFirebaseStorageSources(storageBucket: string): Promise<number> {
+    // Already seeded with this backend — cheap skip so the boot call is safe
+    // to run on every session (INSERT OR REPLACE on 12k+ rows is not).
+    const existing = await this._db.query({
+      sql: "SELECT COUNT(*) AS n FROM asset_sources WHERE backend = 'firebase-storage'",
+      args: [],
+    });
+    const existingCount = existing.rows[0]?.n as number | undefined;
+    if ((existingCount ?? 0) > 0) {
+      return 0;
+    }
+
+    const result = await this._db.query({
+      sql: 'SELECT asset_id, url FROM asset_sources WHERE backend = ?',
+      args: [BUNDLED_SOURCE_BACKEND],
+    });
+
+    const base = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o`;
+    const queries: { sql: string; args: unknown[] }[] = [];
+
+    for (const row of result.rows) {
+      const assetId = row.asset_id as string;
+      const bundledUrl = row.url as string;
+      const storagePath = bundledUrl.startsWith(`${BUNDLED_ASSET_BASE}/`)
+        ? bundledUrl.slice(`${BUNDLED_ASSET_BASE}/`.length)
+        : bundledUrl;
+      queries.push({
+        sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+              VALUES (?, 'firebase-storage', ?, 1)`,
+        args: [assetId, `${base}/${encodeURIComponent(storagePath)}?alt=media`],
+      });
+    }
+
+    if (queries.length === 0) {
+      return 0;
+    }
+
+    // Chunked like seeding — a single large transaction stalls WASM SQLite.
+    for (let i = 0; i < queries.length; i += SEED_CHUNK_SIZE) {
+      const chunk = queries.slice(i, i + SEED_CHUNK_SIZE);
+      await this._db.transaction(chunk);
+    }
+    return queries.length;
+  }
+
   // ── Install state ────────────────────────────────────────────────────
 
   /** Reads the installation status of an asset, or undefined when never downloaded. */

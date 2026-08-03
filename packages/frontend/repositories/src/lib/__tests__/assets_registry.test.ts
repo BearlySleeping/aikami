@@ -148,6 +148,26 @@ describe('AssetRegistryRepository', () => {
     expect(sources[0]?.url).toBe('/game-data/music/exploration/forest.mp3');
   });
 
+  test('addFirebaseStorageSources mirrors bundled paths as priority-1 bucket URLs', async () => {
+    await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
+
+    const added = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added).toBe(3);
+
+    const sources = await registry.listSources('music:exploration:forest');
+    expect(sources).toHaveLength(2);
+    expect(sources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(sources[0]?.priority).toBe(0);
+    expect(sources[1]?.backend).toBe('firebase-storage');
+    expect(sources[1]?.priority).toBe(1);
+    expect(sources[1]?.url).toBe(
+      'https://firebasestorage.googleapis.com/v0/b/aikami-staging.firebasestorage.app/o/music%2Fexploration%2Fforest.mp3?alt=media',
+    );
+
+    // Idempotent — second call is a cheap no-op.
+    expect(await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app')).toBe(0);
+  });
+
   test('meta.asset_registry_seeded is set to the manifest scannedAt', async () => {
     const manifest = makeManifest();
     await registry.seedFromManifest({ manifest, hashes: makeHashes() });

@@ -76,7 +76,7 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
    * If no track is currently playing, the new track fades in from silence.
    * If the requested track is already the active track, this is a no-op.
    *
-   * @param trackUrl — URL of the audio asset (e.g. '/assets/audio/music/bgm_combat.webm')
+   * @param trackUrl — URL of the audio asset (e.g. '/game-data/music/exploration/Chainsmoker.mp3')
    * @param durationMs — Crossfade duration in milliseconds (default 1500)
    */
   transitionToBgm(trackUrl: string, durationMs?: number): Promise<void>;
@@ -88,7 +88,7 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
    * AudioBufferSourceNode. Short sounds (< 500ms) are aggressively
    * cleaned up.
    *
-   * @param trackUrl — URL of the audio asset (e.g. '/assets/audio/sfx/sfx_hit.wav')
+   * @param trackUrl — URL of the audio asset (e.g. '/game-data/sfx/sfx_hit.wav')
    */
   playSfx(trackUrl: string): Promise<void>;
 
@@ -263,6 +263,11 @@ export class AudioService
 
   /** @inheritdoc */
   async transitionToBgm(trackUrl: string, durationMs: number = 1500): Promise<void> {
+    // Guard: empty/unresolvable URL (no bundled asset) is a safe no-op.
+    if (!trackUrl) {
+      return;
+    }
+
     // No-op if already playing the requested track
     if (this._activeTrackUrl === trackUrl && !this.isCrossfading) {
       return;
@@ -351,6 +356,11 @@ export class AudioService
 
   /** @inheritdoc */
   async playSfx(trackUrl: string): Promise<void> {
+    // Guard: empty/unresolvable URL (no bundled asset) is a safe no-op.
+    if (!trackUrl) {
+      return;
+    }
+
     audioContextManager.unlock();
 
     const ctx = audioContextManager.context;
