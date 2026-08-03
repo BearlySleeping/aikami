@@ -8,6 +8,7 @@ export type GameBootStage =
   | 'idle'
   | 'loading_campaign'
   | 'validating_save'
+  | 'initializing_asset_registry'
   | 'preloading_content'
   | 'creating_engine'
   | 'hydrating_snapshot'

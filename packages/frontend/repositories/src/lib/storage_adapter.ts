@@ -222,6 +222,40 @@ export const AIKAMI_SCHEMA_DDL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_session_checkpoints_campaign ON session_checkpoints(campaign_id)`,
   `CREATE INDEX IF NOT EXISTS idx_journal_campaign ON journal_entries(campaign_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_compacted_campaign ON compacted_summaries(campaign_id, compacted_at)`,
+
+  // ── Asset registry (C-373) ───────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    pack_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    license TEXT NOT NULL DEFAULT 'unknown',
+    attribution TEXT,
+    tags_json TEXT NOT NULL DEFAULT '[]'
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS asset_sources (
+    asset_id TEXT NOT NULL REFERENCES assets(id),
+    backend TEXT NOT NULL, -- 'bundled' | 'firebase-storage' | 'r2' | 'self-hosted'
+    url TEXT NOT NULL,
+    priority INTEGER NOT NULL,
+    PRIMARY KEY (asset_id, backend)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS install_state (
+    asset_id TEXT PRIMARY KEY REFERENCES assets(id),
+    status TEXT NOT NULL CHECK(status IN ('not_downloaded', 'downloading', 'cached', 'stale')),
+    local_path TEXT,
+    cached_hash TEXT,
+    downloaded_at TEXT
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_assets_pack ON assets(pack_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_install_state_status ON install_state(status)`,
 ];
 
 /** Database file name for the local SQLite store. */

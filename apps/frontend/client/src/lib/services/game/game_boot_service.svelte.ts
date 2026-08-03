@@ -15,7 +15,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { Campaign, PersonaData } from '@aikami/types';
+import type { AssetHashesFile, Campaign, PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { authService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
@@ -28,6 +28,7 @@ import { gameEngineService } from './game_engine_service.svelte';
 const bootStageOrder: readonly GameBootStage[] = [
   'loading_campaign',
   'validating_save',
+  'initializing_asset_registry',
   'preloading_content',
   'creating_engine',
   'hydrating_snapshot',
@@ -42,6 +43,7 @@ const bootStageLabels: Record<GameBootStage, string> = {
   idle: 'Preparing...',
   loading_campaign: 'Loading campaign...',
   validating_save: 'Validating save...',
+  initializing_asset_registry: 'Preparing assets...',
   preloading_content: 'Loading content pack...',
   creating_engine: 'Starting game engine...',
   hydrating_snapshot: 'Restoring world...',
@@ -342,6 +344,9 @@ class GameBootService
       case 'validating_save':
         await this._stageValidateSave(input, generation);
         break;
+      case 'initializing_asset_registry':
+        await this._stageInitializeAssetRegistry(generation);
+        break;
       case 'preloading_content':
         await this._stagePreloadContent(input, generation);
         break;
@@ -579,6 +584,95 @@ class GameBootService
 
     const elapsed = performance.now() - t0;
     this.debug('stage:validating_save:complete', { elapsedMs: elapsed });
+  }
+
+  /**
+   * Stage: open the shared local DB, seed the asset registry from the
+   * manifest + hash sidecar, init the platform cache backend, and reconcile
+   * install state (C-373 AC-1/AC-3). Never blocks boot — any failure degrades
+   * to online mode and seeding retries on the next boot.
+   */
+  private async _stageInitializeAssetRegistry(generation: number): Promise<void> {
+    const t0 = performance.now();
+
+    try {
+      // 1. Ensure the manifest is loaded (fetchManifest is idempotent).
+      const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+      if (!assetStore.manifest) {
+        await assetStore.fetchManifest();
+      }
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+      if (!assetStore.manifest) {
+        this.warn('stage:initializing_asset_registry:no-manifest');
+        return;
+      }
+
+      // 2. Hash sidecar — tags without an entry are never seeded.
+      const hashesResponse = await fetch('/game-data/asset_hashes.json');
+      if (!hashesResponse.ok) {
+        this.warn('stage:initializing_asset_registry:no-sidecar', {
+          status: hashesResponse.status,
+        });
+        return;
+      }
+      const hashes = (await hashesResponse.json()) as AssetHashesFile;
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      // 3. Open the shared DB (applies AIKAMI_SCHEMA_DDL idempotently) + registry.
+      const { getLocalDatabase, AssetRegistryRepository } = await import(
+        '@aikami/frontend/repositories'
+      );
+      const db = await getLocalDatabase();
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+      const registry = new AssetRegistryRepository(db);
+
+      // 4. Seed if not already seeded with this manifest revision (idempotent).
+      if (!(await registry.isSeeded(assetStore.manifest.scannedAt))) {
+        const stats = await registry.seedFromManifest({
+          manifest: assetStore.manifest,
+          hashes,
+        });
+        this.debug('stage:initializing_asset_registry:seeded', { ...stats });
+      } else {
+        this.debug('stage:initializing_asset_registry:already-seeded');
+      }
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      // 5. Platform cache backend (OPFS / Tauri FS) + persistence request.
+      const { createPlatformCacheBackend, assetManager } = await import(
+        '$lib/services/assets/asset_manager.svelte'
+      );
+      const backend = createPlatformCacheBackend();
+      await backend.init();
+      await backend.requestPersistence();
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      // 6. Initialize the manager (pre-registers cached binaries) + reconcile
+      //    interrupted downloads and stale-hash evictions.
+      await assetManager.initialize({ registry, backend });
+      await assetManager.reconcile();
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      const elapsed = performance.now() - t0;
+      this.debug('stage:initializing_asset_registry:complete', {
+        elapsedMs: Math.round(elapsed),
+      });
+    } catch (error) {
+      // Non-fatal: continue in online mode; seeding retries on next boot.
+      this.warn('stage:initializing_asset_registry:degraded', { error: String(error) });
+    }
   }
 
   /** Stage: preload content pack manifest + asset bundles. */

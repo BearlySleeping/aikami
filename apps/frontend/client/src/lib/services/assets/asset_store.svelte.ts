@@ -11,6 +11,7 @@
 
 import type { AssetManifest, AssetStoreState } from '@aikami/types';
 import { logger } from '$logger';
+import { assetManager } from './asset_manager.svelte.ts';
 
 /** Path to the static manifest JSON file. */
 const MANIFEST_URL = '/game-data/manifest.json';
@@ -105,6 +106,15 @@ class AssetStoreImpl implements AssetStore {
     if (!entry) {
       return null;
     }
+
+    // C-373: serve verified cached binaries via the AssetManager (blob: URL)
+    // when available — zero network traffic. Uncached assets are prefetched
+    // in the background (warm) and fall back to the static path for now.
+    const cachedUrl = assetManager.peekBlobUrl(tag);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+    void assetManager.warm(tag).catch(() => undefined);
 
     return `${ASSETS_BASE}/${entry.path}`;
   }

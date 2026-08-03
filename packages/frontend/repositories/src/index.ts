@@ -1,3 +1,4 @@
+export * from './lib/assets.ts';
 export * from './lib/chat.ts';
 export * from './lib/config.ts';
 export * from './lib/local_database_factory.ts';

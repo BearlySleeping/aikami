@@ -425,6 +425,17 @@ export class AudioService
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
     this._bufferCache.set(url, audioBuffer);
+
+    // C-373: release the managed blob URL after decode — the AudioBuffer is
+    // self-contained, so the cached binary's object URL can be revoked.
+    // No-op for non-managed (static) URLs.
+    try {
+      const { assetManager } = await import('../assets/asset_manager.svelte.ts');
+      assetManager.releaseUrl(url);
+    } catch {
+      // Non-fatal — revocation is best-effort.
+    }
+
     return audioBuffer;
   }
 
