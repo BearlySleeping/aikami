@@ -49,12 +49,30 @@ permissions:
   contents: write # required for `gh release upload`
 
 jobs:
+  # ── Preflight: materialize DEPLOY_APPS for job-level `if` ───────────
+  # GitHub Actions does NOT expose the `env` context to job-level `if:`
+  # conditions (only step-level) — a workflow using it fails to parse
+  # ("Unrecognized named-value: 'env'") and never runs. This tiny job
+  # re-exports the workflow-level env var as a job output so downstream
+  # jobs can gate on it via the `needs` context, which IS allowed.
+  resolve-apps:
+    name: Resolve Deploy Apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy_apps: ${{ steps.apps.outputs.deploy_apps }}
+    steps:
+      - name: Read DEPLOY_APPS
+        id: apps
+        run: echo "deploy_apps=$DEPLOY_APPS" >> "$GITHUB_OUTPUT"
+
   # ── Desktop releases (multi-platform matrix, parallel) ──────────────
   deploy-desktop:
     name: Desktop (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    if: contains(env.DEPLOY_APPS, 'client-tauri') || env.DEPLOY_APPS == 'all'
+    needs: resolve-apps
+    if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
     strategy:
       fail-fast: false
       matrix:
@@ -124,13 +142,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # shell: bash — these steps use bash variable syntax (MODE=..., $MODE,
+      # $FORCE_FLAG) which breaks under the default PowerShell on the
+      # windows-latest runner. bash is available on every GitHub runner.
       - name: Download Secrets from GCP Secret Manager
+        shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
           bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts client-tauri
 
       - name: Run Desktop Deploy Pipeline
         id: deploy
+        shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
           FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
@@ -168,7 +191,8 @@ jobs:
     name: Web & Backend
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: env.DEPLOY_APPS != 'client-tauri'
+    needs: resolve-apps
+    if: needs.resolve-apps.outputs.deploy_apps != 'client-tauri'
     steps:
       - name: Compute web deploy apps
         id: apps
