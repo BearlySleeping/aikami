@@ -160,6 +160,9 @@ jobs:
           bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG client-tauri
         env:
           CI: "true"
+          # moon's toolchain would otherwise try to provision its own bun via
+          # proto in CI — force global tools (same as pr-checks.yml).
+          MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
           TAURI_BUNDLE_TARGETS: ${{ matrix.bundles }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only set on a real GitHub Release publish. This is what tells
