@@ -514,11 +514,20 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     const promise = (async () => {
       const texture = await loadLpcSheet(assetId, state);
-      this._sheetTextureCache.set(cacheKey, texture);
+      // Only cache successful textures — transient EMPTY must be retried on a
+      // later call (the renderer only permanently caches genuinely unmapped
+      // assets once the manifest is loaded).
+      if (texture !== Texture.EMPTY) {
+        this._sheetTextureCache.set(cacheKey, texture);
+      }
       return texture;
     })();
 
     this._sheetTexturePromises.set(cacheKey, promise);
+    void promise.finally(() => {
+      // Release the in-flight entry once settled so EMPTY results can retry.
+      this._sheetTexturePromises.delete(cacheKey);
+    });
     return promise;
   }
 
@@ -863,8 +872,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   override async initialize(): Promise<void> {
-    // Ensure the manifest-backed LPC URL resolver is wired (idempotent).
-    wireLpcUrlResolver();
+    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
+    // is loaded before any layer lookup (idempotent).
+    await wireLpcUrlResolver();
 
     // Register $effect blocks via registerEffectRoot.
     // PixiJS init is deferred to a reactive $effect that fires when

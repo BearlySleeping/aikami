@@ -180,8 +180,9 @@ class LpcPreviewViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Ensure the manifest-backed LPC URL resolver is wired (idempotent).
-    wireLpcUrlResolver();
+    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
+    // is loaded before any layer lookup (idempotent).
+    await wireLpcUrlResolver();
 
     this.registerEffectRoot(() => {
       // Reactively initialize PixiJS when canvasElement becomes available
@@ -444,17 +445,21 @@ class LpcPreviewViewModel
     }
 
     const promise = (async () => {
-      try {
-        const texture = await loadLpcSheet(assetId, state);
+      const texture = await loadLpcSheet(assetId, state);
+      // Only cache successful textures — transient EMPTY must be retried on a
+      // later call (the renderer only permanently caches genuinely unmapped
+      // assets once the manifest is loaded).
+      if (texture !== Texture.EMPTY) {
         this._sheetCache.set(cacheKey, texture);
-        return texture;
-      } catch {
-        this._sheetCache.set(cacheKey, Texture.EMPTY);
-        return Texture.EMPTY;
       }
+      return texture;
     })();
 
     this._sheetPromises.set(cacheKey, promise);
+    void promise.finally(() => {
+      // Release the in-flight entry once settled so EMPTY results can retry.
+      this._sheetPromises.delete(cacheKey);
+    });
     return promise;
   }
 

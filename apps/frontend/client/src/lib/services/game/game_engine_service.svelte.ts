@@ -466,9 +466,10 @@ class GameEngineService
     try {
       const { GameWorld, TextureManager } = await import('@aikami/frontend/engine');
       const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
-      // C-372: ensure the manifest-backed LPC resolver is wired before the
-      // engine boots (idempotent — catalog module scope also wires it).
-      wireLpcUrlResolver();
+      // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
+      // is loaded before the engine boots (idempotent — catalog module scope
+      // also wires it).
+      await wireLpcUrlResolver();
       const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
         '$lib/data/lpc_asset_catalog_generated'
       );

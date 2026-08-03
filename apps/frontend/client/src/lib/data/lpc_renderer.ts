@@ -55,11 +55,41 @@ const _sheetCache = new Map<string, Texture>();
 const _sheetPromises = new Map<string, Promise<Texture>>();
 const _frameCache = new Map<string, Texture>();
 
+let _manifestReady = false;
+
+/**
+ * Marks whether the asset manifest has finished loading.
+ *
+ * Until this is true, an unresolvable URL is treated as *transient* (the
+ * manifest may simply not have loaded yet) and is NOT cached, so a later
+ * call after the manifest resolves can retry. Once true, a null resolution
+ * is a genuinely unmapped asset and is cached as Texture.EMPTY (fallback).
+ *
+ * @param ready - Whether the manifest is loaded.
+ */
+export const setLpcManifestReady = (ready: boolean): void => {
+  _manifestReady = ready;
+  if (ready) {
+    // Drop any Texture.EMPTY entries cached while the manifest was loading,
+    // so a later render attempt resolves them properly.
+    for (const [key, texture] of _sheetCache) {
+      if (texture === Texture.EMPTY) {
+        _sheetCache.delete(key);
+      }
+    }
+  }
+};
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
  * Loads a webp spritesheet for a given asset and animation state.
  * Caches results. Falls back to Texture.EMPTY on failure or unmapped asset.
+ *
+ * Negative results are only cached once the manifest has loaded (so a
+ * not-yet-loaded manifest can retry later); transient Assets.load failures
+ * are not cached and retry on subsequent calls. Successful textures are
+ * cached permanently.
  */
 export async function loadLpcSheet(assetId: string, state: LpcAnimationState): Promise<Texture> {
   const stateSuffix = lpcStateSuffix(state);
@@ -78,6 +108,11 @@ export async function loadLpcSheet(assetId: string, state: LpcAnimationState): P
   const promise = (async () => {
     const url = resolveLpcUrl(assetId, state);
     if (!url) {
+      if (!_manifestReady) {
+        // Manifest not loaded yet — treat as transient, do not cache EMPTY.
+        logger.debug('lpcRenderer:manifestNotReady', { assetId, stateSuffix });
+        return Texture.EMPTY;
+      }
       logger.warn('lpcRenderer:unmapped', { assetId, stateSuffix });
       _sheetCache.set(key, Texture.EMPTY);
       return Texture.EMPTY;
@@ -90,12 +125,17 @@ export async function loadLpcSheet(assetId: string, state: LpcAnimationState): P
       return texture;
     } catch (err) {
       logger.warn('lpcRenderer:loadFailed', { assetId, stateSuffix, url, error: String(err) });
-      _sheetCache.set(key, Texture.EMPTY);
+      // Transient failure — do not permanently cache EMPTY; a later call retries.
       return Texture.EMPTY;
     }
   })();
 
   _sheetPromises.set(key, promise);
+  void promise.finally(() => {
+    // Release the in-flight entry once settled so failed/transient loads
+    // can retry on a later call (successful results hit _sheetCache first).
+    _sheetPromises.delete(key);
+  });
   return promise;
 }
 

@@ -104,14 +104,10 @@ test('man with orange buzzcut', async ({ page }) => {
   });
 
   test.expect(nonBackgroundPixels, 'canvas must render LPC layers').toBeGreaterThan(100);
-  test
-    .expect(
-      consoleErrors.filter(
-        (e) => e.includes('decodeAudioData') || e.includes('Failed to decode') || e.includes('404'),
-      ),
-      'no decode/404 console errors',
-    )
-    .toEqual([]);
+  // C-372: the page must be console-error-free. Assert the complete error
+  // collection is empty (not just decode/404 substrings) so unrelated
+  // TypeError / manifest-resolver errors also fail the test.
+  test.expect(consoleErrors, 'no console errors').toEqual([]);
   test.expect(failedLpcRequests, 'no failed /game-data/lpc/ requests').toEqual([]);
   test.expect(srcLibAssetRequests, 'no /src/lib/assets/ requests').toEqual([]);
 

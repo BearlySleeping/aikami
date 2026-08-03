@@ -5,7 +5,6 @@
     "rewrites": [
       {
         "source": "**/*.@(webp|webm|mp3|ogg|json|png|jpg|jpeg|gif|avif|svg|wav|flac|m4a|aac|woff|woff2|ttf|eot|ico|txt|pdf)",
-        "statusCode": 404,
         "destination": "/404.html"
       },
       {

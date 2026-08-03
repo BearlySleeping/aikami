@@ -131,8 +131,9 @@ class LpcWalkTestViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Ensure the manifest-backed LPC URL resolver is wired (idempotent).
-    wireLpcUrlResolver();
+    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
+    // is loaded before any layer lookup (idempotent).
+    await wireLpcUrlResolver();
 
     this.registerEffectRoot(() => {
       $effect(() => {

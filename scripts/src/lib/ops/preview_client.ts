@@ -247,7 +247,10 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
   // static/game-data/lpc/ so Vite copies it into the build output and the
   // manifest resolver can serve it at /game-data/lpc/... URLs.
   const lpcStaticDir = resolve(CLIENT_DIR, 'static/game-data/lpc');
-  const lpcHasAssets = existsSync(lpcStaticDir) && existsSync(resolve(lpcStaticDir, 'body'));
+  // Validate a required LPC asset file (AC-1 canonical path) rather than only
+  // the body directory — an empty or partial static/game-data/lpc tree must
+  // leave lpcHasAssets false so the download step runs.
+  const lpcHasAssets = existsSync(resolve(lpcStaticDir, 'body', 'bodies_male.walk.webp'));
 
   if (!lpcHasAssets) {
     warn('LPC assets not found — downloading…');
