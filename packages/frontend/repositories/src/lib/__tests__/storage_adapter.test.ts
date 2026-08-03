@@ -320,4 +320,53 @@ describe('WasmStorageAdapter (in-memory)', () => {
     // Should not throw
     await db.sync();
   });
+
+  // ── C-373: Asset registry tables (old-DB additive upgrade) ─────────
+
+  test('C-373: assets/asset_sources/install_state tables exist after DDL', async () => {
+    // The three tables must be created by the appended DDL so existing
+    // databases upgrade in place (additive migration, no data loss).
+    const registryTables = await db.query({
+      sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('assets', 'asset_sources', 'install_state')",
+      args: [],
+    });
+    const names = registryTables.rows.map((r) => r.name).sort();
+    expect(names).toEqual(['asset_sources', 'assets', 'install_state']);
+
+    // Column sanity: assets.hash is NOT NULL; install_state.status has a CHECK
+    await db.execute({
+      sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['sprites:hero', 'sprites', 'sprites', 'abc123', 1, 100],
+    });
+    await db.execute({
+      sql: `INSERT INTO asset_sources (asset_id, backend, url, priority) VALUES (?, ?, ?, ?)`,
+      args: ['sprites:hero', 'bundled', '/game-data/sprites/hero.png', 0],
+    });
+    await db.execute({
+      sql: `INSERT INTO install_state (asset_id, status, local_path, cached_hash) VALUES (?, ?, ?, ?)`,
+      args: ['sprites:hero', 'cached', 'abc123', 'abc123'],
+    });
+
+    const sources = await db.query({
+      sql: 'SELECT url, priority FROM asset_sources WHERE asset_id = ?',
+      args: ['sprites:hero'],
+    });
+    expect(sources.rows).toHaveLength(1);
+    expect(sources.rows[0].url).toBe('/game-data/sprites/hero.png');
+
+    // CHECK constraint rejects an invalid status. A distinct asset_id avoids
+    // the PRIMARY KEY conflict from the earlier 'sprites:hero' insert — the
+    // rejection must exercise the status CHECK, not the PK. The parent asset
+    // is registered first so foreign-key enforcement stays valid.
+    await db.execute({
+      sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['sprites:bogus', 'sprites', 'sprites', 'bogushash', 1, 10],
+    });
+    await expect(
+      db.execute({
+        sql: `INSERT INTO install_state (asset_id, status) VALUES (?, ?)`,
+        args: ['sprites:bogus', 'bogus'],
+      }),
+    ).rejects.toThrow();
+  });
 });

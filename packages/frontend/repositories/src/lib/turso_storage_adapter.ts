@@ -87,6 +87,10 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     const turso = await import('@tursodatabase/database');
     this._db = await turso.connect(this._databasePath);
 
+    // Foreign-key enforcement ON — asset_sources/install_state reference
+    // assets(id); deleting an asset must first remove its dependent rows.
+    await this.execute({ sql: 'PRAGMA foreign_keys = ON', args: [] });
+
     logger.debug('TursoStorageAdapter.open:connected');
   }
 
