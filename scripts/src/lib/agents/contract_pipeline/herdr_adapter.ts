@@ -166,6 +166,25 @@ export type ContractHerdrAdapterInterface = {
 
 // ── Implementation ──────────────────────────────────────────
 
+/**
+ * Build the Herdr workspace label used by the contract pipeline.
+ *
+ * Root mode reuses the standard `aikami-{mode}` workspace so all stages run
+ * from the repo root; otherwise a per-contract workspace is used. The
+ * orchestrator's lock staleness check must build the SAME label — extract it
+ * here so the two can never drift.
+ *
+ * @param contractId - Contract ID (e.g. `C-372`), only used in worktree mode.
+ * @param rootMode   - Whether the run executes on the root branch.
+ */
+export const buildWorkspaceLabel = (options: {
+  contractId: string;
+  rootMode?: boolean;
+}): string => {
+  const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
+  return options.rootMode ? `aikami-${mode}` : `aikami-contract-${options.contractId}`;
+};
+
 export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _repoRoot: string;
   private readonly _runId: string;
@@ -192,10 +211,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
-    const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
-    this._workspaceLabel = options.rootMode
-      ? `aikami-${mode}`
-      : `aikami-contract-${options.contractId}`;
+    this._workspaceLabel = buildWorkspaceLabel({
+      contractId: options.contractId,
+      rootMode: options.rootMode,
+    });
     this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS !== '0';
     this._interactiveWriter = options.interactiveWriter ?? false;
     this._rootMode = options.rootMode ?? false;

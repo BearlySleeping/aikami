@@ -22,7 +22,11 @@ import {
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
-import { ContractHerdrAdapter, type ContractHerdrAdapterInterface } from './herdr_adapter.ts';
+import {
+  buildWorkspaceLabel,
+  ContractHerdrAdapter,
+  type ContractHerdrAdapterInterface,
+} from './herdr_adapter.ts';
 import {
   acquireLock,
   createManifest,
@@ -632,7 +636,11 @@ export const runContractPipeline = async (options: {
     return manifest;
   }
 
-  const buildWsLabel = (cid: string): string => `aikami-contract-${cid}`;
+  // Workspace label MUST match ContractHerdrAdapter's — root mode uses the
+  // standard aikami-{mode} workspace, worktree mode uses aikami-contract-{id}.
+  // A mismatch would make checkWorkspaceAlive always return false in root
+  // mode, breaking the lock on a live pipeline.
+  const buildWsLabel = (cid: string): string => buildWorkspaceLabel({ contractId: cid, rootMode });
   await acquireLock({
     contractId: manifest.contractId,
     runId: manifest.runId,
@@ -694,7 +702,8 @@ export const runContractPipeline = async (options: {
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
 
-        const interactiveStage = !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
+        const interactiveStage =
+          !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
         const outcome = await runStage({
           repoRoot: options.repoRoot,
           runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
