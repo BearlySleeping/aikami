@@ -22,6 +22,7 @@ import {
 import { basename, join } from 'node:path';
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
+import { readManifest } from './contract_pipeline/manifest_store.ts';
 import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
 const sleep = async (milliseconds: number): Promise<void> =>
@@ -742,6 +743,32 @@ const main = async (): Promise<void> => {
   if (cli.help && !cli.resumeRunId) {
     printHelp();
     return;
+  }
+
+  // 🔴 Resume hydration: when continuing an incomplete run, remember the
+  // original invocation. The run manifest persists rootMode (and the contract
+  // target), so `bun run contract --resume <run-id>` without re-passing
+  // `--root` still executes on the root branch (contract/C-XXX) instead of
+  // silently switching to a worktree. setupRootBranch below is idempotent —
+  // it detects the existing branch and checks out the current one.
+  if (cli.resumeRunId) {
+    try {
+      const resumed = readManifest({ runId: cli.resumeRunId, cwd: process.cwd() });
+      if (resumed) {
+        if (resumed.rootMode) {
+          cli.root = true;
+          // Resuming on the root branch must not be blocked by the tree state
+          // left behind when the session stopped — that state IS the run's
+          // state (mid-implement working tree).
+          cli.dirty = true;
+        }
+        if (!cli.target) {
+          cli.target = resumed.contractId;
+        }
+      }
+    } catch {
+      // Non-fatal — the orchestrator re-reads and validates the manifest.
+    }
   }
 
   // 🔴 Fail fast BEFORE creating any placeholder or contract file: --root

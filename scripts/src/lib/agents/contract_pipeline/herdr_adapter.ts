@@ -166,6 +166,25 @@ export type ContractHerdrAdapterInterface = {
 
 // ── Implementation ──────────────────────────────────────────
 
+/**
+ * Build the Herdr workspace label used by the contract pipeline.
+ *
+ * Root mode reuses the standard `aikami-{mode}` workspace so all stages run
+ * from the repo root; otherwise a per-contract workspace is used. The
+ * orchestrator's lock staleness check must build the SAME label — extract it
+ * here so the two can never drift.
+ *
+ * @param contractId - Contract ID (e.g. `C-372`), only used in worktree mode.
+ * @param rootMode   - Whether the run executes on the root branch.
+ */
+export const buildWorkspaceLabel = (options: {
+  contractId: string;
+  rootMode?: boolean;
+}): string => {
+  const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
+  return options.rootMode ? `aikami-${mode}` : `aikami-contract-${options.contractId}`;
+};
+
 export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _repoRoot: string;
   private readonly _runId: string;
@@ -192,10 +211,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
-    const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
-    this._workspaceLabel = options.rootMode
-      ? `aikami-${mode}`
-      : `aikami-contract-${options.contractId}`;
+    this._workspaceLabel = buildWorkspaceLabel({
+      contractId: options.contractId,
+      rootMode: options.rootMode,
+    });
     this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS !== '0';
     this._interactiveWriter = options.interactiveWriter ?? false;
     this._rootMode = options.rootMode ?? false;
@@ -563,10 +582,16 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
           ].join('\n')
         : isInteractiveWriter
           ? [
-              `👋 Welcome to direct contract drafting for ${contractId}.`,
+              `👋 Direct contract drafting for ${contractId}.`,
               '',
-              'The user will describe their feature in this chat. Wait for their',
-              'description before doing any work — do NOT write the contract yet.',
+              'You are WAITING for the user to describe their feature in this chat.',
+              '',
+              '🔴 DO NOT DO ANY WORK YET:',
+              '- Do NOT inspect the codebase, scan the backlog, or write any file.',
+              '- Do NOT call `contract_stage_complete` before the contract is written.',
+              '',
+              'The input box is empty. The user will type their feature description',
+              'and press Enter — THAT is your input to act on.',
               '',
               'Once the user has described the feature:',
               '',
@@ -619,15 +644,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     if (!this._useJsonMode(options.request.role)) {
       // TUI mode — send task text via PTY.
-      let taskText: string;
       if (isRetry) {
-        taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`;
+        await this._sendTaskText({
+          paneId,
+          text: `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`,
+        });
       } else if (isInteractiveWriter) {
-        taskText = `👋 Welcome to direct contract drafting for ${contractId}! Tell me what you want this contract to be and I'll write the full specification. Read your full task brief at ${taskMessagePath} for the workflow.`;
+        // 🔴 Leave the input box EMPTY and do not send anything. The agent
+        // must not take a turn — it would start working (or abort) before the
+        // user has described their feature. The user types their description
+        // into the empty chat field and presses Enter themselves.
       } else {
-        taskText = `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
+        await this._sendTaskText({
+          paneId,
+          text: `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`,
+        });
       }
-      await this._sendTaskText({ paneId, text: taskText });
     }
     return { paneId };
   }

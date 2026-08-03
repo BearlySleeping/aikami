@@ -22,7 +22,11 @@ import {
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
-import { ContractHerdrAdapter, type ContractHerdrAdapterInterface } from './herdr_adapter.ts';
+import {
+  buildWorkspaceLabel,
+  ContractHerdrAdapter,
+  type ContractHerdrAdapterInterface,
+} from './herdr_adapter.ts';
 import {
   acquireLock,
   createManifest,
@@ -196,48 +200,67 @@ const reconcileWorkspace = (options: {
   manifest: RunManifest;
   repoRoot: string;
   baseBranch?: string;
+  rootMode?: boolean;
 }): ReconciliationResult => {
-  const workspaceRunName = options.manifest.runId;
-  const { workspacePath, branchName } = provisionGitWorktree({
-    repoRoot: options.repoRoot,
-    name: workspaceRunName,
-    baseRevision: options.baseBranch ?? PIPELINE_BASE_BRANCH,
-  });
-
-  // Restore .envrc / .pi/settings.json from base (origin/main), not HEAD.
   const b = options.baseBranch ?? PIPELINE_BASE_BRANCH;
-  let resolvedBase: string | undefined;
-  try {
-    resolvedBase = runGit(`rev-parse --verify origin/${b}`, { cwd: options.repoRoot });
-  } catch {
+  const rootMode = options.rootMode ?? false;
+
+  let workspacePath: string;
+  let headBranch: string;
+
+  if (rootMode) {
+    // Root mode: no worktree — the implementation lives in the repo root on
+    // the contract branch (e.g. contract/C-372). Commit remaining changes and
+    // push that branch directly.
+    workspacePath = options.repoRoot;
     try {
-      resolvedBase = runGit(`rev-parse --verify ${b}`, { cwd: options.repoRoot });
-    } catch {}
-  }
-  if (resolvedBase) {
-    for (const fp of [
-      '.envrc',
-      '.pi/settings.json',
-      'docs/contracts/PROGRESS.md',
-      'docs/contracts/PROMOTION.md',
-    ]) {
+      headBranch = runGit('rev-parse --abbrev-ref HEAD', { cwd: workspacePath });
+    } catch {
+      headBranch = `contract/${options.manifest.contractId}`;
+    }
+  } else {
+    const workspaceRunName = options.manifest.runId;
+    const provisioned = provisionGitWorktree({
+      repoRoot: options.repoRoot,
+      name: workspaceRunName,
+      baseRevision: b,
+    });
+    workspacePath = provisioned.workspacePath;
+
+    // Restore .envrc / .pi/settings.json from base (origin/main), not HEAD.
+    let resolvedBase: string | undefined;
+    try {
+      resolvedBase = runGit(`rev-parse --verify origin/${b}`, { cwd: options.repoRoot });
+    } catch {
       try {
-        runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
+        resolvedBase = runGit(`rev-parse --verify ${b}`, { cwd: options.repoRoot });
       } catch {}
     }
-  }
+    if (resolvedBase) {
+      for (const fp of [
+        '.envrc',
+        '.pi/settings.json',
+        'docs/contracts/PROGRESS.md',
+        'docs/contracts/PROMOTION.md',
+      ]) {
+        try {
+          runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
+        } catch {}
+      }
+    }
 
-  const runToken = options.manifest.runId.replace(/^run-/, '').split('-')[0];
-  const baseBranchName = `contract-task-${options.manifest.contractId.toLowerCase()}-${runToken}`;
-  let headBranch = baseBranchName;
-  if (remoteBranchExists({ branchName: baseBranchName, repoRoot: options.repoRoot })) {
-    headBranch = `${baseBranchName}-${Date.now().toString(36).slice(-6)}`;
-  }
-  if (branchName !== headBranch) {
-    try {
-      runGit(`branch -m ${branchName} ${headBranch}`, { cwd: workspacePath });
-    } catch {
-      headBranch = branchName;
+    const runToken = options.manifest.runId.replace(/^run-/, '').split('-')[0];
+    const baseBranchName = `contract-task-${options.manifest.contractId.toLowerCase()}-${runToken}`;
+    headBranch = baseBranchName;
+    if (remoteBranchExists({ branchName: baseBranchName, repoRoot: options.repoRoot })) {
+      headBranch = `${baseBranchName}-${Date.now().toString(36).slice(-6)}`;
+    }
+    if (provisioned.branchName !== headBranch) {
+      try {
+        runGit(`branch -m ${provisioned.branchName} ${headBranch}`, { cwd: workspacePath });
+      } catch {
+        headBranch = provisioned.branchName;
+      }
     }
   }
 
@@ -601,14 +624,23 @@ export const runContractPipeline = async (options: {
       baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
       startStage,
       skipAuthoring: options.skipAuthoring,
+      rootMode: options.rootMode,
     });
     writeManifest({ manifest, cwd: options.repoRoot });
   }
+  // Effective root mode: an explicit CLI flag wins; otherwise resume the
+  // persisted mode from the manifest so `bun run contract --resume <run-id>`
+  // keeps the original --root/--worktree decision.
+  const rootMode = options.rootMode ?? manifest.rootMode ?? false;
   if (options.dryRun) {
     return manifest;
   }
 
-  const buildWsLabel = (cid: string): string => `aikami-contract-${cid}`;
+  // Workspace label MUST match ContractHerdrAdapter's — root mode uses the
+  // standard aikami-{mode} workspace, worktree mode uses aikami-contract-{id}.
+  // A mismatch would make checkWorkspaceAlive always return false in root
+  // mode, breaking the lock on a live pipeline.
+  const buildWsLabel = (cid: string): string => buildWorkspaceLabel({ contractId: cid, rootMode });
   await acquireLock({
     contractId: manifest.contractId,
     runId: manifest.runId,
@@ -633,7 +665,7 @@ export const runContractPipeline = async (options: {
       runId: manifest.runId,
       contractId: manifest.contractId,
       interactiveWriter: options.interactiveWriter,
-      rootMode: options.rootMode,
+      rootMode,
     });
 
   try {
@@ -670,6 +702,8 @@ export const runContractPipeline = async (options: {
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
 
+        const interactiveStage =
+          !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
         const outcome = await runStage({
           repoRoot: options.repoRoot,
           runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
@@ -677,12 +711,18 @@ export const runContractPipeline = async (options: {
           stage,
           attempt,
           contractPath: manifest.contractPath,
-          idleTimeoutMs: IDLE_TIMEOUT_MS,
+          // The interactive writer legitimately sits idle while waiting for the
+          // user to describe their feature — don't nudge it or time it out
+          // early. Only the hard wall-clock cap bounds the wait.
+          idleTimeoutMs: interactiveStage
+            ? (STAGE_HARD_CAPS.write_contract ?? IDLE_TIMEOUT_MS)
+            : IDLE_TIMEOUT_MS,
           hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
           feedback,
+          interactiveWriter: interactiveStage,
           launchWorker: (req) => adapter.launchWorker(req),
           checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
-          nudgeWorker: (opts) => adapter.nudgeWorker(opts),
+          nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
         });
         const after = captureGitState(cwdForGit);
 
@@ -745,13 +785,16 @@ export const runContractPipeline = async (options: {
 
         if (stage === 'implement' && result.status === 'passed') {
           // Status is tracked in run manifest only — don't touch main contract.
-          // Commit implementer changes to the worktree branch.
-          // The verifier runs next and expects a clean git state — untracked
-          // implementation files would otherwise be flagged as missing.
-          if (wPath) {
+          // Commit implementer changes. In worktree mode they land on the
+          // worktree branch; in root mode on the current root branch
+          // (contract/C-XXX). The verifier runs next and expects a clean git
+          // state — untracked implementation files would otherwise be flagged
+          // as missing.
+          const commitCwd = wPath || (rootMode ? options.repoRoot : '');
+          if (commitCwd) {
             try {
               commitAll({
-                cwd: wPath,
+                cwd: commitCwd,
                 message: `Feat: Contract ${manifest.contractId} — implementation`,
                 authorName: 'Pi Agent',
                 authorEmail: 'agent@pi.internal',
@@ -759,7 +802,7 @@ export const runContractPipeline = async (options: {
               pipelineLog({
                 runId: manifest.runId,
                 cwd: options.repoRoot,
-                message: 'Implementer changes committed to worktree.',
+                message: 'Implementer changes committed.',
               });
             } catch (commitErr: unknown) {
               const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
@@ -866,6 +909,7 @@ export const runContractPipeline = async (options: {
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
+                  rootMode,
                 });
                 pipelineLog({
                   runId: manifest.runId,
@@ -910,6 +954,7 @@ export const runContractPipeline = async (options: {
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
+                  rootMode,
                 });
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
