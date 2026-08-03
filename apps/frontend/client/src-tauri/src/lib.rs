@@ -1,5 +1,4 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-use tauri::Manager;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -7,7 +6,9 @@ fn greet(name: &str) -> String {
 }
 
 /// Parse a `--route <path>` argument from CLI args, if present.
-/// Returns `Some(path)` to navigate to on startup, or `None` to load the default root.
+/// Returns `Some(path)` to open at startup, or `None` to load the root.
+///
+/// Set by `bun preview --tauri` / `bun preview --tauri-dev`.
 fn parse_startup_route() -> Option<String> {
     std::env::args()
         .collect::<Vec<_>>()
@@ -18,7 +19,6 @@ fn parse_startup_route() -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Log CLI args for debugging
     let args: Vec<String> = std::env::args().collect();
     println!("Tauri startup — CLI args: {:?}", &args);
 
@@ -27,40 +27,35 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(move |app| {
-            println!("Tauri setup — configuring window...");
+            // Create the main window with the requested route baked into the
+            // app URL. `WebviewUrl::App` resolves against `build.devUrl` in dev
+            // mode (herdr dev server) and `tauri://localhost/` in production
+            // (embedded frontendDist), so one code path covers both.
+            let route = startup_route
+                .clone()
+                .unwrap_or_default()
+                .trim_start_matches('/')
+                .to_string();
+            println!("Tauri setup — creating main window at route '/{}'", route);
 
-            // Log available windows
-            let window_labels: Vec<_> = app.webview_windows().keys().cloned().collect();
-            println!("Tauri setup — window labels: {:?}", window_labels);
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App(route.into()),
+            )
+                .title("Aikami")
+                .inner_size(1200.0, 800.0)
+                .resizable(true)
+                .build()
+                .expect("failed to build main window");
 
-            if let Some(route) = startup_route {
-                let handle = app.handle().clone();
-                println!("Tauri setup — scheduling navigation to '{}' in 2s...", route);
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    match handle.get_webview_window("main") {
-                        Some(window) => {
-                            let js = format!("console.log('[Tauri] navigating to {}'); window.location.href = '{}';", route, route);
-                            match window.eval(&js) {
-                                Ok(_) => println!("Tauri — eval sent, navigating to {}", route),
-                                Err(e) => eprintln!("Tauri — eval failed: {}", e),
-                            }
-                        }
-                        None => {
-                            eprintln!("Tauri — main window not found during route setup");
-                            // Try listing windows again
-                            let labels: Vec<_> = handle.webview_windows().keys().cloned().collect();
-                            eprintln!("Tauri — available windows at navigation time: {:?}", labels);
-                        }
-                    }
-                });
-            }
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_log::Builder::new().level(log::LevelFilter::Debug).build())
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
