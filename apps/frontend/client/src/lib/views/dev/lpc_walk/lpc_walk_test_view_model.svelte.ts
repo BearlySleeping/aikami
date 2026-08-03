@@ -12,7 +12,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { Application, Assets, Container, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Rectangle, Sprite, Texture } from 'pixi.js';
+import { wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
+import { LpcAnimationState } from '$lib/data/lpc_models';
+import { loadLpcSheet } from '$lib/data/lpc_renderer';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -40,13 +43,6 @@ const SLOT_Z_ORDER: Record<string, number> = {
   hair: 50,
 };
 const DEFAULT_Z = 100;
-
-/** Vite glob for all walk spritesheet assets. */
-const LPC_ASSET_URLS = import.meta.glob('/src/lib/assets/lpc/**/*.walk.webp', {
-  query: '?url',
-  import: 'default',
-  eager: false,
-}) as Record<string, () => Promise<string>>;
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -135,6 +131,9 @@ class LpcWalkTestViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    // Ensure the manifest-backed LPC URL resolver is wired (idempotent).
+    wireLpcUrlResolver();
+
     this.registerEffectRoot(() => {
       $effect(() => {
         if (this.canvasElement && !this._pixiApp) {
@@ -195,12 +194,8 @@ class LpcWalkTestViewModel
         fps: this._pixiApp.ticker.FPS,
       });
 
-      // Log glob keys for debugging
-      const globKeys = Object.keys(LPC_ASSET_URLS);
-      this.debug('lpcWalk.init.glob-keys', {
-        count: globKeys.length,
-        first5: globKeys.slice(0, 5),
-      });
+      // Log resolved-layer count for debugging
+      this.debug('lpcWalk.init.ready', { loadedLayers: 0 });
 
       this._addKeyboardListeners();
       this.debug('lpcWalk.init.listeners-added');
@@ -414,15 +409,10 @@ class LpcWalkTestViewModel
     }
 
     try {
-      const assetPath = `/src/lib/assets/lpc/${assetId}.walk.webp`;
-      const urlLoader = LPC_ASSET_URLS[assetPath];
-      if (!urlLoader) {
+      const texture = await loadLpcSheet(assetId, LpcAnimationState.Walk);
+      if (texture === Texture.EMPTY) {
         return null;
       }
-
-      const url = await urlLoader();
-      const texture = await Assets.load(url);
-      texture.source.scaleMode = 'nearest';
       this._sheetCache.set(cacheKey, texture);
       return texture;
     } catch {

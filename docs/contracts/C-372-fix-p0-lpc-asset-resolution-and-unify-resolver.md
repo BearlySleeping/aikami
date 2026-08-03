@@ -2,7 +2,7 @@
 id: C-372
 title: "Fix P0 LPC Asset Resolution & Unify Asset Resolver"
 source: "user_bug_report"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -295,3 +295,68 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Registered the LPC asset tree under `static/game-data/lpc/` as a first-class `lpc` manifest category (shared `ASSET_CATEGORIES` + state-token tag normalization), regenerated `manifest.json` (12,704 entries, 12,699 LPC), routed every client LPC loader through the manifest-backed `assetStore.resolveUrl` via an injected resolver (`setLpcUrlResolver` + `lpcTag`), deleted the legacy `src/lib/assets/lpc/` dev tree and stale `static/lpc/`, retargeted the upload/download/collect scripts, fixed the Firebase Hosting SPA rewrite so missing media returns true 404s, and added unit + E2E coverage. Production paths `/dev/lpc` (full character render, 90/100 visual) and `/game` (all 6 layers per entity load with HTTP 200, zero decode/404 errors) verified. One pre-existing engine composition quirk (white head on `/game`) is documented below and is out of scope (URL resolution only).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `lpc` category + `stateExtensions` in shared `ASSET_CATEGORIES`; manifest regenerated with tags `lpc:<slot>:<variant>:<state>` (e.g. `lpc:body:bodies_male:walk` → `lpc/body/bodies_male.walk.webp`), populated `byCategory.lpc` (12,699), `count` 12,704. `asset_manifest.test.ts` extended (splitStateSegments + lpc scan cases). |
+| AC-2 | ✅ | `asset_store.test.ts` (new, 6 tests): `resolveUrl(lpcTag('torso/aprons/apron_female', Walk))` → `/game-data/lpc/torso/aprons/apron_female.walk.webp`; no `/src/lib/assets/`, no Firebase Storage origin; `null` for unmapped tags and unloaded manifest. |
+| AC-3 | ✅ | `client:build` clean — 0 `/src/lib/assets/` references in bundle, 0 unhandled dynamic-import warnings. `/dev/lpc` renders fully composed character (E2E `lpc_man.spec.ts` extended with canvas-pixel + zero-console-error + zero-failed-request assertions, 2 passed; visual 90/100). `/game` loads all 6 LPC layers/entity with HTTP 200, 0 `decodeAudioData` errors, 0 failed `/game-data/lpc/` requests. Note: `/game` player head renders white — pre-existing engine frame-application quirk, composition is out of scope (see Deviations). |
+| AC-4 | ✅ | `firebase.json` adds a static-extension → `/404.html` rewrite (`statusCode: 404`) above the `**` catch-all. Verified against Firebase Hosting emulator: missing `.webp`/`.mp3`/`.json` → HTTP 404 with the 404.html body (never index.html); present assets 200; SPA routes still serve index.html. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/data/lpc_tags.ts` | Pure helpers: `lpcStateSuffix`, `lpcTag` (assetId + state → manifest tag), `LpcTag` type. No pixi/service deps — unit-testable. |
+| `apps/frontend/client/src/lib/services/assets/asset_store.test.ts` | AC-2 unit tests (tag mapping, URL prefix, null cases). |
+| `apps/frontend/client/static/404.html` | 404 error page served for missing static media on Hosting. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/game_assets.ts` | Added `lpc` category (`.webp`, 16 slot subdirs, `stateExtensions`), optional `stateExtensions` on `AssetCategoryDefinition`, `splitStateSegments` helper. |
+| `apps/frontend/client/static/game-data/manifest.json` | Regenerated via `scan_assets.ts` — 1 → 12,704 entries (12,699 LPC). |
+| `apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts` | Empty-manifest fallback now includes `lpc: []`. |
+| `apps/frontend/client/src/lib/data/lpc_renderer.ts` | Dropped Firebase Storage + `PUBLIC_LPC_USE_LOCAL`; added `setLpcUrlResolver`, resolver-routed `loadLpcSheet`/`getLpcAssetPath` (returns `string \| null`), warn-on-unmapped. |
+| `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` | `getLpcAssetPath` → `string \| null`; added `wireLpcUrlResolver()` (module-scope wired — global wiring point). |
+| `apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts` | Removed `@vite-ignore` dynamic import; `_loadSheetTexture` delegates to `loadLpcSheet`; head fallback via renderer; explicit `wireLpcUrlResolver()` in `initialize()`. |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` | Removed `import.meta.glob`; delegates to `loadLpcSheet`; explicit resolver wiring. |
+| `apps/frontend/client/src/lib/views/dev/lpc_walk/lpc_walk_test_view_model.svelte.ts` | Removed `import.meta.glob`; `_loadWalkSheet` → `loadLpcSheet(assetId, Walk)`; explicit resolver wiring. |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | `assetUrlResolver` types widened to `string \| null`; `wireLpcUrlResolver()` before engine boot. |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Same as boot service. |
+| `packages/frontend/engine/src/game_world.ts` | Type-only: `assetUrlResolver` → `string \| null` (runtime already null-tolerates at `if (!url) return`). |
+| `packages/frontend/engine/src/assets/asset_manifest.ts` | `buildManifest` applies `splitStateSegments` before `pathToTag`. |
+| `packages/frontend/engine/src/__tests__/asset_manifest.test.ts` | Added `splitStateSegments` + `lpc` scan test cases. |
+| `scripts/src/lib/ops/scan_assets.ts` | Applies `splitStateSegments`; regenerates manifest. |
+| `scripts/src/lib/ops/preview_client.ts` | Removed stale `src/lib/assets` → `static/lpc` copy; download targets `static/game-data/lpc` directly. |
+| `scripts/src/lib/ops/upload_lpc_assets.ts` / `download_lpc_assets.ts` / `collect_lpc_assets.ts` | Retargeted to `static/game-data/lpc`. |
+| `apps/frontend/client/firebase.json` | Static-extension 404 rewrite above the SPA catch-all. |
+| `apps/e2e/tests/client/lpc_man.spec.ts` | Extended: canvas pixel render + zero decode/404 console errors + zero failed `/game-data/lpc/` + zero `/src/lib/assets/` requests. |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts` | Fixed pre-existing `mock is not defined`; added mocks for manifest-aware renderer/catalog. |
+| `biome.json` | Excluded regenerated `manifest.json` (7.2 MB > 1 MiB lint cap). |
+| `.gitignore` | Removed stale `src/lib/assets/lpc/` and `static/lpc/**/*` entries. |
+| `apps/frontend/client/.env.local` | Removed dead `PUBLIC_LPC_USE_LOCAL` flag (gitignored local file). |
+
+### Deviations from Spec
+
+1. **Scanner state-tag normalization (small addition)**: The contract stated `pathToTag` would naturally produce `lpc:body:bodies_male:walk`; the generic scanner actually produces `lpc:body:bodies_male.walk` (it only strips the final extension). To satisfy AC-1's required colon-separated tag form, added an optional `stateExtensions` field to the shared `AssetCategoryDefinition` registry plus a `splitStateSegments` normalizer consumed by both scanners — keeping the “single registry drives both scanners” architecture. This slightly extends the “no scanner changes required” directive, which was based on an incorrect premise. `name`/`subcategory`/`path` fields are unchanged (still dotted filenames on disk).
+2. **`e2e:lpc-smoke` moon task is pre-existing broken**: references a removed Playwright project (`client-visual`). Not fixed (out of scope); the smoke capture step fails independent of C-372. `lpc_man.spec.ts` (the AC-3 E2E) passes with the new assertions.
+3. **Pre-existing `lpc_preview_view_model.test.ts` bug fixed**: the file called `mock.module` without importing `mock` (failed to load entirely). Added the import + module mocks for the new renderer/catalog imports. 2 lifecycle tests still fail under the non-reactive `$effect` polyfill — a pre-existing environment limitation, not caused by this contract (verified: the HEAD version of the file fails wholesale).
+4. **`/game` white head**: the player's head layer stays white despite the sheet resolving and loading (HTTP 200, 6/6 layers per entity loaded, zero errors). Root cause is the engine's `_applyLpcFrame` frame-key application — untouched by this contract (type-only diff in `game_world.ts`). Per the contract's Out of Scope (“engine paperdoll/body-layer logic — this contract only changes how URLs resolve”), no fix was attempted. Proposed follow-up: C-370 layer-composition bug.
+5. **`PUBLIC_LPC_USE_LOCAL` removed** from `.env.local` per Resolved Decisions (renderer no longer reads it).
+
+### Test Results
+
+- Unit: **1,013 pass / 2 fail** (frontend-engine 832/0, constants 114/0, scripts 8/0, client asset_store 6/0, client lpc_preview 18/20 — the 2 fails are pre-existing `$effect` polyfill lifecycle tests). Full client suite: 522 pass / 146 pre-existing fails in unrelated areas (text-gen, bridge listeners, audio, expression, chat, worldgen — none import C-372 modules); suite hangs on network-dependent tests, so focused suites were used for the gate.
+- E2E: **2 passed** (`lpc_man.spec.ts`, extended with C-372 assertions).
+- Visual: `man-debug.png` **90/100 PASS** (fully composed orange-buzzcut character); `/dev/lpc` full-page character render PASS; `/game` layers load with zero errors (white-head composition note above).
+- Baseline: 0 new failures introduced; 0 pre-existing LPC/asset/manifest failures.

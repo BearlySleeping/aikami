@@ -54,6 +54,13 @@ export type AssetCategoryDefinition = {
   name: string;
   extensions: Set<string>;
   defaultSubdirs: string[];
+  /**
+   * Optional: for categories where files are named `<name>.<state>.<ext>`
+   * (e.g. LPC spritesheets `bodies_male.walk.webp`), the trailing state
+   * token is split into its own tag segment so the manifest tag becomes
+   * `lpc:body:bodies_male:walk` instead of `lpc:body:bodies_male.walk`.
+   */
+  stateExtensions?: readonly string[];
 };
 
 /** All supported asset categories with validation rules. */
@@ -88,7 +95,84 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     extensions: new Set(IMAGE_EXTS),
     defaultSubdirs: ['fantasy', 'scifi', 'modern', 'illustrations'],
   },
+  lpc: {
+    name: 'lpc',
+    extensions: new Set(['.webp']),
+    defaultSubdirs: [
+      'body',
+      'legs',
+      'feet',
+      'torso',
+      'head',
+      'hair',
+      'eyes',
+      'facial',
+      'hat',
+      'neck',
+      'shield',
+      'shoulders',
+      'weapon',
+      'cape',
+      'dress',
+      'beard',
+    ],
+    stateExtensions: [
+      'walk',
+      'idle',
+      'run',
+      'jump',
+      'sit',
+      'climb',
+      'emote',
+      'spellcast',
+      'thrust',
+      'slash',
+      'halfslash',
+      'backslash',
+      'shoot',
+      'hurt',
+      'combat_idle',
+    ],
+  },
 } as const satisfies Record<string, AssetCategoryDefinition>;
+
+// ---------------------------------------------------------------------------
+// Tag normalization helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Splits a trailing `<state>` token into its own path segment for categories
+ * that declare {@link AssetCategoryDefinition.stateExtensions}.
+ *
+ * @example "lpc/body/bodies_male.walk" → "lpc/body/bodies_male/walk"
+ * @param relPath - Extension-stripped relative path (may still contain the
+ *   trailing `.<state>` token).
+ * @param categoryName - First path segment (the asset category).
+ * @returns The normalized path, or the input unchanged when the category has
+ *   no state extensions or the trailing token is not a known state.
+ */
+export const splitStateSegments = (relPath: string, categoryName: string): string => {
+  const categoryDef = ASSET_CATEGORIES[categoryName];
+  const stateExtensions = categoryDef?.stateExtensions;
+  if (!stateExtensions || stateExtensions.length === 0) {
+    return relPath;
+  }
+
+  // Strip the real file extension first (e.g. "lpc/body/bodies_male.walk.webp" →
+  // "lpc/body/bodies_male.walk") so the trailing `.<state>` token is what remains.
+  const withoutExt = relPath.replace(/\.[^.]+$/, '');
+  const lastDot = withoutExt.lastIndexOf('.');
+  if (lastDot <= 0) {
+    return relPath;
+  }
+
+  const state = withoutExt.slice(lastDot + 1);
+  if (!stateExtensions.includes(state)) {
+    return relPath;
+  }
+
+  return `${withoutExt.slice(0, lastDot)}/${state}`;
+};
 
 /** Default filename for the persisted manifest JSON. */
 export const MANIFEST_FILENAME = 'manifest.json';

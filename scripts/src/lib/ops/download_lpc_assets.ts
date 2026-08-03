@@ -3,7 +3,7 @@
  * Download LPC assets from Firebase Storage.
  *
  * Lists all files under the `lpc/` prefix in Firebase Storage and downloads
- * them to apps/frontend/client/src/lib/assets/lpc, preserving directory
+ * them to apps/frontend/client/static/game-data/lpc, preserving directory
  * structure.
  *
  * Usage:
@@ -27,9 +27,8 @@ const LPC_ASSETS_DIR = join(
   'apps',
   'frontend',
   'client',
-  'src',
-  'lib',
-  'assets',
+  'static',
+  'game-data',
   'lpc',
 );
 

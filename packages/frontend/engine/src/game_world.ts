@@ -145,8 +145,9 @@ export type GameWorldOptions = BaseEngineClassOptions & {
   recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
   /**
    * Resolves a slot, asset ID, and animation state to a texture URL.
+   * May return null for unmapped tags — callers degrade gracefully.
    */
-  assetUrlResolver?: (slot: string, assetId: string, state: string) => string;
+  assetUrlResolver?: (slot: string, assetId: string, state: string) => string | null;
   /**
    * Texture manager instance for LRU caching and frame slicing.
    */
@@ -217,8 +218,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Resolves layer IDs to LPC layer recipes. */
   private readonly _recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
 
-  /** Resolves asset URLs. */
-  private readonly _assetUrlResolver?: (slot: string, assetId: string, state: string) => string;
+  /** Resolves asset URLs. May return null for unmapped tags. */
+  private readonly _assetUrlResolver?: (
+    slot: string,
+    assetId: string,
+    state: string,
+  ) => string | null;
 
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;

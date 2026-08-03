@@ -17,7 +17,8 @@
       "!**/temp/*",
       "!**/tmp/*",
       "!**/dist/*",
-      "!**/build/*"
+      "!**/build/*",
+      "!apps/frontend/client/static/game-data/manifest.json"
     ]
   },
   "formatter": {

@@ -1,5 +1,8 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { setLpcUrlResolver } from '$lib/data/lpc_renderer';
+import { lpcTag } from '$lib/data/lpc_tags';
+import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Catalog — types for slot definitions and variants.
@@ -73,8 +76,29 @@ export const DIRECTION_OPTIONS: readonly { value: LpcDirection; label: string }[
 import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
 
 /**
+ * Wires the manifest-backed LPC URL resolver into the shared renderer.
+ *
+ * Idempotent — safe to call from every bootstrap / ViewModel wiring point.
+ * Also ensures the manifest is fetched so /game and the dev LPC pages can
+ * resolve layers on first paint.
+ */
+export const wireLpcUrlResolver = (): void => {
+  setLpcUrlResolver((assetId, state) => assetStore.resolveUrl(lpcTag(assetId, state)));
+  if (!assetStore.manifest && !assetStore.isLoading) {
+    void assetStore.fetchManifest();
+  }
+};
+
+// Wire once at module scope — every consumer of getLpcAssetPath imports this
+// module, so the renderer is manifest-aware before any layer lookup happens.
+wireLpcUrlResolver();
+
+/**
  * Asset path resolver for the sandbox/game engine.
  * Delegates to the shared LPC renderer.
  */
-export const getLpcAssetPath = (_slot: string, assetId: string, state: LpcAnimationState): string =>
-  _getLpcAssetPath(assetId, state);
+export const getLpcAssetPath = (
+  _slot: string,
+  assetId: string,
+  state: LpcAnimationState,
+): string | null => _getLpcAssetPath(assetId, state);
