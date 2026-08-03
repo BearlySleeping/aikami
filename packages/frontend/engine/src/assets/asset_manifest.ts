@@ -11,6 +11,7 @@ import {
   DEFAULT_ASSETS_DIR,
   MANIFEST_FILENAME,
   MAX_TAG_LIST_LENGTH,
+  splitStateSegments,
 } from '@aikami/constants';
 import { AssetManifestSchema } from '@aikami/schemas';
 import type { AssetEntry, AssetManifest, AssetTreeNode } from '@aikami/types';
@@ -238,7 +239,7 @@ export const buildManifest = async (rootDir?: string): Promise<AssetManifest> =>
       }
 
       // Build entry
-      const tag = pathToTag(relPath);
+      const tag = pathToTag(splitStateSegments(relPath, categoryName));
       const name = entryName.slice(0, extIdx);
 
       // Build subcategory from path segments between category and filename

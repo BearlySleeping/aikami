@@ -9,7 +9,7 @@
 
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
-import { ASSET_CATEGORIES } from '@aikami/constants';
+import { ASSET_CATEGORIES, splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetManifest } from '@aikami/types';
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ const scanDir = async (rootDir: string): Promise<AssetManifest> => {
         continue;
       }
 
-      const tag = pathToTag(relPath);
+      const tag = pathToTag(splitStateSegments(relPath, categoryName));
       const nameDotIdx = entryName.lastIndexOf('.');
       const name = nameDotIdx >= 0 ? entryName.slice(0, nameDotIdx) : entryName;
       const subcategory = pathSegments.length > 2 ? pathSegments.slice(1, -1).join('/') : '';

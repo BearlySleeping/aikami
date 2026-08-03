@@ -19,9 +19,12 @@ import {
   LPC_DEFAULT_BODY_ASSET_ID,
   LPC_DEFAULT_HEAD_ASSET_ID,
   REQUIRED_LPC_SLOTS,
+  wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { loadLpcSheet } from '$lib/data/lpc_renderer';
+import { lpcStateSuffix } from '$lib/data/lpc_tags';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
@@ -492,8 +495,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Texture / sheet helpers ─────────────────────────────────────────
 
-  private async _loadSheetTexture(_path: string, _slot: string, assetId: string): Promise<Texture> {
-    const cacheKey = `__lpc__${assetId}`;
+  private async _loadSheetTexture(
+    _slot: string,
+    assetId: string,
+    state: LpcAnimationState,
+  ): Promise<Texture> {
+    const stateSuffix = lpcStateSuffix(state);
+    const cacheKey = `__lpc__${assetId}.${stateSuffix}`;
 
     const cached = this._sheetTextureCache.get(cacheKey);
     if (cached) {
@@ -505,22 +513,21 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
-      const { Assets } = await import('./lpc_pixi_facade');
-      try {
-        const mod = await import(/* @vite-ignore */ `/src/lib/assets/lpc/${assetId}.webp?url`);
-        const url = (mod as { default: string }).default;
-        const texture = await Assets.load(url);
-        texture.source.scaleMode = 'nearest';
+      const texture = await loadLpcSheet(assetId, state);
+      // Only cache successful textures — transient EMPTY must be retried on a
+      // later call (the renderer only permanently caches genuinely unmapped
+      // assets once the manifest is loaded).
+      if (texture !== Texture.EMPTY) {
         this._sheetTextureCache.set(cacheKey, texture);
-        return texture;
-      } catch {
-        const { Texture: T } = await import('./lpc_pixi_facade');
-        this._sheetTextureCache.set(cacheKey, T.EMPTY);
-        return T.EMPTY;
       }
+      return texture;
     })();
 
     this._sheetTexturePromises.set(cacheKey, promise);
+    void promise.finally(() => {
+      // Release the in-flight entry once settled so EMPTY results can retry.
+      this._sheetTexturePromises.delete(cacheKey);
+    });
     return promise;
   }
 
@@ -553,32 +560,18 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const recipeAssetId = recipe.assetId;
 
         // Load webp spritesheet for the current animation state
-        const stateMap: Record<number, string> = {
-          [LpcAnimationState.Walk]: 'walk',
-          [LpcAnimationState.Spellcast]: 'spellcast',
-          [LpcAnimationState.Thrust]: 'thrust',
-          [LpcAnimationState.Slash]: 'slash',
-          [LpcAnimationState.Shoot]: 'shoot',
-          [LpcAnimationState.Die]: 'hurt',
-        };
-        const stateSuffix = stateMap[currentState] ?? 'walk';
-        let texture = await this._loadSheetTexture(
-          '',
-          recipeSlot,
-          `${recipeAssetId}.${stateSuffix}`,
-        );
+        let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
 
         // Head fallback: if the configured head spritesheet fails to load,
         // retry with the default human male head. The character still renders
         // with the intended palette tint — only the spritesheet geometry changes.
         if ((!texture || texture === Texture.EMPTY) && recipeSlot === 'head') {
-          const defaultAssetId = `${LPC_DEFAULT_HEAD_ASSET_ID}.${stateSuffix}`;
-          if (defaultAssetId !== `${recipeAssetId}.${stateSuffix}`) {
+          if (LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId) {
             this.warn('lpc.headFallback', {
               original: recipeAssetId,
               fallback: LPC_DEFAULT_HEAD_ASSET_ID,
             });
-            texture = await this._loadSheetTexture('', 'head', defaultAssetId);
+            texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
           }
         }
 
@@ -879,6 +872,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   override async initialize(): Promise<void> {
+    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
+    // is loaded before any layer lookup (idempotent).
+    await wireLpcUrlResolver();
+
     // Register $effect blocks via registerEffectRoot.
     // PixiJS init is deferred to a reactive $effect that fires when
     // canvasElement becomes available (after bind:this propagates).

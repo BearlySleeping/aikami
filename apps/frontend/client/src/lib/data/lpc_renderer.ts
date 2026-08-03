@@ -2,21 +2,51 @@
 // Single source of truth for LPC texture loading and frame extraction.
 // Used by: LPC dev page, sandbox, game engine, character creation preview.
 //
-// Assets are sourced from Firebase Storage. Set PUBLIC_LPC_USE_LOCAL=true
-// to fall back to local files under /src/lib/assets/lpc/ for development.
+// All asset URLs resolve through an injected manifest resolver
+// (setLpcUrlResolver) — the canonical static base is /game-data/lpc/
+// served from the regenerated manifest. No Firebase Storage runtime origin,
+// no /src/lib/assets/ dev-directory references.
+//
+// Contract: C-372
 
 import { Rectangle, Sprite, Texture } from 'pixi.js';
-import { LpcAnimationState, type LpcDirection } from '$lib/data/lpc_models';
+import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { lpcStateSuffix } from '$lib/data/lpc_tags';
+import { logger } from '$logger';
 
-// ── State mapping ──────────────────────────────────────────────────────────
+// ── Resolver injection ────────────────────────────────────────────────────
 
-const STATE_SUFFIX: Record<number, string> = {
-  [LpcAnimationState.Walk]: 'walk',
-  [LpcAnimationState.Spellcast]: 'spellcast',
-  [LpcAnimationState.Thrust]: 'thrust',
-  [LpcAnimationState.Slash]: 'slash',
-  [LpcAnimationState.Shoot]: 'shoot',
-  [LpcAnimationState.Die]: 'hurt',
+/** Resolves an LPC assetId + animation state to a static URL, or null when unmapped. */
+export type LpcUrlResolver = (assetId: string, state: LpcAnimationState) => string | null;
+
+let _urlResolver: LpcUrlResolver | null = null;
+
+/**
+ * Injects the manifest-backed URL resolver for LPC assets.
+ *
+ * Wired once at bootstrap (game boot/engine services) and by each
+ * LPC-rendering ViewModel. Replaces the old Firebase Storage /
+ * `/src/lib/assets/` resolution strategies.
+ *
+ * @param resolver - Function mapping (assetId, state) → static URL or null.
+ */
+export const setLpcUrlResolver = (resolver: LpcUrlResolver): void => {
+  _urlResolver = resolver;
+};
+
+/**
+ * Resolves an LPC asset URL through the injected resolver.
+ *
+ * @param assetId - Renderer asset ID (e.g. "body/bodies_male").
+ * @param state - Animation state value.
+ * @returns The static URL, or null when unmapped / no resolver wired.
+ */
+const resolveLpcUrl = (assetId: string, state: LpcAnimationState): string | null => {
+  if (_urlResolver) {
+    return _urlResolver(assetId, state);
+  }
+  logger.warn('lpcRenderer:noUrlResolver', { assetId });
+  return null;
 };
 
 // ── Caches ─────────────────────────────────────────────────────────────────
@@ -25,51 +55,44 @@ const _sheetCache = new Map<string, Texture>();
 const _sheetPromises = new Map<string, Promise<Texture>>();
 const _frameCache = new Map<string, Texture>();
 
-// ── Asset URL resolution ───────────────────────────────────────────────────
+let _manifestReady = false;
 
 /**
- * Build the Firebase Storage base URL for LPC assets.
+ * Marks whether the asset manifest has finished loading.
  *
- * In emulator mode, points to the local storage emulator on port 9198.
- * In live modes, uses firebasestorage.googleapis.com with the project bucket.
- */
-const getStorageBaseUrl = (): string => {
-  const mode = import.meta.env.PUBLIC_MODE ?? 'emulator';
-  const bucket =
-    import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'demo-aikami-emulator.appspot.com';
-
-  if (mode === 'emulator') {
-    return `http://localhost:9198/v0/b/${bucket}/o`;
-  }
-  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o`;
-};
-
-/**
- * Build the full URL for an LPC asset file.
+ * Until this is true, an unresolvable URL is treated as *transient* (the
+ * manifest may simply not have loaded yet) and is NOT cached, so a later
+ * call after the manifest resolves can retry. Once true, a null resolution
+ * is a genuinely unmapped asset and is cached as Texture.EMPTY (fallback).
  *
- * When PUBLIC_LPC_USE_LOCAL is set, loads from the local filesystem
- * (Vite dev server or static build). Otherwise loads from Firebase Storage.
+ * @param ready - Whether the manifest is loaded.
  */
-const buildLpcAssetUrl = (key: string): string => {
-  const useLocal = import.meta.env.PUBLIC_LPC_USE_LOCAL === 'true';
-
-  if (useLocal) {
-    return `/src/lib/assets/lpc/${key}.webp`;
+export const setLpcManifestReady = (ready: boolean): void => {
+  _manifestReady = ready;
+  if (ready) {
+    // Drop any Texture.EMPTY entries cached while the manifest was loading,
+    // so a later render attempt resolves them properly.
+    for (const [key, texture] of _sheetCache) {
+      if (texture === Texture.EMPTY) {
+        _sheetCache.delete(key);
+      }
+    }
   }
-
-  const base = getStorageBaseUrl();
-  const encoded = encodeURIComponent(`lpc/${key}.webp`);
-  return `${base}/${encoded}?alt=media`;
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
  * Loads a webp spritesheet for a given asset and animation state.
- * Caches results. Falls back to Texture.EMPTY on failure.
+ * Caches results. Falls back to Texture.EMPTY on failure or unmapped asset.
+ *
+ * Negative results are only cached once the manifest has loaded (so a
+ * not-yet-loaded manifest can retry later); transient Assets.load failures
+ * are not cached and retry on subsequent calls. Successful textures are
+ * cached permanently.
  */
 export async function loadLpcSheet(assetId: string, state: LpcAnimationState): Promise<Texture> {
-  const stateSuffix = STATE_SUFFIX[state] ?? 'walk';
+  const stateSuffix = lpcStateSuffix(state);
   const key = `${assetId}.${stateSuffix}`;
 
   const cached = _sheetCache.get(key);
@@ -83,20 +106,36 @@ export async function loadLpcSheet(assetId: string, state: LpcAnimationState): P
   }
 
   const promise = (async () => {
+    const url = resolveLpcUrl(assetId, state);
+    if (!url) {
+      if (!_manifestReady) {
+        // Manifest not loaded yet — treat as transient, do not cache EMPTY.
+        logger.debug('lpcRenderer:manifestNotReady', { assetId, stateSuffix });
+        return Texture.EMPTY;
+      }
+      logger.warn('lpcRenderer:unmapped', { assetId, stateSuffix });
+      _sheetCache.set(key, Texture.EMPTY);
+      return Texture.EMPTY;
+    }
     try {
       const { Assets } = await import('pixi.js');
-      const url = buildLpcAssetUrl(key);
       const texture = await Assets.load(url);
       texture.source.scaleMode = 'nearest';
       _sheetCache.set(key, texture);
       return texture;
-    } catch {
-      _sheetCache.set(key, Texture.EMPTY);
+    } catch (err) {
+      logger.warn('lpcRenderer:loadFailed', { assetId, stateSuffix, url, error: String(err) });
+      // Transient failure — do not permanently cache EMPTY; a later call retries.
       return Texture.EMPTY;
     }
   })();
 
   _sheetPromises.set(key, promise);
+  void promise.finally(() => {
+    // Release the in-flight entry once settled so failed/transient loads
+    // can retry on a later call (successful results hit _sheetCache first).
+    _sheetPromises.delete(key);
+  });
   return promise;
 }
 
@@ -156,7 +195,7 @@ export async function getLpcFrameTexture(
   frame: number,
   direction: LpcDirection,
 ): Promise<Texture | null> {
-  const stateSuffix = STATE_SUFFIX[state] ?? 'walk';
+  const stateSuffix = lpcStateSuffix(state);
   const frameKey = `${assetId}.${stateSuffix}:${frame}:${direction}`;
 
   const cached = _frameCache.get(frameKey);
@@ -202,14 +241,13 @@ export async function createLpcSprite(
 }
 
 /**
- * Converts an asset ID + state to a file path or storage URL.
+ * Resolves the static URL for an LPC asset via the injected manifest resolver.
  *
- * Respects PUBLIC_LPC_USE_LOCAL for local vs Firebase Storage loading.
+ * Returns null when the asset is not present in the manifest — callers must
+ * degrade gracefully (default sprite or layer omission). Never fabricates URLs.
  */
-export function getLpcAssetPath(assetId: string, state: LpcAnimationState): string {
-  const stateSuffix = STATE_SUFFIX[state] ?? 'walk';
-  const key = `${assetId}.${stateSuffix}`;
-  return buildLpcAssetUrl(key);
+export function getLpcAssetPath(assetId: string, state: LpcAnimationState): string | null {
+  return resolveLpcUrl(assetId, state);
 }
 
 /** Clears all caches (useful for testing or memory pressure). */
