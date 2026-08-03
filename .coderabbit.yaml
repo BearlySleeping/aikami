@@ -29,7 +29,6 @@ reviews:
         - "!docs/PROGRESS.md"
 
         # Inclusions (Allowlist)
-        - "package.json" # Enable root package manifest reviews
         - ".pi/**"
         - "src/**"
         - "scripts/**"
