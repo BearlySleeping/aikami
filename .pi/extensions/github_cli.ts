@@ -656,22 +656,39 @@ export default function (pi: ExtensionAPI) {
         return match ? Number(match[1]) : undefined;
       })();
 
-      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter
+      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter.
+      // Match from the TITLE or the head branch (e.g. contract/C-372,
+      // contract-task-c-372-*). The BODY is prose — a PR can mention another
+      // contract in its description (e.g. "ran C-372 to reproduce this") and
+      // must NOT clobber that contract's pr_url.
       let contractUpdated: string | undefined;
       if (prNumber && prUrl) {
         const contractMatch =
-          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ?? body.match(/\b(C-\d+|MIG-\d+)\b/i);
+          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ??
+          params.headBranch.match(/\b(C-\d+|MIG-\d+)\b/i);
         if (contractMatch?.[1]) {
           const contractId = contractMatch[1].toUpperCase();
           const cwd = _ctx?.cwd ?? process.cwd();
           const contractsDir = join(cwd, 'docs/contracts');
           try {
             if (existsSync(contractsDir)) {
-              const files = readdirSync(contractsDir).filter(
+              // Resolution order matches contract_resolver.ts:
+              // 1. Full-slug files (C-XXX-slug.md)
+              const fullSlugFiles = readdirSync(contractsDir).filter(
                 (f: string) => f.startsWith(`${contractId}-`) && f.endsWith('.md'),
               );
-              if (files.length === 1 && files[0]) {
-                const contractPath = join(contractsDir, files[0]);
+              // 2. Placeholder files (C-XXX.md)
+              const placeholderFile = `${contractId}.md`;
+              const placeholderExists = existsSync(join(contractsDir, placeholderFile));
+
+              let contractPath: string | undefined;
+              if (fullSlugFiles.length === 1 && fullSlugFiles[0]) {
+                contractPath = join(contractsDir, fullSlugFiles[0]);
+              } else if (fullSlugFiles.length === 0 && placeholderExists) {
+                contractPath = join(contractsDir, placeholderFile);
+              }
+
+              if (contractPath) {
                 const content = readFileSync(contractPath, 'utf-8');
                 const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
                 if (yamlMatch?.[1]) {

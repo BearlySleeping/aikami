@@ -131,6 +131,10 @@ export type RunManifest = {
    *  Used during resume to prevent a draft path-sourced run from being reset
    *  to write_contract when resumed by run ID without a target. */
   skipAuthoring?: boolean;
+  /** When true, the run executes on the root branch (contract/C-XXX) in the
+   *  main checkout instead of a git worktree. Persisted so a resumed run
+   *  remembers the original `--root` invocation. */
+  rootMode?: boolean;
 };
 
 /** Request passed to the Herdr worker launcher. */

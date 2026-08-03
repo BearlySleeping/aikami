@@ -41,6 +41,13 @@ export const loadRolePrompt = (options: {
   role: ContractWorkerRole;
   contractPath: string;
   repoRoot: string;
+  /** True for the interactive writer (direct draft): the agent waits for the
+   *  user's feature description in the chat instead of executing a task
+   *  immediately. Overrides the completion handoff so it never blocks early. */
+  interactiveWriter?: boolean;
+  /** Absolute path to the per-stage task brief file. The interactive writer
+   *  reads it once the user describes the feature. */
+  taskBriefPath?: string;
 }): string => {
   const promptPath = resolve(options.repoRoot, ROLE_PROMPTS[options.role]);
   if (!existsSync(promptPath)) {
@@ -52,9 +59,15 @@ export const loadRolePrompt = (options: {
   );
   const contractId = contractArgument.match(/(C-\d+|MIG-\d+)/)?.[0] ?? contractArgument;
   const contractExistsOnDisk = existsSync(resolve(options.contractPath));
+  // For the interactive writer, don't present the placeholder path as task
+  // input — the agent would treat it as a job to execute. Its real input is
+  // the feature the user types in the chat.
+  const userInput = options.interactiveWriter
+    ? '(direct draft — awaiting your feature description in the chat)'
+    : contractArgument;
   const canonical = stripFrontmatter(readFileSync(promptPath, 'utf-8')).replace(
     /\$ARGUMENTS\b/g,
-    contractArgument,
+    userInput,
   );
   const creationInstruction =
     options.role === 'writer' && !contractExistsOnDisk
@@ -90,13 +103,36 @@ export const loadRolePrompt = (options: {
           '- The worst outcome is a blocked pipeline waiting for human input.',
         ].join('\n')
       : '';
+  // The interactive writer is a human-in-the-loop stage: it must WAIT for the
+  // user's description. The standard completion handoff ("finish with blocked")
+  // would make it abort when no description has arrived yet — exactly what
+  // happened before. Replace it with explicit wait instructions.
+  const completionHandoff = options.interactiveWriter
+    ? [
+        '\n## 🔴 INTERACTIVE DIRECT DRAFT — WAIT FOR THE USER',
+        'You are the Contract Writer for a direct draft. The user will describe',
+        'their feature in this chat. You have NO task to execute yet.',
+        '',
+        '- Do NOT inspect the codebase, scan the backlog, or write any file',
+        '  until the user describes their feature.',
+        '- Do NOT call `contract_stage_complete` before the contract is written.',
+        '- When the user describes the feature, read your task brief at:',
+        `  ${options.taskBriefPath ?? '(see your task brief path in the welcome message)'}`,
+        '  and follow it exactly: derive a slug → create',
+        '  `docs/contracts/C-XXX-<slug>.md` → read `docs/contracts/TEMPLATE.md` →',
+        '  inspect the codebase → fill every section (no TBD) → set status to',
+        '  `draft` → call `contract_stage_complete` with status `passed`.',
+      ].join('\n')
+    : [
+        '\n## 🔴 MANDATORY COMPLETION HANDOFF',
+        'Do not ask questions. If input is required, finish with `blocked`.',
+        '🔴 Your last action MUST be a call to `contract_stage_complete`.',
+      ].join('\n');
   return [
     canonical,
     creationInstruction,
     criticInstruction,
-    '\n## 🔴 MANDATORY COMPLETION HANDOFF',
-    'Do not ask questions. If input is required, finish with `blocked`.',
-    '🔴 Your last action MUST be a call to `contract_stage_complete`.',
+    completionHandoff,
     '\n## 🔴 EXECUTION RULES',
     '- For moon/test/build: use `moon_run_task` or `validate()` — built-in timeouts.',
     '- For any shell >10s: use `ctx_execute` or `bash` with explicit `timeout`.',

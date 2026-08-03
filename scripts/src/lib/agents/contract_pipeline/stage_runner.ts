@@ -57,6 +57,10 @@ export const runStage = async (options: {
   hardTimeoutMs: number;
   pollIntervalMs?: number;
   feedback?: string;
+  /** True for the interactive writer stage (direct draft). The agent waits
+   *  for the user's description in the chat — loadRolePrompt gets the wait
+   *  instructions and the task brief path. */
+  interactiveWriter?: boolean;
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
   checkAgentWorking?: (paneId: string) => Promise<boolean>;
   nudgeWorker?: (opts: { paneId: string; message: string }) => Promise<void>;
@@ -115,6 +119,10 @@ export const runStage = async (options: {
     role,
     contractPath: options.contractPath,
     repoRoot: options.repoRoot,
+    interactiveWriter: options.interactiveWriter,
+    taskBriefPath: options.interactiveWriter
+      ? join(options.runDirectory, 'prompts', `${options.stage}-${options.attempt}-task.md`)
+      : undefined,
   });
   const userMessage = options.feedback?.trim()
     ? feedbackMessage({ role, feedback: options.feedback })

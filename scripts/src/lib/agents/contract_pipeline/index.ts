@@ -12,7 +12,7 @@ export {
   fingerprintFiles,
 } from './git_state.ts';
 export type { ContractHerdrAdapterInterface } from './herdr_adapter.ts';
-export { ContractHerdrAdapter } from './herdr_adapter.ts';
+export { buildWorkspaceLabel, ContractHerdrAdapter } from './herdr_adapter.ts';
 export {
   acquireLock,
   createManifest,
