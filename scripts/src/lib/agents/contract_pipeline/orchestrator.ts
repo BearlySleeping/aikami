@@ -620,9 +620,14 @@ export const runContractPipeline = async (options: {
       baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
       startStage,
       skipAuthoring: options.skipAuthoring,
+      rootMode: options.rootMode,
     });
     writeManifest({ manifest, cwd: options.repoRoot });
   }
+  // Effective root mode: an explicit CLI flag wins; otherwise resume the
+  // persisted mode from the manifest so `bun run contract --resume <run-id>`
+  // keeps the original --root/--worktree decision.
+  const rootMode = options.rootMode ?? manifest.rootMode ?? false;
   if (options.dryRun) {
     return manifest;
   }
@@ -652,7 +657,7 @@ export const runContractPipeline = async (options: {
       runId: manifest.runId,
       contractId: manifest.contractId,
       interactiveWriter: options.interactiveWriter,
-      rootMode: options.rootMode,
+      rootMode,
     });
 
   try {
@@ -776,7 +781,7 @@ export const runContractPipeline = async (options: {
           // (contract/C-XXX). The verifier runs next and expects a clean git
           // state — untracked implementation files would otherwise be flagged
           // as missing.
-          const commitCwd = wPath || (options.rootMode ? options.repoRoot : '');
+          const commitCwd = wPath || (rootMode ? options.repoRoot : '');
           if (commitCwd) {
             try {
               commitAll({
@@ -895,7 +900,7 @@ export const runContractPipeline = async (options: {
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
-                  rootMode: options.rootMode,
+                  rootMode,
                 });
                 pipelineLog({
                   runId: manifest.runId,
@@ -940,7 +945,7 @@ export const runContractPipeline = async (options: {
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
-                  rootMode: options.rootMode,
+                  rootMode,
                 });
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {

@@ -656,11 +656,16 @@ export default function (pi: ExtensionAPI) {
         return match ? Number(match[1]) : undefined;
       })();
 
-      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter
+      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter.
+      // Match from the TITLE or the head branch (e.g. contract/C-372,
+      // contract-task-c-372-*). The BODY is prose — a PR can mention another
+      // contract in its description (e.g. "ran C-372 to reproduce this") and
+      // must NOT clobber that contract's pr_url.
       let contractUpdated: string | undefined;
       if (prNumber && prUrl) {
         const contractMatch =
-          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ?? body.match(/\b(C-\d+|MIG-\d+)\b/i);
+          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ??
+          params.headBranch.match(/\b(C-\d+|MIG-\d+)\b/i);
         if (contractMatch?.[1]) {
           const contractId = contractMatch[1].toUpperCase();
           const cwd = _ctx?.cwd ?? process.cwd();
