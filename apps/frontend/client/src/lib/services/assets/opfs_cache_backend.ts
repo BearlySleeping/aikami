@@ -115,7 +115,20 @@ export class OpfsCacheBackend implements AssetCacheBackend {
     }
     try {
       const handle = await this._root.getFileHandle(hash);
-      return await handle.getFile();
+      const blob = await handle.getFile();
+
+      // Read-time verification: a corrupted/tampered entry must never be
+      // served. Mismatched entries are removed so the next resolve re-fetches.
+      const actualHash = await sha256Hex(blob);
+      if (actualHash !== hash) {
+        logger.warn('OpfsCacheBackend.get:hash-mismatch', {
+          expected: hash,
+          actual: actualHash,
+        });
+        await this._root.removeEntry(hash).catch(() => undefined);
+        return undefined;
+      }
+      return blob;
     } catch {
       return undefined;
     }
@@ -135,6 +148,13 @@ export class OpfsCacheBackend implements AssetCacheBackend {
         actual: actualHash,
       });
       throw new AssetHashMismatchError({ expectedHash: options.hash, actualHash });
+    }
+
+    // Content-addressed idempotency: an entry already stored under this hash
+    // holds the exact same bytes (identity === content), so repeat/concurrent
+    // puts for the same hash are no-ops — one physical write per hash.
+    if (await this.has(options.hash)) {
+      return;
     }
 
     // Dedupe concurrent writes for the same hash (InvalidStateError guard).
@@ -169,7 +189,13 @@ export class OpfsCacheBackend implements AssetCacheBackend {
     if (!this._root) {
       return;
     }
+    // Snapshot the entry names first — removing entries while iterating the
+    // live generator is undefined behaviour in some engines.
+    const names: string[] = [];
     for await (const [name] of this._root.entries()) {
+      names.push(name);
+    }
+    for (const name of names) {
       try {
         await this._root.removeEntry(name);
       } catch {
@@ -192,19 +218,43 @@ export class OpfsCacheBackend implements AssetCacheBackend {
 
   // ── Private ──────────────────────────────────────────────────────────
 
-  /** Writes a verified blob to a hash-named OPFS file. */
+  /** Writes a verified blob to a hash-named OPFS file, atomically. */
   private async _write(hash: string, blob: Blob): Promise<void> {
     const root = this._root;
     if (!root) {
       throw new Error('OpfsCacheBackend: not initialised');
     }
-    const handle = await root.getFileHandle(hash, { create: true });
-    const writable = await handle.createWritable();
+
+    // Write to a temporary name first, then atomically rename it to the final
+    // hash-named file. Readers never observe a partially-written entry.
+    const tmpName = `.tmp-${hash}`;
+    const tmpHandle = await root.getFileHandle(tmpName, { create: true });
+    const writable = await tmpHandle.createWritable();
     try {
       await writable.write(blob);
     } finally {
       // Close in finally — never hold a handle across retries (watch point).
       await writable.close();
+    }
+
+    const movable = tmpHandle as FileSystemFileHandle & {
+      move?: (newName: string) => Promise<void>;
+    };
+    if (typeof movable.move === 'function') {
+      await movable.move(hash);
+      return;
+    }
+
+    // No atomic rename support — fall back to a direct write to the final
+    // name (readers may briefly see the entry being written), then clean up
+    // the temp file.
+    await root.removeEntry(tmpName).catch(() => undefined);
+    const finalHandle = await root.getFileHandle(hash, { create: true });
+    const finalWritable = await finalHandle.createWritable();
+    try {
+      await finalWritable.write(blob);
+    } finally {
+      await finalWritable.close();
     }
   }
 }

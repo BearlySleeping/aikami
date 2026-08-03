@@ -42,6 +42,13 @@ class AssetStoreImpl implements AssetStore {
   currentMusic: string | null = $state(null);
   audioMuted: boolean = $state(false);
 
+  /**
+   * Tags whose background warm() attempt failed (unresolvable). Skipped on
+   * subsequent resolveUrl calls to avoid repeated fetch attempts from render
+   * or reactive paths; cleared when a new manifest revision loads.
+   */
+  private _warmFailedTags = new Set<string>();
+
   // -----------------------------------------------------------------------
   // fetchManifest
   // -----------------------------------------------------------------------
@@ -74,6 +81,9 @@ class AssetStoreImpl implements AssetStore {
       }
       this.manifest = await response.json();
       logger.debug('assetStore: manifest loaded', { count: this.manifest?.count });
+      // A new manifest revision may add tags that previously failed to warm —
+      // allow them to be retried.
+      this._warmFailedTags.clear();
     } catch (err) {
       this.error = `Failed to load manifest: ${String(err)}`;
       logger.error('assetStore: fetchManifest failed', err);
@@ -108,13 +118,25 @@ class AssetStoreImpl implements AssetStore {
     }
 
     // C-373: serve verified cached binaries via the AssetManager (blob: URL)
-    // when available — zero network traffic. Uncached assets are prefetched
-    // in the background (warm) and fall back to the static path for now.
-    const cachedUrl = assetManager.peekBlobUrl(tag);
+    // when available — zero network traffic, with an acquired reference so the
+    // renderer retains a valid URL. Uncached assets are prefetched in the
+    // background (warm) and fall back to the static path for now.
+    const cachedUrl = assetManager.acquireUrl(tag);
     if (cachedUrl) {
       return cachedUrl;
     }
-    void assetManager.warm(tag).catch(() => undefined);
+    if (!this._warmFailedTags.has(tag)) {
+      void assetManager
+        .warm(tag)
+        .then((url) => {
+          if (url === null) {
+            this._warmFailedTags.add(tag);
+          }
+        })
+        .catch(() => {
+          this._warmFailedTags.add(tag);
+        });
+    }
 
     return `${ASSETS_BASE}/${entry.path}`;
   }

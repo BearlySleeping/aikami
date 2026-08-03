@@ -98,32 +98,35 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     if (this._databasePath === ':memory:') {
       const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
       this._db = new DbCtor(':memory:', 'c');
-      return;
-    }
-
-    // Request persistent storage — non-fatal if denied
-    await this._requestPersistence();
-
-    // Try SAH pool first (works without COOP/COEP headers), fall back to OpfsDb.
-    // If neither is available (e.g. headless Chromium where Atomics.wait() is
-    // blocked on the main thread), fall back to an in-memory database so the
-    // app remains functional — data will not persist across restarts.
-    if (oo1['OpfsSAHPoolDb']) {
-      const SahCtor = oo1['OpfsSAHPoolDb'] as { new (filename: string): WasmDatabase };
-      this._db = new SahCtor(this._databasePath);
-    } else if (oo1['OpfsDb']) {
-      const OpfsCtor = oo1['OpfsDb'] as {
-        new (filename: string, flags?: string): WasmDatabase;
-      };
-      this._db = new OpfsCtor(this._databasePath, 'c');
     } else {
-      logger.warn(
-        'WasmStorageAdapter: OPFS VFS not available — falling back to in-memory database. ' +
-          'Campaign data will NOT persist across page reloads in this environment.',
-      );
-      const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
-      this._db = new DbCtor(':memory:', 'c');
+      // Request persistent storage — non-fatal if denied
+      await this._requestPersistence();
+
+      // Try SAH pool first (works without COOP/COEP headers), fall back to OpfsDb.
+      // If neither is available (e.g. headless Chromium where Atomics.wait() is
+      // blocked on the main thread), fall back to an in-memory database so the
+      // app remains functional — data will not persist across restarts.
+      if (oo1['OpfsSAHPoolDb']) {
+        const SahCtor = oo1['OpfsSAHPoolDb'] as { new (filename: string): WasmDatabase };
+        this._db = new SahCtor(this._databasePath);
+      } else if (oo1['OpfsDb']) {
+        const OpfsCtor = oo1['OpfsDb'] as {
+          new (filename: string, flags?: string): WasmDatabase;
+        };
+        this._db = new OpfsCtor(this._databasePath, 'c');
+      } else {
+        logger.warn(
+          'WasmStorageAdapter: OPFS VFS not available — falling back to in-memory database. ' +
+            'Campaign data will NOT persist across page reloads in this environment.',
+        );
+        const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
+        this._db = new DbCtor(':memory:', 'c');
+      }
     }
+
+    // Foreign-key enforcement ON — asset_sources/install_state reference
+    // assets(id); deleting an asset must first remove its dependent rows.
+    this._db?.exec({ sql: 'PRAGMA foreign_keys = ON' });
   }
 
   /** Closes the database connection and releases WASM resources. */

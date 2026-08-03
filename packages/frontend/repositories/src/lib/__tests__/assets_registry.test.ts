@@ -170,6 +170,13 @@ describe('AssetRegistryRepository', () => {
 
     const hero = await registry.findById('sprites:generic-fantasy:hero');
     expect(hero?.version).toBe(1);
+
+    // Re-seeding must not duplicate asset_sources rows — exactly one bundled
+    // row survives both seed operations.
+    const sources = await registry.listSources('sprites:generic-fantasy:hero');
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(sources[0]?.priority).toBe(0);
   });
 
   // ── AC-3 prerequisite: hash change → version bump + hashChanges ─────
@@ -286,6 +293,39 @@ describe('AssetRegistryRepository', () => {
     expect(ids.sort()).toEqual(['lpc:body:bodies_male:walk', 'music:exploration:forest']);
 
     expect(await registry.findIdsByHashes([])).toEqual([]);
+  });
+
+  test('findIdsByHashes handles more than 500 hashes — chunked reverse lookup', async () => {
+    // 600 distinct hashes exceed the 500-row IN-clause chunk bound, so the
+    // chunking loop in findIdsByHashes is actually exercised.
+    const assets: AssetManifest['assets'] = {};
+    const hashes: AssetHashesFile['hashes'] = {};
+    const seededHashes: string[] = [];
+    for (let i = 0; i < 600; i++) {
+      const tag = `sprites:bulk:${i}`;
+      const hash = `${String(i).padStart(4, '0')}${'0'.repeat(60)}`;
+      assets[tag] = {
+        tag,
+        category: 'sprites',
+        subcategory: 'bulk',
+        name: `bulk-${i}`,
+        path: `sprites/bulk/${i}.png`,
+        ext: '.png',
+      };
+      hashes[tag] = { hash, sizeBytes: 100 };
+      seededHashes.push(hash);
+    }
+    const manifest = makeManifest({ assets, count: 600 });
+    await registry.seedFromManifest({
+      manifest,
+      hashes: { scannedAt: manifest.scannedAt, hashes },
+    });
+
+    const ids = await registry.findIdsByHashes(seededHashes);
+    expect(ids).toHaveLength(600);
+    // Every seeded tag returned exactly once.
+    expect(new Set(ids).size).toBe(600);
+    expect(ids).toEqual(expect.arrayContaining(Object.keys(assets)));
   });
 
   test('seed chunk boundary — more assets than one chunk', async () => {

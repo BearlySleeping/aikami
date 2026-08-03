@@ -21,6 +21,8 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 type MemoryDir = {
   dirs: Map<string, MemoryDir>;
   files: Map<string, Blob>;
+  /** Total write() calls across all writables — dedupe/atomicity assertions. */
+  writeCount: number;
 };
 
 const makeMemoryFileHandle = (name: string, dir: MemoryDir): FileSystemFileHandle => {
@@ -33,17 +35,25 @@ const makeMemoryFileHandle = (name: string, dir: MemoryDir): FileSystemFileHandl
       return blob as File;
     },
     createWritable: async (): Promise<FileSystemWritableFileStream> => {
-      let written: Blob | undefined;
+      // Accumulate every chunk written — never replace the previous one.
+      const parts: Blob[] = [];
       return {
         write: async (data: Blob): Promise<void> => {
-          written = data;
+          parts.push(data);
+          dir.writeCount += 1;
         },
         close: async (): Promise<void> => {
-          if (written) {
-            dir.files.set(name, written);
-          }
+          dir.files.set(name, new Blob(parts));
         },
       } as unknown as FileSystemWritableFileStream;
+    },
+    move: async (newName: string): Promise<void> => {
+      // Atomic rename: swap the entry under the final name.
+      const blob = dir.files.get(name);
+      if (blob !== undefined) {
+        dir.files.set(newName, blob);
+        dir.files.delete(name);
+      }
     },
   } as unknown as FileSystemFileHandle;
 };
@@ -56,7 +66,7 @@ const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle => {
     ): Promise<FileSystemDirectoryHandle> => {
       let child = dir.dirs.get(name);
       if (!child && options?.create) {
-        child = { dirs: new Map(), files: new Map() };
+        child = { dirs: new Map(), files: new Map(), writeCount: 0 };
         dir.dirs.set(name, child);
       }
       if (!child) {
@@ -93,7 +103,7 @@ const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle => {
 
 /** Installs the in-memory OPFS root and returns it for assertions. */
 const installMemoryOpfs = (): MemoryDir => {
-  const root: MemoryDir = { dirs: new Map(), files: new Map() };
+  const root: MemoryDir = { dirs: new Map(), files: new Map(), writeCount: 0 };
   Object.defineProperty(globalThis.navigator, 'storage', {
     value: {
       getDirectory: async (): Promise<FileSystemDirectoryHandle> => makeMemoryDirHandle(root),
@@ -204,6 +214,16 @@ describe('OpfsCacheBackend', () => {
     ]);
 
     expect(await backend.has(hash)).toBe(true);
+    const stored = await backend.get(hash);
+    expect(stored).toBeDefined();
+    if (stored) {
+      // Accumulated content survived the atomic write (no partial entry).
+      expect(await stored.text()).toBe('same bytes');
+    }
+    // Exactly one physical write — the in-flight dedupe collapsed the three
+    // concurrent puts into a single write.
+    const assetsDir = root.dirs.get('aikami-assets');
+    expect(assetsDir?.writeCount).toBe(1);
   });
 
   test('uninitialised backend is a safe no-op for read paths', async () => {

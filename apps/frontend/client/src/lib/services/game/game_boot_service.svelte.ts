@@ -596,33 +596,10 @@ class GameBootService
     const t0 = performance.now();
 
     try {
-      // 1. Ensure the manifest is loaded (fetchManifest is idempotent).
-      const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-      if (!assetStore.manifest) {
-        await assetStore.fetchManifest();
-      }
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      if (!assetStore.manifest) {
-        this.warn('stage:initializing_asset_registry:no-manifest');
-        return;
-      }
-
-      // 2. Hash sidecar — tags without an entry are never seeded.
-      const hashesResponse = await fetch('/game-data/asset_hashes.json');
-      if (!hashesResponse.ok) {
-        this.warn('stage:initializing_asset_registry:no-sidecar', {
-          status: hashesResponse.status,
-        });
-        return;
-      }
-      const hashes = (await hashesResponse.json()) as AssetHashesFile;
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // 3. Open the shared DB (applies AIKAMI_SCHEMA_DDL idempotently) + registry.
+      // 1. Open the shared DB (applies AIKAMI_SCHEMA_DDL idempotently) + registry
+      //    FIRST — cached registry rows are the offline source of truth, and the
+      //    network-dependent manifest/sidecar checks below must never block cache
+      //    rehydration.
       const { getLocalDatabase, AssetRegistryRepository } = await import(
         '@aikami/frontend/repositories'
       );
@@ -632,13 +609,64 @@ class GameBootService
       }
       const registry = new AssetRegistryRepository(db);
 
-      // 4. Seed if not already seeded with this manifest revision (idempotent).
-      if (!(await registry.isSeeded(assetStore.manifest.scannedAt))) {
-        const stats = await registry.seedFromManifest({
+      // 2. Ensure the manifest is loaded (fetchManifest is idempotent).
+      const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+      if (!assetStore.manifest) {
+        await assetStore.fetchManifest();
+      }
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+      if (!assetStore.manifest) {
+        // No usable seed exists — nothing to reconcile against.
+        this.warn('stage:initializing_asset_registry:no-manifest');
+        return;
+      }
+
+      // 3. Hash sidecar — OPTIONAL. Tags without an entry are never seeded,
+      //    but cached binaries from a prior session must still rehydrate, so
+      //    a missing sidecar degrades to "skip seeding, keep cached rows".
+      let hashes: AssetHashesFile | undefined;
+      try {
+        const hashesResponse = await fetch('/game-data/asset_hashes.json');
+        if (!hashesResponse.ok) {
+          this.warn('stage:initializing_asset_registry:no-sidecar', {
+            status: hashesResponse.status,
+          });
+        } else {
+          hashes = (await hashesResponse.json()) as AssetHashesFile;
+        }
+      } catch (error) {
+        this.warn('stage:initializing_asset_registry:sidecar-fetch-failed', {
+          error: String(error),
+        });
+      }
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      // 4. Seed if a sidecar is present AND the registry isn't already seeded
+      //    with this manifest revision (idempotent). Seeding is optional — a
+      //    registry seeded by an earlier session, or a missing sidecar, both
+      //    continue through cache-backend init + reconcile.
+      if (hashes && !(await registry.isSeeded(assetStore.manifest.scannedAt))) {
+        const seedT0 = performance.now();
+        await registry.seedFromManifest({
           manifest: assetStore.manifest,
           hashes,
+          onProgress: ({ chunk, totalChunks }) => {
+            if (generation === this._bootGeneration) {
+              this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
+            }
+          },
         });
-        this.debug('stage:initializing_asset_registry:seeded', { ...stats });
+        const seedElapsed = Math.round(performance.now() - seedT0);
+        this.debug('stage:initializing_asset_registry:seeded', {
+          elapsedMs: seedElapsed,
+          manifestCount: assetStore.manifest.count,
+        });
+      } else if (!hashes) {
+        this.debug('stage:initializing_asset_registry:seed-skipped-no-sidecar');
       } else {
         this.debug('stage:initializing_asset_registry:already-seeded');
       }

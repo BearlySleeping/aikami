@@ -97,6 +97,31 @@ export class AssetRegistryRepository {
   }
 
   /**
+   * Finds every registered asset row whose id is in the given set (batched
+   * read for boot rehydration — avoids per-id query fan-out). Chunked to
+   * keep the IN clause bounded, mirroring {@link findIdsByHashes}.
+   */
+  async findByIds(ids: readonly string[]): Promise<AssetRecord[]> {
+    const records: AssetRecord[] = [];
+    const chunkSize = 500;
+    for (let start = 0; start < ids.length; start += chunkSize) {
+      const chunk = ids.slice(start, start + chunkSize);
+      if (chunk.length === 0) {
+        continue;
+      }
+      const placeholders = chunk.map(() => '?').join(', ');
+      const result = await this._db.query({
+        sql: `SELECT id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json FROM assets WHERE id IN (${placeholders})`,
+        args: [...chunk],
+      });
+      for (const row of result.rows) {
+        records.push(_rowToAssetRecord(row));
+      }
+    }
+    return records;
+  }
+
+  /**
    * Finds every registered tag whose authoritative hash is in the given set
    * (reverse lookup — maps cached content hashes back to manifest tags).
    * Chunked to keep the IN clause bounded.
@@ -203,22 +228,20 @@ export class AssetRegistryRepository {
    * @returns The number of rows reconciled.
    */
   async resetInterruptedDownloads(): Promise<number> {
-    const result = await this._db.query({
-      sql: "SELECT asset_id FROM install_state WHERE status = 'downloading'",
+    const affected = await this._db.query({
+      sql: "SELECT COUNT(*) AS count FROM install_state WHERE status = 'downloading'",
       args: [],
     });
-    for (const row of result.rows) {
-      await this.setInstallState({
-        assetId: row.asset_id as string,
-        status: 'not_downloaded',
+    const count = (affected.rows[0]?.count as number | undefined) ?? 0;
+    if (count > 0) {
+      // Single UPDATE — no per-row setInstallState loop.
+      await this._db.execute({
+        sql: "UPDATE install_state SET status = 'not_downloaded' WHERE status = 'downloading'",
+        args: [],
       });
+      logger.debug('AssetRegistryRepository.resetInterruptedDownloads', { count });
     }
-    if (result.rows.length > 0) {
-      logger.debug('AssetRegistryRepository.resetInterruptedDownloads', {
-        count: result.rows.length,
-      });
-    }
-    return result.rows.length;
+    return count;
   }
 
   // ── Meta guard ───────────────────────────────────────────────────────
@@ -274,20 +297,22 @@ export class AssetRegistryRepository {
   async seedFromManifest(options: {
     manifest: AssetManifest;
     hashes: AssetHashesFile;
+    onProgress?: (progress: { chunk: number; totalChunks: number }) => void;
   }): Promise<AssetSeedStats> {
-    const { manifest, hashes } = options;
+    const { manifest, hashes, onProgress } = options;
 
     // Tags without a sidecar hash entry are skipped — never seeded.
     const seedableTags = Object.keys(manifest.assets).filter(
       (tag) => hashes.hashes[tag] !== undefined,
     );
 
+    const hashChanges: { id: string; oldHash: string; newHash: string }[] = [];
     const stats: AssetSeedStats = {
       seeded: 0,
       updated: 0,
       unchanged: 0,
       skipped: Object.keys(manifest.assets).length - seedableTags.length,
-      hashChanges: [],
+      hashChanges,
     };
 
     const t0 = performance.now();
@@ -296,8 +321,10 @@ export class AssetRegistryRepository {
 
     while (chunkStart < seedableTags.length) {
       const chunk = seedableTags.slice(chunkStart, chunkStart + SEED_CHUNK_SIZE);
-      await this._seedChunk({ manifest, hashes, tags: chunk, stats });
+      await this._seedChunk({ manifest, hashes, tags: chunk, stats, hashChanges });
       chunkStart += SEED_CHUNK_SIZE;
+
+      onProgress?.({ chunk: Math.ceil(chunkStart / SEED_CHUNK_SIZE), totalChunks });
 
       if (chunkStart < seedableTags.length) {
         // Yield between chunks — keeps the WASM main thread responsive.
@@ -322,8 +349,9 @@ export class AssetRegistryRepository {
     hashes: AssetHashesFile;
     tags: readonly string[];
     stats: AssetSeedStats;
+    hashChanges: { id: string; oldHash: string; newHash: string }[];
   }): Promise<void> {
-    const { manifest, hashes, tags, stats } = options;
+    const { manifest, hashes, tags, stats, hashChanges } = options;
 
     // Load existing rows for this chunk to compute version bumps.
     const placeholders = tags.map(() => '?').join(', ');
@@ -359,10 +387,7 @@ export class AssetRegistryRepository {
         stats.unchanged += 1;
       } else if (existing) {
         stats.updated += 1;
-        stats.hashChanges = [
-          ...stats.hashChanges,
-          { id: tag, oldHash: existing.hash, newHash: hashEntry.hash },
-        ];
+        hashChanges.push({ id: tag, oldHash: existing.hash, newHash: hashEntry.hash });
       } else {
         stats.seeded += 1;
       }

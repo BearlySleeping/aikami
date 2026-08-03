@@ -354,11 +354,18 @@ describe('WasmStorageAdapter (in-memory)', () => {
     expect(sources.rows).toHaveLength(1);
     expect(sources.rows[0].url).toBe('/game-data/sprites/hero.png');
 
-    // CHECK constraint rejects an invalid status
+    // CHECK constraint rejects an invalid status. A distinct asset_id avoids
+    // the PRIMARY KEY conflict from the earlier 'sprites:hero' insert — the
+    // rejection must exercise the status CHECK, not the PK. The parent asset
+    // is registered first so foreign-key enforcement stays valid.
+    await db.execute({
+      sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes) VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['sprites:bogus', 'sprites', 'sprites', 'bogushash', 1, 10],
+    });
     await expect(
       db.execute({
         sql: `INSERT INTO install_state (asset_id, status) VALUES (?, ?)`,
-        args: ['sprites:hero', 'bogus'],
+        args: ['sprites:bogus', 'bogus'],
       }),
     ).rejects.toThrow();
   });

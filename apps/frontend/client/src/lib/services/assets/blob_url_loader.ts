@@ -10,7 +10,7 @@
 //
 // Registered at module scope so it exists before any Assets.load() call.
 
-import { ExtensionType, LoaderParserPriority, Texture, extensions } from 'pixi.js';
+import { ExtensionType, extensions, LoaderParserPriority, Texture } from 'pixi.js';
 
 /** Whether the parser has been registered (idempotent guard). */
 let _registered = false;
@@ -39,9 +39,15 @@ const _register = (): void => {
       // Texture.from(blob) where ImageBitmap is unavailable.
       if (typeof createImageBitmap === 'function') {
         const bitmap = await createImageBitmap(blob);
-        const texture = Texture.from(bitmap);
-        texture.source.scaleMode = 'nearest';
-        return texture;
+        try {
+          const texture = Texture.from(bitmap);
+          texture.source.scaleMode = 'nearest';
+          return texture;
+        } catch (error) {
+          // Never leak the ImageBitmap if texture creation/config fails.
+          bitmap.close();
+          throw error;
+        }
       }
       const texture = Texture.from(blob);
       texture.source.scaleMode = 'nearest';

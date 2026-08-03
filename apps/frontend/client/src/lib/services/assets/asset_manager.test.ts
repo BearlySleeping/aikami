@@ -21,6 +21,10 @@ const createMockRegistry = () => {
 
   return {
     findById: async (id: string): Promise<AssetRecord | undefined> => records.get(id),
+    findByIds: async (ids: readonly string[]): Promise<AssetRecord[]> =>
+      ids
+        .map((id) => records.get(id))
+        .filter((record): record is AssetRecord => record !== undefined),
     findIdsByHashes: async (hashes: readonly string[]): Promise<string[]> =>
       [...records.values()]
         .filter((record) => hashes.includes(record.hash))
@@ -186,12 +190,11 @@ describe('AssetManager', () => {
     });
     backend._files.set(hash, blob);
 
-    const t0 = performance.now();
     const url = await assetManager.resolve('music:track');
-    const elapsedMs = performance.now() - t0;
 
     expect(url).toStartWith('blob:');
-    expect(elapsedMs).toBeLessThan(10);
+    // Host-dependent wall-clock timing is not asserted here — the hard gate
+    // is the fetchMock assertion below: a cached hit must not hit the network.
     expect(fetchMock.calls).toHaveLength(0);
   });
 
@@ -222,6 +225,50 @@ describe('AssetManager', () => {
     expect(registry._states.get('sprites:corrupt')?.status).toBe('not_downloaded');
     // The corrupt blob is discarded — no blob URL registered.
     expect(assetManager.peekBlobUrl('sprites:corrupt')).toBeNull();
+  });
+
+  test('multi-source fallback: priority-0 mismatch falls through to priority-1', async () => {
+    const goodBlob = new Blob(['correct-bytes']);
+    const goodHash = await sha256Hex(goodBlob);
+    registry._records.set('sprites:dual-source', {
+      id: 'sprites:dual-source',
+      packId: 'sprites',
+      category: 'sprites',
+      hash: goodHash,
+      version: 1,
+      sizeBytes: goodBlob.size,
+      license: 'unknown',
+    });
+    registry._sources.set('sprites:dual-source', [
+      { assetId: 'sprites:dual-source', backend: 'r2', url: '/mirror/source-0.png', priority: 0 },
+      {
+        assetId: 'sprites:dual-source',
+        backend: 'bundled',
+        url: '/game-data/source-1.png',
+        priority: 1,
+      },
+    ]);
+
+    // Priority-0 serves WRONG bytes (hash mismatch → discarded); priority-1
+    // serves the correct bytes.
+    fetchMock.restore();
+    fetchMock = installFetchMock(async (url: string) => {
+      if (url === '/mirror/source-0.png') {
+        return new Response(new Blob(['wrong-bytes']));
+      }
+      return new Response(goodBlob);
+    });
+
+    const url = await assetManager.resolve('sprites:dual-source');
+
+    // Both sources were tried, in priority order.
+    expect(fetchMock.calls).toEqual(['/mirror/source-0.png', '/game-data/source-1.png']);
+    expect(url).toStartWith('blob:');
+    // Served from the verified priority-1 bytes — cached under the registry hash.
+    expect(await backend.has(goodHash)).toBe(true);
+    const state = registry._states.get('sprites:dual-source');
+    expect(state?.status).toBe('cached');
+    expect(state?.cachedHash).toBe(goodHash);
   });
 
   test('resolve returns null for unregistered tags — no fetch, no state', async () => {

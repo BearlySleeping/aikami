@@ -255,6 +255,7 @@ export const AIKAMI_SCHEMA_DDL: readonly string[] = [
   )`,
 
   `CREATE INDEX IF NOT EXISTS idx_assets_pack ON assets(pack_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(hash)`,
   `CREATE INDEX IF NOT EXISTS idx_install_state_status ON install_state(status)`,
 ];
 

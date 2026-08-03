@@ -10,9 +10,9 @@
 // decode via releaseUrl). Raw binaries never touch SQLite rows.
 //
 // The wrapped resolvers (asset_store.resolveUrl + LPC resolver wiring)
-// call peekBlobUrl() synchronously and warm() in the background, so cached
-// assets resolve with zero network traffic and uncached assets degrade to
-// the C-372 static-URL fallback.
+// call acquireUrl() synchronously (refcounted) and warm() in the
+// background, so cached assets resolve with zero network traffic and
+// uncached assets degrade to the C-372 static-URL fallback.
 
 import { ASSET_CATEGORIES } from '@aikami/constants';
 import type { AssetRegistryRepository } from '@aikami/frontend/repositories';
@@ -69,6 +69,13 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
   resolve(tag: string, options?: { signal?: AbortSignal }): Promise<string | null>;
   /** Synchronous lookup of a cached asset's blob URL (wrapped resolvers). */
   peekBlobUrl(tag: string): string | null;
+  /**
+   * Acquires a reference to a cached asset's blob URL (synchronous fast-path
+   * for wrapped resolvers). Every returned URL is refcounted — callers must
+   * release via {@link release} / {@link releaseUrl} when done, otherwise
+   * the URL stays alive (never revoked while in use).
+   */
+  acquireUrl(tag: string): string | null;
   /** Fire-and-forget prefetch — same as resolve, safe to not await. */
   warm(tag: string): Promise<string | null>;
   /** Boot-time reconcile: reset interrupted downloads + evict stale binaries. */
@@ -103,6 +110,14 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   /** Blob URLs keyed by tag — refcounted for post-decode revocation. */
   private readonly _blobUrls = new Map<string, { url: string; refs: number }>();
 
+  /**
+   * Verified tag → content-hash mappings recorded during initialize()
+   * rehydration. Kept separate from {@link _blobUrls} so rehydration never
+   * needs to materialise object URLs eagerly; resolve() materialises lazily
+   * on first access for any tag whose backend file was missing at boot.
+   */
+  private readonly _verifiedHashes = new Map<string, string>();
+
   /** Reverse lookup: blob URL → tag. */
   private readonly _urlToTag = new Map<string, string>();
 
@@ -126,18 +141,33 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     this._backend = options.backend;
     this.isInitialized = true;
 
-    // Pre-register verified cached binaries so offline reloads resolve
-    // instantly (synchronous peekBlobUrl) without touching the network.
+    // Rehydrate verified cached binaries so offline reloads resolve instantly
+    // (synchronous acquireUrl/peekBlobUrl) without touching the network.
+    // Queries are BATCHED (one listInstallStates + one findByIds, one
+    // listHashes + one findIdsByHashes) — no per-entry DB fan-out.
     let registered = 0;
     const states = await this._registry.listInstallStates();
-    for (const state of states) {
-      if (state.status !== 'cached' || !state.cachedHash) {
-        continue;
-      }
-      const record = await this._registry.findById(state.assetId);
+    const stateById = new Map(states.map((state) => [state.assetId, state]));
+    const cachedStates = states.filter(
+      (state) => state.status === 'cached' && state.cachedHash !== undefined,
+    );
+    const recordsById = new Map(
+      (await this._registry.findByIds(cachedStates.map((state) => state.assetId))).map(
+        (record) => [record.id, record] as const,
+      ),
+    );
+
+    // Known-downloaded set: the registry hash must still match the recorded
+    // cachedHash before the binary is served (stale rows are left for
+    // reconcile()). Blob URLs are materialised eagerly for this set — the
+    // engine resolves through a synchronous resolver, so offline first-access
+    // needs the URL ready before the first resolveUrl() call.
+    for (const state of cachedStates) {
+      const record = recordsById.get(state.assetId);
       if (!record || record.hash !== state.cachedHash) {
         continue;
       }
+      this._verifiedHashes.set(state.assetId, state.cachedHash);
       const blob = await this._backend.get(state.cachedHash);
       if (blob) {
         this._registerBlobUrl(state.assetId, blob);
@@ -148,23 +178,23 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     // Content-addressed rehydration: even when install_state bookkeeping was
     // lost (e.g. an in-memory DB fallback across reloads), hash-named files
     // in the cache are authoritative. Reverse-map them to registry tags,
-    // register blob URLs, and repair the bookkeeping.
+    // register blob URLs, and repair the bookkeeping — all batched.
     const cachedHashes = await this._backend.listHashes().catch(() => [] as string[]);
     if (cachedHashes.length > 0) {
       const ids = await this._registry.findIdsByHashes(cachedHashes);
-      for (const id of ids) {
-        const record = await this._registry.findById(id);
-        if (!record) {
-          continue;
-        }
+      const records = await this._registry.findByIds(ids);
+      for (const record of records) {
+        this._verifiedHashes.set(record.id, record.hash);
         const blob = await this._backend.get(record.hash);
         if (blob) {
-          this._registerBlobUrl(id, blob);
-          registered += 1;
-          const state = await this._registry.getInstallState(id);
+          if (!this._blobUrls.has(record.id)) {
+            this._registerBlobUrl(record.id, blob);
+            registered += 1;
+          }
+          const state = stateById.get(record.id);
           if (state?.status !== 'cached') {
             await this._registry.setInstallState({
-              assetId: id,
+              assetId: record.id,
               status: 'cached',
               cachedHash: record.hash,
               localPath: record.hash,
@@ -185,6 +215,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     }
     this._blobUrls.clear();
     this._urlToTag.clear();
+    this._verifiedHashes.clear();
     this._inflight.clear();
     this._abortControllers.clear();
     this._registry = null;
@@ -197,6 +228,16 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   /** @inheritdoc */
   peekBlobUrl(tag: string): string | null {
     return this._blobUrls.get(tag)?.url ?? null;
+  }
+
+  /** @inheritdoc */
+  acquireUrl(tag: string): string | null {
+    const entry = this._blobUrls.get(tag);
+    if (!entry) {
+      return null;
+    }
+    entry.refs += 1;
+    return entry.url;
   }
 
   /** @inheritdoc */
@@ -219,7 +260,18 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     const promise = this._doResolve(tag, options?.signal);
     this._inflight.set(tag, promise);
     try {
-      return await promise;
+      const url = await promise;
+      if (url) {
+        // Every returned URL holds one reference for THIS caller. The
+        // _inflight promise is shared by concurrent resolvers, so each of
+        // them must acquire — otherwise a sibling's release() could revoke
+        // a URL that is still in use.
+        const entry = this._blobUrls.get(tag);
+        if (entry) {
+          entry.refs += 1;
+        }
+      }
+      return url;
     } finally {
       this._inflight.delete(tag);
     }
@@ -307,11 +359,36 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
       return null;
     }
 
-    // 1. Already registered → serve the existing blob URL (acquire a ref).
+    // 1. Already registered → serve the existing blob URL. (The caller's
+    //    reference is acquired by resolve(), not here, so concurrent
+    //    inflight-shared callers each hold their own ref.)
     const existing = this._blobUrls.get(tag);
     if (existing) {
-      existing.refs += 1;
       return existing.url;
+    }
+
+    // 1b. Rehydration recorded a verified tag→hash mapping but the blob URL
+    //     was not materialised (e.g. the backend file was missing at boot) —
+    //     materialise lazily on first access.
+    const verifiedHash = this._verifiedHashes.get(tag);
+    if (verifiedHash) {
+      this._verifiedHashes.delete(tag);
+      const blob = await backend.get(verifiedHash);
+      if (blob) {
+        const state = await registry.getInstallState(tag);
+        if (state?.status !== 'cached') {
+          await registry.setInstallState({
+            assetId: tag,
+            status: 'cached',
+            cachedHash: verifiedHash,
+            localPath: verifiedHash,
+            downloadedAt: state?.downloadedAt ?? new Date().toISOString(),
+          });
+        }
+        const url = this._registerBlobUrl(tag, blob);
+        this.debug('asset_manager:lazy-materialised', { assetId: tag });
+        return url;
+      }
     }
 
     // 2. Registry row — unknown tags fall back to the static manifest URL.
@@ -516,15 +593,18 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     return true;
   }
 
-  /** Registers (or increments the refcount of) a blob URL for a tag. */
+  /**
+   * Registers a blob URL for a tag (refs start at 0 — the caller acquires
+   * via resolve()/acquireUrl()). Returns the existing URL when already
+   * registered, without touching its refcount.
+   */
   private _registerBlobUrl(tag: string, blob: Blob): string {
     const existing = this._blobUrls.get(tag);
     if (existing) {
-      existing.refs += 1;
       return existing.url;
     }
     const url = _createObjectUrl(blob);
-    this._blobUrls.set(tag, { url, refs: 1 });
+    this._blobUrls.set(tag, { url, refs: 0 });
     this._urlToTag.set(url, tag);
     return url;
   }

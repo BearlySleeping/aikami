@@ -27,9 +27,16 @@ type TauriFsModule = {
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   readFile(path: string): Promise<Uint8Array>;
   writeFile(path: string, data: Uint8Array): Promise<void>;
-  readDir(path: string): Promise<readonly { name: string }[]>;
+  readDir(
+    path: string,
+  ): Promise<
+    readonly { name: string; isFile?: boolean; isDirectory?: boolean; isSymlink?: boolean }[]
+  >;
   remove(path: string, options?: { recursive?: boolean }): Promise<void>;
 };
+
+/** Matches a lowercase hex SHA-256 digest (content-hash file name). */
+const _SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 // ---------------------------------------------------------------------------
 // Backend
@@ -51,6 +58,9 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
   /** The plugin-fs module (set during init on Tauri). */
   private _fs: TauriFsModule | null = null;
 
+  /** Path join helper from @tauri-apps/api/path (set during init). */
+  private _join: ((...paths: string[]) => Promise<string>) | null = null;
+
   /** Cache directory path under appDataDir(). */
   private _dir = '';
 
@@ -63,12 +73,13 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
     }
     try {
       // Platform-specific code — dynamic import is justified here.
-      const [{ appDataDir }, fs] = await Promise.all([
+      const [{ appDataDir, join }, fs] = await Promise.all([
         import('@tauri-apps/api/path'),
         import('@tauri-apps/plugin-fs'),
       ]);
       const base = await appDataDir();
-      this._dir = `${base}aikami-assets`;
+      this._join = join as (...paths: string[]) => Promise<string>;
+      this._dir = await join(base, 'aikami-assets');
       await fs.mkdir(this._dir, { recursive: true });
       this._fs = fs as unknown as TauriFsModule;
       this.isAvailable = true;
@@ -96,7 +107,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
       return false;
     }
     try {
-      return await this._fs.exists(this._path(hash));
+      return await this._fs.exists(await this._path(hash));
     } catch {
       return false;
     }
@@ -108,7 +119,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
       return undefined;
     }
     try {
-      const bytes = await this._fs.readFile(this._path(hash));
+      const bytes = await this._fs.readFile(await this._path(hash));
       return new Blob([bytes as unknown as ArrayBuffer]);
     } catch {
       return undefined;
@@ -132,7 +143,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
     }
 
     const bytes = new Uint8Array(await options.blob.arrayBuffer());
-    await this._fs.writeFile(this._path(options.hash), bytes);
+    await this._fs.writeFile(await this._path(options.hash), bytes);
   }
 
   /** @inheritdoc */
@@ -141,7 +152,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
       return;
     }
     try {
-      await this._fs.remove(this._path(hash));
+      await this._fs.remove(await this._path(hash));
     } catch {
       // Already gone — no-op
     }
@@ -167,7 +178,13 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
     }
     try {
       const entries = await this._fs.readDir(this._dir);
-      return entries.map((entry) => entry.name).filter((name) => name.length > 0);
+      // Only regular files whose name is a 64-char SHA-256 hex digest count
+      // as cached binaries — exclude directories and symlinks before applying
+      // the hash-name filter so cache enumeration stays accurate.
+      return entries
+        .filter((entry) => !entry.isDirectory && !entry.isSymlink)
+        .map((entry) => entry.name)
+        .filter((name) => _SHA256_HEX_RE.test(name));
     } catch {
       return [];
     }
@@ -176,7 +193,14 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
   // ── Private ──────────────────────────────────────────────────────────
 
   /** Joins the cache dir with a hash file name. */
-  private _path(hash: string): string {
+  private async _path(hash: string): Promise<string> {
+    if (this._join) {
+      try {
+        return await this._join(this._dir, hash);
+      } catch {
+        // Fall back to manual join if the platform helper fails.
+      }
+    }
     return `${this._dir}/${hash}`;
   }
 }

@@ -22,14 +22,77 @@ test.describe('Offline Assets (C-373)', () => {
   }) => {
     const consoleErrors: string[] = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
+      if (msg.type() !== 'error') {
+        return;
       }
+      const text = msg.text();
+      // Expected noise in the offline scenario (filtered, not failures):
+      // - "Failed to load resource" — browser-generated message for network
+      //   requests that fail while the network is cut.
+      // - "[AudioService] transitionToBgm:failed" — the legacy hardcoded
+      //   /assets/audio/ BGM path (C-203-era, outside the C-373 manifest-cache
+      //   scope) degrades gracefully offline.
+      if (text.includes('Failed to load resource') || text.includes('transitionToBgm:failed')) {
+        return;
+      }
+      consoleErrors.push(text);
     });
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => {
       pageErrors.push(String(err));
     });
+
+    /** Boot progress bar rendered by the boot overlay while loading. */
+    const loadingBar = page.locator('progress.progress-primary');
+
+    /**
+     * Waits for the boot overlay to appear and then detach — the loading
+     * state is gone once the game view mounts (deterministic readiness, no
+     * fixed delay).
+     */
+    const waitForBootComplete = async (): Promise<void> => {
+      await expect(loadingBar).toBeVisible({ timeout: 60000 });
+      await expect(loadingBar).toBeHidden({ timeout: 60000 });
+    };
+
+    /**
+     * Waits until the OPFS asset cache stops growing. The engine resolves
+     * manifest binaries through the AssetManager shortly after boot — the
+     * cache must be warm (and stable) before the network is cut, or the
+     * offline reload has nothing to serve.
+     */
+    const waitForCacheWarm = async (): Promise<void> => {
+      let lastCount = -1;
+      let stableChecks = 0;
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const count = await page.evaluate(async () => {
+          try {
+            const root = await navigator.storage.getDirectory();
+            const dir = await root.getDirectoryHandle('aikami-assets', { create: false });
+            let n = 0;
+            for await (const [name] of dir.entries()) {
+              if (name) {
+                n += 1;
+              }
+            }
+            return n;
+          } catch {
+            return 0;
+          }
+        });
+        if (count === lastCount && count > 0) {
+          stableChecks += 1;
+          if (stableChecks >= 3) {
+            return; // stable for ~1.5s — warm-up settled
+          }
+        } else {
+          stableChecks = 0;
+          lastCount = count;
+        }
+        await page.waitForTimeout(500);
+      }
+    };
 
     // ── 1. Online boot — load + cache assets ───────────────────────────
     await page.goto('/game');
@@ -39,7 +102,8 @@ test.describe('Offline Assets (C-373)', () => {
 
     // Let the engine resolve sprite/LPC/audio loads through the AssetManager
     // so OPFS is warm before we cut the network.
-    await page.waitForTimeout(4000);
+    await waitForBootComplete();
+    await waitForCacheWarm();
 
     // ── 2. Cut the network for manifest binaries ───────────────────────
     const blockedBinaryRequests: string[] = [];
@@ -76,20 +140,23 @@ test.describe('Offline Assets (C-373)', () => {
     await expect(canvasAfterReload).toBeAttached({ timeout: 60000 });
     await expect(canvasAfterReload).toBeVisible({ timeout: 10000 });
 
-    await page.waitForTimeout(3000);
+    // Wait for the boot overlay to leave the loading state — deterministic
+    // settle, no fixed delay.
+    await waitForBootComplete();
 
     // ── Assertions ─────────────────────────────────────────────────────
     // No uncaught JS exceptions — the boot pipeline degrades gracefully.
     expect(pageErrors).toHaveLength(0);
 
-    // Everything the boot needed came from cache: no manifest-category
-    // binary request should have hit the network while offline.
-    // (Informational — the canvas-attached assertion is the hard gate.)
-    expect(blockedBinaryRequests.length).toBeGreaterThanOrEqual(0);
+    // No script-level console errors — the offline path must not surface any.
+    expect(consoleErrors).toHaveLength(0);
 
-    // Boot pipeline completed — the boot progress leaves the loading state.
-    const loadingBar = page.locator('progress.progress-primary');
+    // Everything the boot needed came from cache: zero manifest-category
+    // binary requests should have hit the network while offline.
+    expect(blockedBinaryRequests).toHaveLength(0);
+
+    // Boot pipeline completed — the loading state is confirmed absent.
     const loadingGone = await loadingBar.count();
-    expect(loadingGone).toBeLessThanOrEqual(1);
+    expect(loadingGone).toBe(0);
   });
 });
