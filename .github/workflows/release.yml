@@ -116,7 +116,7 @@ jobs:
             echo "Building platform: ${{ matrix.platform }}"
           else
             echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED) — skipping"
+            echo "Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED) — skipping"
           fi
 
       - name: Checkout repository
@@ -208,7 +208,9 @@ jobs:
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts client-tauri
+          # --strict: fail the deploy early if any secret can't be fetched instead
+          # of silently proceeding with incomplete .env files.
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts client-tauri
 
       - name: Run Desktop Deploy Pipeline
         id: deploy
@@ -230,12 +232,12 @@ jobs:
           # workflow_dispatch runs, which have no release to attach to.
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
-      # Always runs: cheap insurance if the gh-release-upload step above
-      # fails partway through, and the *only* artifact path for
-      # workflow_dispatch/staging builds (no public Release exists then).
+      # Runs even after a failed deploy (insurance for release uploads), but only
+      # on legs that passed the Platform gate — skipped platforms must not emit
+      # "no files found" warnings.
       - name: Upload build artifacts to workflow run
-        if: always()
-        uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v6
         with:
           name: tauri-${{ matrix.platform }}
           path: |
@@ -321,7 +323,7 @@ jobs:
         if: steps.apps.outputs.web_apps != ''
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts ${{ steps.apps.outputs.web_apps }}
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts ${{ steps.apps.outputs.web_apps }}
 
       - name: Run Web Deploy Pipeline
         if: steps.apps.outputs.web_apps != ''
