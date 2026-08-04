@@ -390,9 +390,12 @@ async function main(): Promise<void> {
       log(`  🏗️  Building ${c.cyan}${moonTarget}:build${c.reset} (for ${appName})...`);
       const forceFlag = isForce ? ' --force' : '';
       // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
+      // live: stream moon's output so CI watchers see the build progressing
+      // (moon build can take minutes on a cold cache).
       run(`bunx moon run ${moonTarget}:build${forceFlag} -- --mode ${mode}`, {
         cwd: ROOT_DIR,
         env: { PUBLIC_APP_VERSION: version },
+        live: true,
       });
       ok(`  ${moonTarget} built`);
     } catch (err) {

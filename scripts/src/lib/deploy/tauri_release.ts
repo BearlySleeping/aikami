@@ -143,7 +143,9 @@ export async function deployTauriRelease(
     // vite build --mode {mode}). Without this, the desktop web bundle would
     // always be built with production PUBLIC_ vars even on staging runs.
     process.env.TAURI_BUILD_MODE = mode;
-    run(`bun run tauri build${targetFlag}${bundlesFlag}`, { cwd: appRoot });
+    // live: stream cargo output so CI watchers see build progress instead of
+    // minutes of silence while the ~15-25min Tauri compile runs.
+    run(`bun run tauri build${targetFlag}${bundlesFlag}`, { cwd: appRoot, live: true });
   } catch (err) {
     warn(`Tauri build failed: ${(err as Error).message}`);
     warn('Make sure Rust toolchain and system deps are installed.');
