@@ -7,6 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import { audioService } from '$services';
 
 // ---------------------------------------------------------------------------
@@ -96,19 +97,19 @@ class SettingsAudioViewModel
 
   async testExploreBgm(): Promise<void> {
     this.feedback = 'Crossfading to Exploration BGM…';
-    await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    await playSceneBgm('explore');
     this.feedback = 'Playing: Exploration BGM';
   }
 
   async testCombatBgm(): Promise<void> {
     this.feedback = 'Crossfading to Combat BGM…';
-    await audioService.transitionToBgm('/assets/audio/music/bgm_combat.webm');
+    await playSceneBgm('combat');
     this.feedback = 'Playing: Combat BGM';
   }
 
   async testHitSfx(): Promise<void> {
     this.feedback = 'Playing: Hit SFX';
-    await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+    await playSfxByName('sfx_hit');
   }
 
   stopAll(): void {

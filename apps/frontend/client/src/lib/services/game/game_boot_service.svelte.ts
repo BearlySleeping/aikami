@@ -674,6 +674,30 @@ class GameBootService
         return;
       }
 
+      // 4b. C-373 asset_sources: add the Firebase Storage fallback download
+      //     origin (priority 1, after the bundled path) for every seeded asset.
+      //     The bucket mirrors static/game-data at the same relative paths
+      //     (upload_audio_assets.ts / upload_lpc_assets.ts). Idempotent.
+      try {
+        const { publicEnv } = await import('@aikami/frontend/configs');
+        const storageBucket = publicEnv.PUBLIC_FIREBASE_STORAGE_BUCKET;
+        if (storageBucket) {
+          const added = await registry.addFirebaseStorageSources(storageBucket);
+          this.debug('stage:initializing_asset_registry:storage-sources', {
+            bucket: storageBucket,
+            sourcesAdded: added,
+          });
+        }
+      } catch (error) {
+        // Non-fatal: bundled sources still serve; storage fallback just missing.
+        this.warn('stage:initializing_asset_registry:storage-sources-failed', {
+          error: String(error),
+        });
+      }
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
       // 5. Platform cache backend (OPFS / Tauri FS) + persistence request.
       const { createPlatformCacheBackend, assetManager } = await import(
         '$lib/services/assets/asset_manager.svelte'

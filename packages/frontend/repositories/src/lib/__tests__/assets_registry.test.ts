@@ -148,6 +148,78 @@ describe('AssetRegistryRepository', () => {
     expect(sources[0]?.url).toBe('/game-data/music/exploration/forest.mp3');
   });
 
+  test('addFirebaseStorageSources mirrors bundled paths as priority-1 bucket URLs', async () => {
+    await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
+
+    const added = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added).toBe(3);
+
+    const sources = await registry.listSources('music:exploration:forest');
+    expect(sources).toHaveLength(2);
+    expect(sources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(sources[0]?.priority).toBe(0);
+    expect(sources[1]?.backend).toBe('firebase-storage');
+    expect(sources[1]?.priority).toBe(1);
+    expect(sources[1]?.url).toBe(
+      'https://firebasestorage.googleapis.com/v0/b/aikami-staging.firebasestorage.app/o/music%2Fexploration%2Fforest.mp3?alt=media',
+    );
+
+    // Idempotent — second call is a cheap no-op.
+    expect(await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app')).toBe(0);
+  });
+
+  test('re-seeding with extra asset adds firebase-storage mirror for new asset only', async () => {
+    // Initial seed: 3 assets
+    await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
+    const added1 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added1).toBe(3);
+
+    // Verify initial mirrors exist
+    const sources1 = await registry.listSources('music:exploration:forest');
+    expect(sources1).toHaveLength(2);
+
+    // Re-seed with an extra asset (new bundled asset added to manifest)
+    const HASH_D = 'd'.repeat(64);
+    const manifest2 = makeManifest({
+      assets: {
+        ...makeManifest().assets,
+        'sfx:ui:click': {
+          tag: 'sfx:ui:click',
+          category: 'sfx',
+          subcategory: 'ui',
+          name: 'click',
+          path: 'sfx/ui/click.wav',
+          ext: '.wav',
+        },
+      },
+      count: 4,
+    });
+    const hashes2 = makeHashes({
+      hashes: {
+        ...makeHashes().hashes,
+        'sfx:ui:click': { hash: HASH_D, sizeBytes: 512 },
+      },
+    });
+
+    await registry.seedFromManifest({ manifest: manifest2, hashes: hashes2 });
+
+    // Second addFirebaseStorageSources should only add the new asset's mirror
+    const added2 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added2).toBe(1);
+
+    // New asset should have both bundled + firebase-storage sources
+    const newSources = await registry.listSources('sfx:ui:click');
+    expect(newSources).toHaveLength(2);
+    expect(newSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(newSources[1]?.backend).toBe('firebase-storage');
+
+    // Existing asset sources should remain unchanged (not duplicated)
+    const existingSources = await registry.listSources('music:exploration:forest');
+    expect(existingSources).toHaveLength(2);
+    expect(existingSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(existingSources[1]?.backend).toBe('firebase-storage');
+  });
+
   test('meta.asset_registry_seeded is set to the manifest scannedAt', async () => {
     const manifest = makeManifest();
     await registry.seedFromManifest({ manifest, hashes: makeHashes() });

@@ -112,8 +112,10 @@ const TILEMAP_CHUNK_GLSL_VERTEX = /* glsl */ `#version 300 es
 
   in vec2 aPosition;
   in vec2 aUV;
+  in float aTextureLayer;
 
   out vec2 vUV;
+  out float vLayer;
 
   uniform mat3 uProjectionMatrix;
   uniform mat3 uWorldTransformMatrix;
@@ -123,6 +125,7 @@ const TILEMAP_CHUNK_GLSL_VERTEX = /* glsl */ `#version 300 es
     mat3 mvp = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
     gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
     vUV = aUV;
+    vLayer = aTextureLayer;
   }
 `;
 
@@ -130,6 +133,7 @@ const TILEMAP_CHUNK_GLSL_FRAGMENT = /* glsl */ `#version 300 es
   precision highp float;
 
   in vec2 vUV;
+  in float vLayer;
 
   uniform sampler2D uTexture;
 
@@ -137,6 +141,14 @@ const TILEMAP_CHUNK_GLSL_FRAGMENT = /* glsl */ `#version 300 es
 
   void main(void) {
     fragColor = texture(uTexture, vUV);
+    // aTextureLayer is supplied by the geometry (C-177) for the WGSL
+    // texture-array path. The GLSL fallback is static — textureLayers are
+    // always 0 — so this branch is unreachable at runtime, but referencing
+    // vLayer keeps the attribute active in the compiled program and silences
+    // PixiJS's "attribute not present in the shader" warning.
+    if (vLayer != 0.0) {
+      fragColor = vec4(0.0);
+    }
   }
 `;
 

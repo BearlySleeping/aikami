@@ -90,7 +90,10 @@ export const renderTilemap = async (
     imageSet.add(tileset.image);
   }
 
-  // Load all tileset textures
+  // Load all tileset textures.
+  // Asset URLs are resolved by the global resolver (Assets.resolver.rootPath
+  // handles custom-scheme/Tauri origins), so the raw path stays a valid cache
+  // alias for Texture.from() below.
   const loadPromises = [...imageSet].map((image) => Assets.load(image));
   await Promise.all(loadPromises);
 

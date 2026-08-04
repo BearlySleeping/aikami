@@ -7,6 +7,8 @@
 // transport when it cancels pending requests (normal behavior during concurrent
 // queries or page transitions).
 
+import '$lib/services/tauri_console_log';
+
 if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     const error = event.reason;

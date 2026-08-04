@@ -7,7 +7,7 @@
 //   bun run scripts -- preview                           # dev + devtools (default)
 //   bun run scripts -- preview --build                   # build + vite preview
 //   bun run scripts -- preview --tauri                   # build + tauri launch
-//   bun run scripts -- preview --mode staging            # staging mode
+//   bun run scripts -- preview --tauri-dev               # herdr dev server + `tauri dev` (hot reload, no client rebuild)
 //   bun run scripts -- preview --mode staging --live     # live staging (no local server)
 //   bun run scripts -- preview --mode production --live  # live production
 //   bun run scripts -- preview --no-devtools             # skip devtools
@@ -16,7 +16,8 @@
 //
 // CLI flags:
 //   --build               Build client + vite preview server
-//   --tauri               Build client + cargo + run Tauri desktop
+//   --tauri               Build client + cargo + run Tauri desktop (embedded assets)
+//   --tauri-dev           Run herdr dev server + `tauri dev` pointed at it (no client rebuild)
 //   --mode <mode>         emulator (default), staging, production
 //   --live                Launch against deployed live URL (staging/production only)
 //   --dev                 (default) Ensure client running in herdr
@@ -45,12 +46,14 @@ type AikamiMode = 'emulator' | 'staging' | 'production';
 type PreviewOptions = {
   build: boolean;
   tauri: boolean;
+  tauriDev: boolean;
   mode: AikamiMode;
   live: boolean;
   dev: boolean;
   devtools: boolean;
   updateDevtools: boolean;
   force: boolean;
+  softwareGl: boolean;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -113,23 +116,38 @@ const getClientUrl = (mode: AikamiMode, live = false): string => {
 const parseOptions = (args: string[]): PreviewOptions => {
   const build = hasFlag(args, 'build');
   const tauri = hasFlag(args, 'tauri');
+  const tauriDev = hasFlag(args, 'tauri-dev') || hasFlag(args, 'tauri-dev-server');
   const live = hasFlag(args, 'live');
   const noDev = hasFlag(args, 'no-dev');
   const noDevtools = hasFlag(args, 'no-devtools');
   const updateDevtoolsFlag = hasFlag(args, 'update-devtools');
   const force = hasFlag(args, 'force');
+  const softwareGl = hasFlag(args, 'software-gl') || hasFlag(args, 'sw-gl');
 
   const rawMode = parseArg(args, '--mode');
   const mode = parseMode(rawMode);
 
   // Defaults:
   //   --dev is default (unless --no-dev, --live, or --build overrides it)
-  //   --devtools is default (unless --tauri or --no-devtools)
+  //   --devtools is default (unless --tauri/--tauri-dev or --no-devtools)
   //   --live implies --no-dev (no herdr server needed for deployed URLs)
-  const dev = !noDev && !live;
-  const devtools = !tauri && !noDevtools;
+  //   --build implies --no-dev (vite preview runs instead)
+  //   --tauri-dev implies --dev (herdr dev server is the point)
+  const dev = (tauriDev || !noDev) && !live && !build;
+  const devtools = !tauri && !tauriDev && !noDevtools;
 
-  return { build, tauri, mode, live, dev, devtools, updateDevtools: updateDevtoolsFlag, force };
+  return {
+    build,
+    tauri,
+    tauriDev,
+    mode,
+    live,
+    dev,
+    devtools,
+    updateDevtools: updateDevtoolsFlag,
+    force,
+    softwareGl,
+  };
 };
 
 // ── Herdr dev server ────────────────────────────────────────────────────────
@@ -241,11 +259,11 @@ const startVitePreview = async (): Promise<void> => {
 
 // ── Tauri launch ───────────────────────────────────────────────────────────
 
-const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean): Promise<void> => {
-  // Ensure LPC assets are available before building for Tauri.
-  // The download_lpc_assets script writes the canonical tree directly to
-  // static/game-data/lpc/ so Vite copies it into the build output and the
-  // manifest resolver can serve it at /game-data/lpc/... URLs.
+/**
+ * Ensures the LPC asset tree exists under static/game-data/lpc/. Downloads
+ * it when missing (shared by the bundled and dev-server Tauri launch paths).
+ */
+const ensureLpcAssets = async (mode: AikamiMode): Promise<void> => {
   const lpcStaticDir = resolve(CLIENT_DIR, 'static/game-data/lpc');
   // Validate a required LPC asset file (AC-1 canonical path) rather than only
   // the body directory — an empty or partial static/game-data/lpc tree must
@@ -265,6 +283,31 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
       ok('LPC assets downloaded to static/game-data/lpc/');
     }
   }
+};
+
+/**
+ * WebKitGTK environment overrides that avoid wedging the Intel i915 GPU on
+ * hybrid-graphics laptops (screen freeze + audio-alive hang). See the
+ * 2026-08-03 freeze incident analysis.
+ *
+ * `WEBKIT_DISABLE_DMABUF_RENDERER` is a dead end on WebKitGTK ≥ 2.44 (X11/WPE
+ * renderers were removed in favor of DMA-BUF); the supported workaround that
+ * keeps compositing while avoiding the DMA-BUF import path is
+ * `WEBKIT_DMABUF_RENDERER_FORCE_SHM=1`. With `--software-gl`, force the whole
+ * webview onto llvmpipe (fully contained, safe for correctness/UI work).
+ */
+const getWebkitGtkSafeEnv = (softwareGl: boolean): Record<string, string> => ({
+  WEBKIT_DMABUF_RENDERER_FORCE_SHM: '1',
+  ...(softwareGl ? { LIBGL_ALWAYS_SOFTWARE: '1', GALLIUM_DRIVER: 'llvmpipe' } : {}),
+});
+
+const launchTauri = async (
+  mode: AikamiMode,
+  force: boolean,
+  devRoute: boolean,
+  softwareGl: boolean,
+): Promise<void> => {
+  await ensureLpcAssets(mode);
 
   info('Building client for Tauri…');
 
@@ -278,7 +321,8 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
   info('Building and launching Tauri desktop app…');
 
   const cargoBuild = Bun.spawn({
-    cmd: ['cargo', 'build'],
+    // Explicit custom-protocol: the binary must embed frontendDist (prod mode).
+    cmd: ['cargo', 'build', '--features', 'tauri/custom-protocol'],
     cwd: resolve(CLIENT_DIR, 'src-tauri'),
     stdout: 'inherit',
     stderr: 'inherit',
@@ -300,6 +344,70 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
     cmd: tauriCmd,
     stdout: 'inherit',
     stderr: 'inherit',
+    env: {
+      ...process.env,
+      ...getWebkitGtkSafeEnv(softwareGl),
+    },
+  });
+
+  await tauriProc.exited;
+};
+
+/**
+ * Tauri dev-server mode — the client is served by the herdr dev server
+ * (Vite with HMR) and the Tauri window loads that URL instead of the
+ * embedded production bundle.
+ *
+ * No SvelteKit rebuild is needed for frontend changes (herdr hot-reloads)
+ * and the app logs flow through `herdr_session read client`.
+ *
+ * Compiles the Rust binary WITHOUT `tauri/custom-protocol` so the runtime
+ * uses `build.devUrl` (tauri.conf.json → http://localhost:<client port>),
+ * then launches it directly — same effect as `tauri dev --no-dev-server-wait`
+ * but without the CLI starting its own frontend server (herdr owns the port).
+ */
+const launchTauriDev = async (
+  mode: AikamiMode,
+  devRoute: boolean,
+  softwareGl: boolean,
+): Promise<void> => {
+  await ensureLpcAssets(mode);
+
+  // Start (or reuse) the herdr dev workspace: firebase + client (emulator) or
+  // client only (staging/production). The client port must match
+  // tauri.conf.json build.devUrl (emulator → http://localhost:5274).
+  await ensureDevServer(mode);
+  const clientPort = getClientPort(mode);
+  const devUrl = `http://localhost:${clientPort}`;
+  info(`Tauri will load the herdr dev server at ${devUrl}`);
+
+  info('Compiling Tauri (dev mode — frontend served by herdr)…');
+  const cargoBuild = Bun.spawn({
+    cmd: ['cargo', 'build'],
+    cwd: resolve(CLIENT_DIR, 'src-tauri'),
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const cargoCode = await cargoBuild.exited;
+  if (cargoCode !== 0) {
+    error(`Cargo build failed with exit code ${cargoCode}`);
+    process.exit(cargoCode);
+  }
+
+  ok(`Tauri built — launching against ${devUrl}…`);
+
+  const tauriCmd: string[] = [resolve(CLIENT_DIR, 'src-tauri/target/debug/aikami')];
+  if (devRoute) {
+    tauriCmd.push('--route', '/dev/sandbox');
+  }
+  const tauriProc = Bun.spawn({
+    cmd: tauriCmd,
+    stdout: 'inherit',
+    stderr: 'inherit',
+    env: {
+      ...process.env,
+      ...getWebkitGtkSafeEnv(softwareGl),
+    },
   });
 
   await tauriProc.exited;
@@ -418,16 +526,24 @@ if (opts.updateDevtools) {
     error('Failed to update PixiJS DevTools');
   }
   // If --update-devtools was the only action, exit
-  if (!opts.build && !opts.tauri && !opts.live && !opts.dev && !opts.devtools) {
+  if (!opts.build && !opts.tauri && !opts.tauriDev && !opts.live && !opts.dev && !opts.devtools) {
     process.exit(result ? 0 : 1);
   }
 }
 
 // ── Tauri path ────────────────────────────────────
+if (opts.tauriDev) {
+  // Dev-server mode: herdr serves the client, tauri dev loads it (no client rebuild).
+  await launchTauriDev(opts.mode, opts.dev, opts.softwareGl);
+  ok('Tauri dev exited.');
+  process.exit(0);
+}
+
+// ── Tauri path (embedded build) ────────────────────
 if (opts.tauri) {
   // In Tauri mode, dev server runs embedded — no herdr or chromium needed
   // --dev flag controls whether to open at /dev/sandbox route
-  await launchTauri(opts.mode, opts.force, opts.dev);
+  await launchTauri(opts.mode, opts.force, opts.dev, opts.softwareGl);
   ok('Tauri exited.');
   process.exit(0);
 }
