@@ -32,7 +32,9 @@ const init = (): void => {
     console[name] = (...args: unknown[]): void => {
       original?.(...args);
       try {
-        void logger(args.map((a) => String(a)).join(' '));
+        logger(args.map((a) => String(a)).join(' ')).catch(() => {
+          // Forwarding must never break app code.
+        });
       } catch {
         // Forwarding must never break app code.
       }

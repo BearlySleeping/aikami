@@ -131,8 +131,9 @@ const parseOptions = (args: string[]): PreviewOptions => {
   //   --dev is default (unless --no-dev, --live, or --build overrides it)
   //   --devtools is default (unless --tauri/--tauri-dev or --no-devtools)
   //   --live implies --no-dev (no herdr server needed for deployed URLs)
+  //   --build implies --no-dev (vite preview runs instead)
   //   --tauri-dev implies --dev (herdr dev server is the point)
-  const dev = (tauriDev || !noDev) && !live;
+  const dev = (tauriDev || !noDev) && !live && !build;
   const devtools = !tauri && !tauriDev && !noDevtools;
 
   return {

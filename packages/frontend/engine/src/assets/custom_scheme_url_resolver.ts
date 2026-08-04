@@ -37,15 +37,29 @@ const _patchResolver = (): void => {
   if (_patched) {
     return;
   }
-  _patched = true;
 
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return;
   }
+
+  // Guard against non-hierarchical or unusable baseURI values (blob:, data:, about:blank).
+  // These can't be used as a meaningful root URL for asset resolution.
+  const baseURI = document.baseURI;
+  if (baseURI.startsWith('blob:') || baseURI.startsWith('data:') || baseURI === 'about:blank') {
+    _patched = true;
+    return;
+  }
+
   // The page origin (e.g. `tauri://localhost/`, `http://localhost:5274/`).
   // Browser URL parser handles custom schemes correctly, unlike pixi's posix
   // path utilities.
-  Assets.resolver.rootPath = new URL('/', document.baseURI).href;
+  try {
+    Assets.resolver.rootPath = new URL('/', baseURI).href;
+    _patched = true;
+  } catch {
+    // URL parsing failed — skip patching.
+    _patched = true;
+  }
 };
 
 _patchResolver();

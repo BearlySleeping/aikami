@@ -13,7 +13,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "dev:tauri": "bun run build:emulator && cd src-tauri && cargo build --features tauri/custom-protocol && ./target/debug/aikami",
+    "dev:tauri": "bun run build:emulator && cd src-tauri && cargo build && ./target/debug/aikami",
     "build:tauri": "bun run build:emulator && cd src-tauri && cargo build --features tauri/custom-protocol",
     "preview:tauri": "bun run build:emulator && cd src-tauri && cargo build --features tauri/custom-protocol && ./target/debug/aikami",
     "preview": "vite preview --mode emulator",
