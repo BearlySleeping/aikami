@@ -161,7 +161,11 @@ export const setupGitHub = async (
       ),
     );
     console.log(fmt.note('Regenerate the key with: gcloud iam service-accounts keys create'));
-    checks.push({ name: 'FIREBASE_SERVICE_ACCOUNT', status: 'error', detail: 'Incomplete key JSON' });
+    checks.push({
+      name: 'FIREBASE_SERVICE_ACCOUNT',
+      status: 'error',
+      detail: 'Incomplete key JSON',
+    });
     return { checks, uploaded: false };
   }
 

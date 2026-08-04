@@ -40,6 +40,11 @@ on:
         required: false
         type: boolean
         default: false
+      platforms:
+        description: "Comma-separated platforms to build (linux,windows,macos). Empty = all"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-${{ github.event.inputs.mode || 'production' }}
@@ -78,7 +83,15 @@ jobs:
     # "production".
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
+    # Gate: only when DEPLOY_APPS includes client-tauri, AND the requested
+    # platforms (workflow_dispatch input) include this matrix leg. The
+    # github.event.inputs.* fall back to '' on release:published runs, so a
+    # real release always builds all platforms.
+    if: >
+      (contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') ||
+       needs.resolve-apps.outputs.deploy_apps == 'all') &&
+      (github.event.inputs.platforms == '' ||
+       contains(github.event.inputs.platforms, matrix.platform))
     strategy:
       fail-fast: false
       matrix:
@@ -107,8 +120,21 @@ jobs:
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          cache: true
-          cache-on-failure: true # keep the cache even if this run fails mid-build
+          # Built-in rust-cache targets the repo ROOT (where there is no
+          # Cargo.toml — its `cargo metadata` probe fails and it caches
+          # ./target instead of the real one). A dedicated step below points
+          # the cache at the nested Tauri workspace instead.
+          cache: false
+          cache-on-failure: true
+
+      # Rust cache for the NESTED cargo workspace. Tauri compiles the full
+      # wry/tao dependency tree (~15-25 min cold); caching the real target
+      # dir turns subsequent runs into a few-minute incremental compile.
+      - name: Cache Rust (nested Tauri workspace)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/frontend/client/src-tauri"
+          cache-on-failure: true
 
       # Plain apt install instead of cache-apt-pkgs-action: the action's cache
       # was saved empty (6KB manifest, no .debs) on the first run, so every

@@ -139,6 +139,10 @@ export async function deployTauriRelease(
   const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
 
   try {
+    // Forward the deploy mode to the Tauri beforeBuildCommand (build:tauri →
+    // vite build --mode {mode}). Without this, the desktop web bundle would
+    // always be built with production PUBLIC_ vars even on staging runs.
+    process.env.TAURI_BUILD_MODE = mode;
     run(`bun run tauri build${targetFlag}${bundlesFlag}`, { cwd: appRoot });
   } catch (err) {
     warn(`Tauri build failed: ${(err as Error).message}`);

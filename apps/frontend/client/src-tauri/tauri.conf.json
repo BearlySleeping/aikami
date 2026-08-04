@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:5274",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run build:tauri-web",
     "frontendDist": "../build"
   },
   "app": {

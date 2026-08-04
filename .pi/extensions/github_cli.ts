@@ -35,11 +35,14 @@
 //   gh_workflow_logs        — Stream workflow run logs (watch until completion)
 //   gh_release_list         — List GitHub Releases
 //   gh_release_view         — View a Release + its assets (debug artifact uploads)
+//   gh_deploy               — Deploy & wait: dispatch + periodic poll + failed logs
 //
 // Deploy workflow:
-//   gh_workflow_run(workflow="release.yml", ref=..., inputs={mode:"staging", force:"true"})
-//   → gh_workflow_status(run=<id>, watch=true)
-//   → gh_workflow_logs(run=<id>, failedOnly=true)
+//   gh_deploy(mode="staging", platforms=["windows"], wait=true)
+//     → dispatches release.yml, polls until the requested platforms finish,
+//       auto-fetches failed logs, reports per-platform result + artifacts.
+//   Granular: gh_workflow_run → gh_workflow_status(run=<id>, watch=true) →
+//            gh_workflow_logs(run=<id>, failedOnly=true)
 //
 // For git branch management after merge, use `git pull` on the target branch.
 
@@ -134,11 +137,10 @@ async function waitForRunCompletion(
 ): Promise<'completed' | 'timeout' | { error: string }> {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    const result = await runGh(
-      pi,
-      ['run', 'view', runId, '--json', 'status'],
-      { parseJson: true, timeout: 30_000 },
-    );
+    const result = await runGh(pi, ['run', 'view', runId, '--json', 'status'], {
+      parseJson: true,
+      timeout: 30_000,
+    });
     if (!result.success) {
       return { error: result.text };
     }
@@ -177,9 +179,10 @@ async function resolveRunId(
     ],
     { parseJson: true, timeout: 30_000 },
   );
-  const runs = result.success && Array.isArray(result.json)
-    ? (result.json as Array<Record<string, unknown>>)
-    : [];
+  const runs =
+    result.success && Array.isArray(result.json)
+      ? (result.json as Array<Record<string, unknown>>)
+      : [];
   const id = runs[0] ? String(runs[0].databaseId ?? '') : '';
   if (!id) {
     return { error: `No runs found for workflow "${workflow}" on branch "${runOrBranch}"` };
@@ -214,9 +217,7 @@ function formatRunDetail(data: Record<string, unknown>): string {
     lines.push(`**URL:** ${url}`);
   }
 
-  const jobs = Array.isArray(data.jobs)
-    ? (data.jobs as Array<Record<string, unknown>>)
-    : [];
+  const jobs = Array.isArray(data.jobs) ? (data.jobs as Array<Record<string, unknown>>) : [];
   if (jobs.length > 0) {
     lines.push('', '**Jobs:**');
     for (const job of jobs) {
@@ -231,23 +232,21 @@ function formatRunDetail(data: Record<string, unknown>): string {
               ? '🚫'
               : '❌'
           : '⏳';
-      lines.push(`  ${jobIcon} **${jobName}** — ${jobStatus}${jobConclusion ? ` / ${jobConclusion}` : ''}`);
+      lines.push(
+        `  ${jobIcon} **${jobName}** — ${jobStatus}${jobConclusion ? ` / ${jobConclusion}` : ''}`,
+      );
 
-      const steps = Array.isArray(job.steps)
-        ? (job.steps as Array<Record<string, unknown>>)
-        : [];
+      const steps = Array.isArray(job.steps) ? (job.steps as Array<Record<string, unknown>>) : [];
       for (const step of steps) {
         const stepName = String(step.name ?? '?');
         const stepStatus = String(step.status ?? '?');
         const stepConclusion = step.conclusion ? String(step.conclusion) : '';
         const stepIcon =
-          stepStatus === 'completed'
-            ? stepConclusion === 'success'
-              ? '✅'
-              : '❌'
-            : '⏳';
+          stepStatus === 'completed' ? (stepConclusion === 'success' ? '✅' : '❌') : '⏳';
         const num = String(step.number ?? '?');
-        lines.push(`     ${stepIcon} ${num}. ${stepName}${stepConclusion ? ` — ${stepConclusion}` : ''}`);
+        lines.push(
+          `     ${stepIcon} ${num}. ${stepName}${stepConclusion ? ` — ${stepConclusion}` : ''}`,
+        );
       }
     }
   }
@@ -281,6 +280,97 @@ function formatRunList(runs: Array<Record<string, unknown>>): string {
     );
   }
   return lines.join('\n');
+}
+
+// ── Deploy-and-wait (periodic fetcher, mirrors code_rabbit.ts) ────────────
+
+/** Module-level abort signal set at gh_deploy entry; checked by the poll loop. */
+let _deploySignal: AbortSignal | undefined;
+
+/** Sleep that throws when the signal is aborted (user pressed Esc/Ctrl+C). */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => {
+  if (signal?.aborted) {
+    return Promise.reject(new Error('Aborted'));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new Error('Aborted'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+};
+
+/** Normalize a platforms param (array or comma string) to a CSV string. */
+const normalizePlatforms = (raw: unknown): string => {
+  if (Array.isArray(raw)) {
+    return raw.filter((p) => typeof p === 'string').join(',');
+  }
+  if (typeof raw === 'string') {
+    return raw
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .join(',');
+  }
+  return '';
+};
+
+/** Fetch run status + jobs, optionally filtered to the requested platforms. */
+async function fetchRunStatus(
+  pi: ExtensionAPI,
+  runId: string,
+  platforms: string[],
+): Promise<
+  | { ok: true; status: string; conclusion: string; jobs: Array<Record<string, unknown>> }
+  | { ok: false; error: string }
+> {
+  const result = await runGh(pi, ['run', 'view', runId, '--json', 'status,conclusion,jobs'], {
+    parseJson: true,
+    timeout: 30_000,
+  });
+  if (!result.success) {
+    return { ok: false, error: result.text };
+  }
+  const data = result.json as Record<string, unknown>;
+  let jobs = Array.isArray(data.jobs) ? (data.jobs as Array<Record<string, unknown>>) : [];
+  if (platforms.length > 0) {
+    jobs = jobs.filter((j) => {
+      const name = String(j.name ?? '').toLowerCase();
+      return platforms.some((p) => name.includes(p));
+    });
+  }
+  return {
+    ok: true,
+    status: String(data.status ?? ''),
+    conclusion: String(data.conclusion ?? ''),
+    jobs,
+  };
+}
+
+/** Fetch artifacts attached to a run (name + size) for the final report. */
+async function fetchRunArtifacts(
+  pi: ExtensionAPI,
+  runId: string,
+): Promise<Array<{ name: string; size: number }>> {
+  const repoCheck = await ensureGitHubRepo(pi);
+  if (!repoCheck.ok || !repoCheck.owner || !repoCheck.repo) {
+    return [];
+  }
+  const result = await runGh(
+    pi,
+    ['api', `repos/${repoCheck.owner}/${repoCheck.repo}/actions/runs/${runId}/artifacts`],
+    { parseJson: true, timeout: 30_000 },
+  );
+  const data = result.json as { artifacts?: Array<Record<string, unknown>> } | undefined;
+  if (!result.success || !Array.isArray(data?.artifacts)) {
+    return [];
+  }
+  return data.artifacts.map((a) => ({
+    name: String(a.name ?? '?'),
+    size: Number(a.size_in_bytes ?? 0),
+  }));
 }
 
 /** Run gh with optional JSON output and parse the result. */
@@ -3255,9 +3345,7 @@ export default function (pi: ExtensionAPI) {
       if (runUrl) {
         lines.push(`**Run:** ${runUrl}`);
       } else {
-        lines.push(
-          '**Run:** not visible yet — check with `gh_workflow_status` in a few seconds.',
-        );
+        lines.push('**Run:** not visible yet — check with `gh_workflow_status` in a few seconds.');
       }
 
       return {
@@ -3365,11 +3453,7 @@ export default function (pi: ExtensionAPI) {
 
       // Optional watch: poll until terminal state.
       if (params.watch) {
-        const outcome = await waitForRunCompletion(
-          pi,
-          runId,
-          params.timeoutSeconds ?? 1800,
-        );
+        const outcome = await waitForRunCompletion(pi, runId, params.timeoutSeconds ?? 1800);
         if (typeof outcome === 'object') {
           return {
             content: [{ type: 'text', text: `❌ ${outcome.error}` }],
@@ -3455,7 +3539,10 @@ export default function (pi: ExtensionAPI) {
         Type.Boolean({ default: false, description: 'Only show logs for failed steps' }),
       ),
       watch: Type.Optional(
-        Type.Boolean({ default: false, description: 'Wait for the run to finish before dumping logs' }),
+        Type.Boolean({
+          default: false,
+          description: 'Wait for the run to finish before dumping logs',
+        }),
       ),
       timeoutSeconds: Type.Optional(
         Type.Number({ default: 1800, description: 'Max watch time in seconds (default: 1800)' }),
@@ -3477,11 +3564,7 @@ export default function (pi: ExtensionAPI) {
       const { runId } = resolved;
 
       if (params.watch) {
-        const outcome = await waitForRunCompletion(
-          pi,
-          runId,
-          params.timeoutSeconds ?? 1800,
-        );
+        const outcome = await waitForRunCompletion(pi, runId, params.timeoutSeconds ?? 1800);
         if (typeof outcome === 'object') {
           return {
             content: [{ type: 'text', text: `❌ ${outcome.error}` }],
@@ -3541,17 +3624,14 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'gh_release_list',
     label: 'GitHub: List Releases',
-    description:
-      'List GitHub Releases with tag, title, publication date, and latest marker.',
+    description: 'List GitHub Releases with tag, title, publication date, and latest marker.',
     promptSnippet: 'Use gh_release_list to list GitHub releases',
     promptGuidelines: [
       'Use gh_release_list to find the latest release tag or see release history.',
       'Use gh_release_view to inspect a release + its uploaded assets.',
     ],
     parameters: Type.Object({
-      limit: Type.Optional(
-        Type.Number({ default: 10, description: 'Max releases (default: 10)' }),
-      ),
+      limit: Type.Optional(Type.Number({ default: 10, description: 'Max releases (default: 10)' })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const result = await runGh(
@@ -3649,7 +3729,11 @@ export default function (pi: ExtensionAPI) {
       const url = String(data.url ?? '');
       const body = String(data.body ?? '').slice(0, 3000);
 
-      const lines = [`**${tag}**${isLatest} — ${name || tag}`, `**Published:** ${published}`, `**URL:** ${url}`];
+      const lines = [
+        `**${tag}**${isLatest} — ${name || tag}`,
+        `**Published:** ${published}`,
+        `**URL:** ${url}`,
+      ];
 
       const assets = Array.isArray(data.assets)
         ? (data.assets as Array<Record<string, unknown>>)
@@ -3659,7 +3743,9 @@ export default function (pi: ExtensionAPI) {
         const byExt = new Map<string, Array<Record<string, unknown>>>();
         for (const asset of assets) {
           const aName = String(asset.name ?? '?');
-          const ext = aName.includes('.') ? aName.slice(aName.lastIndexOf('.')).toLowerCase() : '(none)';
+          const ext = aName.includes('.')
+            ? aName.slice(aName.lastIndexOf('.')).toLowerCase()
+            : '(none)';
           const list = byExt.get(ext) ?? [];
           list.push(asset);
           byExt.set(ext, list);
@@ -3676,7 +3762,11 @@ export default function (pi: ExtensionAPI) {
           }
         }
       } else {
-        lines.push('', '⚠️ **No assets uploaded to this release.**', '  If this was a desktop release, the upload step likely failed.');
+        lines.push(
+          '',
+          '⚠️ **No assets uploaded to this release.**',
+          '  If this was a desktop release, the upload step likely failed.',
+        );
       }
 
       if (body.trim()) {
@@ -3686,6 +3776,339 @@ export default function (pi: ExtensionAPI) {
       return {
         content: [{ type: 'text', text: lines.join('\n') }],
         details: { tag, isLatest: !!data.isLatest, assetCount: assets.length },
+      };
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_deploy — trigger the release workflow and wait for the result
+  // ═══════════════════════════════════════════════════════════════════════
+
+  pi.registerTool({
+    name: 'gh_deploy',
+    label: 'GitHub: Deploy & Wait',
+    description:
+      'Trigger the release/deploy workflow (workflow_dispatch) and optionally wait for the result. ' +
+      'Dispatches release.yml with mode/platforms/force inputs, then periodically polls ' +
+      'job status until every requested platform finishes (code_rabbit-style periodic fetcher, ' +
+      'abortable with Esc/Ctrl+C). On failure it auto-fetches the failed step logs. ' +
+      'Use platforms=["windows"] for "deploy windows only" style requests.',
+    promptSnippet: 'Use gh_deploy to deploy and wait for the result',
+    promptGuidelines: [
+      'Use gh_deploy when the user says "deploy", "test/debug the deployment", "deploy and wait", "ship windows" etc.',
+      'Set platforms to a subset: ["windows"] or "windows,linux" (default: all).',
+      'Default mode is staging — pass mode: "production" explicitly for a production deploy.',
+      'wait=true (default) polls until completion and returns a per-platform report with failed logs.',
+      'For a quick dispatch without waiting, pass wait=false — then follow up with gh_workflow_status / gh_workflow_logs.',
+    ],
+    parameters: Type.Object({
+      mode: Type.Optional(
+        Type.String({
+          enum: ['staging', 'production'],
+          default: 'staging',
+          description: 'Deployment target (default: staging)',
+        }),
+      ),
+      platforms: Type.Optional(
+        Type.Union(
+          [
+            Type.Array(Type.String({ enum: ['linux', 'windows', 'macos'] })),
+            Type.String({ description: 'Comma-separated, e.g. "linux,windows"' }),
+          ],
+          { description: 'Platforms to build (default: all)' },
+        ),
+      ),
+      ref: Type.Optional(
+        Type.String({ description: 'Branch to deploy (default: current git branch)' }),
+      ),
+      workflow: Type.Optional(
+        Type.String({
+          default: 'release.yml',
+          description: 'Workflow file name (default: "release.yml")',
+        }),
+      ),
+      force: Type.Optional(
+        Type.Boolean({ default: false, description: 'Bypass the Redis checksum cache (--force)' }),
+      ),
+      wait: Type.Optional(
+        Type.Boolean({
+          default: true,
+          description: 'Wait for completion and report (default: true)',
+        }),
+      ),
+      timeoutSeconds: Type.Optional(
+        Type.Number({
+          default: 2700,
+          description: 'Max wait time in seconds (default: 2700 = 45min)',
+        }),
+      ),
+      intervalSeconds: Type.Optional(
+        Type.Number({ default: 15, description: 'Poll interval in seconds (default: 15)' }),
+      ),
+      fetchLogs: Type.Optional(
+        Type.Boolean({
+          default: true,
+          description: 'Auto-fetch failed step logs when a job fails (default: true)',
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+      _deploySignal = signal;
+
+      const repoCheck = await ensureGitHubRepo(pi);
+      if (!repoCheck.ok) {
+        return {
+          content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+          isError: true,
+          details: {},
+        };
+      }
+
+      const workflow = params.workflow ?? 'release.yml';
+      const mode = params.mode ?? 'staging';
+      const ref = params.ref ?? (await currentBranch(pi));
+      const platformsCsv = normalizePlatforms(params.platforms);
+      const platforms = platformsCsv ? platformsCsv.split(',') : [];
+      const intervalMs = (params.intervalSeconds ?? 15) * 1000;
+
+      // ── 1. Dispatch ──
+      const dispatchArgs = ['workflow', 'run', workflow, '--ref', ref, '-f', `mode=${mode}`];
+      if (params.force) {
+        dispatchArgs.push('-f', 'force=true');
+      }
+      if (platformsCsv) {
+        dispatchArgs.push('-f', `platforms=${platformsCsv}`);
+      }
+
+      console.log(
+        `🚀 Dispatching ${workflow} on ${ref} (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'})...`,
+      );
+      const dispatch = await runGh(pi, dispatchArgs, { timeout: 30_000 });
+      if (!dispatch.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `❌ Failed to trigger deploy: ${dispatch.text}`,
+                '',
+                'If the error mentions "failed to parse workflow", the workflow file is invalid.',
+              ].join('\n'),
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+
+      // ── 2. Wait for the run to appear ──
+      let runId: string | undefined;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          await abortableSleep(1500, _deploySignal);
+        } catch {
+          return {
+            content: [{ type: 'text', text: '🛑 Aborted while waiting for the run to appear.' }],
+            details: { dispatched: true },
+          };
+        }
+        const list = await runGh(
+          pi,
+          [
+            'run',
+            'list',
+            '--workflow',
+            workflow,
+            '--branch',
+            ref,
+            '--limit',
+            '1',
+            '--json',
+            'databaseId,url',
+          ],
+          { parseJson: true, timeout: 30_000 },
+        );
+        const runs =
+          list.success && Array.isArray(list.json)
+            ? (list.json as Array<Record<string, unknown>>)
+            : [];
+        if (runs[0]) {
+          runId = String(runs[0].databaseId ?? '');
+          break;
+        }
+      }
+
+      if (!runId) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Deploy dispatched but the run did not appear — check with gh_workflow_status(workflow="${workflow}").`,
+            },
+          ],
+          isError: true,
+          details: { workflow, ref, mode },
+        };
+      }
+
+      const runUrl = `https://github.com/${repoCheck.owner}/${repoCheck.repo}/actions/runs/${runId}`;
+
+      // ── 3. Quick dispatch (no wait) ──
+      if (!params.wait) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'})`,
+                `**Run:** ${runUrl}`,
+                '',
+                `Watch with: gh_workflow_status(run=${runId}, watch=true)`,
+                `Logs with: gh_workflow_logs(run=${runId})`,
+              ].join('\n'),
+            },
+          ],
+          details: { runId, runUrl, workflow, ref, mode, platforms },
+        };
+      }
+
+      // ── 4. Periodic fetch until all requested jobs are terminal ──
+      const deadline = Date.now() + (params.timeoutSeconds ?? 2700) * 1000;
+      let lastJobState = '';
+      let aborted = false;
+      let timedOut = false;
+      let finalStatus:
+        | { ok: true; status: string; conclusion: string; jobs: Array<Record<string, unknown>> }
+        | undefined;
+      let lastError: string | undefined;
+
+      while (Date.now() < deadline) {
+        const snap = await fetchRunStatus(pi, runId, platforms);
+        if (!snap.ok) {
+          lastError = snap.error;
+          break;
+        }
+        finalStatus = snap;
+
+        const jobStates = snap.jobs
+          .map((j) => `${String(j.name ?? '?')}:${String(j.conclusion ?? String(j.status ?? ''))}`)
+          .join(' | ');
+        if (jobStates !== lastJobState) {
+          console.log(`⏳ ${jobStates || '(no jobs yet — runner starting)'}`);
+          lastJobState = jobStates;
+        }
+
+        const relevantJobs = snap.jobs.filter((j) => String(j.status ?? '') === 'completed');
+        const allDone = snap.jobs.length > 0 && relevantJobs.length === snap.jobs.length;
+        if (allDone || snap.status === 'completed') {
+          break;
+        }
+
+        try {
+          await abortableSleep(intervalMs, _deploySignal);
+        } catch {
+          aborted = true;
+          break;
+        }
+      }
+
+      if (!finalStatus && lastError) {
+        return {
+          content: [{ type: 'text', text: `❌ Failed to poll deploy run: ${lastError}` }],
+          isError: true,
+          details: { runId },
+        };
+      }
+
+      if (!finalStatus) {
+        timedOut = true;
+      } else if (Date.now() >= deadline && !aborted) {
+        timedOut = true;
+      }
+
+      // ── 5. Final report ──
+      const report: string[] = [];
+      const isAborted = aborted;
+      if (isAborted) {
+        report.push('🛑 **Aborted** (Esc/Ctrl+C) — current state:');
+      } else if (timedOut) {
+        report.push(`⏳ **Timed out after ${params.timeoutSeconds ?? 2700}s** — current state:`);
+      }
+
+      const runStatus = finalStatus?.status ?? 'unknown';
+      const runConclusion = finalStatus?.conclusion ?? '';
+      const finalJobs = finalStatus?.jobs ?? [];
+      const allSucceeded =
+        !isAborted &&
+        !timedOut &&
+        runStatus === 'completed' &&
+        (runConclusion === 'success' ||
+          (finalJobs.length > 0 && finalJobs.every((j) => j.conclusion === 'success')));
+
+      report.push(
+        `${allSucceeded ? '✅' : '❌'} **Deploy ${allSucceeded ? 'succeeded' : runConclusion || runStatus}** — ${mode}${platformsCsv ? ` (${platformsCsv})` : ' (all platforms)'}`,
+        `**Run:** ${runUrl}`,
+      );
+
+      if (finalStatus && finalStatus.jobs.length > 0) {
+        report.push('', '**Jobs:**');
+        for (const job of finalStatus.jobs) {
+          const jobName = String(job.name ?? '?');
+          const jobConclusion = job.conclusion ? String(job.conclusion) : String(job.status ?? '');
+          const icon =
+            jobConclusion === 'success'
+              ? '✅'
+              : jobConclusion === 'skipped'
+                ? '⏭️'
+                : jobConclusion === 'cancelled'
+                  ? '🚫'
+                  : '❌';
+          report.push(`  ${icon} **${jobName}** — ${jobConclusion}`);
+        }
+      }
+
+      // Artifacts (only meaningful when the run is done)
+      if (runStatus === 'completed') {
+        const artifacts = await fetchRunArtifacts(pi, runId);
+        if (artifacts.length > 0) {
+          report.push('', '**Artifacts:**');
+          for (const a of artifacts) {
+            report.push(`  📦 ${a.name} — ${formatBytes(a.size)}`);
+          }
+        }
+      }
+
+      // ── 6. Auto-fetch failed logs ──
+      const failedJobs = finalStatus?.jobs.filter((j) => j.conclusion === 'failure') ?? [];
+      if (params.fetchLogs !== false && (failedJobs.length > 0 || runConclusion === 'failure')) {
+        report.push('', '---', '**Failed step logs:**');
+        const logs = await runGh(pi, ['run', 'view', runId, '--log-failed'], {
+          timeout: 120_000,
+        });
+        if (logs.success && logs.text.trim()) {
+          const lines = logs.text.split('\n');
+          const kept = lines.slice(-150);
+          report.push('', '```', kept.join('\n'), '```');
+        } else {
+          report.push('  _(no failed logs available)_');
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: report.join('\n') }],
+        details: {
+          runId,
+          runUrl,
+          workflow,
+          ref,
+          mode,
+          platforms,
+          status: runStatus,
+          conclusion: runConclusion || null,
+          succeeded: allSucceeded,
+          aborted: isAborted,
+          timedOut,
+        },
       };
     },
   });
