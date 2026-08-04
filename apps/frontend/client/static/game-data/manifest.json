@@ -1,6 +1,6 @@
 {
-  "scannedAt": "2026-08-03T12:32:44.959Z",
-  "count": 12704,
+  "scannedAt": "2026-08-03T14:13:55.713Z",
+  "count": 12705,
   "assets": {
     "lpc:hat:magic:celestial_moon_adult:backslash": {
       "tag": "lpc:hat:magic:celestial_moon_adult:backslash",
@@ -101633,10 +101633,27 @@
       "name": "atlas",
       "path": "sprites/tilesets/atlas.webp",
       "ext": ".webp"
+    },
+    "music:exploration:Chainsmoker": {
+      "tag": "music:exploration:Chainsmoker",
+      "category": "music",
+      "subcategory": "exploration",
+      "name": "Chainsmoker",
+      "path": "music/exploration/Chainsmoker.mp3",
+      "ext": ".mp3"
     }
   },
   "byCategory": {
-    "music": [],
+    "music": [
+      {
+        "tag": "music:exploration:Chainsmoker",
+        "category": "music",
+        "subcategory": "exploration",
+        "name": "Chainsmoker",
+        "path": "music/exploration/Chainsmoker.mp3",
+        "ext": ".mp3"
+      }
+    ],
     "sfx": [],
     "ambient": [],
     "sprites": [

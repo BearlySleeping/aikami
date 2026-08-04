@@ -30,8 +30,14 @@ import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
-// @ts-expect-error — Vite ?worker&inline import for bootstrap entry point
-import EcsWorker from './worker/ecs_worker_bootstrap.ts?worker&inline';
+// Vite ?worker&type=module import for the bootstrap entry point.
+//
+// MUST NOT be inlined (?worker&inline): the bootstrap dynamic-imports
+// ./ecs_worker.ts, and a relative dynamic import cannot resolve inside a
+// blob/data-URL worker (no path base) — the module never evaluates and the
+// engine silently hangs (LOAD_MAP timeout). A real worker file keeps the
+// dynamic-import chunk resolvable at its emitted URL.
+import EcsWorker from './worker/ecs_worker_bootstrap.ts?worker&type=module';
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager

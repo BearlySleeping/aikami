@@ -13,6 +13,7 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
+import { playSceneBgm, resolveBgmUrl } from '$lib/services/audio/audio_asset_resolver';
 import {
   audioService,
   diceService,
@@ -1520,33 +1521,26 @@ export class CombatViewModel
   }
 
   /**
-   * Hardcoded fallback BGM URLs for when Firebase Data Connect is
+   * Fallback BGM resolution for when Firebase Data Connect is
    * unavailable or no tracks exist for the requested mood.
    *
-   * Maps moods to the placeholder audio files created in C-150.
+   * Resolves through the manifest-backed audio resolver (C-372) instead
+   * of legacy /assets/audio/* URLs. Routes through playSceneBgm's recency
+   * guard to serialize transitions.
    *
    * @param mood - Musical mood tag.
    */
   private async _transitionBgmFallback(mood: string): Promise<void> {
-    const fallbackMap: Record<string, string> = {
-      epic: '/assets/audio/bgm_combat.webm',
-      heroic: '/assets/audio/bgm_combat.webm',
-      tense: '/assets/audio/bgm_combat.webm',
-      foreboding: '/assets/audio/bgm_combat.webm',
-      triumph: '/assets/audio/bgm_explore.webm',
-      sorrow: '/assets/audio/bgm_explore.webm',
-      mysterious: '/assets/audio/bgm_explore.webm',
-      peaceful: '/assets/audio/bgm_explore.webm',
-    };
+    const combatMoods = new Set(['epic', 'heroic', 'tense', 'foreboding']);
+    const normalizedMood = mood.toLowerCase();
+    const scene = combatMoods.has(normalizedMood) ? 'combat' : 'explore';
 
-    const url = fallbackMap[mood] ?? '/assets/audio/bgm_combat.webm';
-
-    this.debug('_transitionBgmFallback', { mood, url });
+    this.debug('_transitionBgmFallback', { mood, normalizedMood, scene });
 
     try {
-      await audioService.transitionToBgm(url, 2000);
+      await playSceneBgm(scene, 2000);
     } catch (error) {
-      this.warn('_transitionBgmFallback: crossfade failed', error);
+      this.warn('_transitionBgmFallback: transition failed', error);
     }
   }
 

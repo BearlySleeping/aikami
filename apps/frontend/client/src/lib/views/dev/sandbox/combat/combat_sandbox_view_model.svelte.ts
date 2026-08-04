@@ -16,6 +16,7 @@ import {
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import type { LpcAnimationState } from '$lib/data/lpc_models';
+import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
@@ -477,8 +478,7 @@ class CombatSandboxViewModel
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      const { audioService } = await import('$services');
-      await audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+      await playSfxByName('sfx_pickup');
       this.debug('devTriggerEquipSfx:played');
     } catch (error) {
       this.debug('devTriggerEquipSfx:failed', { error: String(error) });
@@ -522,8 +522,7 @@ class CombatSandboxViewModel
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      const { audioService } = await import('$services');
-      await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+      await playSfxByName('sfx_hit');
     } catch (error) {
       this.debug('_playHitSfx:failed', { error: String(error) });
     }

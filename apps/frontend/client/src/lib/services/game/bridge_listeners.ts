@@ -7,6 +7,7 @@
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { AudioServiceInterface } from '$services';
+import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
@@ -127,13 +128,13 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('GAME_READY', () => {
     gameOverlayService.setTransitioning(false);
-    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    void playSceneBgm('explore');
   });
 
   bridge.on('MAP_LOADED', () => {
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
-    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    void playSceneBgm('explore');
   });
 
   // ── Combat ──
@@ -162,12 +163,12 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         gameOverlayService.setActive(overlay);
       },
     });
-    void audioService.transitionToBgm('/assets/audio/music/bgm_combat.webm');
+    void playSceneBgm('combat');
   });
 
   bridge.on('COMBAT_LOG', (event) => {
     if (event.message.includes('Hits for')) {
-      void audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+      void playSfxByName('sfx_hit');
     }
   });
 
@@ -181,7 +182,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         }
         setTimeout(() => {
           gameOverlayService.clearActive();
-          void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+          void playSceneBgm('explore');
           gameEngineService.resumeEngine();
         }, 2500);
       } else {

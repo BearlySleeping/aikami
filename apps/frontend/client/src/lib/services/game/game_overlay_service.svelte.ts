@@ -17,6 +17,7 @@ import {
   sessionService,
   worldStateService,
 } from '$services';
+import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
@@ -670,7 +671,7 @@ export class GameOverlayService
   /** Plays pickup SFX when inventory count increases. */
   onInventoryCountChange(newCount: number): void {
     if (newCount > this._previousInventoryCount) {
-      void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+      void playSfxByName('sfx_pickup');
     }
     this._previousInventoryCount = newCount;
   }
@@ -1003,7 +1004,7 @@ export class GameOverlayService
   async respawnPlayer(): Promise<void> {
     this.activeOverlay = 'NONE';
     gameModeService.setMode('EXPLORE');
-    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    void playSceneBgm('explore');
     this._engineService?.resumeEngine();
 
     // Resolve the map URL and spawn point from the active campaign's content pack
