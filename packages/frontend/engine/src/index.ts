@@ -4,6 +4,10 @@
 // Public game engine exports
 // ---------------------------------------------------------------------------
 
+// Register the custom-scheme (tauri://, file://) asset URL resolver with
+// PixiJS before any Assets.load() call in the app. Idempotent.
+import './assets/custom_scheme_url_resolver.ts';
+
 // Core
 
 // Base engine class (extend for engine-layer classes)

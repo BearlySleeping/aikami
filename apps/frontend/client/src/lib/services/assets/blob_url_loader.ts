@@ -10,6 +10,11 @@
 //
 // Registered at module scope so it exists before any Assets.load() call.
 
+// Also register the custom-scheme (tauri://, file://) URL resolve parser so
+// root-relative /game-data paths resolve to absolute URLs before PixiJS's
+// path utilities mis-parse the tauri:// origin. Idempotent.
+import '@aikami/frontend/engine/assets/custom_scheme_url_resolver.ts';
+
 import { ExtensionType, extensions, LoaderParserPriority, Texture } from 'pixi.js';
 
 /** Whether the parser has been registered (idempotent guard). */
