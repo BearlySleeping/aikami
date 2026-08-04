@@ -83,15 +83,11 @@ jobs:
     # "production".
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    # Gate: only when DEPLOY_APPS includes client-tauri, AND the requested
-    # platforms (workflow_dispatch input) include this matrix leg. The
-    # github.event.inputs.* fall back to '' on release:published runs, so a
-    # real release always builds all platforms.
-    if: >
-      (contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') ||
-       needs.resolve-apps.outputs.deploy_apps == 'all') &&
-      (github.event.inputs.platforms == '' ||
-       contains(github.event.inputs.platforms, matrix.platform))
+    # DEPLOY_APPS gate only — the `matrix` context is NOT available in
+    # job-level `if`, so the requested-platforms filter runs as the first
+    # step ("Platform gate") instead. github.event.inputs.* fall back to ''
+    # on release:published runs, so a real release always builds all platforms.
+    if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
     strategy:
       fail-fast: false
       matrix:
@@ -107,17 +103,36 @@ jobs:
             bundles: "dmg"
 
     steps:
+      # ── Platform gate ───────────────────────────────────────────────
+      # matrix IS available at step level. Skipped legs still spin up a
+      # runner but exit right after this gate.
+      - name: Platform gate
+        id: gate
+        shell: bash
+        run: |
+          REQUESTED="${{ github.event.inputs.platforms }}"
+          if [ -z "$REQUESTED" ] || echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.platform }}"; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "Building platform: ${{ matrix.platform }}"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED) — skipping"
+          fi
+
       - name: Checkout repository
+        if: steps.gate.outputs.proceed == 'true'
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Bun
+        if: steps.gate.outputs.proceed == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.13"
 
       - name: Setup Rust toolchain
+        if: steps.gate.outputs.proceed == 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # Built-in rust-cache targets the repo ROOT (where there is no
@@ -131,6 +146,7 @@ jobs:
       # wry/tao dependency tree (~15-25 min cold); caching the real target
       # dir turns subsequent runs into a few-minute incremental compile.
       - name: Cache Rust (nested Tauri workspace)
+        if: steps.gate.outputs.proceed == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "apps/frontend/client/src-tauri"
@@ -142,7 +158,7 @@ jobs:
       # libs (gobject-2.0 etc.). The workflow runs rarely — a direct install
       # is simpler and cannot go stale. Tauri v2 Ubuntu 24.04 prerequisite set.
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
+        if: steps.gate.outputs.proceed == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -156,18 +172,21 @@ jobs:
             curl wget file
 
       - name: Authenticate to Google Cloud
+        if: steps.gate.outputs.proceed == 'true'
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Google Cloud SDK
+        if: steps.gate.outputs.proceed == 'true'
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry (Linux only)
-        if: runner.os == 'Linux'
+        if: steps.gate.outputs.proceed == 'true' && runner.os == 'Linux'
         run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
       - name: Restore Bun & Moon build caches
+        if: steps.gate.outputs.proceed == 'true'
         uses: actions/cache@v5
         with:
           path: |
@@ -178,12 +197,14 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-build-
 
       - name: Install dependencies
+        if: steps.gate.outputs.proceed == 'true'
         run: bun install --frozen-lockfile
 
       # shell: bash — these steps use bash variable syntax (MODE=..., $MODE,
       # $FORCE_FLAG) which breaks under the default PowerShell on the
       # windows-latest runner. bash is available on every GitHub runner.
       - name: Download Secrets from GCP Secret Manager
+        if: steps.gate.outputs.proceed == 'true'
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
@@ -191,6 +212,7 @@ jobs:
 
       - name: Run Desktop Deploy Pipeline
         id: deploy
+        if: steps.gate.outputs.proceed == 'true'
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
