@@ -72,6 +72,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     needs: resolve-apps
+    # Per-environment secrets: GCP_SA_KEY lives on the "staging" and
+    # "production" environments (different SA keys per project).
+    # release:published runs and the workflow_dispatch default resolve to
+    # "production".
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
     if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
     strategy:
       fail-fast: false
@@ -201,6 +207,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: resolve-apps
+    # Same per-environment GCP_SA_KEY resolution as deploy-desktop.
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.resolve-apps.outputs.deploy_apps != 'client-tauri'
     steps:
       - name: Compute web deploy apps
