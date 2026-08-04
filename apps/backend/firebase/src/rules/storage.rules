@@ -30,6 +30,10 @@ service firebase.storage {
       return request.resource.contentType in ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     }
 
+    function isValidAudioType() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // User avatars and uploads — owner only
     // ═══════════════════════════════════════════════════════════════
@@ -69,17 +73,17 @@ service firebase.storage {
     match /music/{allPaths=**} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow create, update: if isAdmin() && isValidFileSize();
+      allow create, update: if isAdmin() && isValidAudioType() && isValidFileSize();
     }
     match /sfx/{allPaths=**} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow create, update: if isAdmin() && isValidFileSize();
+      allow create, update: if isAdmin() && isValidAudioType() && isValidFileSize();
     }
     match /ambient/{allPaths=**} {
       allow read: if true;
       allow delete: if isAdmin();
-      allow create, update: if isAdmin() && isValidFileSize();
+      allow create, update: if isAdmin() && isValidAudioType() && isValidFileSize();
     }
 
     // ═══════════════════════════════════════════════════════════════

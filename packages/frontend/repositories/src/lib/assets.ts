@@ -171,19 +171,16 @@ export class AssetRegistryRepository {
    * @returns The number of source rows written.
    */
   async addFirebaseStorageSources(storageBucket: string): Promise<number> {
-    // Already seeded with this backend — cheap skip so the boot call is safe
-    // to run on every session (INSERT OR REPLACE on 12k+ rows is not).
-    const existing = await this._db.query({
-      sql: "SELECT COUNT(*) AS n FROM asset_sources WHERE backend = 'firebase-storage'",
-      args: [],
-    });
-    const existingCount = existing.rows[0]?.n as number | undefined;
-    if ((existingCount ?? 0) > 0) {
-      return 0;
-    }
-
+    // Select only bundled assets lacking a firebase-storage sibling so
+    // newly re-seeded assets receive mirrors and existing mirrors remain
+    // untouched. Preserves cheap repeat-boot behavior while ensuring bucket
+    // changes can update missing mirror records.
     const result = await this._db.query({
-      sql: 'SELECT asset_id, url FROM asset_sources WHERE backend = ?',
+      sql: `SELECT asset_id, url FROM asset_sources
+            WHERE backend = ?
+            AND asset_id NOT IN (
+              SELECT asset_id FROM asset_sources WHERE backend = 'firebase-storage'
+            )`,
       args: [BUNDLED_SOURCE_BACKEND],
     });
 
@@ -211,6 +208,12 @@ export class AssetRegistryRepository {
     for (let i = 0; i < queries.length; i += SEED_CHUNK_SIZE) {
       const chunk = queries.slice(i, i + SEED_CHUNK_SIZE);
       await this._db.transaction(chunk);
+
+      // Yield between chunks to keep the WASM main thread responsive,
+      // matching seedFromManifest's inter-chunk yielding behavior.
+      if (i + SEED_CHUNK_SIZE < queries.length) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
     return queries.length;
   }

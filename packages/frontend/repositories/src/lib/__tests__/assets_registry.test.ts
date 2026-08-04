@@ -168,6 +168,58 @@ describe('AssetRegistryRepository', () => {
     expect(await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app')).toBe(0);
   });
 
+  test('re-seeding with extra asset adds firebase-storage mirror for new asset only', async () => {
+    // Initial seed: 3 assets
+    await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
+    const added1 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added1).toBe(3);
+
+    // Verify initial mirrors exist
+    const sources1 = await registry.listSources('music:exploration:forest');
+    expect(sources1).toHaveLength(2);
+
+    // Re-seed with an extra asset (new bundled asset added to manifest)
+    const HASH_D = 'd'.repeat(64);
+    const manifest2 = makeManifest({
+      assets: {
+        ...makeManifest().assets,
+        'sfx:ui:click': {
+          tag: 'sfx:ui:click',
+          category: 'sfx',
+          subcategory: 'ui',
+          name: 'click',
+          path: 'sfx/ui/click.wav',
+          ext: '.wav',
+        },
+      },
+      count: 4,
+    });
+    const hashes2 = makeHashes({
+      hashes: {
+        ...makeHashes().hashes,
+        'sfx:ui:click': { hash: HASH_D, sizeBytes: 512 },
+      },
+    });
+
+    await registry.seedFromManifest({ manifest: manifest2, hashes: hashes2 });
+
+    // Second addFirebaseStorageSources should only add the new asset's mirror
+    const added2 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    expect(added2).toBe(1);
+
+    // New asset should have both bundled + firebase-storage sources
+    const newSources = await registry.listSources('sfx:ui:click');
+    expect(newSources).toHaveLength(2);
+    expect(newSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(newSources[1]?.backend).toBe('firebase-storage');
+
+    // Existing asset sources should remain unchanged (not duplicated)
+    const existingSources = await registry.listSources('music:exploration:forest');
+    expect(existingSources).toHaveLength(2);
+    expect(existingSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(existingSources[1]?.backend).toBe('firebase-storage');
+  });
+
   test('meta.asset_registry_seeded is set to the manifest scannedAt', async () => {
     const manifest = makeManifest();
     await registry.seedFromManifest({ manifest, hashes: makeHashes() });

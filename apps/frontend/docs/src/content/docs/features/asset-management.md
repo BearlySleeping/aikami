@@ -52,7 +52,7 @@ Assets are mirrored to Firebase Storage so the AssetManager can fall back to an
 online origin (C-373 `asset_sources`). The bucket layout mirrors the bundled
 `static/game-data` tree:
 
-```
+```text
 gs://<project>.firebasestorage.app/
   lpc/…                # LPC spritesheets (upload_lpc_assets.ts)
   music/… sfx/… ambient/…   # audio assets

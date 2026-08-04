@@ -13,7 +13,7 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { resolveBgmUrl } from '$lib/services/audio/audio_asset_resolver';
+import { playSceneBgm, resolveBgmUrl } from '$lib/services/audio/audio_asset_resolver';
 import {
   audioService,
   diceService,
@@ -1525,24 +1525,22 @@ export class CombatViewModel
    * unavailable or no tracks exist for the requested mood.
    *
    * Resolves through the manifest-backed audio resolver (C-372) instead
-   * of legacy /assets/audio/* URLs.
+   * of legacy /assets/audio/* URLs. Routes through playSceneBgm's recency
+   * guard to serialize transitions.
    *
    * @param mood - Musical mood tag.
    */
   private async _transitionBgmFallback(mood: string): Promise<void> {
     const combatMoods = new Set(['epic', 'heroic', 'tense', 'foreboding']);
-    const scene = combatMoods.has(mood) ? 'combat' : 'explore';
-    const url = await resolveBgmUrl(scene);
+    const normalizedMood = mood.toLowerCase();
+    const scene = combatMoods.has(normalizedMood) ? 'combat' : 'explore';
 
-    this.debug('_transitionBgmFallback', { mood, scene, url });
-    if (!url) {
-      return;
-    }
+    this.debug('_transitionBgmFallback', { mood, normalizedMood, scene });
 
     try {
-      await audioService.transitionToBgm(url, 2000);
+      await playSceneBgm(scene, 2000);
     } catch (error) {
-      this.warn('_transitionBgmFallback: crossfade failed', error);
+      this.warn('_transitionBgmFallback: transition failed', error);
     }
   }
 

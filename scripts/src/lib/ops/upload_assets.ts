@@ -112,7 +112,6 @@ const uploadFile = async (options: {
 }): Promise<boolean> => {
   const { baseUrl, localPath, storagePath, accessToken, mode } = options;
 
-  const fileBytes = readFileSync(localPath);
   const encodedPath = encodeStoragePath(storagePath);
   const url = `${baseUrl}?name=${encodedPath}`;
 
@@ -125,6 +124,7 @@ const uploadFile = async (options: {
   }
 
   try {
+    const fileBytes = readFileSync(localPath);
     const response = await fetch(url, { method: 'POST', headers, body: fileBytes });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
@@ -201,13 +201,22 @@ const main = async (): Promise<void> => {
     }
   }
 
-  const seedFiles = SEED_FILES.map(({ local, storage }) => ({
-    localPath: join(GAME_DATA_DIR, local),
-    storagePath: storage,
-  }));
+  const seedFiles: { localPath: string; storagePath: string }[] = [];
+  let skippedSeeds = 0;
+  for (const { local, storage } of SEED_FILES) {
+    const localPath = join(GAME_DATA_DIR, local);
+    if (existsSync(localPath)) {
+      seedFiles.push({ localPath, storagePath: storage });
+    } else {
+      skippedSeeds++;
+    }
+  }
 
   const allFiles = [...audioFiles, ...seedFiles];
-  console.log(`📁 Found ${audioFiles.length} asset file(s) + ${seedFiles.length} seed file(s)`);
+  console.log(
+    `📁 Found ${audioFiles.length} asset file(s) + ${seedFiles.length} seed file(s)` +
+      (skippedSeeds > 0 ? ` (${skippedSeeds} seed file(s) skipped — missing)` : ''),
+  );
   console.log('');
 
   // Authenticate for live environments.

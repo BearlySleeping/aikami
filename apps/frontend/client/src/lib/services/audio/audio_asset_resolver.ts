@@ -24,6 +24,9 @@ const SCENE_TAG: Record<'explore' | 'combat', string> = {
   combat: 'combat',
 };
 
+/** Monotonically increasing request ID for BGM transition serialization. */
+let _bgmRequestId = 0;
+
 /** Manifest category names consumed by this resolver. */
 
 /**
@@ -178,14 +181,25 @@ export const resolveAmbientUrl = async (tag: string): Promise<string | null> => 
 /**
  * Plays a resolved BGM URL, skipping when no asset exists.
  * Convenience wrapper so call sites stay one-liners.
+ *
+ * Serializes transitions through a recency guard so rapid concurrent calls
+ * (e.g., combat start + mood change) don't race — only the most recent
+ * request's transition completes.
+ *
+ * @param scene - Scene type ('explore' | 'combat').
+ * @param durationMs - Crossfade duration in milliseconds (default 1500).
  */
-export const playSceneBgm = async (scene: 'explore' | 'combat'): Promise<void> => {
+export const playSceneBgm = async (
+  scene: 'explore' | 'combat',
+  durationMs?: number,
+): Promise<void> => {
+  const requestId = ++_bgmRequestId;
   const url = await resolveBgmUrl(scene);
-  if (!url) {
+  if (!url || requestId !== _bgmRequestId) {
     return;
   }
   const { audioService } = await import('$services');
-  await audioService.transitionToBgm(url);
+  await audioService.transitionToBgm(url, durationMs);
 };
 
 /**
