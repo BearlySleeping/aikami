@@ -9,6 +9,7 @@
     "fs:default",
     "dialog:default",
     "http:default",
+    "log:default",
     {
       "identifier": "http:allow-fetch",
       "allow": [{ "url": "http://localhost:11434/**" }, { "url": "http://localhost:8188/**" }]
