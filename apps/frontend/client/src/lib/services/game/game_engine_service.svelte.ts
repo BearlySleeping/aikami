@@ -10,9 +10,10 @@ import {
 import type { PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
-import { audioContextManager, audioService, personaService } from '$services';
+import { audioContextManager, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
+import { playSfxByName } from '../audio/audio_asset_resolver';
 
 // ---------------------------------------------------------------------------
 // GameEngineService — owns the PixiJS engine bridge, world, and game state
@@ -778,7 +779,7 @@ class GameEngineService
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+      await playSfxByName('sfx_hit');
     } catch (error) {
       logger.debug('GameEngineService:_playHitSfx:failed', { error: String(error) });
     }

@@ -14,8 +14,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
+import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
-  audioService,
   equipmentService,
   gameOverlayService,
   getItemDefinition,
@@ -113,7 +113,7 @@ export class InventoryViewModel
   equipItem(itemId: string): void {
     const equipped = equipmentService.equipItem({ itemId });
     if (equipped) {
-      void audioService.playSfx('/assets/audio/sfx/sfx_equip.wav');
+      void playSfxByName('sfx_equip');
     }
   }
 
@@ -125,7 +125,7 @@ export class InventoryViewModel
   useItem(itemId: string): void {
     const result = inventoryService.useConsumable({ itemId });
     if (result === 'ok') {
-      void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+      void playSfxByName('sfx_pickup');
       this._showActionMessage(`Used ${getItemDefinition(itemId).label}`);
       return;
     }

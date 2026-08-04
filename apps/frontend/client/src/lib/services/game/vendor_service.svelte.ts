@@ -19,8 +19,9 @@ import {
   type VendorActionIntent,
   VendorActionSchema,
 } from '$lib/data/ai_prompts/vendor_action_schema';
-import { audioService, textGenerationService } from '$services';
+import { textGenerationService } from '$services';
 import type { VendorSessionOptions } from '$types';
+import { playSfxByName } from '../audio/audio_asset_resolver';
 import { getItemDefinition, inventoryService } from './inventory_service.svelte';
 
 // ── Pricing ─────────────────────────────────────────────────────────────
@@ -270,7 +271,7 @@ class VendorService
       if (!committed) {
         return;
       }
-      void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+      void playSfxByName('sfx_pickup');
       this._showTransaction(
         `Purchased ${getItemDefinition(itemId).label} for ${finalPrice} gold!`,
         true,
@@ -291,7 +292,7 @@ class VendorService
     if (!committed) {
       return;
     }
-    void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+    void playSfxByName('sfx_pickup');
     this._showTransaction(`Sold ${getItemDefinition(itemId).label} for ${sellPrice} gold!`, true);
   }
 
