@@ -3789,14 +3789,15 @@ export default function (pi: ExtensionAPI) {
     label: 'GitHub: Deploy & Wait',
     description:
       'Trigger the release/deploy workflow (workflow_dispatch) and optionally wait for the result. ' +
-      'Dispatches release.yml with mode/platforms/force inputs, then periodically polls ' +
+      'Dispatches release.yml with mode/platforms/bundles/force inputs, then periodically polls ' +
       'job status until every requested platform finishes (code_rabbit-style periodic fetcher, ' +
       'abortable with Esc/Ctrl+C). On failure it auto-fetches the failed step logs. ' +
-      'Use platforms=["windows"] for "deploy windows only" style requests.',
+      'Use platforms=["windows"] for "deploy windows only", bundles="appimage" for a single bundle.',
     promptSnippet: 'Use gh_deploy to deploy and wait for the result',
     promptGuidelines: [
       'Use gh_deploy when the user says "deploy", "test/debug the deployment", "deploy and wait", "ship windows" etc.',
       'Set platforms to a subset: ["windows"] or "windows,linux" (default: all).',
+      'Set bundles to a subset: "appimage", "appimage,deb" etc. (default: platform defaults).',
       'Default mode is staging — pass mode: "production" explicitly for a production deploy.',
       'wait=true (default) polls until completion and returns a per-platform report with failed logs.',
       'For a quick dispatch without waiting, pass wait=false — then follow up with gh_workflow_status / gh_workflow_logs.',
@@ -3817,6 +3818,12 @@ export default function (pi: ExtensionAPI) {
           ],
           { description: 'Platforms to build (default: all)' },
         ),
+      ),
+      bundles: Type.Optional(
+        Type.String({
+          description:
+            'Bundle targets to build, comma-separated (appimage,deb,rpm,msi,dmg). Empty = platform defaults',
+        }),
       ),
       ref: Type.Optional(
         Type.String({ description: 'Branch to deploy (default: current git branch)' }),
@@ -3879,9 +3886,13 @@ export default function (pi: ExtensionAPI) {
       if (platformsCsv) {
         dispatchArgs.push('-f', `platforms=${platformsCsv}`);
       }
+      const bundles = params.bundles?.trim() ?? '';
+      if (bundles) {
+        dispatchArgs.push('-f', `bundles=${bundles}`);
+      }
 
       console.log(
-        `🚀 Dispatching ${workflow} on ${ref} (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'})...`,
+        `🚀 Dispatching ${workflow} on ${ref} (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})...`,
       );
       const dispatch = await runGh(pi, dispatchArgs, { timeout: 30_000 });
       if (!dispatch.success) {
@@ -3960,7 +3971,7 @@ export default function (pi: ExtensionAPI) {
             {
               type: 'text',
               text: [
-                `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'})`,
+                `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})`,
                 `**Run:** ${runUrl}`,
                 '',
                 `Watch with: gh_workflow_status(run=${runId}, watch=true)`,
@@ -4046,7 +4057,7 @@ export default function (pi: ExtensionAPI) {
           (finalJobs.length > 0 && finalJobs.every((j) => j.conclusion === 'success')));
 
       report.push(
-        `${allSucceeded ? '✅' : '❌'} **Deploy ${allSucceeded ? 'succeeded' : runConclusion || runStatus}** — ${mode}${platformsCsv ? ` (${platformsCsv})` : ' (all platforms)'}`,
+        `${allSucceeded ? '✅' : '❌'} **Deploy ${allSucceeded ? 'succeeded' : runConclusion || runStatus}** — ${mode}${platformsCsv ? ` (${platformsCsv})` : ' (all platforms)'}${bundles ? `, bundles: ${bundles}` : ''}`,
         `**Run:** ${runUrl}`,
       );
 
@@ -4103,6 +4114,7 @@ export default function (pi: ExtensionAPI) {
           ref,
           mode,
           platforms,
+          bundles: bundles || null,
           status: runStatus,
           conclusion: runConclusion || null,
           succeeded: allSucceeded,

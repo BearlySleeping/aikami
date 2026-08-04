@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: ""
+      bundles:
+        description: "Comma-separated bundle targets (appimage,deb,rpm,msi,dmg). Empty = platform defaults"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-${{ github.event.inputs.mode || 'production' }}
@@ -103,7 +108,7 @@ jobs:
             bundles: "dmg"
 
     steps:
-      # ── Platform gate ───────────────────────────────────────────────
+      # ── Platform + bundle gate ───────────────────────────────────────
       # matrix IS available at step level. Skipped legs still spin up a
       # runner but exit right after this gate.
       - name: Platform gate
@@ -111,12 +116,26 @@ jobs:
         shell: bash
         run: |
           REQUESTED="${{ github.event.inputs.platforms }}"
-          if [ -z "$REQUESTED" ] || echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.platform }}"; then
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-            echo "Building platform: ${{ matrix.platform }}"
-          else
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED) — skipping"
+          REQUESTED_BUNDLES="${{ github.event.inputs.bundles }}"
+          LEG_BUNDLES="${{ matrix.bundles }}"
+          proceed="true"
+          if [ -n "$REQUESTED" ] && ! echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.platform }}"; then
+            proceed="false"
+            echo "Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED)"
+          fi
+          if [ "$proceed" = "true" ] && [ -n "$REQUESTED_BUNDLES" ]; then
+            match=""
+            for b in $(echo "$LEG_BUNDLES" | tr ',' ' '); do
+              if echo "$REQUESTED_BUNDLES" | tr ',' '\n' | grep -qx "$b"; then match="$b"; fi
+            done
+            if [ -z "$match" ]; then
+              proceed="false"
+              echo "No requested bundle ($REQUESTED_BUNDLES) matches this leg's bundles ($LEG_BUNDLES)"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          if [ "$proceed" = "true" ]; then
+            echo "Building platform: ${{ matrix.platform }} (bundles: ${LEG_BUNDLES:-default})"
           fi
 
       - name: Checkout repository
@@ -225,30 +244,82 @@ jobs:
           # moon's toolchain would otherwise try to provision its own bun via
           # proto in CI — force global tools (same as pr-checks.yml).
           MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
-          TAURI_BUNDLE_TARGETS: ${{ matrix.bundles }}
+          # Requested bundles override the platform defaults (e.g. linux
+          # appimage-only debugging); empty on release:published = full set.
+          TAURI_BUNDLE_TARGETS: ${{ github.event.inputs.bundles || matrix.bundles }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only set on a real GitHub Release publish. This is what tells
           # tauri_release.ts to `gh release upload` — empty on
           # workflow_dispatch runs, which have no release to attach to.
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
-      # Runs even after a failed deploy (insurance for release uploads), but only
-      # on legs that passed the Platform gate — skipped platforms must not emit
-      # "no files found" warnings.
-      - name: Upload build artifacts to workflow run
+      # ── Artifact upload (one artifact per bundle, unzipped) ─────────
+      # upload-artifact v7 with `archive: false` uploads the raw files — no
+      # zip wrapping, and each bundle gets its own artifact so a user only
+      # downloads the file they need (no forced multi-bundle download).
+      # Runs even after a failed deploy (insurance), only on gated legs.
+      # if-no-files-found: ignore — partial bundle sets are legitimate
+      # (e.g. a bundles=appimage-only debug run has no deb/rpm).
+      - name: Upload Linux AppImage
         if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: tauri-${{ matrix.platform }}
+          name: tauri-linux-appimage
+          path: '**/target/release/bundle/appimage/*.AppImage'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux deb
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-deb
+          path: '**/target/release/bundle/deb/*.deb'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux rpm
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-rpm
+          path: '**/target/release/bundle/rpm/*.rpm'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Windows msi
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-windows-msi
+          path: '**/target/release/bundle/msi/*.msi'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS dmg
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-dmg
+          path: '**/target/release/bundle/dmg/*.dmg'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS updater artifacts
+        if: always() && steps.gate.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-updater
           path: |
-            **/target/release/bundle/**/*.deb
-            **/target/release/bundle/**/*.rpm
-            **/target/release/bundle/**/*.AppImage
-            **/target/release/bundle/**/*.msi
-            **/target/release/bundle/**/*.dmg
-            **/target/release/bundle/**/*.app.tar.gz
-            **/target/release/bundle/**/*.sig
-          if-no-files-found: warn
+            **/target/release/bundle/macos/*.app.tar.gz
+            **/target/release/bundle/macos/*.sig
+          archive: false
+          if-no-files-found: ignore
           retention-days: 14
 
   # ── Web & backend deploys (singleton, runs in parallel with desktop) ─
