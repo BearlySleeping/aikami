@@ -52,7 +52,9 @@ type PlatformDef = { runsOn: string; platform: string; bundles: string };
 
 const PLATFORM_DEFAULTS: PlatformDef[] = [
   { runsOn: 'ubuntu-latest', platform: 'linux', bundles: 'appimage,deb,rpm' },
-  { runsOn: 'windows-latest', platform: 'windows', bundles: 'msi' },
+  // Windows ships the NSIS installer (.exe) — the updater signs it like the
+  // AppImage/MSI. MSI is intentionally not built.
+  { runsOn: 'windows-latest', platform: 'windows', bundles: 'nsis' },
   // `app` is required on macOS: createUpdaterArtifacts only emits the
   // .app.tar.gz updater bundle when the MacOsBundle target is built.
   { runsOn: 'macos-latest', platform: 'macos', bundles: 'app,dmg' },
@@ -64,6 +66,7 @@ const BUNDLE_EXTENSIONS: Record<string, string> = {
   deb: '.deb',
   rpm: '.rpm',
   msi: '.msi',
+  nsis: '.exe',
   dmg: '.dmg',
   app: '.app.tar.gz',
 };

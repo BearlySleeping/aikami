@@ -52,6 +52,7 @@ const BUNDLE_GLOBS: Record<string, string[]> = {
   deb: ['*.deb', '*.deb.sig'],
   rpm: ['*.rpm', '*.rpm.sig'],
   msi: ['*.msi', '*.msi.sig'],
+  nsis: ['*.exe', '*.exe.sig'],
   dmg: ['*.dmg'],
   app: ['*.app.tar.gz', '*.app.tar.gz.sig'],
 };
