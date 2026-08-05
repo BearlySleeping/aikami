@@ -35,13 +35,18 @@ import { readCargoVersion } from './tauri_release';
 
 export type PlatformName = 'linux' | 'windows' | 'macos';
 
+/** One platform entry of the static updater manifest. */
 export type UpdaterPlatformEntry = {
+  /** Raw content of the .sig file (not a path or URL). */
   signature: string;
+  /** browser_download_url of the signed artifact on the release. */
   url: string;
 };
 
+/** `os-arch` → platform entry (e.g. `{ "windows-x86_64": { … } }`). */
 export type UpdaterFragment = Record<string, UpdaterPlatformEntry>;
 
+/** Full static manifest consumed by tauri-plugin-updater. */
 export type UpdaterManifest = {
   version: string;
   notes: string;
@@ -57,8 +62,10 @@ const PLATFORM_OS_PREFIX: Record<PlatformName, string> = {
   macos: 'darwin-',
 } as const;
 
+/** Signed updater artifacts produced by `createUpdaterArtifacts: true`. */
 const UPDATER_SIGNED_SUFFIXES = ['.appimage', '.msi', '.exe', '.app.tar.gz'] as const;
 
+/** File-name arch tokens (from Tauri artifact names) and Node arch → Tauri arch. */
 const ARCH_TO_TAURI: Record<string, string> = {
   x64: 'x86_64',
   amd64: 'x86_64',
@@ -75,6 +82,10 @@ const ARCH_TO_TAURI: Record<string, string> = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Resolve `<owner>/<repo>` from the GitHub Actions context, then the git
+ * remote, then a hardcoded fallback. Used to build artifact download URLs.
+ */
 const repoSlug = (): string => {
   if (process.env.GITHUB_REPOSITORY) {
     return process.env.GITHUB_REPOSITORY;
@@ -88,25 +99,35 @@ const repoSlug = (): string => {
       return `${match[1]}/${match[2]}`;
     }
   } catch {
-    // Fallback
+    // Fall through to the hardcoded default.
   }
   return 'BearlySleeping/aikami';
 };
 
+/** browser_download_url for a release asset. */
 export const releaseDownloadUrl = (releaseTag: string, assetName: string): string => {
   return `https://github.com/${repoSlug()}/releases/download/${releaseTag}/${encodeURIComponent(assetName)}`;
 };
 
+/** True when a file name identifies an updater-relevant signed artifact. */
 const isUpdaterSignedFile = (fileName: string): boolean => {
   const lower = fileName.toLowerCase();
   return UPDATER_SIGNED_SUFFIXES.some((suffix) => lower.endsWith(suffix));
 };
 
 export type UpdaterArtifactPair = {
+  /** Path to the signed artifact (the file the `.sig` verifies). */
   signed: string;
+  /** Raw `.sig` file content. */
   signature: string;
 };
 
+/**
+ * Map every `.sig` file in `paths` to the artifact it signs (`<file>.sig` →
+ * `<file>`), keeping only updater-relevant signed files whose artifact is
+ * also present (deb/rpm/dmg signatures are ignored — the updater never
+ * consumes them).
+ */
 export const collectUpdaterArtifacts = (paths: readonly string[]): UpdaterArtifactPair[] => {
   const byName = new Map<string, string>(paths.map((p) => [basename(p), p]));
   const pairs: UpdaterArtifactPair[] = [];
@@ -127,6 +148,11 @@ export const collectUpdaterArtifacts = (paths: readonly string[]): UpdaterArtifa
   return pairs;
 };
 
+/**
+ * Tauri updater platform key(s) for a platform + arch. A universal macOS
+ * build is emitted under BOTH `darwin-aarch64` and `darwin-x86_64` — there is
+ * no single combined key (see tauri-action's upload-version-json.ts).
+ */
 export const deriveUpdaterPlatformKeys = (options: {
   platform: PlatformName;
   arch: string;
@@ -139,6 +165,7 @@ export const deriveUpdaterPlatformKeys = (options: {
   return [`${prefix}${arch}`];
 };
 
+/** Arch token embedded in a Tauri artifact file name, if any. */
 const archFromFileName = (fileName: string): string | undefined => {
   const match = fileName.match(
     /(?:^|_)(amd64|x86_64|x64|aarch64|arm64|i686|armv7|universal)(?:_|\.)/,
@@ -147,13 +174,28 @@ const archFromFileName = (fileName: string): string | undefined => {
 };
 
 export type FragmentBuildOptions = {
+  /** Leg platform (linux / windows / macos). */
   platform: PlatformName;
+  /** Paths of the leg's artifacts (build leg) or downloaded files (reuse leg). */
   artifactPaths: readonly string[];
+  /** Release tag the fragment's URLs point at. */
   releaseTag: string;
+  /** Arch token for the build host; defaults to process.arch. */
   arch?: string;
+  /**
+   * Source release manifest (reuse legs only): its platform keys are reused
+   * verbatim for matching signatures so a copied-forward artifact keeps the
+   * exact keys it was originally built with (e.g. both darwin keys for a
+   * universal build). Ignored when the source release predates the updater.
+   */
   sourceManifest?: UpdaterManifest | null;
 };
 
+/**
+ * Build the updater fragment for one platform leg: every signed updater
+ * artifact found in `artifactPaths` becomes one or more `<os>-<arch>` entries
+ * pointing at this release.
+ */
 export const buildPlatformFragment = (options: FragmentBuildOptions): UpdaterFragment => {
   const { platform, artifactPaths, releaseTag } = options;
   const fragment: UpdaterFragment = {};
@@ -182,6 +224,8 @@ const updaterKeysForPair = (options: {
   const { platform, pair } = options;
   const prefix = PLATFORM_OS_PREFIX[platform];
 
+  // Reuse legs: prefer the source release's own keys (authoritative for arch
+  // and universal builds) when a signature matches verbatim.
   if (options.sourceManifest) {
     const matching = Object.keys(options.sourceManifest.platforms ?? {}).filter((key) => {
       return (
@@ -202,6 +246,7 @@ const updaterKeysForPair = (options: {
   return deriveUpdaterPlatformKeys({ platform, arch });
 };
 
+/** Write a leg's fragment to `<cwd>/updater-fragments/<platform>.json`. */
 export const writeFragmentFile = (platform: PlatformName, fragment: UpdaterFragment): void => {
   const dir = join(process.cwd(), 'updater-fragments');
   mkdirSync(dir, { recursive: true });
@@ -216,7 +261,7 @@ export const writeFragmentFile = (platform: PlatformName, fragment: UpdaterFragm
   }
 };
 
-// ── Merge mode ───────────────────────────────────────────────────────────
+// ── Merge mode (update-manifest job) ─────────────────────────────────────
 
 const collectJsonFiles = (dir: string): string[] => {
   const found: string[] = [];
@@ -240,11 +285,6 @@ const loadFragments = (dir: string): UpdaterFragment => {
   for (const file of files) {
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as UpdaterFragment;
-      const keyCount = Object.keys(parsed).length;
-      if (keyCount === 0) {
-        warn(`Fragment file ${file} is empty (zero platform keys) — skipping.`);
-        continue;
-      }
       Object.assign(merged, parsed);
     } catch (err) {
       warn(
@@ -297,23 +337,15 @@ async function main(): Promise<void> {
   const platformKeyCount = Object.keys(platforms).length;
   if (platformKeyCount === 0) {
     error(
-      `No valid platform fragments found under ${fragmentsDir} — refusing to upload an empty manifest.`,
-    );
-    process.exit(1);
-  }
-
-  // Validate all required platform keys are present before uploading
-  const requiredPlatforms = ['linux-x86_64', 'windows-x86_64', 'darwin-x86_64', 'darwin-aarch64'];
-  const missingPlatforms = requiredPlatforms.filter((key) => !platforms[key]);
-  if (missingPlatforms.length > 0) {
-    error(
-      `Missing required platform fragments: ${missingPlatforms.join(', ')} — refusing to upload a partial manifest.`,
+      `No platform fragments found under ${fragmentsDir} — refusing to upload an empty manifest.`,
     );
     process.exit(1);
   }
 
   const tauriDir = opts['tauri-dir'] ?? 'apps/frontend/client/src-tauri';
   const manifest: UpdaterManifest = {
+    // Cargo.toml version — no leading 'v'. Must be bumped per release for
+    // the updater to detect a newer build.
     version: readCargoVersion(tauriDir),
     notes: await fetchReleaseNotes(releaseTag),
     pub_date: new Date().toISOString(),
@@ -330,6 +362,8 @@ async function main(): Promise<void> {
   ok(`Uploaded latest.json to release ${releaseTag} (--clobber)`);
 }
 
+// Only run the CLI when invoked directly — this module is also imported by
+// ci_run.ts / tauri_release.ts for the fragment helpers.
 if (import.meta.main) {
   await main();
 }

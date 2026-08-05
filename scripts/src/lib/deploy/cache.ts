@@ -361,7 +361,7 @@ export type TauriCacheEntry = {
   builtAt: string;
 };
 
-const tauriCacheKey = (mode: string): string => `${CACHE_PREFIX}:${mode}:client-tauri:tauri-release`;
+const tauriCacheKey = (mode: string): string => `${CACHE_PREFIX}:${mode}:client-tauri`;
 
 /**
  * Read the tauri-release cache entry for a mode.
