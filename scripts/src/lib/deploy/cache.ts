@@ -340,3 +340,59 @@ export async function saveDeployCache(
 
   log(`  ${c.dim}Updated Redis cache & version (${version}) for ${appName}${c.reset}`);
 }
+
+// ── Tauri release cache (JSON entry — tauri-release only) ────────────────
+//
+// The tauri-release cache value under `cache-aikami-deploy:{mode}:client-tauri`
+// is a JSON object (not a bare checksum) because the decision to skip/reuse a
+// build needs more than "did we build this exact tree" — it needs to know which
+// GitHub Release currently holds the built assets so unchanged releases can be
+// reused instead of rebuilt (or, worse, silently published with zero binaries).
+// Other service types keep the bare-checksum format via checkDeployCache /
+// saveDeployCache above.
+
+export type TauriCacheEntry = {
+  checksum: string;
+  /** Cargo.toml version at build time. */
+  version: string;
+  /** Which release currently holds the built assets (null for workflow_dispatch builds). */
+  releaseTag: string | null;
+  /** ISO timestamp of the last successful build. */
+  builtAt: string;
+};
+
+const tauriCacheKey = (mode: string): string => `${CACHE_PREFIX}:${mode}:client-tauri`;
+
+/**
+ * Read the tauri-release cache entry for a mode.
+ * Old bare-checksum values (pre-JSON schema) fail JSON.parse → treated as
+ * "no cached entry" so they degrade to a fresh build, never a crash.
+ */
+export async function getTauriCache(mode: string): Promise<TauriCacheEntry | null> {
+  const result = await upstashGet(tauriCacheKey(mode));
+  if (!result.ok || result.value === null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(result.value) as Partial<TauriCacheEntry>;
+    if (typeof parsed.checksum !== 'string') {
+      return null;
+    }
+    return {
+      checksum: parsed.checksum,
+      version: parsed.version ?? '',
+      releaseTag: parsed.releaseTag ?? null,
+      builtAt: parsed.builtAt ?? '',
+    };
+  } catch {
+    return null; // bare string or corrupt → no cached entry
+  }
+}
+
+/** Write the tauri-release cache entry for a mode. */
+export async function setTauriCache(mode: string, entry: TauriCacheEntry): Promise<void> {
+  await upstashSet(tauriCacheKey(mode), JSON.stringify(entry));
+  log(
+    `  ${c.dim}Updated Redis tauri cache (release=${entry.releaseTag ?? 'none'}, ${entry.version})${c.reset}`,
+  );
+}

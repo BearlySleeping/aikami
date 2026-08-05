@@ -10,14 +10,22 @@ name: Release
 #   release: published  → real production cut. Desktop artifacts are
 #                          uploaded straight to the GitHub Release that
 #                          triggered this run (`gh release upload`).
-#                          GitHub's own /releases/latest already gives you
-#                          a "latest stable" pointer for free — no custom
-#                          versions/latest/stable bucket scheme needed.
 #   workflow_dispatch    → manual run (staging QA, re-deploy, force
 #                          rebuild). No public Release exists to attach to,
 #                          so desktop artifacts are attached to the
 #                          *workflow run* instead (Actions tab, 14-day
 #                          retention) — visible to the team, not the public.
+#
+# Desktop pipeline shape (client-tauri only):
+#   plan       → runs ci_planning.ts ONCE: checksum + shared version +
+#                platform/bundle filtering + per-leg build/reuse/skip decision
+#                (emits the dynamic matrix; unchanged-checksum releases get
+#                reuse legs that copy prior artifacts instead of recompiling).
+#   build-web  → builds the OS-independent SvelteKit bundle ONCE with the
+#                plan's version string, uploads it for the matrix legs.
+#   deploy-desktop → one job per matrix leg (runs-on from the plan):
+#                build legs compile with the shared web bundle; reuse legs
+#                just copy artifacts between releases on ubuntu-latest.
 # ────────────────────────────────────────────────────────────────────────
 env:
   DEPLOY_APPS: "client-tauri"
@@ -56,7 +64,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # required for `gh release upload`
+  contents: write # required for `gh release upload` / `gh release download`
 
 jobs:
   # ── Preflight: materialize DEPLOY_APPS for job-level `if` ───────────
@@ -76,82 +84,167 @@ jobs:
         id: apps
         run: echo "deploy_apps=$DEPLOY_APPS" >> "$GITHUB_OUTPUT"
 
-  # ── Desktop releases (multi-platform matrix, parallel) ──────────────
-  deploy-desktop:
-    name: Desktop (${{ matrix.platform }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  # ── Plan: decide the desktop matrix once ───────────────────────────
+  # No Rust, no builds — just checksum + version + matrix computation so the
+  # expensive legs only run when they actually have to. All inputs fall back
+  # to '' on release:published runs (real releases build every platform).
+  plan:
+    name: Plan Desktop Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: resolve-apps
-    # Per-environment secrets: GCP_SA_KEY lives on the "staging" and
-    # "production" environments (different SA keys per project).
-    # release:published runs and the workflow_dispatch default resolve to
-    # "production".
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    # DEPLOY_APPS gate only — the `matrix` context is NOT available in
-    # job-level `if`, so the requested-platforms filter runs as the first
-    # step ("Platform gate") instead. github.event.inputs.* fall back to ''
-    # on release:published runs, so a real release always builds all platforms.
     if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            bundles: "appimage,deb,rpm"
-          - os: windows-latest
-            platform: windows
-            bundles: "msi"
-          - os: macos-latest
-            platform: macos
-            bundles: "dmg"
-
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      needs_build: ${{ steps.plan.outputs.needs_build }}
+      version: ${{ steps.plan.outputs.version }}
+      checksum: ${{ steps.plan.outputs.checksum }}
     steps:
-      # ── Platform + bundle gate ───────────────────────────────────────
-      # matrix IS available at step level. Skipped legs still spin up a
-      # runner but exit right after this gate.
-      - name: Platform gate
-        id: gate
-        shell: bash
-        run: |
-          REQUESTED="${{ github.event.inputs.platforms }}"
-          REQUESTED_BUNDLES="${{ github.event.inputs.bundles }}"
-          LEG_BUNDLES="${{ matrix.bundles }}"
-          proceed="true"
-          if [ -n "$REQUESTED" ] && ! echo "$REQUESTED" | tr ',' '\n' | grep -qx "${{ matrix.platform }}"; then
-            proceed="false"
-            echo "Platform ${{ matrix.platform }} not in requested platforms ($REQUESTED)"
-          fi
-          if [ "$proceed" = "true" ] && [ -n "$REQUESTED_BUNDLES" ]; then
-            match=""
-            for b in $(echo "$LEG_BUNDLES" | tr ',' ' '); do
-              if echo "$REQUESTED_BUNDLES" | tr ',' '\n' | grep -qx "$b"; then match="$b"; fi
-            done
-            if [ -z "$match" ]; then
-              proceed="false"
-              echo "No requested bundle ($REQUESTED_BUNDLES) matches this leg's bundles ($LEG_BUNDLES)"
-            fi
-          fi
-          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
-          if [ "$proceed" = "true" ]; then
-            echo "Building platform: ${{ matrix.platform }} (bundles: ${LEG_BUNDLES:-default})"
-          fi
-
       - name: Checkout repository
-        if: steps.gate.outputs.proceed == 'true'
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Bun
-        if: steps.gate.outputs.proceed == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.13"
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      # The checksum hashes apps/frontend/client/.env.{mode}, so the env file
+      # must exist before planning. --strict fails loudly on missing secrets.
+      - name: Download Secrets from GCP Secret Manager
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts client-tauri
+
+      - name: Compute plan
+        id: plan
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
+          PLATFORMS="${{ github.event.inputs.platforms }}"
+          BUNDLES="${{ github.event.inputs.bundles }}"
+          bun scripts/src/lib/deploy/ci_planning.ts \
+            --mode="$MODE" $FORCE_FLAG \
+            --platforms="$PLATFORMS" --bundles="$BUNDLES"
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+  # ── Shared web build (once, OS-independent) ────────────────────────
+  # The SvelteKit bundle is embedded inside every desktop binary, so build it
+  # a single time with the plan's version string — previously each matrix leg
+  # rebuilt it independently, racing to different PUBLIC_APP_VERSION values.
+  build-web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: plan
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.plan.result == 'success' && needs.plan.outputs.needs_build == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Restore Bun & Moon build caches
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.bun/install/cache
+            .moon/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-build-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download Secrets from GCP Secret Manager
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict client-tauri
+
+      - name: Build web bundle
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bunx moon run client:build -- --mode "$MODE"
+        env:
+          PUBLIC_APP_VERSION: ${{ needs.plan.outputs.version }}
+          # moon's toolchain would otherwise try to provision its own bun via
+          # proto in CI — force global tools (same as pr-checks.yml).
+          MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
+
+      - name: Upload shared web build
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-build-${{ github.run_id }}
+          path: apps/frontend/client/build
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Desktop releases (dynamic matrix from the plan job) ────────────
+  # matrix.include comes from ci_planning.ts: build legs run on their native
+  # OS with the full toolchain; reuse legs run on ubuntu-latest and just copy
+  # previously-built artifacts between releases. No per-leg "Platform gate" —
+  # unneeded legs are never scheduled.
+  deploy-desktop:
+    name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
+    runs-on: ${{ matrix.runsOn }}
+    timeout-minutes: 45
+    needs: [plan, build-web]
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.plan.result == 'success' && needs.plan.outputs.matrix != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      # ── Build legs only: Rust toolchain + OS deps ──────────────────
       - name: Setup Rust toolchain
-        if: steps.gate.outputs.proceed == 'true'
+        if: matrix.action == 'build'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           # Built-in rust-cache targets the repo ROOT (where there is no
@@ -165,7 +258,7 @@ jobs:
       # wry/tao dependency tree (~15-25 min cold); caching the real target
       # dir turns subsequent runs into a few-minute incremental compile.
       - name: Cache Rust (nested Tauri workspace)
-        if: steps.gate.outputs.proceed == 'true'
+        if: matrix.action == 'build'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "apps/frontend/client/src-tauri"
@@ -177,7 +270,7 @@ jobs:
       # libs (gobject-2.0 etc.). The workflow runs rarely — a direct install
       # is simpler and cannot go stale. Tauri v2 Ubuntu 24.04 prerequisite set.
       - name: Install Linux system dependencies
-        if: steps.gate.outputs.proceed == 'true' && runner.os == 'Linux'
+        if: matrix.action == 'build' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -190,23 +283,19 @@ jobs:
             build-essential \
             curl wget file
 
+      # ── Secrets (all legs — REDIS creds for the deploy cache) ─────
+      # build legs need @tauri-apps/cli, so they also run bun install below.
       - name: Authenticate to Google Cloud
-        if: steps.gate.outputs.proceed == 'true'
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Google Cloud SDK
-        if: steps.gate.outputs.proceed == 'true'
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Configure Docker for Artifact Registry (Linux only)
-        if: steps.gate.outputs.proceed == 'true' && runner.os == 'Linux'
-        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
-
       - name: Restore Bun & Moon build caches
-        if: steps.gate.outputs.proceed == 'true'
-        uses: actions/cache@v5
+        if: matrix.action == 'build'
+        uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -216,110 +305,48 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-build-
 
       - name: Install dependencies
-        if: steps.gate.outputs.proceed == 'true'
+        if: matrix.action == 'build'
         run: bun install --frozen-lockfile
 
-      # shell: bash — these steps use bash variable syntax (MODE=..., $MODE,
-      # $FORCE_FLAG) which breaks under the default PowerShell on the
-      # windows-latest runner. bash is available on every GitHub runner.
       - name: Download Secrets from GCP Secret Manager
-        if: steps.gate.outputs.proceed == 'true'
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          # --strict: fail the deploy early if any secret can't be fetched instead
-          # of silently proceeding with incomplete .env files.
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts client-tauri
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts
 
-      - name: Run Desktop Deploy Pipeline
-        id: deploy
-        if: steps.gate.outputs.proceed == 'true'
+      # ── Build legs only: consume the shared web bundle ─────────────
+      - name: Download shared web build
+        if: matrix.action == 'build'
+        uses: actions/download-artifact@v8
+        with:
+          name: web-build-${{ github.run_id }}
+          path: apps/frontend/client/build
+
+      # ── Run the leg (build or reuse) ───────────────────────────────
+      - name: Run Desktop Leg
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG client-tauri
+          bun scripts/src/lib/deploy/ci_run.ts \
+            --mode="$MODE" \
+            --version="${{ needs.plan.outputs.version }}" \
+            --checksum="${{ needs.plan.outputs.checksum }}"
         env:
+          LEG: ${{ toJson(matrix) }}
           CI: "true"
-          # moon's toolchain would otherwise try to provision its own bun via
-          # proto in CI — force global tools (same as pr-checks.yml).
-          MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
-          # Requested bundles override the platform defaults (e.g. linux
-          # appimage-only debugging); empty on release:published = full set.
-          TAURI_BUNDLE_TARGETS: ${{ github.event.inputs.bundles || matrix.bundles }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Only set on a real GitHub Release publish. This is what tells
-          # tauri_release.ts to `gh release upload` — empty on
-          # workflow_dispatch runs, which have no release to attach to.
-          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
-      # ── Artifact upload (one artifact per bundle, unzipped) ─────────
-      # upload-artifact v7 with `archive: false` uploads the raw files — no
-      # zip wrapping, and each bundle gets its own artifact so a user only
-      # downloads the file they need (no forced multi-bundle download).
-      # Runs even after a failed deploy (insurance), only on gated legs.
-      # if-no-files-found: ignore — partial bundle sets are legitimate
-      # (e.g. a bundles=appimage-only debug run has no deb/rpm).
-      - name: Upload Linux AppImage
-        if: always() && steps.gate.outputs.proceed == 'true'
+      # Workflow-dispatch / staging only: no public Release exists, so attach
+      # the raw bundle files to the run (unzipped via archive: false). When
+      # RELEASE_TAG is set, ci_run.ts already uploaded them to the release.
+      - name: Upload build artifacts to workflow run
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
         uses: actions/upload-artifact@v7
         with:
-          name: tauri-linux-appimage
-          path: '**/target/release/bundle/appimage/*.AppImage'
+          name: tauri-${{ matrix.platform }}
+          path: apps/frontend/client/src-tauri/target/release/bundle/**
           archive: false
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload Linux deb
-        if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: tauri-linux-deb
-          path: '**/target/release/bundle/deb/*.deb'
-          archive: false
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload Linux rpm
-        if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: tauri-linux-rpm
-          path: '**/target/release/bundle/rpm/*.rpm'
-          archive: false
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload Windows msi
-        if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: tauri-windows-msi
-          path: '**/target/release/bundle/msi/*.msi'
-          archive: false
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload macOS dmg
-        if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: tauri-macos-dmg
-          path: '**/target/release/bundle/dmg/*.dmg'
-          archive: false
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload macOS updater artifacts
-        if: always() && steps.gate.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: tauri-macos-updater
-          path: |
-            **/target/release/bundle/macos/*.app.tar.gz
-            **/target/release/bundle/macos/*.sig
-          archive: false
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 14
 
   # ── Web & backend deploys (singleton, runs in parallel with desktop) ─
@@ -377,7 +404,7 @@ jobs:
 
       - name: Restore Bun & Moon build caches
         if: steps.apps.outputs.web_apps != ''
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
