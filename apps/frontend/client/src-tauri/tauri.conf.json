@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:5274",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run build:tauri-web",
     "frontendDist": "../build"
   },
   "app": {
@@ -20,6 +20,7 @@
   "bundle": {
     "active": true,
     "targets": ["deb"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -27,5 +28,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCRDI4MkQ2RDRENzRCQjQKUldTMFM5ZlUxb0xTSzFCcGxsc2JoWmNmbTIyWkc5Q2NxT2hpeTV5WEY0QVN6YmNmMTJVK094SW8K",
+      "endpoints": [
+        "https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

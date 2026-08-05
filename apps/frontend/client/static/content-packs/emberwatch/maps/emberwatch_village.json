@@ -10,14 +10,14 @@
   "tilesets": [
     {
       "firstgid": 1,
-      "name": "debug_tiles",
-      "image": "/game-data/sprites/tilesets/debug_tiles.png",
+      "name": "atlas",
+      "image": "/game-data/sprites/tilesets/atlas.webp",
       "imagewidth": 128,
-      "imageheight": 32,
+      "imageheight": 128,
       "tilewidth": 32,
       "tileheight": 32,
       "columns": 4,
-      "tilecount": 4,
+      "tilecount": 16,
       "spacing": 0,
       "margin": 0
     }

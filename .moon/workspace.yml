@@ -44,7 +44,7 @@ projects:
 
 vcs:
   provider: "github"
-  defaultBranch: "master"
+  defaultBranch: "main"
   remoteCandidates: ["origin"]
   hooks:
     pre-commit:

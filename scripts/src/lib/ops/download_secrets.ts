@@ -16,6 +16,7 @@
  * Usage:
  *   bun run download-secrets --mode production
  *   bun run download-secrets --mode production client site
+ *   bun run download-secrets --mode staging --strict   # fail if any secret can't be fetched
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -36,6 +37,7 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 
 const opts = parseCliArgs(Bun.argv.slice(2), {
   mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
+  strict: { type: 'boolean', description: 'Exit non-zero if any secret cannot be fetched' },
 });
 const mode = (opts.mode as string) || process.env.AIKAMI_MODE || process.env.MODE || '';
 if (!mode) {
@@ -120,6 +122,9 @@ function isSecretKey(key: string): boolean {
 
 // ── GSM batch fetch ──────────────────────────────────────────────────────
 
+/** Secrets that failed to fetch (name → first line of the error). Filled by fetchSecret. */
+const fetchFailures = new Map<string, string>();
+
 async function checkGcloudAvailable(): Promise<void> {
   try {
     const proc = Bun.spawn({
@@ -168,14 +173,15 @@ async function fetchSecret(gcmName: string): Promise<string | null> {
     const stderr = await new Response(proc.stderr).text();
     const code = await proc.exited;
     if (code !== 0) {
-      console.warn(
-        `   ⚠️  gcloud secret access failed for "${gcmName}": ${stderr.trim().split('\n')[0]}`,
-      );
+      const firstLine = stderr.trim().split('\n')[0] ?? 'unknown error';
+      fetchFailures.set(gcmName, firstLine);
+      console.warn(`   ⚠️  gcloud secret access failed for "${gcmName}": ${firstLine}`);
       return null;
     }
     return out.trim();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    fetchFailures.set(gcmName, msg);
     console.warn(`   ⚠️  Failed to fetch secret "${gcmName}": ${msg}`);
     return null;
   }
@@ -353,6 +359,19 @@ if (missing > 0) {
   console.warn(`   ⚠️  ${missing} secret(s) not found in GSM (${GCP_PROJECT}):`);
   for (const m of missingNames) {
     console.warn(`      - ${m}`);
+  }
+
+  if (opts.strict) {
+    console.error(
+      `\n❌ Strict mode: ${missing} secret(s) could not be fetched from GSM (${GCP_PROJECT}).`,
+    );
+    console.error('   Failing early — the generated .env files would be incomplete.');
+    for (const [name, reason] of fetchFailures) {
+      console.error(`      - ${name}: ${reason}`);
+    }
+    console.error('   Fix: grant the deploy SA secretmanager.secretAccessor, create the missing');
+    console.error('   secrets, or re-run without --strict to proceed with warnings.');
+    process.exit(1);
   }
 }
 console.log('');
