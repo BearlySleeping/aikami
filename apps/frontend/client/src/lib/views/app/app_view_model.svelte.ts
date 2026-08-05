@@ -18,8 +18,12 @@ import {
   authService,
   onboardingService,
   routerService,
+  updaterService,
 } from '$services';
 import type { ClientHookData } from '$types';
+
+/** Delay before the background desktop update check — keeps first paint clear. */
+const UPDATE_CHECK_DELAY_MS = 5000;
 
 export type AppViewModelOptions = BaseViewModelOptions & {
   data: ClientHookData;
@@ -129,6 +133,12 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       const eruda = (await import('eruda')).default;
       eruda.init();
     }
+
+    // Tauri desktop only: check for updates a few seconds after startup so
+    // first paint is never blocked. No-op in the browser PWA.
+    setTimeout(() => {
+      void updaterService.checkForUpdates();
+    }, UPDATE_CHECK_DELAY_MS);
 
     return await super.initialize();
   }

@@ -1,18 +1,21 @@
 #!/usr/bin/env bun
 // scripts/src/lib/setup/github.ts
 //
-// Configure GitHub repository secrets for CI deployments.
-// Uploads FIREBASE_SERVICE_ACCOUNT from .env.{mode} as GCP_SA_KEY.
+// Configure GitHub repository environment secrets for CI deployments.
+// GCP_SA_KEY is per-environment (staging vs production use different
+// service account keys), so this uploads FIREBASE_SERVICE_ACCOUNT from
+// .env.{mode} as the GCP_SA_KEY secret of the matching GitHub
+// environment (creating the environment if needed).
 //
 // Usage:
 //   bun run scripts/src/lib/setup/github.ts --mode=staging
-//   bun run scripts/src/lib/setup/github.ts --mode=production
+//   bun run scripts/src/lib/setup/github.ts --mode=production   (default)
 //   bun run scripts/src/lib/setup/github.ts --mode=staging --dry-run
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fmt, parseCliArgs, run } from '../cli_utils';
-import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
+import { liveModes, MODE_PROJECT_MAP } from '../deploy/deployment_config';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
@@ -23,10 +26,14 @@ function gh(...args: string[]): Promise<{ ok: boolean; out: string; err: string 
   return run(['gh', ...args]).then((r) => ({ ok: r.code === 0, out: r.out, err: r.err }));
 }
 
-async function setGitHubSecret(name: string, value: string): Promise<boolean> {
+async function setGitHubSecret(name: string, value: string, env?: string): Promise<boolean> {
   // Pass the value via stdin so it never appears in process listings
+  const args = ['secret', 'set', name, '--repo', REPO];
+  if (env) {
+    args.push('--env', env);
+  }
   const proc = Bun.spawn({
-    cmd: ['gh', 'secret', 'set', name, '--repo', REPO],
+    cmd: args,
     stdin: 'pipe',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -35,6 +42,12 @@ async function setGitHubSecret(name: string, value: string): Promise<boolean> {
   await proc.stdin.end();
   const code = await proc.exited;
   return code === 0;
+}
+
+/** Create a GitHub environment if it does not exist yet (idempotent). */
+async function ensureGitHubEnvironment(env: string): Promise<boolean> {
+  const { ok } = await gh('api', '-X', 'PUT', `repos/${REPO}/environments/${env}`, '--silent');
+  return ok;
 }
 
 async function readServiceAccount(mode: string): Promise<{
@@ -128,30 +141,77 @@ export const setupGitHub = async (
     console.log(fmt.note(`Service account project: ${sa.projectId}`));
   }
 
-  // Validate it's valid JSON
+  // Validate it's a FULL service account key JSON (the google-github-actions
+  // auth action rejects keys missing fields like `type`, `private_key_id`,
+  // `token_uri`. A truncated/partial key is a silent CI breaker — fail here.)
+  let parsed: Record<string, unknown>;
   try {
-    JSON.parse(sa.value);
+    parsed = JSON.parse(sa.value) as Record<string, unknown>;
   } catch {
     console.log(fmt.err('FIREBASE_SERVICE_ACCOUNT is not valid JSON'));
     checks.push({ name: 'FIREBASE_SERVICE_ACCOUNT', status: 'error', detail: 'Not valid JSON' });
     return { checks, uploaded: false };
   }
-
-  // Upload as GCP_SA_KEY
-  if (dryRun) {
-    console.log(fmt.fix('Would upload GCP_SA_KEY secret (dry-run)'));
-    checks.push({ name: 'GCP_SA_KEY', status: 'missing', fixed: true });
+  const required = ['type', 'private_key', 'client_email', 'private_key_id', 'token_uri'];
+  const missing = required.filter((k) => !parsed[k]);
+  if (parsed.type !== 'service_account' || missing.length > 0) {
+    console.log(
+      fmt.err(
+        `FIREBASE_SERVICE_ACCOUNT is not a full service account key JSON — missing: ${missing.join(', ') || "type='service_account'"}`,
+      ),
+    );
+    console.log(fmt.note('Regenerate the key with: gcloud iam service-accounts keys create'));
+    checks.push({
+      name: 'FIREBASE_SERVICE_ACCOUNT',
+      status: 'error',
+      detail: 'Incomplete key JSON',
+    });
     return { checks, uploaded: false };
   }
 
-  console.log(fmt.fix('Uploading GCP_SA_KEY...'));
-  const ok = await setGitHubSecret('GCP_SA_KEY', sa.value);
+  // Validate project_id matches the mode's expected project
+  const expectedProjectId = MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP];
+  if (parsed.project_id !== expectedProjectId) {
+    console.log(
+      fmt.err(
+        `Service account project_id mismatch: expected ${expectedProjectId} for ${mode}, got ${parsed.project_id}`,
+      ),
+    );
+    console.log(
+      fmt.note(`Ensure FIREBASE_SERVICE_ACCOUNT in .env.${mode} matches the ${mode} project.`),
+    );
+    checks.push({
+      name: 'FIREBASE_SERVICE_ACCOUNT',
+      status: 'error',
+      detail: 'project_id mismatch',
+    });
+    return { checks, uploaded: false };
+  }
+
+  // Upload as GCP_SA_KEY on the environment matching the mode.
+  const env = mode; // 'staging' | 'production'
+  if (dryRun) {
+    console.log(fmt.fix(`Would upload GCP_SA_KEY to environment "${env}" (dry-run)`));
+    checks.push({ name: `GCP_SA_KEY (env:${env})`, status: 'missing', fixed: true });
+    return { checks, uploaded: false };
+  }
+
+  console.log(fmt.fix(`Ensuring GitHub environment "${env}"...`));
+  if (!(await ensureGitHubEnvironment(env))) {
+    console.log(fmt.err(`Failed to create/access environment "${env}"`));
+    checks.push({ name: `environment:${env}`, status: 'error' });
+    return { checks, uploaded: false };
+  }
+  console.log(fmt.ok(`Environment "${env}" ready`));
+
+  console.log(fmt.fix(`Uploading GCP_SA_KEY to environment "${env}"...`));
+  const ok = await setGitHubSecret('GCP_SA_KEY', sa.value, env);
   if (ok) {
-    console.log(fmt.ok('GCP_SA_KEY uploaded'));
-    checks.push({ name: 'GCP_SA_KEY', status: 'missing', fixed: true });
+    console.log(fmt.ok(`GCP_SA_KEY uploaded to environment "${env}"`));
+    checks.push({ name: `GCP_SA_KEY (env:${env})`, status: 'missing', fixed: true });
   } else {
-    console.log(fmt.err('Failed to upload GCP_SA_KEY'));
-    checks.push({ name: 'GCP_SA_KEY', status: 'error', detail: 'Upload failed' });
+    console.log(fmt.err(`Failed to upload GCP_SA_KEY to environment "${env}"`));
+    checks.push({ name: `GCP_SA_KEY (env:${env})`, status: 'error', detail: 'Upload failed' });
   }
 
   return { checks, uploaded: ok };
@@ -163,8 +223,14 @@ if (import.meta.main) {
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
     'dry-run': { type: 'boolean' },
   });
-  const mode = (opts.mode as string) ?? 'staging';
+  // Default to production — release deploys are the primary use case.
+  const mode = (opts.mode as string) ?? 'production';
   const dryRun = opts['dry-run'] as boolean;
+
+  if (!liveModes.includes(mode as (typeof liveModes)[number])) {
+    console.error(fmt.err(`Unknown live mode: ${mode}. Valid: ${liveModes.join(', ')}`));
+    process.exit(1);
+  }
 
   const projectId = MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP];
   if (!projectId) {
@@ -172,7 +238,7 @@ if (import.meta.main) {
     process.exit(1);
   }
 
-  console.log(fmt.head(`GitHub Secrets Setup — ${mode} (${projectId})`));
+  console.log(fmt.head(`GitHub Environment Secrets Setup — ${mode} (${projectId})`));
   if (dryRun) {
     console.log(fmt.warn('Dry-run mode — no changes will be made.\n'));
   }

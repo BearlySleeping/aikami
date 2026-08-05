@@ -53,12 +53,12 @@ export function isQuiet(): boolean {
 
 export function run(
   cmd: string,
-  opts: { cwd?: string; quiet?: boolean; env?: Record<string, string> } = {},
+  opts: { cwd?: string; quiet?: boolean; env?: Record<string, string>; live?: boolean } = {},
 ): string {
-  // verbose → inherit (direct terminal output, raw)
+  // verbose or live → inherit (direct terminal output, raw, streams in CI)
   // quiet   → pipe, suppress everything (no prefix, no output)
   // default → pipe, show only the command prefix
-  const stdio: 'pipe' | 'inherit' = _verbose && !opts.quiet ? 'inherit' : 'pipe';
+  const stdio: 'pipe' | 'inherit' = opts.live || (_verbose && !opts.quiet) ? 'inherit' : 'pipe';
   const suppressPrefix = _quiet || opts.quiet === true;
   try {
     if (!suppressPrefix && !_verbose) {

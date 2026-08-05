@@ -10,14 +10,24 @@ name: Release
 #   release: published  → real production cut. Desktop artifacts are
 #                          uploaded straight to the GitHub Release that
 #                          triggered this run (`gh release upload`).
-#                          GitHub's own /releases/latest already gives you
-#                          a "latest stable" pointer for free — no custom
-#                          versions/latest/stable bucket scheme needed.
 #   workflow_dispatch    → manual run (staging QA, re-deploy, force
 #                          rebuild). No public Release exists to attach to,
 #                          so desktop artifacts are attached to the
 #                          *workflow run* instead (Actions tab, 14-day
 #                          retention) — visible to the team, not the public.
+#
+# Desktop pipeline shape (client-tauri only):
+#   plan       → runs ci_planning.ts ONCE: checksum + shared version +
+#                platform/bundle filtering + per-leg build/reuse/skip decision
+#                (emits the dynamic matrix; unchanged-checksum releases get
+#                reuse legs that copy prior artifacts instead of recompiling).
+#   build-web  → builds the OS-independent SvelteKit bundle ONCE with the
+#                plan's version string, uploads it for the matrix legs.
+#   deploy-desktop → one job per matrix leg (runs-on from the plan):
+#                build legs compile with the shared web bundle; reuse legs
+#                just copy artifacts between releases on ubuntu-latest.
+#   update-manifest → (release: published only) merges each leg's updater
+#                fragment into a single latest.json on the triggering release.
 # ────────────────────────────────────────────────────────────────────────
 env:
   DEPLOY_APPS: "client-tauri"
@@ -40,35 +50,62 @@ on:
         required: false
         type: boolean
         default: false
+      platforms:
+        description: "Comma-separated platforms to build (linux,windows,macos). Empty = all"
+        required: false
+        type: string
+        default: ""
+      bundles:
+        description: "Comma-separated bundle targets (appimage,deb,rpm,msi,dmg). Empty = platform defaults"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-${{ github.event.inputs.mode || 'production' }}
   cancel-in-progress: false
 
 permissions:
-  contents: write # required for `gh release upload`
+  contents: write # required for `gh release upload` / `gh release download`
 
 jobs:
-  # ── Desktop releases (multi-platform matrix, parallel) ──────────────
-  deploy-desktop:
-    name: Desktop (${{ matrix.platform }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    if: contains(env.DEPLOY_APPS, 'client-tauri') || env.DEPLOY_APPS == 'all'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            bundles: "appimage,deb,rpm"
-          - os: windows-latest
-            platform: windows
-            bundles: "msi"
-          - os: macos-latest
-            platform: macos
-            bundles: "dmg"
+  # ── Preflight: materialize DEPLOY_APPS for job-level `if` ───────────
+  # GitHub Actions does NOT expose the `env` context to job-level `if:`
+  # conditions (only step-level) — a workflow using it fails to parse
+  # ("Unrecognized named-value: 'env'") and never runs. This tiny job
+  # re-exports the workflow-level env var as a job output so downstream
+  # jobs can gate on it via the `needs` context, which IS allowed.
+  resolve-apps:
+    name: Resolve Deploy Apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy_apps: ${{ steps.apps.outputs.deploy_apps }}
+    steps:
+      - name: Read DEPLOY_APPS
+        id: apps
+        run: echo "deploy_apps=$DEPLOY_APPS" >> "$GITHUB_OUTPUT"
 
+  # ── Plan (compute): checksum + version + cache read ───────────────
+  # Touches GCP secrets (download_secrets). Emits ONLY brace-free outputs
+  # (checksum/version/cached state) — the JSON matrix is computed in the
+  # separate plan-matrix job below because GitHub Actions silently drops any
+  # job output containing a masked substring, and using the multiline JSON
+  # GCP_SA_KEY secret here registers `{`/`}` as masked characters (which
+  # would strip a JSON matrix output).
+  plan:
+    name: Plan Desktop Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: resolve-apps
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
+    outputs:
+      checksum: ${{ steps.plan.outputs.checksum }}
+      version: ${{ steps.plan.outputs.version }}
+      cached_checksum: ${{ steps.plan.outputs.cached_checksum }}
+      cached_release_tag: ${{ steps.plan.outputs.cached_release_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -80,24 +117,93 @@ jobs:
         with:
           bun-version: "1.3.13"
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
         with:
-          cache: true
-          cache-on-failure: true # keep the cache even if this run fails mid-build
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # Cached apt install instead of a fresh apt-get every run — skips the
-      # webkit2gtk/gtk3 download+install (the single biggest fixed cost on
-      # the Linux leg) once the cache is warm.
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        uses: awalsh128/cache-apt-pkgs-action@v1
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      # The checksum hashes apps/frontend/client/.env.{mode}, so the env file
+      # must exist before planning. --strict fails loudly on missing secrets.
+      - name: Download Secrets from GCP Secret Manager
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts client-tauri
+
+      - name: Compute checksum + version
+        id: plan
+        shell: bash
+        run: bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE"
+        env:
+          MODE: ${{ github.event.inputs.mode || 'production' }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+  # ── Plan-matrix: build/skip/reuse decisions → the JSON matrix ─────
+  # Deliberately NO secret references (no GCP auth, no download_secrets) so
+  # GitHub's masker never registers `{`/`}` here and the JSON matrix output
+  # survives. All state comes in as plain strings from the plan job.
+  plan-matrix:
+    name: Decide Desktop Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: plan
+    outputs:
+      matrix: ${{ steps.decide.outputs.matrix }}
+      needs_build: ${{ steps.decide.outputs.needs_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
         with:
-          packages: >-
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
-            patchelf libssl-dev libgtk-3-dev libsoup-3.0-dev
-            libjavascriptcoregtk-4.1-dev
-          version: "1.0"
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Decide matrix
+        id: decide
+        shell: bash
+        run: |
+          bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE" --decide \
+            --checksum="${{ needs.plan.outputs.checksum }}" \
+            --version="${{ needs.plan.outputs.version }}" \
+            --cached-checksum="${{ needs.plan.outputs.cached_checksum }}" \
+            --cached-release-tag="${{ needs.plan.outputs.cached_release_tag }}" \
+            --platforms="$PLATFORMS" --bundles="$BUNDLES" $FORCE_FLAG
+        env:
+          MODE: ${{ github.event.inputs.mode || 'production' }}
+          PLATFORMS: ${{ github.event.inputs.platforms }}
+          BUNDLES: ${{ github.event.inputs.bundles }}
+          FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Shared web build (once, OS-independent) ────────────────────────
+  # The SvelteKit bundle is embedded inside every desktop binary, so build it
+  # a single time with the plan's version string — previously each matrix leg
+  # rebuilt it independently, racing to different PUBLIC_APP_VERSION values.
+  build-web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: plan-matrix
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.needs_build == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -107,12 +213,8 @@ jobs:
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Configure Docker for Artifact Registry (Linux only)
-        if: runner.os == 'Linux'
-        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
-
       - name: Restore Bun & Moon build caches
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -125,50 +227,304 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Download Secrets from GCP Secret Manager
+        shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts client-tauri
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict client-tauri
 
-      - name: Run Desktop Deploy Pipeline
-        id: deploy
+      - name: Build web bundle
+        shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG client-tauri
+          bunx moon run client:build -- --mode "$MODE"
         env:
-          CI: "true"
-          TAURI_BUNDLE_TARGETS: ${{ matrix.bundles }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Only set on a real GitHub Release publish. This is what tells
-          # tauri_release.ts to `gh release upload` — empty on
-          # workflow_dispatch runs, which have no release to attach to.
-          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+          PUBLIC_APP_VERSION: ${{ needs.plan.outputs.version }}
+          # moon's toolchain would otherwise try to provision its own bun via
+          # proto in CI — force global tools (same as pr-checks.yml).
+          MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
 
-      # Always runs: cheap insurance if the gh-release-upload step above
-      # fails partway through, and the *only* artifact path for
-      # workflow_dispatch/staging builds (no public Release exists then).
-      - name: Upload build artifacts to workflow run
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Upload shared web build
+        uses: actions/upload-artifact@v7
         with:
-          name: tauri-${{ matrix.platform }}
+          name: web-build-${{ github.run_id }}
+          path: apps/frontend/client/build
+          # Zipped on purpose: ~13k files, and upload-artifact v7's
+          # `archive: false` only supports a SINGLE file per artifact.
+          # download-artifact@v8 unzips transparently on the matrix legs.
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Desktop releases (dynamic matrix from the plan job) ────────────
+  # matrix.include comes from ci_planning.ts: build legs run on their native
+  # OS with the full toolchain; reuse legs run on ubuntu-latest and just copy
+  # previously-built artifacts between releases. No per-leg "Platform gate" —
+  # unneeded legs are never scheduled.
+  deploy-desktop:
+    name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
+    runs-on: ${{ matrix.runsOn }}
+    timeout-minutes: 45
+    needs: [plan, plan-matrix, build-web]
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan-matrix.outputs.matrix) }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      # ── Build legs only: Rust toolchain + OS deps ──────────────────
+      - name: Setup Rust toolchain
+        if: matrix.action == 'build'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          # Built-in rust-cache targets the repo ROOT (where there is no
+          # Cargo.toml — its `cargo metadata` probe fails and it caches
+          # ./target instead of the real one). A dedicated step below points
+          # the cache at the nested Tauri workspace instead.
+          cache: false
+          cache-on-failure: true
+
+      # Rust cache for the NESTED cargo workspace. Tauri compiles the full
+      # wry/tao dependency tree (~15-25 min cold); caching the real target
+      # dir turns subsequent runs into a few-minute incremental compile.
+      - name: Cache Rust (nested Tauri workspace)
+        if: matrix.action == 'build'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/frontend/client/src-tauri"
+          cache-on-failure: true
+
+      # Plain apt install instead of cache-apt-pkgs-action: the action's cache
+      # was saved empty (6KB manifest, no .debs) on the first run, so every
+      # subsequent run restored nothing and cargo failed on missing system
+      # libs (gobject-2.0 etc.). The workflow runs rarely — a direct install
+      # is simpler and cannot go stale. Tauri v2 Ubuntu 24.04 prerequisite set.
+      - name: Install Linux system dependencies
+        if: matrix.action == 'build' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libxdo-dev \
+            build-essential \
+            curl wget file
+
+      # ── Secrets (all legs — REDIS creds for the deploy cache) ─────
+      # build legs need @tauri-apps/cli, so they also run bun install below.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Restore Bun & Moon build caches
+        if: matrix.action == 'build'
+        uses: actions/cache@v6
+        with:
           path: |
-            **/target/release/bundle/**/*.deb
-            **/target/release/bundle/**/*.rpm
-            **/target/release/bundle/**/*.AppImage
-            **/target/release/bundle/**/*.msi
-            **/target/release/bundle/**/*.dmg
-            **/target/release/bundle/**/*.app.tar.gz
-            **/target/release/bundle/**/*.sig
-          if-no-files-found: warn
+            ~/.bun/install/cache
+            .moon/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-build-
+
+      - name: Install dependencies
+        if: matrix.action == 'build'
+        run: bun install --frozen-lockfile
+
+      - name: Download Secrets from GCP Secret Manager
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts
+
+      # ── Build legs only: consume the shared web bundle ─────────────
+      - name: Download shared web build
+        if: matrix.action == 'build'
+        uses: actions/download-artifact@v8
+        with:
+          name: web-build-${{ github.run_id }}
+          path: apps/frontend/client/build
+
+      # ── Run the leg (build or reuse) ───────────────────────────────
+      - name: Run Desktop Leg
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/deploy/ci_run.ts \
+            --mode="$MODE" \
+            --version="${{ needs.plan.outputs.version }}" \
+            --checksum="${{ needs.plan.outputs.checksum }}"
+        env:
+          LEG: ${{ toJson(matrix) }}
+          CI: "true"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing key. Scoped to the desktop build step ONLY — the
+          # SvelteKit web build (build-web job) never sees it, and the
+          # client's vite envPrefix is ['PUBLIC_'] so TAURI_* could not reach
+          # the frontend bundle anyway (GHSA-2rcp-jvr4-r259 safe).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # Updater fragment for this leg (release runs only) — the
+      # update-manifest job merges all fragments into latest.json.
+      - name: Upload updater fragment
+        if: env.RELEASE_TAG != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: updater-fragments-${{ matrix.platform }}
+          path: updater-fragments
+          if-no-files-found: ignore
           retention-days: 14
+
+      # Workflow-dispatch / staging only: no public Release exists, so attach
+      # the raw bundle files to the run. One artifact PER FILE with
+      # `archive: false` (v7 limitation: single file per unzipped artifact) —
+      # users download exactly the installer they need, no zip wrapping. When
+      # RELEASE_TAG is set, ci_run.ts already uploaded them to the release.
+      - name: Upload Linux AppImage
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-appimage
+          path: '**/target/release/bundle/appimage/*.AppImage'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux deb
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-deb
+          path: '**/target/release/bundle/deb/*.deb'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux rpm
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-rpm
+          path: '**/target/release/bundle/rpm/*.rpm'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Windows msi
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-windows-msi
+          path: '**/target/release/bundle/msi/*.msi'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS dmg
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-dmg
+          path: '**/target/release/bundle/dmg/*.dmg'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS updater archive
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-updater
+          path: '**/target/release/bundle/macos/*.app.tar.gz'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload signature files
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-signatures
+          path: '**/target/release/bundle/**/*.sig'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── Update manifest (release runs only) ──────────────────────────
+  # Merge the per-platform updater fragments every leg emitted into a single
+  # latest.json and attach it to the triggering release. GitHub's
+  # releases/latest/download/latest.json URL then always resolves to the
+  # newest release's manifest, which is what the in-app updater polls.
+  #
+  # Gated on the matrix being non-empty (not needs_build): a pure-reuse run
+  # still re-attaches artifacts to the new release and needs a manifest there
+  # too, or clients would 404 on the newest release.
+  update-manifest:
+    name: Generate Update Manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [plan-matrix, deploy-desktop]
+    if: github.event_name == 'release' && needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # Read Cargo.toml from the release's own commit so the manifest
+          # version always matches the artifact that was built for it.
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Download updater fragments
+        uses: actions/download-artifact@v8
+        with:
+          pattern: updater-fragments-*
+          path: updater-fragments-merged
+          merge-multiple: true
+
+      - name: Merge + upload latest.json
+        shell: bash
+        run: |
+          bun scripts/src/lib/deploy/updater_manifest.ts --merge \
+            --fragments-dir="updater-fragments-merged" \
+            --release-tag="${{ github.event.release.tag_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Web & backend deploys (singleton, runs in parallel with desktop) ─
   deploy-web:
     name: Web & Backend
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: env.DEPLOY_APPS != 'client-tauri'
+    needs: resolve-apps
+    # Same per-environment GCP_SA_KEY resolution as deploy-desktop.
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.resolve-apps.outputs.deploy_apps != 'client-tauri'
     steps:
       - name: Compute web deploy apps
         id: apps
@@ -214,7 +570,7 @@ jobs:
 
       - name: Restore Bun & Moon build caches
         if: steps.apps.outputs.web_apps != ''
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -231,7 +587,7 @@ jobs:
         if: steps.apps.outputs.web_apps != ''
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" scripts ${{ steps.apps.outputs.web_apps }}
+          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts ${{ steps.apps.outputs.web_apps }}
 
       - name: Run Web Deploy Pipeline
         if: steps.apps.outputs.web_apps != ''

@@ -1,3 +1,4 @@
+# apps/frontend/client/src-tauri/Cargo.toml
 [package]
 name = "aikami"
 version = "0.1.0"
@@ -18,12 +19,29 @@ tauri-build = { version = "2", features = ["codegen"] }
 # used and the app loads the local dev server (herdr). The `tauri build` CLI
 # adds `tauri/custom-protocol` automatically for production bundles, and the
 # bundled preview path builds with `--features tauri/custom-protocol`.
-tauri = { version = "2" }
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-log = "2"
-log = "0.4.33"
+log = "0.4"
+
+# Smaller (and often faster-starting) desktop binaries — worth having before
+# you're shipping installers to actual players, cheap to add now.
+#
+# `lto` + `codegen-units = 1` are the ones that cost real `cargo tauri build`
+# time (already the slow part of CI). `strip` and `panic = "abort"` are
+# nearly free by comparison. If release compile time starts to hurt, drop
+# `lto` to `"thin"` (or remove it) and drop `codegen-units` before touching
+# the other two.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
