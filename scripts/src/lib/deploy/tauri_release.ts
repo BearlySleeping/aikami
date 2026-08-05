@@ -255,8 +255,13 @@ export async function buildTauriArtifacts(
     }
   }
 
-  // 4. Collect final artifacts
-  const bundleDir = join(tauriDir, 'target/release/bundle');
+  // 4. Collect final artifacts. With `--target <triple>` cargo places the
+  // bundle under target/<triple>/release/bundle (e.g.
+  // universal-apple-darwin) instead of target/release/bundle.
+  const bundleSubdir = tauriTarget
+    ? `target/${tauriTarget}/release/bundle`
+    : 'target/release/bundle';
+  const bundleDir = join(tauriDir, bundleSubdir);
   if (!existsSync(bundleDir)) {
     throw new Error('No bundle directory found — Tauri build produced nothing.');
   }

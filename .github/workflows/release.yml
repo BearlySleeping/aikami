@@ -418,7 +418,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-linux-appimage
-          path: '**/target/release/bundle/appimage/*.appimage'
+          path: '**/target/**/bundle/appimage/*.appimage'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -428,7 +428,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-linux-deb
-          path: '**/target/release/bundle/deb/*.deb'
+          path: '**/target/**/bundle/deb/*.deb'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -438,7 +438,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-linux-rpm
-          path: '**/target/release/bundle/rpm/*.rpm'
+          path: '**/target/**/bundle/rpm/*.rpm'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -448,7 +448,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-windows-nsis
-          path: '**/target/release/bundle/nsis/*.exe'
+          path: '**/target/**/bundle/nsis/*.exe'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -458,7 +458,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-macos-dmg
-          path: '**/target/release/bundle/dmg/*.dmg'
+          path: '**/target/**/bundle/dmg/*.dmg'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -468,7 +468,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-macos-updater
-          path: '**/target/release/bundle/macos/*.app.tar.gz'
+          path: '**/target/**/bundle/macos/*.app.tar.gz'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
@@ -478,7 +478,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tauri-signatures
-          path: '**/target/release/bundle/**/*.sig'
+          path: '**/target/**/bundle/**/*.sig'
           archive: false
           if-no-files-found: ignore
           retention-days: 14
