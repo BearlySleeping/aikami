@@ -261,7 +261,7 @@ jobs:
     name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 45
-    needs: [plan-matrix, build-web]
+    needs: [plan, plan-matrix, build-web]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'

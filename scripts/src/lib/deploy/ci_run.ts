@@ -133,7 +133,6 @@ async function main(): Promise<void> {
     // ── Build leg ────────────────────────────────────────────────────
     const { artifacts, version } = await buildTauriArtifacts(
       config,
-      'client-tauri',
       mode,
       ROOT_DIR,
       {
