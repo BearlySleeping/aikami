@@ -187,16 +187,19 @@ async function fetchSecret(gcmName: string): Promise<string | null> {
   }
 }
 
-/** Fetch all unique GSM secret names in parallel, return a map of gcmName → value. */
+/** Fetch all unique GSM secret names, one gcloud call at a time. */
+// Concurrent `gcloud secrets` processes collide on gcloud's own config/token
+// cache files — Windows enforces strict file locks and fails with "The process
+// cannot access the file because it is being used by another process". With a
+// handful of secrets the sequential cost is negligible (a second or two).
 async function batchFetch(gcmNames: Set<string>): Promise<Map<string, string>> {
   const results = new Map<string, string>();
-  const promises = [...gcmNames].map(async (name) => {
+  for (const name of gcmNames) {
     const value = await fetchSecret(name);
     if (value !== null) {
       results.set(name, value);
     }
-  });
-  await Promise.all(promises);
+  }
   return results;
 }
 
