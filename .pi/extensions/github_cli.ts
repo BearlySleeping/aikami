@@ -284,16 +284,18 @@ function formatRunList(runs: Array<Record<string, unknown>>): string {
 
 // ── Deploy-and-wait (periodic fetcher, mirrors code_rabbit.ts) ────────────
 
-/** Module-level abort signal set at gh_deploy entry; checked by the poll loop. */
-let _deploySignal: AbortSignal | undefined;
-
 /** Sleep that throws when the signal is aborted (user pressed Esc/Ctrl+C). */
 const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => {
   if (signal?.aborted) {
     return Promise.reject(new Error('Aborted'));
   }
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
+    const timer = setTimeout(() => {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      resolve();
+    }, ms);
     const onAbort = (): void => {
       clearTimeout(timer);
       reject(new Error('Aborted'));
@@ -317,6 +319,25 @@ const normalizePlatforms = (raw: unknown): string => {
   return '';
 };
 
+/**
+ * Fetch the newest run ID for a workflow on a given ref.
+ * Used to detect post-dispatch runs and avoid picking up stale/pre-existing runs.
+ */
+async function fetchNewestRunId(
+  pi: ExtensionAPI,
+  workflow: string,
+  ref: string,
+): Promise<string | undefined> {
+  const list = await runGh(
+    pi,
+    ['run', 'list', '--workflow', workflow, '--branch', ref, '--limit', '1', '--json', 'databaseId'],
+    { parseJson: true, timeout: 30_000 },
+  );
+  const runs =
+    list.success && Array.isArray(list.json) ? (list.json as Array<Record<string, unknown>>) : [];
+  return runs[0] ? String(runs[0].databaseId ?? '') : undefined;
+}
+
 /** Fetch run status + jobs, optionally filtered to the requested platforms. */
 async function fetchRunStatus(
   pi: ExtensionAPI,
@@ -338,7 +359,7 @@ async function fetchRunStatus(
   if (platforms.length > 0) {
     jobs = jobs.filter((j) => {
       const name = String(j.name ?? '').toLowerCase();
-      return platforms.some((p) => name.includes(p));
+      return platforms.some((p) => name.includes(p.trim().toLowerCase()));
     });
   }
   return {
@@ -3282,6 +3303,10 @@ export default function (pi: ExtensionAPI) {
 
       const workflow = params.workflow ?? 'release.yml';
       const ref = params.ref ?? (await currentBranch(pi));
+
+      // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
+      const baselineRunId = await fetchNewestRunId(pi, workflow, ref);
+
       const args = ['workflow', 'run', workflow, '--ref', ref];
       for (const [key, value] of Object.entries(params.inputs ?? {})) {
         args.push('-f', `${key}=${value}`);
@@ -3306,7 +3331,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      // Dispatch returns no payload — poll briefly for the newest run on this ref.
+      // Dispatch returns no payload — poll briefly for the NEW run (not a pre-existing one).
       let runId: string | undefined;
       let runUrl: string | undefined;
       for (let attempt = 0; attempt < 10; attempt++) {
@@ -3332,9 +3357,13 @@ export default function (pi: ExtensionAPI) {
             ? (list.json as Array<Record<string, unknown>>)
             : [];
         if (runs[0]) {
-          runId = String(runs[0].databaseId ?? '');
-          runUrl = String(runs[0].url ?? '');
-          break;
+          const candidateId = String(runs[0].databaseId ?? '');
+          // Accept only when the run ID differs from the baseline (new run created)
+          if (candidateId !== baselineRunId) {
+            runId = candidateId;
+            runUrl = String(runs[0].url ?? '');
+            break;
+          }
         }
       }
 
@@ -3697,22 +3726,19 @@ export default function (pi: ExtensionAPI) {
       'Pass tag="latest" or a specific tag like "v0.1.0".',
     ],
     parameters: Type.Object({
-      tag: Type.String({
-        description: 'Release tag, or "latest" for the newest release',
-      }),
+      tag: Type.Optional(
+        Type.String({
+          description: 'Release tag, or "latest" for the newest release (defaults to latest)',
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = await runGh(
-        pi,
-        [
-          'release',
-          'view',
-          params.tag,
-          '--json',
-          'tagName,name,body,publishedAt,isLatest,url,assets',
-        ],
-        { parseJson: true, timeout: 30_000 },
-      );
+      const args = ['release', 'view'];
+      if (params.tag && params.tag !== 'latest') {
+        args.push(params.tag);
+      }
+      args.push('--json', 'tagName,name,body,publishedAt,isLatest,url,assets');
+      const result = await runGh(pi, args, { parseJson: true, timeout: 30_000 });
       if (!result.success) {
         return {
           content: [{ type: 'text', text: `❌ Failed to view release: ${result.text}` }],
@@ -3775,7 +3801,7 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: 'text', text: lines.join('\n') }],
-        details: { tag, isLatest: !!data.isLatest, assetCount: assets.length },
+        details: { tag: tag, isLatest: !!data.isLatest, assetCount: assets.length },
       };
     },
   });
@@ -3846,11 +3872,16 @@ export default function (pi: ExtensionAPI) {
       timeoutSeconds: Type.Optional(
         Type.Number({
           default: 2700,
+          minimum: 1,
           description: 'Max wait time in seconds (default: 2700 = 45min)',
         }),
       ),
       intervalSeconds: Type.Optional(
-        Type.Number({ default: 15, description: 'Poll interval in seconds (default: 15)' }),
+        Type.Number({
+          default: 15,
+          minimum: 1,
+          description: 'Poll interval in seconds (default: 15)',
+        }),
       ),
       fetchLogs: Type.Optional(
         Type.Boolean({
@@ -3860,8 +3891,6 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      _deploySignal = signal;
-
       const repoCheck = await ensureGitHubRepo(pi);
       if (!repoCheck.ok) {
         return {
@@ -3876,7 +3905,12 @@ export default function (pi: ExtensionAPI) {
       const ref = params.ref ?? (await currentBranch(pi));
       const platformsCsv = normalizePlatforms(params.platforms);
       const platforms = platformsCsv ? platformsCsv.split(',') : [];
-      const intervalMs = (params.intervalSeconds ?? 15) * 1000;
+      const timeoutSeconds = Math.max(1, params.timeoutSeconds ?? 2700);
+      const intervalSeconds = Math.max(1, params.intervalSeconds ?? 15);
+      const intervalMs = intervalSeconds * 1000;
+
+      // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
+      const baselineRunId = await fetchNewestRunId(pi, workflow, ref);
 
       // ── 1. Dispatch ──
       const dispatchArgs = ['workflow', 'run', workflow, '--ref', ref, '-f', `mode=${mode}`];
@@ -3912,11 +3946,11 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      // ── 2. Wait for the run to appear ──
+      // ── 2. Wait for the NEW run to appear (not a pre-existing one) ──
       let runId: string | undefined;
       for (let attempt = 0; attempt < 10; attempt++) {
         try {
-          await abortableSleep(1500, _deploySignal);
+          await abortableSleep(1500, signal);
         } catch {
           return {
             content: [{ type: 'text', text: '🛑 Aborted while waiting for the run to appear.' }],
@@ -3944,8 +3978,12 @@ export default function (pi: ExtensionAPI) {
             ? (list.json as Array<Record<string, unknown>>)
             : [];
         if (runs[0]) {
-          runId = String(runs[0].databaseId ?? '');
-          break;
+          const candidateId = String(runs[0].databaseId ?? '');
+          // Accept only when the run ID differs from the baseline (new run created)
+          if (candidateId !== baselineRunId) {
+            runId = candidateId;
+            break;
+          }
         }
       }
 
@@ -3984,7 +4022,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       // ── 4. Periodic fetch until all requested jobs are terminal ──
-      const deadline = Date.now() + (params.timeoutSeconds ?? 2700) * 1000;
+      const deadline = Date.now() + timeoutSeconds * 1000;
       let lastJobState = '';
       let aborted = false;
       let timedOut = false;
@@ -4016,14 +4054,15 @@ export default function (pi: ExtensionAPI) {
         }
 
         try {
-          await abortableSleep(intervalMs, _deploySignal);
+          await abortableSleep(intervalMs, signal);
         } catch {
           aborted = true;
           break;
         }
       }
 
-      if (!finalStatus && lastError) {
+      // Prioritize polling errors even if we have a stale finalStatus
+      if (lastError) {
         return {
           content: [{ type: 'text', text: `❌ Failed to poll deploy run: ${lastError}` }],
           isError: true,
@@ -4043,7 +4082,7 @@ export default function (pi: ExtensionAPI) {
       if (isAborted) {
         report.push('🛑 **Aborted** (Esc/Ctrl+C) — current state:');
       } else if (timedOut) {
-        report.push(`⏳ **Timed out after ${params.timeoutSeconds ?? 2700}s** — current state:`);
+        report.push(`⏳ **Timed out after ${timeoutSeconds}s** — current state:`);
       }
 
       const runStatus = finalStatus?.status ?? 'unknown';

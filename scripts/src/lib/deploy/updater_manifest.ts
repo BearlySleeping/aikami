@@ -285,6 +285,11 @@ const loadFragments = (dir: string): UpdaterFragment => {
   for (const file of files) {
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as UpdaterFragment;
+      const keyCount = Object.keys(parsed).length;
+      if (keyCount === 0) {
+        error(`Fragment file ${file} is empty (zero platform keys) — refusing to merge.`);
+        process.exit(1);
+      }
       Object.assign(merged, parsed);
     } catch (err) {
       warn(

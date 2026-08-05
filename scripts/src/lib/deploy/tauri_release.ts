@@ -89,19 +89,28 @@ export const currentPlatformDir = (): 'linux' | 'windows' | 'macos' => {
   return 'linux';
 };
 
-/** Read the app version from src-tauri/Cargo.toml (falls back to '0.0.0'). */
+/** Read the app version from src-tauri/Cargo.toml [package] section. */
 export const readCargoVersion = (tauriDir: string): string => {
+  const cargoToml = join(tauriDir, 'Cargo.toml');
+  let cargoContent: string;
   try {
-    const cargoToml = join(tauriDir, 'Cargo.toml');
-    const cargoContent = readFileSync(cargoToml, 'utf8');
-    const versionMatch = cargoContent.match(/version\s*=\s*"([^"]+)"/);
-    if (versionMatch?.[1]) {
-      return versionMatch[1];
-    }
-  } catch {
-    // Fallback — keep default
+    cargoContent = readFileSync(cargoToml, 'utf8');
+  } catch (err) {
+    throw new Error(
+      `Failed to read Cargo.toml at ${cargoToml}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
-  return '0.0.0';
+  // Extract [package] section explicitly
+  const packageMatch = cargoContent.match(/^\[package\]\s*$(.*?)(?=^\[|\n\n|$)/ms);
+  if (!packageMatch) {
+    throw new Error(`[package] section not found in ${cargoToml}`);
+  }
+  const packageSection = packageMatch[1];
+  const versionMatch = packageSection.match(/^\s*version\s*=\s*"([^"]+)"/m);
+  if (!versionMatch?.[1]) {
+    throw new Error(`version field not found in [package] section of ${cargoToml}`);
+  }
+  return versionMatch[1];
 };
 
 export type TauriBuildResult = {

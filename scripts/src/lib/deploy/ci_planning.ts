@@ -73,7 +73,9 @@ const BUNDLE_EXTENSIONS: Record<string, string> = {
 /**
  * True when the release at `tag` has at least one asset per requested bundle
  * type (extension match — Tauri filenames embed the version, so exact names
- * aren't required). False on any gh failure (missing release, no assets…).
+ * aren't required). For updater-capable bundles (appimage, msi, app), BOTH the
+ * artifact AND its .sig file must be present. False on any gh failure (missing
+ * release, no assets…).
  */
 async function assetsPresentOnRelease(tag: string, bundles: string[]): Promise<boolean> {
   const res = await run([
@@ -97,9 +99,22 @@ async function assetsPresentOnRelease(tag: string, bundles: string[]): Promise<b
   if (names.length === 0) {
     return false;
   }
+  // Updater bundles requiring signatures (appimage, msi, app.tar.gz)
+  const UPDATER_BUNDLES = new Set(['appimage', 'msi', 'app']);
   return bundles.every((b) => {
     const ext = BUNDLE_EXTENSIONS[b];
-    return !!ext && names.some((n) => n.endsWith(ext));
+    if (!ext) {
+      return false;
+    }
+    const hasArtifact = names.some((n) => n.endsWith(ext));
+    if (!hasArtifact) {
+      return false;
+    }
+    // For updater bundles, also require the .sig file
+    if (UPDATER_BUNDLES.has(b)) {
+      return names.some((n) => n.endsWith(`${ext}.sig`));
+    }
+    return true;
   });
 }
 

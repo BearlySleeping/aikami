@@ -69,9 +69,16 @@ function parseLeg(raw: string | undefined): Leg {
   if (parsed.action !== 'build' && parsed.action !== 'reuse') {
     throw new Error(`Invalid leg action: ${String(parsed.action)}`);
   }
+  const VALID_PLATFORMS: PlatformName[] = ['linux', 'windows', 'macos'];
+  const platform = parsed.platform ?? '';
+  if (!VALID_PLATFORMS.includes(platform as PlatformName)) {
+    throw new Error(
+      `Invalid leg platform: ${platform}. Expected one of: ${VALID_PLATFORMS.join(', ')}`,
+    );
+  }
   return {
     runsOn: parsed.runsOn ?? '',
-    platform: parsed.platform ?? 'unknown',
+    platform: platform as PlatformName,
     bundles: parsed.bundles ?? '',
     action: parsed.action,
     sourceReleaseTag: parsed.sourceReleaseTag ?? null,
@@ -166,6 +173,10 @@ async function main(): Promise<void> {
   const releaseTag = process.env.RELEASE_TAG?.trim() || null;
   const config = APP_CONFIG['client-tauri'];
   const checksum = opts.checksum ?? '';
+  if (!checksum) {
+    error('--checksum is required');
+    process.exit(1);
+  }
 
   log(`\n${c.bold}🖥️  CI run: ${leg.platform} [${leg.bundles}] — ${leg.action}${c.reset}`);
   log(`  Mode:     ${mode}`);
@@ -186,9 +197,9 @@ async function main(): Promise<void> {
       const arch =
         process.env.TAURI_TARGET === 'universal-apple-darwin' ? 'universal' : process.arch;
       writeFragmentFile(
-        leg.platform as PlatformName,
+        leg.platform,
         buildPlatformFragment({
-          platform: leg.platform as PlatformName,
+          platform: leg.platform,
           artifactPaths: artifacts,
           releaseTag,
           arch,
@@ -234,9 +245,9 @@ async function main(): Promise<void> {
   // match the original build exactly, then emit this leg's fragment.
   const sourceManifest = await downloadSourceManifest(leg.sourceReleaseTag, manifestDir);
   writeFragmentFile(
-    leg.platform as PlatformName,
+    leg.platform,
     buildPlatformFragment({
-      platform: leg.platform as PlatformName,
+      platform: leg.platform,
       artifactPaths: files,
       releaseTag,
       sourceManifest,

@@ -169,6 +169,25 @@ export const setupGitHub = async (
     return { checks, uploaded: false };
   }
 
+  // Validate project_id matches the mode's expected project
+  const expectedProjectId = MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP];
+  if (parsed.project_id !== expectedProjectId) {
+    console.log(
+      fmt.err(
+        `Service account project_id mismatch: expected ${expectedProjectId} for ${mode}, got ${parsed.project_id}`,
+      ),
+    );
+    console.log(
+      fmt.note(`Ensure FIREBASE_SERVICE_ACCOUNT in .env.${mode} matches the ${mode} project.`),
+    );
+    checks.push({
+      name: 'FIREBASE_SERVICE_ACCOUNT',
+      status: 'error',
+      detail: 'project_id mismatch',
+    });
+    return { checks, uploaded: false };
+  }
+
   // Upload as GCP_SA_KEY on the environment matching the mode.
   const env = mode; // 'staging' | 'production'
   if (dryRun) {
