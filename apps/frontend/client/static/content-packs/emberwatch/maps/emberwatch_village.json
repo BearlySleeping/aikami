@@ -132,7 +132,8 @@
           "height": 0,
           "properties": [
             { "name": "propId", "type": "string", "value": "village_well" },
-            { "name": "propName", "type": "string", "value": "Old Stone Well" }
+            { "name": "propName", "type": "string", "value": "Old Stone Well" },
+            { "name": "frame", "type": "string", "value": "well.png" }
           ]
         },
         {
@@ -144,7 +145,8 @@
           "height": 0,
           "properties": [
             { "name": "propId", "type": "string", "value": "notice_board" },
-            { "name": "propName", "type": "string", "value": "Village Notice Board" }
+            { "name": "propName", "type": "string", "value": "Village Notice Board" },
+            { "name": "frame", "type": "string", "value": "notice_board.png" }
           ]
         },
         {
@@ -156,7 +158,8 @@
           "height": 0,
           "properties": [
             { "name": "propId", "type": "string", "value": "village_gate" },
-            { "name": "propName", "type": "string", "value": "Emberwatch Village Gate" }
+            { "name": "propName", "type": "string", "value": "Emberwatch Village Gate" },
+            { "name": "frame", "type": "string", "value": "village_gate.png" }
           ]
         }
       ]

@@ -552,7 +552,8 @@ const formatNpcText = (
 
     <!-- Delete confirmation modal -->
     {#if viewModel.pendingDeleteMessageId}
-      <div class="absolute inset-0 z-50 flex items-center justify-center bg-base-300/60">
+      <!-- daisyUI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
+      <div class="modal modal-open bg-base-300/60">
         <div class="modal-box w-80">
           <h3 class="text-lg font-bold">Delete Message?</h3>
           <p class="py-4 text-sm">This will remove the message and all subsequent replies.</p>

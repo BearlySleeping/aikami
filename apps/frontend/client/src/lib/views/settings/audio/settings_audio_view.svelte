@@ -22,6 +22,27 @@ const { viewModel }: Props = $props();
         <div class="divider"></div>
 
         <div class="space-y-4">
+          <!-- Music Player overlay toggle -->
+          <div class="form-control">
+            <label class="label cursor-pointer" for="settings-audio-music-player">
+              <span class="label-text flex items-center gap-2">
+                🎵 In-Game Music Player
+                <span class="badge badge-outline badge-xs">overlay</span>
+              </span>
+              <input
+                id="settings-audio-music-player"
+                type="checkbox"
+                class="toggle toggle-primary"
+                checked={viewModel.musicPlayerVisible}
+                onchange={() => viewModel.toggleMusicPlayer()}
+              >
+            </label>
+            <p class="label-text-alt text-base-content/50 px-1">
+              Show a mini music player in-game with skip / pause / stop and vibe-matched song
+              suggestions.
+            </p>
+          </div>
+
           <!-- Master Volume -->
           <div class="form-control">
             <label class="label" for="settings-audio-master">

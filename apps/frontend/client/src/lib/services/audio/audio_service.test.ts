@@ -473,4 +473,52 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
     // After completion, isCrossfading should be false
     expect(audioService.isCrossfading).toBe(false);
   });
+
+  // ── AC-8: BGM pause / resume ──
+
+  test('pauseBgm stops the active source and flags paused', async () => {
+    await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    expect(audioService.isBgmPaused).toBe(false);
+    const sourceBefore = createdSources.length;
+    expect(sourceBefore).toBeGreaterThan(0);
+
+    audioService.pauseBgm();
+
+    expect(audioService.isBgmPaused).toBe(true);
+    expect(createdSources[sourceBefore - 1].stopped).toBe(true);
+    // Track URL is retained for resume.
+    expect(audioService.activeTrackUrl).toBe('/assets/audio/music/bgm_explore.webm');
+  });
+
+  test('resumeBgm recreates the source and clears paused state', async () => {
+    await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    audioService.pauseBgm();
+    const sourcesBefore = createdSources.length;
+
+    await audioService.resumeBgm();
+
+    expect(audioService.isBgmPaused).toBe(false);
+    expect(createdSources.length).toBe(sourcesBefore + 1);
+    expect(createdSources[createdSources.length - 1].started).toBe(true);
+  });
+
+  test('resumeBgm is a no-op when not paused', async () => {
+    await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    const sourcesBefore = createdSources.length;
+
+    await audioService.resumeBgm();
+
+    expect(createdSources.length).toBe(sourcesBefore);
+  });
+
+  test('stopAll clears paused state and track', async () => {
+    await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    audioService.pauseBgm();
+    expect(audioService.isBgmPaused).toBe(true);
+
+    audioService.stopAll();
+
+    expect(audioService.isBgmPaused).toBe(false);
+    expect(audioService.activeTrackUrl).toBeNull();
+  });
 });

@@ -769,10 +769,25 @@ class GameBootService
     if (generation !== this._bootGeneration) {
       return;
     }
+
+    // Preload the tileset spritesheet (atlas.json) so named frames like
+    // "well.png" are registered in the Pixi TextureCache. Props reference
+    // these frames via their spawn `frame` property; without this preload
+    // Texture.from(frame) returns a 1×1 white texture (white-square bug).
+    const spritesheetUrl = pack.manifest.atlas?.spritesheetUrl;
+    if (spritesheetUrl) {
+      await this._preloadAsset(spritesheetUrl);
+      // Check generation after async preload
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+    }
+
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
       elapsedMs: elapsed,
       packId: input.contentPackId,
+      atlasSpritesheet: spritesheetUrl,
     });
   }
 
@@ -929,7 +944,7 @@ class GameBootService
       if (generation !== this._bootGeneration) {
         return;
       }
-      await this._gameWorld.loadMap({
+      await gameEngineService.loadMap({
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX,
         targetY: startingMap.defaultY,

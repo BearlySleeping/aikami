@@ -1048,6 +1048,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     sprite.tint = safeTint;
     container.addChild(sprite);
 
+    // Props carry their named atlas frame from the worker — swap the white
+    // placeholder for the real tileset sprite (e.g. "well.png"). The atlas
+    // spritesheet is preloaded at boot so Texture.from(frame) resolves.
+    const frame = message.frame as string | undefined;
+    if (frame) {
+      void this._loadPropFrameTexture({ eid, frame, container });
+    }
+
     // Per-contract C-032: bypass layout hit-tests for character visuals
     container.eventMode = 'none';
 
@@ -1071,6 +1079,63 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
 
     // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
+  }
+
+  /**
+   * Loads a prop's named atlas frame texture and swaps it into the entity
+   * container, replacing the white placeholder sprite.
+   *
+   * The tileset spritesheet (atlas.json) is preloaded during boot so the
+   * frame is registered in the Pixi TextureCache. When the frame cannot be
+   * resolved, an error is logged and the placeholder remains (visible bug,
+   * not silent).
+   */
+  private async _loadPropFrameTexture(options: {
+    eid: number;
+    frame: string;
+    container: Container;
+  }): Promise<void> {
+    const { eid, frame, container } = options;
+    try {
+      const { Sprite: PixiSprite, Texture } = await import('pixi.js');
+      const texture = Texture.from(frame);
+
+      if (texture === Texture.WHITE || (texture.width <= 1 && texture.height <= 1)) {
+        this.error('prop-frame-texture-missing', {
+          eid,
+          frame,
+          hint: 'The frame must exist in the content-pack tileset spritesheet (atlas.json), preloaded before the world loads.',
+        });
+        return;
+      }
+
+      // Replace the white placeholder sprite (children = [placeholder]).
+      for (const child of [...container.children]) {
+        container.removeChild(child);
+        child.destroy();
+      }
+
+      const propSprite = new PixiSprite(texture);
+      propSprite.width = 32;
+      propSprite.height = 32;
+      // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
+      // and the placeholder it replaces.
+      propSprite.anchor.set(0.5, 1.0);
+      container.addChild(propSprite);
+
+      this.debug('prop-frame-texture-loaded', {
+        eid,
+        frame,
+        width: texture.width,
+        height: texture.height,
+      });
+    } catch (error) {
+      this.error('prop-frame-texture-failed', {
+        eid,
+        frame,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

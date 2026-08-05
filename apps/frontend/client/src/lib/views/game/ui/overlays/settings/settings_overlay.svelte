@@ -23,8 +23,10 @@ const TABS: readonly { id: string; label: string }[] = [
 </script>
 
 <!-- Overlay backdrop — semi-transparent, game world visible behind -->
+<!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+     visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
 <div
-  class="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  class="modal modal-open backdrop-blur-sm"
   role="dialog"
   aria-modal="true"
   aria-label="In-game settings"

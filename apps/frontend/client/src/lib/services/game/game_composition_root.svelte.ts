@@ -15,6 +15,7 @@ import {
 } from '@aikami/frontend/services';
 import type { ContentPackLootEntry } from '@aikami/types';
 import { aiGatewayService } from '../ai/ai_gateway_service.svelte';
+import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
@@ -230,6 +231,9 @@ export class GameCompositionRoot
     // Phase 2: Initialise overlay (sets up bridge listeners)
     await gameOverlayService.initialize();
 
+    // Phase 2b: Music player — discover tracks, register vibe tags, watch scene.
+    await musicPlayerService.initialize();
+
     // Phase 3: Stateless infrastructure
     this._gameModeService = gameModeService;
     this._inventoryService = inventoryService;
@@ -322,6 +326,7 @@ export class GameCompositionRoot
             isVendor: npc.isVendor,
             vendorInventory: npc.vendorInventory,
             combatStats: npc.combatStats as Record<string, unknown> | undefined,
+            initialSuggestions: npc.initialSuggestions,
           };
         },
         getDialogue: (key) => contentPack.getDialogue(key),

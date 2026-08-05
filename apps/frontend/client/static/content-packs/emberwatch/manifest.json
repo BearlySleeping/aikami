@@ -104,38 +104,158 @@
       "name": "Elder Thalia",
       "defaultDialogueKey": "elder_thalia_greeting",
       "appearanceLayers": [2, 3, 65, 21, 20, 97],
-      "isVendor": false
+      "isVendor": false,
+      "initialSuggestions": [
+    {
+      "id": "elder_ask_ward",
+      "label": "🕯️ Ask about the ward",
+      "intentType": "quest",
+      "prefillText": "The ward is failing, you said — can you tell me what happened to it?"
+    },
+    {
+      "id": "elder_offer_help",
+      "label": "🤝 Offer to help",
+      "intentType": "quest",
+      "prefillText": "I would like to help Emberwatch — is there a task you need done?"
+    },
+    {
+      "id": "elder_ask_village",
+      "label": "🏘️ Ask about the village",
+      "intentType": "dialogue",
+      "prefillText": "What can you tell me about the village and the people who live here?"
+    }
+  ]
     },
     "guard_captain": {
       "name": "Guard Captain Aldric",
       "defaultDialogueKey": "guard_captain_greeting",
       "appearanceLayers": [3, 3, 23, 22, 7, 95],
-      "isVendor": false
+      "isVendor": false,
+      "initialSuggestions": [
+    {
+      "id": "guard_ask_dangers",
+      "label": "⚠️ Ask about road dangers",
+      "intentType": "dialogue",
+      "prefillText": "What dangers have you seen on the roads lately? I should be prepared."
+    },
+    {
+      "id": "guard_offer_services",
+      "label": "⚔️ Offer your services",
+      "intentType": "quest",
+      "prefillText": "If the village needs a capable fighter, I am offering my services."
+    },
+    {
+      "id": "guard_ask_elder",
+      "label": "🏠 Ask about Elder Thalia",
+      "intentType": "dialogue",
+      "prefillText": "You mentioned Elder Thalia needs help — where can I find her?"
+    }
+  ]
     },
     "traveling_merchant": {
       "name": "Keth the Merchant",
       "defaultDialogueKey": "merchant_keth_greeting",
       "appearanceLayers": [3, 91, 127, 22, 19, 95],
       "isVendor": true,
-      "vendorInventory": "ironSword, healthPotion, manaPotion, ironArmor, woodenShield"
+      "vendorInventory": "ironSword, healthPotion, manaPotion, ironArmor, woodenShield",
+      "initialSuggestions": [
+    {
+      "id": "keth_browse",
+      "label": "💰 Browse the wares",
+      "intentType": "trade",
+      "prefillText": "I would like to see what wares you have for sale today."
+    },
+    {
+      "id": "keth_pendant",
+      "label": "📿 Ask about the pendant",
+      "intentType": "quest",
+      "prefillText": "You mentioned a lost family pendant — can you describe it to me?"
+    },
+    {
+      "id": "keth_news",
+      "label": "🗞️ Ask for news",
+      "intentType": "dialogue",
+      "prefillText": "A traveling merchant hears everything — what news have you gathered?"
+    }
+  ]
     },
     "elara_wayfinder": {
       "name": "Elara Wayfinder",
       "defaultDialogueKey": "elara_wayfinder_greeting",
       "appearanceLayers": [2, 91, 22, 21, 20, 94],
-      "isVendor": false
+      "isVendor": false,
+      "initialSuggestions": [
+    {
+      "id": "elara_road",
+      "label": "🛤️ Ask about the road ahead",
+      "intentType": "quest",
+      "prefillText": "You know these roads — what should I expect on the way to the shrine?"
+    },
+    {
+      "id": "elara_together",
+      "label": "👥 Offer to travel together",
+      "intentType": "dialogue",
+      "prefillText": "Would you travel with me? I could use a guide who knows the wilds."
+    },
+    {
+      "id": "elara_corruption",
+      "label": "🌑 Ask about the corruption",
+      "intentType": "dialogue",
+      "prefillText": "What signs of corruption have you seen in the wilds lately?"
+    }
+  ]
     },
     "kade_blackthorn": {
       "name": "Kade Blackthorn",
       "defaultDialogueKey": "kade_blackthorn_taunt",
       "appearanceLayers": [3, 123, 23, 22, 7, 95],
-      "isVendor": false
+      "isVendor": false,
+      "initialSuggestions": [
+    {
+      "id": "kade_why",
+      "label": "🤨 Ask why he blocks the way",
+      "intentType": "dialogue",
+      "prefillText": "Why are you trying to stop me from reaching the shrine?"
+    },
+    {
+      "id": "kade_persuade",
+      "label": "🗣️ Reason with him",
+      "intentType": "skill_check",
+      "prefillText": "You do not have to do this — we could talk this through instead."
+    },
+    {
+      "id": "kade_leave",
+      "label": "🚶 Turn back",
+      "intentType": "dialogue",
+      "prefillText": "Fine. I will turn back for now, but this is not over."
+    }
+  ]
     },
     "shrine_spirit": {
       "name": "Vesperine Spirit",
       "defaultDialogueKey": "shrine_spirit_greeting",
       "appearanceLayers": [2, 3, 65, 21, 20, 96],
-      "isVendor": false
+      "isVendor": false,
+      "initialSuggestions": [
+    {
+      "id": "spirit_what",
+      "label": "❓ Ask what the ward is",
+      "intentType": "dialogue",
+      "prefillText": "What exactly is this ward you guard, and what does it protect?"
+    },
+    {
+      "id": "spirit_renew",
+      "label": "🕯️ Ask how to renew it",
+      "intentType": "quest",
+      "prefillText": "You said the ward needs a living soul — how can I renew it?"
+    },
+    {
+      "id": "spirit_sacrifice",
+      "label": "⚖️ Ask about the sacrifice",
+      "intentType": "dialogue",
+      "prefillText": "What does offering something of equal value truly mean here?"
+    }
+  ]
     },
     "shade_guardian": {
       "name": "Shade Guardian",

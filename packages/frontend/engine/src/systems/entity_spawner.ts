@@ -546,9 +546,17 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
 
 /**
  * Creates a prop entity from a spawn point.
+ *
+ * The prop's named atlas frame is read from the `frame` spawn property
+ * (e.g. "well.png" — matches a frame in the content-pack tileset
+ * spritesheet). When the frame is missing, the entity keeps a generic
+ * alias and an error is logged so missing art is never silent.
  */
 const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
   const eid = addEntity(world);
+
+  const propId = _getStringProperty(spawnPoint.properties, 'propId', spawnPoint.id);
+  const frame = _getStringProperty(spawnPoint.properties, 'frame', '');
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
@@ -561,8 +569,27 @@ const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
       assetIndex: AssetAlias.PROP_CHEST,
       tint: PROP_TINT,
       visible: 1,
+      frame,
     }),
   );
+
+  if (!frame) {
+    logger.error('[entity_spawner] Prop has no atlas frame — it will render as a placeholder.', {
+      eid,
+      propId,
+      x: spawnPoint.x,
+      y: spawnPoint.y,
+      hint: 'Add a "frame" property to the prop spawn point (e.g. "well.png") matching a frame in the tileset spritesheet.',
+    });
+  } else {
+    logger.debug('[entity_spawner] Spawned prop', {
+      eid,
+      propId,
+      frame,
+      x: spawnPoint.x,
+      y: spawnPoint.y,
+    });
+  }
 
   return eid;
 };
