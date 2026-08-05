@@ -26,10 +26,14 @@ class InventoryDevViewModel extends InventoryViewModel {
   override async initialize(): Promise<void> {
     inventoryService.inventory = [
       { itemId: 'ironSword', quantity: 1 },
-      { itemId: 'healthPotion', quantity: 3 },
       { itemId: 'woodenShield', quantity: 1 },
-      { itemId: 'rustySword', quantity: 1 },
       { itemId: 'leatherArmor', quantity: 1 },
+      { itemId: 'leatherBoots', quantity: 1 },
+      { itemId: 'leatherCap', quantity: 1 },
+      { itemId: 'leatherPauldrons', quantity: 1 },
+      { itemId: 'healthPotion', quantity: 3 },
+      { itemId: 'shortBow', quantity: 1 },
+      { itemId: 'rustySword', quantity: 1 },
     ];
     return await super.initialize();
   }

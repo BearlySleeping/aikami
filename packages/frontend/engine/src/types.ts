@@ -180,17 +180,21 @@ export type GameCommand =
     }
   | {
       /**
-       * Updates the player entity's Appearance component layers based on
-       * current equipment state. Sent by the InventoryViewModel after equip
-       * or unequip resolves.
+       * Nudges the engine to refresh the player's rendered appearance.
+       * Sent by the EquipmentService after equip/unequip resolves.
        *
-       * Contract: C-163 Visceral Feedback Juice
+       * The worker re-emits APPEARANCE_CHANGED with the current base layers;
+       * the main thread merges equipment recipes (via the
+       * `equipmentRecipeProvider` option) before re-rendering the sprite.
+       *
+       * Contract: C-374 Equipment, Armour & Weapon Inventory UI
        */
       type: 'UPDATE_PLAYER_APPEARANCE';
-      /** Item ID of the equipped weapon, or undefined if none. */
-      weapon?: string;
-      /** Item ID of the equipped armor, or undefined if none. */
-      armor?: string;
+      /**
+       * Equipped item ID per paperdoll slot (value undefined = slot emptied).
+       * Informational only — the main thread resolves items to LPC assets.
+       */
+      slots?: Record<string, string | undefined>;
     }
   | {
       /**

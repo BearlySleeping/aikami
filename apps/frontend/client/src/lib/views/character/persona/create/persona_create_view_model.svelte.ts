@@ -1,4 +1,6 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
+
+import { STARTER_KIT } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -478,6 +480,10 @@ export class PersonaCreateViewModel
     playerStateService.reset();
     equipmentService.reset();
 
+    // C-374: grant the starter kit — clothes/armour + equipment pre-equipped,
+    // plus a couple of potions in the bag.
+    this._seedStarterKit();
+
     // Set persona as active if user is logged in
     const uid = (authService as { uid?: string }).uid;
     if (uid && this.persona?.id) {
@@ -493,6 +499,32 @@ export class PersonaCreateViewModel
     await routerService.goToRoute('game', {
       queryParameters: undefined,
       pathParameters: undefined,
+    });
+  }
+
+  // ── Private: starter kit ────────────────────────────────────────────
+
+  /**
+   * Seeds the character's starting equipment + bag (C-374).
+   *
+   * Adds the starter consumables to the bag, then adds each equipment item
+   * to the bag and pre-equips it so a fresh character renders fully geared.
+   */
+  private _seedStarterKit(): void {
+    for (const entry of STARTER_KIT.inventory) {
+      inventoryService.addItem({ itemId: entry.itemId, quantity: entry.quantity });
+    }
+    for (const [, itemId] of Object.entries(STARTER_KIT.equipment)) {
+      if (!itemId) {
+        continue;
+      }
+      // Equipment items must exist in the bag before equipItem can move
+      // them into a slot.
+      inventoryService.addItem({ itemId, quantity: 1 });
+      equipmentService.equipItem({ itemId });
+    }
+    this.info('enterWorld:starter-kit-seeded', {
+      equipment: Object.keys(STARTER_KIT.equipment).join(','),
     });
   }
 

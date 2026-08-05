@@ -1,5 +1,10 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/inventory/inventory_view.svelte
+//
+// Inventory modal — 5-slot paperdoll (head, leftHand, body, rightHand,
+// feet) + bag grid. Equip/unequip updates the LPC character via the
+// equipment service (C-374).
+import type { EquipmentSlot } from '@aikami/types';
 import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
 
 type Props = {
@@ -7,6 +12,15 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Paperdoll grid placement per slot (3-column grid, 3 rows). */
+const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
+  head: 'col-start-2 row-start-1',
+  leftHand: 'col-start-1 row-start-2',
+  body: 'col-start-2 row-start-2',
+  rightHand: 'col-start-3 row-start-2',
+  feet: 'col-start-2 row-start-3',
+};
 
 /** Focus action: focuses the element when it mounts. */
 function focusOnMount(node: HTMLElement): { destroy: () => void } {
@@ -45,7 +59,7 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   }}
   use:focusOnMount
 >
-  <div class="card w-full max-w-md bg-base-100 shadow-xl">
+  <div class="card w-full max-w-xl bg-base-100 shadow-xl">
     <div class="card-body p-6 gap-4">
       <!-- Header -->
       <div class="flex items-center justify-between">
@@ -62,73 +76,62 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
 
       <div class="divider my-0"></div>
 
-      <!-- Equipment Slots -->
-      <div class="grid grid-cols-2 gap-3">
-        <!-- Weapon Slot -->
-        <div class="rounded-lg bg-base-200 p-3 flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-md {viewModel.equippedWeaponDef ? 'bg-warning/20' : 'bg-base-300'}"
-          >
-            <span class="text-lg">
-              {viewModel.equippedWeaponDef ? '⚔️' : '🗡️'}
-            </span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs opacity-50">Weapon</div>
-            <div class="text-sm font-medium truncate">
-              {viewModel.equippedWeaponDef?.label ?? 'Empty'}
-            </div>
-            {#if viewModel.equippedWeaponDef}
-              <div class="flex items-center gap-1 mt-1">
-                <span class="text-xs text-warning"
-                  >+{viewModel.equippedWeaponDef.attackBonus}
-                  ATK</span
-                >
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost text-error"
-                  onclick={() => viewModel.unequipItem('weapon')}
-                  aria-label="Unequip weapon"
-                >
-                  Unequip
-                </button>
-              </div>
-            {/if}
-          </div>
+      <!-- Stat totals -->
+      <div class="flex justify-center gap-6">
+        <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
+          <span class="text-warning">⚔</span>
+          <span class="font-semibold text-warning">{viewModel.totalAttack}</span>
+          <span class="text-xs text-base-content/50">ATK</span>
         </div>
+        <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
+          <span class="text-info">🛡</span>
+          <span class="font-semibold text-info">{viewModel.totalDefense}</span>
+          <span class="text-xs text-base-content/50">DEF</span>
+        </div>
+      </div>
 
-        <!-- Armor Slot -->
-        <div class="rounded-lg bg-base-200 p-3 flex items-center gap-3">
+      <!-- Paperdoll -->
+      <div class="grid grid-cols-3 grid-rows-3 gap-2 w-full max-w-sm mx-auto">
+        {#each viewModel.slotOrder as slot (slot)}
+          {@const equipped = viewModel.getEquippedItem(slot)}
           <div
-            class="flex h-10 w-10 items-center justify-center rounded-md {viewModel.equippedArmorDef ? 'bg-info/20' : 'bg-base-300'}"
+            class="rounded-lg border p-2 flex flex-col items-center justify-center text-center transition-colors {SLOT_GRID_CLASS[slot]} {equipped ? 'border-primary/40 bg-primary/5' : 'border-base-300 bg-base-200'}"
           >
-            <span class="text-lg">
-              {viewModel.equippedArmorDef ? '🛡️' : '👕'}
-            </span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs opacity-50">Armor</div>
-            <div class="text-sm font-medium truncate">
-              {viewModel.equippedArmorDef?.label ?? 'Empty'}
+            <div class="text-lg leading-none">{viewModel.getSlotIcon(slot)}</div>
+            <div class="mt-1 text-[0.62rem] uppercase tracking-wide text-base-content/50">
+              {viewModel.getSlotLabel(slot)}
             </div>
-            {#if viewModel.equippedArmorDef}
-              <div class="flex items-center gap-1 mt-1">
-                <span class="text-xs text-info"
-                  >+{viewModel.equippedArmorDef.defenseBonus}
-                  DEF</span
-                >
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost text-error"
-                  onclick={() => viewModel.unequipItem('armor')}
-                  aria-label="Unequip armor"
-                >
-                  Unequip
-                </button>
+            {#if equipped}
+              <div class="mt-1 text-xs font-medium text-base-content leading-tight line-clamp-2">
+                {equipped.definition.label}
               </div>
+              <div class="mt-0.5 flex items-center gap-1 flex-wrap justify-center">
+                {#if equipped.definition.attackBonus > 0}
+                  <span class="text-[0.6rem] font-semibold text-warning"
+                    >+{equipped.definition.attackBonus}
+                    ATK</span
+                  >
+                {/if}
+                {#if equipped.definition.defenseBonus > 0}
+                  <span class="text-[0.6rem] font-semibold text-info"
+                    >+{equipped.definition.defenseBonus}
+                    DEF</span
+                  >
+                {/if}
+              </div>
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost text-error mt-1"
+                onclick={() => viewModel.unequipItem(slot)}
+                aria-label="Unequip {equipped.definition.label}"
+              >
+                Unequip
+              </button>
+            {:else}
+              <div class="mt-1 text-[0.62rem] text-base-content/30">Empty</div>
             {/if}
           </div>
-        </div>
+        {/each}
       </div>
 
       <div class="divider my-0"></div>
@@ -164,7 +167,7 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
           <p class="text-xs">Walk up to items and press E to collect them</p>
         </div>
       {:else}
-        <div class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+        <div class="grid grid-cols-4 gap-2 max-h-52 overflow-y-auto pr-1">
           {#each viewModel.items as item, index (index)}
             <div
               class="flex flex-col items-center gap-1 rounded-lg bg-base-200 p-3 transition-colors hover:bg-base-300"

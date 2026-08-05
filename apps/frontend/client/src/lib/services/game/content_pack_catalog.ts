@@ -31,6 +31,10 @@ export const buildItemCatalogFromPack = (options: {
       equippable: entry.equipmentSlot !== undefined,
       slot: entry.equipmentSlot,
       basePrice: entry.basePrice ?? 0,
+      // C-374: LPC rendering metadata — passed through from the pack manifest
+      lpcSlot: entry.lpcSlot,
+      lpcAssetId: entry.lpcAssetId,
+      lpcAssetIdBehind: entry.lpcAssetIdBehind,
     };
     if (entry.type === 'consumable') {
       def.effect = entry.effect;

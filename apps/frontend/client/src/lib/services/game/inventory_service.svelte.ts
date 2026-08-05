@@ -34,16 +34,23 @@ import { registerSerializable, type SerializableService } from './serializable_s
  * Production `/game` boots hydrate the active catalog from the content pack
  * via {@link InventoryServiceInterface.configureCatalog}; this map keeps
  * dev sandboxes and tests functional without a pack.
+ *
+ * C-374: items carry `lpcSlot` / `lpcAssetId` so equipped items render on
+ * the LPC character. Every equipment item maps to a real spritesheet asset
+ * under static/game-data/lpc/.
  */
 const ITEM_CATALOG: Record<string, ItemDefinition> = {
+  // ── Swords (right hand → LPC weapon layer) ──
   rustySword: {
     label: 'Rusty Sword',
     itemType: 'weapon',
     attackBonus: 3,
     defenseBonus: 0,
     equippable: true,
-    slot: 'weapon',
+    slot: 'rightHand',
     basePrice: 15,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/sword/dagger',
   },
   ironSword: {
     label: 'Iron Sword',
@@ -51,8 +58,10 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     attackBonus: 5,
     defenseBonus: 0,
     equippable: true,
-    slot: 'weapon',
+    slot: 'rightHand',
     basePrice: 50,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/sword/longsword',
   },
   steelSword: {
     label: 'Steel Sword',
@@ -60,17 +69,90 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     attackBonus: 8,
     defenseBonus: 0,
     equippable: true,
-    slot: 'weapon',
+    slot: 'rightHand',
     basePrice: 150,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/sword/saber',
   },
+  // ── Bows (right hand → LPC weapon layer) ──
+  shortBow: {
+    label: 'Short Bow',
+    itemType: 'weapon',
+    attackBonus: 4,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'rightHand',
+    basePrice: 40,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/ranged/bow/normal',
+  },
+  recurveBow: {
+    label: 'Recurve Bow',
+    itemType: 'weapon',
+    attackBonus: 6,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'rightHand',
+    basePrice: 90,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/ranged/bow/recurve',
+  },
+  greatBow: {
+    label: 'Great Bow',
+    itemType: 'weapon',
+    attackBonus: 9,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'rightHand',
+    basePrice: 180,
+    lpcSlot: 'weapon',
+    lpcAssetId: 'weapon/ranged/bow/great',
+  },
+  // ── Shields (left hand → LPC shield layer) ──
   woodenShield: {
     label: 'Wooden Shield',
     itemType: 'armor',
     attackBonus: 0,
     defenseBonus: 2,
     equippable: true,
-    slot: 'armor',
+    slot: 'leftHand',
     basePrice: 20,
+    lpcSlot: 'shield',
+    lpcAssetId: 'shield/heater/original/wood_fg',
+  },
+  ironShield: {
+    label: 'Iron Shield',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 4,
+    equippable: true,
+    slot: 'leftHand',
+    basePrice: 80,
+    lpcSlot: 'shield',
+    lpcAssetId: 'shield/kite_male',
+  },
+  towerShield: {
+    label: 'Tower Shield',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 6,
+    equippable: true,
+    slot: 'leftHand',
+    basePrice: 160,
+    lpcSlot: 'shield',
+    lpcAssetId: 'shield/scutum_trim_fg',
+  },
+  // ── Body armour (torso → LPC torso layer) ──
+  clothTunic: {
+    label: 'Cloth Tunic',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 1,
+    equippable: true,
+    slot: 'body',
+    basePrice: 10,
+    lpcSlot: 'torso',
+    lpcAssetId: 'torso/clothes/shortsleeve/shortsleeve_male',
   },
   leatherArmor: {
     label: 'Leather Armor',
@@ -78,8 +160,21 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     attackBonus: 0,
     defenseBonus: 3,
     equippable: true,
-    slot: 'armor',
+    slot: 'body',
     basePrice: 45,
+    lpcSlot: 'torso',
+    lpcAssetId: 'torso/armour/leather_male',
+  },
+  chainmailArmor: {
+    label: 'Chainmail',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 4,
+    equippable: true,
+    slot: 'body',
+    basePrice: 90,
+    lpcSlot: 'torso',
+    lpcAssetId: 'torso/chainmail_male',
   },
   ironArmor: {
     label: 'Iron Armor',
@@ -87,9 +182,69 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     attackBonus: 0,
     defenseBonus: 5,
     equippable: true,
-    slot: 'armor',
+    slot: 'body',
     basePrice: 120,
+    lpcSlot: 'torso',
+    lpcAssetId: 'torso/armour/plate_male',
   },
+  // ── Boots (feet → LPC feet layer) ──
+  leatherBoots: {
+    label: 'Leather Boots',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 1,
+    equippable: true,
+    slot: 'feet',
+    basePrice: 15,
+    lpcSlot: 'feet',
+    lpcAssetId: 'feet/boots/basic_male',
+  },
+  plateBoots: {
+    label: 'Plate Boots',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 2,
+    equippable: true,
+    slot: 'feet',
+    basePrice: 60,
+    lpcSlot: 'feet',
+    lpcAssetId: 'feet/armour/plate_male',
+  },
+  // ── Helmets (head → LPC hat layer) ──
+  leatherCap: {
+    label: 'Leather Cap',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 1,
+    equippable: true,
+    slot: 'head',
+    basePrice: 12,
+    lpcSlot: 'hat',
+    lpcAssetId: 'hat/cloth/leather_cap_adult',
+  },
+  ironHelmet: {
+    label: 'Iron Helmet',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 2,
+    equippable: true,
+    slot: 'head',
+    basePrice: 55,
+    lpcSlot: 'hat',
+    lpcAssetId: 'hat/helmet/nasal_adult',
+  },
+  greatHelmet: {
+    label: 'Great Helm',
+    itemType: 'armor',
+    attackBonus: 0,
+    defenseBonus: 3,
+    equippable: true,
+    slot: 'head',
+    basePrice: 100,
+    lpcSlot: 'hat',
+    lpcAssetId: 'hat/helmet/greathelm_male',
+  },
+  // ── Consumables ──
   healthPotion: {
     label: 'Health Potion',
     itemType: 'consumable',
@@ -134,8 +289,8 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     itemType: 'armor',
     attackBonus: 0,
     defenseBonus: 3,
-    equippable: true,
-    slot: 'armor',
+    equippable: false,
+    slot: undefined,
     basePrice: 0,
   },
   wardShard: {
@@ -178,6 +333,24 @@ export const getItemDefinition = (itemId: string): ItemDefinition => {
     return fromPack;
   }
   return ITEM_CATALOG[itemId] ?? { ...DEFAULT_ITEM_DEFINITION, label: itemId };
+};
+
+/**
+ * Finds an item whose LPC render asset matches the given asset ID.
+ *
+ * Used to map a character's base appearance layer (e.g. the default
+ * chainmail torso) to an equippable item so the paperdoll reflects the
+ * base outfit (C-374). Returns `undefined` when no item renders that asset
+ * (e.g. AI-generated appearance layers without a catalog item).
+ */
+export const findItemIdByLpcAsset = (assetId: string): string | undefined => {
+  const catalog = _activeCatalog ?? ITEM_CATALOG;
+  for (const [itemId, definition] of Object.entries(catalog)) {
+    if (definition.lpcAssetId === assetId) {
+      return itemId;
+    }
+  }
+  return undefined;
 };
 
 // ---------------------------------------------------------------------------

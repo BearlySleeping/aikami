@@ -123,7 +123,9 @@ const emberwatchManifest = {
       name: 'Iron Sword',
       type: 'weapon',
       attackBonus: 5,
-      equipmentSlot: 'weapon',
+      equipmentSlot: 'rightHand',
+      lpcSlot: 'weapon',
+      lpcAssetId: 'weapon/sword/longsword',
     },
     healthPotion: {
       name: 'Health Potion',
@@ -139,13 +141,17 @@ const emberwatchManifest = {
       name: 'Iron Armor',
       type: 'armor',
       defenseBonus: 5,
-      equipmentSlot: 'armor',
+      equipmentSlot: 'body',
+      lpcSlot: 'torso',
+      lpcAssetId: 'torso/armour/plate_male',
     },
     woodenShield: {
       name: 'Wooden Shield',
       type: 'armor',
       defenseBonus: 2,
-      equipmentSlot: 'armor',
+      equipmentSlot: 'leftHand',
+      lpcSlot: 'shield',
+      lpcAssetId: 'shield/heater/original/wood_fg',
     },
     wardPendant: {
       name: 'Ward Pendant',
@@ -155,7 +161,6 @@ const emberwatchManifest = {
       name: 'Ward Amulet',
       type: 'armor',
       defenseBonus: 3,
-      equipmentSlot: 'armor',
     },
     wardShard: {
       name: 'Ward Shard',

@@ -13,7 +13,6 @@ import {
 import { logger } from '$logger';
 import type { SpawnPointEntity, TransitionZone } from '../assets/map_loader.ts';
 import {
-  Appearance,
   DEFAULT_BODY_LAYER_ID,
   getAppearanceLayers,
   type LpcLayerRecipe,
@@ -488,14 +487,14 @@ const handleBridgeCommand = (command: GameCommand): void => {
       break;
     }
     case 'UPDATE_PLAYER_APPEARANCE': {
-      // ── Equipment → Appearance layer sync (C-163) ──
-      // When equipment changes, update the player entity's Appearance
-      // component layers so the LPC sprite reflects the new gear.
+      // ── Equipment → appearance refresh nudge (C-374) ──
+      // Equipment no longer mutates the worker's base Appearance layers —
+      // the main thread merges equipment recipes (item → LPC asset) on top
+      // of the base recipe via the equipmentRecipeProvider option. This
+      // handler simply re-emits APPEARANCE_CHANGED so the main thread
+      // re-resolves and re-renders the player sprite with current gear.
       if (world && playerEntityId > 0) {
-        _updatePlayerAppearanceFromEquipment(playerEntityId, {
-          weapon: (command as { weapon?: string }).weapon,
-          armor: (command as { armor?: string }).armor,
-        });
+        _refreshPlayerAppearance(playerEntityId);
       }
       break;
     }
@@ -536,87 +535,30 @@ const handleBridgeCommand = (command: GameCommand): void => {
 // -- Worker-side recipe resolver --------------------------------------------
 
 /**
- * Updates the player entity's Appearance component layers based on
- * current equipment state.
+ * Re-emits APPEARANCE_CHANGED for the player entity with the current base
+ * layers so the main thread re-resolves recipes and merges equipment.
  *
- * Maps equipment item IDs to LPC layer variant indices:
- * - Armor: updates layer2 (torso)
- *   - leatherArmor → layer 2
- *   - ironArmor   → layer 3
- *   - no armor     → layer 1 (default)
+ * The base Appearance layers are untouched — equipment is resolved on the
+ * main thread (item → LPC asset) via the `equipmentRecipeProvider` option.
  *
- * After updating, emits APPEARANCE_CHANGED through the bridge so the
- * LPC rendering pipeline picks up the change immediately.
- *
- * Contract: C-163 Visceral Feedback Juice
+ * Contract: C-374 Equipment, Armour & Weapon Inventory UI
  */
-const _updatePlayerAppearanceFromEquipment = (
-  eid: number,
-  equipment: { weapon?: string; armor?: string },
-): void => {
-  // Read current layers
+const _refreshPlayerAppearance = (eid: number): void => {
   const currentLayers = getAppearanceLayers(eid);
-  const newLayers = [...currentLayers];
 
-  // C-370: enforce body layer invariant — if layer0 is non-positive or undefined,
-  // inject the default body variant so the paperdoll always has a base.
-  if ((newLayers[0] ?? 0) <= 0) {
-    newLayers[0] = DEFAULT_BODY_LAYER_ID;
+  // C-370: enforce body layer invariant — if layer0 is non-positive or
+  // undefined, inject the default body variant so the paperdoll always has
+  // a base (the body fallback also applies in workerRecipeResolver, but
+  // keeping the invariant here makes the emitted payload consistent).
+  const layers = [...currentLayers];
+  if ((layers[0] ?? 0) <= 0) {
+    layers[0] = DEFAULT_BODY_LAYER_ID;
   }
 
-  // Map armor to torso layer (index 2)
-  if (equipment.armor) {
-    const armorToLayer = (armorId: string): number => {
-      switch (armorId) {
-        case 'leatherArmor':
-        case 'woodenShield':
-          return 2;
-        case 'ironArmor':
-          return 3;
-        default:
-          return 2;
-      }
-    };
-    newLayers[2] = armorToLayer(equipment.armor);
-  } else {
-    // No armor equipped — revert torso to default
-    newLayers[2] = 1;
-  }
-
-  // Apply updated layers
-  for (let i = 0; i < newLayers.length; i++) {
-    const layerValue = newLayers[i];
-    if (layerValue === undefined) {
-      continue;
-    }
-    switch (i) {
-      case 0:
-        Appearance.layer0[eid] = layerValue;
-        break;
-      case 1:
-        Appearance.layer1[eid] = layerValue;
-        break;
-      case 2:
-        Appearance.layer2[eid] = layerValue;
-        break;
-      case 3:
-        Appearance.layer3[eid] = layerValue;
-        break;
-      case 4:
-        Appearance.layer4[eid] = layerValue;
-        break;
-      case 5:
-        Appearance.layer5[eid] = layerValue;
-        break;
-    }
-  }
-
-  // Emit APPEARANCE_CHANGED so the LPC rendering pipeline regenerates
-  // the sprite with the updated layers.
   workerBridge.emit({
     type: 'APPEARANCE_CHANGED',
     eid,
-    layerIds: newLayers as number[],
+    layerIds: layers as number[],
   });
 };
 
