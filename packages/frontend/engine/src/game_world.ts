@@ -367,6 +367,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _renderEntries = new Map<number, RenderEntry>();
 
   /**
+   * Per-entity revision counter for appearance loads.
+   * Prevents stale async loads from overwriting newer equipment changes.
+   */
+  private _entityLoadRevisions = new Map<number, number>();
+
+  /**
    * Do NOT use `new GameWorld()`. Use {@link GameWorld.create} instead.
    *
    * The `.create()` factory wraps the instance with auto-debug proxy.
@@ -972,8 +978,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               recipes = this._mergeEquipmentRecipes(recipes, this._equipmentRecipeProvider());
             }
             entry.recipes = recipes;
+            // Bump revision to invalidate any in-flight loads for this entity.
+            const nextRevision = (this._entityLoadRevisions.get(gameEvent.eid) ?? 0) + 1;
+            this._entityLoadRevisions.set(gameEvent.eid, nextRevision);
             // Fire async load, ignoring promise result.
-            void this._loadEntityRecipes(gameEvent.eid, recipes);
+            void this._loadEntityRecipes(gameEvent.eid, recipes, nextRevision);
           }
           dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
         }
@@ -2371,7 +2380,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     return merged;
   }
 
-  private async _loadEntityRecipes(eid: number, recipes: LpcLayerRecipe[]): Promise<void> {
+  private async _loadEntityRecipes(
+    eid: number,
+    recipes: LpcLayerRecipe[],
+    revision: number,
+  ): Promise<void> {
     const entry = this._renderEntries.get(eid);
     if (!entry || !this._assetUrlResolver) {
       return;
@@ -2446,6 +2459,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
 
     await Promise.all(loadPromises);
+
+    // Check if this load is stale (a newer load started while we were loading).
+    const currentRevision = this._entityLoadRevisions.get(eid) ?? 0;
+    if (revision < currentRevision) {
+      // Stale load — discard sprites and destroy textures to avoid memory leak.
+      this.debug('lpc-load-stale', { eid, revision, currentRevision });
+      for (const { sprite } of layerSprites) {
+        sprite.destroy();
+      }
+      return;
+    }
 
     if (texturesLoaded) {
       this.debug('lpc-loaded', { eid, layers: layerSprites.length });

@@ -398,8 +398,7 @@
     },
     "wardAmulet": {
       "name": "Ward Amulet",
-      "type": "armor",
-      "defenseBonus": 3
+      "type": "misc"
     },
     "wardShard": {
       "name": "Ward Shard",

@@ -136,7 +136,7 @@ const BaseContentPackItemSchema = Type.Object({
   attackBonus: Type.Optional(Type.Number({ description: 'Attack bonus value' })),
   /** Optional defense bonus */
   defenseBonus: Type.Optional(Type.Number({ description: 'Defense bonus value' })),
-  /** Optional reference to an equipment slot (leftHand | rightHand | head | torso | arms | feet) */
+  /** Optional reference to an equipment slot (leftHand | rightHand | head | body | feet) */
   equipmentSlot: Type.Optional(EquipmentSlotSchema),
   /** LPC character layer this item renders into when equipped (e.g. "weapon", "shield", "hat"). */
   lpcSlot: Type.Optional(Type.String({ description: 'LPC layer slot this item renders into' })),

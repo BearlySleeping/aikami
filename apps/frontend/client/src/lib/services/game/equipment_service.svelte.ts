@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts
 //
-// Equipment service (C-374) — owns the 6-slot paperdoll (leftHand,
-// rightHand, head, torso, arms, feet), equip/unequip logic, and computed
+// Equipment service (C-374) — owns the 5-slot paperdoll (head, leftHand,
+// body, rightHand, feet), equip/unequip logic, and computed
 // attack/defense bonuses summed across all equipped items.
 //
 // Extracted from game_state_service (C-314 service split). C-374 replaced
@@ -343,11 +343,20 @@ class EquipmentService
         }
       }
     }
+    // Legacy migration: restore equippedWeapon/equippedArmor ONLY when the
+    // item is equippable AND its slot matches the target (rightHand / body).
+    // Retired items like wardAmulet (no valid equipmentSlot) are skipped.
     if (data.equippedWeapon && !slots.rightHand) {
-      slots.rightHand = data.equippedWeapon;
+      const definition = getItemDefinition(data.equippedWeapon);
+      if (definition.equippable && definition.slot === 'rightHand') {
+        slots.rightHand = data.equippedWeapon;
+      }
     }
     if (data.equippedArmor && !slots.body) {
-      slots.body = data.equippedArmor;
+      const definition = getItemDefinition(data.equippedArmor);
+      if (definition.equippable && definition.slot === 'body') {
+        slots.body = data.equippedArmor;
+      }
     }
     this.slots = slots;
     this.debug('hydrate', { slots: JSON.stringify(slots) });

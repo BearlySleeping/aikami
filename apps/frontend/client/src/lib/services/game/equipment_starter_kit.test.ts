@@ -42,13 +42,14 @@ describe('STARTER_KIT (C-374)', () => {
   });
 
   test('every equipment item resolves, is equippable, and maps to an LPC asset', () => {
-    for (const [, itemId] of Object.entries(STARTER_KIT.equipment)) {
+    for (const [slotKey, itemId] of Object.entries(STARTER_KIT.equipment)) {
       if (!itemId) {
         continue;
       }
       const definition = getItemDefinition(itemId);
       expect(definition.equippable).toBe(true);
       expect(definition.slot).toBeDefined();
+      expect(definition.slot).toBe(slotKey); // slot must match the configured key
       expect(definition.lpcAssetId).toBeTruthy();
       expect(definition.lpcSlot).toBeTruthy();
     }

@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/services/game/equipment_service.test.ts
 //
-// Unit tests for EquipmentService — 6-slot paperdoll, single equip path,
+// Unit tests for EquipmentService — 5-slot paperdoll, single equip path,
 // serialization, stat computation, and reset.
 //
 // Contracts: C-331 AC-4, C-374 Equipment, Armour & Weapon Inventory UI.
@@ -158,6 +158,16 @@ describe('EquipmentService', () => {
     });
     expect(equipmentService.getEquippedItemId('rightHand')).toBe('steelSword');
     expect(equipmentService.getEquippedItemId('body')).toBe('leatherArmor');
+  });
+
+  test('hydrate does NOT restore legacy wardAmulet (retired item with no valid slot)', () => {
+    equipmentService.hydrate({
+      equippedArmor: 'wardAmulet',
+    });
+    // wardAmulet has no valid equipmentSlot → not equippable → NOT hydrated
+    expect(equipmentService.getEquippedItemId('body')).toBeUndefined();
+    // Defense bonus should remain at base (no equipped items)
+    expect(equipmentService.totalDefense).toBe(12); // base defense only
   });
 
   // ── Reset ─────────────────────────────────────────────────────────

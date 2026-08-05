@@ -521,7 +521,7 @@ export class GameStateService
 
   // ── Equipment methods (C-153) ──
   // Removed in C-374 — equipment state + stat aggregation moved to
-  // equipment_service.svelte.ts (6-slot paperdoll).
+  // equipment_service.svelte.ts (5-slot paperdoll: head, leftHand, body, rightHand, feet).
 
   /**
    * Sets the current game mode and broadcasts the change to the ECS worker

@@ -1,8 +1,8 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/inventory/inventory_view.svelte
 //
-// Inventory modal — 6-slot paperdoll (leftHand, rightHand, head, torso,
-// arms, feet) + bag grid. Equip/unequip updates the LPC character via the
+// Inventory modal — 5-slot paperdoll (head, leftHand, body, rightHand,
+// feet) + bag grid. Equip/unequip updates the LPC character via the
 // equipment service (C-374).
 import type { EquipmentSlot } from '@aikami/types';
 import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
