@@ -208,7 +208,9 @@ jobs:
         with:
           name: web-build-${{ github.run_id }}
           path: apps/frontend/client/build
-          archive: false
+          # Zipped on purpose: ~13k files, and upload-artifact v7's
+          # `archive: false` only supports a SINGLE file per artifact.
+          # download-artifact@v8 unzips transparently on the matrix legs.
           if-no-files-found: error
           retention-days: 1
 
@@ -337,16 +339,78 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Workflow-dispatch / staging only: no public Release exists, so attach
-      # the raw bundle files to the run (unzipped via archive: false). When
+      # the raw bundle files to the run. One artifact PER FILE with
+      # `archive: false` (v7 limitation: single file per unzipped artifact) —
+      # users download exactly the installer they need, no zip wrapping. When
       # RELEASE_TAG is set, ci_run.ts already uploaded them to the release.
-      - name: Upload build artifacts to workflow run
+      - name: Upload Linux AppImage
         if: matrix.action == 'build' && env.RELEASE_TAG == ''
         uses: actions/upload-artifact@v7
         with:
-          name: tauri-${{ matrix.platform }}
-          path: apps/frontend/client/src-tauri/target/release/bundle/**
+          name: tauri-linux-appimage
+          path: '**/target/release/bundle/appimage/*.AppImage'
           archive: false
-          if-no-files-found: warn
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux deb
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-deb
+          path: '**/target/release/bundle/deb/*.deb'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Linux rpm
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-linux-rpm
+          path: '**/target/release/bundle/rpm/*.rpm'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Windows msi
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-windows-msi
+          path: '**/target/release/bundle/msi/*.msi'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS dmg
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-dmg
+          path: '**/target/release/bundle/dmg/*.dmg'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload macOS updater archive
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-macos-updater
+          path: '**/target/release/bundle/macos/*.app.tar.gz'
+          archive: false
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload signature files
+        if: matrix.action == 'build' && env.RELEASE_TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-signatures
+          path: '**/target/release/bundle/macos/*.sig'
+          archive: false
+          if-no-files-found: ignore
           retention-days: 14
 
   # ── Web & backend deploys (singleton, runs in parallel with desktop) ─
