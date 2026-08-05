@@ -23,7 +23,7 @@
 //   env: LEG (JSON from ${{ toJson(matrix) }}), RELEASE_TAG, GH_TOKEN,
 //        REDIS_URL/REDIS_TOKEN (via scripts/.env.{mode})
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,10 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 
 /** Bundle → glob patterns for gh release download. */
 const BUNDLE_GLOBS: Record<string, string[]> = {
-  appimage: ['*.AppImage', '*.AppImage.sig'],
+  // Canonical release names (aikami.appimage …) since v0.0.2; the legacy
+  // `<Product>_<version>_<arch>.AppImage` pattern is kept so reuse legs can
+  // still copy from pre-rename releases.
+  appimage: ['aikami.appimage', 'aikami.appimage.sig', '*.AppImage', '*.AppImage.sig'],
   deb: ['*.deb', '*.deb.sig'],
   rpm: ['*.rpm', '*.rpm.sig'],
   msi: ['*.msi', '*.msi.sig'],
@@ -69,40 +72,13 @@ function parseLeg(raw: string | undefined): Leg {
   if (parsed.action !== 'build' && parsed.action !== 'reuse') {
     throw new Error(`Invalid leg action: ${String(parsed.action)}`);
   }
-  const VALID_PLATFORMS: PlatformName[] = ['linux', 'windows', 'macos'];
-  const platform = parsed.platform ?? '';
-  if (!VALID_PLATFORMS.includes(platform as PlatformName)) {
-    throw new Error(
-      `Invalid leg platform: ${platform}. Expected one of: ${VALID_PLATFORMS.join(', ')}`,
-    );
-  }
   return {
     runsOn: parsed.runsOn ?? '',
-    platform: platform as PlatformName,
+    platform: parsed.platform ?? 'unknown',
     bundles: parsed.bundles ?? '',
     action: parsed.action,
     sourceReleaseTag: parsed.sourceReleaseTag ?? null,
   };
-}
-
-/** Normalize Node/Bun process.arch to Tauri updater target architectures */
-function resolveTauriArch(): string {
-  const tauriTarget = process.env.TAURI_TARGET;
-  if (tauriTarget === 'universal-apple-darwin') {
-    return 'universal';
-  }
-  // Parse architecture from TAURI_TARGET triple (e.g., "x86_64-pc-windows-msvc" → "x86_64")
-  if (tauriTarget) {
-    const targetArch = tauriTarget.split('-')[0];
-    if (targetArch === 'x86_64' || targetArch === 'aarch64') {
-      return targetArch;
-    }
-  }
-  // Fall back to process.arch normalization
-  const rawArch = process.arch;
-  if (rawArch === 'x64') return 'x86_64';
-  if (rawArch === 'arm64') return 'aarch64';
-  return rawArch;
 }
 
 /** gh release download with per-bundle globs; fails loudly on error. */
@@ -139,6 +115,11 @@ async function uploadToCurrentRelease(releaseTag: string, files: string[]): Prom
   ok(`  Uploaded ${files.length} artifact(s) to ${releaseTag}`);
 }
 
+/**
+ * Best-effort download of the source release's latest.json (reuse legs).
+ * Returns null when the source release predates the updater (no manifest).
+ * Downloaded to its own dir so it is never re-uploaded with the artifacts.
+ */
 async function downloadSourceManifest(
   sourceTag: string,
   destDir: string,
@@ -188,35 +169,29 @@ async function main(): Promise<void> {
   const releaseTag = process.env.RELEASE_TAG?.trim() || null;
   const config = APP_CONFIG['client-tauri'];
   const checksum = opts.checksum ?? '';
-  if (!checksum) {
-    error('--checksum is required');
-    process.exit(1);
-  }
 
   log(`\n${c.bold}🖥️  CI run: ${leg.platform} [${leg.bundles}] — ${leg.action}${c.reset}`);
   log(`  Mode:     ${mode}`);
   log(`  Release:  ${releaseTag ?? '(none — workflow_dispatch)'}`);
 
   if (leg.action === 'build') {
-    // Clean target bundle directory before building to prevent uploading stale artifacts
-    const targetBundleDir = join(ROOT_DIR, 'apps/frontend/client/src-tauri/target/release/bundle');
-    if (existsSync(targetBundleDir)) {
-      rmSync(targetBundleDir, { recursive: true, force: true });
-    }
-
+    // ── Build leg ────────────────────────────────────────────────────
     const { artifacts, version } = await buildTauriArtifacts(config, mode, ROOT_DIR, {
       bundles: leg.bundles,
+      // The shared web build was produced by the build-web job and downloaded
+      // to apps/frontend/client/build — don't rebuild it inside tauri build.
       disableBeforeBuildCommand: true,
     });
 
     if (releaseTag) {
       uploadArtifactsToRelease(releaseTag, artifacts);
-
-      const arch = resolveTauriArch();
+      // Updater fragment — merged into latest.json by the update-manifest job.
+      const arch =
+        process.env.TAURI_TARGET === 'universal-apple-darwin' ? 'universal' : process.arch;
       writeFragmentFile(
-        leg.platform,
+        leg.platform as PlatformName,
         buildPlatformFragment({
-          platform: leg.platform,
+          platform: leg.platform as PlatformName,
           artifactPaths: artifacts,
           releaseTag,
           arch,
@@ -224,7 +199,7 @@ async function main(): Promise<void> {
       );
     } else {
       log(
-        `  ${c.dim}No RELEASE_TAG set (workflow_dispatch run) — artifacts remain on disk for workflow steps.${c.reset}`,
+        `  ${c.dim}No RELEASE_TAG set (workflow_dispatch run) — artifacts remain on disk for the workflow's upload-artifact step.${c.reset}`,
       );
     }
 
@@ -238,11 +213,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  // ── Reuse leg ──────────────────────────────────────────────────────
   if (!leg.sourceReleaseTag) {
     error('Reuse leg requires sourceReleaseTag in the leg JSON');
     process.exit(1);
   }
   if (!releaseTag) {
+    // A reuse leg with no RELEASE_TAG can't upload anywhere — should not
+    // happen (the plan job only emits reuse for release runs), but guard.
     error('Reuse leg requires RELEASE_TAG to upload the copied artifacts');
     process.exit(1);
   }
@@ -253,17 +231,23 @@ async function main(): Promise<void> {
   const files = await downloadReleaseAssets(leg.sourceReleaseTag, bundles, destDir);
   await uploadToCurrentRelease(releaseTag, files);
 
+  // Updater: the .sig files came from the source release alongside the
+  // artifacts (identical bytes → identical signatures — never re-sign). Pull
+  // the source latest.json so the reused platform keys (arch / universal)
+  // match the original build exactly, then emit this leg's fragment.
   const sourceManifest = await downloadSourceManifest(leg.sourceReleaseTag, manifestDir);
   writeFragmentFile(
-    leg.platform,
+    leg.platform as PlatformName,
     buildPlatformFragment({
-      platform: leg.platform,
+      platform: leg.platform as PlatformName,
       artifactPaths: files,
       releaseTag,
       sourceManifest,
     }),
   );
 
+  // Chain the cache forward so future releases copy from the most recent tag,
+  // not always from the original build.
   const existing = await getTauriCache(mode);
   if (existing) {
     await setTauriCache(mode, { ...existing, releaseTag });

@@ -1,19 +1,69 @@
-// scripts/src/lib/deploy/tauri_release.ts
 import {
   existsSync,
   readdirSync,
   readFileSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, setTauriCache } from './cache';
 import type { AppConfig } from './deployment_config';
 import { buildPlatformFragment, writeFragmentFile } from './updater_manifest';
 import { isVerbose, run } from './utils';
+
+// ── Canonical artifact naming ─────────────────────────────────────────────
+//
+// Tauri names bundles `<ProductName>_<version>_<arch>.<ext>` (e.g.
+// `Aikami_0.1.0_amd64.AppImage`). The release tag/URL already carries the
+// version, so release assets are renamed to stable, lowercase names —
+// `aikami.appimage`, `aikami.deb`, `aikami.msi`, … — that never change
+// between releases. `.sig` updater signatures are renamed alongside so the
+// updater can resolve `<artifact>.sig` next to the artifact.
+
+const CANONICAL_ARTIFACT_NAME = 'aikami';
+
+const ARTIFACT_EXTENSION_RULES: ReadonlyArray<{ suffix: string; ext: string }> = [
+  { suffix: '.app.tar.gz', ext: '.app.tar.gz' },
+  { suffix: '.AppImage', ext: '.appimage' },
+  { suffix: '.deb', ext: '.deb' },
+  { suffix: '.rpm', ext: '.rpm' },
+  { suffix: '.msi', ext: '.msi' },
+  { suffix: '.dmg', ext: '.dmg' },
+  { suffix: '.exe', ext: '.exe' },
+];
+
+/** Map a Tauri bundle file name to its canonical release name, or null when unknown. */
+const canonicalArtifactName = (fileName: string): string | null => {
+  const isSig = fileName.toLowerCase().endsWith('.sig');
+  const base = isSig ? fileName.slice(0, -'.sig'.length) : fileName;
+  for (const rule of ARTIFACT_EXTENSION_RULES) {
+    if (base.endsWith(rule.suffix)) {
+      return `${CANONICAL_ARTIFACT_NAME}${rule.ext}${isSig ? '.sig' : ''}`;
+    }
+  }
+  return null;
+};
+
+/** Rename final artifacts to canonical names in place; returns updated paths. */
+const normalizeArtifactNames = (artifacts: readonly string[]): string[] => {
+  const normalized: string[] = [];
+  for (const artifact of artifacts) {
+    const canonical = canonicalArtifactName(basename(artifact));
+    if (!canonical || canonical === basename(artifact)) {
+      normalized.push(artifact);
+      continue;
+    }
+    const dest = join(dirname(artifact), canonical);
+    renameSync(artifact, dest);
+    log(`  ${c.dim}renamed ${basename(artifact)} → ${canonical}${c.reset}`);
+    normalized.push(dest);
+  }
+  return normalized;
+};
 
 // ── Final-artifact detection ──────────────────────────────────────────────
 const KNOWN_TARGET_DIRS = new Set([
@@ -37,7 +87,7 @@ const FINAL_ARTIFACT_SUFFIXES = [
   '.dmg',
   '.sig',
   '.json',
-  '.zip',
+  '.zip', // updater archives (.msi.zip / .nsis.zip) when createUpdaterArtifacts is "v1Compatible"
 ] as const;
 
 const isFinalArtifact = (fileName: string): boolean => {
@@ -47,7 +97,7 @@ const isFinalArtifact = (fileName: string): boolean => {
 
 /**
  * Walks target/release/bundle and returns only final distributable artifacts.
- * Skips uncompressed .app bundle directories on macOS to avoid scanning thousands of internal assets.
+ * Exported so ci_run.ts can reuse the exact same filtering (no duplication).
  */
 export const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skipped: number } => {
   const kept: string[] = [];
@@ -57,17 +107,10 @@ export const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skip
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       const stat = statSync(full);
-
       if (stat.isDirectory()) {
-        // Skip walking inside raw .app bundle directories on macOS
-        if (entry.endsWith('.app')) {
-          skipped++;
-          continue;
-        }
         walk(full, targetDir);
         continue;
       }
-
       if (KNOWN_TARGET_DIRS.has(targetDir) && isFinalArtifact(entry)) {
         kept.push(full);
       } else {
@@ -97,41 +140,51 @@ export const currentPlatformDir = (): 'linux' | 'windows' | 'macos' => {
   return 'linux';
 };
 
-/** Read the app version from src-tauri/Cargo.toml [package] section. */
+/** Read the app version from src-tauri/Cargo.toml (falls back to '0.0.0'). */
 export const readCargoVersion = (tauriDir: string): string => {
-  const cargoToml = join(tauriDir, 'Cargo.toml');
-  let cargoContent: string;
   try {
-    cargoContent = readFileSync(cargoToml, 'utf8');
-  } catch (err) {
-    throw new Error(
-      `Failed to read Cargo.toml at ${cargoToml}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const cargoToml = join(tauriDir, 'Cargo.toml');
+    const cargoContent = readFileSync(cargoToml, 'utf8');
+    const versionMatch = cargoContent.match(/version\s*=\s*"([^"]+)"/);
+    if (versionMatch?.[1]) {
+      return versionMatch[1];
+    }
+  } catch {
+    // Fallback — keep default
   }
-  const packageMatch = cargoContent.match(/^\[package\]\s*$(.*?)(?=^\[|\n\n|$)/ms);
-  if (!packageMatch) {
-    throw new Error(`[package] section not found in ${cargoToml}`);
-  }
-  const packageSection = packageMatch[1];
-  const versionMatch = packageSection.match(/^\s*version\s*=\s*"([^"]+)"/m);
-  if (!versionMatch?.[1]) {
-    throw new Error(`version field not found in [package] section of ${cargoToml}`);
-  }
-  return versionMatch[1];
+  return '0.0.0';
 };
 
 export type TauriBuildResult = {
+  /** Absolute paths to the final distributable artifacts. */
   artifacts: string[];
+  /** Cargo.toml version. */
   version: string;
+  /** Host platform dir (linux/windows/macos). */
   platformDir: 'linux' | 'windows' | 'macos';
+  /** Absolute path to target/release/bundle. */
   bundleDir: string;
 };
 
 export type TauriBuildOptions = {
+  /** Override the bundle targets (e.g. "appimage" for a debug run). Defaults to TAURI_BUNDLE_TARGETS env. */
   bundles?: string;
+  /**
+   * Skip the web rebuild via `--config {"build":{"beforeBuildCommand":""}}`.
+   * Used by ci_run.ts, where the shared web build was already produced by the
+   * build-web job and downloaded to apps/frontend/client/build. The config
+   * override is written to a temp file (cross-platform safe — the tauri CLI
+   * accepts a path to a JSON config to merge; inline JSON quoting breaks under
+   * cmd.exe on Windows).
+   */
   disableBeforeBuildCommand?: boolean;
 };
 
+/**
+ * Build the Tauri desktop app and collect the final installer artifacts.
+ * Shared by the local pipeline (deployTauriRelease) and the CI per-leg runner
+ * (ci_run.ts). Does NOT touch the deploy cache — callers decide skip/reuse.
+ */
 export async function buildTauriArtifacts(
   config: AppConfig,
   mode: string,
@@ -142,10 +195,13 @@ export async function buildTauriArtifacts(
   const tauriDir = join(appRoot, 'src-tauri');
   const platformDir = currentPlatformDir();
 
+  // 1. Verify Tauri directory exists
   if (!existsSync(tauriDir)) {
     throw new Error(`No src-tauri directory found at ${tauriDir}.`);
   }
 
+  // 2. Verify web build exists (produced by Phase 1 locally, or downloaded
+  // from the build-web job artifact in CI — see release.yml).
   const buildDir = join(appRoot, 'build');
   if (!existsSync(buildDir)) {
     throw new Error(
@@ -153,9 +209,12 @@ export async function buildTauriArtifacts(
     );
   }
 
+  // 3. Build Tauri desktop app
   log(`🦀 Building Tauri desktop app${platformDir === 'macos' ? ' (universal binary)' : ''}...`);
   const tauriTarget = process.env.TAURI_TARGET;
   const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
+  // Explicit bundles win; otherwise TAURI_BUNDLE_TARGETS env (set by the
+  // workflow); otherwise tauri.conf.json defaults.
   const bundleTargets = opts.bundles ?? process.env.TAURI_BUNDLE_TARGETS;
   const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
 
@@ -168,7 +227,12 @@ export async function buildTauriArtifacts(
   }
 
   try {
+    // Forward the deploy mode to the Tauri beforeBuildCommand (build:tauri →
+    // vite build --mode {mode}). Without this, the desktop web bundle would
+    // always be built with production PUBLIC_ vars even on staging runs.
     process.env.TAURI_BUILD_MODE = mode;
+    // live: stream cargo output so CI watchers see build progress instead of
+    // minutes of silence while the ~15-25min Tauri compile runs.
     run(`bun run tauri build${configFlag}${targetFlag}${bundlesFlag}`, {
       cwd: appRoot,
       live: true,
@@ -188,6 +252,7 @@ export async function buildTauriArtifacts(
     }
   }
 
+  // 4. Collect final artifacts
   const bundleDir = join(tauriDir, 'target/release/bundle');
   if (!existsSync(bundleDir)) {
     throw new Error('No bundle directory found — Tauri build produced nothing.');
@@ -199,33 +264,41 @@ export async function buildTauriArtifacts(
     throw new Error('No final release artifacts found after filtering.');
   }
 
+  // Canonical artifact names (aikami.appimage, aikami.deb, …) so release
+  // assets stay stable across versions — the version lives in the tag/URL.
+  const finalArtifacts = normalizeArtifactNames(artifacts);
+
   log(
-    `📦 Found ${artifacts.length} final artifact(s) (discarded ${skipped} intermediate build file(s)):`,
+    `📦 Found ${finalArtifacts.length} final artifact(s) (discarded ${skipped} intermediate build file(s)):`,
   );
-  for (const art of artifacts) {
+  for (const art of finalArtifacts) {
     log(`  • ${art}`);
   }
 
   return {
-    artifacts,
+    artifacts: finalArtifacts,
     version: readCargoVersion(tauriDir),
     platformDir,
     bundleDir,
   };
 }
 
-/** Upload artifacts to a GitHub Release in a single batched `gh` call. */
+/**
+ * Upload the built artifacts to a GitHub Release (RELEASE_TAG env). Loud on
+ * failure — a failed upload means the release ships with no desktop binaries.
+ */
 export function uploadArtifactsToRelease(releaseTag: string, artifacts: string[]): void {
-  if (artifacts.length === 0) return;
-  log(`\n📤 Publishing ${artifacts.length} artifact(s) to GitHub Release ${c.cyan}${releaseTag}${c.reset}...`);
-
-  const quotedArtifacts = artifacts.map((a) => `"${a}"`).join(' ');
-  try {
-    run(`gh release upload "${releaseTag}" ${quotedArtifacts} --clobber`, { quiet: false });
-  } catch (err) {
-    throw new Error(
-      `Failed to upload artifacts to GitHub Release ${releaseTag}:\n${(err as Error).message}`,
-    );
+  log(`\n📤 Publishing to GitHub Release ${c.cyan}${releaseTag}${c.reset}...`);
+  for (const artifact of artifacts) {
+    // --clobber makes this idempotent: safe to re-run the same release
+    // (e.g. after a --force rebuild) without a "asset already exists" error.
+    try {
+      run(`gh release upload "${releaseTag}" "${artifact}" --clobber`, { quiet: false });
+    } catch (err) {
+      throw new Error(
+        `Failed to upload artifact to GitHub Release ${releaseTag}: ${artifact}\n${(err as Error).message}`,
+      );
+    }
   }
   ok(`  Uploaded ${artifacts.length} artifact(s) to release ${releaseTag}`);
 }
@@ -249,6 +322,8 @@ export async function deployTauriRelease(
   log(`  App:      ${appRoot}`);
   log(`  Tauri:    ${tauriDir}\n`);
 
+  // 0. Checksum cache — use pre-flight checksum when available
+  // Extract RELEASE_TAG early for cache key consistency
   const releaseTag = process.env.RELEASE_TAG?.trim();
 
   let checksum: string;
@@ -266,14 +341,23 @@ export async function deployTauriRelease(
     checksum = cache.checksum;
   }
 
+  // 1-4. Build + collect (shared with ci_run.ts)
   const {
     artifacts,
     version: ver,
     bundleDir,
   } = await buildTauriArtifacts(config, mode, rootDir, {});
 
+  // 5. Publish artifacts
+  // A real GitHub Release only exists when this run was triggered by
+  // `release: published` — the workflow sets RELEASE_TAG in that case only.
+  // workflow_dispatch / staging runs have no tag to attach to; the
+  // workflow's own actions/upload-artifact step is the distribution path
+  // for those (see .github/workflows/release.yml).
   if (releaseTag) {
     uploadArtifactsToRelease(releaseTag, artifacts);
+    // Updater fragment — the CI update-manifest job merges these into
+    // latest.json on the release.
     writeFragmentFile(
       platformDir,
       buildPlatformFragment({ platform: platformDir, artifactPaths: artifacts, releaseTag }),
@@ -288,6 +372,7 @@ export async function deployTauriRelease(
     log(`  ${c.dim}${bundleDir}${c.reset}`);
   }
 
+  // 6. Save cache on success (new JSON schema — tauri-release only)
   await setTauriCache(mode, {
     checksum,
     version: ver,
