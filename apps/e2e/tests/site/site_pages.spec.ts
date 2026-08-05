@@ -141,8 +141,8 @@ test.describe('Site pages — download section', () => {
       const cardCount = await cards.count();
       expect(cardCount).toBe(3); // linux, macos, windows
 
-      // Linux card should exist (only platform with builds initially)
-      const linuxCard = container.locator('[data-platform="linux"]');
+      // Linux card should exist (all three platforms have builds now)
+      const linuxCard = container.locator('.download-card[data-platform="linux"]');
       await expect(linuxCard).toBeVisible();
 
       // Click latest channel — UI should update without error
