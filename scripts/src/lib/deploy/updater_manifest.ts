@@ -342,6 +342,23 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Validate all required platform keys are present before uploading — a
+  // partial manifest silently drops updater support for entire platforms
+  // (e.g. darwin-x86_64 when macOS was built arm64-only).
+  const requiredPlatforms = [
+    'linux-x86_64',
+    'windows-x86_64',
+    'darwin-x86_64',
+    'darwin-aarch64',
+  ];
+  const missingPlatforms = requiredPlatforms.filter((key) => !platforms[key]);
+  if (missingPlatforms.length > 0) {
+    error(
+      `Missing required platform fragments: ${missingPlatforms.join(', ')} — refusing to upload a partial manifest.`,
+    );
+    process.exit(1);
+  }
+
   const tauriDir = opts['tauri-dir'] ?? 'apps/frontend/client/src-tauri';
   const manifest: UpdaterManifest = {
     // Cargo.toml version — no leading 'v'. Must be bumped per release for
