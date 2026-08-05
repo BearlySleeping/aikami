@@ -11,7 +11,7 @@ const PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    criticalText: ['AI-Powered 2D RPG', 'living world'],
+    criticalText: ['Open-Source AI RPG', 'Infinite RPG Roleplay'],
   },
 ];
 

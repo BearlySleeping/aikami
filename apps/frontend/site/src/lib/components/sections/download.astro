@@ -279,37 +279,39 @@ async function init(): Promise<void> {
     channels = { stable: null, latest: null };
   }
 
-  // API unreachable / rate-limited → fall back to direct /releases/latest URLs
-  if (!channels.stable && !channels.latest) {
-    for (const card of cards) {
-      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
-      if (!platform) {
-        continue;
-      }
-      setLinkState(card, 'ok', {
-        href: fallbackUrl(platform),
-        label: 'Download',
-        status: 'latest',
-        userOS,
-        platform,
-      });
-    }
-    return;
-  }
+  // API unreachable / rate-limited → fall back to direct /releases/latest
+  // URLs (no sizes). Channel toggles still work — both channels point at the
+  // same /releases/latest assets in this degraded mode.
+  const apiUnavailable = !channels.stable && !channels.latest;
 
   // Default to the channel that has a release (stable wins when both exist)
-  let activeChannel: ChannelId = 'stable';
-  if (!channels.stable && channels.latest) {
+  let activeChannel: ChannelId = apiUnavailable ? 'latest' : 'stable';
+  if (!apiUnavailable && !channels.stable && channels.latest) {
     activeChannel = 'latest';
   }
 
+  const activeBtnClass =
+    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+  const inactiveBtnClass =
+    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+
   function renderChannel(): void {
-    const release = channels[activeChannel];
     for (const card of cards) {
       const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
       if (!platform) {
         continue;
       }
+      if (apiUnavailable) {
+        setLinkState(card, 'ok', {
+          href: fallbackUrl(platform),
+          label: 'Download',
+          status: 'latest',
+          userOS,
+          platform,
+        });
+        continue;
+      }
+      const release = channels[activeChannel];
       if (!release) {
         setLinkState(card, 'missing', {
           label: 'Coming soon',
@@ -339,11 +341,6 @@ async function init(): Promise<void> {
     }
   }
 
-  const activeBtnClass =
-    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-  const inactiveBtnClass =
-    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-
   const channelButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
   const applyButtonState = (): void => {
     for (const btn of channelButtons) {
@@ -351,7 +348,8 @@ async function init(): Promise<void> {
     }
   };
 
-  // Channel toggle buttons
+  // Channel toggle buttons — attached BEFORE the first render so the toggle
+  // always works (even in the degraded API-fallback state).
   for (const btn of channelButtons) {
     btn.addEventListener('click', () => {
       const id = (btn.dataset.channel ?? 'stable') as ChannelId;
