@@ -56,6 +56,28 @@
       "collision": { "type": "rect", "width": 16, "height": 16 }
     }
   },
+  "props": {
+    "village_well": {
+      "name": "Old Stone Well",
+      "frame": "well.png",
+      "anchor": { "x": 0.5, "y": 1.0 },
+      "isWalkable": false,
+      "collision": { "type": "rect", "width": 22, "height": 14 }
+    },
+    "notice_board": {
+      "name": "Village Notice Board",
+      "frame": "notice_board.png",
+      "anchor": { "x": 0.5, "y": 1.0 },
+      "isWalkable": false,
+      "collision": { "type": "rect", "width": 20, "height": 10 }
+    },
+    "village_gate": {
+      "name": "Emberwatch Village Gate",
+      "frame": "village_gate.png",
+      "anchor": { "x": 0.5, "y": 1.0 },
+      "isWalkable": true
+    }
+  },
   "maps": {
     "emberwatch_village": {
       "file": "maps/emberwatch_village.json",

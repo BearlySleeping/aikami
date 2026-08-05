@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, setTauriCache } from './cache';
 import type { AppConfig } from './deployment_config';
+import { buildPlatformFragment, writeFragmentFile } from './updater_manifest';
 import { isVerbose, run } from './utils';
 
 // ── Final-artifact detection ──────────────────────────────────────────────
@@ -35,6 +36,7 @@ const FINAL_ARTIFACT_SUFFIXES = [
   '.dmg',
   '.sig',
   '.json',
+  '.zip', // updater archives (.msi.zip / .nsis.zip) when createUpdaterArtifacts is "v1Compatible"
 ] as const;
 
 const isFinalArtifact = (fileName: string): boolean => {
@@ -289,7 +291,7 @@ export async function deployTauriRelease(
     artifacts,
     version: ver,
     bundleDir,
-  } = await buildTauriArtifacts(config, appName, mode, rootDir);
+  } = await buildTauriArtifacts(config, mode, rootDir, {});
 
   // 5. Publish artifacts
   // A real GitHub Release only exists when this run was triggered by
@@ -299,6 +301,12 @@ export async function deployTauriRelease(
   // for those (see .github/workflows/release.yml).
   if (releaseTag) {
     uploadArtifactsToRelease(releaseTag, artifacts);
+    // Updater fragment — the CI update-manifest job merges these into
+    // latest.json on the release.
+    writeFragmentFile(
+      platformDir,
+      buildPlatformFragment({ platform: platformDir, artifactPaths: artifacts, releaseTag }),
+    );
   } else if (process.env.CI === 'true') {
     log(
       `  ${c.dim}No RELEASE_TAG set (workflow_dispatch run) — skipping Release upload.${c.reset}`,

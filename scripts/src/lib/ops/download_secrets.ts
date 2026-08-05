@@ -362,7 +362,9 @@ if (missing > 0) {
   }
 
   if (opts.strict) {
-    console.error(`\n❌ Strict mode: ${missing} secret(s) could not be fetched from GSM (${GCP_PROJECT}).`);
+    console.error(
+      `\n❌ Strict mode: ${missing} secret(s) could not be fetched from GSM (${GCP_PROJECT}).`,
+    );
     console.error('   Failing early — the generated .env files would be incomplete.');
     for (const [name, reason] of fetchFailures) {
       console.error(`      - ${name}: ${reason}`);

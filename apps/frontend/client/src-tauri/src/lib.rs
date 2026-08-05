@@ -1,3 +1,4 @@
+// apps/frontend/client/src-tauri/src/lib.rs
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 #[tauri::command]
@@ -55,6 +56,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_log::Builder::new().level(
             if cfg!(debug_assertions) {
                 log::LevelFilter::Debug

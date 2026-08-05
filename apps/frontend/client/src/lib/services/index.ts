@@ -116,5 +116,6 @@ export * from './persona/persona_creation_text_stream.svelte.ts';
 export * from './persona/persona_repository.svelte.ts';
 export * from './settings/ai_settings.svelte.ts';
 export * from './storage/storage_service.svelte.ts';
+export * from './updater/updater_service.svelte.ts';
 export * from './user/user_repository.svelte.ts';
 export * from './worldgen/world_gen_seeding_service.svelte.ts';

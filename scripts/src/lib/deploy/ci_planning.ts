@@ -53,7 +53,9 @@ type PlatformDef = { runsOn: string; platform: string; bundles: string };
 const PLATFORM_DEFAULTS: PlatformDef[] = [
   { runsOn: 'ubuntu-latest', platform: 'linux', bundles: 'appimage,deb,rpm' },
   { runsOn: 'windows-latest', platform: 'windows', bundles: 'msi' },
-  { runsOn: 'macos-latest', platform: 'macos', bundles: 'dmg' },
+  // `app` is required on macOS: createUpdaterArtifacts only emits the
+  // .app.tar.gz updater bundle when the MacOsBundle target is built.
+  { runsOn: 'macos-latest', platform: 'macos', bundles: 'app,dmg' },
 ];
 
 /** Bundle → file extension (used by assetsPresentOnRelease). */
@@ -63,6 +65,7 @@ const BUNDLE_EXTENSIONS: Record<string, string> = {
   rpm: '.rpm',
   msi: '.msi',
   dmg: '.dmg',
+  app: '.app.tar.gz',
 };
 
 // ── GitHub Release asset checks ───────────────────────────────────────────
@@ -73,12 +76,24 @@ const BUNDLE_EXTENSIONS: Record<string, string> = {
  * aren't required). False on any gh failure (missing release, no assets…).
  */
 async function assetsPresentOnRelease(tag: string, bundles: string[]): Promise<boolean> {
-  const res = await run(['gh', 'release', 'view', tag, '--json', 'assets', '--jq', '.assets[].name']);
+  const res = await run([
+    'gh',
+    'release',
+    'view',
+    tag,
+    '--json',
+    'assets',
+    '--jq',
+    '.assets[].name',
+  ]);
   if (res.code !== 0) {
     warn(`  gh release view ${tag} failed: ${res.err || res.out}`);
     return false;
   }
-  const names = res.out.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const names = res.out
+    .split('\n')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   if (names.length === 0) {
     return false;
   }
@@ -133,10 +148,22 @@ async function decideLeg(
   const bundles = leg.bundles.split(',').filter(Boolean);
 
   if (isForce) {
-    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
+    return {
+      runsOn: leg.runsOn,
+      platform: leg.platform,
+      bundles: leg.bundles,
+      action: 'build',
+      sourceReleaseTag: null,
+    };
   }
   if (!cached || cached.checksum !== checksum) {
-    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
+    return {
+      runsOn: leg.runsOn,
+      platform: leg.platform,
+      bundles: leg.bundles,
+      action: 'build',
+      sourceReleaseTag: null,
+    };
   }
   if (releaseTag === null) {
     // workflow_dispatch / staging run — no permanent release to attach to.
@@ -151,7 +178,13 @@ async function decideLeg(
       return null;
     }
     log(`  ${leg.platform}: same release but assets missing → build (don't trust cache)`);
-    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
+    return {
+      runsOn: leg.runsOn,
+      platform: leg.platform,
+      bundles: leg.bundles,
+      action: 'build',
+      sourceReleaseTag: null,
+    };
   }
   // Different release than the one that built these artifacts.
   if (cached.releaseTag && (await assetsPresentOnRelease(cached.releaseTag, bundles))) {
@@ -165,7 +198,13 @@ async function decideLeg(
     };
   }
   log(`  ${leg.platform}: source release lacks assets → build`);
-  return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
+  return {
+    runsOn: leg.runsOn,
+    platform: leg.platform,
+    bundles: leg.bundles,
+    action: 'build',
+    sourceReleaseTag: null,
+  };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -199,7 +238,9 @@ async function main(): Promise<void> {
 
     log(`  Checksum:   ${checksum.slice(0, 16)}...`);
     log(`  Version:    ${version}`);
-    log(`  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`);
+    log(
+      `  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`,
+    );
 
     // Brace-free outputs only — this job touches GCP secrets, so GitHub's
     // masker has `{`/`}` registered; JSON outputs would be silently dropped.
@@ -229,7 +270,9 @@ async function main(): Promise<void> {
   log(`  Release:    ${releaseTag ?? '(none — workflow_dispatch)'}`);
   log(`  Checksum:   ${checksum.slice(0, 16)}...`);
   log(`  Version:    ${version}`);
-  log(`  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`);
+  log(
+    `  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`,
+  );
 
   // Filter requested platforms/bundles (empty = all / platform defaults).
   const requestedPlatforms = (opts.platforms ?? '')
