@@ -402,6 +402,13 @@ jobs:
           path: apps/frontend/client/build
 
       # ── Run the leg (build or reuse) ───────────────────────────────
+      # macOS ships a UNIVERSAL binary (arm64 + x86_64 lipo'd together) so
+      # both the darwin-aarch64 and darwin-x86_64 updater channels resolve;
+      # the extra rust target is installed right before the build.
+      - name: Add Intel macOS target (universal build)
+        if: matrix.action == 'build' && matrix.platform == 'macos'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Run Desktop Leg
         shell: bash
         run: |
@@ -414,6 +421,7 @@ jobs:
           LEG: ${{ toJson(matrix) }}
           CI: "true"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
           # Updater signing key. Scoped to the desktop build step ONLY — the
           # SvelteKit web build (build-web job) never sees it, and the
           # client's vite envPrefix is ['PUBLIC_'] so TAURI_* could not reach
