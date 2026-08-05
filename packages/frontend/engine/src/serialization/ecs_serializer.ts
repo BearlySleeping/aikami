@@ -7,14 +7,16 @@ import { addComponent, addEntity, getAllEntities } from 'bitecs';
 import { Appearance } from '../components/appearance.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Position } from '../components/position.ts';
+import { Visual } from '../components/visual.ts';
 
 // ---------------------------------------------------------------------------
 // EcsSerializer — bitECS world snapshot serialization / hydration
 //
 // Contract C-117: Extracts persistent component data (Position, Appearance,
 // CombatStats) from active entities into a portable JSON payload. Ephemeral
-// components (Velocity, Visual, DirtyGraphics, etc.) are deliberately
-// excluded to keep the payload dense and safe for cloud sync.
+// components (Velocity, DirtyGraphics, etc.) are deliberately excluded to
+// keep the payload dense and safe for cloud sync. Visual.frame is included
+// so prop entities can restore their atlas frame.
 //
 // Entity IDs are preserved across serialize/deserialize because bitECS
 // recycles EIDs — restoring the same IDs prevents relational data breakage.
@@ -31,6 +33,7 @@ const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
   ['Position', Position],
   ['Appearance', Appearance],
   ['CombatStats', CombatStats],
+  ['Visual', Visual],
 ];
 
 /**

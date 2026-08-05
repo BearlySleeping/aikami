@@ -2,6 +2,7 @@
 import type { World } from 'bitecs';
 import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bitecs';
 import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
+import { logger } from '$logger';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
 import type { PositionData } from '../components/position.ts';
@@ -90,7 +91,7 @@ const setupVisualObservers = (options: { world: World; stage: Container }): void
     _sceneMap.set(eid, displayObject);
 
     // Kick off async texture load, replacing placeholder when ready
-    _loadVisualTextureAsync({ eid, world, stage, assetIndex: visualData.assetIndex });
+    _loadVisualTextureAsync({ eid, world, stage, visualData });
   });
 
   // onRemove: destroy display object and clean up
@@ -208,17 +209,59 @@ const _loadVisualTextureAsync = (options: {
   eid: number;
   world: World;
   stage: Container;
-  assetIndex: number;
+  visualData: VisualData;
 }): void => {
-  const { eid, world, stage, assetIndex } = options;
+  const { eid, world, stage, visualData } = options;
+  const { assetIndex, frame } = visualData;
 
-  // Placeholder alias (0) or empty path — skip async load
+  // Placeholder alias (0) — skip async load
   if (assetIndex === AssetAlias.PLACEHOLDER || assetIndex === 0) {
+    return;
+  }
+
+  // Named atlas frame (props): resolve from the preloaded tileset
+  // spritesheet. The frame must be registered by preloading the
+  // content-pack spritesheet (atlas.json) before the world spawns.
+  if (frame) {
+    void import('pixi.js')
+      .then(({ Sprite: PixiSprite, Texture }) => {
+        const texture = Texture.from(frame);
+        if (texture === Texture.WHITE || (texture.width <= 1 && texture.height <= 1)) {
+          logger.error(
+            '[render_system] Atlas frame not found for entity — prop will render as a placeholder.',
+            {
+              eid,
+              frame,
+              hint: 'Preload the content-pack spritesheet (atlas.json) before the world loads, or fix the frame name in the spawn point.',
+            },
+          );
+          return null;
+        }
+        return { sprite: PixiSprite, texture };
+      })
+      .then((resolved) => {
+        if (!resolved) {
+          return;
+        }
+        _swapInSprite({ eid, world, stage, resolved });
+      })
+      .catch((error) => {
+        logger.error('[render_system] Failed to load named frame texture for entity', {
+          eid,
+          frame,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     return;
   }
 
   const assetPath = resolveAssetPath(assetIndex);
   if (!assetPath) {
+    logger.error('[render_system] No texture source for visual entity.', {
+      eid,
+      assetIndex,
+      hint: 'Add a frame to the spawn point or map the AssetAlias in resolveAssetPath().',
+    });
     return;
   }
 
@@ -228,40 +271,62 @@ const _loadVisualTextureAsync = (options: {
   void import('pixi.js')
     .then(({ Assets, Sprite: PixiSprite }) => {
       return Assets.load(assetPath).then((texture) => ({
-        // biome-ignore lint/style/useNamingConvention: PixiJS import name
-        Sprite: PixiSprite,
+        sprite: PixiSprite,
         texture,
       }));
     })
-    .then(({ Sprite: PixiSprite, texture }) => {
-      // Guard: entity may have been destroyed during fetch
-      if (!hasComponent(world, eid, Visual)) {
-        return;
-      }
-
-      const oldDisplayObject = _sceneMap.get(eid);
-      const sprite = new PixiSprite(texture);
-      sprite.eventMode = 'none';
-      sprite.filterArea = CELL_GEOMETRY_RECT;
-
-      // Preserve position from old placeholder
-      if (oldDisplayObject) {
-        sprite.x = oldDisplayObject.x;
-        sprite.y = oldDisplayObject.y;
-        sprite.visible = oldDisplayObject.visible;
-
-        if (oldDisplayObject.parent) {
-          oldDisplayObject.parent.removeChild(oldDisplayObject);
-        }
-        oldDisplayObject.destroy();
-      }
-
-      stage.addChild(sprite);
-      _sceneMap.set(eid, sprite);
+    .then((resolved) => {
+      _swapInSprite({ eid, world, stage, resolved });
     })
-    .catch(() => {
-      // Texture load failed — placeholder remains visible
+    .catch((error: unknown) => {
+      // Texture load failed — placeholder remains visible, but surface why.
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error('[render_system] Failed to load texture for visual entity.', {
+        eid,
+        assetIndex,
+        assetPath,
+        error: message,
+      });
     });
+};
+
+/**
+ * Replaces a placeholder display object with the resolved sprite.
+ * Guards against entities destroyed during the async fetch.
+ */
+const _swapInSprite = (options: {
+  eid: number;
+  world: World;
+  stage: Container;
+  resolved: { sprite: typeof import('pixi.js').Sprite; texture: import('pixi.js').Texture };
+}): void => {
+  const { eid, world, stage, resolved } = options;
+  const { sprite: PixiSprite, texture } = resolved;
+
+  // Guard: entity may have been destroyed during fetch
+  if (!hasComponent(world, eid, Visual)) {
+    return;
+  }
+
+  const oldDisplayObject = _sceneMap.get(eid);
+  const sprite = new PixiSprite(texture);
+  sprite.eventMode = 'none';
+  sprite.filterArea = CELL_GEOMETRY_RECT;
+
+  // Preserve position from old placeholder
+  if (oldDisplayObject) {
+    sprite.x = oldDisplayObject.x;
+    sprite.y = oldDisplayObject.y;
+    sprite.visible = oldDisplayObject.visible;
+
+    if (oldDisplayObject.parent) {
+      oldDisplayObject.parent.removeChild(oldDisplayObject);
+    }
+    oldDisplayObject.destroy();
+  }
+
+  stage.addChild(sprite);
+  _sceneMap.set(eid, sprite);
 };
 
 /**

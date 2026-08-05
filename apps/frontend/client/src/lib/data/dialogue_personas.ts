@@ -4,9 +4,6 @@
 // Moved here from dialogue_overlay_view_model.svelte.ts so they can be
 // referenced by the dialogue service without ViewModel dependencies.
 
-/** Default LPC spritesheet URL used as fallback NPC avatar. */
-export const FALLBACK_AVATAR_URL = '/game-data/lpc/body/bodies_male.walk.webp' as const;
-
 /** Fallback persona ID when no specific archetype is assigned. */
 export const FALLBACK_PERSONA_ID = 'default' as const;
 

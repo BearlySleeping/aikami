@@ -50,6 +50,14 @@ const emberwatchManifest = {
       defaultDialogueKey: 'elder_thalia_greeting',
       appearanceLayers: [2, 3, 65, 21, 20, 97],
       isVendor: false,
+      initialSuggestions: [
+        {
+          id: 'elder_ask_ward',
+          label: '🕯️ Ask about the ward',
+          intentType: 'quest',
+          prefillText: 'The ward is failing, you said — can you tell me what happened to it?',
+        },
+      ],
     },
     // biome-ignore lint/style/useNamingConvention: JSON manifest key
     guard_captain: {
@@ -57,6 +65,14 @@ const emberwatchManifest = {
       defaultDialogueKey: 'guard_captain_greeting',
       appearanceLayers: [3, 3, 23, 22, 7, 95],
       isVendor: false,
+      initialSuggestions: [
+        {
+          id: 'guard_ask_dangers',
+          label: '⚠️ Ask about road dangers',
+          intentType: 'dialogue',
+          prefillText: 'What dangers have you seen on the roads lately? I should be prepared.',
+        },
+      ],
     },
     // biome-ignore lint/style/useNamingConvention: JSON manifest key
     traveling_merchant: {
@@ -504,6 +520,9 @@ describe('ContentPackLoader — Emberwatch v2.0.0 Integration', () => {
     const elder = loader.getNpc('village_elder');
     expect(elder?.name).toBe('Elder Thalia');
     expect(elder?.appearanceLayers?.length).toBeGreaterThanOrEqual(6);
+    // Initial greeting suggestion chips load from the manifest.
+    expect(elder?.initialSuggestions?.length).toBeGreaterThan(0);
+    expect(elder?.initialSuggestions?.[0]?.prefillText.length).toBeGreaterThanOrEqual(10);
 
     // All dialogue keys resolve
     const keys = [

@@ -8,7 +8,8 @@ import {
 } from '@aikami/frontend/services';
 import type { NpcSuggestionChip } from '@aikami/types';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
-import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
+import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
+import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from '$services';
 import {
@@ -18,6 +19,7 @@ import {
   draftStore,
   gameModeService,
   messageBranchStore,
+  playerStateService,
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
@@ -563,6 +565,20 @@ class DialogueOverlayViewModel
           canSwipeRight: false,
         },
       ];
+
+      // Preload suggestion chips: the NPC's authored initial suggestions
+      // (content pack) merged with the player class's preset hooks.
+      this.suggestedChips = mergeInitialSuggestions(
+        this._npcData.initialSuggestions,
+        playerStateService.classId,
+      );
+      if (this.suggestedChips.length > 0) {
+        this.debug('initialSuggestions', {
+          npcId: this._npcData.npcId,
+          chipCount: this.suggestedChips.length,
+          classId: playerStateService.classId,
+        });
+      }
     }
   }
 
@@ -571,20 +587,25 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * NPC avatar URL.
-   * Uses the fallback LPC spritesheet from the asset catalog when image
-   * generation is unavailable, or the default body walk sheet otherwise.
+   * NPC avatar URL — resolved from the NPC portrait catalog keyed by
+   * npcId/personaId. Logs an error and returns a placeholder when no
+   * portrait is configured (never the in-world LPC body spritesheet).
    */
   get npcAvatarUrl(): string {
-    return FALLBACK_AVATAR_URL;
+    return resolveNpcAvatarUrl({
+      npcId: this._npcData.npcId,
+      npcName: this._npcData.npcName,
+      personaId: this._npcData.personaId,
+      expression: this.npcExpression,
+    });
   }
 
   /** Current NPC expression — defaults to neutral, updated by detection. */
   npcExpression = $state<ExpressionId>('neutral');
 
-  /** Player avatar URL (LPC default for now). */
+  /** Player avatar URL — resolved from the active player character's class. */
   get playerAvatarUrl(): string {
-    return FALLBACK_AVATAR_URL;
+    return resolvePlayerAvatarUrl({ classId: playerStateService.classId });
   }
 
   /** Which speaker is highlighted — derived from streaming/input state. */
@@ -1276,7 +1297,7 @@ class DialogueOverlayViewModel
     // Remove this message and all subsequent messages
     this.messages = this.messages.slice(0, messageIndex);
 
-    // If no messages remain, restore the NPC greeting
+    // If no messages remain, restore the NPC greeting + initial suggestions
     if (this.messages.length === 0 && this._npcData.dialog) {
       this.messages = [
         {
@@ -1289,6 +1310,10 @@ class DialogueOverlayViewModel
           canSwipeRight: false,
         },
       ];
+      this.suggestedChips = mergeInitialSuggestions(
+        this._npcData.initialSuggestions,
+        playerStateService.classId,
+      );
     }
 
     // Clear alternatives for the deleted message

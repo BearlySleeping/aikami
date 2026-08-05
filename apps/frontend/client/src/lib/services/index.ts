@@ -36,6 +36,7 @@ export * from './assets/asset_store.svelte.ts';
 export * from './audio/audio_context_manager';
 export * from './audio/audio_queue_player';
 export * from './audio/audio_service.svelte';
+export * from './audio/music_player_service.svelte';
 export * from './audio/scene_to_music_tags';
 export * from './audio/track_registry_service.svelte';
 export * from './audio/tts_service.svelte.ts';

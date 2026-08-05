@@ -34,7 +34,7 @@ export class UpdaterService
     if (this._checking) {
       return;
     }
-    if (typeof window === 'undefined' || !('__TAURI__' in window)) {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
       // Browser (PWA) build — there is no desktop updater.
       return;
     }

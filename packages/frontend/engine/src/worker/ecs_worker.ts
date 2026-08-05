@@ -46,7 +46,7 @@ import { registerStatusEffectsObservers } from '../components/status_effects.ts'
 import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
-import { registerVisualObservers } from '../components/visual.ts';
+import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
@@ -771,7 +771,14 @@ const initializeEngine = (
       if (playerEntityId === 0) {
         playerEntityId = newEid;
       }
-      postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+      // Include Visual.frame for prop entities so they load the real texture
+      const frame = Visual.frame[newEid] ? (Visual.frame[newEid] as string) : undefined;
+      postMessage({
+        type: 'ENTITY_CREATED',
+        eid: newEid,
+        tint,
+        ...(frame ? { frame } : {}),
+      });
     }
   } else {
     playerEntityId = createPlayer(world, playerData);
@@ -1585,6 +1592,8 @@ self.onmessage = (event: MessageEvent): void => {
 
             if (!isPlayer) {
               npcIndex++;
+              // Include Visual.frame for prop entities so they load the real texture
+              const frame = Visual.frame[newEid] ? (Visual.frame[newEid] as string) : undefined;
               postMessage({
                 type: 'ENTITY_CREATED',
                 eid: newEid,
@@ -1600,6 +1609,7 @@ self.onmessage = (event: MessageEvent): void => {
                   isVendor: false,
                   vendorInventory: '',
                 },
+                ...(frame ? { frame } : {}),
               });
             } else {
               postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
@@ -1914,6 +1924,11 @@ self.onmessage = (event: MessageEvent): void => {
               eid: result.eid,
               tint,
               ...(npcData ? { npcData } : {}),
+              // Props carry their named atlas frame so the main thread can
+              // swap the white placeholder for the real tileset sprite.
+              ...(result.type === 'prop'
+                ? { frame: (Visual.frame[result.eid] ?? '') as string }
+                : {}),
             });
 
             // Emit APPEARANCE_CHANGED for entities with Appearance component

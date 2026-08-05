@@ -8,6 +8,7 @@ import {
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
+import type { NpcSuggestionChip } from '@aikami/types';
 import {
   aiSettingsService,
   audioService,
@@ -57,6 +58,8 @@ export type DialogueNpcData = {
   npcName: string;
   dialog?: string;
   personaId?: string;
+  /** Pre-authored suggestion chips shown with the initial greeting. */
+  initialSuggestions?: NpcSuggestionChip[];
 };
 
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';

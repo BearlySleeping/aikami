@@ -24,6 +24,12 @@ export const Visual = {
   tint: [] as number[],
   /** Visibility flag: 1 = visible, 0 = hidden. */
   visible: [] as number[],
+  /**
+   * Optional named atlas frame key (e.g. "well.png") resolved from the
+   * content-pack tileset spritesheet. When set, the render system uses
+   * this frame instead of {@link resolveAssetPath}. Empty string = none.
+   */
+  frame: [] as string[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -31,6 +37,8 @@ export type VisualData = {
   assetIndex: number;
   tint: number;
   visible: number;
+  /** Optional named atlas frame key (empty string when unused). */
+  frame?: string;
 };
 
 /**
@@ -128,6 +136,7 @@ export const registerVisualObservers = (world: World): void => {
     Visual.assetIndex[eid] = params.assetIndex;
     Visual.tint[eid] = params.tint;
     Visual.visible[eid] = params.visible;
+    Visual.frame[eid] = params.frame ?? '';
   });
 
   observe(
@@ -137,6 +146,7 @@ export const registerVisualObservers = (world: World): void => {
       assetIndex: Visual.assetIndex[eid],
       tint: Visual.tint[eid],
       visible: Visual.visible[eid],
+      frame: Visual.frame[eid] ?? '',
     }),
   );
 };

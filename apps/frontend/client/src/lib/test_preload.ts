@@ -598,6 +598,8 @@ const _localServicesMock = () => ({
   }),
   gmPromptService: _createServiceStub(),
   messageBranchStore: _createServiceStub(),
+  trackRegistryService: _createServiceStub(),
+  timeService: { gameHour: 12, gameMinute: 0, windVelocity: 0, rainIntensity: 0 },
   SentenceBoundaryChunker: class {},
   __esModule: true,
 });

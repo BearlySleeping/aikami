@@ -9,6 +9,7 @@ import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import AutosaveIndicator from './hud/autosave_indicator.svelte';
 import HpBar from './hud/hp_bar.svelte';
 import InteractionPrompt from './hud/interaction_prompt.svelte';
+import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
@@ -98,6 +99,9 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     reducedMotion={viewModel.reducedMotion}
     onDismiss={() => viewModel.dismissOnboardingHint()}
   />
+
+  <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
+  <MusicPlayerOverlay />
 
   <!-- Overlay router -->
   {#if viewModel.chatLocked}

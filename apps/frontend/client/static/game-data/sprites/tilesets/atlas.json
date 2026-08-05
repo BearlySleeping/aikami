@@ -1,14 +1,14 @@
 {
   "frames": {
-    "grass.png":        { "frame": { "x": 0,  "y": 0,  "w": 32, "h": 32 } },
-    "brick.png":        { "frame": { "x": 32, "y": 0,  "w": 32, "h": 32 } },
-    "tough.png":        { "frame": { "x": 64, "y": 0,  "w": 32, "h": 32 } },
-    "brick_wall.png":   { "frame": { "x": 96, "y": 0,  "w": 32, "h": 32 } },
-    "chest.png":        { "frame": { "x": 0,  "y": 32, "w": 32, "h": 32 } },
-    "red_chest.png":    { "frame": { "x": 32, "y": 32, "w": 32, "h": 32 } },
-    "well.png":         { "frame": { "x": 64, "y": 32, "w": 32, "h": 32 } },
+    "grass.png": { "frame": { "x": 0, "y": 0, "w": 32, "h": 32 } },
+    "brick.png": { "frame": { "x": 32, "y": 0, "w": 32, "h": 32 } },
+    "tough.png": { "frame": { "x": 64, "y": 0, "w": 32, "h": 32 } },
+    "brick_wall.png": { "frame": { "x": 96, "y": 0, "w": 32, "h": 32 } },
+    "chest.png": { "frame": { "x": 0, "y": 32, "w": 32, "h": 32 } },
+    "red_chest.png": { "frame": { "x": 32, "y": 32, "w": 32, "h": 32 } },
+    "well.png": { "frame": { "x": 64, "y": 32, "w": 32, "h": 32 } },
     "notice_board.png": { "frame": { "x": 96, "y": 32, "w": 32, "h": 32 } },
-    "village_gate.png": { "frame": { "x": 0,  "y": 64, "w": 32, "h": 32 } }
+    "village_gate.png": { "frame": { "x": 0, "y": 64, "w": 32, "h": 32 } }
   },
   "meta": {
     "image": "atlas.webp",

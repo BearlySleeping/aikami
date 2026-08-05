@@ -31,8 +31,23 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
   /** Whether a crossfade transition is currently in progress. */
   readonly isCrossfading: boolean;
 
+  /** Whether BGM is paused (source stopped, playback position retained). */
+  readonly isBgmPaused: boolean;
+
   /** URL of the currently playing BGM track (null if not playing). */
   readonly activeTrackUrl: string | null;
+
+  /**
+   * Pauses BGM, retaining the playback position so {@link resumeBgm}
+   * continues from where it left off. SFX are unaffected.
+   */
+  pauseBgm(): void;
+
+  /**
+   * Resumes BGM from the paused position.
+   * No-op when BGM is not paused.
+   */
+  resumeBgm(): Promise<void>;
 
   /**
    * The master GainNode at the root of the audio graph.
@@ -129,6 +144,8 @@ export class AudioService
   bgmVolume = $state<number>(0.8);
   sfxVolume = $state<number>(1);
   isCrossfading = $state<boolean>(false);
+  /** Whether BGM is paused (position retained for resume). */
+  isBgmPaused = $state<boolean>(false);
 
   // ── Web Audio nodes ──
   private _masterGain: GainNode | undefined;
@@ -145,6 +162,10 @@ export class AudioService
   private _crossfadeAbort: AbortController | undefined;
   /** Map of cached AudioBuffers keyed by URL to avoid re-decoding. */
   private readonly _bufferCache = new Map<string, AudioBuffer>();
+  /** AudioContext time when the active BGM source started (for pause offset). */
+  private _bgmStartTime = 0;
+  /** Playback offset in seconds retained across pause/resume. */
+  private _bgmPausedOffset = 0;
 
   // ── Initialization ──
 
@@ -310,6 +331,11 @@ export class AudioService
       source.connect(this._activeGain);
       source.start(0);
 
+      // Track playback origin for pause/resume offset math.
+      this._bgmStartTime = ctx.currentTime;
+      this._bgmPausedOffset = 0;
+      this.isBgmPaused = false;
+
       // Stop previous active source after transition
       const oldSource = this._activeSource;
       this._activeSource = source;
@@ -394,6 +420,86 @@ export class AudioService
   }
 
   /** @inheritdoc */
+  pauseBgm(): void {
+    if (!this._activeSource || this.isBgmPaused) {
+      return;
+    }
+
+    const ctx = audioContextManager.context;
+    // Retain position: elapsed since the source started (+ any prior offset).
+    this._bgmPausedOffset += Math.max(0, ctx.currentTime - this._bgmStartTime);
+
+    this._stopSource(this._activeSource);
+    this._activeSource = undefined;
+
+    // Cancel any in-progress crossfade and stop the fading-out source
+    if (this._crossfadeAbort) {
+      this._crossfadeAbort.abort();
+      this._crossfadeAbort = undefined;
+    }
+    if (this.isCrossfading && this._nextGain) {
+      // The fading-out source is still connected; stop it
+      const oldSource = this._nextSource;
+      if (oldSource) {
+        this._stopSource(oldSource);
+        this._nextSource = undefined;
+      }
+      this._nextGain.gain.value = 0;
+      this.isCrossfading = false;
+    }
+
+    this.isBgmPaused = true;
+
+    this.debug('pauseBgm', {
+      trackUrl: this._activeTrackUrl,
+      offsetSeconds: Math.round(this._bgmPausedOffset),
+    });
+  }
+
+  /** @inheritdoc */
+  async resumeBgm(): Promise<void> {
+    if (!this.isBgmPaused || !this._activeTrackUrl) {
+      return;
+    }
+
+    audioContextManager.unlock();
+    const ctx = audioContextManager.context;
+    this._ensureGraph();
+
+    const buffer = this._bufferCache.get(this._activeTrackUrl);
+    if (!buffer) {
+      // Buffer evicted or never cached — restart from the beginning.
+      this.isBgmPaused = false;
+      await this.transitionToBgm(this._activeTrackUrl, 0);
+      return;
+    }
+
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      if (!this._activeGain) {
+        return;
+      }
+      source.connect(this._activeGain);
+      // Continue from the retained offset.
+      source.start(0, this._bgmPausedOffset);
+
+      this._activeSource = source;
+      this._bgmStartTime = ctx.currentTime;
+      this.isBgmPaused = false;
+
+      this.debug('resumeBgm', {
+        trackUrl: this._activeTrackUrl,
+        offsetSeconds: Math.round(this._bgmPausedOffset),
+      });
+    } catch (error) {
+      this.error('resumeBgm:failed', { trackUrl: this._activeTrackUrl, error });
+      this.isBgmPaused = false;
+    }
+  }
+
+  /** @inheritdoc */
   stopAll(): void {
     this._abortCrossfade();
     this._stopSource(this._activeSource);
@@ -402,6 +508,9 @@ export class AudioService
     this._nextSource = undefined;
     this._activeTrackUrl = undefined;
     this.isCrossfading = false;
+    this.isBgmPaused = false;
+    this._bgmStartTime = 0;
+    this._bgmPausedOffset = 0;
   }
 
   override async dispose(): Promise<void> {
