@@ -19,7 +19,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb"],
+    "targets": "all",
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -32,9 +32,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJCRDI4MkQ2RDRENzRCQjQKUldTMFM5ZlUxb0xTSzFCcGxsc2JoWmNmbTIyWkc5Q2NxT2hpeTV5WEY0QVN6YmNmMTJVK094SW8K",
-      "endpoints": [
-        "https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"
-      ]
+      "endpoints": ["https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"]
     }
   }
 }

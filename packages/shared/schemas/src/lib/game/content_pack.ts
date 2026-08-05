@@ -10,6 +10,7 @@
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../database/item.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
+import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,16 @@ export const ContentPackNpcEntrySchema = Type.Object({
   ),
   /** Combat stats for enemy NPCs (C-316) */
   combatStats: Type.Optional(ContentPackCombatStatsSchema),
+  /**
+   * Optional: pre-authored suggestion chips shown with the NPC's initial
+   * greeting when dialogue opens. When present, these are merged with the
+   * player's class-based suggestion presets.
+   */
+  initialSuggestions: Type.Optional(
+    Type.Array(NpcSuggestionChipSchema, {
+      description: 'Initial greeting suggestion chips',
+    }),
+  ),
   // ── Companion fields (C-340) ──
   /** Whether this NPC can be recruited as a companion. */
   isCompanion: Type.Optional(Type.Boolean({ default: false })),
@@ -636,7 +647,25 @@ export const ContentPackManifestSchema = Type.Object({
   description: Type.Optional(Type.String({ description: 'Short adventure description' })),
   /** Map ID of the entry point — first map loaded on campaign start */
   startingMapId: Type.String({ minLength: 1, description: 'Starting map ID' }),
-  /** All maps in this pack, keyed by map ID */
+  /**
+   * Optional: tileset atlas metadata (C-171). The tileset texture image is
+   * sliced by the map renderer; the spritesheet JSON registers named frames
+   * (e.g. "well.png") used by entity sprites (props, player spawn).
+   */
+  atlas: Type.Optional(
+    Type.Object({
+      /** URL to the tileset texture image (PNG/WebP). */
+      textureUrl: Type.String({ description: 'Tileset texture image URL' }),
+      /** Optional: URL to the spritesheet JSON (named frame definitions). */
+      spritesheetUrl: Type.Optional(
+        Type.String({ description: 'Spritesheet JSON URL (named frames)' }),
+      ),
+      /** Pixel size of a single tile (must match map tilewidth/tileheight). */
+      tileSize: Type.Optional(
+        Type.Integer({ minimum: 8, description: 'Pixel size of one tile' }),
+      ),
+    }),
+  ),  /** All maps in this pack, keyed by map ID */
   maps: Type.Record(Type.String(), ContentPackMapEntrySchema, {
     description: 'Map definitions keyed by map ID',
   }),

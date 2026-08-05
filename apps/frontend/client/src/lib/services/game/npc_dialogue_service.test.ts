@@ -636,3 +636,116 @@ describe('Edge cases', () => {
     ).toThrow('not configured');
   });
 });
+
+// ---------------------------------------------------------------------------
+// startDialogue — greeting resolution + initial suggestions
+// ---------------------------------------------------------------------------
+
+describe('startDialogue', () => {
+  test('resolves the dialogue KEY to authored text via the content provider', () => {
+    const contentProvider = makeContentProvider();
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    npcDialogueService.startDialogue({
+      npcData: { npcId: 'village_elder', npcName: 'Elder Thalia', dialog: 'elder_thalia_greeting' },
+      setOverlay: () => {},
+      pauseEngine: () => {},
+    });
+
+    expect(npcDialogueService.activeNpc?.dialog).toBe(
+      '"Greetings, traveler. Our village has need of your aid."',
+    );
+  });
+
+  test('passes plain dialog text through unchanged when not a dialogue key', () => {
+    const contentProvider = makeContentProvider();
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    npcDialogueService.startDialogue({
+      npcData: {
+        npcId: 'sandbox-elder',
+        npcName: 'Elder Thrain',
+        dialog: 'Ah, a traveler! Welcome to our humble village.',
+      },
+      setOverlay: () => {},
+      pauseEngine: () => {},
+    });
+
+    expect(npcDialogueService.activeNpc?.dialog).toBe(
+      'Ah, a traveler! Welcome to our humble village.',
+    );
+  });
+
+  test('attaches the NPC authored initial suggestions to the session', () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        village_elder: {
+          name: 'Elder Thalia',
+          defaultDialogueKey: 'elder_thalia_greeting',
+          initialSuggestions: [
+            {
+              id: 'elder_ask_ward',
+              label: 'Ask about the ward',
+              intentType: 'quest',
+              prefillText: 'Can you tell me about the fading ward?',
+            },
+          ],
+        },
+      },
+    });
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    npcDialogueService.startDialogue({
+      npcData: { npcId: 'village_elder', npcName: 'Elder Thalia', dialog: 'elder_thalia_greeting' },
+      setOverlay: () => {},
+      pauseEngine: () => {},
+    });
+
+    expect(npcDialogueService.activeNpc?.initialSuggestions?.[0]?.id).toBe('elder_ask_ward');
+  });
+
+  test('keeps the caller-supplied initialSuggestions over the content lookup', () => {
+    npcDialogueService.startDialogue({
+      npcData: {
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        dialog: 'Hello.',
+        initialSuggestions: [
+          {
+            id: 'custom_chip',
+            label: 'Custom',
+            intentType: 'dialogue',
+            prefillText: 'A caller-provided chip takes priority over the content pack.',
+          },
+        ],
+      },
+      setOverlay: () => {},
+      pauseEngine: () => {},
+    });
+
+    expect(npcDialogueService.activeNpc?.initialSuggestions?.[0]?.id).toBe('custom_chip');
+  });
+
+  test('works unconfigured (plain dialog, no suggestions) without throwing', () => {
+    const freshService = NpcDialogueService.create({ className: 'NpcDialogueServiceTest' });
+    freshService.startDialogue({
+      npcData: { npcId: 'x', npcName: 'X', dialog: 'plain text' },
+      setOverlay: () => {},
+      pauseEngine: () => {},
+    });
+    expect(freshService.activeNpc?.dialog).toBe('plain text');
+    expect(freshService.activeNpc?.initialSuggestions).toBeUndefined();
+  });
+});

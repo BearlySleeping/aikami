@@ -227,6 +227,32 @@ describe('spawnEntities', () => {
     expect(Appearance.layer0[eid]).toBeUndefined();
   });
 
+  it('stores the prop atlas frame on the Visual component when provided', () => {
+    const spawnPoint = createPropSpawnPoint({
+      properties: {
+        propId: 'village_well',
+        propName: 'Old Stone Well',
+        frame: 'well.png',
+      },
+    });
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint] });
+    const eid = results[0].eid;
+
+    expect(Visual.frame[eid]).toBe('well.png');
+  });
+
+  it('leaves Visual.frame empty when the prop has no frame property', () => {
+    const spawnPoint = createPropSpawnPoint({
+      properties: { propId: 'mystery_prop' },
+    });
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint] });
+    const eid = results[0].eid;
+
+    expect(Visual.frame[eid]).toBe('');
+  });
+
   // -------------------------------------------------------------------------
   // Multiple spawn points
   // -------------------------------------------------------------------------

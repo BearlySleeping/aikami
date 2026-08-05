@@ -39,6 +39,11 @@ export type TrackRegistryServiceInterface = BaseFrontendClassInterface & {
   /** Discover local tracks from the asset manifest. */
   discoverLocal(): Promise<void>;
   /**
+   * Registers curated vibe tags keyed by track id. Tags are merged into
+   * discovered tracks so scene-context matching finds similar-vibe songs.
+   */
+  registerVibeTags(augments: Record<string, readonly string[]>): void;
+  /**
    * Finds the best matching track for a set of tags.
    * Returns the track with the highest tag overlap score, or null if no match.
    */
@@ -68,6 +73,24 @@ class TrackRegistryService
 
   /** Play count cache for fallback selection. */
   private readonly _playCounts = new Map<string, number>();
+
+  /** Curated vibe tags merged into discovered tracks (keyed by track id). */
+  private readonly _vibeTagAugments = new Map<string, readonly string[]>();
+
+  /** @inheritdoc */
+  registerVibeTags(augments: Record<string, readonly string[]>): void {
+    for (const [id, tags] of Object.entries(augments)) {
+      this._vibeTagAugments.set(id, tags);
+    }
+    // Re-merge into already-discovered tracks if discovery already ran.
+    if (this.tracks.length > 0) {
+      this.tracks = this.tracks.map((track) => ({
+        ...track,
+        tags: [...new Set([...track.tags, ...(this._vibeTagAugments.get(track.id) ?? [])])],
+      }));
+    }
+    this.debug('registerVibeTags', { count: Object.keys(augments).length });
+  }
 
   // ── Public API ──
 
@@ -110,7 +133,9 @@ class TrackRegistryService
       // Extract tags from the tag path and subcategory
       // Tag format: "music:ambient:forest" → tags: ["ambient", "forest"]
       // Subcategory: "combat/intense" → tags: ["combat", "intense"]
-      const tags = this._extractTags(entry);
+      const tags = [
+        ...new Set([...this._extractTags(entry), ...(this._vibeTagAugments.get(id) ?? [])]),
+      ];
 
       // Format a display title from the name
       const title = this._formatTitle(entry.name);

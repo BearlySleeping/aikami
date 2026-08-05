@@ -41,6 +41,12 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
   /** The player's current scene name. */
   readonly playerScene: string;
 
+  /**
+   * ID of the currently loaded map (derived from the map URL on load,
+   * e.g. "emberwatch_village"). Empty before the first map load.
+   */
+  readonly currentMapId: string;
+
   /** Whether the PixiJS game engine has initialized and is running. */
   readonly isGameReady: boolean;
 
@@ -143,6 +149,7 @@ class GameEngineService
   // ── Public reactive state ──
 
   playerScene = $state<string>('unknown');
+  currentMapId = $state<string>('');
   isGameReady = $state<boolean>(false);
   gameError = $state<string | undefined>(undefined);
   activeContexts: ActiveContextEntry[] = $state([]);
@@ -303,6 +310,10 @@ class GameEngineService
   }): Promise<void> {
     if (this._gameWorld) {
       await this._gameWorld.loadMap(options);
+      // Derive the map id from the URL (e.g. .../emberwatch_village.json).
+      const file = options.mapUrl.split('/').pop() ?? '';
+      this.currentMapId = file.replace(/\.json$/i, '');
+      this.debug('loadMap:map-id', { currentMapId: this.currentMapId });
     }
   }
 
@@ -330,6 +341,7 @@ class GameEngineService
 
     this.isGameReady = false;
     this.playerScene = 'unknown';
+    this.currentMapId = '';
     this.gameError = undefined;
     this.activeContexts = [];
     this.floatingTexts = [];
@@ -536,6 +548,9 @@ class GameEngineService
         targetX: startingMap.defaultX ?? 160,
         targetY: startingMap.defaultY ?? 192,
       });
+      // Track the starting map id for scene/vibe context.
+      this.currentMapId = pack.manifest.startingMapId;
+      this.debug('loadMap:starting-map-id', { currentMapId: this.currentMapId });
 
       this._registerResizeHandler();
     } catch (error) {

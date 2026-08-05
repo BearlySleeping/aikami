@@ -111,6 +111,7 @@ mock.module('$services', () => ({
   },
   playerStateService: {
     characterSheetSummary: undefined,
+    classId: 'fighter',
   },
   ttsService: {
     selectedVoice: 'default',
@@ -166,6 +167,7 @@ mock.module(TIME_PATH, () => ({
 
 import {
   type DialogueOverlayViewModelInterface,
+  type DialogueOverlayViewModelOptions,
   getDialogueOverlayViewModel,
 } from './dialogue_overlay_view_model.svelte';
 
@@ -173,7 +175,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const createNpcData = (overrides?: Record<string, string | undefined>) => ({
+const createNpcData = (overrides?: Partial<DialogueOverlayViewModelOptions['npcData']>) => ({
   npcId: 'npc-001',
   npcName: 'Elder Thrain',
   dialog: 'Welcome, traveler!',
@@ -371,8 +373,38 @@ describe('DialogueOverlayViewModel', () => {
     vm.handleChipTap('nonexistent');
   });
 
-  test('suggestedChips is empty by default', () => {
+  test('suggestedChips preloads player-class chips when a greeting exists', () => {
     const vm = createViewModel();
+    // Default class (fighter) preset chips are preloaded alongside the greeting.
+    expect(vm.suggestedChips.length).toBeGreaterThan(0);
+    expect(vm.suggestedChips.some((c) => c.id.startsWith('class_'))).toBe(true);
+  });
+
+  test('suggestedChips merges NPC initialSuggestions with class presets', () => {
+    const vm = createViewModel({
+      npcData: createNpcData({
+        initialSuggestions: [
+          {
+            id: 'elder_ask_ward',
+            label: 'Ask about the ward',
+            intentType: 'quest',
+            prefillText: 'Can you tell me about the fading ward?',
+          },
+        ],
+      }),
+    });
+
+    expect(vm.suggestedChips.length).toBeGreaterThanOrEqual(1);
+    // NPC-authored chip comes first.
+    expect(vm.suggestedChips[0].id).toBe('elder_ask_ward');
+    // Class chips are appended after NPC chips.
+    expect(vm.suggestedChips.some((c) => c.id.startsWith('class_'))).toBe(true);
+  });
+
+  test('suggestedChips stays empty when no greeting message exists', () => {
+    const vm = createViewModel({
+      npcData: createNpcData({ dialog: '' }),
+    });
     expect(vm.suggestedChips.length).toBe(0);
   });
 

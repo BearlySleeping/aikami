@@ -1,6 +1,6 @@
 {
-  "scannedAt": "2026-08-03T14:13:55.713Z",
-  "count": 12705,
+  "scannedAt": "2026-08-05T11:48:30.893Z",
+  "count": 12707,
   "assets": {
     "lpc:hat:magic:celestial_moon_adult:backslash": {
       "tag": "lpc:hat:magic:celestial_moon_adult:backslash",
@@ -101634,6 +101634,14 @@
       "path": "sprites/tilesets/atlas.webp",
       "ext": ".webp"
     },
+    "music:exploration:bgm_explore": {
+      "tag": "music:exploration:bgm_explore",
+      "category": "music",
+      "subcategory": "exploration",
+      "name": "bgm_explore",
+      "path": "music/exploration/bgm_explore.webm",
+      "ext": ".webm"
+    },
     "music:exploration:Chainsmoker": {
       "tag": "music:exploration:Chainsmoker",
       "category": "music",
@@ -101641,10 +101649,34 @@
       "name": "Chainsmoker",
       "path": "music/exploration/Chainsmoker.mp3",
       "ext": ".mp3"
+    },
+    "music:combat:bgm_combat": {
+      "tag": "music:combat:bgm_combat",
+      "category": "music",
+      "subcategory": "combat",
+      "name": "bgm_combat",
+      "path": "music/combat/bgm_combat.webm",
+      "ext": ".webm"
     }
   },
   "byCategory": {
     "music": [
+      {
+        "tag": "music:combat:bgm_combat",
+        "category": "music",
+        "subcategory": "combat",
+        "name": "bgm_combat",
+        "path": "music/combat/bgm_combat.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "music:exploration:bgm_explore",
+        "category": "music",
+        "subcategory": "exploration",
+        "name": "bgm_explore",
+        "path": "music/exploration/bgm_explore.webm",
+        "ext": ".webm"
+      },
       {
         "tag": "music:exploration:Chainsmoker",
         "category": "music",

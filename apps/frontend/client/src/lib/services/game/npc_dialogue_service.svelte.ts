@@ -58,6 +58,8 @@ export type NpcDialogueContentProvider = {
         isVendor?: boolean;
         vendorInventory?: string;
         combatStats?: Record<string, unknown>;
+        /** Pre-authored suggestion chips for the initial greeting. */
+        initialSuggestions?: NpcSuggestionChip[];
       }
     | undefined;
   /** Returns a piece of authored dialogue by key, or undefined. */
@@ -152,7 +154,14 @@ type FallbackTurnRecord = {
 export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   /** The currently active NPC being conversed with, if any. */
   readonly activeNpc:
-    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | {
+        npcId: string;
+        npcName: string;
+        dialog?: string;
+        personaId?: string;
+        /** Pre-authored suggestion chips for the initial greeting. */
+        initialSuggestions?: NpcSuggestionChip[];
+      }
     | undefined;
 
   /**
@@ -173,9 +182,19 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   /**
    * Starts a dialogue session with the given NPC.
    * Called by the bridge listener on NPC_INTERACTED.
+   *
+   * When the content provider is configured, `dialog` is resolved through
+   * `getDialogue` (the engine emits the dialogue KEY, not the text) and the
+   * NPC's authored `initialSuggestions` are attached to the session.
    */
   startDialogue(options: {
-    npcData: { npcId: string; npcName: string; dialog?: string; personaId?: string };
+    npcData: {
+      npcId: string;
+      npcName: string;
+      dialog?: string;
+      personaId?: string;
+      initialSuggestions?: NpcSuggestionChip[];
+    };
     setOverlay: (type: string) => void;
     pauseEngine: () => void;
   }): void;
@@ -324,27 +343,62 @@ export class NpcDialogueService
 
   /** The currently active NPC, if any. */
   private _activeNpc:
-    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | {
+        npcId: string;
+        npcName: string;
+        dialog?: string;
+        personaId?: string;
+        initialSuggestions?: NpcSuggestionChip[];
+      }
     | undefined;
 
   /** @inheritdoc */
   get activeNpc():
-    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | {
+        npcId: string;
+        npcName: string;
+        dialog?: string;
+        personaId?: string;
+        initialSuggestions?: NpcSuggestionChip[];
+      }
     | undefined {
     return this._activeNpc;
   }
 
   /** @inheritdoc */
   startDialogue(options: {
-    npcData: { npcId: string; npcName: string; dialog?: string; personaId?: string };
+    npcData: {
+      npcId: string;
+      npcName: string;
+      dialog?: string;
+      personaId?: string;
+      initialSuggestions?: NpcSuggestionChip[];
+    };
     setOverlay: (type: string) => void;
     pauseEngine: () => void;
   }): void {
+    // The engine emits the dialogue KEY (e.g. "guard_captain_greeting"); the
+    // content provider resolves it to authored text. Plain text (dev sandbox)
+    // passes through unchanged when getDialogue has no entry for it.
+    const rawDialog = options.npcData.dialog;
+    const resolvedDialog = this._contentProvider?.getDialogue(rawDialog ?? '') ?? rawDialog;
+
+    // Attach the NPC's authored initial suggestion chips when not supplied.
+    const npcEntry = this._contentProvider?.getNpc(options.npcData.npcId);
+    const initialSuggestions = options.npcData.initialSuggestions ?? npcEntry?.initialSuggestions;
+
+    this.debug('startDialogue', {
+      npcId: options.npcData.npcId,
+      dialogWasKey: rawDialog !== resolvedDialog,
+      suggestionCount: initialSuggestions?.length ?? 0,
+    });
+
     this._activeNpc = {
       npcId: options.npcData.npcId,
       npcName: options.npcData.npcName,
-      dialog: options.npcData.dialog,
+      dialog: resolvedDialog,
       personaId: options.npcData.personaId,
+      initialSuggestions,
     };
     options.pauseEngine();
     options.setOverlay('DIALOGUE');

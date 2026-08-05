@@ -8,7 +8,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
-import { audioService } from '$services';
+import { audioService, musicPlayerService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -23,8 +23,13 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   readonly sfxVolume: number;
   /** Whether a BGM crossfade is currently in progress. */
   readonly isCrossfading: boolean;
+  /** Whether the in-game music player overlay is visible. */
+  readonly musicPlayerVisible: boolean;
   /** Last test-playback feedback message. */
   readonly feedback: string;
+
+  /** Shows/hides the in-game music player overlay. */
+  toggleMusicPlayer(): void;
 
   setMasterVolume(volume: number): void;
   setBgmVolume(volume: number): void;
@@ -58,7 +63,6 @@ class SettingsAudioViewModel
   sfxVolume = $state<number>(audioService.sfxVolume);
   isCrossfading = $state<boolean>(false);
   feedback = $state<string>('');
-
   private _pollInterval: ReturnType<typeof setInterval> | undefined;
 
   override async initialize(): Promise<void> {
@@ -93,6 +97,14 @@ class SettingsAudioViewModel
   setSfxVolume(volume: number): void {
     audioService.setSfxVolume(volume);
     this.sfxVolume = audioService.sfxVolume;
+  }
+
+  get musicPlayerVisible(): boolean {
+    return musicPlayerService.visible;
+  }
+
+  toggleMusicPlayer(): void {
+    musicPlayerService.toggleVisible();
   }
 
   async testExploreBgm(): Promise<void> {

@@ -1,3 +1,4 @@
+// scripts/src/lib/deploy/tauri_release.ts
 import {
   existsSync,
   readdirSync,
@@ -36,7 +37,7 @@ const FINAL_ARTIFACT_SUFFIXES = [
   '.dmg',
   '.sig',
   '.json',
-  '.zip', // updater archives (.msi.zip / .nsis.zip) when createUpdaterArtifacts is "v1Compatible"
+  '.zip',
 ] as const;
 
 const isFinalArtifact = (fileName: string): boolean => {
@@ -46,7 +47,7 @@ const isFinalArtifact = (fileName: string): boolean => {
 
 /**
  * Walks target/release/bundle and returns only final distributable artifacts.
- * Exported so ci_run.ts can reuse the exact same filtering (no duplication).
+ * Skips uncompressed .app bundle directories on macOS to avoid scanning thousands of internal assets.
  */
 export const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skipped: number } => {
   const kept: string[] = [];
@@ -56,10 +57,17 @@ export const collectFinalArtifacts = (bundleDir: string): { kept: string[]; skip
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       const stat = statSync(full);
+
       if (stat.isDirectory()) {
+        // Skip walking inside raw .app bundle directories on macOS
+        if (entry.endsWith('.app')) {
+          skipped++;
+          continue;
+        }
         walk(full, targetDir);
         continue;
       }
+
       if (KNOWN_TARGET_DIRS.has(targetDir) && isFinalArtifact(entry)) {
         kept.push(full);
       } else {
@@ -100,7 +108,6 @@ export const readCargoVersion = (tauriDir: string): string => {
       `Failed to read Cargo.toml at ${cargoToml}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  // Extract [package] section explicitly
   const packageMatch = cargoContent.match(/^\[package\]\s*$(.*?)(?=^\[|\n\n|$)/ms);
   if (!packageMatch) {
     throw new Error(`[package] section not found in ${cargoToml}`);
@@ -114,35 +121,17 @@ export const readCargoVersion = (tauriDir: string): string => {
 };
 
 export type TauriBuildResult = {
-  /** Absolute paths to the final distributable artifacts. */
   artifacts: string[];
-  /** Cargo.toml version. */
   version: string;
-  /** Host platform dir (linux/windows/macos). */
   platformDir: 'linux' | 'windows' | 'macos';
-  /** Absolute path to target/release/bundle. */
   bundleDir: string;
 };
 
 export type TauriBuildOptions = {
-  /** Override the bundle targets (e.g. "appimage" for a debug run). Defaults to TAURI_BUNDLE_TARGETS env. */
   bundles?: string;
-  /**
-   * Skip the web rebuild via `--config {"build":{"beforeBuildCommand":""}}`.
-   * Used by ci_run.ts, where the shared web build was already produced by the
-   * build-web job and downloaded to apps/frontend/client/build. The config
-   * override is written to a temp file (cross-platform safe — the tauri CLI
-   * accepts a path to a JSON config to merge; inline JSON quoting breaks under
-   * cmd.exe on Windows).
-   */
   disableBeforeBuildCommand?: boolean;
 };
 
-/**
- * Build the Tauri desktop app and collect the final installer artifacts.
- * Shared by the local pipeline (deployTauriRelease) and the CI per-leg runner
- * (ci_run.ts). Does NOT touch the deploy cache — callers decide skip/reuse.
- */
 export async function buildTauriArtifacts(
   config: AppConfig,
   mode: string,
@@ -153,13 +142,10 @@ export async function buildTauriArtifacts(
   const tauriDir = join(appRoot, 'src-tauri');
   const platformDir = currentPlatformDir();
 
-  // 1. Verify Tauri directory exists
   if (!existsSync(tauriDir)) {
     throw new Error(`No src-tauri directory found at ${tauriDir}.`);
   }
 
-  // 2. Verify web build exists (produced by Phase 1 locally, or downloaded
-  // from the build-web job artifact in CI — see release.yml).
   const buildDir = join(appRoot, 'build');
   if (!existsSync(buildDir)) {
     throw new Error(
@@ -167,12 +153,9 @@ export async function buildTauriArtifacts(
     );
   }
 
-  // 3. Build Tauri desktop app
   log(`🦀 Building Tauri desktop app${platformDir === 'macos' ? ' (universal binary)' : ''}...`);
   const tauriTarget = process.env.TAURI_TARGET;
   const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
-  // Explicit bundles win; otherwise TAURI_BUNDLE_TARGETS env (set by the
-  // workflow); otherwise tauri.conf.json defaults.
   const bundleTargets = opts.bundles ?? process.env.TAURI_BUNDLE_TARGETS;
   const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
 
@@ -185,12 +168,7 @@ export async function buildTauriArtifacts(
   }
 
   try {
-    // Forward the deploy mode to the Tauri beforeBuildCommand (build:tauri →
-    // vite build --mode {mode}). Without this, the desktop web bundle would
-    // always be built with production PUBLIC_ vars even on staging runs.
     process.env.TAURI_BUILD_MODE = mode;
-    // live: stream cargo output so CI watchers see build progress instead of
-    // minutes of silence while the ~15-25min Tauri compile runs.
     run(`bun run tauri build${configFlag}${targetFlag}${bundlesFlag}`, {
       cwd: appRoot,
       live: true,
@@ -210,7 +188,6 @@ export async function buildTauriArtifacts(
     }
   }
 
-  // 4. Collect final artifacts
   const bundleDir = join(tauriDir, 'target/release/bundle');
   if (!existsSync(bundleDir)) {
     throw new Error('No bundle directory found — Tauri build produced nothing.');
@@ -237,22 +214,18 @@ export async function buildTauriArtifacts(
   };
 }
 
-/**
- * Upload the built artifacts to a GitHub Release (RELEASE_TAG env). Loud on
- * failure — a failed upload means the release ships with no desktop binaries.
- */
+/** Upload artifacts to a GitHub Release in a single batched `gh` call. */
 export function uploadArtifactsToRelease(releaseTag: string, artifacts: string[]): void {
-  log(`\n📤 Publishing to GitHub Release ${c.cyan}${releaseTag}${c.reset}...`);
-  for (const artifact of artifacts) {
-    // --clobber makes this idempotent: safe to re-run the same release
-    // (e.g. after a --force rebuild) without a "asset already exists" error.
-    try {
-      run(`gh release upload "${releaseTag}" "${artifact}" --clobber`, { quiet: false });
-    } catch (err) {
-      throw new Error(
-        `Failed to upload artifact to GitHub Release ${releaseTag}: ${artifact}\n${(err as Error).message}`,
-      );
-    }
+  if (artifacts.length === 0) return;
+  log(`\n📤 Publishing ${artifacts.length} artifact(s) to GitHub Release ${c.cyan}${releaseTag}${c.reset}...`);
+
+  const quotedArtifacts = artifacts.map((a) => `"${a}"`).join(' ');
+  try {
+    run(`gh release upload "${releaseTag}" ${quotedArtifacts} --clobber`, { quiet: false });
+  } catch (err) {
+    throw new Error(
+      `Failed to upload artifacts to GitHub Release ${releaseTag}:\n${(err as Error).message}`,
+    );
   }
   ok(`  Uploaded ${artifacts.length} artifact(s) to release ${releaseTag}`);
 }
@@ -276,8 +249,6 @@ export async function deployTauriRelease(
   log(`  App:      ${appRoot}`);
   log(`  Tauri:    ${tauriDir}\n`);
 
-  // 0. Checksum cache — use pre-flight checksum when available
-  // Extract RELEASE_TAG early for cache key consistency
   const releaseTag = process.env.RELEASE_TAG?.trim();
 
   let checksum: string;
@@ -295,23 +266,14 @@ export async function deployTauriRelease(
     checksum = cache.checksum;
   }
 
-  // 1-4. Build + collect (shared with ci_run.ts)
   const {
     artifacts,
     version: ver,
     bundleDir,
   } = await buildTauriArtifacts(config, mode, rootDir, {});
 
-  // 5. Publish artifacts
-  // A real GitHub Release only exists when this run was triggered by
-  // `release: published` — the workflow sets RELEASE_TAG in that case only.
-  // workflow_dispatch / staging runs have no tag to attach to; the
-  // workflow's own actions/upload-artifact step is the distribution path
-  // for those (see .github/workflows/release.yml).
   if (releaseTag) {
     uploadArtifactsToRelease(releaseTag, artifacts);
-    // Updater fragment — the CI update-manifest job merges these into
-    // latest.json on the release.
     writeFragmentFile(
       platformDir,
       buildPlatformFragment({ platform: platformDir, artifactPaths: artifacts, releaseTag }),
@@ -326,7 +288,6 @@ export async function deployTauriRelease(
     log(`  ${c.dim}${bundleDir}${c.reset}`);
   }
 
-  // 6. Save cache on success (new JSON schema — tauri-release only)
   await setTauriCache(mode, {
     checksum,
     version: ver,
