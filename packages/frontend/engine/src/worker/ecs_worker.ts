@@ -771,7 +771,14 @@ const initializeEngine = (
       if (playerEntityId === 0) {
         playerEntityId = newEid;
       }
-      postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+      // Include Visual.frame for prop entities so they load the real texture
+      const frame = Visual.frame[newEid] ? (Visual.frame[newEid] as string) : undefined;
+      postMessage({
+        type: 'ENTITY_CREATED',
+        eid: newEid,
+        tint,
+        ...(frame ? { frame } : {}),
+      });
     }
   } else {
     playerEntityId = createPlayer(world, playerData);
@@ -1585,6 +1592,8 @@ self.onmessage = (event: MessageEvent): void => {
 
             if (!isPlayer) {
               npcIndex++;
+              // Include Visual.frame for prop entities so they load the real texture
+              const frame = Visual.frame[newEid] ? (Visual.frame[newEid] as string) : undefined;
               postMessage({
                 type: 'ENTITY_CREATED',
                 eid: newEid,
@@ -1600,6 +1609,7 @@ self.onmessage = (event: MessageEvent): void => {
                   isVendor: false,
                   vendorInventory: '',
                 },
+                ...(frame ? { frame } : {}),
               });
             } else {
               postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });

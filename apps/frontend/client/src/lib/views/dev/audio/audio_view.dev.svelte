@@ -159,6 +159,7 @@ const { viewModel }: Props = $props();
                   type="button"
                   class="btn btn-xs btn-outline"
                   onclick={() => viewModel.playTrack(track)}
+                  aria-label={`Play ${track.title}`}
                 >
                   ▶
                 </button>

@@ -87,7 +87,7 @@ const { viewModel = getMusicPlayerViewModel({ className: 'MusicPlayerVM' }) }: P
           title={viewModel.hasSimilarTracks
             ? 'Play another song matching this vibe'
             : 'No other similar track available'}
-          class:btn-disabled={!viewModel.hasSimilarTracks && !viewModel.hasActiveTrack}
+          disabled={!viewModel.hasSimilarTracks}
         >
           ⏭
         </button>

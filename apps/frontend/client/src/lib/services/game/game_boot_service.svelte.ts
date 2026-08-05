@@ -1368,6 +1368,8 @@ class GameBootService
     // ── C-332: Unbind from GameEngineService so stale reference doesn't
     // survive teardown. Next boot will re-register via registerWorld(). ──
     gameEngineService.registerWorld(undefined as unknown as GameWorld);
+    gameEngineService.currentMapId = '';
+    gameEngineService.playerScene = 'unknown';
 
     this._bridge = undefined;
   }

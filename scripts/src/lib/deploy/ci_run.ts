@@ -87,9 +87,18 @@ function parseLeg(raw: string | undefined): Leg {
 
 /** Normalize Node/Bun process.arch to Tauri updater target architectures */
 function resolveTauriArch(): string {
-  if (process.env.TAURI_TARGET === 'universal-apple-darwin') {
+  const tauriTarget = process.env.TAURI_TARGET;
+  if (tauriTarget === 'universal-apple-darwin') {
     return 'universal';
   }
+  // Parse architecture from TAURI_TARGET triple (e.g., "x86_64-pc-windows-msvc" → "x86_64")
+  if (tauriTarget) {
+    const targetArch = tauriTarget.split('-')[0];
+    if (targetArch === 'x86_64' || targetArch === 'aarch64') {
+      return targetArch;
+    }
+  }
+  // Fall back to process.arch normalization
   const rawArch = process.arch;
   if (rawArch === 'x64') return 'x86_64';
   if (rawArch === 'arm64') return 'aarch64';

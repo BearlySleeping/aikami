@@ -341,6 +341,7 @@ class GameEngineService
 
     this.isGameReady = false;
     this.playerScene = 'unknown';
+    this.currentMapId = '';
     this.gameError = undefined;
     this.activeContexts = [];
     this.floatingTexts = [];

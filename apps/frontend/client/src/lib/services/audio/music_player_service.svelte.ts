@@ -215,7 +215,10 @@ class MusicPlayerService
   async skip(): Promise<void> {
     const similar = this._findSimilarTrack();
     if (similar) {
-      this._skipHistory.push(this.currentTrack?.id ?? '');
+      const currentId = this.currentTrack?.id;
+      if (currentId) {
+        this._skipHistory.push(currentId);
+      }
       this.feedback = '';
       await this.playTrack(similar);
       return;
@@ -270,6 +273,7 @@ class MusicPlayerService
    * Scores library tracks by tag overlap with the scene vibe tags, excludes
    * the currently playing track and recent skip targets, and returns the best
    * match. Falls back to any other track when the vibe has no overlap.
+   * If all tracks are excluded, resets skip history and rescores.
    */
   private _findSimilarTrack(): Track | null {
     const currentId = this.currentTrack?.id;
@@ -293,6 +297,13 @@ class MusicPlayerService
     // No vibe overlap — still offer a different track if one exists.
     if (!best && this.tracks.length > 1) {
       best = this.tracks.find((t) => t.id !== currentId && !recent.has(t.id)) ?? null;
+    }
+
+    // If all tracks other than current are excluded, reset skip history and rescore
+    if (!best && this.tracks.length > 1 && this._skipHistory.length > 0) {
+      this._skipHistory.length = 0;
+      this.debug('findSimilarTrack:history-reset', { trackCount: this.tracks.length });
+      return this._findSimilarTrack();
     }
 
     if (best) {

@@ -431,6 +431,23 @@ export class AudioService
 
     this._stopSource(this._activeSource);
     this._activeSource = undefined;
+
+    // Cancel any in-progress crossfade and stop the fading-out source
+    if (this._crossfadeAbort) {
+      this._crossfadeAbort.abort();
+      this._crossfadeAbort = undefined;
+    }
+    if (this.isCrossfading && this._nextGain) {
+      // The fading-out source is still connected; stop it
+      const oldSource = this._nextSource;
+      if (oldSource) {
+        this._stopSource(oldSource);
+        this._nextSource = undefined;
+      }
+      this._nextGain.gain.value = 0;
+      this.isCrossfading = false;
+    }
+
     this.isBgmPaused = true;
 
     this.debug('pauseBgm', {

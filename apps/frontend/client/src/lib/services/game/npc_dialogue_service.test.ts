@@ -662,6 +662,13 @@ describe('startDialogue', () => {
   });
 
   test('passes plain dialog text through unchanged when not a dialogue key', () => {
+    const contentProvider = makeContentProvider();
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
     npcDialogueService.startDialogue({
       npcData: {
         npcId: 'sandbox-elder',

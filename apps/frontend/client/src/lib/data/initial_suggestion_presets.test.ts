@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/data/initial_suggestion_presets.test.ts
 import { describe, expect, test } from 'bun:test';
+import { CLASS_PRESETS } from '@aikami/constants';
 import {
   getClassInitialSuggestions,
   MAX_INITIAL_SUGGESTIONS,
@@ -9,7 +10,7 @@ import {
 
 describe('PLAYER_CLASS_INITIAL_CHIPS', () => {
   test('covers every class preset id', () => {
-    const classIds = ['fighter', 'wizard', 'rogue', 'bard', 'cleric', 'ranger', 'paladin', 'druid'];
+    const classIds = CLASS_PRESETS.map((preset) => preset.id);
     for (const id of classIds) {
       expect(PLAYER_CLASS_INITIAL_CHIPS[id], `class ${id}`).toBeDefined();
       expect(PLAYER_CLASS_INITIAL_CHIPS[id]?.length).toBeGreaterThan(0);

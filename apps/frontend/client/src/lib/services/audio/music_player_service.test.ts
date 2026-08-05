@@ -110,6 +110,14 @@ describe('MusicPlayerService — visibility', () => {
     musicPlayerService.toggleVisible();
     expect(musicPlayerService.visible).toBe(true);
   });
+
+  test('initialize restores visible state from storage', () => {
+    const MUSIC_PLAYER_VISIBLE_KEY = 'aikami-music-player-visible';
+    localStorage.setItem(MUSIC_PLAYER_VISIBLE_KEY, '1');
+    musicPlayerService.initialize();
+    expect(musicPlayerService.visible).toBe(true);
+    localStorage.removeItem(MUSIC_PLAYER_VISIBLE_KEY);
+  });
 });
 
 describe('MusicPlayerService — derived playback state', () => {
@@ -198,6 +206,21 @@ describe('MusicPlayerService — vibe-based skip', () => {
     expect(second).toBeString();
     expect(second).not.toBe(first);
   });
+
+  test('skip exhausts history and wraps rotation beyond catalog size', async () => {
+    resetMocks([FOREST_A, FOREST_B, COMBAT]);
+    musicPlayerService.setSceneContext(FOREST_SCENE);
+    audioService.activeTrackUrl = FOREST_A.url;
+
+    // Skip more times than the library contains
+    for (let i = 0; i < 5; i++) {
+      await musicPlayerService.skip();
+      const url = lastTransitionUrl();
+      expect(url).toBeString();
+      expect(musicPlayerService.feedback).not.toBe('No other track matches this vibe');
+      audioService.activeTrackUrl = url;
+    }
+  });
 });
 
 describe('MusicPlayerService — pause / resume / stop', () => {
@@ -213,10 +236,19 @@ describe('MusicPlayerService — pause / resume / stop', () => {
   test('stop delegates to the audio service and clears skip history', async () => {
     resetMocks([FOREST_A, FOREST_B, COMBAT]);
     musicPlayerService.setSceneContext(FOREST_SCENE);
+    audioService.activeTrackUrl = FOREST_A.url;
     await musicPlayerService.skip();
+    const firstSkipUrl = lastTransitionUrl();
+    audioService.activeTrackUrl = firstSkipUrl;
     (audioService.stopAll as ReturnType<typeof mock>).mockClear();
 
     musicPlayerService.stop();
     expect(audioService.stopAll).toHaveBeenCalled();
+
+    // After stop, skip again and assert it can return to the previously skipped track
+    (audioService.transitionToBgm as ReturnType<typeof mock>).mockClear();
+    await musicPlayerService.skip();
+    const afterStopUrl = lastTransitionUrl();
+    expect(afterStopUrl).toBeString();
   });
 });

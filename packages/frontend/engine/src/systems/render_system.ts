@@ -244,6 +244,13 @@ const _loadVisualTextureAsync = (options: {
           return;
         }
         _swapInSprite({ eid, world, stage, resolved });
+      })
+      .catch((error) => {
+        logger.error('[render_system] Failed to load named frame texture for entity', {
+          eid,
+          frame,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     return;
   }

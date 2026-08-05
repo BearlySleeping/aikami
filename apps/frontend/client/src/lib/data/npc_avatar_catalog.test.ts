@@ -36,11 +36,11 @@ describe('npc_avatar_catalog — emberwatch coverage', () => {
     }
   });
 
-  test('every emberwatch NPC portrait file exists on disk', () => {
+  test('every emberwatch NPC portrait file exists on disk', async () => {
     for (const npcId of EMBERWATCH_NPC_IDS) {
       const url = resolveNpcAvatarUrl({ npcId });
       const filePath = url.replace('/assets/npc/', 'assets/npc/');
-      expect(
+      await expect(
         Bun.file(new URL(`../../../static/${filePath}`, import.meta.url)).exists(),
         `portrait file ${filePath} should exist for NPC ${npcId}`,
       ).resolves.toBe(true);
@@ -61,10 +61,10 @@ describe('npc_avatar_catalog — emberwatch coverage', () => {
 // ---------------------------------------------------------------------------
 
 describe('npc_avatar_catalog — catalog integrity', () => {
-  test('every mapped NPC sprite is registered with expressions and a neutral portrait', () => {
+  test('every mapped NPC sprite is registered with expressions and a neutral portrait', async () => {
     for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
       expect(NPC_SPRITE_EXPRESSIONS[sprite], `sprite ${sprite} (NPC ${npcId})`).toBeDefined();
-      expect(
+      await expect(
         Bun.file(
           new URL(`../../../static/assets/npc/${sprite}/neutral.webp`, import.meta.url),
         ).exists(),
@@ -82,10 +82,10 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('every mapped player class sprite is registered with expressions and a neutral portrait', () => {
+  test('every mapped player class sprite is registered with expressions and a neutral portrait', async () => {
     for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
       expect(NPC_SPRITE_EXPRESSIONS[sprite], `sprite ${sprite} (class ${classId})`).toBeDefined();
-      expect(
+      await expect(
         Bun.file(
           new URL(`../../../static/assets/npc/${sprite}/neutral.webp`, import.meta.url),
         ).exists(),
@@ -94,8 +94,8 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('placeholder avatar file exists', () => {
-    expect(
+  test('placeholder avatar file exists', async () => {
+    await expect(
       Bun.file(new URL('../../../static/assets/npc/placeholder.svg', import.meta.url)).exists(),
     ).resolves.toBe(true);
   });

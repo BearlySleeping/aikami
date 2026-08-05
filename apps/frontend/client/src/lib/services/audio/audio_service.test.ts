@@ -495,11 +495,17 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
     audioService.pauseBgm();
     const sourcesBefore = createdSources.length;
 
+    // Advance mock time to simulate elapsed pause duration
+    mockContext.currentTime += 5;
+
     await audioService.resumeBgm();
 
     expect(audioService.isBgmPaused).toBe(false);
     expect(createdSources.length).toBe(sourcesBefore + 1);
-    expect(createdSources[createdSources.length - 1].started).toBe(true);
+    const resumedSource = createdSources[createdSources.length - 1];
+    expect(resumedSource.started).toBe(true);
+    // Assert resume starts with the paused offset, not zero
+    expect(resumedSource.startOffset).toBeGreaterThan(0);
   });
 
   test('resumeBgm is a no-op when not paused', async () => {
