@@ -1,17 +1,21 @@
 ---
 // apps/frontend/site/src/lib/components/sections/download.astro
 /**
- * Download Section — Tauri desktop release downloads.
+ * Download Section — Tauri desktop release downloads from GitHub Releases.
  *
- * Client-side: auto-detects OS, pings URLs to check availability,
- * and shows download buttons for stable/latest channels.
- * Platforms without builds (Windows, macOS currently) are gracefully
- * shown as "coming soon" until artifacts are uploaded.
+ * Client-side: resolves the GitHub releases for the `stable` (newest
+ * production / non-prerelease release) and `latest` (newest release, may
+ * include prereleases) channels, then shows download buttons for Linux,
+ * macOS and Windows with live file sizes.
+ *
+ * Staging never publishes official releases — staging workflow runs only
+ * produce ephemeral workflow artifacts — so this section only ever links to
+ * production GitHub Releases.
  */
 
-import { PUBLIC_DOWNLOAD_BASE_URL } from 'astro:env/client';
+import { PUBLIC_GITHUB_REPO } from 'astro:env/client';
 
-const BASE = PUBLIC_DOWNLOAD_BASE_URL || '';
+const REPO = PUBLIC_GITHUB_REPO || '';
 
 type PlatformDef = {
   id: string;
@@ -23,12 +27,12 @@ type PlatformDef = {
 const PLATFORMS: PlatformDef[] = [
   { id: 'linux', label: 'Linux', ext: '.appimage', icon: 'linux' },
   { id: 'macos', label: 'macOS', ext: '.dmg', icon: 'apple' },
-  { id: 'windows', label: 'Windows', ext: '.msi', icon: 'windows' },
+  { id: 'windows', label: 'Windows', ext: '.exe', icon: 'windows' },
 ] as const;
 
 const CHANNELS = [
-  { id: 'stable', label: 'Stable', description: 'Production releases' },
-  { id: 'latest', label: 'Latest', description: 'Dev builds' },
+  { id: 'stable', label: 'Stable', description: 'Production release' },
+  { id: 'latest', label: 'Latest', description: 'Newest release' },
 ] as const;
 ---
 
@@ -44,7 +48,7 @@ const CHANNELS = [
     </div>
 
     <!-- Channel Toggle -->
-    <div id="download-root" class="mt-10" data-base-url={BASE}>
+    <div id="download-root" class="mt-10" data-repo={REPO}>
       <div class="flex justify-center gap-2 mb-8">
         {CHANNELS.map((ch) => (
           <button
@@ -61,7 +65,7 @@ const CHANNELS = [
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto" id="download-cards">
         {PLATFORMS.map((p) => (
           <div
-            class={`download-card rune-border p-6 bg-background/50 text-center transition-opacity ${p.id === 'linux' ? '' : 'opacity-50'}`}
+            class="download-card rune-border p-6 bg-background/50 text-center transition-opacity"
             data-platform={p.id}
             data-ext={p.ext}
           >
@@ -93,16 +97,14 @@ const CHANNELS = [
 
             <a
               href="/download"
-              aria-label={`${p.id !== 'linux' ? 'Unavailable — Coming soon' : `Download Aikami desktop client for ${p.label}`}`}
-              class={`download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full ${p.id === 'linux' ? 'bg-primary text-primary-foreground hover:opacity-90' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
+              aria-label={`Download Aikami desktop client for ${p.label}`}
+              class="download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full border border-border bg-card text-foreground hover:bg-muted"
               data-platform={p.id}
             >
               <span class="download-label">Download</span>
             </a>
 
-            <p class="download-status mt-3 text-xs text-muted-foreground">
-              {p.id === 'linux' ? 'Checking...' : 'Coming soon'}
-            </p>
+            <p class="download-status mt-3 text-xs text-muted-foreground">Checking…</p>
           </div>
         ))}
       </div>
@@ -118,17 +120,24 @@ const CHANNELS = [
 <script>
 // apps/frontend/site/src/lib/components/sections/download.astro (client script)
 
-const BASE_URL = (document.getElementById('download-root') as HTMLElement)?.dataset.baseUrl || '';
-
-// Split into build-time and runtime sections to avoid type clashes
+const ROOT = document.getElementById('download-root') as HTMLElement | null;
+const REPO = ROOT?.dataset.repo || '';
 
 type Platform = { id: string; label: string; ext: string };
+// GitHub API returns snake_case field names — keep them verbatim in the types.
+// biome-ignore lint/style/useNamingConvention: GitHub API field name
+type ReleaseAsset = { name: string; size: number; browser_download_url: string };
+// biome-ignore lint/style/useNamingConvention: GitHub API field names
+type Release = { tag_name: string; prerelease: boolean; assets: ReleaseAsset[] };
+type ChannelId = 'stable' | 'latest';
 
 const PLATFORM_DEFS: Platform[] = [
   { id: 'linux', label: 'Linux', ext: '.appimage' },
   { id: 'macos', label: 'macOS', ext: '.dmg' },
-  { id: 'windows', label: 'Windows', ext: '.msi' },
+  { id: 'windows', label: 'Windows', ext: '.exe' },
 ];
+
+const CHANNEL_IDS: ChannelId[] = ['stable', 'latest'];
 
 /** Detect the user's OS from navigator.userAgent. */
 function detectOS(): string {
@@ -142,30 +151,9 @@ function detectOS(): string {
   return 'linux';
 }
 
-/** Build the full download URL for a platform + channel. */
-function buildUrl(base: string, channel: string, platform: Platform): string {
-  const cleanBase = base.replace(/\/+$/, '');
-  return `${cleanBase}/${channel}/${platform.id}${platform.ext}`;
-}
-
-/**
- * Check if a URL is reachable and get file size via Content-Length.
- * Uses a real fetch (no no-cors) — bucket must have CORS configured.
- */
-async function checkUrl(url: string): Promise<{ ok: boolean; size?: number }> {
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (res.ok) {
-      const size = res.headers.get('content-length');
-      return { ok: true, size: size ? Number.parseInt(size, 10) : undefined };
-    }
-    return { ok: false };
-  } catch {
-    return { ok: false };
-  }
+/** Canonical asset name for a platform (aikami.appimage, aikami.exe, …). */
+function assetName(ext: string): string {
+  return `aikami${ext}`;
 }
 
 function formatSize(bytes: number): string {
@@ -175,23 +163,88 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Main init — runs on DOMContentLoaded. */
-async function init() {
-  if (!BASE_URL) {
-    for (const card of document.querySelectorAll<HTMLElement>('.download-card')) {
-      card.style.opacity = '0.4';
-      const label = card.querySelector<HTMLElement>('.download-label');
-      const status = card.querySelector<HTMLElement>('.download-status');
-      if (label) {
-        label.textContent = 'Unavailable';
-      }
-      if (status) {
-        status.textContent = 'Not configured';
-      }
-    }
+async function fetchWithTimeout(url: string, ms = 5_000): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(ms) });
+}
+
+/**
+ * Resolve the per-channel releases from the GitHub API.
+ *  - stable: newest release that is NOT a prerelease (production)
+ *  - latest: newest release overall (may include prereleases)
+ * Staging has no official releases — workflow artifacts only — so it never
+ * appears as a channel here.
+ */
+async function resolveChannels(): Promise<Record<ChannelId, Release | null>> {
+  const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/releases?per_page=10`);
+  if (!res.ok) {
+    return { stable: null, latest: null };
+  }
+  const releases = (await res.json()) as Release[];
+  return {
+    latest: releases[0] ?? null,
+    stable: releases.find((r) => !r.prerelease) ?? null,
+  };
+}
+
+/** Find the platform's asset inside a release. */
+function findAsset(release: Release, platform: Platform): ReleaseAsset | undefined {
+  const want = assetName(platform.ext);
+  return (
+    release.assets.find((a) => a.name === want) ??
+    release.assets.find((a) => a.name.toLowerCase().endsWith(platform.ext))
+  );
+}
+
+/** Rate-limit fallback: /releases/latest/download/<asset> needs no API call. */
+function fallbackUrl(platform: Platform): string {
+  return `https://github.com/${REPO}/releases/latest/download/${assetName(platform.ext)}`;
+}
+
+function setLinkState(
+  card: HTMLElement,
+  state: 'ok' | 'missing' | 'unconfigured',
+  opts: { href?: string; label: string; status: string; userOS: string; platform: Platform },
+): void {
+  const link = card.querySelector<HTMLAnchorElement>('.download-link');
+  const label = card.querySelector<HTMLElement>('.download-label');
+  const status = card.querySelector<HTMLElement>('.download-status');
+  if (!link || !label || !status) {
     return;
   }
 
+  link.className =
+    'download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full border border-border bg-card text-foreground hover:bg-muted';
+  link.removeAttribute('download');
+  card.style.opacity = '1';
+  label.textContent = opts.label;
+  status.textContent = opts.status;
+
+  if (state === 'ok' && opts.href) {
+    link.href = opts.href;
+    link.setAttribute('download', '');
+    link.setAttribute('aria-label', `Download Aikami desktop client for ${opts.platform.label}`);
+    // Highlight the detected OS card
+    if (opts.platform.id === opts.userOS) {
+      link.className = link.className
+        .replace(/bg-card/, 'bg-primary')
+        .replace(/text-foreground/, 'text-primary-foreground')
+        .replace(/hover:bg-muted/, 'hover:opacity-90');
+    }
+    return;
+  }
+  if (state === 'missing') {
+    link.removeAttribute('href');
+    link.setAttribute('aria-label', 'Unavailable — Coming soon');
+    card.style.opacity = '0.5';
+    return;
+  }
+  link.removeAttribute('href');
+  link.setAttribute('aria-label', 'Unavailable — Not configured');
+  card.style.opacity = '0.4';
+}
+
+/** Main init — runs on DOMContentLoaded. */
+async function init(): Promise<void> {
   const userOS = detectOS();
 
   const osBadge = document.getElementById('download-os-badge');
@@ -201,119 +254,118 @@ async function init() {
     osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
   }
 
-  // Probe both channels — default to the one with available artifacts
-  const channelResults: Record<string, boolean> = {};
-  for (const ch of ['stable', 'latest']) {
-    const firstPlatform = PLATFORM_DEFS[0];
-    if (!firstPlatform) {
-      continue;
-    }
-    const probeUrl = buildUrl(BASE_URL, ch, firstPlatform);
-    const result = await checkUrl(probeUrl);
-    channelResults[ch] = result.ok;
-  }
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('.download-card'));
 
-  let activeChannel: string;
-  if (channelResults.stable) {
-    activeChannel = 'stable';
-  } else if (channelResults.latest) {
-    activeChannel = 'latest';
-  } else {
-    activeChannel = 'latest';
-  }
-
-  // Update channel button UI to match
-  if (activeChannel === 'latest') {
-    const stableBtn = document.querySelector<HTMLButtonElement>('[data-channel="stable"]');
-    const latestBtn = document.querySelector<HTMLButtonElement>('[data-channel="latest"]');
-    if (stableBtn) {
-      stableBtn.className =
-        'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-    }
-    if (latestBtn) {
-      latestBtn.className =
-        'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-    }
-  }
-
-  // Channel toggle buttons
-  const channelButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
-  for (const btn of channelButtons) {
-    btn.addEventListener('click', () => {
-      activeChannel = btn.dataset.channel ?? 'stable';
-      const allButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
-      for (const b of allButtons) {
-        if (b.dataset.channel === activeChannel) {
-          b.className =
-            'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-        } else {
-          b.className =
-            'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-        }
-      }
-      updateCards();
-    });
-  }
-
-  // Check all platform URLs for initial channel
-  async function updateCards() {
-    const cards = document.querySelectorAll<HTMLElement>('.download-card');
+  if (!REPO) {
     for (const card of cards) {
-      const platformId = card.dataset.platform ?? '';
-      const platform = PLATFORM_DEFS.find((p) => p.id === platformId);
+      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
       if (!platform) {
         continue;
       }
+      setLinkState(card, 'unconfigured', {
+        label: 'Unavailable',
+        status: 'Not configured',
+        userOS,
+        platform,
+      });
+    }
+    return;
+  }
 
-      const url = buildUrl(BASE_URL, activeChannel, platform);
+  let channels: Record<ChannelId, Release | null>;
+  try {
+    channels = await resolveChannels();
+  } catch {
+    channels = { stable: null, latest: null };
+  }
 
-      const link = card.querySelector<HTMLAnchorElement>('.download-link');
-      const label = card.querySelector<HTMLElement>('.download-label');
-      const status = card.querySelector<HTMLElement>('.download-status');
+  // API unreachable / rate-limited → fall back to direct /releases/latest URLs
+  if (!channels.stable && !channels.latest) {
+    for (const card of cards) {
+      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
+      if (!platform) {
+        continue;
+      }
+      setLinkState(card, 'ok', {
+        href: fallbackUrl(platform),
+        label: 'Download',
+        status: 'latest',
+        userOS,
+        platform,
+      });
+    }
+    return;
+  }
 
-      // Check fresh for the active channel
-      const result = await checkUrl(url);
+  // Default to the channel that has a release (stable wins when both exist)
+  let activeChannel: ChannelId = 'stable';
+  if (!channels.stable && channels.latest) {
+    activeChannel = 'latest';
+  }
 
-      if (link) {
-        link.className = link.className.replace(/pointer-events-none/, '');
-
-        if (result.ok) {
-          link.href = url;
-          link.setAttribute('download', '');
-          card.style.opacity = '1';
-          if (label) {
-            label.textContent = result.size ? `Download (${formatSize(result.size)})` : 'Download';
-          }
-          const platformLabel = PLATFORM_DEFS.find((p) => p.id === platformId)?.label ?? platformId;
-          link.setAttribute('aria-label', `Download Aikami desktop client for ${platformLabel}`);
-          if (status) {
-            status.textContent = activeChannel;
-          }
-          // Highlight detected OS
-          if (platformId === userOS) {
-            link.className = link.className
-              .replace(/bg-card/, 'bg-primary')
-              .replace(/text-foreground/, 'text-primary-foreground')
-              .replace(/hover:bg-muted/, 'hover:opacity-90');
-          }
-        } else {
-          link.removeAttribute('href');
-          link.removeAttribute('download');
-          card.style.opacity = '0.5';
-          if (label) {
-            label.textContent = 'Coming soon';
-          }
-          link.setAttribute('aria-label', 'Unavailable — Coming soon');
-          if (status) {
-            status.textContent = 'Not yet available';
-          }
-        }
+  function renderChannel(): void {
+    const release = channels[activeChannel];
+    for (const card of cards) {
+      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
+      if (!platform) {
+        continue;
+      }
+      if (!release) {
+        setLinkState(card, 'missing', {
+          label: 'Coming soon',
+          status: 'Not yet available',
+          userOS,
+          platform,
+        });
+        continue;
+      }
+      const asset = findAsset(release, platform);
+      if (asset) {
+        setLinkState(card, 'ok', {
+          href: asset.browser_download_url,
+          label: asset.size ? `Download (${formatSize(asset.size)})` : 'Download',
+          status: release.tag_name,
+          userOS,
+          platform,
+        });
+      } else {
+        setLinkState(card, 'missing', {
+          label: 'Coming soon',
+          status: 'Not in this release',
+          userOS,
+          platform,
+        });
       }
     }
   }
 
-  // Initial render
-  await updateCards();
+  const activeBtnClass =
+    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
+  const inactiveBtnClass =
+    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
+
+  const channelButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
+  const applyButtonState = (): void => {
+    for (const btn of channelButtons) {
+      btn.className = btn.dataset.channel === activeChannel ? activeBtnClass : inactiveBtnClass;
+    }
+  };
+
+  // Channel toggle buttons
+  for (const btn of channelButtons) {
+    btn.addEventListener('click', () => {
+      const id = (btn.dataset.channel ?? 'stable') as ChannelId;
+      if (!CHANNEL_IDS.includes(id)) {
+        return;
+      }
+      activeChannel = id;
+      applyButtonState();
+      renderChannel();
+    });
+  }
+
+  applyButtonState();
+  renderChannel();
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -106,7 +106,7 @@ export default defineConfig({
         optional: false,
         min: 1,
       }),
-      PUBLIC_DOWNLOAD_BASE_URL: envField.string({
+      PUBLIC_GITHUB_REPO: envField.string({
         context: 'client',
         access: 'public',
         optional: false,
