@@ -212,11 +212,14 @@ export async function buildTauriArtifacts(
   // 3. Build Tauri desktop app
   log(`🦀 Building Tauri desktop app${platformDir === 'macos' ? ' (universal binary)' : ''}...`);
   const tauriTarget = process.env.TAURI_TARGET;
-  const targetFlag = tauriTarget ? ` -- --target ${tauriTarget}` : '';
   // Explicit bundles win; otherwise TAURI_BUNDLE_TARGETS env (set by the
   // workflow); otherwise tauri.conf.json defaults.
   const bundleTargets = opts.bundles ?? process.env.TAURI_BUNDLE_TARGETS;
   const bundlesFlag = bundleTargets ? ` --bundles ${bundleTargets}` : '';
+  // `--target` is a top-level tauri build flag (e.g. universal-apple-darwin).
+  // It must NOT go after `--` — everything after `--` is forwarded to cargo,
+  // which rejects tauri's own flags ("unexpected argument '--bundles'").
+  const targetFlag = tauriTarget ? ` --target ${tauriTarget}` : '';
 
   let configOverridePath: string | undefined;
   let configFlag = '';

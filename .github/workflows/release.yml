@@ -136,31 +136,15 @@ jobs:
       # ── Single secrets fetch, shared with every desktop job ─────────
       # Every desktop job needs the same .env.{mode} files. Fetching per-job
       # spawned concurrent `gcloud secrets` processes that collide on gcloud's
-      # own config/token cache — Windows fails with "file is being used by
-      # another process". Fetch ONCE here (serialized inside download_secrets)
-      # and hand the files down encrypted. The repo is PUBLIC, so the env
-      # files are AES-encrypted with a passphrase from GitHub secrets before
-      # upload; jobs decrypt them into their own workspaces.
-      - name: Encrypt env files for matrix legs
+      # config/token cache (Windows file-lock). Fetch ONCE here and hand the
+      # files down via Upstash Redis (per-run key, 4h TTL) — the repo is
+      # PUBLIC, so no env content may ride in downloadable workflow artifacts.
+      # Downstream jobs restore the files with env_share.ts --get.
+      - name: Share env files via Redis
         shell: bash
         run: |
-          set -euo pipefail
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in scripts/.env.production -out scripts.env.enc
-          openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in apps/frontend/client/.env.production -out client.env.enc
-        env:
-          ENV_PASSPHRASE: ${{ secrets.ENV_PASSPHRASE }}
-
-      - name: Upload encrypted env files
-        uses: actions/upload-artifact@v7
-        with:
-          name: env-files-${{ github.run_id }}
-          path: |
-            scripts.env.enc
-            client.env.enc
-          if-no-files-found: error
-          retention-days: 1
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --put
 
       - name: Compute checksum + version
         id: plan
@@ -247,22 +231,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Download env files
-        uses: actions/download-artifact@v8
-        with:
-          name: env-files-${{ github.run_id }}
-          path: env-archive
-
-      - name: Decrypt env files
+      - name: Restore env files from Redis
         shell: bash
         run: |
-          set -euo pipefail
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in env-archive/scripts.env.enc -out scripts/.env.production
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in env-archive/client.env.enc -out apps/frontend/client/.env.production
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
         env:
-          ENV_PASSPHRASE: ${{ secrets.ENV_PASSPHRASE }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
 
       - name: Build web bundle
         shell: bash
@@ -376,22 +352,14 @@ jobs:
         if: matrix.action == 'build'
         run: bun install --frozen-lockfile
 
-      - name: Download env files
-        uses: actions/download-artifact@v8
-        with:
-          name: env-files-${{ github.run_id }}
-          path: env-archive
-
-      - name: Decrypt env files
+      - name: Restore env files from Redis
         shell: bash
         run: |
-          set -euo pipefail
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in env-archive/scripts.env.enc -out scripts/.env.production
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass env:ENV_PASSPHRASE \
-            -in env-archive/client.env.enc -out apps/frontend/client/.env.production
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
         env:
-          ENV_PASSPHRASE: ${{ secrets.ENV_PASSPHRASE }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
 
       # ── Build legs only: consume the shared web bundle ─────────────
       - name: Download shared web build
