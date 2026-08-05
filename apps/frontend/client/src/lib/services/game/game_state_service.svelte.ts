@@ -8,7 +8,6 @@ import {
 } from '@aikami/frontend/services';
 import type {
   ActiveSessionData,
-  EquipmentSlot,
   GameCharacterSheet,
   NarrativeTraits,
   WorldEvent,
@@ -21,8 +20,9 @@ import type { ActiveContextEntry, GameMode, GameStateEvent, GameStateListener } 
 import { registerSerializable } from './serializable_service';
 
 // C-314: ITEM_CATALOG and getItemDefinition moved to inventory_service.svelte.ts
+// C-374: equipment state/stat aggregation moved to equipment_service.svelte.ts
 
-import { getItemDefinition } from './inventory_service.svelte';
+import { equipmentService } from './equipment_service.svelte';
 
 export type GameStateServiceOptions = BaseFrontendClassOptions & {
   uid: string;
@@ -89,30 +89,10 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   readonly playerBaseAttack: number;
   /** Base defense from leveling (before equipment bonuses). */
   readonly playerBaseDefense: number;
-  /** Total attack = base + equipped weapon bonus. */
+  /** Total attack = base + equipment bonuses (C-374, via equipmentService). */
   readonly playerTotalAttack: number;
-  /** Total defense = base + equipped armor bonus. */
+  /** Total defense = base + equipment bonuses (C-374, via equipmentService). */
   readonly playerTotalDefense: number;
-
-  // ── Equipment (C-153 Equipping) ──
-
-  /** Item ID of the currently equipped weapon, or undefined if none. */
-  readonly equippedWeapon: string | undefined;
-  /** Item ID of the currently equipped armor, or undefined if none. */
-  readonly equippedArmor: string | undefined;
-
-  /**
-   * Equips an item from the inventory into its designated slot.
-   *
-   * Moves the item from the inventory to the equipment slot and updates
-   * total attack/defense accordingly. If an item is already in that slot,
-   * it is unequipped first (returned to inventory).
-   */
-  equipItem(options: { itemId: string }): void;
-  /**
-   * Unequips the item in the given slot and returns it to the inventory.
-   */
-  unequipItem(options: { slot: EquipmentSlot }): void;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -177,10 +157,6 @@ export class GameStateService
   playerBaseAttack = $state<number>(5);
   playerBaseDefense = $state<number>(12);
 
-  // ── Equipment slots (C-153 Equipping) ──
-  equippedWeapon = $state<string | undefined>(undefined);
-  equippedArmor = $state<string | undefined>(undefined);
-
   // ── Narrative traits (C-232 Character Sheet) ──
   narrativeTraits = $state<NarrativeTraits>({ likes: [], temptations: [], keys: [] });
 
@@ -189,14 +165,14 @@ export class GameStateService
 
   // ── Computed stat getters ──
 
-  /** Total attack = base + weapon bonus. */
+  /** Total attack = base + equipment bonuses (C-374). */
   get playerTotalAttack(): number {
-    return this.playerBaseAttack + this._equipmentAttackBonus;
+    return equipmentService.totalAttack;
   }
 
-  /** Total defense = base + armor bonus. */
+  /** Total defense = base + equipment bonuses (C-374). */
   get playerTotalDefense(): number {
-    return this.playerBaseDefense + this._equipmentDefenseBonus;
+    return equipmentService.totalDefense;
   }
 
   /** Compact AI-ready character sheet summary for prompt injection (C-232). */
@@ -212,22 +188,6 @@ export class GameStateService
       narrativeTraits: this.narrativeTraits,
     };
     return serializeForAi(sheet);
-  }
-
-  /** Attack bonus from currently equipped weapon. */
-  private get _equipmentAttackBonus(): number {
-    if (!this.equippedWeapon) {
-      return 0;
-    }
-    return getItemDefinition(this.equippedWeapon).attackBonus;
-  }
-
-  /** Defense bonus from currently equipped armor. */
-  private get _equipmentDefenseBonus(): number {
-    if (!this.equippedArmor) {
-      return 0;
-    }
-    return getItemDefinition(this.equippedArmor).defenseBonus;
   }
 
   get worldVariables(): Record<string, unknown> {
@@ -520,8 +480,6 @@ export class GameStateService
     this.inventory = [];
     this.defeatedEnemies = [];
     this.quests = [];
-    this.equippedWeapon = undefined;
-    this.equippedArmor = undefined;
     this.gold = 100;
     this.playerLevel = 1;
     this.playerXp = 0;
@@ -562,86 +520,8 @@ export class GameStateService
   }
 
   // ── Equipment methods (C-153) ──
-
-  /** @inheritdoc */
-  equipItem(options: { itemId: string }): void {
-    const { itemId } = options;
-    const definition = getItemDefinition(itemId);
-
-    if (!definition.equippable || !definition.slot) {
-      this.debug('equipItem:not-equippable', { itemId });
-      return;
-    }
-
-    // Find the item in inventory
-    const index = this.inventory.findIndex((item) => item.itemId === itemId);
-    if (index < 0) {
-      this.debug('equipItem:not-in-inventory', { itemId });
-      return;
-    }
-
-    const slot = definition.slot;
-
-    // If there's already an item in this slot, unequip it first
-    if (slot === 'weapon' && this.equippedWeapon) {
-      this._unequipCurrent(slot);
-    } else if (slot === 'armor' && this.equippedArmor) {
-      this._unequipCurrent(slot);
-    }
-
-    // Remove from inventory (reduce quantity or remove entirely)
-    const item = this.inventory[index];
-    if (item.quantity > 1) {
-      this.inventory[index] = { itemId, quantity: item.quantity - 1 };
-    } else {
-      this.inventory = this.inventory.filter((_, i) => i !== index);
-    }
-
-    // Equip into slot
-    if (slot === 'weapon') {
-      this.equippedWeapon = itemId;
-    } else {
-      this.equippedArmor = itemId;
-    }
-
-    this.debug('equipItem:equipped', { itemId, slot });
-  }
-
-  /** @inheritdoc */
-  unequipItem(options: { slot: EquipmentSlot }): void {
-    const { slot } = options;
-    this._unequipCurrent(slot);
-  }
-
-  /**
-   * Moves the currently equipped item in the given slot back to inventory.
-   */
-  private _unequipCurrent(slot: EquipmentSlot): void {
-    const itemId = slot === 'weapon' ? this.equippedWeapon : this.equippedArmor;
-    if (!itemId) {
-      return;
-    }
-
-    // Return to inventory (stack if existing, otherwise new entry)
-    const existingIndex = this.inventory.findIndex((item) => item.itemId === itemId);
-    if (existingIndex >= 0) {
-      this.inventory[existingIndex] = {
-        itemId,
-        quantity: this.inventory[existingIndex].quantity + 1,
-      };
-    } else {
-      this.inventory = [...this.inventory, { itemId, quantity: 1 }];
-    }
-
-    // Clear the slot
-    if (slot === 'weapon') {
-      this.equippedWeapon = undefined;
-    } else {
-      this.equippedArmor = undefined;
-    }
-
-    this.debug('_unequipCurrent', { itemId, slot });
-  }
+  // Removed in C-374 — equipment state + stat aggregation moved to
+  // equipment_service.svelte.ts (6-slot paperdoll).
 
   /**
    * Sets the current game mode and broadcasts the change to the ECS worker

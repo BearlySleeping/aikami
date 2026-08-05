@@ -155,6 +155,16 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    */
   assetUrlResolver?: (slot: string, assetId: string, state: string) => string | null;
   /**
+   * Optional provider returning the player's currently equipped items as
+   * LPC layer recipes. Invoked whenever the player's appearance changes
+   * (initial render + UPDATE_PLAYER_APPEARANCE nudges) and merged on top
+   * of the base recipe — equipment slots that overlap base layers (torso,
+   * feet) replace them, others are appended.
+   *
+   * Contract: C-374 Equipment, Armour & Weapon Inventory UI
+   */
+  equipmentRecipeProvider?: () => readonly LpcLayerRecipe[];
+  /**
    * Texture manager instance for LRU caching and frame slicing.
    */
   textureManager?: TextureManager;
@@ -230,6 +240,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     assetId: string,
     state: string,
   ) => string | null;
+
+  /** Returns the player's equipped items as LPC layer recipes (C-374). */
+  private readonly _equipmentRecipeProvider?: () => readonly LpcLayerRecipe[];
 
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;
@@ -366,6 +379,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._workerFactory = options.workerFactory;
     this._recipeResolver = options.recipeResolver;
     this._assetUrlResolver = options.assetUrlResolver;
+    this._equipmentRecipeProvider = options.equipmentRecipeProvider;
     this._textureManager = options.textureManager;
   }
 
@@ -950,9 +964,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           });
           const entry = this._renderEntries.get(gameEvent.eid);
           if (entry && this._recipeResolver) {
-            entry.recipes = this._recipeResolver(gameEvent.layerIds);
+            let recipes = this._recipeResolver(gameEvent.layerIds);
+            // C-374: merge equipped items into the player's recipe so the
+            // sprite reflects current gear (torso/feet replace the base
+            // layer; hat/shoulders/weapon/shield are appended).
+            if (gameEvent.eid === this._playerEntityId && this._equipmentRecipeProvider) {
+              recipes = this._mergeEquipmentRecipes(recipes, this._equipmentRecipeProvider());
+            }
+            entry.recipes = recipes;
             // Fire async load, ignoring promise result.
-            void this._loadEntityRecipes(gameEvent.eid, entry.recipes);
+            void this._loadEntityRecipes(gameEvent.eid, recipes);
           }
           dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
         }
@@ -2322,6 +2343,34 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Initiates async loading of LPC textures for a given entity's recipes.
    * Creates layer sprites on the container once loaded.
    */
+  /**
+   * Merges equipment layer recipes into the base character recipe.
+   *
+   * Equipment slots that overlap base layers (torso, feet) replace the
+   * base entry so unequipping reveals the persona's default clothing;
+   * all other equipment layers (hat, shoulders, weapon, shield) are
+   * appended on top.
+   *
+   * @param baseRecipes - Recipes resolved from the player's base Appearance
+   * @param equipmentRecipes - Recipes for currently equipped items
+   * @returns Merged recipe array (base + equipment)
+   */
+  private _mergeEquipmentRecipes(
+    baseRecipes: readonly LpcLayerRecipe[],
+    equipmentRecipes: readonly LpcLayerRecipe[],
+  ): LpcLayerRecipe[] {
+    const merged = [...baseRecipes];
+    for (const equipmentRecipe of equipmentRecipes) {
+      const overlapIndex = merged.findIndex((r) => r.slot === equipmentRecipe.slot);
+      if (overlapIndex >= 0) {
+        merged[overlapIndex] = equipmentRecipe;
+      } else {
+        merged.push(equipmentRecipe);
+      }
+    }
+    return merged;
+  }
+
   private async _loadEntityRecipes(eid: number, recipes: LpcLayerRecipe[]): Promise<void> {
     const entry = this._renderEntries.get(eid);
     if (!entry || !this._assetUrlResolver) {
@@ -2403,15 +2452,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Sort by z-depth so back-to-front rendering is correct:
-    // body behind legs behind feet behind torso behind head behind hair.
+    // body behind legs behind feet behind torso behind head behind hair,
+    // with equipment (shoulders, hat, weapon, shield) layered on top.
     // Promise.all may scramble the order, so we re-sort here.
     const SlotZ: Record<string, number> = {
       body: 0,
-      legs: 1,
-      feet: 2,
-      torso: 3,
-      head: 4,
-      hair: 5,
+      legs: 10,
+      feet: 20,
+      torso: 30,
+      shoulders: 40,
+      head: 50,
+      hair: 60,
+      hat: 70,
+      weapon: 80,
+      shield: 90,
     } as const;
     layerSprites.sort((a, b) => {
       const zA = SlotZ[a.recipe.slot] ?? 0;

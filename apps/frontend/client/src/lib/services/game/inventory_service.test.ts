@@ -35,7 +35,7 @@ describe('InventoryService', () => {
           attackBonus: 10,
           defenseBonus: 0,
           equippable: true,
-          slot: 'weapon',
+          slot: 'rightHand',
           basePrice: 100,
         },
       },

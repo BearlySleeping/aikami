@@ -9,9 +9,24 @@ import { InteractableStateEntrySchema } from '../game/interactable_state.ts';
 
 // ── Equipment Slot ──────────────────────────────────────────────────────
 
-export const EquipmentSlotSchema = Type.Union([Type.Literal('weapon'), Type.Literal('armor')], {
-  description: 'Equipment slot type',
-});
+/**
+ * Equipment slots on the character paperdoll.
+ *
+ * - `leftHand` / `rightHand` — held items (shields, weapons)
+ * - `head` — headgear (helmets, caps) — renders into the LPC `hat` layer
+ * - `body` — body armour / clothing — renders into the LPC `torso` layer
+ * - `feet` — boots / shoes — renders into the LPC `feet` layer
+ */
+export const EquipmentSlotSchema = Type.Union(
+  [
+    Type.Literal('leftHand'),
+    Type.Literal('rightHand'),
+    Type.Literal('head'),
+    Type.Literal('body'),
+    Type.Literal('feet'),
+  ],
+  { description: 'Equipment slot type (paperdoll)' },
+);
 
 export type EquipmentSlotData = Type.Static<typeof EquipmentSlotSchema>;
 export type EquipmentSlot = Type.Static<typeof EquipmentSlotSchema>;
@@ -111,8 +126,15 @@ export type InventorySnapshot = Type.Static<typeof InventorySnapshotSchema>;
 
 export const EquipmentSnapshotSchema = Type.Object(
   {
-    equippedWeapon: Type.Optional(Type.String({ description: 'Equipped weapon item ID' })),
-    equippedArmor: Type.Optional(Type.String({ description: 'Equipped armor item ID' })),
+    /** Equipped item ID per paperdoll slot. Absent = slot empty. */
+    slots: Type.Optional(
+      Type.Record(EquipmentSlotSchema, Type.Optional(Type.String()), {
+        description: 'Equipped item ID per equipment slot',
+      }),
+    ),
+    // ── Legacy fields (pre-C-374) — old saves carry these instead of `slots`. ──
+    equippedWeapon: Type.Optional(Type.String({ description: 'Deprecated: legacy weapon slot' })),
+    equippedArmor: Type.Optional(Type.String({ description: 'Deprecated: legacy armor slot' })),
   },
   { description: 'Serialized equipment service state (slot item IDs)' },
 );

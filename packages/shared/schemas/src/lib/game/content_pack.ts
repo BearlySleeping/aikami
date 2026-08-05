@@ -136,8 +136,16 @@ const BaseContentPackItemSchema = Type.Object({
   attackBonus: Type.Optional(Type.Number({ description: 'Attack bonus value' })),
   /** Optional defense bonus */
   defenseBonus: Type.Optional(Type.Number({ description: 'Defense bonus value' })),
-  /** Optional reference to an equipment slot (weapon | armor) */
+  /** Optional reference to an equipment slot (leftHand | rightHand | head | torso | arms | feet) */
   equipmentSlot: Type.Optional(EquipmentSlotSchema),
+  /** LPC character layer this item renders into when equipped (e.g. "weapon", "shield", "hat"). */
+  lpcSlot: Type.Optional(Type.String({ description: 'LPC layer slot this item renders into' })),
+  /** LPC spritesheet asset ID (e.g. "weapon/sword/arming_universal"). */
+  lpcAssetId: Type.Optional(Type.String({ description: 'LPC spritesheet asset ID for the item' })),
+  /** Optional behind-variant asset ID for per-direction rendering (facing up). */
+  lpcAssetIdBehind: Type.Optional(
+    Type.String({ description: 'LPC spritesheet asset ID rendered behind the character' }),
+  ),
   /** Optional deterministic vendor base price in gold (0 = unsellable, or >= 2) — C-331 */
   basePrice: Type.Optional(
     Type.Union([Type.Literal(0), Type.Number({ minimum: 2 })], {
@@ -661,11 +669,9 @@ export const ContentPackManifestSchema = Type.Object({
         Type.String({ description: 'Spritesheet JSON URL (named frames)' }),
       ),
       /** Pixel size of a single tile (must match map tilewidth/tileheight). */
-      tileSize: Type.Optional(
-        Type.Integer({ minimum: 8, description: 'Pixel size of one tile' }),
-      ),
+      tileSize: Type.Optional(Type.Integer({ minimum: 8, description: 'Pixel size of one tile' })),
     }),
-  ),  /** All maps in this pack, keyed by map ID */
+  ) /** All maps in this pack, keyed by map ID */,
   maps: Type.Record(Type.String(), ContentPackMapEntrySchema, {
     description: 'Map definitions keyed by map ID',
   }),
