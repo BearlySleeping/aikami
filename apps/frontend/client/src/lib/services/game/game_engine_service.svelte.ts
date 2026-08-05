@@ -10,7 +10,7 @@ import {
 import type { PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
-import { audioContextManager, personaService } from '$services';
+import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { playSfxByName } from '../audio/audio_asset_resolver';
@@ -501,6 +501,8 @@ class GameEngineService
         bridge,
         recipeResolver,
         assetUrlResolver,
+        // C-374: merge equipped items onto the player's base LPC render
+        equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
         textureManager,
       });
 
@@ -613,9 +615,9 @@ class GameEngineService
     const SlotFallbacks: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 23,
+      torso: 0,
       legs: 22,
-      feet: 7,
+      feet: 0,
       head: 95,
     };
 
@@ -639,7 +641,17 @@ class GameEngineService
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
       appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 1));
     }
+
+    // C-374: torso (index 2) and feet (index 4) are equipment-owned — force
+    // them out of the base appearance so unequipping reveals the bare body
+    // and the base outfit renders via the equipment service instead.
+    appearanceLayers[2] = 0;
+    appearanceLayers[4] = 0;
     playerData.appearanceLayers = appearanceLayers;
+
+    // C-374: seed the base outfit (chainmail + boots by default) into the
+    // equipment service so the paperdoll reflects what the character wears.
+    equipmentService.seedBaseOutfit(effectiveRecipe);
 
     this.debug('lpc.engine.appearanceLayers', { appearanceLayers });
 

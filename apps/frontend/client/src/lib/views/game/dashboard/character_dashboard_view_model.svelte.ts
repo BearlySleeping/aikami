@@ -6,6 +6,7 @@
 //
 // Contract: C-153 Character Dashboard & Equipment
 
+import { EQUIPMENT_SLOT_ICONS, EQUIPMENT_SLOT_LABELS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -42,10 +43,14 @@ export type CharacterDashboardViewModelInterface = BaseViewModelInterface & {
   /** Total defense including equipment bonuses. */
   readonly totalDefense: number;
 
-  /** Currently equipped weapon definition, or undefined. */
-  readonly equippedWeaponDef: ItemDefinition | undefined;
-  /** Currently equipped armor definition, or undefined. */
-  readonly equippedArmorDef: ItemDefinition | undefined;
+  /** Slot-ordered equipped items with definitions (C-374). */
+  readonly equippedItems: ReadonlyArray<{
+    slot: EquipmentSlot;
+    itemId: string;
+    definition: ItemDefinition;
+  }>;
+  getSlotLabel(slot: EquipmentSlot): string;
+  getSlotIcon(slot: EquipmentSlot): string;
 
   /** Closes the dashboard overlay. */
   closeDashboard(): void;
@@ -133,21 +138,24 @@ class CharacterDashboardViewModel
   }
 
   /** @inheritdoc */
-  get equippedWeaponDef(): ItemDefinition | undefined {
-    const weaponId = equipmentService.equippedWeapon;
-    if (!weaponId) {
-      return undefined;
-    }
-    return getItemDefinition(weaponId);
+  get equippedItems(): ReadonlyArray<{
+    slot: EquipmentSlot;
+    itemId: string;
+    definition: ItemDefinition;
+  }> {
+    return equipmentService.equippedItems.map((entry) => ({
+      slot: entry.slot,
+      itemId: entry.itemId,
+      definition: getItemDefinition(entry.itemId),
+    }));
   }
 
-  /** @inheritdoc */
-  get equippedArmorDef(): ItemDefinition | undefined {
-    const armorId = equipmentService.equippedArmor;
-    if (!armorId) {
-      return undefined;
-    }
-    return getItemDefinition(armorId);
+  getSlotLabel(slot: EquipmentSlot): string {
+    return EQUIPMENT_SLOT_LABELS[slot];
+  }
+
+  getSlotIcon(slot: EquipmentSlot): string {
+    return EQUIPMENT_SLOT_ICONS[slot];
   }
 
   /** @inheritdoc */

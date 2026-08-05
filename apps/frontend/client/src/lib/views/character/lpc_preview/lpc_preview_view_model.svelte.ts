@@ -33,8 +33,12 @@ const SLOT_Z_ORDER: Record<string, number> = {
   legs: 10,
   feet: 20,
   torso: 30,
-  head: 40,
-  hair: 50,
+  shoulders: 40,
+  head: 50,
+  hair: 60,
+  hat: 70,
+  weapon: 80,
+  shield: 90,
 };
 const DEFAULT_Z_ORDER = 100;
 

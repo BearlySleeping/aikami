@@ -17,7 +17,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetHashesFile, Campaign, PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
-import { authService } from '$services';
+import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
@@ -830,6 +830,8 @@ class GameBootService
       bridge: this._bridge,
       recipeResolver,
       assetUrlResolver,
+      // C-374: merge equipped items onto the player's base LPC render
+      equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
     });
 
@@ -1186,13 +1188,16 @@ class GameBootService
 
     // Map effective recipe to engine variant indices.
     // Fallback per-slot values produce a good-looking male character
-    // (bodies_male=3, bangs=3, chainmail=23, pants=22, boots=7, head=95).
+    // (bodies_male=3, bangs=3, pants=22, head=95). Torso (chainmail) and
+    // feet (boots) are equipment-owned (C-374) — they are excluded from the
+    // base appearance so unequipping reveals the bare body, and the base
+    // outfit is seeded into the equipment service instead.
     const SLOT_FALLBACKS: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 23,
+      torso: 0,
       legs: 22,
-      feet: 7,
+      feet: 0,
       head: 95,
     };
 
@@ -1216,7 +1221,18 @@ class GameBootService
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
       appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
     }
+
+    // C-374: torso (index 2) and feet (index 4) are equipment-owned — force
+    // them out of the base appearance so unequipping reveals the bare body
+    // and the base outfit renders via the equipment service instead.
+    appearanceLayers[2] = 0;
+    appearanceLayers[4] = 0;
     playerData.appearanceLayers = appearanceLayers;
+
+    // C-374: seed the base outfit (chainmail + boots by default) into the
+    // equipment service so the paperdoll reflects what the character wears.
+    // Only fills empty body/feet slots — saved gear is never clobbered.
+    equipmentService.seedBaseOutfit(effectiveRecipe);
 
     this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 

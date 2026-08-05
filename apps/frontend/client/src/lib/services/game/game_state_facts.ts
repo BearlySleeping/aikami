@@ -43,11 +43,8 @@ export const buildGameStateFacts = (options: {
   }
 
   const equipped: string[] = [];
-  if (equipmentService.equippedWeapon) {
-    equipped.push(`${getItemDefinition(equipmentService.equippedWeapon).label} (weapon)`);
-  }
-  if (equipmentService.equippedArmor) {
-    equipped.push(`${getItemDefinition(equipmentService.equippedArmor).label} (armor)`);
+  for (const { slot, itemId } of equipmentService.equippedItems) {
+    equipped.push(`${getItemDefinition(itemId).label} (${slot})`);
   }
   facts.push(`Equipped: ${equipped.length > 0 ? equipped.join(', ') : 'nothing'}`);
 

@@ -500,46 +500,31 @@ const { viewModel }: Props = $props();
         <!-- Equipment Slots -->
         <div>
           <h3 class="text-xs font-semibold text-base-content/70 mb-2">Equipment</h3>
-          <div class="grid grid-cols-2 gap-2">
-            <div class="rounded-lg bg-base-200 p-2 flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-md {viewModel.equippedWeaponDef ? 'bg-warning/20' : 'bg-base-300'}"
-              >
-                <span class="text-sm">{viewModel.equippedWeaponDef ? '⚔️' : '🗡️'}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-[10px] opacity-50">Weapon</div>
-                <div class="text-xs font-medium truncate">
-                  {viewModel.equippedWeaponDef?.label ?? 'Empty'}
-                </div>
-                {#if viewModel.equippedWeaponDef}
-                  <div class="text-[10px] text-warning">
-                    +{viewModel.equippedWeaponDef.attackBonus}
-                    ATK
+          {#if viewModel.equippedItems.length === 0}
+            <div class="text-xs text-base-content/40">Nothing equipped</div>
+          {:else}
+            <div class="grid grid-cols-2 gap-2">
+              {#each viewModel.equippedItems as entry}
+                <div class="rounded-lg bg-base-200 p-2 flex items-center gap-2">
+                  <div class="flex h-8 w-8 items-center justify-center rounded-md bg-base-300">
+                    <span class="text-sm">{viewModel.getSlotIcon(entry.slot)}</span>
                   </div>
-                {/if}
-              </div>
-            </div>
-            <div class="rounded-lg bg-base-200 p-2 flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-md {viewModel.equippedArmorDef ? 'bg-info/20' : 'bg-base-300'}"
-              >
-                <span class="text-sm">{viewModel.equippedArmorDef ? '🛡️' : '👕'}</span>
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-[10px] opacity-50">Armor</div>
-                <div class="text-xs font-medium truncate">
-                  {viewModel.equippedArmorDef?.label ?? 'Empty'}
-                </div>
-                {#if viewModel.equippedArmorDef}
-                  <div class="text-[10px] text-info">
-                    +{viewModel.equippedArmorDef.defenseBonus}
-                    DEF
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[10px] opacity-50">{viewModel.getSlotLabel(entry.slot)}</div>
+                    <div class="text-xs font-medium truncate">{entry.definition.label}</div>
+                    <div class="flex gap-1 text-[10px]">
+                      {#if entry.definition.attackBonus > 0}
+                        <span class="text-warning">+{entry.definition.attackBonus} ATK</span>
+                      {/if}
+                      {#if entry.definition.defenseBonus > 0}
+                        <span class="text-info">+{entry.definition.defenseBonus} DEF</span>
+                      {/if}
+                    </div>
                   </div>
-                {/if}
-              </div>
+                </div>
+              {/each}
             </div>
-          </div>
+          {/if}
         </div>
       {/if}
 

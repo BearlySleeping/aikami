@@ -1,19 +1,26 @@
 // apps/frontend/client/src/lib/views/inventory/inventory_view_model.svelte.ts
 //
 // Inventory ViewModel. Reads inventory + equipment state from the domain
-// services and exposes equip/unequip/use actions.
+// services and exposes equip/unequip/use actions for the 6-slot paperdoll
+// (leftHand, rightHand, head, torso, arms, feet).
 //
 // Contract: C-153 Character Dashboard & Equipment
 // Contract: C-163 Visceral Feedback Juice (equip SFX + appearance sync)
-// Contract: C-331 — single equip path through equipmentService (the mutable
-// cast hack is gone), stat-compare data, and consumable use.
+// Contract: C-331 — single equip path through equipmentService, stat-compare
+// data, and consumable use.
+// Contract: C-374 — full paperdoll slots + summed stats.
 
+import {
+  EQUIPMENT_SLOT_ICONS,
+  EQUIPMENT_SLOT_LABELS,
+  EQUIPMENT_SLOT_ORDER,
+} from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { ItemDefinition } from '@aikami/types';
+import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
 import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   equipmentService,
@@ -22,14 +29,28 @@ import {
   inventoryService,
 } from '$services';
 
+export type EquippedItemView = {
+  slot: EquipmentSlot;
+  itemId: string;
+  definition: ItemDefinition;
+};
+
 export type InventoryViewModelInterface = BaseViewModelInterface & {
   readonly items: Array<{ itemId: string; quantity: number }>;
-  readonly equippedWeaponDef: ItemDefinition | undefined;
-  readonly equippedArmorDef: ItemDefinition | undefined;
+  /** Canonical paperdoll slot order for the view grid. */
+  readonly slotOrder: readonly EquipmentSlot[];
+  /** Slot-ordered list of currently equipped items with definitions. */
+  readonly equippedItems: ReadonlyArray<EquippedItemView>;
+  readonly totalAttack: number;
+  readonly totalDefense: number;
   /** Transient feedback (inventory full, full HP, etc.) — C-331 AC-2/AC-4. */
   readonly feedbackMessage: string | undefined;
 
   getItemLabel(itemId: string): string;
+  getSlotLabel(slot: EquipmentSlot): string;
+  getSlotIcon(slot: EquipmentSlot): string;
+  /** Returns the equipped entry for a paperdoll slot (undefined = empty). */
+  getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined;
   isEquippable(itemId: string): boolean;
   isConsumable(itemId: string): boolean;
   /**
@@ -38,7 +59,7 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
    */
   getCompareLabel(itemId: string): string | undefined;
   equipItem(itemId: string): void;
-  unequipItem(slot: 'weapon' | 'armor'): void;
+  unequipItem(slot: EquipmentSlot): void;
   useItem(itemId: string): void;
   closeInventory(): void;
 };
@@ -56,16 +77,29 @@ export class InventoryViewModel
     return inventoryService.inventory;
   }
 
-  get equippedWeaponDef(): ItemDefinition | undefined {
-    return equipmentService.equippedWeapon
-      ? getItemDefinition(equipmentService.equippedWeapon)
-      : undefined;
+  get slotOrder(): readonly EquipmentSlot[] {
+    return EQUIPMENT_SLOT_ORDER;
   }
 
-  get equippedArmorDef(): ItemDefinition | undefined {
-    return equipmentService.equippedArmor
-      ? getItemDefinition(equipmentService.equippedArmor)
-      : undefined;
+  /** Slot-ordered equipped items with resolved definitions. */
+  get equippedItems(): ReadonlyArray<EquippedItemView> {
+    const views: EquippedItemView[] = [];
+    for (const slot of EQUIPMENT_SLOT_ORDER) {
+      const itemId = equipmentService.getEquippedItemId(slot);
+      if (!itemId) {
+        continue;
+      }
+      views.push({ slot, itemId, definition: getItemDefinition(itemId) });
+    }
+    return views;
+  }
+
+  get totalAttack(): number {
+    return equipmentService.totalAttack;
+  }
+
+  get totalDefense(): number {
+    return equipmentService.totalDefense;
   }
 
   get feedbackMessage(): string | undefined {
@@ -74,6 +108,22 @@ export class InventoryViewModel
 
   getItemLabel(itemId: string): string {
     return getItemDefinition(itemId).label;
+  }
+
+  getSlotLabel(slot: EquipmentSlot): string {
+    return EQUIPMENT_SLOT_LABELS[slot];
+  }
+
+  getSlotIcon(slot: EquipmentSlot): string {
+    return EQUIPMENT_SLOT_ICONS[slot];
+  }
+
+  getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined {
+    const itemId = equipmentService.getEquippedItemId(slot);
+    if (!itemId) {
+      return undefined;
+    }
+    return { slot, itemId, definition: getItemDefinition(itemId) };
   }
 
   isEquippable(itemId: string): boolean {
@@ -91,23 +141,19 @@ export class InventoryViewModel
     if (!candidate.equippable || !candidate.slot) {
       return undefined;
     }
-    const equippedId =
-      candidate.slot === 'weapon'
-        ? equipmentService.equippedWeapon
-        : equipmentService.equippedArmor;
-    const equipped = equippedId ? getItemDefinition(equippedId) : undefined;
+    const equipped = this.getEquippedItem(candidate.slot);
 
-    const attackDelta = candidate.attackBonus - (equipped?.attackBonus ?? 0);
-    const defenseDelta = candidate.defenseBonus - (equipped?.defenseBonus ?? 0);
+    const attackDelta = candidate.attackBonus - (equipped?.definition.attackBonus ?? 0);
+    const defenseDelta = candidate.defenseBonus - (equipped?.definition.defenseBonus ?? 0);
 
     const parts: string[] = [];
-    if (candidate.slot === 'weapon' || attackDelta !== 0) {
-      parts.push(`${attackDelta >= 0 ? '+' : ''}${attackDelta} ATK`);
+    if (attackDelta !== 0) {
+      parts.push(`${attackDelta > 0 ? '+' : ''}${attackDelta} ATK`);
     }
-    if (candidate.slot === 'armor' || defenseDelta !== 0) {
-      parts.push(`${defenseDelta >= 0 ? '+' : ''}${defenseDelta} DEF`);
+    if (defenseDelta !== 0) {
+      parts.push(`${defenseDelta > 0 ? '+' : ''}${defenseDelta} DEF`);
     }
-    return parts.join(' ');
+    return parts.length > 0 ? parts.join(' ') : undefined;
   }
 
   equipItem(itemId: string): void {
@@ -117,7 +163,7 @@ export class InventoryViewModel
     }
   }
 
-  unequipItem(slot: 'weapon' | 'armor'): void {
+  unequipItem(slot: EquipmentSlot): void {
     equipmentService.unequipItem({ slot });
   }
 

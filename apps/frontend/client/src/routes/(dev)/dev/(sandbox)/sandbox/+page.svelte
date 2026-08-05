@@ -174,7 +174,7 @@ const devActions = [
     onClick: () => {
       inventoryService.inventory = [
         ...inventoryService.inventory,
-        { itemId: 'iron-sword', quantity: 1 },
+        { itemId: 'ironSword', quantity: 1 },
       ];
     },
   },
@@ -183,7 +183,7 @@ const devActions = [
     onClick: () => {
       inventoryService.inventory = [
         ...inventoryService.inventory,
-        { itemId: 'health-potion', quantity: 1 },
+        { itemId: 'healthPotion', quantity: 1 },
       ];
     },
   },
