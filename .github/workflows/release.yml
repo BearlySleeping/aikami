@@ -84,10 +84,13 @@ jobs:
         id: apps
         run: echo "deploy_apps=$DEPLOY_APPS" >> "$GITHUB_OUTPUT"
 
-  # ── Plan: decide the desktop matrix once ───────────────────────────
-  # No Rust, no builds — just checksum + version + matrix computation so the
-  # expensive legs only run when they actually have to. All inputs fall back
-  # to '' on release:published runs (real releases build every platform).
+  # ── Plan (compute): checksum + version + cache read ───────────────
+  # Touches GCP secrets (download_secrets). Emits ONLY brace-free outputs
+  # (checksum/version/cached state) — the JSON matrix is computed in the
+  # separate plan-matrix job below because GitHub Actions silently drops any
+  # job output containing a masked substring, and using the multiline JSON
+  # GCP_SA_KEY secret here registers `{`/`}` as masked characters (which
+  # would strip a JSON matrix output).
   plan:
     name: Plan Desktop Release
     runs-on: ubuntu-latest
@@ -97,10 +100,10 @@ jobs:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: contains(needs.resolve-apps.outputs.deploy_apps, 'client-tauri') || needs.resolve-apps.outputs.deploy_apps == 'all'
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      needs_build: ${{ steps.plan.outputs.needs_build }}
-      version: ${{ steps.plan.outputs.version }}
       checksum: ${{ steps.plan.outputs.checksum }}
+      version: ${{ steps.plan.outputs.version }}
+      cached_checksum: ${{ steps.plan.outputs.cached_checksum }}
+      cached_release_tag: ${{ steps.plan.outputs.cached_release_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -128,19 +131,54 @@ jobs:
           MODE="${{ github.event.inputs.mode || 'production' }}"
           bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts client-tauri
 
-      - name: Compute plan
+      - name: Compute checksum + version
         id: plan
         shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          PLATFORMS="${{ github.event.inputs.platforms }}"
-          BUNDLES="${{ github.event.inputs.bundles }}"
-          bun scripts/src/lib/deploy/ci_planning.ts \
-            --mode="$MODE" $FORCE_FLAG \
-            --platforms="$PLATFORMS" --bundles="$BUNDLES"
+        run: bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE"
         env:
+          MODE: ${{ github.event.inputs.mode || 'production' }}
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+
+  # ── Plan-matrix: build/skip/reuse decisions → the JSON matrix ─────
+  # Deliberately NO secret references (no GCP auth, no download_secrets) so
+  # GitHub's masker never registers `{`/`}` here and the JSON matrix output
+  # survives. All state comes in as plain strings from the plan job.
+  plan-matrix:
+    name: Decide Desktop Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: plan
+    outputs:
+      matrix: ${{ steps.decide.outputs.matrix }}
+      needs_build: ${{ steps.decide.outputs.needs_build }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Decide matrix
+        id: decide
+        shell: bash
+        run: |
+          bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE" --decide \
+            --checksum="${{ needs.plan.outputs.checksum }}" \
+            --version="${{ needs.plan.outputs.version }}" \
+            --cached-checksum="${{ needs.plan.outputs.cached_checksum }}" \
+            --cached-release-tag="${{ needs.plan.outputs.cached_release_tag }}" \
+            --platforms="$PLATFORMS" --bundles="$BUNDLES" $FORCE_FLAG
+        env:
+          MODE: ${{ github.event.inputs.mode || 'production' }}
+          PLATFORMS: ${{ github.event.inputs.platforms }}
+          BUNDLES: ${{ github.event.inputs.bundles }}
+          FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Shared web build (once, OS-independent) ────────────────────────
   # The SvelteKit bundle is embedded inside every desktop binary, so build it
@@ -150,10 +188,10 @@ jobs:
     name: Build Web Bundle
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: plan
+    needs: plan-matrix
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.plan.result == 'success' && needs.plan.outputs.needs_build == 'true'
+    if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.needs_build == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -223,14 +261,14 @@ jobs:
     name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 45
-    needs: [plan, build-web]
+    needs: [plan-matrix, build-web]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.plan.result == 'success' && needs.plan.outputs.matrix != '[]'
+    if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+        include: ${{ fromJson(needs.plan-matrix.outputs.matrix) }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
     steps:

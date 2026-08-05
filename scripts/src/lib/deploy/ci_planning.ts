@@ -1,38 +1,38 @@
 #!/usr/bin/env bun
 // scripts/src/lib/deploy/ci_planning.ts
 //
-// CI-only planner for the Tauri desktop release. Runs ONCE per workflow run
-// (the `plan` job in release.yml), before any desktop matrix leg is
-// scheduled, and decides:
+// CI-only planner for the Tauri desktop release. Runs in TWO jobs (see
+// release.yml) because GitHub Actions drops any job output whose value
+// contains a masked secret substring — and using a multiline JSON secret
+// (GCP_SA_KEY) in a job causes the runner to mask `{`/`}` characters, which
+// would silently strip a JSON matrix output ("Skip output ... since it may
+// contain secret"). So the secret-touching work and the matrix emission are
+// deliberately separated:
 //
-//   1. Which (platform, bundles) legs to run at all (ports the old per-leg
-//      bash "Platform gate" into TypeScript — unneeded legs are never
-//      scheduled instead of being scheduled and early-exiting).
-//   2. What each leg should DO:
-//        build  — compile + bundle (or rebuild after a change)
-//        reuse  — the checksum is unchanged and a previous release already
-//                 holds the exact artifacts; copy them forward instead of
-//                 recompiling byte-identical files
-//        skip   — nothing to do (workflow_dispatch with unchanged checksum)
-//   3. The shared version string (PUBLIC_APP_VERSION), generated exactly
-//      once so all platform legs embed the same value (previously each
-//      matrix leg computed its own UTC timestamp → version drift).
+//   plan (default mode, touches GCP secrets):
+//     downloads secrets (workflow), computes the checksum + shared version,
+//     reads the Redis cache → emits checksum / version / cached_checksum /
+//     cached_release_tag (all plain, brace-free strings).
+//   plan-matrix (--decide mode, NO secret references):
+//     filters the platform/bundle legs and runs the build/skip/reuse decision
+//     from the passed-in cache state → emits matrix / needs_build. This job
+//     never expands a GitHub secret, so `{`/`}` are not masked and the JSON
+//     matrix output survives.
 //
 // The Redis cache entry (cache-aikami-deploy:{mode}:client-tauri, see
 // cache.ts getTauriCache/setTauriCache) is the source of truth for what a
 // given checksum last produced and which release holds the artifacts.
 //
-// Emits (via $GITHUB_OUTPUT when present, console otherwise):
-//   matrix       — JSON array of legs: {runsOn, platform, bundles, action, sourceReleaseTag}
-//   needs_build  — "true" if any leg must compile
-//   version      — shared version string
-//   checksum     — computed checksum (for debugging)
-//
-// Usage (workflow):
-//   bun scripts/src/lib/deploy/ci_planning.ts \
-//     --mode="$MODE" $FORCE_FLAG --platforms="$PLATFORMS" --bundles="$BUNDLES"
+// Usage:
+//   # compute (secret job):
+//   bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE"
+//   # decide (clean job):
+//   bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE" --decide \
+//     --checksum="$CHECKSUM" --version="$VERSION" \
+//     --cached-checksum="$CACHED_CHECKSUM" --cached-release-tag="$CACHED_TAG" \
+//     --platforms="$PLATFORMS" --bundles="$BUNDLES" [--force]
 //   env: RELEASE_TAG (set only on release:published), REDIS_URL/REDIS_TOKEN
-//        (via scripts/.env.{mode}, loaded by download_secrets.ts first)
+//        (via scripts/.env.{mode}) for compute mode.
 
 import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -73,24 +73,12 @@ const BUNDLE_EXTENSIONS: Record<string, string> = {
  * aren't required). False on any gh failure (missing release, no assets…).
  */
 async function assetsPresentOnRelease(tag: string, bundles: string[]): Promise<boolean> {
-  const res = await run([
-    'gh',
-    'release',
-    'view',
-    tag,
-    '--json',
-    'assets',
-    '--jq',
-    '.assets[].name',
-  ]);
+  const res = await run(['gh', 'release', 'view', tag, '--json', 'assets', '--jq', '.assets[].name']);
   if (res.code !== 0) {
     warn(`  gh release view ${tag} failed: ${res.err || res.out}`);
     return false;
   }
-  const names = res.out
-    .split('\n')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const names = res.out.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (names.length === 0) {
     return false;
   }
@@ -122,6 +110,8 @@ type Leg = {
   sourceReleaseTag: string | null;
 };
 
+type CacheState = { checksum: string; releaseTag: string | null } | null;
+
 /**
  * Decide what to do with a single (platform, bundles) pair.
  *
@@ -137,28 +127,16 @@ async function decideLeg(
   leg: PlatformDef,
   checksum: string,
   releaseTag: string | null,
-  cached: { checksum: string; releaseTag: string | null } | null,
+  cached: CacheState,
   isForce: boolean,
 ): Promise<Leg | null> {
   const bundles = leg.bundles.split(',').filter(Boolean);
 
   if (isForce) {
-    return {
-      runsOn: leg.runsOn,
-      platform: leg.platform,
-      bundles: leg.bundles,
-      action: 'build',
-      sourceReleaseTag: null,
-    };
+    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
   }
   if (!cached || cached.checksum !== checksum) {
-    return {
-      runsOn: leg.runsOn,
-      platform: leg.platform,
-      bundles: leg.bundles,
-      action: 'build',
-      sourceReleaseTag: null,
-    };
+    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
   }
   if (releaseTag === null) {
     // workflow_dispatch / staging run — no permanent release to attach to.
@@ -173,13 +151,7 @@ async function decideLeg(
       return null;
     }
     log(`  ${leg.platform}: same release but assets missing → build (don't trust cache)`);
-    return {
-      runsOn: leg.runsOn,
-      platform: leg.platform,
-      bundles: leg.bundles,
-      action: 'build',
-      sourceReleaseTag: null,
-    };
+    return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
   }
   // Different release than the one that built these artifacts.
   if (cached.releaseTag && (await assetsPresentOnRelease(cached.releaseTag, bundles))) {
@@ -193,13 +165,7 @@ async function decideLeg(
     };
   }
   log(`  ${leg.platform}: source release lacks assets → build`);
-  return {
-    runsOn: leg.runsOn,
-    platform: leg.platform,
-    bundles: leg.bundles,
-    action: 'build',
-    sourceReleaseTag: null,
-  };
+  return { runsOn: leg.runsOn, platform: leg.platform, bundles: leg.bundles, action: 'build', sourceReleaseTag: null };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -210,27 +176,62 @@ async function main(): Promise<void> {
     force: { type: 'boolean', aliases: ['f'] },
     platforms: { type: 'string' },
     bundles: { type: 'string' },
+    decide: { type: 'boolean' },
+    checksum: { type: 'string' },
+    version: { type: 'string' },
+    'cached-checksum': { type: 'string' },
+    'cached-release-tag': { type: 'string' },
   });
   const mode = opts.mode ?? 'production';
-  const isForce = opts.force ?? false;
-
-  initScriptsEnv(mode);
-
   const releaseTag = process.env.RELEASE_TAG?.trim() || null;
 
-  log(`\n${c.bold}📋 Planning Tauri desktop release${c.reset}`);
+  // ── Compute mode (default): checksum + version + cache read ─────────
+  if (!opts.decide) {
+    initScriptsEnv(mode);
+    log(`\n${c.bold}📋 Planning Tauri desktop release (compute)${c.reset}`);
+    log(`  Mode:       ${mode}`);
+    log(`  Release:    ${releaseTag ?? '(none — workflow_dispatch)'}`);
+
+    const config = APP_CONFIG['client-tauri'];
+    const checksum = computeAppChecksum(config, 'client-tauri', mode, ROOT_DIR);
+    const version = generateVersionString();
+    const cached = await getTauriCache(mode);
+
+    log(`  Checksum:   ${checksum.slice(0, 16)}...`);
+    log(`  Version:    ${version}`);
+    log(`  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`);
+
+    // Brace-free outputs only — this job touches GCP secrets, so GitHub's
+    // masker has `{`/`}` registered; JSON outputs would be silently dropped.
+    emitOutput('checksum', checksum);
+    emitOutput('version', version);
+    emitOutput('cached_checksum', cached?.checksum ?? '');
+    emitOutput('cached_release_tag', cached?.releaseTag ?? '');
+    ok('Compute complete.');
+    return;
+  }
+
+  // ── Decide mode: filter legs + build/skip/reuse (no secrets here) ──
+  const isForce = opts.force ?? false;
+  const checksum = opts.checksum ?? '';
+  const version = opts.version ?? '';
+  const cached: CacheState =
+    opts['cached-checksum'] && opts['cached-checksum'] !== ''
+      ? {
+          checksum: opts['cached-checksum'],
+          releaseTag: opts['cached-release-tag'] ? opts['cached-release-tag'] : null,
+        }
+      : null;
+
+  log(`\n${c.bold}📋 Planning Tauri desktop release (decide)${c.reset}`);
   log(`  Mode:       ${mode}`);
   log(`  Force:      ${isForce}`);
   log(`  Release:    ${releaseTag ?? '(none — workflow_dispatch)'}`);
-
-  // 1. Checksum + shared version — computed exactly once here.
-  const config = APP_CONFIG['client-tauri'];
-  const checksum = computeAppChecksum(config, 'client-tauri', mode, ROOT_DIR);
-  const version = generateVersionString();
   log(`  Checksum:   ${checksum.slice(0, 16)}...`);
   log(`  Version:    ${version}`);
+  log(`  Cached:     ${cached ? `${cached.checksum.slice(0, 16)}... (release=${cached.releaseTag ?? 'none'})` : '(none)'}`);
 
-  // 2. Resolve requested platforms/bundles (empty = all / platform defaults).
+  // Filter requested platforms/bundles (empty = all / platform defaults).
   const requestedPlatforms = (opts.platforms ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -260,8 +261,6 @@ async function main(): Promise<void> {
     log(`${c.yellow}No legs requested — emitting empty matrix.${c.reset}`);
   }
 
-  // 3. Read the cache + decide each leg.
-  const cached = await getTauriCache(mode);
   const matrix: Leg[] = [];
   let needsBuild = false;
 
@@ -276,11 +275,8 @@ async function main(): Promise<void> {
     matrix.push(decided);
   }
 
-  // 4. Emit outputs.
   emitOutput('matrix', JSON.stringify(matrix));
   emitOutput('needs_build', String(needsBuild));
-  emitOutput('version', version);
-  emitOutput('checksum', checksum);
 
   if (matrix.length > 0) {
     ok(`Planned ${matrix.length} leg(s):`);
