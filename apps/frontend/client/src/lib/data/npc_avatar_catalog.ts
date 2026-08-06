@@ -35,15 +35,12 @@ const DEFAULT_EXPRESSION = 'neutral' as const;
  * `avatarSprite` on the NPC spawn data and read it from there).
  */
 export const NPC_AVATAR_SPRITE_MAP: Readonly<Record<string, string>> = {
-  // ── Emberwatch village (emberwatch_village.json) ──
+  // ── Emberwatch village (village.json) ──
   village_elder: 'gandalf', // Elder Thalia — sage
-  guard_captain: 'aragon', // Guard Captain Aldric — captain
-  traveling_merchant: 'aragon', // Keth the Merchant
-  // ── Old road (old_road.json) ──
-  elara_wayfinder: 'aragon', // Elara Wayfinder — ranger
-  kade_blackthorn: 'orc', // Kade Blackthorn — dark hunter
-  // ── Ruined ward shrine (ruined_ward_shrine.json) ──
-  shrine_spirit: 'gandalf', // Vesperine Spirit — mystical
+  // ── Inn (inn.json) ──
+  rollo_grasper: 'orc', // Rollo the Grasper — rogue
+  // ── Merchant shop (merchant_shop.json) ──
+  merchant: 'aragon', // Mara the Merchant
 } as const;
 
 /**

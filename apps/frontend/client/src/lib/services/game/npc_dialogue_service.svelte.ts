@@ -42,7 +42,7 @@ import type {
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
-import { questStateService } from '$services';
+import { inventoryService, questStateService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
@@ -644,7 +644,12 @@ export class NpcDialogueService
         const message = error instanceof Error ? error.message : String(error);
         const cause = message.includes('abort') ? 'cancelled' : 'generation_failed';
         this.warn('analyzeIntent:fallback', { cause, detail: message });
-        return this._deriveIntentFallback(options.npcName, allowedCommands);
+        const lastPlayerInput =
+          [...options.messages].reverse().find((m) => m.role === 'player')?.content ?? '';
+        return this._deriveIntentFallback(options.npcName, allowedCommands, {
+          playerInput: lastPlayerInput,
+          npcId: options.npcId,
+        });
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -1354,6 +1359,7 @@ export class NpcDialogueService
         modifierSource: undefined,
         npcResponse: recovered.npcResponse,
         suggestedChips: recovered.suggestedChips,
+        questActivation: recovered.questActivation,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -1450,6 +1456,9 @@ export class NpcDialogueService
 
   /**
    * Validates and applies state deltas proposed by the LLM.
+   * Applied: inventory_grant/inventory_remove mutate the player inventory
+   * (grants also advance completeOnItemPickup quest objectives), and
+   * flag_set/flag_clear mutate the quest world-state flags.
    * Invalid deltas are silently dropped and logged.
    */
   private _validateAndApplyDeltas(options: {
@@ -1468,19 +1477,58 @@ export class NpcDialogueService
           }
           break;
         }
-        case 'flag_set':
-        case 'flag_clear': {
+        case 'flag_set': {
           if (delta.label && delta.label.length > 0) {
-            valid.push(delta);
+            if (questStateService.setWorldStateFlag(delta.label)) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
+            }
           } else {
             this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
           }
           break;
         }
-        case 'inventory_grant':
+        case 'flag_clear': {
+          if (delta.label && delta.label.length > 0) {
+            if (questStateService.clearWorldStateFlag(delta.label)) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
+            }
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
+          }
+          break;
+        }
+        case 'inventory_grant': {
+          if (delta.target && delta.target.length > 0) {
+            // Bound the authored quantity to the [1, 99] range.
+            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+            if (inventoryService.addItem({ itemId: delta.target, quantity })) {
+              // Advance completeOnItemPickup quest objectives (e.g. the Ward Wand).
+              questStateService.evaluateTriggers({
+                type: 'ITEM_PICKED_UP',
+                itemId: delta.target,
+              });
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:inventory-grant-failed', { delta });
+            }
+          } else {
+            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
+          }
+          break;
+        }
         case 'inventory_remove': {
           if (delta.target && delta.target.length > 0) {
-            valid.push(delta);
+            // Bound the authored quantity to the [1, 99] range.
+            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+            if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:inventory-remove-failed', { delta });
+            }
           } else {
             this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
           }
@@ -1557,10 +1605,13 @@ export class NpcDialogueService
 
   /**
    * Derives a fallback intent analysis output when AI is unavailable.
+   * Also derives a deterministic quest-activation tool call from the player's
+   * message so accepting/declining an offered quest works even without AI.
    */
   private _deriveIntentFallback(
     npcName: string,
     allowedCommands: NpcDialogueCommandKind[],
+    context?: { playerInput?: string; npcId?: string },
   ): NpcIntentAnalysisOutput {
     return {
       requiresRoll: false,
@@ -1569,7 +1620,62 @@ export class NpcDialogueService
       modifierSource: undefined,
       npcResponse: this._genericFallbackLine(npcName),
       suggestedChips: this._deriveChips({ npcName, allowedCommands }),
+      questActivation: this._deriveQuestActivationFallback(
+        context?.playerInput ?? '',
+        context?.npcId ?? '',
+      ),
     };
+  }
+
+  /**
+   * Deterministic quest-activation fallback for when AI is unavailable.
+   * Only fires when this NPC has exactly one offerable quest and the player's
+   * message clearly accepts or declines it (quest-context phrases required), so
+   * ordinary chatter can never accidentally accept a quest.
+   */
+  private _deriveQuestActivationFallback(
+    playerInput: string,
+    npcId: string,
+  ): NpcQuestActivation | undefined {
+    const text = playerInput.trim().toLowerCase();
+    if (!text || !npcId) {
+      return undefined;
+    }
+    const offerable = questStateService.getOfferableQuests(npcId);
+    if (offerable.length !== 1) {
+      return undefined; // Ambiguous — require exactly one offerable quest.
+    }
+    const quest = offerable[0];
+    if (!quest) {
+      return undefined;
+    }
+
+    const questContext = /\b(quest|task|job|mission|errand|responsibility)\b/.test(text);
+    if (!questContext) {
+      return undefined;
+    }
+
+    // Negations — only explicit refusal phrases count, and they must occur
+    // near a quest-related word so ordinary help requests (e.g. "Can you
+    // help me?") are never treated as declines.
+    const refusalMatch = /\b(no thanks?|no thank you|i decline|i refuse)\b/.exec(text);
+    const questMatch = /\b(quest|task|job|mission|errand|responsibility)\b/.exec(text);
+    const negated =
+      !!refusalMatch &&
+      !!questMatch &&
+      Math.abs((refusalMatch.index ?? 0) - (questMatch.index ?? 0)) <= 60;
+    if (negated) {
+      return { action: 'decline', questId: quest.id };
+    }
+
+    const accepts =
+      /\b(accept|take|agree|will do|i'?ll do it|consider it done|count me in|sign me up|i'?m in|i will (help|do|take))\b/.test(
+        text,
+      );
+    if (accepts) {
+      return { action: 'accept', questId: quest.id };
+    }
+    return undefined;
   }
 
   /**
@@ -1619,6 +1725,16 @@ export function buildIntentAnalysisSystemPrompt(): string {
     '   NEVER write third-person narration like "The elder considers your words."',
     '4. 0-4 contextual suggestion chips for the player.',
     '',
+    'QUEST ACTIVATION TOOL:',
+    '- The [GAME STATE] facts list quests this NPC can offer, e.g. "Offerable quests: "The Fading Ward" (id: fading_ward)".',
+    '- When the player CLEARLY accepts an offered quest ("I will take the quest", "Consider it done", "I accept"):',
+    '  set questActivation to { "action": "accept", "questId": "<id>" }.',
+    '- When the player CLEARLY declines ("No thanks", "I cannot help"): set questActivation to',
+    '  { "action": "decline", "questId": "<id>" }.',
+    '- Only use questActivation for a quest listed as offerable by THIS NPC, and only when the',
+    '  intent is unambiguous. Ordinary conversation about the quest leaves questActivation unset.',
+    '- The narrative (npcResponse) should still acknowledge the acceptance/refusal in character.',
+    '',
     'Be conservative: only require a roll when the player is clearly attempting',
     'persuasion, deception, intimidation, stealth, or another skill-based action.',
     'Everyday conversation does NOT need a roll.',
@@ -1639,9 +1755,10 @@ export function buildIntentAnalysisSystemPrompt(): string {
 export function recoverIntentAnalysisOutput(
   rawText: string | undefined,
   _schema: typeof NpcIntentAnalysisOutputSchema,
-): Pick<NpcIntentAnalysisOutput, 'npcResponse' | 'suggestedChips'> {
+): Pick<NpcIntentAnalysisOutput, 'npcResponse' | 'suggestedChips' | 'questActivation'> {
   let narrative = '';
   let chips: NpcSuggestionChip[] = [];
+  let questActivation: NpcQuestActivation | undefined;
 
   if (!rawText) {
     throw new Error('No raw text to recover');
@@ -1717,6 +1834,18 @@ export function recoverIntentAnalysisOutput(
         })
         .filter((c): c is NpcSuggestionChip => c !== null);
     }
+
+    // Recover the quest-activation tool call from the raw JSON.
+    const rawActivation = obj.questActivation;
+    if (rawActivation && typeof rawActivation === 'object') {
+      const candidate = {
+        action: (rawActivation as Record<string, unknown>).action,
+        questId: (rawActivation as Record<string, unknown>).questId,
+      };
+      if (Value.Check(NpcQuestActivationSchema, candidate)) {
+        questActivation = candidate as NpcQuestActivation;
+      }
+    }
   } else {
     // Plain text (not JSON) — use directly as narrative
     narrative = trimmed;
@@ -1730,5 +1859,6 @@ export function recoverIntentAnalysisOutput(
   return {
     npcResponse: narrative,
     suggestedChips: chips,
+    questActivation,
   };
 }

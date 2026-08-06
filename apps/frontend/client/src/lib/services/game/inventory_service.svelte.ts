@@ -275,20 +275,11 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     basePrice: 0,
   },
   // C-316: Emberwatch adventure items
-  wardPendant: {
-    label: 'Ward Pendant',
+  wardWand: {
+    label: 'Ward Wand',
     itemType: 'key',
     attackBonus: 0,
     defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-    basePrice: 0,
-  },
-  wardAmulet: {
-    label: 'Ward Amulet',
-    itemType: 'armor',
-    attackBonus: 0,
-    defenseBonus: 3,
     equippable: false,
     slot: undefined,
     basePrice: 0,

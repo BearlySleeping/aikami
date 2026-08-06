@@ -202,7 +202,11 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   openReputation(): void;
   closeReputation(): void;
 
-  startCombat(options: { enemyName: string }): void;
+  startCombat(options: {
+    enemyName: string;
+    /** Encounter ID so victory loot/quest triggers resolve (C-316). */
+    encounterId?: string | null;
+  }): void;
 
   // ── Auto-Save Scheduling (C-334) ──
 
@@ -1190,13 +1194,14 @@ export class GameOverlayService
     }
   }
 
-  startCombat(options: { enemyName: string }): void {
+  startCombat(options: { enemyName: string; encounterId?: string | null }): void {
     combatService.startCombat({
       enemyName: options.enemyName,
       enemyHp: 60,
       enemyMaxHp: 60,
       participantIds: [1, 2],
       firstTurnEntityId: 1,
+      encounterId: options.encounterId ?? undefined,
       setActive: (overlay) => {
         this.setActive(overlay);
       },

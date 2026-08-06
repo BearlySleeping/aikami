@@ -4,16 +4,17 @@
 
 ## What is Aikami?
 
-Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (Client) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, and a relational PostgreSQL backend via Firebase Data Connect.
+Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (Client) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, offline-first persistence via Turso (libSQL), local AI microservices, and a SvelteKit SSR Hub running on Cloud Run.
 
 - **SvelteKit Client + Tauri v2** — Cross-platform progressive web app exported as native desktop app
 - **PixiJS v8 + bitECS Game Engine** — WebGPU-accelerated 2D rendering with data-oriented ECS architecture
-- **Firebase Data Connect (PostgreSQL)** — Managed relational database with pgvector and recursive CTEs
-- **PowerSync Real-Time Sync** — WAL-streamed SQLite on the client via TanStack DB
+- **Turso (libSQL) Offline-First** — Local-first persistence: campaigns, saves, and chat history live in an embedded SQLite-compatible store (C-321); cloud sync is an optional adapter, never a boot dependency
+- **SvelteKit Hub (SSR)** — Community hub on Google Cloud Run (Bun) for community assets, maps, mods, and managing your own characters/personas
+- **Local AI Microservices** — ComfyUI (image), Ollama (text), Kokoro (voice) via Docker/herdr
 - **Bun Runtime** — Fast JavaScript/TypeScript runtime
 - **Moon Monorepo** — Task orchestration and dependency management
 - **Biome** — Consistent linting and formatting
-- **Vendor-Agnostic AI** — AiServiceInterface abstraction supporting OpenAI and Gemini
+- **Vendor-Agnostic AI** — AiProviderGateway abstraction with offline / BYOK / service modes
 
 ## Quick Start
 

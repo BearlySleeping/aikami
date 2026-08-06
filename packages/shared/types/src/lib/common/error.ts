@@ -35,6 +35,7 @@ export type ErrorType =
   | 'unauthorized'
   | 'server-error'
   | 'unknown-error'
+  | 'captcha-required'
   | 'text-provider-required';
 
 export type SvelteKitError = {

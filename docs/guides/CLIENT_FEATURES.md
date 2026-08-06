@@ -58,7 +58,7 @@ Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this d
 ### Multi-Backend Support
 - [ ] **OpenAI** - GPT-4, GPT-4 Turbo integration
 - [ ] **Anthropic** - Claude integration
-- [ ] **Google AI** - Gemini integration (via Genkit)
+- [ ] **Google AI** - Gemini integration (via AiProviderGateway)
 - [ ] **OpenRouter** - Unified API for multiple providers
 - [ ] **Custom Endpoint** - Connect to self-hosted models
 
@@ -139,7 +139,7 @@ Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this d
 ### Phase 1: Core Chat (MVP)
 1. Basic text chat interface
 2. Character cards with profile
-3. Single AI backend (Genkit/Gemini)
+3. Single AI backend (AiProviderGateway: offline/BYOK/service)
 4. Simple prompt configuration
 5. Chat history persistence
 

@@ -24,7 +24,7 @@ Testing approach for the Aikami monorepo.
 **Runner:** Vitest (libraries), Bun test (scripts)
 
 **What's tested:**
-- Zod schema validation (packages/shared/schemas/src/lib/*.test.ts)
+- TypeBox schema validation (packages/shared/schemas/src/lib/*.test.ts)
 - Business logic validation
 - Utility functions
 - AI response parsing
@@ -42,12 +42,12 @@ bun run moon run schemas:test  # Just schemas
 
 **Firestore Rules Tests:**
 ```bash
-cd apps/backend/functions
+cd apps/backend/firebase
 bun run test:rules
 ```
 
 **Functions Tests:**
-- Controller unit tests in `apps/backend/functions/tests/controllers.test.ts`
+- Controller unit tests in `apps/backend/firebase/tests/controllers.test.ts`
 - Auth triggers, callable functions, scheduled jobs
 
 ## Blackbox (E2E) Tests
@@ -96,7 +96,7 @@ CI=true bun run test:blackbox
 | Unit (schemas) | 15+ test files | ✅ Active |
 | Unit (functions) | 1 test file | ⚠️ Minimal |
 | Unit (Client) | None | ❌ Missing |
-| Unit (game engine) | None | ❌ Missing — Target: client/src/lib/game/ (C-016) |
+| Unit (game engine) | Some (string registry, etc.) | ⚠️ Partial — packages/frontend/engine |
 | Integration (Firestore rules) | Configured | ✅ Active |
 | Blackbox (schema-check) | Working | ✅ Active |
 | Blackbox (functions) | Health probe | ⚠️ Basic |

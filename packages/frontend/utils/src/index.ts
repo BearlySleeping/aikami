@@ -12,5 +12,5 @@ export * from './lib/common/downloader.ts';
 export * from './lib/form/auth.ts';
 
 export * from './lib/internal.ts';
-
+export * from './lib/transform.ts';
 export * from './lib/ui.ts';

@@ -209,6 +209,7 @@ class MockBaseFrontendClass {
   protected log(..._args: unknown[]): void {}
   protected warn(..._args: unknown[]): void {}
   protected error(..._args: unknown[]): void {}
+  protected showSnackbar(_action: unknown): void {}
 }
 
 class MockBaseViewModel extends MockBaseFrontendClass {
@@ -382,6 +383,7 @@ const _localServicesMock = () => ({
     acceptQuest: _createCallableStub(),
     declineQuest: _createCallableStub(),
     canAcceptQuest: () => true,
+    getOfferableQuests: () => [],
     evaluateTriggers: _createCallableStub(),
     serialize: () => ({
       activeQuests: [],
@@ -395,6 +397,21 @@ const _localServicesMock = () => ({
     reset: _createCallableStub(),
     startListening: _createCallableStub(),
   }),
+  questOverlayService: (() => {
+    const svc = Object.assign(_createServiceStub(), {
+      visible: true,
+      setVisible: (v: boolean) => {
+        svc.visible = v;
+      },
+      toggleVisible: () => {
+        svc.visible = !svc.visible;
+      },
+      reset: () => {
+        svc.visible = true;
+      },
+    });
+    return svc;
+  })(),
   playerStateService: Object.assign(_createServiceStub(), {
     playerLevel: 1,
     playerXp: 0,

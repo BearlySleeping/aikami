@@ -20,15 +20,16 @@ This document details the primary technologies, frameworks, and services used in
 | **Game Rendering** | PixiJS v8 (WebGPU) | 2D rendering engine, imperative canvas |
 | **Game Logic** | bitECS | Entity Component System, data-oriented design |
 | Static Sites | Astro | Landing page, documentation |
+| **Hub (SSR)** | SvelteKit 2 + svelte-adapter-bun | Community hub on Google Cloud Run — assets, maps, mods, personas |
 | Styling | Tailwind CSS | Utility-first CSS |
 | Backend Functions | Firebase Cloud Functions v2 | Serverless API endpoints |
-| **Database** | Firebase Data Connect (PostgreSQL) | Managed PostgreSQL via GraphQL |
-| **Client DB Sync** | TanStack DB + PowerSync | Real-time SQLite client syncing via WAL streaming |
+| **Database (local-first)** | Turso (libSQL) | Embedded SQLite-compatible store — source of truth for campaigns, saves, chat (C-321) |
+| **Cloud Sync (optional)** | Firebase | Auth + optional backup/sync layer; never a boot dependency |
 | Authentication | Firebase Authentication | Email/password |
 | File Storage | Firebase Storage | User uploads, assets |
-| **Server Validation** | Zod | Runtime validation for API boundaries |
-| **Client Validation** | Valibot | Tree-shakeable, lightweight (~1.5KB) client-side |
-| AI Framework | AiServiceInterface (C-015) | Vendor-agnostic: OpenAI + Gemini |
+| **Local AI Microservices** | ComfyUI / Ollama / Kokoro | Docker/herdr services for image, text, and voice generation |
+| **Validation** | TypeBox | Runtime validation across API boundaries and persistence (unified; replaces Zod/Valibot) |
+| AI Framework | AiProviderGateway (C-320) | One wrapper, three modes: offline (local) / BYOK / service |
 | Linting/Formatting | Biome | Consistent code style |
 | Testing | Playwright + Vitest + Blackbox runner | E2E, unit, integration |
 
@@ -37,27 +38,32 @@ This document details the primary technologies, frameworks, and services used in
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Aikami Platform                             │
-├──────────────────┬──────────────────────┬────────────────────────┤
-│   Client + Tauri    │   Game Engine        │   Landing + Docs       │
-│ (SvelteKit 2)    │ (PixiJS v8 + bitECS) │   (Astro)              │
-├──────────────────┴──────────────────────┴────────────────────────┤
-│                     Firebase Backend                              │
-│  Functions │ Auth │ Data Connect (PostgreSQL) │ Storage │ FCM    │
+├──────────────┬──────────────────────┬──────────────┬─────────────┤
+│ Client+Tauri │   Game Engine        │  Hub (SSR)   │ Site/Docs   │
+│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (Cloud Run)  │ (Astro)     │
+├──────────────┴──────────┬───────────┴──────────────┴─────────────┤
+│    Turso (libSQL) — local source of truth (C-321)                │
+├─────────────────────────┴────────────────────────────────────────┤
+│      Firebase — auth, optional sync, infrastructure only         │
+│         Functions │ Auth │ Storage │ Firestore (infra)           │
+├──────────────────────────────────────────────────────────────────┤
+│        Local AI Microservices (Docker/herdr)                     │
+│   ComfyUI (image) │ Ollama (text) │ Kokoro (voice)               │
 ├──────────────────────────────────────────────────────────────────┤
 │               Shared Packages (packages/shared/)                  │
-│  constants │ types │ schemas │ logger │ utils │ mocks            │
+│  constants │ types │ schemas │ parser │ logger │ utils │ mocks   │
 ├──────────────────────────────────────────────────────────────────┤
 │              Backend Packages (packages/backend/)                 │
-│  auth │ configs │ database (BaseDatabaseService) │ svelte-kit    │
-│  utils │ ai (AiServiceInterface)                                  │
+│  auth │ chat │ configs │ database │ svelte-kit │ utils           │
 ├──────────────────────────────────────────────────────────────────┤
 │             Frontend Packages (packages/frontend/)                │
-│  configs │ components │ repositories │ services │ utils           │
+│  configs │ engine │ ai-gateway │ repositories │ services │ utils │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Migration Notes
 
-- **Firestore NoSQL** → Replaced by **Firebase Data Connect (PostgreSQL)** for operations-based pricing and relational query support (pgvector, recursive CTEs).
-- **Genkit** → Replaced by vendor-agnostic **AiServiceInterface** (C-015) supporting OpenAI and Gemini providers.
-- **Client-side Zod** → Replaced by **Valibot** for perimeter validation (1.5KB vs ~12KB bundle saving, 16× faster parsing).
+- **Firestore as campaign store** → Replaced by **Turso (libSQL)** as the local source of truth (C-321). Campaigns, saves, and chat history live in the embedded local database from day one; Firebase remains for auth, sync, and infrastructure only.
+- **Data Connect / PowerSync / TanStack DB** → Never adopted for the campaign store. PowerSync/TanStack DB are explicitly deferred (Turso's embedded-replica sync is the default, C-357); Data Connect is revisited only if a dashboard/admin use case emerges.
+- **Genkit** → Replaced by vendor-agnostic **AiProviderGateway** (C-320) with offline (local Ollama), BYOK, and service modes.
+- **Zod/Valibot** → Unified on **TypeBox** (tree-shakeable, used across shared schemas, types, and mocks).

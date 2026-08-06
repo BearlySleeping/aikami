@@ -364,6 +364,45 @@ export class GamePage {
     await expect(tracker).toBeVisible({ timeout: 10_000 });
   }
 
+  // ── Active Quest Overlay (C-quest-overlay) ────────────────
+
+  /** The active-quest mini overlay card (top-right). */
+  get questOverlay() {
+    return this.page.locator('[data-testid="quest-overlay"]');
+  }
+
+  /** Assert the active-quest overlay card is visible. */
+  async expectQuestOverlayVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.questOverlay).toBeVisible({ timeout: 15_000 });
+  }
+
+  /** Assert the overlay shows the given quest title. */
+  async expectQuestTitle(title: string): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.questOverlay.getByText(title)).toBeVisible({ timeout: 5000 });
+  }
+
+  /** Assert the current objective (aria-current="step") text. */
+  async expectCurrentObjective(label: string): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const current = this.questOverlay.locator('[aria-current="step"]');
+    await expect(current).toHaveText(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  /** Assert the empty-state hint is shown when no quest is active. */
+  async expectNoActiveQuestHint(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.questOverlay.getByText(/no active quest/i).first()).toBeVisible({
+      timeout: 5000,
+    });
+  }
+
+  /** Hide the quest overlay via its ✕ button. */
+  async hideQuestOverlay(): Promise<void> {
+    await this.questOverlay.getByRole('button', { name: /hide quest overlay/i }).click();
+  }
+
   // ── Save & Reload ─────────────────────────────────────────
 
   /** Trigger page reload and wait for re-boot to playing state. */
