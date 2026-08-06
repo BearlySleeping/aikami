@@ -11,7 +11,10 @@ const PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    criticalText: ['Open-Source AI RPG', 'Infinite RPG Roleplay'],
+    // Hero rewritten around the memory hook (2025 refactor). The h1 renders
+    // the hook across three <br>-separated lines, so the full phrase is
+    // asserted as a regex that tolerates the missing textContent whitespace.
+    criticalText: [/Every NPC\s*remembers what\s*you did\./, 'Play now, free in your browser'],
   },
 ];
 
@@ -132,10 +135,6 @@ test.describe('Site pages — download section', () => {
         await expect(container.getByText(text).first()).toBeVisible();
       }
 
-      // Verify channel toggle buttons exist
-      const stableBtn = container.locator('.download-channel-btn').first();
-      await expect(stableBtn).toBeVisible();
-
       // Verify platform cards are present
       const cards = container.locator('.download-card');
       const cardCount = await cards.count();
@@ -145,16 +144,34 @@ test.describe('Site pages — download section', () => {
       const linuxCard = container.locator('.download-card[data-platform="linux"]');
       await expect(linuxCard).toBeVisible();
 
-      // Click latest channel — UI should update without error
-      const latestBtn = container.locator('[data-channel="latest"]');
-      if (await latestBtn.isVisible()) {
-        await latestBtn.click();
-        await page.waitForTimeout(500);
-        // Verify stable button now has secondary style (not primary)
-        const stableBtnClass = await stableBtn.getAttribute('class');
-        expect(stableBtnClass).toContain('border border-border');
-        expect(stableBtnClass).not.toContain('bg-primary text-primary-foreground');
+      // Every platform card has a direct download button with a real href
+      const links = container.locator('.download-link');
+      const linkCount = await links.count();
+      expect(linkCount).toBe(3);
+      for (let i = 0; i < linkCount; i += 1) {
+        const href = await links.nth(i).getAttribute('href');
+        expect(href).toContain('releases/latest/download/aikami.');
       }
+
+      // Every card keeps a secondary "View releases" link
+      const viewLinks = container.locator('a', { hasText: 'View releases' });
+      expect(await viewLinks.count()).toBe(3);
+
+      // Linux card offers the three package formats
+      const formatChips = linuxCard.locator('.linux-format-chip');
+      expect(await formatChips.count()).toBe(3);
+
+      // Clicking a format chip swaps the direct download URL and marks the
+      // chip as selected — exercises applyFormat(), not just chip rendering.
+      const debChip = linuxCard.locator('.linux-format-chip[data-format="deb"]');
+      await debChip.click();
+      const linuxLink = linuxCard.locator('.download-link');
+      await expect(linuxLink).toHaveAttribute('href', /aikami\.deb$/);
+      await expect(debChip).toHaveAttribute('aria-pressed', 'true');
+
+      // The previously-default AppImage chip is deselected
+      const appimageChip = linuxCard.locator('.linux-format-chip[data-format="appimage"]');
+      await expect(appimageChip).toHaveAttribute('aria-pressed', 'false');
     });
   }
 });

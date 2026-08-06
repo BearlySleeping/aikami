@@ -1,18 +1,21 @@
 ---
-// apps/frontend/site/src/lib/components/sections/memory_graph.astro
+// apps/frontend/site/src/lib/components/sections/npcs_remember.astro
+/**
+ * "NPCs that remember" — the single demo section for living memory.
+ * Centerpiece: the interactive memory graph. Storylet branching and the
+ * faction system are folded in as short supporting lines below.
+ */
 ---
 
-<section id="ai-cognition" class="border-b border-border/70 bg-card">
+<section id="demo" class="border-b border-border/70 bg-card">
   <div class="mx-auto max-w-6xl px-6 py-24 md:py-28">
     <div class="max-w-2xl">
-      <span class="eyebrow text-rune">AI Cognition Engine</span>
-      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
-        Every NPC thinks, remembers, and adapts.
-      </h2>
+      <span class="eyebrow text-rune">Play with living memory</span>
+      <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">NPCs that remember.</h2>
       <p class="mt-5 text-muted-foreground leading-relaxed">
-        Aikami's AI engine maintains dual-track memory for every agent: a fast, volatile short-term
-        buffer for immediate context, and a persistent long-term world state that evolves with every
-        interaction.
+        Steal from a merchant and they remember. Save a village and word spreads. Every NPC keeps
+        short-term memory for the moment, and long-term memory that persists across sessions — so
+        the world reacts to what you actually did, not a script.
       </p>
     </div>
 
@@ -26,7 +29,7 @@
       ></div>
     </div>
 
-    <div class="mt-6 grid grid-cols-2 gap-4 text-xs md:text-sm">
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs md:text-sm">
       <div class="glass-panel p-4 flex items-start gap-3">
         <span class="h-2.5 w-2.5 rounded-full bg-indigo-400 mt-1 shrink-0" aria-hidden></span>
         <div>
@@ -34,8 +37,7 @@
             >Short-Term Memory</span
           >
           <p class="mt-1 text-muted-foreground leading-relaxed">
-            Volatile context buffer — recent dialog, active quests, combat state. Resets on session
-            end.
+            What's happening right now — the conversation, the fight, the deal in progress.
           </p>
         </div>
       </div>
@@ -43,11 +45,11 @@
         <span class="h-2.5 w-2.5 rounded-full bg-purple-400 mt-1 shrink-0" aria-hidden></span>
         <div>
           <span class="font-mono text-[10px] uppercase tracking-wider text-purple-400 font-medium"
-            >Long-Term World State</span
+            >Long-Term Memory</span
           >
           <p class="mt-1 text-muted-foreground leading-relaxed">
-            Persistent knowledge — world lore, faction relations, player choices. Survives across
-            sessions.
+            What the world knows about you — your deeds, your debts, your reputation. It survives
+            across sessions.
           </p>
         </div>
       </div>
@@ -56,6 +58,25 @@
     <p class="mt-3 text-xs text-muted-foreground/60">
       Click any node to inspect the agent's current state.
     </p>
+
+    <!-- Supporting lines: branching + factions (folded in, not separate sections) -->
+    <div class="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="glass-panel p-6">
+        <h3 class="font-serif text-2xl leading-tight">Choices that actually change the story.</h3>
+        <p class="mt-3 text-sm text-muted-foreground leading-relaxed">
+          Dialogue and quests aren't pre-written — the AI builds them as you play, and every choice
+          branches the tale. Two players who start in the same village can end up in completely
+          different worlds.
+        </p>
+      </div>
+      <div class="glass-panel p-6">
+        <h3 class="font-serif text-2xl leading-tight">Factions that talk to each other.</h3>
+        <p class="mt-3 text-sm text-muted-foreground leading-relaxed">
+          Help one group and their rivals will know. Factions are generated per playthrough, with
+          their own beliefs, alliances, and grudges — and your reputation follows you between them.
+        </p>
+      </div>
+    </div>
   </div>
 </section>
 

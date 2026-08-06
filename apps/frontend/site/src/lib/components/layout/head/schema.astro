@@ -25,13 +25,19 @@ type Props = {
 
 const { title, description, image, canonicalURL, type, publishDate, updateDate } = Astro.props;
 
+// Use the resolved Astro site URL (mode-correct: staging builds emit staging
+// IDs) with the static site.url as a fallback — keeps JSON-LD identity IDs
+// consistent with the canonical URL instead of hard-coding production.
+// Trailing slash is stripped so `/#website`-style fragment IDs stay clean.
+const siteUrl = (Astro.site?.toString() ?? site.url).replace(/\/$/, '');
+
 // 1. Build the Identity
 const sameAs = Object.values(site.social).filter((url) => url && url.length > 0);
 
 const identity = {
   '@type': 'Organization',
   name: site.name,
-  url: site.url,
+  url: siteUrl,
   ...(site.email && { email: site.email }),
   ...(site.telephone && { telephone: site.telephone }),
   ...(site.address &&
@@ -59,19 +65,19 @@ const schema: SchemaGraph = {
   '@graph': [
     {
       '@type': 'WebSite',
-      '@id': `${site.url}/#website`,
-      url: site.url,
+      '@id': `${siteUrl}/#website`,
+      url: siteUrl,
       name: site.name,
       description: site.description,
-      publisher: { '@id': `${site.url}/#identity` },
+      publisher: { '@id': `${siteUrl}/#identity` },
       potentialAction: {
         '@type': 'SearchAction',
-        target: `${site.url}?q={search_term_string}`,
+        target: `${siteUrl}?q={search_term_string}`,
         'query-input': 'required name=search_term_string',
       },
     },
     {
-      '@id': `${site.url}/#identity`,
+      '@id': `${siteUrl}/#identity`,
       ...identity,
     },
   ],
@@ -90,10 +96,10 @@ if (type === 'article') {
     author: {
       '@type': 'Person',
       name: site.author,
-      url: site.url,
+      url: siteUrl,
     },
-    publisher: { '@id': `${site.url}/#identity` },
-    isPartOf: { '@id': `${site.url}/#website` },
+    publisher: { '@id': `${siteUrl}/#identity` },
+    isPartOf: { '@id': `${siteUrl}/#website` },
     mainEntityOfPage: { '@id': canonicalURL },
   });
 } else {
@@ -103,8 +109,8 @@ if (type === 'article') {
     url: canonicalURL,
     name: title,
     description: description,
-    isPartOf: { '@id': `${site.url}/#website` },
-    about: { '@id': `${site.url}/#identity` },
+    isPartOf: { '@id': `${siteUrl}/#website` },
+    about: { '@id': `${siteUrl}/#identity` },
   });
 }
 ---
