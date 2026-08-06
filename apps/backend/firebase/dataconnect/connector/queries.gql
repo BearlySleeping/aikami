@@ -2,10 +2,11 @@
 # Users
 # ---------------------------------------------------------------------------
 
-query ListUsers @auth(level: PUBLIC) {
+# Any authenticated user may list users, but only non-PII fields are
+# exposed — email was removed from the selection (was @auth(level: PUBLIC)).
+query ListUsers @auth(level: USER) {
   users {
     id
-    email
   }
 }
 

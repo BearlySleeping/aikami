@@ -8,9 +8,40 @@ import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
-import { defineConfig, type PluginOption } from 'vite';
+import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
+
+// Default Vite logger, wrapped below to filter out warnings that cannot be
+// suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
+// e.g. EVAL, PLUGIN_TIMINGS, and INEFFECTIVE_DYNAMIC_IMPORT, through the
+// logger instead).
+const viteLogger = createLogger();
+
+/** True for warnings that are expected for this codebase and can be dropped.
+ *  Matched narrowly to their known sources so unrelated warnings stay visible. */
+function isIgnoredWarning(msg: string): boolean {
+  if (typeof msg !== 'string') {
+    return false;
+  }
+  // rolldown EVAL warning — emitted only when bundling the eruda debug
+  // console (the message carries the eruda module path)
+  if (msg.includes('strongly discouraged') && msg.includes('eruda')) {
+    return true;
+  }
+  // plugin timing diagnostics
+  if (msg.includes('PLUGIN_TIMINGS')) {
+    return true;
+  }
+  // The services barrel (src/lib/services/index.ts) is statically imported
+  // by 150+ modules, so `import('$services')` can never split a chunk. Those
+  // dynamic imports exist to break circular dependencies at module-init time,
+  // not for code-splitting — the warning is expected for this architecture.
+  if (msg.includes('src/lib/services/index.ts is dynamically imported')) {
+    return true;
+  }
+  return false;
+}
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
@@ -101,9 +132,34 @@ export default defineConfig(({ mode }) => {
     plugins,
     envPrefix: ['PUBLIC_'],
 
+    customLogger: {
+      ...viteLogger,
+      warn(msg, options) {
+        if (isIgnoredWarning(msg)) {
+          return;
+        }
+        viteLogger.warn(msg, options);
+      },
+      warnOnce(msg, options) {
+        if (isIgnoredWarning(msg)) {
+          return;
+        }
+        viteLogger.warnOnce(msg, options);
+      },
+    },
+
     build: {
       emptyOutDir: true,
-      rollupOptions: {
+      // The app bundles a game engine (PixiJS), Firebase, and a large services
+      // layer. Measured budget (staging build, 2026-08): largest JS chunk
+      // ~596 kB raw / ~150 kB gzip (services + engine), plus the kokoro TTS
+      // worker at ~520 kB and lazy-loaded ONNX/SQLite worker assets far above
+      // this limit. 1000 keeps the warning useful for real regressions without
+      // false positives for the inherent engine/barrel chunk sizes.
+      chunkSizeWarningLimit: 1000,
+      // build.rollupOptions is a deprecated alias for rolldownOptions in
+      // Vite 8 — use the current option directly.
+      rolldownOptions: {
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings
@@ -112,6 +168,14 @@ export default defineConfig(({ mode }) => {
           }
           // Silence plugin timing diagnostics
           if (warning.code === 'PLUGIN_TIMINGS' || warning.message.includes('PLUGIN_TIMINGS')) {
+            return;
+          }
+          // The services barrel (src/lib/services/index.ts) is statically
+          // imported by 150+ modules, so any `import('$services')` can never
+          // split a chunk. Those dynamic imports exist to break circular
+          // dependencies at module-init time, not for code-splitting — the
+          // warning is expected for this architecture.
+          if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') {
             return;
           }
 

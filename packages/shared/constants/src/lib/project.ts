@@ -26,8 +26,9 @@ export const backendAppIds = ['firebase', 'image', 'text', 'voice'] as const;
  * | `site`         | `apps/frontend/site`           | Public marketing site                 |
  * | `client`       | `apps/frontend/client`           | Main client app (characters, chat, settings) |
  * | `client-tauri` | `apps/frontend/client`           | Tauri desktop release (same source, different deploy target) |
+ * | `hub`          | `apps/frontend/hub`              | SvelteKit SSR dashboard (Cloud Run + Firebase Hosting) |
  */
-export const frontendAppIds = ['docs', 'site', 'client', 'client-tauri'] as const;
+export const frontendAppIds = ['docs', 'site', 'client', 'client-tauri', 'hub'] as const;
 
 /**
  * All Aikami application identifiers (backend + frontend).

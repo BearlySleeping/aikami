@@ -15,7 +15,7 @@ Two agents exist. You communicate with both through the human operator.
     - `service_logs` — Cloud Run / Firebase log viewer
     - `firestore_query` — Firebase Data Connect / Firestore data inspection
     - **Skills**: aikami-conventions, aikami-standards, contract-implementer, firestack, firestore-collection, pixijs-v8, tauri-v2, svelte-page, project-commands
-    - **Prompts**: `/contract` (reads INDEX.md → picks next → implements → validates → logs execution report to individual contract file, flips status in PROGRESS.md)
+    - **Prompts**: `/contract-implement` (reads INDEX.md → picks next → implements → validates → logs execution report to individual contract file, flips status in PROGRESS.md)
 
 - **Deep Research** (Gemini Deep Research) — Web-crawls documentation, compares libraries, finds edge cases. **Only for pre-contract research.** Never used for the contract being delivered now or for post-implementation analysis.
 

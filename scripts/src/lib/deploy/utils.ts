@@ -33,7 +33,7 @@ export function resolveRegion(_mode: string, configOverride?: string): string {
 
 let _verbose = false;
 let _quiet = false;
-let _dockerAuthenticated = false;
+const _dockerAuthenticated = new Set<string>();
 
 export function setVerbose(v: boolean): void {
   _verbose = v;
@@ -140,13 +140,14 @@ export function resolveCloudRunServiceName(config: AppConfig, appName: string): 
 }
 
 /** GCP Artifact Registry auth — authenticates the Docker registry.
- *  Idempotent: only runs the first time it's called per process. */
-export function authenticateDocker(): void {
-  if (_dockerAuthenticated) {
+ *  Idempotent per region: only configures a region once per process.
+ *  @param region Region of the Artifact Registry to configure; defaults to the global region. */
+export function authenticateDocker(region: string = GCP_REGION): void {
+  if (_dockerAuthenticated.has(region)) {
     return;
   }
-  _dockerAuthenticated = true;
-  run(`gcloud auth configure-docker ${GCP_REGION}-docker.pkg.dev --quiet`, { quiet: true });
+  _dockerAuthenticated.add(region);
+  run(`gcloud auth configure-docker ${region}-docker.pkg.dev --quiet`, { quiet: true });
 }
 
 /**

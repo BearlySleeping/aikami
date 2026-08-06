@@ -486,7 +486,7 @@ export default function (pi: ExtensionAPI) {
               `Next steps:`,
               `1. Use \`/contract-create\` to complete the draft with codebase inspection`,
               `2. Use \`/contract-critique\` for adversarial review`,
-              `3. After approval, use \`/contract\` to implement`,
+              `3. After approval, use \`/contract-implement\` to implement`,
             ].join('\n'),
           },
         ],

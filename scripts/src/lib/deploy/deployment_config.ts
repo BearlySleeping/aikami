@@ -10,9 +10,9 @@
  * to keep a single source of truth across all apps.
  *
  * Service types:
- *   cloud-run-sveltekit  → Build + Docker + push → Cloud Run (client web)
+ *   cloud-run-sveltekit  → Build + Docker + push → Cloud Run (hub SSR, fronted by Firebase Hosting)
  *   tauri-release        → Build Tauri desktop app → release artifacts
- *   firebase-hosting     → Build → Firebase Hosting (site, docs)
+ *   firebase-hosting     → Build → Firebase Hosting (client, site, docs)
  *   firebase-functions   → Deploy via firestack (firebase)
  *   docker-release       → Docker build + push only (image, text, voice)
  */
@@ -86,6 +86,15 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     path: 'apps/frontend/site',
     shortName: '',
     prefix: 'SITE',
+  },
+  /** SvelteKit SSR dashboard — deployed to Cloud Run (aikami-hub), fronted by Firebase Hosting sites per mode. */
+  hub: {
+    serviceType: 'cloud-run-sveltekit',
+    path: 'apps/frontend/hub',
+    shortName: 'hub',
+    prefix: 'HUB',
+    cloudRunServiceId: 'aikami-hub',
+    region: 'europe-west4',
   },
   docs: {
     serviceType: 'firebase-hosting',

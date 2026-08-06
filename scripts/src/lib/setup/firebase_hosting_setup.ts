@@ -47,7 +47,13 @@ export const setupFirebaseHosting = async (
   console.log(fmt.section('Firebase Hosting Sites'));
 
   for (const [appName, appConfig] of Object.entries(APP_CONFIG)) {
-    if (appConfig.serviceType !== 'firebase-hosting') {
+    // firebase-hosting apps deploy directly to Hosting; cloud-run-sveltekit
+    // apps (e.g. hub) are fronted by a per-mode Hosting site that rewrites
+    // to their Cloud Run service — both need the site to exist.
+    if (
+      appConfig.serviceType !== 'firebase-hosting' &&
+      appConfig.serviceType !== 'cloud-run-sveltekit'
+    ) {
       continue;
     }
 

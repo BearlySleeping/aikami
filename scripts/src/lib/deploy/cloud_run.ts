@@ -139,7 +139,7 @@ export async function deployCloudRunSveltekit(
 
   // 3. Build & push Docker image with layer caching from previous build
   log('🐳 Building & pushing Docker image (with layer cache)...');
-  authenticateDocker();
+  authenticateDocker(region);
   const cacheRepo = `${region}-docker.pkg.dev/${projectId}/${imageName}`;
   const cacheTag = `${cacheRepo}:latest`;
   run(`docker pull ${cacheTag} 2>/dev/null || true`, { quiet: true });
