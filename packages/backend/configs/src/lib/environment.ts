@@ -25,6 +25,7 @@ export type BackendEnv = {
   readonly NODE_ENV?: string;
   readonly K_SERVICE?: string;
   readonly PWA_URL?: string;
+  readonly APP_URL?: string;
   readonly FIREBASE_SERVICE_ACCOUNT?: string;
   readonly FIRESTORE_EMULATOR_HOST?: string;
   readonly FIREBASE_AUTH_EMULATOR_HOST?: string;
