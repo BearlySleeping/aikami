@@ -119,7 +119,10 @@ const _detectPlatform = async (): Promise<'native' | 'wasm'> => {
   try {
     // In Tauri, @tursodatabase/database is loadable. In a plain
     // browser webview it will throw (Node-native module not found).
-    await import('@tursodatabase/database');
+    // @vite-ignore: optional native module — Vite must not statically
+    // analyze it (its `node:module` import would otherwise be
+    // externalized with browser-compatibility warnings).
+    await import(/* @vite-ignore */ '@tursodatabase/database');
     return 'native';
   } catch {
     return 'wasm';

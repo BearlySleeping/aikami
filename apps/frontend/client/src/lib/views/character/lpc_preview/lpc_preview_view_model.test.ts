@@ -113,12 +113,33 @@ mock.module('$lib/data/lpc_tags', () => ({
 
 mock.module('$lib/data/lpc_renderer', () => ({
   loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+  detectLpcSheetLayout: (sheet: { width: number; height: number }) => ({
+    pitch: 64,
+    columns: Math.max(1, Math.floor(sheet.width / 64)),
+    rows: Math.max(1, Math.floor(sheet.height / 64)),
+    scale: 1,
+  }),
+  getLpcSpriteAnchor: () => ({ x: -32, y: -32 }),
   setLpcUrlResolver: () => {},
 }));
 
 mock.module('$lib/data/lpc_asset_catalog', () => ({
   wireLpcUrlResolver: () => {},
   getLpcAssetPath: () => '/game-data/lpc/test.walk.webp',
+  ANIMATION_STATE_OPTIONS: [
+    { value: 8, label: 'Walk' },
+    { value: 0, label: 'Spellcast' },
+    { value: 4, label: 'Thrust' },
+    { value: 12, label: 'Slash' },
+    { value: 16, label: 'Shoot' },
+    { value: 20, label: 'Die' },
+  ],
+  DIRECTION_OPTIONS: [
+    { value: 0, label: 'Up' },
+    { value: 1, label: 'Left' },
+    { value: 2, label: 'Down' },
+    { value: 3, label: 'Right' },
+  ],
 }));
 
 // PixiJS facade mock — all classes are empty shells

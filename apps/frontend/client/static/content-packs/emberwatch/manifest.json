@@ -127,14 +127,7 @@
     "village_elder": {
       "name": "Elder Thalia",
       "defaultDialogueKey": "elder_thalia_greeting",
-      "appearanceLayers": [
-        2,
-        3,
-        65,
-        21,
-        20,
-        97
-      ],
+      "appearanceLayers": [2, 3, 65, 21, 20, 97],
       "isVendor": false,
       "initialSuggestions": [
         {
@@ -160,14 +153,7 @@
     "guard_captain": {
       "name": "Guard Captain Aldric",
       "defaultDialogueKey": "guard_captain_greeting",
-      "appearanceLayers": [
-        3,
-        3,
-        23,
-        22,
-        7,
-        95
-      ],
+      "appearanceLayers": [3, 3, 23, 22, 7, 95],
       "isVendor": false,
       "initialSuggestions": [
         {
@@ -193,14 +179,7 @@
     "traveling_merchant": {
       "name": "Keth the Merchant",
       "defaultDialogueKey": "merchant_keth_greeting",
-      "appearanceLayers": [
-        3,
-        91,
-        127,
-        22,
-        19,
-        95
-      ],
+      "appearanceLayers": [3, 91, 127, 22, 19, 95],
       "isVendor": true,
       "vendorInventory": "ironSword, healthPotion, manaPotion, ironArmor, woodenShield",
       "initialSuggestions": [
@@ -227,14 +206,7 @@
     "elara_wayfinder": {
       "name": "Elara Wayfinder",
       "defaultDialogueKey": "elara_wayfinder_greeting",
-      "appearanceLayers": [
-        2,
-        91,
-        22,
-        21,
-        20,
-        94
-      ],
+      "appearanceLayers": [2, 91, 22, 21, 20, 94],
       "isVendor": false,
       "initialSuggestions": [
         {
@@ -260,14 +232,7 @@
     "kade_blackthorn": {
       "name": "Kade Blackthorn",
       "defaultDialogueKey": "kade_blackthorn_taunt",
-      "appearanceLayers": [
-        3,
-        123,
-        23,
-        22,
-        7,
-        95
-      ],
+      "appearanceLayers": [3, 123, 23, 22, 7, 95],
       "isVendor": false,
       "initialSuggestions": [
         {
@@ -293,14 +258,7 @@
     "shrine_spirit": {
       "name": "Vesperine Spirit",
       "defaultDialogueKey": "shrine_spirit_greeting",
-      "appearanceLayers": [
-        2,
-        3,
-        65,
-        21,
-        20,
-        96
-      ],
+      "appearanceLayers": [2, 3, 65, 21, 20, 96],
       "isVendor": false,
       "initialSuggestions": [
         {
@@ -532,9 +490,7 @@
       "id": "ruined_ward_encounter",
       "mapId": "ruined_ward_shrine",
       "name": "Shade of the Ruined Shrine",
-      "enemyNpcIds": [
-        "shade_guardian"
-      ],
+      "enemyNpcIds": ["shade_guardian"],
       "allowNonCombatResolution": true,
       "nonCombatSkillCheck": {
         "skill": "persuasion",
@@ -561,22 +517,11 @@
     }
   },
   "credits": {
-    "design": [
-      "Aikami Studio"
-    ],
-    "writing": [
-      "Aikami Studio"
-    ],
-    "art": [
-      "Liberated Pixel Cup (LPC) asset contributors"
-    ],
-    "music": [
-      "Chainsmoker \u2014 Exploration Theme"
-    ],
-    "thanks": [
-      "The open-source game development community",
-      "The LPC asset artists"
-    ]
+    "design": ["Aikami Studio"],
+    "writing": ["Aikami Studio"],
+    "art": ["Liberated Pixel Cup (LPC) asset contributors"],
+    "music": ["Chainsmoker \u2014 Exploration Theme"],
+    "thanks": ["The open-source game development community", "The LPC asset artists"]
   },
   "onboarding": {
     "steps": [

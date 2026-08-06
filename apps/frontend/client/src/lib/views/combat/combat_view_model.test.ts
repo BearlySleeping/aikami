@@ -13,6 +13,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 
+// The gatekeeping tests below mutate the real textGenerationService's
+// extractStructure. The ViewModel reads textGenerationService from the
+// barrel, so the barrel mock must expose the REAL singleton (the same
+// instance the tests import and patch).
+import { textGenerationService as realTextGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+
 mock.module('$services', () => ({
   diceService: {
     rollWithModifier: () => ({ roll: 17, modifier: 4, total: 21, success: true }),
@@ -30,6 +36,7 @@ mock.module('$services', () => ({
     stopAll: () => {},
   },
   vendorService: undefined,
+  textGenerationService: realTextGenerationService,
 }));
 
 import {

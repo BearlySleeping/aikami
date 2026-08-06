@@ -179,7 +179,7 @@ describe('AssetRegistryRepository', () => {
     expect(sources1).toHaveLength(2);
 
     // Re-seed with an extra asset (new bundled asset added to manifest)
-    const HASH_D = 'd'.repeat(64);
+    const HashD = 'd'.repeat(64);
     const manifest2 = makeManifest({
       assets: {
         ...makeManifest().assets,
@@ -197,7 +197,7 @@ describe('AssetRegistryRepository', () => {
     const hashes2 = makeHashes({
       hashes: {
         ...makeHashes().hashes,
-        'sfx:ui:click': { hash: HASH_D, sizeBytes: 512 },
+        'sfx:ui:click': { hash: HashD, sizeBytes: 512 },
       },
     });
 

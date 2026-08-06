@@ -28,9 +28,20 @@ mock.module('$services', () => ({
     recordEvent() {},
   },
   npcService: {},
+  worldGenSeedingService: {
+    seedNpcs: mock(async () => {}),
+    seedLocations: mock(async () => {}),
+    seedPartyArcs: mock(async () => {}),
+    seedHudWidgets: mock(async () => {}),
+    assembleGmPrompt: mock(() => ''),
+  },
 }));
 
 import { worldGenSeedingService } from '$services';
+
+// assembleGmPrompt tests exercise the REAL prompt assembly (not the
+// $services mock) — load the actual singleton from its module path.
+import { worldGenSeedingService as promptService } from '../../services/worldgen/world_gen_seeding_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -168,7 +179,7 @@ describe('WorldGenSeedingService — C-233', () => {
         hudWidgets: MOCK_WIDGETS,
       };
 
-      const prompt = worldGenSeedingService.assembleGmPrompt({
+      const prompt = promptService.assembleGmPrompt({
         output,
         playerGoals: 'Test the world.',
       });
@@ -191,7 +202,7 @@ describe('WorldGenSeedingService — C-233', () => {
         hudWidgets: MOCK_WIDGETS,
       };
 
-      const prompt = worldGenSeedingService.assembleGmPrompt({
+      const prompt = promptService.assembleGmPrompt({
         output,
         playerGoals: 'Goals.',
       });
@@ -211,7 +222,7 @@ describe('WorldGenSeedingService — C-233', () => {
         hudWidgets: MOCK_WIDGETS,
       };
 
-      const prompt = worldGenSeedingService.assembleGmPrompt({
+      const prompt = promptService.assembleGmPrompt({
         output,
         playerGoals: 'Goals.',
       });

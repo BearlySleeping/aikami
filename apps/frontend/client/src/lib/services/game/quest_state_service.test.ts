@@ -311,6 +311,14 @@ describe('QuestStateService', () => {
     test('delivers item, gold, and XP rewards on completion', () => {
       service.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
 
+      // Baseline balances — the inventory/player singletons persist across
+      // tests in this file (and the game seeds 100 starting gold), so we
+      // assert the reward delta rather than an absolute balance.
+      const baselineGold = inventoryService.gold;
+      const baselineXp = playerStateService.playerXp;
+      const baselineAmuletQty =
+        inventoryService.inventory.find((e) => e.itemId === 'wardAmulet')?.quantity ?? 0;
+
       // Complete the quest via triggers
       service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/old_road.json' });
       service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/ruined_ward_shrine.json' });
@@ -326,9 +334,9 @@ describe('QuestStateService', () => {
       // Verify reward side effects: item, gold, XP delivered
       const inventoryItem = inventoryService.inventory.find((e) => e.itemId === 'wardAmulet');
       expect(inventoryItem).toBeDefined();
-      expect(inventoryItem?.quantity).toBe(1);
-      expect(inventoryService.gold).toBe(200);
-      expect(playerStateService.playerXp).toBe(500);
+      expect(inventoryItem?.quantity).toBe(baselineAmuletQty + 1);
+      expect(inventoryService.gold).toBe(baselineGold + 200);
+      expect(playerStateService.playerXp).toBe(baselineXp + 500);
 
       // Quest should be in completed list, not active
       const serialized = service.serialize();
@@ -337,6 +345,10 @@ describe('QuestStateService', () => {
 
     test('only delivers rewards once (idempotency)', () => {
       service.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+
+      // Baseline balances — see note above.
+      const baselineGold = inventoryService.gold;
+      const baselineXp = playerStateService.playerXp;
 
       service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/old_road.json' });
       service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/ruined_ward_shrine.json' });
@@ -359,9 +371,9 @@ describe('QuestStateService', () => {
       const serialized = service.serialize();
       expect(serialized.activeQuests.filter((q) => q.questId === 'fading_ward').length).toBe(0);
 
-      // Rewards delivered exactly once: gold is 200, not 400
-      expect(inventoryService.gold).toBe(200);
-      expect(playerStateService.playerXp).toBe(500);
+      // Rewards delivered exactly once: gold is baseline+200, not baseline+400
+      expect(inventoryService.gold).toBe(baselineGold + 200);
+      expect(playerStateService.playerXp).toBe(baselineXp + 500);
     });
   });
 

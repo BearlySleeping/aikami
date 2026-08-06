@@ -11,14 +11,17 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
+import {
+  ANIMATION_STATE_OPTIONS,
+  DIRECTION_OPTIONS,
+  wireLpcUrlResolver,
+} from '$lib/data/lpc_asset_catalog';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
-import { loadLpcSheet } from '$lib/data/lpc_renderer';
+import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
 import { lpcStateSuffix } from '$lib/data/lpc_tags';
 import {
   Application,
   Container,
-  Graphics,
   type PixiApplication,
   Rectangle,
   Sprite,
@@ -41,10 +44,6 @@ const SLOT_Z_ORDER: Record<string, number> = {
   shield: 90,
 };
 const DEFAULT_Z_ORDER = 100;
-
-/** Frame dimensions for LPC spritesheet extraction. */
-const FRAME_W = 64;
-const FRAME_H = 64;
 
 /** Default animation playback FPS. */
 const DEFAULT_PLAYBACK_FPS = 12;
@@ -71,8 +70,18 @@ const FRAME_COUNTS: Record<number, number> = {
 export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   readonly isPlaying: boolean;
   readonly animationFrame: number;
+  /** Last frame index for the current animation state (inclusive). */
+  readonly maxFrame: number;
   readonly zoom: number;
   readonly compositionFailed: boolean;
+  /** Slots whose asset could not be loaded in the last render ("slot:assetId"). */
+  readonly missingAssets: string[];
+
+  readonly animationState: LpcAnimationState;
+  readonly facingDirection: LpcDirection;
+  readonly playbackFps: number;
+  readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
+  readonly directionOptions: typeof DIRECTION_OPTIONS;
 
   /** Canvas element reference — bind via `bind:this={viewModel.setCanvasElement}`. */
   canvasElement: HTMLCanvasElement | undefined;
@@ -84,8 +93,23 @@ export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   /** Set the animation state (idle=Walk with playback=false, walk=Walk with playback=true). */
   setAnimationState(state: LpcAnimationState): void;
 
+  /** Set the facing direction row. Triggers a recompose. */
+  setFacingDirection(direction: LpcDirection): void;
+
   /** Toggle animation playback on/off. */
   togglePlayback(): void;
+
+  /** Step one frame forward (no-op while playing). */
+  stepNext(): void;
+
+  /** Step one frame backward (no-op while playing). */
+  stepPrev(): void;
+
+  /** Set the animation frame directly (no-op while playing). */
+  setAnimationFrame(frame: number): void;
+
+  /** Set playback speed in FPS. */
+  setPlaybackFps(fps: number): void;
 
   /** Set the preview zoom level. */
   setZoom(zoom: number): void;
@@ -115,6 +139,7 @@ class LpcPreviewViewModel
   animationFrame = $state(0);
   zoom = $state(1.0);
   compositionFailed = $state(false);
+  missingAssets = $state<string[]>([]);
 
   // ── Private state ──────────────────────────────────────────────────
 
@@ -145,6 +170,25 @@ class LpcPreviewViewModel
 
   // ── Public API ────────────────────────────────────────────────────
 
+  readonly animationStateOptions = ANIMATION_STATE_OPTIONS;
+  readonly directionOptions = DIRECTION_OPTIONS;
+
+  get animationState(): LpcAnimationState {
+    return this._animationState;
+  }
+
+  get facingDirection(): LpcDirection {
+    return this._facingDirection;
+  }
+
+  get maxFrame(): number {
+    return this._maxFrame;
+  }
+
+  get playbackFps(): number {
+    return this._playbackFps;
+  }
+
   setCanvasElement(canvas: HTMLCanvasElement): void {
     this.canvasElement = canvas;
   }
@@ -169,9 +213,40 @@ class LpcPreviewViewModel
     }
   }
 
+  setFacingDirection(direction: LpcDirection): void {
+    this._facingDirection = direction;
+    if (this._isInitialized) {
+      this._renderCharacter();
+    }
+  }
+
   togglePlayback(): void {
     this.isPlaying = !this.isPlaying;
     this._tickAccumulator = 0;
+  }
+
+  stepNext(): void {
+    if (this.isPlaying) {
+      return;
+    }
+    this.animationFrame = (this.animationFrame + 1) % (this._maxFrame + 1);
+  }
+
+  stepPrev(): void {
+    if (this.isPlaying) {
+      return;
+    }
+    this.animationFrame = this.animationFrame === 0 ? this._maxFrame : this.animationFrame - 1;
+  }
+
+  setAnimationFrame(frame: number): void {
+    if (!this.isPlaying) {
+      this.animationFrame = frame;
+    }
+  }
+
+  setPlaybackFps(fps: number): void {
+    this._playbackFps = Math.max(1, fps);
   }
 
   setZoom(zoom: number): void {
@@ -288,8 +363,10 @@ class LpcPreviewViewModel
    * Composes all layers into the PixiJS stage.
    *
    * Loads spritesheets for each recipe layer, extracts the correct animation
-   * frame, applies tints, enforces z-order, and renders the composite.
-   * Missing assets render as magenta placeholder rectangles.
+   * frame (auto-detecting standard 64px vs universal 128px cell layouts),
+   * applies tints, enforces z-order, and renders the composite.
+   * Missing assets are skipped gracefully and surfaced via `missingAssets`
+   * instead of painting placeholder rectangles over the character.
    */
   private async _renderCharacter(): Promise<void> {
     const recipes = this._recipes;
@@ -308,6 +385,7 @@ class LpcPreviewViewModel
     const capturedPixiApp = this._pixiApp;
 
     this.compositionFailed = false;
+    const missingLayers: string[] = [];
 
     try {
       const newChildren: Container[] = [];
@@ -322,42 +400,49 @@ class LpcPreviewViewModel
 
         if (!texture || texture === Texture.EMPTY) {
           this.warn('lpcPreview.missingAsset', { slot: slotName, assetId, sheetKey });
-          const placeholder = this._createPlaceholder(slotName);
-          newChildren.push(placeholder);
+          // Graceful degradation: skip the layer instead of covering the
+          // character with a placeholder square. The slot is surfaced via
+          // `missingAssets` so UI can show a subtle diagnostic.
+          missingLayers.push(`${slotName}:${assetId}`);
           return;
         }
 
-        // Extract frame from spritesheet
-        const columns = Math.max(1, Math.floor(texture.width / FRAME_W));
+        // Extract frame from spritesheet (handles both 64px standard and
+        // 128px universal cell layouts — e.g. bow walk sheets).
+        const layout = detectLpcSheetLayout(texture);
         const stateRow = this._getStateRow(currentState, currentDirection);
-        const rows = Math.max(1, Math.floor(texture.height / FRAME_H));
 
-        const col = currentFrame % columns;
-        const row = rows > 1 ? stateRow % rows : 0;
-        const x = col * FRAME_W;
-        const y = row * FRAME_H;
+        const col = currentFrame % layout.columns;
+        const row = layout.rows > 1 ? stateRow % layout.rows : 0;
+        const x = col * layout.pitch;
+        const y = row * layout.pitch;
 
-        if (x + FRAME_W > texture.width || y + FRAME_H > texture.height) {
+        if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
           this.warn('lpcPreview.frameOutOfBounds', {
             slot: slotName,
             assetId,
             frame: col,
             row,
           });
-          const placeholder = this._createPlaceholder(slotName);
-          newChildren.push(placeholder);
+          missingLayers.push(`${slotName}:${assetId}`);
           return;
         }
 
         const frameTexture = new Texture({
           source: texture.source,
-          frame: new Rectangle(x, y, FRAME_W, FRAME_H),
+          frame: new Rectangle(x, y, layout.pitch, layout.pitch),
         });
 
+        const anchor = getLpcSpriteAnchor(layout, assetId);
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
-        sprite.x = -FRAME_W / 2;
-        sprite.y = -FRAME_H / 2;
+        // Anchor at the 64px logical frame origin. Universal 128px cells are
+        // scaled down but keep the same anchor — the drawing is centered in
+        // the padded cell, so scaling + standard anchoring aligns it with the
+        // character's hands.
+        sprite.x = anchor.x;
+        sprite.y = anchor.y;
+        sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
 
         // Z-order: use canonical slot mapping, fall back to index-based
@@ -374,6 +459,7 @@ class LpcPreviewViewModel
       });
 
       await Promise.all(layerPromises);
+      this.missingAssets = missingLayers;
 
       // Check if this render is stale
       if (
@@ -421,13 +507,11 @@ class LpcPreviewViewModel
         return;
       }
 
-      // Global fallback: magenta rectangle covering the center
+      // Graceful degradation: clear the stage and leave the canvas empty.
+      // The compositionFailed flag + view notice surface the failure without
+      // painting a loud placeholder over the character.
       this._destroyAllChildren();
-      const fallbackContainer = this._createPlaceholder('_global');
-      fallbackContainer.x = this._canvasWidth / 2;
-      fallbackContainer.y = this._canvasHeight / 2;
-      this._pixiApp.stage.addChild(fallbackContainer);
-      this._currentChildren.push(fallbackContainer);
+      this.missingAssets = missingLayers;
       this.compositionFailed = true;
     }
   }
@@ -495,30 +579,6 @@ class LpcPreviewViewModel
       return undefined;
     }
     return (r << 16) | (g << 8) | b;
-  }
-
-  /**
-   * Creates a 64×64 magenta placeholder with red border for a missing layer.
-   *
-   * Uses a Graphics object inside a Container, centered at origin.
-   */
-  private _createPlaceholder(slotName: string): Container {
-    const gfx = new Graphics();
-    gfx.rect(0, 0, FRAME_W, FRAME_H);
-    gfx.fill({ color: 0xff00ff, alpha: 0.9 });
-    gfx.rect(0, 0, FRAME_W, FRAME_H);
-    gfx.stroke({ color: 0xff0000, width: 2 });
-    gfx.eventMode = 'none';
-
-    const container = new Container();
-    container.eventMode = 'none';
-    container.x = -FRAME_W / 2;
-    container.y = -FRAME_H / 2;
-    container.zIndex = SLOT_Z_ORDER[slotName] ?? DEFAULT_Z_ORDER;
-    container.addChild(gfx);
-
-    this.warn('lpcPreview.placeholderRendered', { slot: slotName });
-    return container;
   }
 
   /** Destroys all existing display children and clears the character container. */

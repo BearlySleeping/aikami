@@ -43,6 +43,16 @@ $effect(() => {
     {viewModel.isPlaying ? '⏸ Pause' : '▶ Play Walk Animation'}
   </button>
 
+  {#if viewModel.missingAssets.length > 0}
+    <span
+      class="badge badge-warning badge-outline badge-sm gap-1"
+      title={viewModel.missingAssets.join('\n')}
+    >
+      ⚠ {viewModel.missingAssets.length} layer{viewModel.missingAssets.length === 1 ? '' : 's'}
+      unavailable
+    </span>
+  {/if}
+
   {#if viewModel.compositionFailed}
     <p class="text-xs text-warning">Preview rendering issue — try a different preset.</p>
   {/if}

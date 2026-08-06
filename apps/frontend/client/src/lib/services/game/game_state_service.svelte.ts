@@ -122,8 +122,11 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   hydrateWorldGen(data: WorldGenOutput | undefined): void;
 
   /**
-   * Resets all mutable game state arrays (inventory, defeatedEnemies, quests,
-   * equipment, player stats).
+   * Resets all mutable game state (inventory, defeatedEnemies, quests, player
+   * stats, gold, world gen output).
+   *
+   * Equipment state lives in equipmentService (C-374) — call
+   * equipmentService.reset() separately to clear equipped items.
    *
    * Called when starting a New Game to prevent stale state from a previous
    * or aborted play session from leaking into the new session.

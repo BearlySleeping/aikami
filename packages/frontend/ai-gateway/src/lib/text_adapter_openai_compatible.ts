@@ -377,7 +377,10 @@ export const createOpenAiCompatibleTextAdapter = (
             text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
           } catch (err) {
             // Rethrow abort/timeout errors so cancellation propagates correctly
-            if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
+            if (
+              err instanceof Error &&
+              (err.name === 'AbortError' || err.message.includes('aborted'))
+            ) {
               throw err;
             }
             // Provider returned 200 but the body wasn't JSON — it likely

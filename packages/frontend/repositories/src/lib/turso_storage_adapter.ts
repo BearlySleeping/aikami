@@ -84,7 +84,11 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
 
     logger.debug('TursoStorageAdapter.open', { path: this._databasePath });
 
-    const turso = await import('@tursodatabase/database');
+    // @vite-ignore: optional native module — Vite must not statically
+    // analyze it (its `node:module` import would otherwise be externalized
+    // with browser-compatibility warnings). This adapter is only reached
+    // in the Tauri runtime; plain browsers use the WASM adapter instead.
+    const turso = await import(/* @vite-ignore */ '@tursodatabase/database');
     this._db = await turso.connect(this._databasePath);
 
     // Foreign-key enforcement ON — asset_sources/install_state reference

@@ -6,10 +6,24 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/vendor/vendor_view_model.test.ts
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 // $services barrel is mocked globally via test_preload.ts
+
+import { vendorService as realVendorService } from '$lib/services/game/vendor_service.svelte.ts';
+
+// The ViewModel consumes vendorService through the $services barrel, which
+// test_preload mocks with a stub. Re-mock the barrel so the ViewModel and
+// this test share the REAL vendor service instance (otherwise state
+// mutations below never reach the ViewModel).
+mock.module('$services', () => ({
+  vendorService: realVendorService,
+  gameOverlayService: {
+    openVendor: () => {},
+    closeVendor: () => {},
+  },
+}));
 
 import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
 import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';

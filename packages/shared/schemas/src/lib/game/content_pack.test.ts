@@ -52,7 +52,8 @@ describe('ContentPackManifestSchema', () => {
           name: 'Rusty Sword',
           type: 'weapon' as const,
           attackBonus: 3,
-          equipmentSlot: 'weapon',
+          // Updated for C-374 paperdoll slots: weapons equip into hand slots.
+          equipmentSlot: 'rightHand',
         },
       },
       dialogues: {
@@ -552,14 +553,15 @@ describe('ContentPackManifestSchema', () => {
           name: 'Iron Helm',
           type: 'armor' as const,
           defenseBonus: 5,
-          equipmentSlot: 'armor',
+          // Updated for C-374 paperdoll slots: helmets equip into the head slot.
+          equipmentSlot: 'head',
         },
       },
     };
     const result = Value.Parse(ContentPackManifestSchema, manifest);
     const item = result.items.ironHelm;
     expect(item.defenseBonus).toBe(5);
-    expect(item.equipmentSlot).toBe('armor');
+    expect(item.equipmentSlot).toBe('head');
     expect(item.attackBonus).toBeUndefined();
   });
 });

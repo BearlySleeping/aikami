@@ -1,5 +1,6 @@
 {
   "name": "@aikami/constants",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "test": "bun test",

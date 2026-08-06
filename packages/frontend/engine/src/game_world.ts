@@ -30,6 +30,7 @@ import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
+
 // Vite ?worker&type=module import for the bootstrap entry point.
 //
 // MUST NOT be inlined (?worker&inline): the bootstrap dynamic-imports
@@ -37,7 +38,11 @@ import type { GameEvent } from './types.ts';
 // blob/data-URL worker (no path base) — the module never evaluates and the
 // engine silently hangs (LOAD_MAP timeout). A real worker file keeps the
 // dynamic-import chunk resolvable at its emitted URL.
-import EcsWorker from './worker/ecs_worker_bootstrap.ts?worker&type=module';
+//
+// The import is lazy (dynamic) so non-Vite runtimes — e.g. bun's test
+// runner — can evaluate this module without resolving the `?worker` query
+// (Vite-specific syntax). `_spawnWorker` loads the constructor on first use.
+type EcsWorkerConstructor = new () => Worker;
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -230,6 +235,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Optional factory for creating the worker (Vite ?worker import). */
   private readonly _workerFactory?: () => Worker;
+
+  /** Lazily-loaded Vite `?worker` constructor (see module top comment). */
+  private _workerConstructor: EcsWorkerConstructor | undefined;
 
   /** Resolves layer IDs to LPC layer recipes. */
   private readonly _recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
@@ -702,8 +710,31 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('spawnWorker:using-workerFactory');
       this._worker = this._workerFactory();
     } else {
-      this._worker = new EcsWorker();
-      this.debug('spawnWorker:created', { name: EcsWorker.name });
+      if (!this._workerConstructor) {
+        try {
+          const workerModule = await import('./worker/ecs_worker_bootstrap.ts?worker&type=module');
+          this._workerConstructor = workerModule.default as EcsWorkerConstructor;
+        } catch (error) {
+          this.error('spawnWorker:import-failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Clean up partial state so initialize() can be retried
+          this._workerConstructor = undefined;
+          this._worker = undefined;
+          throw error;
+        }
+      }
+
+      // Check if destroy() was called during the await above
+      if (this._disposed) {
+        this.warn('spawnWorker:aborted-after-import', {
+          reason: 'GameWorld was destroyed during worker module import',
+        });
+        return;
+      }
+
+      this._worker = new this._workerConstructor();
+      this.debug('spawnWorker:created', { name: this._workerConstructor.name });
     }
 
     const worker = this._worker;

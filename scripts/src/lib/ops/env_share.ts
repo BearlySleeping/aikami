@@ -29,8 +29,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs } from '../cli_utils';
-import { initScriptsEnv } from '../env/scripts_env';
 import { resolveEnvFile } from '../deploy/deployment_config';
+import { initScriptsEnv } from '../env/scripts_env';
 
 const _filename = fileURLToPath(import.meta.url);
 const _scriptDir = dirname(_filename);

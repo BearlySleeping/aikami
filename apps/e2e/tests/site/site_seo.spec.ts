@@ -11,7 +11,9 @@ const SEO_PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    description: 'AI-powered',
+    // Updated to match the current landing page meta description
+    // (the description was rewritten in the interactive showcase rework).
+    description: 'AI RPG engine',
   },
 ];
 
