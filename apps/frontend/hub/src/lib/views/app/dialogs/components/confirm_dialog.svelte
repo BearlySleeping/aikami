@@ -3,10 +3,30 @@ import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.sve
 
 type Props = { viewModel: AppDialogsViewModelInterface };
 const { viewModel }: Props = $props();
+
+let dialogElement = $state<HTMLDivElement | undefined>();
+let previouslyFocused: HTMLElement | null = null;
+
+// Move focus into the dialog when it opens so Escape is handled by the
+// active modal, and restore focus to the trigger when it closes.
+$effect(() => {
+  if (viewModel.confirmDialog && dialogElement) {
+    previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogElement.focus();
+  }
+});
+
+$effect(() => {
+  if (!viewModel.confirmDialog && previouslyFocused) {
+    previouslyFocused.focus();
+    previouslyFocused = null;
+  }
+});
 </script>
 
 {#if viewModel.confirmDialog}
   <div
+    bind:this={dialogElement}
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     onclick={() => viewModel.confirmDialogCancel()}
     onkeydown={(e) => { if (e.key === 'Escape') { viewModel.confirmDialogCancel() } }}

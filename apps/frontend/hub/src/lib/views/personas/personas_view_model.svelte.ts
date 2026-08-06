@@ -100,6 +100,7 @@ class PersonasViewModel
   }
 
   async setActivePersona(personaId: string): Promise<void> {
+    this.errorMessage = undefined;
     try {
       await personaDataService.setActivePersona(personaId);
       await this.refresh();
@@ -121,6 +122,7 @@ class PersonasViewModel
     if (!confirmed) {
       return;
     }
+    this.errorMessage = undefined;
     try {
       await personaDataService.deletePersona(personaId);
       await this.refresh();

@@ -21,7 +21,7 @@ import { logger } from '$logger';
 // of replacing the whole blob, otherwise the next request re-sets
 // `aikamiSessionId` and its Set-Cookie header clobbers the session.
 
-const SESSION_COOKIE_MAX_AGE_SECONDS = Math.floor(sessionAge / 1000);
+const SESSION_COOKIE_MAX_AGE_SECONDS = sessionAge;
 
 /** Decode and parse the existing `__aikami_session` blob from a request. */
 const parseExistingStore = (cookieValue: unknown): Record<string, string> => {
@@ -117,10 +117,9 @@ const handleSession = async ({
   }
 
   try {
-    const [session, decodedIdToken] = await Promise.all([
-      createSessionCookie({ token, expiresIn: sessionAge }),
-      verifyIdToken(token),
-    ]);
+    // Verify the ID token first, then enforce login freshness before
+    // minting a session cookie.
+    const decodedIdToken = await verifyIdToken(token);
 
     if (!decodedIdToken.email) {
       logger.warn('/api/auth/session: user has no email — rejecting session', {
@@ -130,6 +129,19 @@ const handleSession = async ({
       return null;
     }
 
+    // Login-freshness policy: a session cookie is only minted from a token
+    // whose auth_time is within the session lifetime, so an old login cannot
+    // bootstrap a fresh session.
+    const authTimeMs = (decodedIdToken.auth_time ?? 0) * 1000;
+    if (!decodedIdToken.auth_time || Date.now() - authTimeMs > sessionAge * 1000) {
+      logger.warn('/api/auth/session: login too old — rejecting session', {
+        uid: decodedIdToken.uid,
+      });
+      set.headers['set-cookie'] = clearSessionCookieHeader(existingStore);
+      return null;
+    }
+
+    const session = await createSessionCookie({ token, expiresIn: sessionAge * 1000 });
     set.headers['set-cookie'] = serializeSessionCookie(session, existingStore);
   } catch (error) {
     // Invalid / revoked / expired token — never leave a stale session.

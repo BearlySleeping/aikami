@@ -68,6 +68,9 @@ export class AppService
 
   setCurrentDevice(device: DeviceData): void {
     this._currentDevice = device;
+    // Keep deviceType in sync with the incoming device, defaulting to
+    // desktop when no type is reported.
+    this.deviceType = device.type ?? 'desktop';
   }
 
   toggleNavigationDrawer(value?: boolean) {

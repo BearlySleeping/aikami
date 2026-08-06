@@ -18,12 +18,11 @@ import { logger } from '$logger';
  */
 export const getServiceIdentityToken = async (audience: string): Promise<string> => {
   // ── Local development / non-production fallback ──────────────
-  // Only return dev token in emulator mode. Staging uses the real
-  // GCP Metadata Server (Cloud Run service account). NODE_ENV is
-  // unreliable — SvelteKit/Bun may override it to "development"
-  // even when deployed to Cloud Run with NODE_ENV=production.
-  if (process.env.AIKAMI_MODE === 'emulator' || process.env.AIKAMI_MODE === undefined) {
-    logger.debug('gcp_oidc: using dev token (local/emulator mode)');
+  // Only return the dev token in emulator mode. Staging uses the real
+  // GCP Metadata Server (Cloud Run service account). When AIKAMI_MODE is
+  // unset or any other value, fail closed by hitting the metadata server.
+  if (process.env.AIKAMI_MODE === 'emulator') {
+    logger.debug('gcp_oidc: using dev token (emulator mode)');
     return 'dev-oidc-token';
   }
 
@@ -35,6 +34,8 @@ export const getServiceIdentityToken = async (audience: string): Promise<string>
       headers: {
         'Metadata-Flavor': 'Google',
       },
+      // Abort if the metadata server does not respond (SSR must not hang).
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

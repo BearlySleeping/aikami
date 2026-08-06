@@ -5,13 +5,17 @@
 # ======================================================================================
 
 # Stage 1: Install dependencies from the minimal package.json generated in build/
-FROM oven/bun:latest AS builder
+# Pinned to an immutable Bun version tag (not :latest) for reproducible builds.
+FROM oven/bun:1.3.13 AS builder
 WORKDIR /app
 COPY build/package.json .
-RUN bun install --production
+# Generate a lockfile from the production dependency set, then install strictly
+# against it so the runtime dependency set is reproducible.
+RUN bun install --production --lockfile-only \
+    && bun install --production --frozen-lockfile
 
 # Stage 2: Final Distroless image
-FROM oven/bun:distroless
+FROM oven/bun:1.3.13-distroless
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 HOST=0.0.0.0
 

@@ -57,7 +57,7 @@ export const getUserSessionFromCookies = async (options: {
 }): Promise<[UserSessionData] | [undefined, boolean]> => {
   try {
     const sessionCookie = getCookie('__session', options);
-    logger.debug('getUserSessionFromCookies', { hasCookie: !!sessionCookie });
+    logger.debug('getUserSessionFromCookies', { hasSessionCookie: !!sessionCookie });
 
     if (!sessionCookie || sessionCookie === 'null' || sessionCookie === 'undefined') {
       return [undefined, false];
@@ -99,18 +99,16 @@ export const getUserSession = async (options: {
   try {
     const { url } = options;
 
-    // ── JWT in search param (for E2E testing with emulator) ──
-    if (process.env.AIKAMI_MODE === 'emulator') {
-      const jwtParam = url.searchParams.get('jwt');
-      if (jwtParam) {
-        const [userSessionFromJwt, shouldReAuth] = await getUserSessionFromIdToken(jwtParam);
-        logger.log('getUserSession:jwt', {
-          hasSession: !!userSessionFromJwt,
-          role: userSessionFromJwt?.userRole,
-        });
-        if (userSessionFromJwt) {
-          return { userSession: userSessionFromJwt, shouldReAuthenticate: shouldReAuth };
-        }
+    // ── JWT in search param (for E2E testing with the emulator only) ──
+    const jwtParam = process.env.AIKAMI_MODE === 'emulator' ? url.searchParams.get('jwt') : null;
+    if (jwtParam) {
+      const [userSessionFromJwt, shouldReAuth] = await getUserSessionFromIdToken(jwtParam);
+      logger.log('getUserSession:jwt', {
+        hasSession: !!userSessionFromJwt,
+        role: userSessionFromJwt?.userRole,
+      });
+      if (userSessionFromJwt) {
+        return { userSession: userSessionFromJwt, shouldReAuthenticate: shouldReAuth };
       }
     }
 
@@ -144,14 +142,13 @@ export const getUserSessionFromLocalesOrURL = async (options: {
 }): Promise<UserSessionData | undefined> => {
   logger.log('getUserSessionFromLocalesOrURL', {
     hasLocalsSession: !!options.locals.userSession,
-    url: options.url.pathname,
   });
   const { locals } = options;
   let userSession = locals.userSession;
   if (!userSession) {
     const { userSession: userSessionFromCookies } = await getUserSession(options);
     logger.log('getUserSessionFromLocalesOrURL:userSessionFromCookies', {
-      userSessionFromCookies,
+      hasSession: !!userSessionFromCookies,
     });
     userSession = userSessionFromCookies;
     if (userSession) {
@@ -166,7 +163,6 @@ export const getUserSessionFromLocalesOrURL = async (options: {
   const idToken = options.request.headers.get('firebase-auth-id-token');
   logger.log('getUserSessionFromLocalesOrURL:idTokenHeader', {
     hasIdToken: !!idToken,
-    idTokenPrefix: idToken ? `${idToken.slice(0, 20)}...` : undefined,
   });
 
   if (idToken) {

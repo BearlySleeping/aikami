@@ -44,7 +44,7 @@ export function apiMethodGuard(
         'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
         'Access-Control-Allow-Origin': corsOrigin ?? '*',
         // biome-ignore lint/style/useNamingConvention: standard HTTP header name
-        Allow: 'GET, POST, PATCH, DELETE',
+        Allow: 'GET, POST, PATCH, DELETE, OPTIONS',
       },
       status: 405,
     });

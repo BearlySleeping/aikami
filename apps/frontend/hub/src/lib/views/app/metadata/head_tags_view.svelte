@@ -47,19 +47,19 @@ let {
     <meta name="twitter:card" content="summary_large_image">
 
     {#each Object.entries(viewModel.fullMetadata.twitter) as [tag, content] (tag)}
-      <meta name={tag} property="twitter:{tag}" content={String(content)}>
+      <meta name="twitter:{tag}" property="twitter:{tag}" content={String(content)}>
     {/each}
   {/if}
 
   {#if viewModel.fullMetadata.openGraph}
     {#each Object.entries(viewModel.fullMetadata.openGraph) as [tag, content] (tag)}
-      <meta name={tag} property="og:{tag}" content={String(content)}>
+      <meta property="og:{tag}" content={String(content)}>
     {/each}
   {/if}
 
   {#if viewModel.fullMetadata.article}
     {#each Object.entries(viewModel.fullMetadata.article) as [tag, content] (tag)}
-      <meta name={tag} property="article:{tag}" content={String(content)}>
+      <meta property="article:{tag}" content={String(content)}>
     {/each}
   {/if}
 

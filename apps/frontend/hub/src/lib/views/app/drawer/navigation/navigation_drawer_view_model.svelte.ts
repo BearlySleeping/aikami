@@ -84,6 +84,11 @@ class NavigationDrawerViewModel
   async logout(): Promise<void> {
     try {
       await authService.signOut();
+      // Only navigate after sign-out succeeds (matching AppBarViewModel).
+      await routerService.goToRoute('login', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
     } catch (error) {
       this.error('logout', error);
     }

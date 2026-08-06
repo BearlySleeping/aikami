@@ -21,7 +21,7 @@ bun install
 ## Dependencies
 
 - `@aikami/constants` - Constant values
-- `@aikami/schemas` - Zod schemas for validation
+- `@aikami/schemas` - TypeBox schemas for validation
 - `@aikami/types` - Type definitions
 - `@aikami/logger` - Logging utilities
 - `@aikami/backend-utils` - Backend utilities

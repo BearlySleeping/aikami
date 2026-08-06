@@ -3,12 +3,32 @@ import BaseViewModelContainer from '$components/base_view_model_container.svelte
 import { getNotificationDrawerViewModel } from './notification_drawer_view_model.svelte.ts';
 
 const viewModel = getNotificationDrawerViewModel({ className: 'NotificationDrawer' });
+
+let drawerElement = $state<HTMLDivElement | undefined>();
+let previouslyFocused: HTMLElement | null = null;
+
+// Move focus into the drawer when it opens so Escape is handled by the
+// active modal, and restore focus to the trigger when it closes.
+$effect(() => {
+  if (viewModel.showNotificationDrawer && drawerElement) {
+    previouslyFocused = document.activeElement as HTMLElement | null;
+    drawerElement.focus();
+  }
+});
+
+$effect(() => {
+  if (!viewModel.showNotificationDrawer && previouslyFocused) {
+    previouslyFocused.focus();
+    previouslyFocused = null;
+  }
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.showNotificationDrawer}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
+      bind:this={drawerElement}
       class="fixed inset-0 z-50"
       onclick={() => viewModel.toggleNotificationDrawer(false)}
       onkeydown={(e) => { if (e.key === 'Escape') { viewModel.toggleNotificationDrawer(false); } }}

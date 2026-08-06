@@ -15,9 +15,16 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
+import type { BatchCommand } from '@aikami/types';
 import { authService } from '$services';
 
 export type PersonaDataServiceOptions = BaseFrontendClassOptions;
+
+/**
+ * Fields callers may edit on a persona. Excludes ownership (`uid`, `id`) and
+ * activation state (`isActive`), which are managed internally.
+ */
+export type PersonaUpdateFields = Omit<Partial<PersonaData>, 'uid' | 'id' | 'isActive'>;
 
 export type PersonaDataServiceInterface = BaseFrontendClassInterface & {
   /**
@@ -42,11 +49,12 @@ export type PersonaDataServiceInterface = BaseFrontendClassInterface & {
   setActivePersona(personaId: string): Promise<void>;
 
   /**
-   * Updates an existing persona (owner-only).
+   * Updates an existing persona (owner-only). Ownership and activation state
+   * cannot be changed through this method.
    * @param personaId The persona ID.
-   * @param data The update data.
+   * @param data Safe editable fields.
    */
-  updatePersona(personaId: string, data: Partial<PersonaData>): Promise<void>;
+  updatePersona(personaId: string, data: PersonaUpdateFields): Promise<void>;
 
   /**
    * Deletes a persona (owner-only).
@@ -112,20 +120,25 @@ class PersonaDataService
       throw new Error('Persona not found');
     }
 
-    const updates = personas.map(async (persona: PersonaData) => {
-      const shouldBeActive = persona.id === personaId;
-      if (persona.isActive !== shouldBeActive) {
-        await personaRepository.updateDocument({
-          getDocumentPathArgument: { uid: user.id, personaId: persona.id },
-          updateData: { isActive: shouldBeActive },
-        });
-      }
-    });
+    // Apply the activation change as one atomic Firestore write batch, so
+    // concurrent requests cannot leave multiple personas active.
+    // (data is cast to BatchCommand['data'] — the repository class applies
+    // the same cast internally when committing.)
+    const commands = personas
+      .filter((persona: PersonaData) => persona.isActive !== (persona.id === personaId))
+      .map(
+        (persona: PersonaData) =>
+          ({
+            type: 'update' as const,
+            data: { isActive: persona.id === personaId },
+            documentPathArgument: { uid: user.id, personaId: persona.id },
+          }) as unknown as BatchCommand,
+      );
 
-    await Promise.all(updates);
+    await personaRepository.commit(commands);
   }
 
-  async updatePersona(personaId: string, data: Partial<PersonaData>): Promise<void> {
+  async updatePersona(personaId: string, data: PersonaUpdateFields): Promise<void> {
     await this._getOwnedPersona(personaId);
     const user = this._requireUser();
     await personaRepository.updateDocument({

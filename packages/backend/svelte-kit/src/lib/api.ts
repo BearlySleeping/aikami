@@ -34,6 +34,8 @@ export const onSvelteKitAPICall = async <
 
     const payload = (await request.json()) as ReconstructMessage<AllFunctions[Endpoint]>;
 
+    // Only log the message type — the payload may contain auth tokens,
+    // session values, or user identifiers.
     logger.log(apiName, { type: payload.type });
 
     const response = await promise(payload);

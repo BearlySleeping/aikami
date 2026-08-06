@@ -29,7 +29,7 @@ const config = {
       $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
       $routes: toSrcPath('lib/constants/routes'),
       $services: toSrcPath('lib/client/services'),
-      '$services/*': toSrcPath('lib/services/*'),
+      '$services/*': toSrcPath('lib/client/services/*'),
       $types: toSrcPath('lib/types'),
       $utils: toSrcPath('lib/utils'),
       '$views/*': toSrcPath('lib/views/*'),

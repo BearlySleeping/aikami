@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/consistent-type-definitions */
 /// <reference types="@sveltejs/kit" />
 
 // See https://kit.svelte.dev/docs/types#the-app-namespace

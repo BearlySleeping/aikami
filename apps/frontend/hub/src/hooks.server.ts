@@ -12,6 +12,7 @@ import {
 } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
 import { verifyAppCheck } from '@aikami/backend/svelte-kit/verify_app_check';
+import { publicEnv } from '@aikami/frontend/configs';
 import type { LogContext } from '@aikami/types';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { logger } from '$logger';
@@ -20,7 +21,9 @@ import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
 
-const enforceAppCheck = false;
+// App Check is enabled unless explicitly disabled via env (PUBLIC_DISABLE_APP_CHECK=1),
+// so production can enforce it without a code change.
+const enforceAppCheck = publicEnv.PUBLIC_DISABLE_APP_CHECK !== 'true';
 
 const appCheckExcludePaths: string[] = [];
 
@@ -73,8 +76,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   // The app's own app.d.ts declaration merges additional fields.
   const locals = event.locals;
 
-  // ── 2. Auth: resolve user session from the __aikami_session cookie ──
-  // The cookie is set by the Elysia internal API (POST /api/auth/session).
+  // ── 2. Auth: resolve user session from the __session cookie ──
+  // The session value inside the session cookie is set by the Elysia
+  // internal API (POST /api/auth/session).
   const { userSession } = await getUserSession({
     cookies: event.cookies,
     request,
@@ -120,14 +124,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 
     if (allowExtensionCors && method === 'OPTIONS') {
       const origin = request.headers.get('origin');
+      // Only answer preflight for trusted extension origins — never fall
+      // back to a wildcard, and omit CORS headers for disallowed origins.
+      const isAllowedOrigin =
+        origin?.startsWith('chrome-extension://') || origin === 'null';
       const preflightHeaders = new Headers();
-      preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      preflightHeaders.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Cookie, x-aikami-session',
-      );
-      // Only allow extension origins (matching the later CORS check)
-      if (origin?.startsWith('chrome-extension://') || origin === 'null') {
+      if (origin && isAllowedOrigin) {
+        preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        preflightHeaders.set(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Cookie, x-aikami-session',
+        );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
         preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
       }

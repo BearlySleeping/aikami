@@ -60,6 +60,8 @@ export class PreferenceService
   override async clear(): Promise<void> {
     try {
       await super.clear();
+      // Drop any cached FCM data now that persistence is cleared.
+      this.fcmCachedData = undefined;
     } catch (error) {
       this.error('clear', error);
     }

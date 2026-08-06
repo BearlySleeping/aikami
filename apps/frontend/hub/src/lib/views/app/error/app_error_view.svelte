@@ -17,7 +17,7 @@ let { viewModel }: Props = $props();
       <!-- Error Icon -->
       <div class="mb-8">
         <div
-          class="w-24 h-24 mx-auto mb-4 bg-error bg-opacity-20 rounded-full flex items-center justify-center"
+          class="w-24 h-24 mx-auto mb-4 bg-error/20 rounded-full flex items-center justify-center"
         >
           <svg
             role="img"

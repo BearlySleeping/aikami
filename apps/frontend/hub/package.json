@@ -18,7 +18,7 @@
     "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
     "fix": "biome check --write src",
     "test": "bun run test:unit",
-    "test:unit": "bun test --tsconfig=tsconfig.json src/lib || true"
+    "test:unit": "bun test --tsconfig=tsconfig.json src/lib"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.20.2",

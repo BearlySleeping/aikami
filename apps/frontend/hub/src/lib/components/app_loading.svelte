@@ -1,4 +1,8 @@
-<div class="flex h-full w-full items-center justify-center p-8 delayed-loader">
+<div
+  class="flex h-full w-full items-center justify-center p-8 delayed-loader"
+  role="status"
+  aria-label="Loading"
+>
   <span class="loading loading-spinner loading-lg text-primary"></span>
 </div>
 

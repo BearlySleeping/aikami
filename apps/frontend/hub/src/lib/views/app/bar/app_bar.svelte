@@ -3,6 +3,21 @@ import { BaseViewModelContainer } from '$components';
 import { getAppBarViewModel } from './app_bar_view_model.svelte.ts';
 
 const viewModel = getAppBarViewModel({ className: 'AppBarViewModel' });
+
+// Close the profile menu with Escape while it is open (window-level, since
+// the backdrop is not focusable).
+$effect(() => {
+  if (!viewModel.menuOpen) {
+    return;
+  }
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      viewModel.closeMenu();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+  return () => window.removeEventListener('keydown', onKeyDown);
+});
 </script>
 
 <BaseViewModelContainer
@@ -61,6 +76,7 @@ const viewModel = getAppBarViewModel({ className: 'AppBarViewModel' });
               alt="Profile"
               class="h-full w-full rounded-full object-cover"
             >
+          {:else}
             <svg
               role="img"
               aria-label="Profile menu"
@@ -84,7 +100,6 @@ const viewModel = getAppBarViewModel({ className: 'AppBarViewModel' });
           <div
             class="fixed inset-0 z-40"
             onclick={() => { viewModel.closeMenu(); }}
-            onkeydown={(e) => { if (e.key === 'Escape') { viewModel.closeMenu(); } }}
             role="presentation"
           ></div>
           <div

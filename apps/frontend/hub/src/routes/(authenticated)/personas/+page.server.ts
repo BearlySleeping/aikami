@@ -6,7 +6,7 @@
 // dynamic import() adds unnecessary Promise overhead on every request.
 // Vite already chunks and optimizes server dependencies at build time.
 //
-// The client-side +page.ts casts the deserialized data to ChatData/MessageData.
+// The client-side +page.ts casts the deserialized data to PersonaData.
 
 import { personaRepository } from '@aikami/backend/database/persona';
 import { toJsonData } from '@aikami/backend/utils/transform';
@@ -23,13 +23,15 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
   const { userSession } = event.locals;
   const uid = userSession?.id;
 
-  logger.debug('/personas:load fetching personas', { uid });
-
+  // Unauthenticated requests keep their HTTP 401 — thrown outside the try so
+  // the HttpError is not swallowed by the empty-list fallback below.
   if (!uid) {
     throw error(401, 'Unauthorized');
   }
 
   try {
+    logger.debug('/personas:load fetching personas', { uid });
+
     const personas = await personaRepository.getDocumentsByQuery({
       filters: [
         {
@@ -48,8 +50,8 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
     }
 
     // toJsonData converts any nested Timestamp instances → numbers for safe
-    // SSR serialization. Chat/Message schemas use z.number() for timestamps,
-    // but nested fields like participants[uid].joinedAt may be Firestore Timestamps.
+    // SSR serialization. Persona timestamps are Unix epoch ms numbers, so the
+    // wire format matches the schema shapes directly.
     const serializedPersonas = personas.map((persona) =>
       toJsonData(persona as unknown as Parameters<typeof toJsonData>[0]),
     );
@@ -60,13 +62,14 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
 
     return { personas: serializedPersonas };
   } catch (err) {
+    // Rethrow SvelteKit HttpErrors (e.g. redirects) — only fall back to an
+    // empty list for unexpected repository failures.
+    if (err instanceof Error && 'status' in err) {
+      throw err;
+    }
     logger.error('/personas:load error', {
       error: err instanceof Error ? err.message : String(err),
     });
-    // Re-throw HttpError instances to preserve their status codes
-    if (err && typeof err === 'object' && 'status' in err) {
-      throw err;
-    }
     return { personas: [] };
   }
 };

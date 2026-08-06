@@ -7,7 +7,7 @@ import type { Mode } from '@aikami/types';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
-import { defineConfig, type PluginOption, type ProxyOptions } from 'vite';
+import { defineConfig, loadEnv, type PluginOption, type ProxyOptions } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index';
 
@@ -80,6 +80,9 @@ function forceExternalPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
+  // Load the full env file for this mode so PUBLIC_MODE (set in .env.<mode>)
+  // drives runtime behaviour instead of the Vite mode argument.
+  const env = loadEnv(mode, projectDirectory, '');
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.hub || 5276);
 
   const plugins: PluginOption[] = [
@@ -183,7 +186,7 @@ export default defineConfig(({ mode }) => {
       },
       port,
       strictPort: true,
-      proxy: mode === 'emulator' ? emulatorAuthProxy : {},
+      proxy: env.PUBLIC_MODE === 'emulator' ? emulatorAuthProxy : {},
       watch: {
         ignored: [
           '**/examples/**',

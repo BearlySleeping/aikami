@@ -15,10 +15,22 @@ export const getHead = (headers: Headers, key: string): string | undefined => {
 export const getCountryCodeFromRequest = (request: Request): CountryCode | undefined => {
   const headers = request.headers;
 
-  const countryCode = getHead(headers, 'x-vercel-ip-country');
+  // Google Cloud HTTP(S) Load Balancer sets x-client-geo-location as a
+  // JSON object, e.g. {"country":"US",...}. The LB overwrites any
+  // client-supplied copy, so this header is trusted.
+  const geoHeader = getHead(headers, 'x-client-geo-location');
+  if (!geoHeader) {
+    return;
+  }
 
-  if (countryCode && countryCodes.includes(countryCode)) {
-    return countryCode as CountryCode;
+  try {
+    const geo = JSON.parse(geoHeader) as { country?: string };
+    const countryCode = geo.country;
+    if (countryCode && countryCodes.includes(countryCode)) {
+      return countryCode as CountryCode;
+    }
+  } catch {
+    // Malformed header — ignore.
   }
   return;
 };

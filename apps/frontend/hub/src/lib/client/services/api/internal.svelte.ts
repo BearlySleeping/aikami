@@ -35,7 +35,12 @@ class InternalAPIService
   implements InternalAPIServiceInterface
 {
   async setToken(token?: string): Promise<void> {
-    await api.api.auth.session.post({ token });
+    const { error } = await api.api.auth.session.post({ token });
+    if (error) {
+      // Let callers know the backend session was not synced so they do not
+      // cache a stale client-side token.
+      throw new Error(`Failed to sync session (HTTP ${error.status ?? 'error'})`);
+    }
   }
 }
 

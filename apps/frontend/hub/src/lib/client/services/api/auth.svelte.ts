@@ -226,6 +226,11 @@ export class AuthService
     return `${claims.sub}|${claims.authTime}|${claims.iat}`;
   }
 
+  /**
+   * Syncs the Firebase ID token (or clears it) with the backend session.
+   * The token is only cached after the backend sync succeeds, so a failed
+   * sync never leaves a stale client-side token.
+   */
   private async _doSetToken(user: FirebaseUser | undefined, forceRefresh?: boolean): Promise<void> {
     let token: string | undefined;
     try {
@@ -236,10 +241,6 @@ export class AuthService
     }
 
     if (!forceRefresh) {
-      if (!user && this._currentToken) {
-        this.debug('_doSetToken:skipped (transient null user)');
-        return;
-      }
       if (token === this._currentToken) {
         return;
       }
@@ -251,13 +252,16 @@ export class AuthService
       }
     }
 
-    this._currentToken = token;
-
     try {
       await internalAPIService.setToken(token);
     } catch (error) {
       this.warn('_setToken: failed to sync with backend', error);
+      // Don't cache a token the backend does not have.
+      this._currentToken = undefined;
+      return;
     }
+
+    this._currentToken = token;
   }
 }
 

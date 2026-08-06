@@ -26,7 +26,7 @@ export const baseCookieOptions = {
   secure: true,
 } as const satisfies SerializeOptions;
 
-export const sessionAge = 60 * 60 * 24 * 14 * 1000; // 14 days
+export const sessionAge = 60 * 60 * 24 * 14; // 14 days in seconds
 
 // Your original getCorrectDomain function, unchanged.
 const getCorrectDomain = (options: { domain?: string; request: Request; url: URL }): string => {
@@ -165,7 +165,6 @@ export const deleteCookie = (
   if (key === '__session') {
     delete store.session;
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete store[key];
   }
 

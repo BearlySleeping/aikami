@@ -176,18 +176,20 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
           return;
         }
 
+        // Bail while SvelteKit is actively navigating — we only want to
+        // evaluate auth rules on fully resolved pages. Checked BEFORE the
+        // duplicate-route guard and before recording the route, so the
+        // evaluation re-runs when navigation completes.
+        if (routerService.isNavigating) {
+          return;
+        }
+
         // Guard: skip if route + user haven't changed since last run.
         const routeKey = `${route}:${user?.id ?? 'anonymous'}`;
         if (routeKey === _lastRouteKey) {
           return;
         }
         _lastRouteKey = routeKey;
-
-        // Bail while SvelteKit is actively navigating — we only want to
-        // evaluate auth rules on fully resolved pages.
-        if (routerService.isNavigating) {
-          return;
-        }
 
         untrack(() => {
           void this._handleRouteTransitions(route, user);

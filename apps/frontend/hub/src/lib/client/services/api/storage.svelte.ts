@@ -44,7 +44,9 @@ class StorageService
       // and check if it expects 'result.ref' or 'result.ref.fullPath' as the argument.
       const downloadUrl = await this._storage.getDownloadURL(result.ref);
 
-      this.log('uploadAvatar uploaded', { downloadUrl });
+      // Log only the storage path — the download URL embeds a signed bearer
+      // token that must never reach logs.
+      this.log('uploadAvatar uploaded', { path });
       return downloadUrl;
     } catch (error) {
       this.error(error);
