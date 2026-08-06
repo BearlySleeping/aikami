@@ -24,7 +24,9 @@ export const fromJsonData = <T extends Omit<CoreData, 'createdAt'>>(
     }
 
     if (key.endsWith(unixLabel) && typeof value === 'number') {
-      transformedData[key.replace(unixLabel, '')] = Timestamp.fromMillis(value);
+      // Strip only the trailing unixLabel suffix so earlier occurrences in the
+      // key (e.g. `lastUnixUpdatedUnix` → `lastUnixUpdated`) are preserved.
+      transformedData[key.slice(0, -unixLabel.length)] = Timestamp.fromMillis(value);
       continue;
     }
 

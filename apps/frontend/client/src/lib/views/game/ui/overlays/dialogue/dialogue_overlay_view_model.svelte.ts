@@ -6,7 +6,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { NpcSuggestionChip } from '@aikami/types';
+import type { NpcQuestActivation, NpcSuggestionChip } from '@aikami/types';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
@@ -20,6 +20,7 @@ import {
   gameModeService,
   messageBranchStore,
   playerStateService,
+  questStateService,
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
@@ -1059,6 +1060,9 @@ class DialogueOverlayViewModel
       // Run expression detection on the NPC response
       void this._detectExpression(analysis.npcResponse);
 
+      // Execute the GM's quest-activation tool call (accept/decline), if any.
+      this._applyQuestActivation(analysis.questActivation);
+
       // Show suggestion chips
       this.suggestedChips = analysis.suggestedChips;
 
@@ -1093,6 +1097,59 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
+    }
+  }
+
+  /**
+   * Executes the GM's quest-activation tool call returned from intent
+   * analysis. Accepts or declines the quest (gated to quests this NPC can
+   * offer), toasts the player, and lets the quest tracker + overlay update
+   * reactively via questStateService.
+   */
+  private _applyQuestActivation(activation: NpcQuestActivation | undefined): void {
+    if (!activation) {
+      return;
+    }
+    const { action, questId } = activation;
+
+    if (action === 'decline') {
+      // Only decline quests this NPC can actually offer — never mutate quest
+      // state for an identifier the NPC has no offerable quest for.
+      const offerable = questStateService.getOfferableQuests(this._npcData.npcId);
+      const quest = offerable.find((q) => q.id === questId);
+      if (!quest) {
+        this.warn('_applyQuestActivation:not-offerable', {
+          questId,
+          npcId: this._npcData.npcId,
+        });
+        return;
+      }
+      questStateService.declineQuest({ questId });
+      this.showSnackbar({ text: 'Quest declined.', type: 'info' });
+      this.debug('_applyQuestActivation:declined', { questId, npcId: this._npcData.npcId });
+      return;
+    }
+
+    // Accept — only quests this NPC can actually offer.
+    const offerable = questStateService.getOfferableQuests(this._npcData.npcId);
+    const quest = offerable.find((q) => q.id === questId);
+    if (!quest) {
+      this.warn('_applyQuestActivation:not-offerable', {
+        questId,
+        npcId: this._npcData.npcId,
+      });
+      return;
+    }
+
+    const accepted = questStateService.acceptQuest({
+      questId,
+      npcId: this._npcData.npcId,
+    });
+    if (accepted) {
+      this.showSnackbar({ text: `📜 Quest accepted: ${quest.name}`, type: 'success' });
+      this.debug('_applyQuestActivation:accepted', { questId, npcId: this._npcData.npcId });
+    } else {
+      this.showSnackbar({ text: 'Quest could not be accepted.', type: 'warning' });
     }
   }
 

@@ -9,7 +9,7 @@ These files were consolidated from the root-level `docs/` directory:
 | File | Content |
 |------|---------|
 | `AI_RESEARCH.md` | AI tooling research and evaluation |
-| `ARCHITECTURE.md` | System architecture overview |
+| [Architecture](../architecture/architecture.md) | System architecture overview |
 | `CI_CD.md` | CI/CD pipeline setup |
 | `CODING_STANDARDS.md` | Coding standards and conventions |
 | `FEATURES.md` | Feature specifications |

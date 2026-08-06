@@ -1,99 +1,108 @@
 // apps/e2e/tests/client/economy_loop.spec.ts
 //
-// Full-stack economy loop test (C-331): pickup → stack → buy/sell →
-// equip → consume → loot → save → reload with consistent state.
+// Economy loop tests (C-331) against the new Emberwatch content pack
+// (manifest v3 — village / inn / merchant shop):
+//   - Buying from the merchant updates gold + inventory.
+//   - Selling back (with confirmation) restores gold.
+//   - Quest key items (Ward Wand) are not vendor-tradable (basePrice 0).
+//
+// Uses the standalone vendor dev sandbox (/dev/sandbox/vendor, Grimbold's
+// Forge) for a deterministic buy/sell surface — the production merchant
+// (Mara) lives in the merchant_shop map and is covered by the visual suite.
 //
 // Requires dev servers + emulator running.
 import { expect, test } from '@playwright/test';
 
-test("AC-2: pickup adds item, gold persists, and collected items don't respawn on reload", async ({
-  page,
-}) => {
-  // Precondition: start on the Old Road map where the wardPendant pickup
-  // exists near the spawn point.
-  await page.goto('/game');
+/** Parses the player gold from the vendor gold badge. */
+const parseGold = async (page: import('@playwright/test').Page): Promise<number> => {
+  const badge = page.locator('.badge-warning', { hasText: '🪙' });
+  const text = (await badge.textContent()) ?? '';
+  return Number.parseInt(text.replace(/[^0-9]/g, ''), 10) || 0;
+};
 
-  // Wait for the engine to boot
-  await page.waitForSelector('[data-testid="game-canvas"]', { timeout: 30000 });
+/**
+ * Polls the vendor gold badge until it parses to the expected amount.
+ * Bounded polling replaces single-read textContent comparisons so the
+ * assertion waits for the badge to settle after a transaction.
+ */
+const expectGold = async (
+  page: import('@playwright/test').Page,
+  expected: number,
+): Promise<void> => {
+  const badge = page.locator('.badge-warning', { hasText: '🪙' });
+  await expect(badge).toBeVisible();
+  await expect
+    .poll(async () => parseGold(page), { timeout: 10_000, intervals: [250, 500, 1000] })
+    .toBe(expected);
+};
 
-  // Interact to pick up the nearby item
-  await page.keyboard.press('e');
-  // Open inventory to verify pickup
-  await page.keyboard.press('i');
+/** Clicks the Buy button inside the vendor card for the given item name. */
+const buyItem = async (page: import('@playwright/test').Page, itemName: string) => {
+  // Walk up from the item title to its nearest rounded-xl card container
+  // (the vendor dialog itself is also rounded-xl — nearest wins).
+  const itemTitle = page.locator('h4', { hasText: itemName }).first();
+  const card = itemTitle.locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+  const buyButton = card.getByRole('button', { name: /Buy for/ });
+  await expect(buyButton).toBeEnabled({ timeout: 10_000 });
+  await buyButton.click();
+};
 
-  // Assert: Ward Pendant appears in the inventory overlay
-  await expect(page.locator('text=Ward Pendant')).toBeVisible({ timeout: 5000 });
-  await page.keyboard.press('Escape');
+test.describe('Economy loop (C-331) — new Emberwatch pack', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/dev/sandbox/vendor');
+    // Vendor sandbox seeds 400 gold.
+    await expect(page.locator('.badge-warning', { hasText: '🪙' })).toBeVisible({
+      timeout: 10_000,
+    });
+  });
 
-  // Enter pause menu and save
-  await page.keyboard.press('Escape');
-  await page.locator('text=Save Game').click();
-  await page.waitForSelector('text=Game Saved', { timeout: 5000 });
+  test('AC-1: buying from the vendor decreases gold and adds the item to inventory', async ({
+    page,
+  }) => {
+    const goldBefore = await parseGold(page);
+    expect(goldBefore).toBeGreaterThanOrEqual(400);
 
-  // Reload the page
-  await page.reload();
-  await page.waitForSelector('[data-testid="game-canvas"]', { timeout: 30000 });
+    await buyItem(page, 'Iron Sword'); // 50g
+    await buyItem(page, 'Health Potion'); // 10g
 
-  // Open inventory — Ward Pendant should still be present
-  await page.keyboard.press('i');
-  await expect(page.locator('text=Ward Pendant')).toBeVisible({ timeout: 5000 });
-});
+    await expectGold(page, goldBefore - 60);
 
-test('AC-3: buy/sell updates gold and inventory list', async ({ page }) => {
-  // Start at the village map where Keth is located
-  await page.goto('/game?map=village&debug=spawn-near-keth');
-  await page.waitForSelector('[data-testid="game-canvas"]', { timeout: 30000 });
+    // Inventory badge/sell list reflects the purchase.
+    await expect(page.locator('button[aria-label^="Sell Iron Sword"]')).toBeVisible({
+      timeout: 5000,
+    });
+  });
 
-  // Interact with Keth
-  await page.keyboard.press('e');
+  test('AC-2: selling an item back (with confirmation) restores gold', async ({ page }) => {
+    // Seed inventory by buying, then sell it back.
+    const goldBefore = await parseGold(page);
+    await buyItem(page, 'Iron Sword'); // 50g
+    await expectGold(page, goldBefore - 50);
 
-  // Wait for vendor overlay
-  await page.waitForSelector('text=For Sale', { timeout: 5000 });
+    const sellButton = page.locator('button[aria-label^="Sell Iron Sword"]');
+    await sellButton.click();
 
-  // Buy the Iron Sword (50 gold)
-  const goldBefore = Number.parseInt(
-    (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ?? '0',
-    10,
-  );
-  await page.locator('text=Iron Sword').locator('..').locator('button:has-text("Buy")').click();
+    // Confirmation dialog → confirm.
+    const confirmButton = page.locator('button', { hasText: 'Confirm Sale' });
+    await expect(confirmButton).toBeVisible();
+    await confirmButton.click();
 
-  // Assert gold decreased
-  const goldAfterBuy = Number.parseInt(
-    (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ?? '0',
-    10,
-  );
-  expect(goldAfterBuy).toBeLessThan(goldBefore);
+    // Iron Sword sells for floor(50 × 0.5) = 25g.
+    await expectGold(page, goldBefore - 50 + 25);
 
-  // Assert Iron Sword appears in inventory
-  await page.keyboard.press('Escape'); // Close vendor
-  await page.keyboard.press('i'); // Open inventory
-  await expect(page.locator('text=Iron Sword')).toBeVisible({ timeout: 5000 });
-  await page.keyboard.press('Escape'); // Close inventory
+    // No longer sellable.
+    await expect(page.locator('button[aria-label^="Sell Iron Sword"]')).toBeHidden();
+  });
 
-  // Re-open vendor and sell Ward Shard if available
-  await page.keyboard.press('e');
-  await page.waitForSelector('text=For Sale', { timeout: 5000 });
-
-  const wardShardSellButton = page
-    .locator('text=Ward Shard')
-    .locator('..')
-    .locator('button:has-text("Sell")');
-  if ((await wardShardSellButton.count()) > 0) {
-    await wardShardSellButton.click();
-    // Confirm sale if there's a confirmation dialog
-    const confirmButton = page.locator('button:has-text("Confirm Sale")');
-    if ((await confirmButton.count()) > 0) {
-      await confirmButton.click();
-    }
-    // Assert gold increased
-    const goldAfterSell = Number.parseInt(
-      (await page.locator('.badge-warning:text("🪙")').textContent())?.replace(/[^0-9]/g, '') ??
-        '0',
-      10,
-    );
-    expect(goldAfterSell).toBeGreaterThan(goldAfterBuy);
-
-    // Assert Ward Shard is removed from sell list
-    await expect(wardShardSellButton).not.toBeVisible();
-  }
+  test('AC-3: quest key items (Ward Wand) are not vendor-tradable', async ({ page }) => {
+    // Wait for the vendor list to render (a known tradable item) before
+    // asserting the Ward Wand is absent — the badge alone does not prove
+    // the inventory list has loaded.
+    await expect(page.locator('h4', { hasText: 'Iron Sword' })).toBeVisible({
+      timeout: 10_000,
+    });
+    // The Ward Wand has no basePrice — the vendor must not list or buy it.
+    await expect(page.locator('h4', { hasText: 'Ward Wand' })).toHaveCount(0);
+    await expect(page.getByText('Nothing the vendor will buy.')).toBeVisible();
+  });
 });

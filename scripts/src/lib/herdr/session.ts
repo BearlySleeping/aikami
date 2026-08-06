@@ -10,10 +10,12 @@
 //   Tab layout (per workspace):
 //     firebase       → bun run emulate
 //     client          → bun run dev
+//     hub             → bun run dev
 //     voice           → bun run dev
 //     image           → bun run dev
 //     text            → bun run dev
 //     preview-client  → bun run scripts/src/lib/ops/preview_client.ts
+//     preview-hub     → bun run scripts/src/lib/ops/preview_hub.ts
 //
 // Three consumers share the exact same herdr server:
 //   1. pi extension (herdr-orchestrator.ts)
@@ -49,7 +51,8 @@ export type DevService =
   | 'text'
   | 'preview-client'
   | 'site'
-  | 'preview-site';
+  | 'preview-site'
+  | 'preview-hub';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
@@ -149,6 +152,17 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run scripts/src/lib/ops/preview_site.ts',
     cwd: (root) => root,
   },
+  hub: {
+    name: 'hub',
+    command: (mode) => `bun run dev -- --mode ${mode}`,
+    cwd: (root) => resolve(root, 'apps/frontend/hub'),
+    readyPort: (mode) => PORTS[mode].hub,
+  },
+  'preview-hub': {
+    name: 'preview-hub',
+    command: () => 'bun run scripts/src/lib/ops/preview_hub.ts',
+    cwd: (root) => root,
+  },
 };
 
 export const ALL_SERVICES: DevService[] = [
@@ -161,13 +175,14 @@ export const ALL_SERVICES: DevService[] = [
   'preview-client',
   'site',
   'preview-site',
+  'preview-hub',
 ];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   if (![...ALL_SERVICES, 'all'].includes(input)) {
     throw new Error(
-      `Unknown service: "${input}". Valid: firebase, client, voice, image, text, preview-client, site, preview-site, all`,
+      `Unknown service: "${input}". Valid: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, all`,
     );
   }
   return input as DevService | 'all';
@@ -661,7 +676,9 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   const workspaceLabel = resolveSessionName(mode);
 
   if (services.length === 0) {
-    throw new Error('No services specified. Use: firebase, client, voice, image, text, all');
+    throw new Error(
+      'No services specified. Use: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, all',
+    );
   }
 
   await ensureServer();

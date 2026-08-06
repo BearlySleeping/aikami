@@ -1,4 +1,5 @@
 <script lang="ts">
+import { questOverlayService } from '$services';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import InventoryView from '../../inventory/inventory_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
@@ -11,6 +12,7 @@ import HpBar from './hud/hp_bar.svelte';
 import InteractionPrompt from './hud/interaction_prompt.svelte';
 import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
+import QuestOverlay from './hud/quest_overlay.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
@@ -76,7 +78,8 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   </div>
 
   <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
-  {#if viewModel.showQuestTracker}
+  <!-- Hidden while the richer Quest Overlay is visible (they show the same info). -->
+  {#if viewModel.showQuestTracker && !questOverlayService.visible}
     <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
   {/if}
 
@@ -102,6 +105,9 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
 
   <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
   <MusicPlayerOverlay />
+
+  <!-- ── Optional Active Quest overlay (toggle in Settings > Gameplay) ── -->
+  <QuestOverlay />
 
   <!-- Overlay router -->
   {#if viewModel.chatLocked}

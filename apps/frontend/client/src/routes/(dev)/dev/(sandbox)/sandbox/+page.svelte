@@ -7,7 +7,7 @@ import { browser } from '$app/environment';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import GameView from '$lib/views/game/game_view.svelte';
 import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
-import { inventoryService, routerService, worldStateService } from '$services';
+import { inventoryService, questStateService, routerService, worldStateService } from '$services';
 import type { DevAction } from '$types';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -86,28 +86,36 @@ const _seedQuests = (): void => {
 };
 
 const _progressRandomObjective = (): void => {
-  const active = worldStateService.quests.filter((q) => q.status === 'active');
-  for (const quest of active) {
-    for (const obj of quest.objectives) {
-      if (obj.current < obj.max) {
-        obj.current++;
-        return;
-      }
+  // Advance the REAL active quest by firing the world trigger that matches
+  // its current objective (map enter / item pickup / npc interact / combat).
+  const active = questStateService.quests.find((q) => q.status === 'active');
+  if (!active) {
+    return;
+  }
+  const trigger = questStateService.getNextObjectiveTrigger(active.id);
+  if (!trigger) {
+    return;
+  }
+  // Grant the item so the inventory matches the quest state — only evaluate
+  // the trigger when the grant succeeds (mirrors the Ward Wand action guard).
+  if (trigger.type === 'ITEM_PICKED_UP') {
+    const added = inventoryService.addItem({ itemId: trigger.itemId, quantity: 1 });
+    if (!added) {
+      return;
     }
   }
+  questStateService.evaluateTriggers(trigger);
 };
 
 const _failRandomQuest = (): void => {
-  const active = worldStateService.quests.filter((q) => q.status === 'active');
-  if (active.length === 0) {
-    return;
+  const active = questStateService.quests.find((q) => q.status === 'active');
+  if (active) {
+    questStateService.failQuest(active.id);
   }
-  const idx = Math.floor(Math.random() * active.length);
-  active[idx].status = 'failed';
 };
 
 const _clearQuests = (): void => {
-  (worldStateService.quests as QuestData[]).length = 0;
+  questStateService.reset();
 };
 
 // Seed a mock persona into localStorage before the GameCanvasViewModel loads.
@@ -188,6 +196,42 @@ const devActions = [
     },
   },
   {
+    label: 'Insert Item (Ward Wand)',
+    onClick: () => {
+      // Mirrors the giveItem executor wiring: grant + fire the pickup
+      // trigger so completeOnItemPickup quest objectives advance.
+      const added = inventoryService.addItem({ itemId: 'wardWand', quantity: 1 });
+      if (added) {
+        questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: 'wardWand' });
+      }
+    },
+  },
+  {
+    label: '🚪 Enter Inn (Map)',
+    onClick: async () => {
+      // REAL zone transition to the inn — the engine loads the inn map,
+      // emits MAP_ENTERED (advancing quests), and the player can walk up
+      // to Rollo. Works before OR after accepting the quest.
+      await canvasVm.loadMap({
+        mapUrl: '/content-packs/emberwatch/maps/inn.json',
+        targetX: 256,
+        targetY: 320,
+        defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],
+      });
+    },
+  },
+  {
+    label: '🏘️ Back to Village (Map)',
+    onClick: async () => {
+      await canvasVm.loadMap({
+        mapUrl: '/content-packs/emberwatch/maps/village.json',
+        targetX: 320,
+        targetY: 576,
+        defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],
+      });
+    },
+  },
+  {
     label: 'Remove Last Item',
     onClick: () => {
       if (inventoryService.inventory.length > 0) {
@@ -207,11 +251,17 @@ const devActions = [
     onClick: () => _seedQuests(),
   },
   {
+    label: 'Accept Default Quest (fading_ward)',
+    onClick: () => {
+      questStateService.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+    },
+  },
+  {
     label: 'Progress Objective',
     onClick: () => _progressRandomObjective(),
   },
   {
-    label: 'Fail Random Quest',
+    label: 'Fail Active Quest',
     onClick: () => _failRandomQuest(),
   },
   {

@@ -10,6 +10,15 @@ Aikami is an **AI-driven platform** for creating and experiencing rich, interact
 
 Aikami is a **next-generation RPG platform** that empowers creators to design and players to explore **AI-enhanced 2D JRPG worlds**. Whether you're a developer, storyteller, or gamer, Aikami provides the tools to bring your vision to life—with **smart AI integration, modular architecture, and a focus on immersive experiences**.
 
+## ✨ Key Features
+
+- **Offline-First**: Campaigns, saves, and chat history live in a local **Turso (libSQL)** database (C-321) — play with zero network; cloud sync is optional, never a boot dependency
+- **Game First**: Launch into a spatial **PixiJS v8 + bitECS** world, not a chat dashboard; deterministic rules decide, AI narrates
+- **AI-Powered NPCs**: Text, image, and voice generation through one `AiProviderGateway` — local (Ollama / ComfyUI / Kokoro via Docker), BYOK, or Aikami-hosted
+- **Community Hub**: A SvelteKit **SSR hub on Google Cloud Run (Bun)** for community assets, maps, mods, and managing your own characters/personas
+- **Cross-Platform**: PWA, desktop export (Tauri v2), and web hub
+- **Vendor-Agnostic AI**: Bring your own cloud key or run local models — your world data stays on your machine
+
 ---
 
 ## 🚀 Vision

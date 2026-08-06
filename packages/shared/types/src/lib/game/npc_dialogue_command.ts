@@ -15,6 +15,7 @@ export type {
   NpcDialogueTurnSource,
   NpcIntentAnalysisInput,
   NpcIntentAnalysisOutput,
+  NpcQuestActivation,
   NpcRollResolutionInput,
   NpcRollResolutionOutput,
   NpcStateDelta,

@@ -61,6 +61,32 @@ const { viewModel }: Props = $props();
         </button>
       {/each}
     </div>
+    <p class="text-sm text-base-content/60 mt-2">
+      {#if viewModel.difficulty === 'easy'}
+        NPCs and the GM give direct hints — they will plainly name the items and people you need.
+      {:else if viewModel.difficulty === 'hard'}
+        NPCs act realistically — they only tell you what you ask for, and nothing more.
+      {:else}
+        NPCs and the GM hint at objectives without spelling everything out.
+      {/if}
+    </p>
+  </div>
+
+  <!-- ── Quest Overlay HUD ── -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h4 class="font-medium">Quest Overlay</h4>
+      <p class="text-sm text-base-content/60">
+        Show the active-quest card (objective tracker) while exploring.
+      </p>
+    </div>
+    <input
+      type="checkbox"
+      class="toggle toggle-primary"
+      checked={viewModel.questOverlayVisible}
+      onchange={() => viewModel.toggleQuestOverlay()}
+      aria-label="Quest overlay"
+    >
   </div>
 
   <!-- ── Reset ── -->

@@ -16,6 +16,7 @@ The setup script checks prerequisites, installs deps, creates `.env`, and verifi
 
 ```bash
 bun run dev              # Start Client dev server (http://localhost:5173)
+bun moon run hub:dev     # Start Hub dev server (apps/frontend/hub)
 bun run dev:all           # Start firebase + Client in herdr workspace
 bun run typecheck         # Typecheck all 22 projects
 bun run fix               # Auto-fix lint/format issues (Biome)
@@ -36,7 +37,7 @@ bun run test:blackbox --no-emulator  # Skip emulator startup
 
 ```bash
 # Via firestack
-cd apps/backend/functions
+cd apps/backend/firebase
 bun run emulate
 
 # Or via the shared dev session
@@ -88,18 +89,23 @@ export class MyFeatureViewModelImpl implements MyFeatureViewModel { ... }
 - View: `MyFeatureView.svelte` — pure template, no logic
 - ViewModel: `my-feature-view-model.svelte.ts` — all logic, `$state` for reactivity
 
-### Firestore Pattern
+### Data Layer Pattern (local-first)
+
 ```
-packages/shared/schemas/src/lib/database/my-collection.ts  # Zod schema
-packages/backend/database/src/lib/my-collection.ts          # Server repo
-packages/frontend/repositories/src/lib/my-collection.ts     # Client repo
+packages/shared/schemas/src/lib/database/my-collection.ts   # TypeBox schema
+packages/backend/database/src/lib/my-collection.ts          # Server repo (Firestore/infra paths)
+packages/frontend/repositories/src/lib/my-collection.ts     # Client repo (TursoStorageAdapter)
 ```
+
+Campaign, save, and chat data lives in the local Turso (libSQL) store (C-321) via
+`packages/frontend/repositories` — never raw IndexedDB, and never Firestore for
+campaign data.
 
 ### Common Aliases
 ```typescript
 $lib          → apps/frontend/client/src/lib/
 $logger       → packages/shared/logger/src/
-$services     → apps/frontend/client/src/lib/client/services/
+$services     → apps/frontend/client/src/lib/services/
 $views        → apps/frontend/client/src/lib/views/
 @aikami/*     → packages/*/src/index.ts
 ```
