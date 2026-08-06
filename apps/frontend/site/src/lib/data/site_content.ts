@@ -16,22 +16,9 @@ export const site = {
     country: '',
   },
   social: {
-    twitter: 'https://twitter.com/aikami',
     github: 'https://github.com/BearlySleeping/aikami',
   },
   themeColor: '#6d28d9',
-  keywords: [
-    'Aikami',
-    'AI RPG',
-    'open-source RPG engine',
-    'self-hosted AI game',
-    'AI-driven NPCs',
-    'local AI RPG',
-    'BYOK game engine',
-    '2D RPG',
-    'dynamic storytelling',
-    'Ollama RPG',
-  ],
 };
 
 export const discordInviteLink = 'https://discord.gg/XuuhWvSxHH';
@@ -41,10 +28,10 @@ export const webClientUrl = 'https://aikami.bearlysleeping.com';
 
 /**
  * Content Pack Hub — where creators browse, upload, remix, and publish
- * content packs. Not yet live; community.bearlysleeping.com is the intended
+ * content packs. Not yet live; hub.bearlysleeping.com is the intended
  * production domain.
  */
-export const hubUrl = 'https://community.bearlysleeping.com';
+export const hubUrl = 'https://hub.bearlysleeping.com';
 
 export const siteContent = {
   site,
