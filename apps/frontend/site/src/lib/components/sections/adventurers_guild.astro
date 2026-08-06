@@ -1,12 +1,16 @@
 ---
 // apps/frontend/site/src/lib/components/sections/adventurers_guild.astro
 /**
- * Adventurer & Developer Guildhall — open-source launchpad.
- * Star on GitHub, Quickstart, Discord, copyable terminal snippet.
- * Uses real GitHub data — no fake metrics.
+ * Closing CTA Guildhall — one primary action (play), secondary links for
+ * GitHub / Discord / Content Packs. Uses real GitHub data fetched at build
+ * time — no fake metrics, no placeholder dashes.
  */
 
-import { discordInviteLink } from '$data/site_content';
+import { formatCount, getRepoStats } from '$data/github_stats';
+import { discordInviteLink, hubUrl, webClientUrl } from '$data/site_content';
+
+const stats = await getRepoStats();
+const starCount = stats.stars;
 ---
 
 <section id="adventurers-guild" class="relative overflow-hidden border-b border-border/70">
@@ -16,69 +20,104 @@ import { discordInviteLink } from '$data/site_content';
     <div class="text-center max-w-2xl mx-auto mb-12">
       <span class="eyebrow text-ember">Open Source Guildhall</span>
       <h2 class="mt-5 font-serif text-4xl md:text-5xl leading-tight">
-        Open-Source Community. Self-Host Your AI RPG.
+        Your world is waiting. And it will remember you.
       </h2>
       <p class="mt-5 text-muted-foreground leading-relaxed">
-        Aikami is free, open-source, and self-hosted. Clone the repo, spin up local AI, and start
-        building your world. No waitlist. No subscription. Just code and creativity.
+        Aikami is free, open-source, and self-hosted. Play in your browser right now — or clone the
+        repo, spin up local AI, and build your own world. No waitlist. No subscription. Just code
+        and creativity.
+      </p>
+      <p class="mt-3 text-xs text-muted-foreground/70 leading-relaxed">
+        It's early days — expect rough edges, and help us smooth them: contributions, ideas, and bug
+        reports are very welcome.
       </p>
     </div>
 
-    <!-- Primary CTAs -->
-    <div class="flex flex-wrap justify-center gap-4 mb-10">
+    <!-- CTA hierarchy: one primary button, secondary text links below -->
+    <div class="flex flex-col items-center gap-5">
       <a
-        href="https://github.com/BearlySleeping/aikami"
-        class="group inline-flex items-center gap-3 rounded-sm bg-rune px-6 py-3.5 text-sm font-medium text-white transition-all hover:gap-4 no-underline shadow-rune hover:shadow-rune-hover"
+        href={webClientUrl}
+        class="group inline-flex items-center gap-3 rounded-sm bg-rune px-7 py-4 text-base font-medium text-white transition-all hover:gap-4 no-underline shadow-rune hover:shadow-rune-hover"
       >
-        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path
-            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-          />
-        </svg>
-        Star on GitHub
-        <span
-          id="github-stars-footer"
-          class="ml-1 rounded-sm bg-white/15 px-2 py-0.5 text-xs tabnum"
-          >★ --</span
+        Play now, free in your browser
+        <span aria-hidden="true">&rarr;</span>
+      </a>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm">
+        <a
+          href="https://github.com/BearlySleeping/aikami"
+          class="inline-flex items-center gap-2 text-muted-foreground hover:text-rune transition-colors no-underline"
         >
-      </a>
-      <a
-        href="https://aikami.bearlysleeping.com"
-        class="inline-flex items-center gap-3 rounded-sm border border-rune px-6 py-3.5 text-sm font-medium text-rune transition-all hover:bg-rune/10 no-underline"
-      >
-        Launch Web Client &rarr;
-      </a>
-      <a
-        href={discordInviteLink}
-        class="inline-flex items-center gap-2 rounded-sm border border-border px-6 py-3.5 text-sm font-medium text-foreground transition-all hover:bg-card no-underline"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path
-            d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
-          />
-        </svg>
-        Join Discord
-      </a>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          Star on GitHub
+          <span
+            id="github-stars-badge"
+            class={`rounded-sm border border-border bg-card px-2 py-0.5 font-mono text-xs tabnum ${starCount === null ? 'hidden' : ''}`}
+            >{starCount !== null ? `★ ${formatCount(starCount)}` : ''}</span
+          >
+        </a>
+        <a
+          href={discordInviteLink}
+          class="inline-flex items-center gap-2 text-muted-foreground hover:text-ember transition-colors no-underline"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
+            />
+          </svg>
+          Join Discord
+        </a>
+        <a
+          href={hubUrl}
+          class="inline-flex items-center gap-2 text-muted-foreground hover:text-indigo-400 transition-colors no-underline"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          Browse content packs
+        </a>
+      </div>
     </div>
   </div>
 </section>
 
 <script>
-// GitHub star count
-const starsEl = document.getElementById('github-stars-footer');
-if (starsEl) {
-  fetch('https://api.github.com/repos/BearlySleeping/aikami')
-    .then((res) => res.json())
-    .then((data) => {
-      const count = data.stargazers_count;
-      if (typeof count === 'number') {
-        starsEl.textContent = `★ ${count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}`;
-      } else {
-        starsEl.textContent = '★ 1.2k';
-      }
-    })
-    .catch(() => {
-      starsEl.textContent = '★ 1.2k';
-    });
+// Live GitHub star count — refines the build-time value rendered in the HTML.
+// Never shows a placeholder dash: the badge stays hidden until a real number
+// arrives (SSR at build time, or this fetch once the API responds).
+const starsBadge = document.getElementById('github-stars-badge');
+if (starsBadge) {
+  const format = (n: number): string =>
+    n >= 1000 ? `★ ${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : `★ ${n}`;
+  const apply = (n: number | null): void => {
+    if (n !== null && typeof n === 'number') {
+      starsBadge.textContent = format(n);
+      starsBadge.classList.remove('hidden');
+    } else if (!starsBadge.textContent?.trim()) {
+      starsBadge.classList.add('hidden');
+    }
+  };
+  fetch('https://api.github.com/repos/BearlySleeping/aikami', {
+    signal: AbortSignal.timeout(5_000),
+  })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) =>
+      apply(typeof data?.stargazers_count === 'number' ? data.stargazers_count : null),
+    )
+    .catch(() => apply(null));
 }
 </script>

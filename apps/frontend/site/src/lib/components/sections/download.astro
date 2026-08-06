@@ -3,37 +3,74 @@
 /**
  * Download Section — Tauri desktop release downloads from GitHub Releases.
  *
- * Client-side: resolves the GitHub releases for the `stable` (newest
- * production / non-prerelease release) and `latest` (newest release, may
- * include prereleases) channels, then shows download buttons for Linux,
- * macOS and Windows with live file sizes.
+ * Direct, API-free download links: Tauri publishes deterministic asset names
+ * (`aikami.AppImage`, `aikami.deb`, `aikami.rpm`, `aikami.dmg`, `aikami.exe`)
+ * under `/releases/latest/download/`, so no GitHub API call is needed — the
+ * buttons always resolve, even when the API is rate-limited. Linux detects
+ * the best package format (deb / rpm / AppImage); every card keeps a
+ * "View releases" link underneath.
  *
  * Staging never publishes official releases — staging workflow runs only
  * produce ephemeral workflow artifacts — so this section only ever links to
- * production GitHub Releases.
+ * production GitHub Releases. There is no stable/latest channel split:
+ * `/releases/latest` is already the newest non-prerelease.
  */
 
 import { PUBLIC_GITHUB_REPO } from 'astro:env/client';
 
-const REPO = PUBLIC_GITHUB_REPO || '';
+const REPO = PUBLIC_GITHUB_REPO || 'BearlySleeping/aikami';
 
 type PlatformDef = {
   id: string;
   label: string;
+  /** Default asset extension for the platform (Linux swaps per format). */
   ext: string;
   icon: string;
+  /** Button label shown when no format-specific label is needed. */
+  buttonLabel: string;
+  /** Status line under the button. */
+  status: string;
 };
 
 const PLATFORMS: PlatformDef[] = [
-  { id: 'linux', label: 'Linux', ext: '.appimage', icon: 'linux' },
-  { id: 'macos', label: 'macOS', ext: '.dmg', icon: 'apple' },
-  { id: 'windows', label: 'Windows', ext: '.exe', icon: 'windows' },
+  {
+    id: 'linux',
+    label: 'Linux',
+    ext: '.AppImage',
+    icon: 'linux',
+    buttonLabel: 'Download for Linux',
+    status: 'AppImage · .deb · .rpm',
+  },
+  {
+    id: 'macos',
+    label: 'macOS',
+    ext: '.dmg',
+    icon: 'apple',
+    buttonLabel: 'Download for macOS',
+    status: 'Universal .dmg',
+  },
+  {
+    id: 'windows',
+    label: 'Windows',
+    ext: '.exe',
+    icon: 'windows',
+    buttonLabel: 'Download for Windows',
+    status: 'Installer (.exe)',
+  },
 ] as const;
 
-const CHANNELS = [
-  { id: 'stable', label: 'Stable', description: 'Production release' },
-  { id: 'latest', label: 'Latest', description: 'Newest release' },
+/** Linux package formats offered, in display order. */
+const LINUX_FORMATS = [
+  { id: 'appimage', ext: '.AppImage', label: 'AppImage' },
+  { id: 'deb', ext: '.deb', label: '.deb' },
+  { id: 'rpm', ext: '.rpm', label: '.rpm' },
 ] as const;
+
+const releasesHref = `https://github.com/${REPO}/releases`;
+
+/** Direct download URL for an asset: no API call, never rate-limited. */
+const downloadUrl = (ext: string): string =>
+  `https://github.com/${REPO}/releases/latest/download/aikami${ext}`;
 ---
 
 <section id="download" class="border-b border-border/70 bg-card">
@@ -47,21 +84,8 @@ const CHANNELS = [
       </p>
     </div>
 
-    <!-- Channel Toggle -->
+    <!-- Platform Cards -->
     <div id="download-root" class="mt-10" data-repo={REPO}>
-      <div class="flex justify-center gap-2 mb-8">
-        {CHANNELS.map((ch) => (
-          <button
-            type="button"
-            class={`download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors ${ch.id === 'stable' ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-foreground hover:bg-muted'}`}
-            data-channel={ch.id}
-          >
-            {ch.label}
-          </button>
-        ))}
-      </div>
-
-      <!-- Platform Cards -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto" id="download-cards">
         {PLATFORMS.map((p) => (
           <div
@@ -96,15 +120,43 @@ const CHANNELS = [
             </p>
 
             <a
-              href="/download"
-              aria-label={`Download Aikami desktop client for ${p.label}`}
-              class="download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full border border-border bg-card text-foreground hover:bg-muted"
+              href={downloadUrl(p.ext)}
+              class="download-link inline-flex items-center justify-center rounded-sm bg-rune px-5 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 no-underline w-full shadow-rune"
               data-platform={p.id}
+              aria-label={`Download Aikami desktop client for ${p.label}`}
             >
-              <span class="download-label">Download</span>
+              <span class="download-label">{p.buttonLabel}</span>
             </a>
 
-            <p class="download-status mt-3 text-xs text-muted-foreground">Checking…</p>
+            {p.id === 'linux' && (
+              <div class="mt-3 flex justify-center gap-1.5">
+                {LINUX_FORMATS.map((f) => (
+                  <button
+                    type="button"
+                    class="linux-format-chip rounded-full border border-rune/40 bg-rune/5 px-3 py-1 text-[11px] font-mono text-rune hover:bg-rune/15 transition-colors"
+                    data-format={f.id}
+                    data-ext={f.ext}
+                    aria-pressed="false"
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <p class="download-status mt-3 text-xs text-muted-foreground">{p.status}</p>
+
+            <a
+              href={releasesHref}
+              target="_blank"
+              rel="noopener"
+              class="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-rune transition-colors no-underline"
+            >
+              View releases
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M7 17L17 7M7 7h10v10" />
+              </svg>
+            </a>
           </div>
         ))}
       </div>
@@ -120,25 +172,6 @@ const CHANNELS = [
 <script>
 // apps/frontend/site/src/lib/components/sections/download.astro (client script)
 
-const ROOT = document.getElementById('download-root') as HTMLElement | null;
-const REPO = ROOT?.dataset.repo || '';
-
-type Platform = { id: string; label: string; ext: string };
-// GitHub API returns snake_case field names — keep them verbatim in the types.
-// biome-ignore lint/style/useNamingConvention: GitHub API field name
-type ReleaseAsset = { name: string; size: number; browser_download_url: string };
-// biome-ignore lint/style/useNamingConvention: GitHub API field names
-type Release = { tag_name: string; prerelease: boolean; assets: ReleaseAsset[] };
-type ChannelId = 'stable' | 'latest';
-
-const PLATFORM_DEFS: Platform[] = [
-  { id: 'linux', label: 'Linux', ext: '.appimage' },
-  { id: 'macos', label: 'macOS', ext: '.dmg' },
-  { id: 'windows', label: 'Windows', ext: '.exe' },
-];
-
-const CHANNEL_IDS: ChannelId[] = ['stable', 'latest'];
-
 /** Detect the user's OS from navigator.userAgent. */
 function detectOS(): string {
   const ua = navigator.userAgent.toLowerCase();
@@ -151,219 +184,92 @@ function detectOS(): string {
   return 'linux';
 }
 
-/** Canonical asset name for a platform (aikami.appimage, aikami.exe, …). */
-function assetName(ext: string): string {
-  return `aikami${ext}`;
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(0)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-async function fetchWithTimeout(url: string, ms = 5_000): Promise<Response> {
-  return fetch(url, { signal: AbortSignal.timeout(ms) });
-}
-
 /**
- * Resolve the per-channel releases from the GitHub API.
- *  - stable: newest release that is NOT a prerelease (production)
- *  - latest: newest release overall (may include prereleases)
- * Staging has no official releases — workflow artifacts only — so it never
- * appears as a channel here.
+ * Best Linux package format for the user's distro, from UA hints.
+ * Debian/Ubuntu → .deb, Fedora/RHEL/SUSE → .rpm, anything else → AppImage.
  */
-async function resolveChannels(): Promise<Record<ChannelId, Release | null>> {
-  const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/releases?per_page=10`);
-  if (!res.ok) {
-    return { stable: null, latest: null };
+function detectLinuxFormat(): 'appimage' | 'deb' | 'rpm' {
+  const ua = navigator.userAgent.toLowerCase();
+  if (/\b(ubuntu|debian|mint|elementary)\b/.test(ua)) {
+    return 'deb';
   }
-  const releases = (await res.json()) as Release[];
-  return {
-    latest: releases[0] ?? null,
-    stable: releases.find((r) => !r.prerelease) ?? null,
-  };
+  if (/\b(fedora|red ?hat|centos|rhel|rocky|alma|opensuse|suse)\b/.test(ua)) {
+    return 'rpm';
+  }
+  return 'appimage';
 }
 
-/** Find the platform's asset inside a release. */
-function findAsset(release: Release, platform: Platform): ReleaseAsset | undefined {
-  const want = assetName(platform.ext);
-  return (
-    release.assets.find((a) => a.name === want) ??
-    release.assets.find((a) => a.name.toLowerCase().endsWith(platform.ext))
-  );
-}
+const ACTIVE_CHIP =
+  'linux-format-chip rounded-full border border-rune bg-rune/20 px-3 py-1 text-[11px] font-mono text-rune font-medium';
+const INACTIVE_CHIP =
+  'linux-format-chip rounded-full border border-rune/40 bg-rune/5 px-3 py-1 text-[11px] font-mono text-rune hover:bg-rune/15 transition-colors';
 
-/** Rate-limit fallback: /releases/latest/download/<asset> needs no API call. */
-function fallbackUrl(platform: Platform): string {
-  return `https://github.com/${REPO}/releases/latest/download/${assetName(platform.ext)}`;
-}
-
-function setLinkState(
-  card: HTMLElement,
-  state: 'ok' | 'missing' | 'unconfigured',
-  opts: { href?: string; label: string; status: string; userOS: string; platform: Platform },
-): void {
-  const link = card.querySelector<HTMLAnchorElement>('.download-link');
-  const label = card.querySelector<HTMLElement>('.download-label');
-  const status = card.querySelector<HTMLElement>('.download-status');
-  if (!link || !label || !status) {
-    return;
-  }
-
-  link.className =
-    'download-link inline-flex items-center justify-center rounded-sm px-5 py-2.5 text-sm font-medium transition-all no-underline w-full border border-border bg-card text-foreground hover:bg-muted';
-  link.removeAttribute('download');
-  card.style.opacity = '1';
-  label.textContent = opts.label;
-  status.textContent = opts.status;
-
-  if (state === 'ok' && opts.href) {
-    link.href = opts.href;
-    link.setAttribute('download', '');
-    link.setAttribute('aria-label', `Download Aikami desktop client for ${opts.platform.label}`);
-    // Highlight the detected OS card
-    if (opts.platform.id === opts.userOS) {
-      link.className = link.className
-        .replace(/bg-card/, 'bg-primary')
-        .replace(/text-foreground/, 'text-primary-foreground')
-        .replace(/hover:bg-muted/, 'hover:opacity-90');
-    }
-    return;
-  }
-  if (state === 'missing') {
-    link.removeAttribute('href');
-    link.setAttribute('aria-label', 'Unavailable — Coming soon');
-    card.style.opacity = '0.5';
-    return;
-  }
-  link.removeAttribute('href');
-  link.setAttribute('aria-label', 'Unavailable — Not configured');
-  card.style.opacity = '0.4';
-}
-
-/** Main init — runs on DOMContentLoaded. */
-async function init(): Promise<void> {
+function init(): void {
   const userOS = detectOS();
 
+  // Detected OS badge
   const osBadge = document.getElementById('download-os-badge');
   const osName = document.getElementById('download-os-name');
   if (osBadge && osName) {
     osBadge.classList.remove('hidden');
-    osName.textContent = PLATFORM_DEFS.find((p) => p.id === userOS)?.label ?? userOS;
+    osName.textContent = userOS.charAt(0).toUpperCase() + userOS.slice(1);
   }
 
+  // Highlight the detected OS card's download button
   const cards = Array.from(document.querySelectorAll<HTMLElement>('.download-card'));
-
-  if (!REPO) {
-    for (const card of cards) {
-      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
-      if (!platform) {
-        continue;
-      }
-      setLinkState(card, 'unconfigured', {
-        label: 'Unavailable',
-        status: 'Not configured',
-        userOS,
-        platform,
-      });
-    }
-    return;
-  }
-
-  let channels: Record<ChannelId, Release | null>;
-  try {
-    channels = await resolveChannels();
-  } catch {
-    channels = { stable: null, latest: null };
-  }
-
-  // API unreachable / rate-limited → fall back to direct /releases/latest
-  // URLs (no sizes). Channel toggles still work — both channels point at the
-  // same /releases/latest assets in this degraded mode.
-  const apiUnavailable = !channels.stable && !channels.latest;
-
-  // Default to the channel that has a release (stable wins when both exist)
-  let activeChannel: ChannelId = apiUnavailable ? 'latest' : 'stable';
-  if (!apiUnavailable && !channels.stable && channels.latest) {
-    activeChannel = 'latest';
-  }
-
-  const activeBtnClass =
-    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors bg-primary text-primary-foreground';
-  const inactiveBtnClass =
-    'download-channel-btn rounded-sm px-5 py-2 text-sm font-medium transition-colors border border-border bg-card text-foreground hover:bg-muted';
-
-  function renderChannel(): void {
-    for (const card of cards) {
-      const platform = PLATFORM_DEFS.find((p) => p.id === card.dataset.platform);
-      if (!platform) {
-        continue;
-      }
-      if (apiUnavailable) {
-        setLinkState(card, 'ok', {
-          href: fallbackUrl(platform),
-          label: 'Download',
-          status: 'latest',
-          userOS,
-          platform,
-        });
-        continue;
-      }
-      const release = channels[activeChannel];
-      if (!release) {
-        setLinkState(card, 'missing', {
-          label: 'Coming soon',
-          status: 'Not yet available',
-          userOS,
-          platform,
-        });
-        continue;
-      }
-      const asset = findAsset(release, platform);
-      if (asset) {
-        setLinkState(card, 'ok', {
-          href: asset.browser_download_url,
-          label: asset.size ? `Download (${formatSize(asset.size)})` : 'Download',
-          status: release.tag_name,
-          userOS,
-          platform,
-        });
-      } else {
-        setLinkState(card, 'missing', {
-          label: 'Coming soon',
-          status: 'Not in this release',
-          userOS,
-          platform,
-        });
-      }
+  for (const card of cards) {
+    if (card.dataset.platform === userOS) {
+      const link = card.querySelector<HTMLAnchorElement>('.download-link');
+      link?.classList.add('ring-1', 'ring-rune/40');
     }
   }
 
-  const channelButtons = document.querySelectorAll<HTMLButtonElement>('.download-channel-btn');
-  const applyButtonState = (): void => {
-    for (const btn of channelButtons) {
-      btn.className = btn.dataset.channel === activeChannel ? activeBtnClass : inactiveBtnClass;
-    }
-  };
+  // Linux: pre-select the detected package format
+  const linuxCard = cards.find((c) => c.dataset.platform === 'linux');
+  if (linuxCard) {
+    const link = linuxCard.querySelector<HTMLAnchorElement>('.download-link');
+    const status = linuxCard.querySelector<HTMLElement>('.download-status');
+    const chips = Array.from(linuxCard.querySelectorAll<HTMLButtonElement>('.linux-format-chip'));
+    const detected = detectLinuxFormat();
 
-  // Channel toggle buttons — attached BEFORE the first render so the toggle
-  // always works (even in the degraded API-fallback state).
-  for (const btn of channelButtons) {
-    btn.addEventListener('click', () => {
-      const id = (btn.dataset.channel ?? 'stable') as ChannelId;
-      if (!CHANNEL_IDS.includes(id)) {
+    const applyFormat = (format: { id: string; ext: string; label: string }): void => {
+      if (!link || !status) {
         return;
       }
-      activeChannel = id;
-      applyButtonState();
-      renderChannel();
+      link.href = `https://github.com/${linuxCard.dataset.repo || 'BearlySleeping/aikami'}/releases/latest/download/aikami${format.ext}`;
+      link.setAttribute('aria-label', `Download Aikami desktop client for Linux (${format.label})`);
+      status.textContent =
+        format.id === 'appimage'
+          ? 'AppImage — works on any distro'
+          : `${format.label} — detected for your distro`;
+      for (const chip of chips) {
+        const active = chip.dataset.format === format.id;
+        chip.className = active ? ACTIVE_CHIP : INACTIVE_CHIP;
+        chip.setAttribute('aria-pressed', String(active));
+      }
+    };
+
+    // Repo is available via the root element's data-repo (set in frontmatter)
+    const root = document.getElementById('download-root');
+    if (root) {
+      linuxCard.dataset.repo = root.dataset.repo || 'BearlySleeping/aikami';
+    }
+
+    for (const chip of chips) {
+      chip.addEventListener('click', () => {
+        applyFormat({
+          id: chip.dataset.format ?? 'appimage',
+          ext: chip.dataset.ext ?? '.AppImage',
+          label: chip.textContent ?? 'AppImage',
+        });
+      });
+    }
+    applyFormat({
+      id: detected,
+      ext: detected === 'appimage' ? '.AppImage' : `.${detected}`,
+      label: detected === 'appimage' ? 'AppImage' : `.${detected}`,
     });
   }
-
-  applyButtonState();
-  renderChannel();
 }
 
 document.addEventListener('DOMContentLoaded', init);

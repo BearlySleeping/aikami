@@ -9,10 +9,30 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField } from 'astro/config';
 import compress from 'astro-compress';
 import robotsTxt from 'astro-robots-txt';
+import { loadEnv } from 'vite';
 
 import { PORTS } from '../../../packages/shared/constants/src/index';
 
-const _mode = (process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mode;
+/**
+ * Resolve the Astro build mode.
+ *
+ * Priority: CLI `--mode <mode>` flag (e.g. `astro build --mode production`, or
+ * `moon run site:build -- --mode staging` via bun passthrough) > ambient env
+ * (AIKAMI_MODE / MODE, set by direnv or the deploy pipeline) > 'emulator'.
+ *
+ * The CLI flag must win: astro.config.ts is evaluated before Astro loads any
+ * `.env.*` file into `process.env`, so relying on process.env alone meant the
+ * ambient direnv value (AIKAMI_MODE=emulator) leaked into production builds
+ * and produced the wrong canonical URL (https://stg.bearlysleeping.com).
+ */
+function resolveMode(): Mode {
+  const argv = process.argv;
+  const modeFlagIndex = argv.indexOf('--mode');
+  const cliMode = modeFlagIndex !== -1 ? argv[modeFlagIndex + 1] : undefined;
+  return (cliMode || process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mode;
+}
+
+const _mode = resolveMode();
 const port = Number(process.env.PORT || PORTS[_mode].site);
 
 const SITE_URL_MAP: Record<string, string> = {
@@ -20,11 +40,15 @@ const SITE_URL_MAP: Record<string, string> = {
   staging: 'https://stg.bearlysleeping.com',
   emulator: `http://localhost:${port}`,
 };
-const site =
-  process.env.SITE_URL ||
-  process.env.PUBLIC_SITE_URL ||
-  SITE_URL_MAP[_mode] ||
-  `http://localhost:${port}`;
+
+/**
+ * Read the site URL from the mode-specific env file (`.env.{mode}`) via
+ * Vite's loadEnv — `process.env` does NOT see these values during config
+ * evaluation. Falls back to the mode map so a missing env file can never
+ * regress the canonical URL to a staging domain.
+ */
+const env = loadEnv(_mode, '.', 'PUBLIC_');
+const site = env.PUBLIC_SITE_URL || SITE_URL_MAP[_mode] || `http://localhost:${port}`;
 
 // https://astro.build/config
 export default defineConfig({
@@ -103,8 +127,9 @@ export default defineConfig({
       PUBLIC_SITE_URL: envField.string({
         context: 'client',
         access: 'public',
-        optional: false,
-        min: 1,
+        // Consumed by astro.config.ts via loadEnv — not via astro:env — so it
+        // must not fail validation when empty (emulator mode uses localhost).
+        optional: true,
       }),
       PUBLIC_GITHUB_REPO: envField.string({
         context: 'client',

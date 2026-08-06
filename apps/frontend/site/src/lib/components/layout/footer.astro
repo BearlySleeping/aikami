@@ -1,6 +1,6 @@
 ---
 // apps/frontend/site/src/lib/components/layout/footer.astro
-import { discordInviteLink } from '$data/site_content';
+import { discordInviteLink, hubUrl } from '$data/site_content';
 ---
 
 <!-- Dark-Fantasy Atmospheric Footer -->
@@ -69,6 +69,13 @@ import { discordInviteLink } from '$data/site_content';
               href="https://github.com/BearlySleeping/aikami/releases"
               class="text-sm text-muted-foreground hover:text-foreground no-underline transition-colors"
               >Downloads</a
+            >
+          </li>
+          <li>
+            <a
+              href={hubUrl}
+              class="text-sm text-muted-foreground hover:text-foreground no-underline transition-colors"
+              >Content Packs</a
             >
           </li>
         </ul>
