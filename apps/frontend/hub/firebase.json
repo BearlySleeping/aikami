@@ -1,7 +1,6 @@
 {
   "hosting": {
-    "site": "aikami-hub",
-    "public": "build/client",
+    "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [
       {
@@ -61,7 +60,7 @@
         "source": "**",
         "run": {
           "serviceId": "aikami-hub",
-          "region": "europe-west3"
+          "region": "europe-west4"
         }
       }
     ]

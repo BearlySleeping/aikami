@@ -152,12 +152,6 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run scripts/src/lib/ops/preview_site.ts',
     cwd: (root) => root,
   },
-  hub: {
-    name: 'hub',
-    command: (mode) => `bun run dev -- --mode ${mode}`,
-    cwd: (root) => resolve(root, 'apps/frontend/hub'),
-    readyPort: (mode) => PORTS[mode].hub,
-  },
   'preview-hub': {
     name: 'preview-hub',
     command: () => 'bun run scripts/src/lib/ops/preview_hub.ts',
@@ -525,13 +519,29 @@ const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
   } else if (parts.length === 3) {
     // hh:mm:ss
     const [hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
-    if (Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && hh !== undefined && mm !== undefined && ss !== undefined) {
+    if (
+      Number.isFinite(hh) &&
+      Number.isFinite(mm) &&
+      Number.isFinite(ss) &&
+      hh !== undefined &&
+      mm !== undefined &&
+      ss !== undefined
+    ) {
       totalSeconds = hh * 3600 + mm * 60 + ss;
     }
   } else if (parts.length === 4) {
     // dd-hh:mm:ss
     const [dd, hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
-    if (Number.isFinite(dd) && Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && dd !== undefined && hh !== undefined && mm !== undefined && ss !== undefined) {
+    if (
+      Number.isFinite(dd) &&
+      Number.isFinite(hh) &&
+      Number.isFinite(mm) &&
+      Number.isFinite(ss) &&
+      dd !== undefined &&
+      hh !== undefined &&
+      mm !== undefined &&
+      ss !== undefined
+    ) {
       totalSeconds = dd * 86400 + hh * 3600 + mm * 60 + ss;
     }
   }

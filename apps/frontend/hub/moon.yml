@@ -40,6 +40,8 @@ fileGroups:
   deployment:
     - 'Dockerfile'
     - 'firebase.json'
+    - 'scripts/deploy.ts'
+    - 'start.js'
 
 tasks:
   dev:
@@ -60,6 +62,17 @@ tasks:
   preview:
     command: 'bun run preview'
     preset: 'server'
+
+  deploy:
+    command: bun
+    args:
+      - run
+      - deploy
+    inputs:
+      - '@group(deployment)'
+    options:
+      cache: false
+      runInCI: true
 
   test:
     command: 'bun run test'
