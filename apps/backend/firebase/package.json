@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",
-    "@types/pg": "8.20.3",
+    "@types/pg": "8.20.4",
     "firebase-tools": "15.25.1"
   }
 }
