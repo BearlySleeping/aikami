@@ -1,0 +1,18 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes:
+    light --default,
+    dark --prefersdark;
+}
+
+@theme {
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter", sans-serif;
+}
+
+/* Hide the default Firebase emulator warning banner injected by the SDK —
+   replaced by our custom ModeIndicator component. */
+.firebase-emulator-warning {
+  display: none;
+}

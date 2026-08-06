@@ -27,7 +27,10 @@ export type PathParameters<T extends RouteName> = ArgumentTypes<AllRoutes[T]['ge
 export const isPublicPage = (route: string): boolean => {
   const routeOptions = routes[route as RouteName];
   if (routeOptions) {
-    return routeOptions.type === 'public' || routeOptions.type === 'unauthenticated';
+    // Compare as string: apps may register only a subset of route types
+    // (e.g. the hub has no 'public' routes) without breaking this check.
+    const routeType: string = routeOptions.type;
+    return routeType === 'public' || routeType === 'unauthenticated';
   }
   return false;
 };

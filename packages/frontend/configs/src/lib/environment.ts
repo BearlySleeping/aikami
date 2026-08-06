@@ -42,6 +42,7 @@ const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
   site: [],
   client: [],
   'client-tauri': [],
+  hub: [],
 };
 
 /**

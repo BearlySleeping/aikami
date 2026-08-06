@@ -1,0 +1,22 @@
+// apps/frontend/hub/src/routes/+layout.server.ts
+import type { LogLevel } from '@aikami/types';
+import type { AdminHookData } from '$types';
+import type { LayoutServerLoad } from './$types';
+
+export const load: LayoutServerLoad = (event) => {
+  const { locals, url } = event;
+  const { currentRoute, device, userSession, sessionId, customFirebaseSignInToken } = locals;
+  const { searchParams } = url;
+
+  const logLevelParam = searchParams.get('logLevel') ?? undefined;
+  const logLevel = logLevelParam as LogLevel;
+
+  return {
+    currentRoute,
+    device,
+    logLevel,
+    sessionId,
+    userSession,
+    customFirebaseSignInToken,
+  } satisfies AdminHookData;
+};

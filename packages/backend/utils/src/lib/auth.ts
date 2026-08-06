@@ -43,9 +43,20 @@ export const createSessionCookie = async (options: {
   return auth.createSessionCookie(options.token, { expiresIn: options.expiresIn });
 };
 
-export const verifyIdToken = async (idToken: string): Promise<DecodedIdToken> => {
+export const verifyIdToken = async (
+  idToken: string,
+  checkRevoked?: boolean,
+): Promise<DecodedIdToken> => {
   const auth = getAuth();
-  return await auth.verifyIdToken(idToken);
+  return await auth.verifyIdToken(idToken, checkRevoked);
+};
+
+export const verifySessionCookie = async (
+  sessionCookie: string,
+  checkRevoked?: boolean,
+): Promise<DecodedIdToken> => {
+  const auth = getAuth();
+  return await auth.verifySessionCookie(sessionCookie, checkRevoked);
 };
 
 export const createFirebaseAuthUser = async (options: AuthCreateRequest): Promise<string> => {
@@ -205,7 +216,7 @@ export const getEmailVerificationLink = async ({
 const convertLink = (link: string, supportedLocale: SupportedLocale) => {
   return link.replace(
     `https://${requireEnv(backendEnv.GCP_PROJECT_ID, 'GCP_PROJECT_ID')}.firebaseapp.com/__/auth/action`,
-    `${requireEnv(backendEnv.PWA_URL, 'PWA_URL')}/${toSupportedLocaleUrlPrefix(supportedLocale)}auth/userMgmt`,
+    `${requireEnv(backendEnv.APP_URL, 'APP_URL')}/${toSupportedLocaleUrlPrefix(supportedLocale)}auth/userMgmt`,
   );
 };
 
