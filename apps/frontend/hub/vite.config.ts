@@ -7,9 +7,9 @@ import type { Mode } from '@aikami/types';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
-import { defineConfig, loadEnv, type PluginOption, type ProxyOptions } from 'vite';
+import { createLogger, defineConfig, loadEnv, type PluginOption, type ProxyOptions } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
-import { PORTS } from '../../../packages/shared/constants/src/index';
+import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
@@ -64,6 +64,11 @@ const FORCE_EXTERNAL = new Set([
   'node-domexception',
 ]);
 
+// Default Vite logger, wrapped below to filter out warnings that cannot be
+// suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
+// e.g. EVAL, through the logger instead).
+const viteLogger = createLogger();
+
 function forceExternalPlugin(): PluginOption {
   return {
     name: 'force-external',
@@ -110,8 +115,35 @@ export default defineConfig(({ mode }) => {
     plugins,
     envPrefix: ['PUBLIC_'],
 
+    customLogger: {
+      ...viteLogger,
+      warn(msg, options) {
+        if (typeof msg === 'string' && msg.includes('strongly discouraged')) {
+          return;
+        }
+        viteLogger.warn(msg, options);
+      },
+      warnOnce(msg, options) {
+        if (typeof msg === 'string' && msg.includes('strongly discouraged')) {
+          return;
+        }
+        viteLogger.warnOnce(msg, options);
+      },
+    },
+
     build: {
       rollupOptions: {
+        // Rewrite bare Node builtins (e.g. `crypto`, `util`) to their `node:`
+        // prefixed form in the output. svelte-adapter-bun's rolldown pass only
+        // externalizes `/^node:/` specifiers, so bare builtins left in the SSR
+        // output would produce UNRESOLVED_IMPORT warnings. bun resolves the
+        // `node:` form natively at runtime, so behavior is unchanged.
+        output: {
+          paths: {
+            crypto: 'node:crypto',
+            util: 'node:util',
+          },
+        },
         // Prevent bundling Node-only packages AND Node native built-ins
         external: [...SERVER_ONLY_PACKAGES, 'body-parser', 'raw-body', ...NODE_BUILTINS],
 
