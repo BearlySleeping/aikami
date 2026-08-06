@@ -1,0 +1,72 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags:
+  - 'hub'
+  - 'svelte'
+  - 'application'
+
+project:
+  name: 'hub'
+  description: 'Hub dashboard built with SvelteKit.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'frontend-utils'
+  - 'frontend-services'
+  - 'frontend-configs'
+  - 'frontend-repositories'
+  - 'schemas'
+  - 'types'
+  - 'constants'
+  - 'logger'
+  - 'utils'
+  - 'backend-configs'
+  - 'backend-database'
+  - 'backend-utils'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'static/**/*'
+  configs:
+    - 'svelte.config.*'
+    - 'vite.config.*'
+    - '.env.*'
+    - '.env'
+  deployment:
+    - 'Dockerfile'
+    - 'firebase.json'
+
+tasks:
+  dev:
+    command: 'bun run dev'
+    preset: 'server'
+
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(deployment)'
+      - '.env'
+    outputs:
+      - '.svelte-kit'
+      - 'build'
+
+  preview:
+    command: 'bun run preview'
+    preset: 'server'
+
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+
+  test-unit:
+    command: 'bun run test:unit'
+    inputs:
+      - '@group(sources)'

@@ -1,0 +1,18 @@
+{
+  "name": "@aikami/backend-svelte-kit",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/backend-configs": "workspace:*",
+    "@aikami/backend-utils": "workspace:*",
+    "@aikami/constants": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@sveltejs/kit": "2.68.0"
+  }
+}

@@ -11,6 +11,7 @@ projects:
   client: "apps/frontend/client"
   site: "apps/frontend/site"
   docs: "apps/frontend/docs"
+  hub: "apps/frontend/hub"
   e2e: "apps/e2e"
   firebase: "apps/backend/firebase"
   voice: "apps/backend/voice"
@@ -32,6 +33,7 @@ projects:
   backend-utils: "packages/backend/utils"
   backend-database: "packages/backend/database"
   backend-auth: "packages/backend/auth"
+  backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
   frontend-engine: "packages/frontend/engine"

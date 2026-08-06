@@ -105,6 +105,11 @@ export type FrontendRepositoryInterface<T extends RepositoryType> = {
   getDocumentsByRawQuery(query: Query): Promise<Type.Static<T['data']>[]>;
 
   getWriteBatch(): Promise<WriteBatch>;
+
+  /**
+   * Applies a set of writes atomically in a single Firestore write batch.
+   */
+  commit(batchCommands: BatchCommand[]): Promise<void>;
 } & BaseRepositoryInterface<T>;
 
 export class FrontendRepository<T extends RepositoryType>

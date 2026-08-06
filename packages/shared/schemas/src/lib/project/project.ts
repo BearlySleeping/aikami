@@ -66,6 +66,7 @@ export const FrontendAppIdSchema = Type.Union([
   Type.Literal('site'),
   Type.Literal('client'),
   Type.Literal('client-tauri'),
+  Type.Literal('hub'),
 ]);
 
 export type FrontendAppId = Type.Static<typeof FrontendAppIdSchema>;

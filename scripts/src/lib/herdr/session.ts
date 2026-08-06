@@ -43,6 +43,7 @@ export type AikamiMode = 'emulator' | 'staging' | 'production';
 export type DevService =
   | 'firebase'
   | 'client'
+  | 'hub'
   | 'voice'
   | 'image'
   | 'text'
@@ -108,6 +109,12 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/client'),
     readyPort: (mode) => PORTS[mode].client,
   },
+  hub: {
+    name: 'hub',
+    command: (mode) => `bun run dev -- --mode ${mode}`,
+    cwd: (root) => resolve(root, 'apps/frontend/hub'),
+    readyPort: (mode) => PORTS[mode].hub,
+  },
   voice: {
     name: 'voice',
     command: () => 'bun run dev',
@@ -147,6 +154,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
 export const ALL_SERVICES: DevService[] = [
   'firebase',
   'client',
+  'hub',
   'voice',
   'image',
   'text',
