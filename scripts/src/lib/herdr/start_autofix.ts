@@ -230,7 +230,7 @@ const ensureService = async (
   }
 
   console.log(`  🚀 Starting ${service} in herdr...`);
-  await startServices({ mode, services: [service], projectRoot: process.cwd() });
+  await startServices({ mode, services: [service], projectRoot: process.cwd(), wait: false });
   await readyCheck(port, Math.max(timeoutSec, 90));
 };
 

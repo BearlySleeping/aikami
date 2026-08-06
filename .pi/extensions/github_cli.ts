@@ -330,7 +330,18 @@ async function fetchNewestRunId(
 ): Promise<string | undefined> {
   const list = await runGh(
     pi,
-    ['run', 'list', '--workflow', workflow, '--branch', ref, '--limit', '1', '--json', 'databaseId'],
+    [
+      'run',
+      'list',
+      '--workflow',
+      workflow,
+      '--branch',
+      ref,
+      '--limit',
+      '1',
+      '--json',
+      'databaseId',
+    ],
     { parseJson: true, timeout: 30_000 },
   );
   const runs =

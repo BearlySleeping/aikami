@@ -245,3 +245,4 @@ apps/backend/image/src/user/comfyui.db.bkp
 apps/frontend/client/.fast-check/
 firebase.deploy.json
 Aikami-x86_64.AppImage
+.secrets/

@@ -67,6 +67,13 @@ export type SessionConfig = {
   force?: boolean;
   join?: boolean;
   projectRoot?: string;
+  /**
+   * Wait for requested services' readyPorts to open after starting, then fail
+   * loudly if any never come up. Default: true.
+   */
+  wait?: boolean;
+  /** Per-service readiness timeout in ms. Default: 120_000. */
+  waitTimeoutMs?: number;
 };
 
 export type ServiceStatus = {
@@ -75,6 +82,8 @@ export type ServiceStatus = {
   running: boolean;
   readyPort?: number;
   portOpen: boolean;
+  /** Health state derived from pane processes + port liveness. */
+  state: 'healthy' | 'booting' | 'crashed' | 'stopped';
 };
 
 export type SessionInfo = {
@@ -432,24 +441,122 @@ export const wrapCommand = (command: string): string =>
 const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
 
 /**
- * Check if a herdr pane is idle — only a shell running, no active command process.
- * Uses `herdr pane process-info` to inspect foreground processes.
+ * How old (seconds) a foreground process must be before a closed port counts
+ * as a crash rather than a slow boot.
  */
-const isPaneIdle = async (paneId: string): Promise<boolean> => {
-  const r = await herdrJson<{
-    result: {
-      process_info: {
-        foreground_processes: { name: string }[];
-      };
-    };
-  }>(['pane', 'process-info', '--pane', paneId]);
+const CRASH_GRACE_SECONDS = 45;
 
-  if (!r?.result?.process_info?.foreground_processes) {
-    return true;
+type PaneProcessInfo = {
+  result: {
+    process_info: {
+      foreground_processes: { name: string; pid: number }[];
+    };
+  };
+};
+
+/** Elapsed seconds since a PID started (`ps -o etimes=` or `ps -o etime=` fallback), or undefined. */
+const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
+  // Try GNU/Linux etimes (seconds) first
+  const etimesOut = await new Promise<string>((res) => {
+    const p = spawn('ps', ['-o', 'etimes=', '-p', String(pid)], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let o = '';
+    p.stdout?.on('data', (d) => {
+      o += String(d);
+    });
+    p.on('close', () => res(o));
+    p.on('error', () => res(''));
+  });
+  const etimesVal = Number.parseInt(etimesOut.trim(), 10);
+  if (Number.isFinite(etimesVal)) {
+    return etimesVal;
   }
 
-  const procs = r.result.process_info.foreground_processes;
-  return procs.every((p) => SHELL_NAMES.has(p.name));
+  // Fallback to BSD/macOS etime ([[dd-]hh:]mm:ss format)
+  const etimeOut = await new Promise<string>((res) => {
+    const p = spawn('ps', ['-o', 'etime=', '-p', String(pid)], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let o = '';
+    p.stdout?.on('data', (d) => {
+      o += String(d);
+    });
+    p.on('close', () => res(o));
+    p.on('error', () => res(''));
+  });
+
+  // Parse [[dd-]hh:]mm:ss into total seconds
+  const parts = etimeOut.trim().split(/[-:]/);
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  let totalSeconds = 0;
+  if (parts.length === 2) {
+    // mm:ss
+    const [mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(mm) && Number.isFinite(ss) && mm !== undefined && ss !== undefined) {
+      totalSeconds = mm * 60 + ss;
+    }
+  } else if (parts.length === 3) {
+    // hh:mm:ss
+    const [hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && hh !== undefined && mm !== undefined && ss !== undefined) {
+      totalSeconds = hh * 3600 + mm * 60 + ss;
+    }
+  } else if (parts.length === 4) {
+    // dd-hh:mm:ss
+    const [dd, hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(dd) && Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && dd !== undefined && hh !== undefined && mm !== undefined && ss !== undefined) {
+      totalSeconds = dd * 86400 + hh * 3600 + mm * 60 + ss;
+    }
+  }
+
+  return totalSeconds > 0 ? totalSeconds : undefined;
+};
+
+/**
+ * Assess a service pane's health from its foreground processes + port:
+ *  - 'crashed' → the wrapped command exited (only shells left in the pane), or
+ *                the process is alive but its port has been dead longer than
+ *                CRASH_GRACE_SECONDS (wedged).
+ *  - 'booting' → port not open yet but the process is young (still starting).
+ *  - 'healthy' → port open, or no port defined and a real process is running.
+ */
+const assessServicePane = async (
+  paneId: string,
+  port?: number,
+): Promise<'crashed' | 'booting' | 'healthy'> => {
+  const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+  const procs = r?.result?.process_info?.foreground_processes;
+
+  // process-info unavailable — fall back to the port only, never restart on missing data
+  if (!procs) {
+    if (port !== undefined && (await isPortReady(port))) {
+      return 'healthy';
+    }
+    return 'booting';
+  }
+
+  const real = procs.filter((p) => !SHELL_NAMES.has(p.name));
+  if (real.length === 0) {
+    // Only shells left → the wrapped command already exited (crash / stopped)
+    return 'crashed';
+  }
+
+  if (port !== undefined && !(await isPortReady(port))) {
+    const pid = real[0]?.pid;
+    if (pid !== undefined) {
+      const age = await processAgeSeconds(pid);
+      // Wedged: process still alive but its port has been dead too long
+      if (age !== undefined && age > CRASH_GRACE_SECONDS) {
+        return 'crashed';
+      }
+    }
+    return 'booting';
+  }
+  return 'healthy';
 };
 
 // ── Tab management ─────────────────────────────────────────
@@ -492,13 +599,18 @@ type TabCreateResult = {
   };
 };
 
+/** Get tabs (id + label) in a workspace. */
+const getWorkspaceTabs = async (
+  workspaceId: string,
+): Promise<{ tab_id: string; label: string }[]> => {
+  const r = await herdrJson<TabListResult>(['tab', 'list', '--workspace', workspaceId]);
+  return r?.result?.tabs ?? [];
+};
+
 /** Get tab names in a workspace. */
 export const getWorkspaceTabNames = async (workspaceId: string): Promise<string[]> => {
-  const r = await herdrJson<TabListResult>(['tab', 'list', '--workspace', workspaceId]);
-  if (!r?.result?.tabs) {
-    return [];
-  }
-  return r.result.tabs.map((t) => t.label);
+  const tabs = await getWorkspaceTabs(workspaceId);
+  return tabs.map((t) => t.label);
 };
 
 /** Get tab id by label in a workspace. */
@@ -529,7 +641,15 @@ const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> 
  * Start one or more services as herdr tabs in the mode workspace.
  */
 export const startServices = async (config: SessionConfig): Promise<string> => {
-  const { mode, services, force = false, join = false, projectRoot = process.cwd() } = config;
+  const {
+    mode,
+    services,
+    force = false,
+    join = false,
+    wait = true,
+    waitTimeoutMs = 120_000,
+    projectRoot = process.cwd(),
+  } = config;
   const workspaceLabel = resolveSessionName(mode);
 
   if (services.length === 0) {
@@ -616,13 +736,21 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         const tabId = await findTab(workspaceId, svc.name);
         if (tabId) {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
-          if (servicePane && (await isPaneIdle(servicePane.pane_id))) {
-            console.log(`  ↻ Tab: ${svc.name} idle, restarting...`);
-            await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command(mode))]);
-            continue;
+          const port = svc.readyPort?.(mode);
+          if (servicePane) {
+            const state = await assessServicePane(servicePane.pane_id, port);
+            if (state === 'crashed') {
+              console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
+              await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command(mode))]);
+              continue;
+            }
+            if (state === 'booting') {
+              console.log(`  ⏳ Tab: ${svc.name} still booting, skipping`);
+              continue;
+            }
           }
         }
-        console.log(`  ○ Tab: ${svc.name} already running, skipping`);
+        console.log(`  ✓ Tab: ${svc.name} already running, skipping`);
         continue;
       }
       const tabR = await herdrJson<TabCreateResult>([
@@ -644,6 +772,49 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   }
 
   await new Promise((r) => setTimeout(r, 1500));
+
+  // ── Verify requested services actually came up ────────
+  const failed: string[] = [];
+  if (wait) {
+    failed.push(...(await waitForReady({ services, mode }, waitTimeoutMs)));
+
+    // ── Workspace health sweep: flag crashed sibling services ──
+    // Catches services that died outside this invocation (e.g. a client tab
+    // that crashed earlier) so the workspace isn't reported as fully healthy.
+    const tabNames = await getWorkspaceTabNames(workspaceId);
+    const panes = await getWorkspacePanes(workspaceId);
+    const paneByTab = new Map(panes.map((p) => [p.tab_id, p]));
+    const crashedOthers: string[] = [];
+    for (const tabName of tabNames) {
+      // Map "pi" tab to preview-client service (matches herdr:list's mapping)
+      const service = (tabName === 'pi' ? 'preview-client' : tabName) as DevService;
+      if (!SERVICE_DEFS[service] || services.includes(service)) {
+        continue;
+      }
+      const tabId = await findTab(workspaceId, tabName);
+      const pane = tabId ? paneByTab.get(tabId) : undefined;
+      if (!pane) {
+        continue;
+      }
+      const port = SERVICE_DEFS[service].readyPort?.(mode);
+      if ((await assessServicePane(pane.pane_id, port)) === 'crashed') {
+        crashedOthers.push(tabName);
+      }
+    }
+    if (crashedOthers.length > 0) {
+      console.log(`\n⚠  Health check — crashed service(s) in ${workspaceLabel}:`);
+      for (const name of crashedOthers) {
+        console.log(`    ✗ ${name} is DOWN. Restart it with: bun herdr:start ${name}`);
+      }
+    }
+  }
+
+  if (failed.length > 0) {
+    throw new Error(
+      `Services failed to start within ${waitTimeoutMs / 1000}s: ${failed.join(', ')}. ` +
+        `Check logs with 'bun herdr:list' or 'herdr session attach default'.`,
+    );
+  }
 
   // ── Attach if requested ───────────────────────────────
   if (join) {
@@ -836,6 +1007,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
             name: 'pi',
             running: piRunning,
             portOpen: piRunning,
+            state: piRunning ? 'healthy' : 'stopped',
           },
         ],
       });
@@ -845,32 +1017,42 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
     const parsed = parseWorkspaceName(ws.label);
     const wsMode = parsed ?? 'emulator';
 
-    const existing = await getWorkspaceTabNames(ws.workspace_id);
+    const tabs = await getWorkspaceTabs(ws.workspace_id);
+    const tabIdByName = new Map(tabs.map((t) => [t.label, t.tab_id]));
+    const panes = await getWorkspacePanes(ws.workspace_id);
+    const paneByTab = new Map(panes.map((p) => [p.tab_id, p]));
 
     const servicesStatus: ServiceStatus[] = ALL_SERVICES.map((svc) => {
       const def = SERVICE_DEFS[svc];
-      const running = existing.includes(def.name);
+      const running = tabIdByName.has(def.name);
       return {
         service: svc,
         name: def.name,
         running,
         readyPort: def.readyPort ? def.readyPort(wsMode) : undefined,
         portOpen: false,
+        state: running ? 'booting' : 'stopped',
       };
     });
 
-    const portChecks = await Promise.all(
+    // Assess per-service health: pane processes + port liveness
+    await Promise.all(
       servicesStatus
-        .filter((s) => s.running && s.readyPort !== undefined)
-        .map(async (s) => ({ ...s, portOpen: await isPortReady(s.readyPort ?? 0) })),
+        .filter((s) => s.running)
+        .map(async (s) => {
+          const def = SERVICE_DEFS[s.service];
+          const tabId = tabIdByName.get(def.name);
+          const pane = tabId ? paneByTab.get(tabId) : undefined;
+          if (!pane) {
+            return;
+          }
+          const port = def.readyPort?.(wsMode);
+          s.state = await assessServicePane(pane.pane_id, port);
+          if (port !== undefined) {
+            s.portOpen = await isPortReady(port);
+          }
+        }),
     );
-
-    for (const check of portChecks) {
-      const svc = servicesStatus.find((s) => s.service === check.service);
-      if (svc) {
-        svc.portOpen = check.portOpen;
-      }
-    }
 
     results.push({
       name: ws.label,
@@ -908,14 +1090,18 @@ export const printServiceList = async (mode?: AikamiMode): Promise<void> => {
 
     for (const svc of session.services) {
       const runningIcon = svc.running ? `${Green}✓${Reset}` : `${Dim}✗${Reset}`;
-      const portIndicator =
-        svc.running && svc.readyPort !== undefined
-          ? svc.portOpen
-            ? `${Green}:${svc.readyPort} ready${Reset}`
-            : `${Yellow}:${svc.readyPort} booting${Reset}`
-          : '';
+      let indicator = '';
+      if (svc.state === 'crashed') {
+        indicator = `${Red}crashed${Reset}`;
+      } else if (svc.state === 'booting' && svc.readyPort !== undefined) {
+        indicator = `${Yellow}:${svc.readyPort} booting${Reset}`;
+      } else if (svc.state === 'healthy' && svc.readyPort !== undefined) {
+        indicator = `${Green}:${svc.readyPort} ready${Reset}`;
+      } else if (svc.running) {
+        indicator = 'running';
+      }
       const name = svc.running ? svc.name : `${Red}${svc.name}${Reset}`;
-      console.log(`  ${runningIcon} ${name.padEnd(14)} ${portIndicator}`);
+      console.log(`  ${runningIcon} ${name.padEnd(14)} ${indicator}`);
     }
   }
 
@@ -932,20 +1118,21 @@ export const printServiceList = async (mode?: AikamiMode): Promise<void> => {
 export const waitForReady = async (
   config: { services: DevService[]; mode: AikamiMode },
   timeoutMs = 180_000,
-): Promise<void> => {
+): Promise<string[]> => {
   const { services, mode } = config;
   const workspaceLabel = resolveSessionName(mode);
 
   const wsId = await findWorkspace(workspaceLabel);
   if (!wsId) {
     console.warn(`⚠ Workspace ${workspaceLabel} not found, skipping readiness check`);
-    return;
+    return [];
   }
 
   console.log('  Waiting for services...');
   const targets = services.map((s) => SERVICE_DEFS[s]);
+  const failed: string[] = [];
 
-  await Promise.allSettled(
+  await Promise.all(
     targets.map(async (svc) => {
       const port = svc.readyPort?.(mode);
       if (port === undefined) {
@@ -961,8 +1148,11 @@ export const waitForReady = async (
         await new Promise((r) => setTimeout(r, 1000));
       }
       console.error(`  ✗ ${svc.name} timed out on :${port}`);
+      failed.push(svc.name);
     }),
   );
+
+  return failed;
 };
 
 // ── Contract session lifecycle ────────────────────────────

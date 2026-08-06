@@ -23,7 +23,7 @@
 //   env: LEG (JSON from ${{ toJson(matrix) }}), RELEASE_TAG, GH_TOKEN,
 //        REDIS_URL/REDIS_TOKEN (via scripts/.env.{mode})
 
-import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,37 @@ import {
 const _filename = fileURLToPath(import.meta.url);
 const _scriptDir = dirname(_filename);
 const ROOT_DIR = resolve(_scriptDir, '../../../..');
+
+/**
+ * Bundle → glob pattern(s) matching where `tauri build` drops that bundle
+ * under target/**. Used ONLY for the workflow_dispatch / staging path (no
+ * RELEASE_TAG) to build a single dynamic `path:` list for one upload-artifact
+ * step per leg, replacing what used to be one hardcoded step per bundle type.
+ */
+const BUNDLE_UPLOAD_GLOBS: Record<string, string> = {
+  appimage: '**/target/**/bundle/appimage/*.appimage',
+  deb: '**/target/**/bundle/deb/*.deb',
+  rpm: '**/target/**/bundle/rpm/*.rpm',
+  msi: '**/target/**/bundle/msi/*.msi',
+  nsis: '**/target/**/bundle/nsis/*.exe',
+  dmg: '**/target/**/bundle/dmg/*.dmg',
+  app: '**/target/**/bundle/macos/*.app.tar.gz',
+};
+
+/**
+ * Append a $GITHUB_OUTPUT entry using the heredoc-safe delimiter form, which
+ * (unlike a plain `key=value` line) also works for multi-line values such as
+ * the newline-joined glob list below. No-op-to-console outside CI.
+ */
+function emitOutput(key: string, value: string): void {
+  const outPath = process.env.GITHUB_OUTPUT;
+  if (!outPath) {
+    console.log(`[GITHUB_OUTPUT] ${key}=${value}`);
+    return;
+  }
+  const delimiter = `ghadelim_${Math.random().toString(36).slice(2)}`;
+  appendFileSync(outPath, `${key}<<${delimiter}\n${value}\n${delimiter}\n`);
+}
 
 /** Bundle → glob patterns for gh release download. */
 const BUNDLE_GLOBS: Record<string, string[]> = {
@@ -202,6 +233,12 @@ async function main(): Promise<void> {
       log(
         `  ${c.dim}No RELEASE_TAG set (workflow_dispatch run) — artifacts remain on disk for the workflow's upload-artifact step.${c.reset}`,
       );
+      // One dynamic `path:` list per leg instead of one hardcoded step per
+      // bundle type — release.yml's single upload step reads this output.
+      const bundles = leg.bundles.split(',').filter(Boolean);
+      const globs = bundles.map((b) => BUNDLE_UPLOAD_GLOBS[b]).filter((g): g is string => !!g);
+      globs.push('**/target/**/bundle/**/*.sig');
+      emitOutput('artifact_globs', globs.join('\n'));
     }
 
     await setTauriCache(mode, {
