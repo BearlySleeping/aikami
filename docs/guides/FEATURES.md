@@ -346,7 +346,7 @@ type KnowledgeGraphData = {
 
 **Data Model**:
 ```typescript
-type TTSProvider = 'elevenlabs' | 'silero' | 'coqui' | 'edge';
+type TTSProvider = 'kokoro' | 'elevenlabs' | 'silero' | 'coqui' | 'edge';
 
 type VoiceConfigData = {
   id: string;

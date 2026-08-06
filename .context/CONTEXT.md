@@ -7,12 +7,14 @@
 
 ## What We're Building
 
-Aikami is an AI-powered 2D JRPG and monorepo application platform spanning a PWA, local containerized AI microservices, and a Firebase backend.
+Aikami is an AI-powered 2D JRPG and monorepo application platform spanning a PWA, a local containerized AI microservices stack, an offline-first Turso (libSQL) data layer, a community Hub, and a Firebase backend.
 
 | Component     | Technology                                          |
 | ------------- | --------------------------------------------------- |
 | Client / Game | SvelteKit 2 (Runes) + Tauri v2 + PixiJS v8 + bitECS |
-| Backend       | Firebase (Functions, Auth, Firestore, Data Connect) |
+| Hub           | SvelteKit SSR on Google Cloud Run (Bun)             |
+| Local Store   | Turso (libSQL) — offline-first source of truth (C-321) |
+| Backend       | Firebase (Functions, Auth, Firestore infra-only)    |
 | Local AI      | Docker (ComfyUI, Ollama, Kokoro TTS)                |
 | Runtime       | Bun                                                 |
 | Monorepo      | Moon task orchestrator                              |
@@ -20,16 +22,19 @@ Aikami is an AI-powered 2D JRPG and monorepo application platform spanning a PWA
 
 ## Tech Stack
 
-**Bun × SvelteKit 2 × PixiJS v8 × Firebase × Docker AI Microservices**
+**Bun × SvelteKit 2 × PixiJS v8 × Turso × Firebase × Docker AI Microservices**
 
 | Layer              | Technology                                                                        |
 | ------------------ | --------------------------------------------------------------------------------- |
 | Runtime            | Bun                                                                               |
 | Frontend (Client)  | SvelteKit 2, Svelte 5 Runes (static SPA, Tauri v2)                                |
+| Frontend (Hub)     | SvelteKit 2 SSR (svelte-adapter-bun) on Google Cloud Run                          |
 | Frontend (Landing) | Astro                                                                             |
 | Frontend (Docs)    | Astro (Starlight)                                                                 |
-| Backend            | Firebase Cloud Functions, Firestore, Auth, Data Connect (managed via `firestack`) |
-| Game Engine        | PixiJS v8 + bitECS (embedded in SvelteKit)                                        |
+| Backend            | Firebase Cloud Functions, Auth, Firestore (infra only), Data Connect (optional) via `firestack` |
+| Game Engine        | PixiJS v8 + bitECS (in `packages/frontend/engine`)                                |
+| Database (local)   | Turso (libSQL) — campaigns, saves, chat (C-321)                                   |
+| Validation         | TypeBox (shared schemas, types, mocks)                                            |
 | AI Microservices   | ComfyUI (Image), Ollama (Text), Kokoro (Voice) via Docker/herdr                   |
 | Monorepo           | Moon task orchestrator                                                            |
 
@@ -38,14 +43,15 @@ Aikami is an AI-powered 2D JRPG and monorepo application platform spanning a PWA
 | Project                 | Description                                                                                 |
 | ----------------------- | ------------------------------------------------------------------------------------------- |
 | `apps/frontend/client`  | Main Client App (SvelteKit 2, Svelte 5, Tauri v2, PixiJS Game)                              |
+| `apps/frontend/hub`     | Community Hub (SvelteKit SSR → Cloud Run/Bun): assets, maps, mods, personas                  |
 | `apps/frontend/site`    | Public landing page (Astro)                                                                 |
 | `apps/frontend/docs`    | Documentation site (Astro Starlight)                                                        |
-| `apps/backend/firebase` | Firebase Cloud Functions + Data Connect + Firestack config                                  |
+| `apps/backend/firebase` | Firebase Cloud Functions + Firestore rules + Firestack config                                |
 | `apps/backend/image`    | Local ComfyUI Docker microservice                                                           |
 | `apps/backend/text`     | Local Ollama Docker microservice                                                            |
 | `apps/backend/voice`    | Local Kokoro TTS Docker microservice                                                        |
-| `packages/frontend/*`   | Frontend packages (`engine`, `services`, `utils`, `configs`, `repositories`, `dataconnect`) |
-| `packages/shared/*`     | Shared logic (`types`, `schemas`, `constants`, `logger`)                                    |
+| `packages/frontend/*`   | Frontend packages (`engine`, `ai-gateway`, `services`, `utils`, `configs`, `repositories`, `components`, `dataconnect`) |
+| `packages/shared/*`     | Shared logic (`types`, `schemas`, `parser`, `constants`, `logger`, `utils`, `mocks`)        |
 
 ## Project Conventions
 
@@ -64,8 +70,8 @@ See `docs/intro/README.md` for full developer guidelines.
 | File                          | What it is                            |
 | ----------------------------- | ------------------------------------- |
 | `.context/llms.txt`           | Complete index of all knowledge files |
-| `docs/guides/ARCHITECTURE.md` | System architecture                   |
+| `docs/architecture/architecture.md` | System architecture                   |
 | `docs/contracts/INDEX.md`     | All active contracts                  |
 
-> Generated: 2026-07-03
+> Generated: 2026-07-29 (hand-updated for the July 2026 stack: Turso local-first, TypeBox, Hub)
 > Run `bun run scripts -- generate_context` to regenerate.

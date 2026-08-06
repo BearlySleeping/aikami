@@ -22,39 +22,39 @@ The `apps` directory contains the following applications:
 ```
 apps/
 ├── frontend/
-│   ├── client/                  # Main client app (SvelteKit 2 + Svelte 5 Runes)
+│   ├── client/                  # Main client app (SvelteKit 2 + Svelte 5 Runes, PWA + Tauri)
 │   │   └── src/
 │   │       └── lib/
-│   │           ├── game/        # 🎮 PixiJS v8 + bitECS engine (target, C-016)
-│   │           │   ├── engine-bridge.ts    # Typed UI↔Game message channel
-│   │           │   ├── game-world.ts       # bitECS World + PixiJS lifecycle
-│   │           │   ├── components/         # bitECS components (Position, Sprite, etc.)
-│   │           │   ├── systems/            # bitECS systems (Movement, Render, Dialog)
-│   │           │   └── entities/           # Entity factories (Player, NPC)
 │   │           ├── views/        # Svelte 5 ViewModels ($state runes)
 │   │           ├── components/   # Shared Svelte UI components
-│   │           └── client/       # Client-side services
+│   │           ├── services/     # Client-side services (game, assets, ai)
+│   │           ├── assets/       # Asset loading
+│   │           └── utils/        # Client utilities
+│   ├── hub/                      # Community hub (SvelteKit SSR → Google Cloud Run / Bun)
+│   │   └── src/
+│   │       ├── routes/           # /login, /dashboard, /personas, /api/[...slugs]
+│   │       ├── lib/client/       # Client-side services
+│   │       ├── lib/server/       # Server-side API (Elysia)
+│   │       └── lib/views/        # ViewModels + views
 │   ├── site/                     # Public site (Astro)
-│   ├── docs/                    # Documentation site (Astro)
+│   └── docs/                     # Documentation site (Astro)
 ```
+
+> 🎮 The PixiJS v8 + bitECS game engine lives in `packages/frontend/engine` (extracted from the client by C-214). The client embeds it through the typed `EngineBridge` message channel (`GameCommand` →, `GameEvent` ←).
 
 ### Backend
 
 ```
 apps/
 └── backend/
-    ├── functions/               # Firebase Cloud Functions v2
-    │   └── src/
-    │       ├── controllers/     # API endpoints + callable functions
-    │       ├── auth/            # Auth triggers (created, deleted)
-    │       └── scheduler/       # Scheduled functions
-    ├── rules/                   # Firestore + Data Connect security rules
-    └── dataconnect/             # Firebase Data Connect config (target, C-014)
-        ├── dataconnect.yaml
-        ├── schema/
-        │   └── schema.gql       # PostgreSQL schema in GraphQL SDL
-        └── connector/
-            └── connector.yaml
+    ├── firebase/                # Firebase backend (Cloud Functions, rules, Data Connect)
+    │   ├── src/
+    │   │   ├── controllers/     # API, callable, auth triggers, scheduler, firestore
+    │   │   └── rules/           # Security rules
+    │   └── dataconnect/         # Firebase Data Connect config (optional sync adapter)
+    ├── image/                   # ComfyUI Docker microservice (AI image generation)
+    ├── text/                    # Ollama Docker microservice (AI text generation)
+    └── voice/                   # Kokoro Docker microservice (AI voice/TTS)
 ```
 
 ## Packages
@@ -65,34 +65,31 @@ The `packages` directory contains the following shared packages:
 
 - `constants`: Enums, log levels, regex patterns, country codes.
 - `types`: TypeScript types and interfaces shared across all projects.
-- `schemas`: Zod validation schemas for API boundaries and Firestore collections.
+- `schemas`: TypeBox validation schemas for API boundaries and persistence.
+- `parser`: Instruct / macro / slash-command parser (lexer, macro resolver).
 - `logger`: Structured logging with environment-specific implementations (browser, functions, SSR).
 - `utils`: Error handling (`AppError`), country data, formatters.
 - `mocks`: Test fixtures, mock factories, `MockAiService`, `MockDatabaseService`.
 
 ### Backend Packages (`packages/backend/`)
 
-- `ai`: **AiServiceInterface** + providers (`OpenAiService`, `GeminiService`). Vendor-agnostic AI abstraction (target, C-015).
 - `auth`: Firebase Authentication server-side helpers.
+- `chat`: Server-side AI — API handler, OpenAI/Gemini providers, rate limiter.
 - `configs`: Backend Firebase configuration.
-- `database`: **BaseDatabaseService** interface + `FirebaseDataConnectService`. Database abstraction layer (target, C-014).
+- `database`: **BaseDatabaseService** interface + backend repositories (Firestore/infra paths).
 - `svelte-kit`: SvelteKit server-side hooks and API helpers.
 - `utils`: Server utilities (storage upload, etc.).
 
 ### Frontend Packages (`packages/frontend/`)
 
 - `configs`: Firebase client init, env validation, feature flags.
-- `services`: Firebase client services (auth, functions, analytics, storage, FCM).
-- `repositories`: Client-side data access layer.
+- `engine`: 🎮 PixiJS v8 + bitECS game engine — rendering, ECS systems, persistence (Turso), sync.
+- `ai-gateway`: **AiProviderGateway** — text/image/voice adapters with offline / BYOK / service modes.
+- `services`: Firebase client services (auth, functions, analytics, storage, FCM) + shared routing.
+- `repositories`: Client-side data access layer (incl. `TursoStorageAdapter`, `LocalDatabaseFactory`).
 - `components`: Shared Svelte 5 UI components.
 - `utils`: Browser utilities.
-
-### Planned / Target Packages
-
-These packages are documented in contracts but not yet created:
-
-- `packages/shared/valibot-schemas/` — Valibot schemas for client-side perimeter validation.
-- `packages/frontend/tanstack-db/` — TanStack DB + PowerSync client configuration for real-time SQLite syncing.
+- `dataconnect`: Firebase Data Connect generated client (optional sync adapter).
 
 ## Path Aliases
 

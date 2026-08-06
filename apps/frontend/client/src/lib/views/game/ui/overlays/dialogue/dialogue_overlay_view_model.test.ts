@@ -41,6 +41,21 @@ let analyzeIntentStub = mock(async () => ({
   ],
 }));
 
+// ── Quest-activation tool call stubs (C-quest-activation) ──
+let acceptQuestStub = mock(() => true);
+let declineQuestStub = mock(() => {});
+let getOfferableQuestsStub = mock(() => [{ id: 'fading_ward', name: 'The Fading Ward' }]);
+
+const mockQuestStateService = {
+  quests: [],
+  worldStateFlags: {},
+  acceptQuest: acceptQuestStub,
+  declineQuest: declineQuestStub,
+  canAcceptQuest: mock(() => true),
+  getOfferableQuests: getOfferableQuestsStub,
+  evaluateTriggers: mock(() => {}),
+};
+
 const resolveRollStub = mock(async () => ({
   narrativeResult: 'The attempt succeeds.',
   stateDeltas: [],
@@ -94,6 +109,7 @@ mock.module('$services', () => ({
     closeEndSession: mock(() => {}),
     endSession: mock(async () => {}),
   },
+  questStateService: mockQuestStateService,
   messageBranchStore: {
     swipeAlternative: mock(() => {}),
     clearAlternatives: mock(() => {}),
@@ -209,6 +225,14 @@ describe('DialogueOverlayViewModel', () => {
       source: 'ai' as const,
     }));
     mockNpcDialogueService.generateTurn = generateTurnStub;
+
+    // Reset quest-activation stubs
+    acceptQuestStub = mock(() => true);
+    declineQuestStub = mock(() => {});
+    getOfferableQuestsStub = mock(() => [{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    mockQuestStateService.acceptQuest = acceptQuestStub;
+    mockQuestStateService.declineQuest = declineQuestStub;
+    mockQuestStateService.getOfferableQuests = getOfferableQuestsStub;
   });
 
   afterEach(() => {
@@ -312,6 +336,83 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.messages[2].content).toBe('The elder strokes his beard. "The ward is failing."');
     // Expression should be set from the mock
     expect(vm.npcExpression).toBe('happy');
+  });
+
+  // ── Quest-activation tool call (C-quest-activation) ──────────────────
+
+  test('quest activation: accepting an offered quest calls acceptQuest', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'The elder beams. "You will save us all, traveler!"',
+      suggestedChips: [],
+      questActivation: { action: 'accept', questId: 'fading_ward' },
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    acceptQuestStub = mock(() => true);
+    mockQuestStateService.acceptQuest = acceptQuestStub;
+    getOfferableQuestsStub = mock(() => [{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    mockQuestStateService.getOfferableQuests = getOfferableQuestsStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'I accept the quest, elder.';
+    vm.sendMessage();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(acceptQuestStub).toHaveBeenCalledWith({
+      questId: 'fading_ward',
+      npcId: 'npc-001',
+    });
+  });
+
+  test('quest activation: decline calls declineQuest', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'The elder sighs. "I understand, traveler."',
+      suggestedChips: [],
+      questActivation: { action: 'decline', questId: 'fading_ward' },
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    declineQuestStub = mock(() => {});
+    mockQuestStateService.declineQuest = declineQuestStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'I cannot take this quest.';
+    vm.sendMessage();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(declineQuestStub).toHaveBeenCalledWith({ questId: 'fading_ward' });
+    expect(acceptQuestStub).not.toHaveBeenCalled();
+  });
+
+  test('quest activation: does not accept a quest this NPC cannot offer', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'The elder nods. "Then it shall be done."',
+      suggestedChips: [],
+      questActivation: { action: 'accept', questId: 'fading_ward' },
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    acceptQuestStub = mock(() => true);
+    mockQuestStateService.acceptQuest = acceptQuestStub;
+    // This NPC offers nothing — the tool call must be ignored.
+    getOfferableQuestsStub = mock(() => []);
+    mockQuestStateService.getOfferableQuests = getOfferableQuestsStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'I will take the quest.';
+    vm.sendMessage();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(acceptQuestStub).not.toHaveBeenCalled();
   });
 
   test('chips are populated from intent analysis', async () => {

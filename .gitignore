@@ -246,3 +246,4 @@ apps/frontend/client/.fast-check/
 firebase.deploy.json
 Aikami-x86_64.AppImage
 .secrets/
+**/.fast-check/

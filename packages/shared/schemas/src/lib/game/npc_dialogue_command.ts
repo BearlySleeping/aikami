@@ -280,6 +280,26 @@ export const NpcIntentAnalysisInputSchema = Type.Object(
 export type NpcIntentAnalysisInput = Static<typeof NpcIntentAnalysisInputSchema>;
 
 /** LLM output from call #1 — determines if a mechanical roll is needed. */
+/** Quest-activation tool call — the GM signals a quest accept/decline. */
+export const NpcQuestActivationSchema = Type.Object(
+  {
+    /** Whether the player accepted or declined the offered quest. */
+    action: Type.Union([Type.Literal('accept'), Type.Literal('decline')], {
+      description: 'Whether the player accepted or declined the offered quest',
+    }),
+    /** Content pack quest ID being accepted or declined. */
+    questId: Type.String({
+      minLength: 1,
+      description: 'Content pack quest ID being accepted or declined',
+    }),
+  },
+  {
+    description: 'Only valid for quests the current NPC can offer',
+  },
+);
+
+export type NpcQuestActivation = Static<typeof NpcQuestActivationSchema>;
+
 export const NpcIntentAnalysisOutputSchema = Type.Object(
   {
     /** Whether this player action requires a skill check / dice roll. */
@@ -302,6 +322,13 @@ export const NpcIntentAnalysisOutputSchema = Type.Object(
     }),
     /** Suggested follow-up chips for this turn (0–4). */
     suggestedChips: Type.Array(NpcSuggestionChipSchema, { minItems: 0, maxItems: 4 }),
+    /**
+     * Quest-activation tool call — set when the player clearly accepts or
+     * declines a quest this NPC has offered. The game executes it (accepts
+     * or declines the quest, toasts the player, updates the tracker).
+     * Leave unset for ordinary conversation.
+     */
+    questActivation: Type.Optional(NpcQuestActivationSchema),
   },
   { additionalProperties: false },
 );

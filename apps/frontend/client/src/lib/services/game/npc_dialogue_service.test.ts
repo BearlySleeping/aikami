@@ -9,6 +9,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { questStateService } from '$services';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -747,5 +748,68 @@ describe('startDialogue', () => {
     });
     expect(freshService.activeNpc?.dialog).toBe('plain text');
     expect(freshService.activeNpc?.initialSuggestions).toBeUndefined();
+  });
+});
+
+describe('Quest-activation fallback (AI unavailable)', () => {
+  const originalGetOfferableQuests = (
+    questStateService as unknown as {
+      getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
+    }
+  ).getOfferableQuests;
+
+  afterEach(() => {
+    // Restore the preload-mocked questStateService behavior.
+    (
+      questStateService as unknown as {
+        getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
+      }
+    ).getOfferableQuests = originalGetOfferableQuests;
+  });
+
+  const stubOfferableQuests = (quests: Array<{ id: string; name: string }>): void => {
+    (
+      questStateService as unknown as {
+        getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
+      }
+    ).getOfferableQuests = () => quests;
+  };
+
+  const runFallbackAnalyze = (playerInput: string) => {
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator({ error: new Error('AI unavailable') }),
+      executors: makeExecutors(),
+    });
+    return npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: playerInput }],
+      signal: new AbortController().signal,
+    });
+  };
+
+  test('accepts the sole offerable quest when the player clearly accepts', async () => {
+    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    const output = await runFallbackAnalyze('Consider it done, I accept the quest, elder.');
+    expect(output.questActivation).toEqual({ action: 'accept', questId: 'fading_ward' });
+  });
+
+  test('declines the sole offerable quest when the player clearly declines', async () => {
+    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    const output = await runFallbackAnalyze('No thanks, I cannot take on this quest.');
+    expect(output.questActivation).toEqual({ action: 'decline', questId: 'fading_ward' });
+  });
+
+  test('does not activate when the NPC has no offerable quest', async () => {
+    stubOfferableQuests([]);
+    const output = await runFallbackAnalyze('I accept the quest, elder.');
+    expect(output.questActivation).toBeUndefined();
+  });
+
+  test('does not activate on ordinary conversation about the quest', async () => {
+    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    const output = await runFallbackAnalyze('Tell me more about this quest.');
+    expect(output.questActivation).toBeUndefined();
   });
 });

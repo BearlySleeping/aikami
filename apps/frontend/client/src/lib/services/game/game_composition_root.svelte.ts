@@ -407,13 +407,31 @@ export class GameCompositionRoot
         giveItem: (_opts) => {
           // Add item to inventory via inventory service (C-331 — rewards
           // bypass the capacity cap; never silently lost)
-          return inventoryService.addItem({
+          const added = inventoryService.addItem({
             itemId: _opts.itemId,
             quantity: _opts.quantity,
           });
+          if (added) {
+            // Surface dialogue-granted items as pickups so quest objectives
+            // (completeOnItemPickup) advance on the grant.
+            questStateService.evaluateTriggers({
+              type: 'ITEM_PICKED_UP',
+              itemId: _opts.itemId,
+            });
+          }
+          return added;
         },
         startCombat: (opts) => {
-          gameOverlayService.startCombat({ enemyName: opts.npcName });
+          // Resolve the encounter ID: prefer the GM-specified one, fall back
+          // to the first content-pack encounter that lists this NPC as an
+          // enemy so victory loot/quest triggers always resolve.
+          const encounterId =
+            opts.encounterId ??
+            contentPack.getAllEncounters().find((enc) => enc.enemyNpcIds.includes(opts.npcId))?.id;
+          gameOverlayService.startCombat({
+            enemyName: opts.npcName,
+            encounterId,
+          });
           return true;
         },
         recruit: (opts) => {
@@ -502,6 +520,13 @@ export class GameCompositionRoot
 
     // Record AFTER successful delivery — replayed events must never double-grant
     worldStateService.recordLootGranted(encounterId);
+
+    // Surface combat loot as pickups so quest objectives (completeOnItemPickup)
+    // advance for drops obtained in combat.
+    for (const drop of rolled) {
+      questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: drop.itemId });
+    }
+
     this.debug('_applyEncounterLoot:granted', { encounterId, rolled });
   }
 

@@ -1,9 +1,10 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "2.1.0",
-  "updatedAt": "2026-07-13T00:00:00.000Z",
-  "startingMapId": "emberwatch_village",
+  "version": "3.0.0",
+  "updatedAt": "2026-07-14T00:00:00.000Z",
+  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade, intimidate, steal, or fight to get it back.",
+  "startingMapId": "village",
   "tileSize": 32,
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
@@ -103,24 +104,24 @@
     }
   },
   "maps": {
-    "emberwatch_village": {
-      "file": "maps/emberwatch_village.json",
+    "village": {
+      "file": "maps/village.json",
       "name": "Emberwatch Village",
       "defaultSpawnId": "village_gate",
       "defaultX": 320,
       "defaultY": 576
     },
-    "old_road": {
-      "file": "maps/old_road.json",
-      "name": "The Old Road",
-      "defaultX": 64,
-      "defaultY": 240
+    "inn": {
+      "file": "maps/inn.json",
+      "name": "The Guttering Candle Inn",
+      "defaultX": 256,
+      "defaultY": 320
     },
-    "ruined_ward_shrine": {
-      "file": "maps/ruined_ward_shrine.json",
-      "name": "Ruined Ward Shrine",
-      "defaultX": 96,
-      "defaultY": 332
+    "merchant_shop": {
+      "file": "maps/merchant_shop.json",
+      "name": "Mara's Provisions",
+      "defaultX": 256,
+      "defaultY": 320
     }
   },
   "npcs": {
@@ -143,156 +144,80 @@
           "prefillText": "I would like to help Emberwatch \u2014 is there a task you need done?"
         },
         {
-          "id": "elder_ask_village",
-          "label": "\ud83c\udfd8\ufe0f Ask about the village",
-          "intentType": "dialogue",
-          "prefillText": "What can you tell me about the village and the people who live here?"
+          "id": "elder_ask_wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "intentType": "quest",
+          "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
         }
       ]
     },
-    "guard_captain": {
-      "name": "Guard Captain Aldric",
-      "defaultDialogueKey": "guard_captain_greeting",
-      "appearanceLayers": [3, 3, 23, 22, 7, 95],
+    "rollo_grasper": {
+      "name": "Rollo the Grasper",
+      "defaultDialogueKey": "rollo_greeting",
+      "appearanceLayers": [3, 123, 23, 22, 7, 95],
       "isVendor": false,
+      "vendorInventory": "wardWand",
+      "combatStats": {
+        "hitPoints": 20,
+        "armorClass": 11,
+        "attackBonus": 2,
+        "damage": "1d4",
+        "initiativeBonus": 0,
+        "xpValue": 30
+      },
       "initialSuggestions": [
         {
-          "id": "guard_ask_dangers",
-          "label": "\u26a0\ufe0f Ask about road dangers",
-          "intentType": "dialogue",
-          "prefillText": "What dangers have you seen on the roads lately? I should be prepared."
-        },
-        {
-          "id": "guard_offer_services",
-          "label": "\u2694\ufe0f Offer your services",
+          "id": "rollo_ask_wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "If the village needs a capable fighter, I am offering my services."
+          "prefillText": "I hear you hold the Ward Wand \u2014 the one Emberwatch needs."
         },
         {
-          "id": "guard_ask_elder",
-          "label": "\ud83c\udfe0 Ask about Elder Thalia",
+          "id": "rollo_persuade",
+          "label": "\ud83d\udde3\ufe0f Reason with him",
+          "intentType": "skill_check",
+          "prefillText": "Emberwatch needs that wand to survive \u2014 name your price, please."
+        },
+        {
+          "id": "rollo_intimidate",
+          "label": "\ud83d\ude21 Intimidate him",
+          "intentType": "skill_check",
+          "prefillText": "Hand over the wand now, or I will take it from you by force."
+        },
+        {
+          "id": "rollo_leave",
+          "label": "\ud83d\udeb6 Turn back",
           "intentType": "dialogue",
-          "prefillText": "You mentioned Elder Thalia needs help \u2014 where can I find her?"
+          "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
         }
       ]
     },
-    "traveling_merchant": {
-      "name": "Keth the Merchant",
-      "defaultDialogueKey": "merchant_keth_greeting",
+    "merchant": {
+      "name": "Mara the Merchant",
+      "defaultDialogueKey": "merchant_mara_greeting",
       "appearanceLayers": [3, 91, 127, 22, 19, 95],
       "isVendor": true,
-      "vendorInventory": "ironSword, healthPotion, manaPotion, ironArmor, woodenShield",
+      "vendorInventory": "ironSword,steelSword,healthPotion,manaPotion,ironArmor,woodenShield",
       "initialSuggestions": [
         {
-          "id": "keth_browse",
+          "id": "mara_browse",
           "label": "\ud83d\udcb0 Browse the wares",
           "intentType": "trade",
           "prefillText": "I would like to see what wares you have for sale today."
         },
         {
-          "id": "keth_pendant",
-          "label": "\ud83d\udcff Ask about the pendant",
+          "id": "mara_wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "You mentioned a lost family pendant \u2014 can you describe it to me?"
+          "prefillText": "A traveling merchant hears everything \u2014 have you heard of the Ward Wand?"
         },
         {
-          "id": "keth_news",
+          "id": "mara_news",
           "label": "\ud83d\uddde\ufe0f Ask for news",
           "intentType": "dialogue",
-          "prefillText": "A traveling merchant hears everything \u2014 what news have you gathered?"
+          "prefillText": "What news have you heard around the village lately?"
         }
       ]
-    },
-    "elara_wayfinder": {
-      "name": "Elara Wayfinder",
-      "defaultDialogueKey": "elara_wayfinder_greeting",
-      "appearanceLayers": [2, 91, 22, 21, 20, 94],
-      "isVendor": false,
-      "initialSuggestions": [
-        {
-          "id": "elara_road",
-          "label": "\ud83d\udee4\ufe0f Ask about the road ahead",
-          "intentType": "quest",
-          "prefillText": "You know these roads \u2014 what should I expect on the way to the shrine?"
-        },
-        {
-          "id": "elara_together",
-          "label": "\ud83d\udc65 Offer to travel together",
-          "intentType": "dialogue",
-          "prefillText": "Would you travel with me? I could use a guide who knows the wilds."
-        },
-        {
-          "id": "elara_corruption",
-          "label": "\ud83c\udf11 Ask about the corruption",
-          "intentType": "dialogue",
-          "prefillText": "What signs of corruption have you seen in the wilds lately?"
-        }
-      ]
-    },
-    "kade_blackthorn": {
-      "name": "Kade Blackthorn",
-      "defaultDialogueKey": "kade_blackthorn_taunt",
-      "appearanceLayers": [3, 123, 23, 22, 7, 95],
-      "isVendor": false,
-      "initialSuggestions": [
-        {
-          "id": "kade_why",
-          "label": "\ud83e\udd28 Ask why he blocks the way",
-          "intentType": "dialogue",
-          "prefillText": "Why are you trying to stop me from reaching the shrine?"
-        },
-        {
-          "id": "kade_persuade",
-          "label": "\ud83d\udde3\ufe0f Reason with him",
-          "intentType": "skill_check",
-          "prefillText": "You do not have to do this \u2014 we could talk this through instead."
-        },
-        {
-          "id": "kade_leave",
-          "label": "\ud83d\udeb6 Turn back",
-          "intentType": "dialogue",
-          "prefillText": "Fine. I will turn back for now, but this is not over."
-        }
-      ]
-    },
-    "shrine_spirit": {
-      "name": "Vesperine Spirit",
-      "defaultDialogueKey": "shrine_spirit_greeting",
-      "appearanceLayers": [2, 3, 65, 21, 20, 96],
-      "isVendor": false,
-      "initialSuggestions": [
-        {
-          "id": "spirit_what",
-          "label": "\u2753 Ask what the ward is",
-          "intentType": "dialogue",
-          "prefillText": "What exactly is this ward you guard, and what does it protect?"
-        },
-        {
-          "id": "spirit_renew",
-          "label": "\ud83d\udd6f\ufe0f Ask how to renew it",
-          "intentType": "quest",
-          "prefillText": "You said the ward needs a living soul \u2014 how can I renew it?"
-        },
-        {
-          "id": "spirit_sacrifice",
-          "label": "\u2696\ufe0f Ask about the sacrifice",
-          "intentType": "dialogue",
-          "prefillText": "What does offering something of equal value truly mean here?"
-        }
-      ]
-    },
-    "shade_guardian": {
-      "name": "Shade Guardian",
-      "defaultDialogueKey": "shade_guardian_manifest",
-      "isVendor": false,
-      "combatStats": {
-        "hitPoints": 30,
-        "armorClass": 13,
-        "attackBonus": 4,
-        "damage": "1d8+2",
-        "initiativeBonus": 0,
-        "xpValue": 75
-      }
     }
   },
   "items": {
@@ -350,161 +275,101 @@
       "lpcSlot": "shield",
       "lpcAssetId": "shield/heater/original/wood_fg"
     },
-    "wardPendant": {
-      "name": "Ward Pendant",
+    "wardWand": {
+      "name": "Ward Wand",
       "type": "key"
-    },
-    "wardAmulet": {
-      "name": "Ward Amulet",
-      "type": "misc"
-    },
-    "wardShard": {
-      "name": "Ward Shard",
-      "type": "misc",
-      "basePrice": 30
     }
   },
   "dialogues": {
-    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ancient ward protecting our lands is fading. Please, come inside and let me explain.",
-    "elder_thalia_offer": "The Ward of Emberwatch was placed centuries ago by the Vesperine Order. It shields our valley from the corruption that festers beyond the Old Road. But the ward crystal at the Ruined Shrine grows dim. If it fails, Emberwatch will fall. I need someone brave to travel the Old Road, reach the shrine, and renew the ward. Will you help us?",
-    "elder_thalia_progress": "Any news from the Old Road? The ward grows weaker each day. You must reach the Ruined Shrine before it is too late. Elara Wayfinder was last seen along the Old Road \u2014 she may have discovered something useful.",
-    "elder_thalia_complete": "You've returned! And the ward \u2014 I can feel its power surging through the valley once more. Emberwatch owes you a debt that can never be repaid. Thank you, brave soul. You are a true hero of our village.",
-    "elder_thalia_ending_renewed": "The Ward renewed! I felt its pulse from here. You have restored hope to Emberwatch. The Vesperine Order smiles upon you.",
-    "elder_thalia_ending_sacrificed": "A sacrifice was made... I sense the ward's power has changed. It is different now \u2014 heavier, tinged with sorrow. But it holds. That is what matters.",
-    "elder_thalia_ending_shattered": "The ward... it is gone. I felt it break. Emberwatch is unprotected now. We will need to prepare for what comes. Still, you did your best \u2014 and for that, we are grateful.",
-    "guard_captain_greeting": "Welcome to Emberwatch, traveler. The roads have been dangerous lately. If you're looking for work, Elder Thalia could use someone with your talents. Her hut is the one with the thatched roof to the west.",
-    "guard_captain_quest": "Elder Thalia's been worried sick about the ward. She could use someone like you. You should speak with her directly \u2014 her hut is the one with the thatched roof.",
-    "merchant_keth_greeting": "Well met, traveler! Keth's the name, and fine wares are my game. I've got swords, shields, armor, and potions \u2014 everything an adventurer needs. What catches your eye?",
-    "merchant_keth_lost_pendant": "Say, you look like someone who gets around. I dropped a family pendant on the Old Road a while back \u2014 silver chain, small blue gem. If you find it out there, I'd be mighty grateful. Might even have something special for you in return.",
-    "elara_wayfinder_greeting": "You must be the one Elder Thalia sent. I'm Elara Wayfinder \u2014 I scout the Old Road for signs of corruption. The road ahead is treacherous, but I've marked a safe path through the brambles. Before you continue to the shrine, you should know: Kade Blackthorn lies in wait ahead. He's a rogue sword-for-hire who abandoned the guard years ago. He'll try to stop you.",
-    "elara_wayfinder_join": "You'll need help against whatever waits at the shrine. I know these roads better than anyone. Let me accompany you. Together we stand a better chance.",
-    "elara_wayfinder_context": "The ward's been failing for weeks now. Animals have grown restless. Strange lights flicker in the forest at night. Everyone's scared, but no one wants to admit it. You're doing something brave, you know.",
-    "kade_blackthorn_taunt": "Well, well. Another fool chasing fairy tales. The ward isn't worth saving \u2014 it's kept Emberwatch weak and complacent for centuries. I'm here to make sure no one reaches that shrine. Turn back now, or I'll make you regret it.",
-    "kade_blackthorn_persuasion_success": "Hmph. You speak with conviction, I'll give you that. Fine \u2014 I won't stop you. But don't think this makes us friends. If that ward falls, I'll be the one saying 'I told you so.' Now get out of my sight.",
-    "kade_blackthorn_persuasion_failure": "Nice words. But words don't change anything. If you want to pass, you'll have to go through me. Draw your weapon.",
-    "shrine_spirit_greeting": "At last... someone has come. I am the last echo of the Vesperine Order \u2014 the spirit bound to the Fading Ward. For centuries I have held back the corruption, but my strength wanes. The ward requires a living soul to renew it. Will you give of yourself to save Emberwatch?",
-    "shrine_spirit_explanation": "The ward was created through sacrifice \u2014 a Vesperine mage gave their essence to forge the crystal. To renew it, you must offer something of equal value. There are three paths before you: You may channel your own life force into the ward, taking its burden upon yourself. The ward will be renewed, but at great personal cost. Or... you may shatter the ward entirely, releasing all its power in a single burst that will purify the valley \u2014 but leave Emberwatch unprotected forever. The choice is yours alone.",
-    "shrine_spirit_ending_renewed": "You chose renewal through sacrifice. I feel your essence flowing into the crystal... the ward blazes with light! Emberwatch is saved. But a part of you will always remain here, bound to this stone. Thank you, brave one.",
-    "shrine_spirit_ending_sacrificed": "You gave something precious, and the ward accepted the offering. It is changed \u2014 no longer the pure shield it once was. But it holds. The valley is safe. Go now, and live with what you have given.",
-    "shrine_spirit_ending_shattered": "The crystal shatters... the ward's power erupts in a wave of cleansing fire! The corruption burns away. The valley is purged. Emberwatch is free \u2014 but unprotected. You have traded safety for freedom. I hope it was worth it.",
-    "shade_guardian_manifest": "The corruption stirs... a dark shape rises from the crumbling stones, its form wreathed in shadow.",
-    "encounter_start": "A twisted shade emerges from the shadows of the ruined shrine! Its hollow eyes fix upon you as it raises a sword of blackened steel.",
-    "encounter_victory": "The shade dissolves into mist with a mournful wail. The path to the ward crystal is clear. You feel a chill run down your spine \u2014 the corruption is strong here, but you have prevailed.",
-    "shade_persuaded": "You speak words of peace and understanding. The shade hesitates... something flickers in its hollow eyes \u2014 a memory, perhaps, of who it once was. Slowly, it lowers its weapon and fades into the darkness, granting you passage.",
-    "shade_enraged": "Your words mean nothing to the shade \u2014 it has forgotten language, forgotten mercy. With a shriek of rage, it lunges at you!"
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
+    "elder_thalia_offer": "The Ward Wand can renew the ward \u2014 a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
+    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort \u2014 he may need convincing, or a firmer hand than words.",
+    "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
+    "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
+    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
+    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
+    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
+    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin \u2014 or real steel.",
+    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine \u2014 take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
+    "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
+    "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
+    "rollo_defeated": "Enough! Mercy! Take the wand \u2014 it's yours! Just... just let me keep my teeth.",
+    "rollo_news": "Hear a lot, sitting here. The ward's failing \u2014 everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
+    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions \u2014 everything an adventurer needs to stay alive out there. What can I get for you today?",
+    "merchant_mara_wand": "The Ward Wand? Oh yes \u2014 Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
+    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it \u2014 the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them."
   },
   "quests": {
     "fading_ward": {
       "id": "fading_ward",
       "name": "The Fading Ward",
-      "description": "The ancient ward protecting Emberwatch is failing. Travel the Old Road to the Ruined Ward Shrine, discover the truth behind the ward's decay, and decide the fate of the valley.",
+      "description": "Elder Thalia needs the Ward Wand to renew the ward protecting Emberwatch. Talk to her about the ward, track down the wand's keeper, and bring it back.",
       "objectives": [
         {
-          "text": "Investigate the Old Road",
-          "completeOnMapEnter": "old_road"
+          "text": "Ask Elder Thalia about the failing ward",
+          "completeOnNpcInteract": "village_elder"
         },
         {
-          "text": "Reach the Ruined Ward Shrine",
-          "completeOnMapEnter": "ruined_ward_shrine"
+          "text": "Find the Ward Wand's keeper at the inn",
+          "completeOnMapEnter": "inn",
+          "prerequisiteIndices": [0]
         },
         {
-          "text": "Decide the ward's fate",
-          "completeOnEncounterComplete": "ruined_ward_encounter"
+          "text": "Obtain the Ward Wand from its keeper",
+          "completeOnItemPickup": "wardWand",
+          "prerequisiteIndices": [1]
+        },
+        {
+          "text": "Return the Ward Wand to Elder Thalia",
+          "completeOnNpcInteract": "village_elder",
+          "prerequisiteIndices": [2]
         }
       ],
       "offerDialogueKey": "elder_thalia_offer",
       "progressDialogueKey": "elder_thalia_progress",
+      "declineDialogueKey": "elder_thalia_decline",
+      "offeredByNpcId": "village_elder",
       "rewards": [
         {
-          "type": "item",
-          "itemId": "wardAmulet"
-        },
-        {
           "type": "gold",
-          "amount": 200
+          "amount": 150
         },
         {
           "type": "xp",
-          "amount": 500
+          "amount": 300
         }
       ],
       "endings": {
         "ward_renewed": {
           "title": "The Ward Renewed",
-          "narration": "You place your hands upon the fading crystal and channel your own life force into the ward. A searing light erupts from the shrine, flooding the valley with warmth. The corruption recoils and retreats beyond the mountains. Emberwatch is saved. But as the light fades, you feel a cold emptiness where your vitality once burned \u2014 a piece of you now lives within the ward, guarding the valley for all time.",
+          "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved \u2014 and the valley will remember the one who brought the wand home.",
           "reactionDialogueKey": "elder_thalia_ending_renewed",
           "worldStateFlag": "emberwatch.ending.renewed"
-        },
-        "ward_sacrificed": {
-          "title": "The Ward Sacrificed",
-          "narration": "You offer the Ward Pendant \u2014 Elara's family heirloom, entrusted to you on the road \u2014 to the crystal. The pendant dissolves into motes of blue light that weave themselves into the failing ward, mending its fractures. The shield holds, but it is not the same: it now carries the weight of loss, of a gift given freely. The valley is protected, but you cannot shake the feeling that something irreplaceable was lost in the exchange.",
-          "reactionDialogueKey": "elder_thalia_ending_sacrificed",
-          "worldStateFlag": "emberwatch.ending.sacrificed"
-        },
-        "ward_shattered": {
-          "title": "The Ward Shattered",
-          "narration": "With a decisive strike, you shatter the ward crystal. A shockwave of raw arcane energy ripples outward, scouring the valley clean of corruption. The dark creatures that lurked in the shadows are obliterated. Emberwatch is free \u2014 but the shield that protected it for centuries is gone forever. The villagers will need to learn to defend themselves. You have given them freedom, but taken away their sanctuary.",
-          "reactionDialogueKey": "elder_thalia_ending_shattered",
-          "worldStateFlag": "emberwatch.ending.shattered"
-        }
-      }
-    },
-    "lost_pendant": {
-      "id": "lost_pendant",
-      "name": "The Merchant's Lost Pendant",
-      "description": "Keth the Merchant dropped a silver pendant with a blue gem somewhere on the Old Road. Find it and return it to him for a reward.",
-      "objectives": [
-        {
-          "text": "Find Keth's lost pendant on the Old Road",
-          "completeOnItemPickup": "wardPendant"
-        },
-        {
-          "text": "Return the pendant to Keth",
-          "completeOnNpcInteract": "traveling_merchant"
-        }
-      ],
-      "offerDialogueKey": "merchant_keth_lost_pendant",
-      "progressDialogueKey": "merchant_keth_greeting",
-      "rewards": [
-        {
-          "type": "item",
-          "itemId": "steelSword"
-        },
-        {
-          "type": "gold",
-          "amount": 100
-        }
-      ],
-      "endings": {
-        "returned": {
-          "title": "Pendant Returned",
-          "narration": "Keth's eyes light up as you hand him the pendant. 'My grandmother's pendant! I thought I'd never see it again.' He presses a gleaming steel sword into your hands and refuses to take no for an answer. 'You've done me a kindness I cannot repay. Take this \u2014 you'll need it more than I do.'",
-          "reactionDialogueKey": "merchant_keth_greeting",
-          "worldStateFlag": "emberwatch.pendant.returned"
         }
       }
     }
   },
   "encounters": {
-    "ruined_ward_encounter": {
-      "id": "ruined_ward_encounter",
-      "mapId": "ruined_ward_shrine",
-      "name": "Shade of the Ruined Shrine",
-      "enemyNpcIds": ["shade_guardian"],
+    "inn_wand_encounter": {
+      "id": "inn_wand_encounter",
+      "mapId": "inn",
+      "name": "Rollo the Grasper",
+      "enemyNpcIds": ["rollo_grasper"],
       "allowNonCombatResolution": true,
       "nonCombatSkillCheck": {
         "skill": "persuasion",
-        "dc": 14,
+        "dc": 12,
         "statModifier": "charisma",
-        "successDialogueKey": "shade_persuaded",
-        "failureDialogueKey": "shade_enraged"
+        "successDialogueKey": "rollo_persuasion_success",
+        "failureDialogueKey": "rollo_persuasion_failure"
       },
-      "startDialogueKey": "encounter_start",
-      "victoryDialogueKey": "encounter_victory",
-      "nonCombatSuccessDialogueKey": "shade_persuaded",
+      "startDialogueKey": "rollo_fight_start",
+      "victoryDialogueKey": "rollo_defeated",
+      "nonCombatSuccessDialogueKey": "rollo_persuasion_success",
       "loot": [
         {
-          "itemId": "wardShard",
+          "itemId": "wardWand",
           "quantity": 1,
           "dropChance": 1.0
         },

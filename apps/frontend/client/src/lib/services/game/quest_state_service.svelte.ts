@@ -66,6 +66,23 @@ export type QuestStateServiceInterface = BaseFrontendClassInterface & {
   canAcceptQuest(questId: string): boolean;
 
   /**
+   * Returns quests the given NPC can currently offer (matching offeredByNpcId
+   * or unrestricted) and which the player is still able to accept. Used by the
+   * GM context projection and the dialogue quest-activation tool.
+   */
+  getOfferableQuests(npcId: string): Array<{ id: string; name: string }>;
+
+  /**
+   * Derives the world trigger that would advance the given active quest's
+   * current incomplete objective, or undefined when none exists. Used by the
+   * sandbox "Progress Objective" dev tool (and useful for debugging).
+   */
+  getNextObjectiveTrigger(questId: string): QuestTriggerEvent | undefined;
+
+  /** Fails an active quest by ID. Returns true if a quest was failed. */
+  failQuest(questId: string): boolean;
+
+  /**
    * Evaluates all active quest objectives against a world trigger event.
    * Called from bridge listeners for MAP_ENTERED, NPC_INTERACTED,
    * ENCOUNTER_COMPLETED, and ITEM_PICKED_UP.
@@ -110,6 +127,8 @@ class QuestStateService
   private _declinedQuestIds = $state<string[]>([]);
   /** Last completion timestamps for repeatable quests (C-339). */
   private _repeatableCompletions = $state<Record<string, number>>({});
+  /** Last MAP_ENTERED map URL — lets acceptQuest retro-complete zone objectives. */
+  private _lastMapEntered: { mapUrl: string } | undefined;
   private _listening = false;
   private _unsubscribers: Array<() => void> = [];
 
@@ -124,7 +143,7 @@ class QuestStateService
 
   /** @inheritdoc */
   acceptQuest(options: { questId: string; npcId: string }): boolean {
-    const { questId } = options;
+    const { questId, npcId } = options;
 
     if (!this.canAcceptQuest(questId)) {
       this.debug('acceptQuest:blocked', { questId });
@@ -163,7 +182,33 @@ class QuestStateService
       rewardsGranted: false,
     };
 
+    // Auto-complete the first objective when the offering NPC is its trigger
+    // (e.g. "Ask Elder Thalia about the failing ward" completes the moment
+    // she offers the quest — the conversation already happened).
+    const firstEntry = progress.objectives[0];
+    const firstDefinition = definition.objectives[0];
+    if (
+      firstEntry &&
+      firstDefinition &&
+      firstEntry.status === 'active' &&
+      firstDefinition.completeOnNpcInteract === npcId
+    ) {
+      firstEntry.current = Math.min(firstEntry.current + 1, firstDefinition.maxCount ?? 1);
+      firstEntry.status = 'completed';
+      this.debug('acceptQuest:auto-completed-first-objective', { questId, npcId });
+    }
+
+    // Unlock objectives chained after the auto-completed opening step so
+    // the next trigger (e.g. entering the inn) can advance them.
+    this._activateReadyObjectives(progress, definition);
+
     this._progress = [...this._progress, progress];
+
+    // Retro-complete zone objectives when the quest is accepted while the
+    // player is already standing on the target map (e.g. entering the inn
+    // before the elder offered the quest).
+    this._applyRetroactiveMapObjectives(progress, definition);
+
     this._syncQuests();
 
     // Emit bridge event
@@ -231,11 +276,93 @@ class QuestStateService
     return true;
   }
 
+  /** @inheritdoc */
+  getOfferableQuests(npcId: string): Array<{ id: string; name: string }> {
+    if (!this._contentPackLoader) {
+      return [];
+    }
+    const result: Array<{ id: string; name: string }> = [];
+    for (const quest of this._contentPackLoader.getAllQuests()) {
+      // Only quests this NPC can offer (offeredByNpcId unset → anyone can offer).
+      if (quest.offeredByNpcId && quest.offeredByNpcId !== npcId) {
+        continue;
+      }
+      if (!this.canAcceptQuest(quest.id)) {
+        continue;
+      }
+      result.push({ id: quest.id, name: quest.name });
+    }
+    return result;
+  }
+
+  /** @inheritdoc */
+  getNextObjectiveTrigger(questId: string): QuestTriggerEvent | undefined {
+    const progress = this._progress.find((p) => p.questId === questId && p.status === 'active');
+    if (!progress) {
+      return undefined;
+    }
+    const definition = this._getQuestDefinition(questId);
+    if (!definition) {
+      return undefined;
+    }
+
+    for (let i = 0; i < definition.objectives.length; i++) {
+      const entry = progress.objectives.find((o) => o.objectiveIndex === i);
+      if (!entry || entry.status !== 'active') {
+        continue;
+      }
+      if (entry.current >= (definition.objectives[i].maxCount ?? 1)) {
+        continue;
+      }
+      const def = definition.objectives[i];
+      if (def.completeOnMapEnter) {
+        return {
+          type: 'MAP_ENTERED',
+          mapUrl:
+            this._contentPackLoader?.resolveMapUrl(def.completeOnMapEnter) ??
+            def.completeOnMapEnter,
+        };
+      }
+      if (def.completeOnNpcInteract) {
+        return { type: 'NPC_INTERACTED', npcId: def.completeOnNpcInteract };
+      }
+      if (def.completeOnEncounterComplete) {
+        return {
+          type: 'ENCOUNTER_COMPLETED',
+          encounterId: def.completeOnEncounterComplete,
+          victory: true,
+        };
+      }
+      if (def.completeOnItemPickup) {
+        return { type: 'ITEM_PICKED_UP', itemId: def.completeOnItemPickup };
+      }
+    }
+    return undefined;
+  }
+
+  /** @inheritdoc */
+  failQuest(questId: string): boolean {
+    const progress = this._progress.find((p) => p.questId === questId && p.status === 'active');
+    if (!progress) {
+      return false;
+    }
+    this._failQuest(progress);
+    this._syncQuests();
+    this.debug('failQuest', { questId });
+    return true;
+  }
+
   // ── Objective triggers ──
 
   /** @inheritdoc */
   evaluateTriggers(trigger: QuestTriggerEvent): void {
     let changed = false;
+
+    // Remember the last entered map so acceptQuest can retro-complete
+    // zone objectives accepted while the player is already in the zone.
+    if (trigger.type === 'MAP_ENTERED') {
+      this._lastMapEntered = { mapUrl: trigger.mapUrl };
+    }
 
     for (const progress of this._progress) {
       if (progress.status !== 'active') {
@@ -427,6 +554,7 @@ class QuestStateService
     this.worldStateFlags = {};
     this.quests = [];
     this._listening = false;
+    this._lastMapEntered = undefined;
     this.debug('reset:cleared');
   }
 
@@ -906,6 +1034,47 @@ class QuestStateService
     }
 
     return expired;
+  }
+
+  /**
+   * Completes active zone objectives (completeOnMapEnter) when the quest is
+   * accepted while the player is already standing on the target map.
+   */
+  private _applyRetroactiveMapObjectives(
+    progress: QuestProgress,
+    definition: ContentPackQuestEntry,
+  ): void {
+    if (!this._lastMapEntered) {
+      return;
+    }
+    const mapId = this._contentPackLoader?.resolveMapId(this._lastMapEntered.mapUrl);
+    if (!mapId) {
+      return;
+    }
+
+    let changed = false;
+    for (const entry of progress.objectives) {
+      if (entry.status !== 'active') {
+        continue;
+      }
+      const def = definition.objectives[entry.objectiveIndex];
+      if (def?.completeOnMapEnter === mapId) {
+        entry.current = Math.min(entry.current + 1, def.maxCount ?? 1);
+        entry.status = 'completed';
+        changed = true;
+        this.debug('_applyRetroactiveMapObjectives:completed', {
+          questId: progress.questId,
+          objectiveIndex: entry.objectiveIndex,
+          mapId,
+        });
+      }
+    }
+
+    if (changed) {
+      // Unlock anything chained after the retro-completed step.
+      this._activateReadyObjectives(progress, definition);
+      this._checkQuestCompletion(progress, definition);
+    }
   }
 
   /**

@@ -459,7 +459,6 @@ class LpcPreviewViewModel
       });
 
       await Promise.all(layerPromises);
-      this.missingAssets = missingLayers;
 
       // Check if this render is stale
       if (
@@ -467,12 +466,16 @@ class LpcPreviewViewModel
         this._pixiApp !== capturedPixiApp ||
         !this._isInitialized
       ) {
-        // Stale render — destroy newly created children and abort
+        // Stale render — destroy newly created children and abort without
+        // publishing diagnostics that could race a newer render.
         for (const child of newChildren) {
           child.destroy({ children: true });
         }
         return;
       }
+
+      // Only publish diagnostics once the render is confirmed current
+      this.missingAssets = missingLayers;
 
       // Sort by zIndex for correct render order
       newChildren.sort((a, b) => a.zIndex - b.zIndex);

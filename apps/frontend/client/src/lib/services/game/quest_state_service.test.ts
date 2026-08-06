@@ -57,12 +57,79 @@ const LOST_PENDANT_QUEST: ContentPackQuestEntry = {
   endings: {},
 };
 
+/**
+ * Quest whose FIRST objective completes by talking to the offering NPC —
+ * exercising the acceptQuest auto-complete of the opening objective.
+ */
+const ELDER_WARD_QUEST: ContentPackQuestEntry = {
+  id: 'elder_ward',
+  name: "The Elder's Ward",
+  description: 'Ask the elder about the ward and recover the wand.',
+  offerDialogueKey: 'elder_ward_offer',
+  progressDialogueKey: 'elder_ward_progress',
+  offeredByNpcId: 'village_elder',
+  objectives: [
+    { text: 'Ask Elder Thalia about the failing ward', completeOnNpcInteract: 'village_elder' },
+    { text: 'Obtain the Ward Wand', completeOnItemPickup: 'wardWand' },
+    { text: 'Return the Ward Wand to Elder Thalia', completeOnNpcInteract: 'village_elder' },
+  ],
+  rewards: [{ type: 'gold', amount: 150 }],
+  endings: {},
+};
+
+/**
+ * Mirrors the shipped emberwatch manifest v3 default quest — the full
+ * chain: ask elder → enter inn → obtain wand → return wand.
+ */
+const WARD_WAND_QUEST: ContentPackQuestEntry = {
+  id: 'ward_wand',
+  name: 'The Fading Ward',
+  description: 'Elder Thalia needs the Ward Wand to renew the ward protecting Emberwatch.',
+  offerDialogueKey: 'elder_thalia_offer',
+  progressDialogueKey: 'elder_thalia_progress',
+  declineDialogueKey: 'elder_thalia_decline',
+  offeredByNpcId: 'village_elder',
+  objectives: [
+    { text: 'Ask Elder Thalia about the failing ward', completeOnNpcInteract: 'village_elder' },
+    {
+      text: "Find the Ward Wand's keeper at the inn",
+      completeOnMapEnter: 'inn',
+      prerequisiteIndices: [0],
+    },
+    {
+      text: 'Obtain the Ward Wand from its keeper',
+      completeOnItemPickup: 'wardWand',
+      prerequisiteIndices: [1],
+    },
+    {
+      text: 'Return the Ward Wand to Elder Thalia',
+      completeOnNpcInteract: 'village_elder',
+      prerequisiteIndices: [2],
+    },
+  ],
+  rewards: [
+    { type: 'gold', amount: 150 },
+    { type: 'xp', amount: 300 },
+  ],
+  endings: {
+    wardRenewed: {
+      title: 'The Ward Renewed',
+      narration:
+        "You place the Ward Wand into Elder Thalia's hands and the fading ward blazes bright once more. Emberwatch is saved — and the valley will remember the one who brought the wand home.",
+      reactionDialogueKey: 'elder_thalia_ending_renewed',
+      worldStateFlag: 'emberwatch.ending.renewed',
+    },
+  },
+};
+
 // ── Mock content pack loader ──
 
 const createMockContentPackLoader = (): ContentPackLoaderInterface => {
   const quests = new Map<string, ContentPackQuestEntry>();
   quests.set('fading_ward', FADING_WARD_QUEST);
   quests.set('lost_pendant', LOST_PENDANT_QUEST);
+  quests.set('elder_ward', ELDER_WARD_QUEST);
+  quests.set('ward_wand', WARD_WAND_QUEST);
 
   return {
     manifest: {
@@ -79,6 +146,12 @@ const createMockContentPackLoader = (): ContentPackLoaderInterface => {
           file: 'maps/emberwatch_village.json',
           name: 'Emberwatch Village',
         },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        village: { file: 'maps/village.json', name: 'Emberwatch Village' },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        inn: { file: 'maps/inn.json', name: 'The Guttering Candle Inn' },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        merchant_shop: { file: 'maps/merchant_shop.json', name: "Mara's Provisions" },
       },
     } as ContentPackLoaderInterface['manifest'],
     packId: 'emberwatch',
@@ -91,6 +164,12 @@ const createMockContentPackLoader = (): ContentPackLoaderInterface => {
         ruined_ward_shrine: { file: 'maps/ruined_ward_shrine.json' },
         // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         emberwatch_village: { file: 'maps/emberwatch_village.json' },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        village: { file: 'maps/village.json' },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        inn: { file: 'maps/inn.json' },
+        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
+        merchant_shop: { file: 'maps/merchant_shop.json' },
       })) {
         // Boundary-safe match: require path to end with "/<mapFile>"
         const normalized = mapUrl.startsWith('/') ? mapUrl : `/${mapUrl}`;
@@ -170,6 +249,138 @@ describe('QuestStateService', () => {
       const result = service.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
       expect(result).toBe(false);
     });
+
+    test('auto-completes the first objective when it triggers on the offering NPC', () => {
+      const result = service.acceptQuest({ questId: 'elder_ward', npcId: 'village_elder' });
+      expect(result).toBe(true);
+      const quest = service.quests.find((q) => q.id === 'elder_ward');
+      expect(quest).toBeDefined();
+      expect(quest?.objectives[0]?.status).toBe('completed');
+      expect(quest?.objectives[0]?.current).toBe(1);
+      // Later objectives remain untouched.
+      expect(quest?.objectives[1]?.current).toBe(0);
+    });
+
+    test('does not auto-complete the first objective for an unrelated NPC', () => {
+      service.acceptQuest({ questId: 'elder_ward', npcId: 'some_other_npc' });
+      const quest = service.quests.find((q) => q.id === 'elder_ward');
+      expect(quest?.objectives[0]?.status).toBe('active');
+      expect(quest?.objectives[0]?.current).toBe(0);
+    });
+  });
+
+  // ── Default quest lifecycle (manifest v3 — The Fading Ward) ──
+
+  describe('ward_wand quest lifecycle', () => {
+    test('accepting from the elder auto-completes the opening objective', () => {
+      const accepted = service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      expect(accepted).toBe(true);
+
+      const quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest).toBeDefined();
+      expect(quest?.objectives[0]?.status).toBe('completed');
+      expect(quest?.objectives[0]?.current).toBe(1);
+      expect(quest?.objectives[1]?.status).toBe('active');
+    });
+
+    test('walks the full chain: elder → inn → wand → return → complete', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+
+      // 1. Enter the inn
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/inn.json' });
+      let quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.objectives[1]?.status).toBe('completed');
+      expect(quest?.objectives[2]?.status).toBe('active');
+
+      // 2. Obtain the Ward Wand (any acquisition path fires ITEM_PICKED_UP)
+      service.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: 'wardWand' });
+      quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.objectives[2]?.status).toBe('completed');
+      expect(quest?.objectives[3]?.status).toBe('active');
+
+      // 3. Return to the elder → quest completes, rewards + ending flag
+      const goldBefore = inventoryService.gold;
+      const xpBefore = playerStateService.playerXp;
+      service.evaluateTriggers({ type: 'NPC_INTERACTED', npcId: 'village_elder' });
+      quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.status).toBe('completed');
+      expect(quest?.objectives[3]?.status).toBe('completed');
+      expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
+      // Rewards: +150 gold, +300 XP (assert deltas — the singletons are shared).
+      expect(inventoryService.gold).toBe(goldBefore + 150);
+      expect(playerStateService.playerXp).toBe(xpBefore + 300);
+    });
+
+    test('returns without the wand does not complete the quest', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      service.evaluateTriggers({ type: 'NPC_INTERACTED', npcId: 'village_elder' });
+      const quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.status).toBe('active');
+      expect(quest?.objectives[3]?.current).toBe(0);
+    });
+  });
+
+  // ── Dev-tool support: getNextObjectiveTrigger / failQuest / retro-zone ──
+
+  describe('quest dev-tool support', () => {
+    test('getNextObjectiveTrigger returns the trigger for the current objective', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      // Opening objective auto-completed → next is the inn zone step.
+      const trigger = service.getNextObjectiveTrigger('ward_wand');
+      expect(trigger).toEqual({ type: 'MAP_ENTERED', mapUrl: 'maps/inn.json' });
+    });
+
+    test('getNextObjectiveTrigger walks the full chain', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+
+      // 1. Enter the inn.
+      const t1 = service.getNextObjectiveTrigger('ward_wand');
+      expect(t1?.type).toBe('MAP_ENTERED');
+      service.evaluateTriggers(t1!);
+
+      // 2. Obtain the wand.
+      const t2 = service.getNextObjectiveTrigger('ward_wand');
+      expect(t2).toEqual({ type: 'ITEM_PICKED_UP', itemId: 'wardWand' });
+      service.evaluateTriggers(t2!);
+
+      // 3. Return the wand.
+      const t3 = service.getNextObjectiveTrigger('ward_wand');
+      expect(t3).toEqual({ type: 'NPC_INTERACTED', npcId: 'village_elder' });
+      service.evaluateTriggers(t3!);
+
+      const quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.status).toBe('completed');
+      // No more triggers for a completed quest.
+      expect(service.getNextObjectiveTrigger('ward_wand')).toBeUndefined();
+    });
+
+    test('getNextObjectiveTrigger returns undefined for unknown/inactive quests', () => {
+      expect(service.getNextObjectiveTrigger('nonexistent')).toBeUndefined();
+    });
+
+    test('failQuest fails an active quest and returns true', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      const failed = service.failQuest('ward_wand');
+      expect(failed).toBe(true);
+      const quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.status).toBe('failed');
+      // Cannot accept a failed quest again.
+      expect(service.canAcceptQuest('ward_wand')).toBe(false);
+    });
+
+    test('failQuest returns false for inactive quests', () => {
+      expect(service.failQuest('ward_wand')).toBe(false);
+    });
+
+    test('accepting while already in the target zone retro-completes the zone objective', () => {
+      // Player entered the inn BEFORE the elder offered the quest.
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/inn.json' });
+
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      const quest = service.quests.find((q) => q.id === 'ward_wand');
+      expect(quest?.objectives[1]?.status).toBe('completed');
+      expect(quest?.objectives[2]?.status).toBe('active');
+    });
   });
 
   describe('declineQuest', () => {
@@ -202,6 +413,32 @@ describe('QuestStateService', () => {
 
     test('returns false for non-existent quest', () => {
       expect(service.canAcceptQuest('nonexistent')).toBe(false);
+    });
+  });
+
+  // ── Quest offering (GM quest-activation tool support) ──
+
+  describe('getOfferableQuests', () => {
+    test('returns quests offered by the NPC plus unrestricted quests', () => {
+      const offerable = service.getOfferableQuests('village_elder');
+      const ids = offerable.map((q) => q.id);
+      expect(ids).toContain('ward_wand'); // offeredByNpcId village_elder
+      expect(ids).toContain('elder_ward'); // offeredByNpcId village_elder
+      expect(ids).toContain('fading_ward'); // unrestricted
+    });
+
+    test('excludes quests bound to another NPC', () => {
+      const offerable = service.getOfferableQuests('rollo_grasper');
+      const ids = offerable.map((q) => q.id);
+      expect(ids).not.toContain('ward_wand');
+      expect(ids).not.toContain('elder_ward');
+      expect(ids).toContain('fading_ward'); // unrestricted — anyone can offer
+    });
+
+    test('excludes already-active quests', () => {
+      service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      const ids = service.getOfferableQuests('village_elder').map((q) => q.id);
+      expect(ids).not.toContain('ward_wand');
     });
   });
 

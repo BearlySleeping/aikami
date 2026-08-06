@@ -8,13 +8,13 @@
 
 1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
 2. [Contracts Index](contracts/INDEX.md) — active feature contracts
-3. [Architecture](guides/ARCHITECTURE.md) — system design
+3. [Architecture](architecture/architecture.md) — system design
 4. [Tech Stack](guides/STACK.md) — technology stack
 5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions
 
 ## Main Repo
 
-Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrator.
+Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backend × Turso (libSQL, offline-first) × Bun runtime × Moon orchestrator.
 
 ## architecture/
 

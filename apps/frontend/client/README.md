@@ -6,8 +6,10 @@ Main Progressive Web Application built with SvelteKit.
 
 This is the primary PWA application for Aikami - an AI-powered RPG experience. The PWA provides:
 - Character selection and chat interface
-- User authentication via Firebase
+- Offline-first persistence via Turso (libSQL) — campaigns, saves, and chat history live locally (C-321)
+- User authentication via Firebase (optional — local play works signed out)
 - Image generation for AI characters
+- 2D game world rendered with PixiJS v8 + bitECS (engine in `packages/frontend/engine`)
 
 ## Tech Stack
 
@@ -15,7 +17,7 @@ This is the primary PWA application for Aikami - an AI-powered RPG experience. T
 - **Styling**: Tailwind CSS + DaisyUI
 - **i18n**: Paraglide (inlang)
 - **Testing**: Playwright
-- **Deployment**: Firebase Hosting
+- **Deployment**: Google Cloud Run (Bun)
 
 ## Installation
 

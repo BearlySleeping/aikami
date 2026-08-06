@@ -8,7 +8,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ### Svelte 5 Reactivity Boundary
 
-- **No `$state` in game code**: PixiJS runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic for performance. The `EngineBridge` pattern (C-016) enforces this separation. All game code lives in `apps/frontend/client/src/lib/game/` — a pure imperative TypeScript zone with zero Svelte imports.
+- **No `$state` in game code**: PixiJS runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic for performance. The `EngineBridge` pattern (C-016) enforces this separation. All game code lives in `packages/frontend/engine` — a pure imperative TypeScript zone with zero Svelte imports.
 - **No `$derived` / `$effect` across the boundary**: Game state flows into Svelte only through bridge event handlers (`bridge.on('EVENT', handler)`). Svelte's reactivity primitives must never watch game-internal values.
 - **Svelte update threshold**: Svelte 5 runes batch updates, but the PixiJS tick loop runs outside Svelte's scheduler. High-frequency tick data must not mutate `$state` runes directly or the microtask queue overflows (`ERR_SVELTE_TOO_MANY_UPDATES`). Bridge events are emitted at UI-relevant intervals (dialogue triggers, health changes) — not per-frame.
 
@@ -20,14 +20,12 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ## Architecture Limitations
 
-1. **No CI/CD pipeline** — No GitHub Actions workflow. All testing and deployment is local.
-2. **No separate staging environment** — The development project (`aikami-staging`) serves as both local dev target and deployed staging. Production is `aikami-production`.
-3. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsgo --noEmit` fails.
-4. **Client accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
-5. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
-6. **No automated dependency updates** — Dependabot/Renovate not configured.
-7. **Data Connect emulator cold start** — PostgreSQL instance starts from scratch on first `emulators:start`, may take 30-60 seconds. Port 5432 may conflict with local PostgreSQL instances.
-8. **GraphQL query complexity** — Data Connect's PostgreSQL schema migration tooling is still maturing (public preview). Schema changes require running `firebase dataconnect:generate` and manual review.
+1. **Staging/production parity** — `aikami-staging` serves as the deployed staging project; production is `aikami-production`. Local development runs against emulators via direnv mode switching.
+2. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsgo --noEmit` fails.
+3. **Client accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
+4. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
+5. **No automated dependency updates** — Dependabot/Renovate not configured.
+6. **Turso local DB lifecycle** — the embedded libSQL store is initialized by `LocalDatabaseFactory` at boot; schema changes must remain compatible with existing local saves (migration strategy tracked under C-321).
 
 ## Feature Gaps
 
@@ -35,19 +33,14 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 | Feature                             | Spec                              | Status                                    |
 | ----------------------------------- | --------------------------------- | ----------------------------------------- |
-| Game Engine (PixiJS + bitECS)       | C-016 contract                    | Not started                               |
-| EngineBridge typed message channel  | C-016 contract                    | Not started                               |
-| Tauri v2 Desktop Export             | C-013 tooling setup               | Not started                               |
-| Database Abstraction (Data Connect) | C-014 contract                    | Not started                               |
-| AI Service Abstraction              | C-015 contract                    | Not started                               |
-| TanStack DB + PowerSync client sync | Planned                           | Not started                               |
-| Valibot client validation           | Planned                           | Not started                               |
-| Group Chats                         | Multiple NPCs in one conversation | Zod schema exists, no UI                  |
+| Authored offline vertical slice      | Product goal (see TODO.md)        | In progress — the immediate focus         |
+| Turso embedded-replica cloud sync    | C-357                              | Not started (default sync path when enabled) |
+| Group Chats                         | Multiple NPCs in one conversation | Schema exists, no UI                      |
 | Character Relationships             | Dynamic relationship tracking     | Schema exists, no logic                   |
 | Knowledge Graphs                    | Connected world knowledge         | Schema stubbed                            |
 | Lorebook Integration                | World lore in chat context        | Schema exists, not wired                  |
-| Voice Synthesis (TTS)               | ElevenLabs integration            | gamejs tests exist, no Client integration |
-| Image Generation                    | AI avatar creation                | Callable function exists, no UI flow      |
+| Voice Synthesis (TTS)               | Kokoro microservice                | Microservice runs locally; Client integration partial |
+| Image Generation                    | ComfyUI microservice               | Microservice runs locally; UI flow partial |
 | NPC Forking                         | Copy/remix public NPCs            | Schema field exists, no UI                |
 | NPC Expressions                     | Multiple avatar images per NPC    | Schema field exists, no UI                |
 
@@ -66,25 +59,25 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 - **Functions tests minimal** — Only 1 test file covering 5 controllers
 - **No visual regression** — Playwright screenshot comparison not configured
 - **No performance tests** — No load or stress testing
-- **No engine boundary tests** — EngineBridge, bitECS systems, and game world have no test coverage (C-016 will create these)
+- **Engine boundary tests partial** — `packages/frontend/engine` has unit tests (e.g. `string_registry.test.ts`), but EngineBridge and full ECS system coverage is incomplete
 
 ## Documentation Gaps
 
-- Engine boundary pattern documented (C-017) but not yet implemented (C-016)
 - API documentation not generated from code
-- Data Connect security rules documentation minimal
-- PowerSync sync protocol documentation not started
+- Turso sync / backup-restore documentation minimal (C-357 embedded-replica sync)
+- Firestore security rules documentation minimal
 
 ## Architectural Constraints (Critical — Must Enforce)
 
 These constraints were identified in the July 2026 architecture review. Violating any of them causes runtime failures.
 
-### PowerSync Init Boundary (Tauri)
+### Turso / Local Persistence Boundary
 
-`tauri-plugin-powersync` `connect()` **must** be invoked from the Rust core, never from client-side JavaScript. Attempting to initialize the replication stream from JS will immediately crash the runtime. All PowerSync initialization code lives in `src-tauri/` and is exposed to the frontend only through Tauri IPC commands.
+Turso (libSQL) is the local source of truth (C-321). Rules:
 
-- **Lint guard**: A future ESLint/Biome rule should ban `PowerSync.connect()` in `apps/frontend/client/src/`.
-- **Review gate**: Any PR touching PowerSync initialization requires Rust-side review.
+- All campaign/save/chat reads and writes go through the storage adapters in `packages/frontend/repositories` (`TursoStorageAdapter`, `LocalDatabaseFactory`) — never raw IndexedDB or direct Firestore calls for campaign data.
+- IndexedDB is reserved for session recovery and chat drafts only.
+- The game must boot, play, and save with zero network and no Firebase sign-in (directive #3).
 
 ### PixiJS v8 WebGPU Shader Reflection Bug
 
@@ -107,19 +100,17 @@ SQL Connect (Firebase Data Connect) reserves the underscore character (`_`) in G
 
 A validation script (`scripts/src/lib/ops/validate_gql_fields.ts`) enforces this.
 
-### PowerSync Queue Validation: 2xx on Business Failures
+### 2xx on Business Failures (Sync Queues)
 
-When the client sends a mutation that fails server-side business validation (e.g., insufficient gold for a purchase), the backend **must** respond with a 2xx success status. Responding with a 4xx error will jam the client's `ps_crud` upload queue, blocking all subsequent sync operations. The error payload should be in the response body, not the HTTP status code.
+If a future sync queue rejects server-side business validation (e.g. insufficient gold for a purchase), the backend should respond with a 2xx success status and carry the error in the response body. Responding with a 4xx can jam an upload queue and block all subsequent sync operations. This only matters once the Turso embedded-replica sync (C-357) is wired end-to-end.
 
 ## TODO (High Priority)
 
-1. Implement C-016: Game Engine Boundary (PixiJS v8 + bitECS + EngineBridge)
-2. Implement C-014: Database Abstraction & Data Connect
-3. Implement C-015: AI Service Abstraction
-4. Set up Tauri v2 desktop export (C-013)
-5. Fix schema test TypeScript errors
-6. Add Client view model unit tests
-7. Set up GitHub Actions CI pipeline
+1. Build the authored 10–20 minute offline vertical slice
+2. Fix schema test TypeScript errors
+3. Add Client view model unit tests
+4. Add engine boundary (EngineBridge) tests
+5. Turso embedded-replica cloud sync (C-357)
 
 ## TODO (Nice to Have)
 
@@ -128,5 +119,3 @@ When the client sends a mutation that fails server-side business validation (e.g
 3. Client Storybook integration
 4. API documentation generation
 5. Performance benchmarks
-6. PowerSync + TanStack DB client integration
-7. Valibot schema migration for client-side validation

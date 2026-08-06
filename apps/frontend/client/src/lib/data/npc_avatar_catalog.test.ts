@@ -15,14 +15,7 @@ import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions.ts';
 // ---------------------------------------------------------------------------
 
 /** Every npcId spawn point present in the emberwatch content pack. */
-const EMBERWATCH_NPC_IDS = [
-  'village_elder',
-  'guard_captain',
-  'traveling_merchant',
-  'elara_wayfinder',
-  'kade_blackthorn',
-  'shrine_spirit',
-] as const;
+const EMBERWATCH_NPC_IDS = ['village_elder', 'rollo_grasper', 'merchant'] as const;
 
 // ---------------------------------------------------------------------------
 // Emberwatch coverage — every character must resolve to a real portrait
@@ -107,18 +100,20 @@ describe('npc_avatar_catalog — catalog integrity', () => {
 
 describe('resolveNpcAvatarUrl', () => {
   test('resolves a known NPC with its default expression', () => {
-    expect(resolveNpcAvatarUrl({ npcId: 'guard_captain' })).toBe('/assets/npc/aragon/neutral.webp');
+    expect(resolveNpcAvatarUrl({ npcId: 'village_elder' })).toBe(
+      '/assets/npc/gandalf/neutral.webp',
+    );
   });
 
   test('resolves a known NPC with a supported expression', () => {
-    expect(resolveNpcAvatarUrl({ npcId: 'guard_captain', expression: 'happy' })).toBe(
+    expect(resolveNpcAvatarUrl({ npcId: 'merchant', expression: 'happy' })).toBe(
       '/assets/npc/aragon/happy.webp',
     );
   });
 
   test('clamps an unsupported expression to neutral', () => {
     // orc only has 'neutral' — requesting 'happy' must clamp, not 404.
-    expect(resolveNpcAvatarUrl({ npcId: 'kade_blackthorn', expression: 'happy' })).toBe(
+    expect(resolveNpcAvatarUrl({ npcId: 'rollo_grasper', expression: 'happy' })).toBe(
       '/assets/npc/orc/neutral.webp',
     );
   });

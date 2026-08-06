@@ -6,6 +6,7 @@
     "module": "ESNext",
     "lib": ["ES2023"],
     "moduleResolution": "Bundler",
+    "types": ["node", "bun"],
 
     "sourceMap": true,
     "strict": true,

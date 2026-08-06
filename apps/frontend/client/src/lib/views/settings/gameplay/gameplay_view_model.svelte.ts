@@ -7,6 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { questOverlayService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,10 +22,13 @@ export type GameplayViewModelInterface = BaseViewModelInterface & {
   readonly difficulty: string;
   /** Available difficulty options. */
   readonly difficultyOptions: readonly { id: string; label: string }[];
+  /** Whether the active-quest overlay HUD is visible. */
+  readonly questOverlayVisible: boolean;
 
   toggleTutorialHints(): void;
   toggleAutosave(): void;
   setDifficulty(id: string): void;
+  toggleQuestOverlay(): void;
   resetDefaults(): void;
 };
 
@@ -39,8 +43,8 @@ export type GameplayViewModelOptions = BaseViewModelOptions;
 // ---------------------------------------------------------------------------
 
 const DIFFICULTY_OPTIONS = [
-  { id: 'story', label: 'Story' },
-  { id: 'normal', label: 'Normal' },
+  { id: 'easy', label: 'Easy' },
+  { id: 'medium', label: 'Medium' },
   { id: 'hard', label: 'Hard' },
 ] as const;
 
@@ -56,10 +60,14 @@ class GameplayViewModel
 {
   tutorialHints = $state<boolean>(true);
   autosave = $state<boolean>(true);
-  difficulty = $state<string>('normal');
+  difficulty = $state<string>('medium');
 
   get difficultyOptions(): readonly { id: string; label: string }[] {
     return DIFFICULTY_OPTIONS;
+  }
+
+  get questOverlayVisible(): boolean {
+    return questOverlayService.visible;
   }
 
   override async initialize(): Promise<void> {
@@ -79,6 +87,11 @@ class GameplayViewModel
     this.debug('toggleAutosave', { autosave: this.autosave });
   }
 
+  toggleQuestOverlay(): void {
+    questOverlayService.toggleVisible();
+    this.debug('toggleQuestOverlay', { visible: questOverlayService.visible });
+  }
+
   setDifficulty(id: string): void {
     // Validate that the ID exists in DIFFICULTY_OPTIONS
     const isValid = DIFFICULTY_OPTIONS.some((opt) => opt.id === id);
@@ -94,7 +107,7 @@ class GameplayViewModel
   resetDefaults(): void {
     this.tutorialHints = true;
     this.autosave = true;
-    this.difficulty = 'normal';
+    this.difficulty = 'medium';
     this._persist();
     this.debug('resetDefaults');
   }
@@ -131,8 +144,8 @@ class GameplayViewModel
           if (isValid) {
             this.difficulty = parsed.difficulty;
           } else {
-            // Reset to normal if persisted value is invalid
-            this.difficulty = 'normal';
+            // Reset to medium if persisted value is invalid
+            this.difficulty = 'medium';
           }
         }
       }

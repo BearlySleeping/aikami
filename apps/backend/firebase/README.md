@@ -8,13 +8,13 @@ This app contains the Firebase Cloud Functions for the Aikami project:
 - HTTP-triggered API endpoints
 - Scheduled jobs
 - Event-triggered functions
-- AI-powered features with Genkit
+- AI-powered features (server-side AI via `packages/backend/chat`)
 
 ## Tech Stack
 
 - **Runtime**: Node.js / Bun
 - **Platform**: Firebase Cloud Functions
-- **AI**: Google Genkit
+- **AI**: Server-side providers (`packages/backend/chat`) — client routes through `AiProviderGateway`
 
 ## Installation
 
@@ -51,7 +51,7 @@ This app depends on the following packages:
 
 ```bash
 # Build and deploy
-moon run functions:deploy
+moon run firebase:deploy
 
 # Or manually
 bun run build && firebase deploy --only functions
