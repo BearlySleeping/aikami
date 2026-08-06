@@ -2,39 +2,43 @@
 // apps/frontend/site/src/lib/views/home.astro
 
 import AdventurersGuildSection from '$sections/adventurers_guild.astro';
-import CharacterSheetSection from '$sections/character_sheet.astro';
+import AudienceForkSection from '$sections/audience_fork.astro';
+import ContentPacksSection from '$sections/content_packs.astro';
 import CrossPlatformSection from '$sections/cross_platform.astro';
 import DownloadSection from '$sections/download.astro';
-import FeaturesSection from '$sections/features.astro';
+import GameMasterSection from '$sections/game_master.astro';
 import HeroSection from '$sections/hero.astro';
-import MemoryGraphSection from '$sections/memory_graph.astro';
-import NpcGeneratorSection from '$sections/npc_generator.astro';
-import StoryletBrancherSection from '$sections/storylet_brancher.astro';
+import NpcsRememberSection from '$sections/npcs_remember.astro';
+import WipBanner from '$sections/wip_banner.astro';
 import YourRealmSection from '$sections/your_realm.astro';
 ---
 
-<!-- Section 1: Hero — The Living World Engine -->
+<!-- Early-WIP notice — sets expectations before the pitch -->
+<WipBanner />
+
+<!-- Hero — the hook in one screen, one primary CTA -->
 <HeroSection />
 
-<!-- Section 2: Dynamic NPC & Lore Generation Showcase -->
-<NpcGeneratorSection />
+<!-- Audience fork — self-routing for players, self-hosters, contributors -->
+<AudienceForkSection />
 
-<!-- Section 3: RPG Mechanics Integration — D&D Sheets & Skill Checks -->
-<CharacterSheetSection />
+<!-- "NPCs that remember" — memory graph demo + branching/factions -->
+<NpcsRememberSection />
 
-<!-- Section 4: Persistent Cognition & World State -->
-<FeaturesSection />
-<MemoryGraphSection />
-<StoryletBrancherSection />
+<!-- "A Game Master that runs the rules" — D&D mechanics + NPC generator demo -->
+<GameMasterSection />
 
-<!-- Section 5: Cross-Platform Architecture -->
+<!-- Cross-platform architecture & procedural character rendering -->
 <CrossPlatformSection />
 
-<!-- Section 5b: Desktop Download -->
+<!-- Content Packs & the Hub -->
+<ContentPacksSection />
+
+<!-- Desktop download -->
 <DownloadSection />
 
-<!-- Section 6: Open Source, Deployment & Dev Hub -->
+<!-- Self-host, deployment tabs, tech stack -->
 <YourRealmSection />
 
-<!-- Section 7: CTA Guildhall -->
+<!-- Closing CTA Guildhall -->
 <AdventurersGuildSection />

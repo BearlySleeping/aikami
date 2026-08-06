@@ -1,0 +1,99 @@
+---
+// apps/frontend/site/src/lib/components/sections/audience_fork.astro
+/**
+ * Audience fork — three compact routing entries below the hero.
+ * Its job is self-routing, not selling: one icon + one line each.
+ * No headings here on purpose (keeps the h1 → h2 heading hierarchy clean).
+ */
+
+const routes = [
+  {
+    href: '/#demo',
+    label: 'I want to play',
+    line: 'Try the living-world demo in your browser.',
+    icon: 'play',
+  },
+  {
+    href: '/#your-realm',
+    label: 'I want to self-host',
+    line: 'Run Aikami on your own hardware with local AI.',
+    icon: 'server',
+  },
+  {
+    href: '/#tech-stack',
+    label: 'I want to build or contribute',
+    line: 'Open-source stack, GitHub repo, and roadmap.',
+    icon: 'code',
+  },
+];
+---
+
+<div class="border-b border-border/70 bg-card/50">
+  <div class="mx-auto max-w-6xl px-6 py-8">
+    <ul
+      class="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-border bg-border md:grid-cols-3"
+    >
+      {routes.map((route) => (
+        <li class="bg-card">
+          <a
+            href={route.href}
+            class="group flex items-center gap-4 px-6 py-5 no-underline transition-colors hover:bg-card/80"
+          >
+            <span
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-rune/30 bg-rune/5 text-rune"
+              aria-hidden="true"
+            >
+              {route.icon === 'play' && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+              {route.icon === 'server' && (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <rect x="2" y="2" width="20" height="8" rx="2" />
+                  <rect x="2" y="14" width="20" height="8" rx="2" />
+                  <path d="M6 6h.01M6 18h.01" />
+                </svg>
+              )}
+              {route.icon === 'code' && (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+                </svg>
+              )}
+            </span>
+            <span>
+              <span class="block text-sm font-medium text-foreground group-hover:text-rune transition-colors">
+                {route.label}
+              </span>
+              <span class="mt-0.5 block text-xs text-muted-foreground leading-relaxed">
+                {route.line}
+              </span>
+            </span>
+            <span
+              class="ml-auto text-muted-foreground/50 transition-all group-hover:translate-x-1 group-hover:text-rune"
+              aria-hidden="true"
+            >
+              &rarr;
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</div>

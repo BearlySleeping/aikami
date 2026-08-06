@@ -1,0 +1,43 @@
+---
+// apps/frontend/site/src/lib/components/sections/wip_banner.astro
+/**
+ * Early-WIP banner — sets expectations on first paint and points
+ * contributors at the three channels: code, ideas, bug reports.
+ */
+const github = 'https://github.com/BearlySleeping/aikami';
+---
+
+<div class="border-b border-ember/20 bg-ember/5">
+  <div
+    class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-x-4 gap-y-1.5 px-6 py-3 text-center sm:flex-row sm:flex-wrap sm:text-left"
+  >
+    <span
+      class="inline-flex items-center gap-2 rounded-full border border-ember/30 bg-ember/10 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-ember"
+    >
+      <span class="h-1.5 w-1.5 rounded-full bg-ember animate-pulse" aria-hidden="true"></span>
+      Early WIP
+    </span>
+    <p class="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+      Aikami is a rough work in progress — expect rough edges and frequent changes.
+    </p>
+    <p class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs sm:text-sm">
+      <a
+        href={github}
+        class="text-foreground hover:text-rune transition-colors no-underline font-medium"
+        >Contribute</a
+      >
+      <span class="text-muted-foreground/40" aria-hidden="true">·</span>
+      <a
+        href={`${github}/discussions`}
+        class="text-foreground hover:text-rune transition-colors no-underline font-medium"
+        >Share ideas</a
+      >
+      <span class="text-muted-foreground/40" aria-hidden="true">·</span>
+      <a
+        href={`${github}/issues`}
+        class="text-foreground hover:text-ember transition-colors no-underline font-medium"
+        >Report a bug</a
+      >
+    </p>
+  </div>
+</div>

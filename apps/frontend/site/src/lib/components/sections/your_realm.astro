@@ -2,8 +2,11 @@
 // apps/frontend/site/src/lib/components/sections/your_realm.astro
 /**
  * "Your World, Your Hardware" — deployment options with tabbed code snippets.
- * Real GitHub data, Docker/Ollama/vLLM/Cloud Functions code tabs.
+ * Real GitHub data (build-time), Docker/Ollama/vLLM/Cloud Functions code tabs.
  */
+import { formatCount, getRepoStats } from '$data/github_stats';
+
+const stats = await getRepoStats();
 ---
 
 <section id="your-realm" class="border-b border-border/70">
@@ -31,7 +34,9 @@
         rel="noopener"
       >
         <p class="font-mono text-[10px] uppercase tracking-widest text-rune mb-1">GitHub Stars</p>
-        <p class="font-mono text-3xl tabnum text-foreground" id="stat-stars">★ --</p>
+        <p class="font-mono text-3xl tabnum text-foreground" id="stat-stars">
+          {stats.stars !== null ? `★ ${formatCount(stats.stars)}` : ''}
+        </p>
         <p class="text-[10px] text-muted-foreground mt-1 group-hover:text-rune transition-colors">
           Star the repo →
         </p>
@@ -45,7 +50,9 @@
         <p class="font-mono text-[10px] uppercase tracking-widest text-ember mb-1">
           Feature Requests
         </p>
-        <p class="font-mono text-3xl tabnum text-foreground" id="stat-features">--</p>
+        <p class="font-mono text-3xl tabnum text-foreground" id="stat-features">
+          {stats.openFeatures !== null ? String(stats.openFeatures) : ''}
+        </p>
         <p class="text-[10px] text-muted-foreground mt-1 group-hover:text-ember transition-colors">
           Open features →
         </p>
@@ -117,8 +124,9 @@
         <!-- Docker -->
         <div class="deploy-panel opacity-100 transition-opacity duration-300" data-panel="docker">
           <p class="text-xs text-muted-foreground leading-relaxed mb-4">
-            Run everything locally on your machine. No internet needed after initial setup. ComfyUI
-            for image generation, Kokoro for TTS, Ollama for LLM — all bundled.
+            <span class="text-rune font-medium">The all-in option.</span>
+            Everything runs locally on your machine — no internet needed after initial setup.
+            ComfyUI for image generation, Kokoro for TTS, Ollama for LLM — all bundled.
           </p>
           <div class="grid md:grid-cols-2 gap-4">
             <div class="glass-panel p-4">
@@ -181,6 +189,7 @@ docker compose up aikami
           data-panel="desktop"
         >
           <p class="text-xs text-muted-foreground leading-relaxed mb-4">
+            <span class="text-rune font-medium">The offline-native option.</span>
             Native desktop experience via Tauri v2. Run local LLM providers like Ollama or vLLM on
             your machine, or bring your own API keys for cloud providers.
           </p>
@@ -217,6 +226,7 @@ bun tauri build
           data-panel="web"
         >
           <p class="text-xs text-muted-foreground leading-relaxed mb-4">
+            <span class="text-rune font-medium">The fastest to try.</span>
             Play directly in the browser. No download, no setup — just bring your own API keys for
             Anthropic, OpenAI, or any OpenAI-compatible endpoint.
           </p>
@@ -273,6 +283,7 @@ bun tauri build
             </div>
             <h4 class="font-serif text-xl text-foreground mb-2">Zero Setup — Coming Soon</h4>
             <p class="text-sm text-muted-foreground leading-relaxed max-w-md">
+              <span class="text-rune font-medium">The lazy adventurer's option.</span>
               Fully managed AI infrastructure hosted on Cloud Run. A pre-trained LLM fine-tuned
               specifically for Aikami handles text generation, with managed TTS and image generation
               services running alongside. No setup, no GPUs, no Docker. Just open your browser and
@@ -302,7 +313,7 @@ bun tauri build
     </div>
 
     <!-- Tech Stack Cards -->
-    <div class="mt-16">
+    <div class="mt-16" id="tech-stack">
       <h3
         class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground text-center mb-8"
       >
@@ -342,37 +353,69 @@ bun tauri build
 </section>
 
 <script>
-// GitHub stats
-const starsEl = document.getElementById('stat-stars');
-const featuresEl = document.getElementById('stat-features');
-
-if (starsEl) {
-  fetch('https://api.github.com/repos/BearlySleeping/aikami')
-    .then((res) => res.json())
-    .then((data) => {
-      const count = data.stargazers_count;
-      if (typeof count === 'number') {
-        starsEl.textContent = `★ ${count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count}`;
-      } else {
-        starsEl.textContent = '★ 1.2k';
+// GitHub stats are fetched at build time (src/lib/data/github_stats.ts) and
+// refined live here — never placeholder dashes. When the build-time value is
+// missing (e.g. API rate-limited during build), the field stays empty until
+// this fetch succeeds.
+const statEls = [
+  { el: document.getElementById('stat-stars'), kind: 'stars' as const },
+  { el: document.getElementById('stat-features'), kind: 'features' as const },
+];
+const statFetches = statEls.filter((s) => s.el);
+if (statFetches.length > 0) {
+  const applyStat = (entry: (typeof statFetches)[number], value: number | null): void => {
+    if (!entry.el) {
+      return;
+    }
+    if (value === null || typeof value !== 'number') {
+      if (!entry.el.textContent?.trim()) {
+        entry.el.textContent = '—';
       }
-    })
-    .catch(() => {
-      starsEl.textContent = '★ 1.2k';
-    });
-}
+      return;
+    }
+    if (entry.kind === 'stars') {
+      entry.el.textContent =
+        value >= 1000 ? `★ ${(value / 1000).toFixed(1).replace(/\.0$/, '')}k` : `★ ${value}`;
+    } else {
+      entry.el.textContent = String(value);
+    }
+  };
 
-if (featuresEl) {
-  fetch(
-    'https://api.github.com/search/issues?q=is:issue+state:open+label:feature+repo:BearlySleeping/aikami',
-  )
-    .then((res) => res.json())
-    .then((data) => {
-      featuresEl.textContent = String(data.total_count ?? '--');
-    })
-    .catch(() => {
-      featuresEl.textContent = '--';
+  Promise.allSettled([
+    fetch('https://api.github.com/repos/BearlySleeping/aikami', {
+      signal: AbortSignal.timeout(5_000),
+    }),
+    fetch(
+      'https://api.github.com/search/issues?q=is:issue+state:open+label:feature+repo:BearlySleeping/aikami',
+      { signal: AbortSignal.timeout(5_000) },
+    ),
+  ]).then((results) => {
+    const [repoRes, issuesRes] = results;
+    const repo =
+      repoRes.status === 'fulfilled' && repoRes.value.ok
+        ? repoRes.value.json()
+        : Promise.resolve(null);
+    const issues =
+      issuesRes.status === 'fulfilled' && issuesRes.value.ok
+        ? issuesRes.value.json()
+        : Promise.resolve(null);
+    void Promise.all([repo, issues]).then(([repoData, issuesData]) => {
+      const repoEntry = statFetches.find((s) => s.kind === 'stars');
+      const issuesEntry = statFetches.find((s) => s.kind === 'features');
+      if (repoEntry) {
+        applyStat(
+          repoEntry,
+          typeof repoData?.stargazers_count === 'number' ? repoData.stargazers_count : null,
+        );
+      }
+      if (issuesEntry) {
+        applyStat(
+          issuesEntry,
+          typeof issuesData?.total_count === 'number' ? issuesData.total_count : null,
+        );
+      }
     });
+  });
 }
 
 // Deployment tab switching
