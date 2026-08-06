@@ -44,7 +44,7 @@ const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
   { itemId: 'healthPotion', quantity: 2 },
 ] as const;
 
-class LpcInventoryViewModel extends InventoryViewModel {
+export class LpcInventoryViewModel extends InventoryViewModel {
   /** Live LPC character preview driven by base + equipment recipes. */
   readonly lpcPreview: LpcPreviewViewModelInterface;
 

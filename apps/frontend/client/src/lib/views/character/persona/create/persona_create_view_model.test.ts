@@ -187,6 +187,30 @@ const _setupServiceOverrides = (): void => {
       }),
     },
     GameStateService: class {},
+    // C-374: enterWorld resets each domain service directly (see test
+    // 'resets each domain service before routing to /game').
+    playerStateService: Object.assign(_createServiceStub(), {
+      reset: mock(() => {
+        resetCalls++;
+      }),
+    }),
+    inventoryService: Object.assign(_createServiceStub(), {
+      reset: mock(() => {
+        resetCalls++;
+      }),
+      addItem: mock(() => {}),
+    }),
+    equipmentService: Object.assign(_createServiceStub(), {
+      reset: mock(() => {
+        resetCalls++;
+      }),
+      equipItem: mock(() => {}),
+    }),
+    worldStateService: Object.assign(_createServiceStub(), {
+      reset: mock(() => {
+        resetCalls++;
+      }),
+    }),
     ImageGenerationService: class {},
     notificationService: _createServiceStub(),
     NotificationService: class {},
@@ -940,7 +964,9 @@ describe('PersonaCreateViewModel — C-078', () => {
   // ── C-152: enterWorld resets state and routes to /game ──────────────
 
   describe('C-152: enterWorld', () => {
-    test('calls gameStateService.reset() before routing to /game', async () => {
+    // C-374: the view model resets each domain service directly instead of
+    // the retired gameStateService.reset() aggregate.
+    test('resets each domain service before routing to /game', async () => {
       const vm = await loadVm();
 
       // Set up a persona so _persistCharacter has data
@@ -979,8 +1005,16 @@ describe('PersonaCreateViewModel — C-078', () => {
 
       await vm.enterWorld();
 
-      // Verify reset was called
-      expect(resetCalls).toBe(1);
+      // Verify resets were called: player, inventory, equipment, world state
+      // Each domain service must be reset exactly once, not the retired gameStateService.
+      const { playerStateService, inventoryService, equipmentService, worldStateService } =
+        await import(
+          '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
+        );
+      expect(playerStateService.reset).toHaveBeenCalledTimes(1);
+      expect(inventoryService.reset).toHaveBeenCalledTimes(1);
+      expect(equipmentService.reset).toHaveBeenCalledTimes(1);
+      expect(worldStateService.reset).toHaveBeenCalledTimes(1);
 
       // Verify route to /game
       expect(enterWorldRouteCalls.length).toBeGreaterThanOrEqual(1);

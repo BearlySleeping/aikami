@@ -5,6 +5,18 @@ import type { OverlayStackEntry } from './game_overlay_service.svelte.ts';
 
 // $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
 
+// The overlay service reads document.activeElement / getElementById when
+// pushing overlays — provide a minimal DOM mock (bun has no jsdom).
+class MockElement {}
+(globalThis as Record<string, unknown>).HTMLElement = MockElement;
+(globalThis as Record<string, unknown>).document = {
+  activeElement: undefined as HTMLElement | undefined,
+  baseURI: 'http://localhost:5274/',
+  getElementById: (): HTMLElement | null => null,
+  addEventListener: mock(() => {}),
+  removeEventListener: mock(() => {}),
+};
+
 describe('GameOverlayService', () => {
   let service: import('./game_overlay_service.svelte.ts').GameOverlayServiceInterface;
 

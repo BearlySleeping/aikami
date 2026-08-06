@@ -5,51 +5,61 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
+import { mock, setSystemTime } from 'bun:test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock dependencies
-vi.mock('../game/idle_detection_service.svelte.ts', () => ({
+// Mock dependencies — bun:test mock.module (vitest's vi.mock is not
+// available under the bun test runner).
+mock.module('../game/idle_detection_service.svelte.ts', () => ({
   idleDetectionService: {
     isDnd: false,
-    isIdle: vi.fn().mockReturnValue(true),
+    isIdle: mock(() => true),
   },
 }));
 
-vi.mock('../game/game_overlay_service.svelte.ts', () => ({
+mock.module('../game/game_overlay_service.svelte.ts', () => ({
   gameOverlayService: {
     activeOverlay: 'NONE',
   },
 }));
 
-vi.mock('../chat/chat.svelte.ts', () => ({
+mock.module('../chat/chat.svelte.ts', () => ({
   chatService: {
     isTyping: false,
     isSending: false,
     messages: [],
-    addMessage: vi.fn(),
+    addMessage: mock(() => {}),
   },
 }));
 
-vi.mock('./npc_schedule_service.svelte.ts', () => ({
+mock.module('./npc_schedule_service.svelte.ts', () => ({
   npcScheduleService: {
-    getSchedule: vi.fn(),
-    isAvailable: vi.fn(),
-    getCurrentStatus: vi.fn(),
+    getSchedule: mock(() => {}),
+    isAvailable: mock(() => {}),
+    getCurrentStatus: mock(() => {}),
   },
 }));
 
-vi.mock('../ai/text_generation_service.svelte.ts', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
-    streamChat: vi.fn(),
-    extractStructure: vi.fn(),
+    streamChat: mock(() => {}),
+    extractStructure: mock(() => {}),
   },
 }));
 
 describe('AutonomousMessageService', () => {
-  beforeEach(() => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-07-10T12:00:00Z'));
+    setSystemTime(new Date('2026-07-10T12:00:00Z'));
+
+    // Reset idleDetectionService.isIdle mock to default true value
+    const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
+    idleDetectionService.isIdle.mockReturnValue(true);
   });
 
   it('should start and stop the poller', async () => {
@@ -65,7 +75,6 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     expect(autonomousMessageService.isRunning).toBe(false);
 
-    vi.resetModules();
     vi.clearAllTimers();
   });
 
@@ -88,7 +97,6 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     idleDetectionService.isDnd = false;
-    vi.resetModules();
     vi.clearAllTimers();
   });
 
@@ -98,7 +106,7 @@ describe('AutonomousMessageService', () => {
     );
     const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
 
-    vi.mocked(idleDetectionService.isIdle).mockReturnValue(false);
+    idleDetectionService.isIdle.mockReturnValue(false);
 
     autonomousMessageService.start();
     vi.advanceTimersByTime(60_000);
@@ -107,7 +115,6 @@ describe('AutonomousMessageService', () => {
     expect(chatService.addMessage).not.toHaveBeenCalled();
 
     autonomousMessageService.stop();
-    vi.resetModules();
     vi.clearAllTimers();
   });
 
@@ -129,7 +136,6 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     gameOverlayService.activeOverlay = 'NONE';
-    vi.resetModules();
     vi.clearAllTimers();
   });
 
@@ -150,7 +156,6 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     chatService.isTyping = false;
-    vi.resetModules();
     vi.clearAllTimers();
   });
 
@@ -165,7 +170,6 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.resume();
     expect(autonomousMessageService.isPaused).toBe(false);
 
-    vi.resetModules();
     vi.clearAllTimers();
   });
 });

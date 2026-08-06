@@ -106,7 +106,7 @@ export * from './image/image_generation_service.svelte.ts';
 export * from './image/prompt_compiler';
 export * from './image/style_profile_service.svelte';
 export * from './lorebook/keyword_scanner';
-export { lorebookStore } from './lorebook/lorebook_store.svelte';
+export { lorebookStore } from './lorebook/lorebook_store.svelte.ts';
 export * from './notification/notification_repository.svelte.ts';
 export * from './npc/autonomous_message_service.svelte.ts';
 export * from './npc/npc_repository.svelte.ts';
