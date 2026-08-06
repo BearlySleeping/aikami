@@ -34,7 +34,7 @@ export const onSvelteKitAPICall = async <
 
     const payload = (await request.json()) as ReconstructMessage<AllFunctions[Endpoint]>;
 
-    logger.log(apiName, payload);
+    logger.log(apiName, { type: payload.type });
 
     const response = await promise(payload);
 

@@ -23,7 +23,7 @@ export const getUserSessionFromIdToken = async (
   token: string,
 ): Promise<[UserSessionData] | [undefined, boolean]> => {
   try {
-    logger.debug('getUserSessionFromIdToken', { token });
+    logger.debug('getUserSessionFromIdToken', { hasToken: !!token });
 
     const decodedIdToken = await verifyIdToken(token, true /** checkRevoked */);
     return [toUserSessionDataFromToken(decodedIdToken)];
@@ -57,7 +57,7 @@ export const getUserSessionFromCookies = async (options: {
 }): Promise<[UserSessionData] | [undefined, boolean]> => {
   try {
     const sessionCookie = getCookie('__session', options);
-    logger.debug('getUserSessionFromCookies', { sessionCookie });
+    logger.debug('getUserSessionFromCookies', { hasCookie: !!sessionCookie });
 
     if (!sessionCookie || sessionCookie === 'null' || sessionCookie === 'undefined') {
       return [undefined, false];
@@ -100,15 +100,17 @@ export const getUserSession = async (options: {
     const { url } = options;
 
     // ── JWT in search param (for E2E testing with emulator) ──
-    const jwtParam = url.searchParams.get('jwt');
-    if (jwtParam) {
-      const [userSessionFromJwt, shouldReAuth] = await getUserSessionFromIdToken(jwtParam);
-      logger.log('getUserSession:jwt', {
-        hasSession: !!userSessionFromJwt,
-        role: userSessionFromJwt?.userRole,
-      });
-      if (userSessionFromJwt) {
-        return { userSession: userSessionFromJwt, shouldReAuthenticate: shouldReAuth };
+    if (process.env.AIKAMI_MODE === 'emulator') {
+      const jwtParam = url.searchParams.get('jwt');
+      if (jwtParam) {
+        const [userSessionFromJwt, shouldReAuth] = await getUserSessionFromIdToken(jwtParam);
+        logger.log('getUserSession:jwt', {
+          hasSession: !!userSessionFromJwt,
+          role: userSessionFromJwt?.userRole,
+        });
+        if (userSessionFromJwt) {
+          return { userSession: userSessionFromJwt, shouldReAuthenticate: shouldReAuth };
+        }
       }
     }
 
@@ -116,9 +118,9 @@ export const getUserSession = async (options: {
 
     logger.log('getUserSession', {
       href: url.href,
-      searchParams: url.searchParams,
+      hasSearchParams: url.searchParams.size > 0,
       shouldReAuthenticate,
-      userSession,
+      hasSession: !!userSession,
     });
 
     return {
@@ -140,7 +142,10 @@ export const getUserSessionFromLocalesOrURL = async (options: {
   url: URL;
   request: Request;
 }): Promise<UserSessionData | undefined> => {
-  logger.log('getUserSessionFromLocalesOrURL', options);
+  logger.log('getUserSessionFromLocalesOrURL', {
+    hasLocalsSession: !!options.locals.userSession,
+    url: options.url.pathname,
+  });
   const { locals } = options;
   let userSession = locals.userSession;
   if (!userSession) {

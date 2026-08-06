@@ -126,8 +126,11 @@ export const handle: Handle = async ({ event, resolve }) => {
         'Access-Control-Allow-Headers',
         'Content-Type, Cookie, x-aikami-session',
       );
-      preflightHeaders.set('Access-Control-Allow-Origin', origin ?? '*');
-      preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
+      // Only allow extension origins (matching the later CORS check)
+      if (origin?.startsWith('chrome-extension://') || origin === 'null') {
+        preflightHeaders.set('Access-Control-Allow-Origin', origin);
+        preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
+      }
       return new Response(null, { status: 204, headers: preflightHeaders });
     }
 

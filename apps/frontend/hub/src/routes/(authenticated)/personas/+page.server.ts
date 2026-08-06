@@ -20,16 +20,16 @@ export type PersonasPageServerData = {
 };
 
 export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
+  const { userSession } = event.locals;
+  const uid = userSession?.id;
+
+  logger.debug('/personas:load fetching personas', { uid });
+
+  if (!uid) {
+    throw error(401, 'Unauthorized');
+  }
+
   try {
-    const { userSession } = event.locals;
-    const uid = userSession?.id;
-
-    logger.debug('/personas:load fetching personas', { uid });
-
-    if (!uid) {
-      throw error(401, 'Unauthorized');
-    }
-
     const personas = await personaRepository.getDocumentsByQuery({
       filters: [
         {
@@ -59,10 +59,14 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
     });
 
     return { personas: serializedPersonas };
-  } catch (error) {
+  } catch (err) {
     logger.error('/personas:load error', {
-      error: error instanceof Error ? error.message : String(error),
+      error: err instanceof Error ? err.message : String(err),
     });
+    // Re-throw HttpError instances to preserve their status codes
+    if (err && typeof err === 'object' && 'status' in err) {
+      throw err;
+    }
     return { personas: [] };
   }
 };
