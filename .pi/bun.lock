@@ -80,19 +80,19 @@
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
 
-    "@hypabolic/hypa": ["@hypabolic/hypa@0.1.12", "", { "optionalDependencies": { "@hypabolic/hypa-darwin-arm64": "0.1.12", "@hypabolic/hypa-darwin-x64": "0.1.12", "@hypabolic/hypa-linux-arm64": "0.1.12", "@hypabolic/hypa-linux-x64": "0.1.12", "@hypabolic/hypa-win32-arm64": "0.1.12", "@hypabolic/hypa-win32-x64": "0.1.12" }, "bin": { "hypa": "bin.js" } }, "sha512-N8+/2tonoeyeJ2aJVrS+vJOktRjjdLQt2sfluPytdEq88a/zeP42W1YcQAS4nm03Wf9SqavDOSrikiy364+fJg=="],
+    "@hypabolic/hypa": ["@hypabolic/hypa@0.1.13", "", { "optionalDependencies": { "@hypabolic/hypa-darwin-arm64": "0.1.13", "@hypabolic/hypa-darwin-x64": "0.1.13", "@hypabolic/hypa-linux-arm64": "0.1.13", "@hypabolic/hypa-linux-x64": "0.1.13", "@hypabolic/hypa-win32-arm64": "0.1.13", "@hypabolic/hypa-win32-x64": "0.1.13" }, "bin": { "hypa": "bin.js" } }, "sha512-Ua4wld4sfrgmmCb89M11xcnUfgMI9bDXncePZZhOf0jZoRelBQn99o1sOQl+rho8A0KUYq9B4He8HALtwmA6Tg=="],
 
-    "@hypabolic/hypa-darwin-arm64": ["@hypabolic/hypa-darwin-arm64@0.1.12", "", { "os": "darwin", "cpu": "arm64" }, "sha512-2Tag7zpTIWZERr7tSbRCOOKWVHp+MOncO184jF76RzD5Q/zvbSMf4siRf+dL6c4WrC46WrjwEf10i1Jj5a9lRg=="],
+    "@hypabolic/hypa-darwin-arm64": ["@hypabolic/hypa-darwin-arm64@0.1.13", "", { "os": "darwin", "cpu": "arm64" }, "sha512-VjF06Tk1VAZBFoAWtpC8i+1vL2Rj2nbe8MJkI+rgeWL2Lx7P+FD31FcGkVzU3RjVFp49jZPjiTDlWis2IGx2kA=="],
 
-    "@hypabolic/hypa-darwin-x64": ["@hypabolic/hypa-darwin-x64@0.1.12", "", { "os": "darwin", "cpu": "x64" }, "sha512-XWrRkNEc2oxhNgy3Pl1osiwAVyGVvBGQSR6WpK/eFNoigit5y3EwAyf2MENiWRhwiAyRW/k7E/Ha2l74mG/GkA=="],
+    "@hypabolic/hypa-darwin-x64": ["@hypabolic/hypa-darwin-x64@0.1.13", "", { "os": "darwin", "cpu": "x64" }, "sha512-R5/sKF1SmE5rHIPCHo4uOvcdOWhJy0NB2jZ7iH+VYmxpfPenzZDODk14p/dfu69rvtE5PfEMwzbQLwhsnIXo2A=="],
 
-    "@hypabolic/hypa-linux-arm64": ["@hypabolic/hypa-linux-arm64@0.1.12", "", { "os": "linux", "cpu": "arm64" }, "sha512-lpdqrM6QbKAxWN9zBS3FVcbjH8eUSP+PQRHVLc67q+TDQeKI7EW8ybbG5TZKLAZhHujUvOzpH/qdefb0Koujqw=="],
+    "@hypabolic/hypa-linux-arm64": ["@hypabolic/hypa-linux-arm64@0.1.13", "", { "os": "linux", "cpu": "arm64" }, "sha512-FljNLjYI0OmqAWeRdgBlSnAdUMN72mS/DLG/luGbh2k+x32+VJqGBEyZkBdd3ZofY+TSlv5vNtaCJQx1VA6bAw=="],
 
-    "@hypabolic/hypa-linux-x64": ["@hypabolic/hypa-linux-x64@0.1.12", "", { "os": "linux", "cpu": "x64" }, "sha512-jO1DaJ8HFM/vrgmSp5RUpbLNbt8IJB+eSwAoP5c+YagXtU2eGjI/qJwmIKp5fh2ZIIpoK3J78swstrfDGnUvpQ=="],
+    "@hypabolic/hypa-linux-x64": ["@hypabolic/hypa-linux-x64@0.1.13", "", { "os": "linux", "cpu": "x64" }, "sha512-cWtMINLYvUuMdR8LJj2R6/H6971A+EfMeADzKPtdrBGhLLwOlRn8Ite9rVAkBMFsMMjvY8rwfkGTojsxg/qqEQ=="],
 
-    "@hypabolic/hypa-win32-arm64": ["@hypabolic/hypa-win32-arm64@0.1.12", "", { "os": "win32", "cpu": "arm64" }, "sha512-u8BD6UqdniyC3rEp8TPbxgFMnxBLYHLWqGJwvLB4jpWeABafk7qmwRHPflax7nhc2q6oMg46RCHqGTUWQbLXhQ=="],
+    "@hypabolic/hypa-win32-arm64": ["@hypabolic/hypa-win32-arm64@0.1.13", "", { "os": "win32", "cpu": "arm64" }, "sha512-WlwOgJpR3cPPlaiWipuY87wvUq+X5KFXi764/L9F5Pgxk+8QxRMCUeJ6e4rgn/A5KiB5T3EUIU495RXsbD/2GQ=="],
 
-    "@hypabolic/hypa-win32-x64": ["@hypabolic/hypa-win32-x64@0.1.12", "", { "os": "win32", "cpu": "x64" }, "sha512-oW8O1s1Xs5/hNgwzyDaukeiW/TmzjR+L9mbewVadhTye/LcwrHs0NzkmAEOabAnP5CkkWAwcry2yxNPRRhpjRA=="],
+    "@hypabolic/hypa-win32-x64": ["@hypabolic/hypa-win32-x64@0.1.13", "", { "os": "win32", "cpu": "x64" }, "sha512-XdIwkV/y+oXVqYIBpGcDVzMAaSV/pCHwyJnh/Ci+j7iFU8lPM1lhdp91Wih+wRrV7yiRxXKiWhig7Jc3a9LLDw=="],
 
     "@mariozechner/clipboard": ["@mariozechner/clipboard@0.3.9", "", { "optionalDependencies": { "@mariozechner/clipboard-darwin-arm64": "0.3.9", "@mariozechner/clipboard-darwin-universal": "0.3.9", "@mariozechner/clipboard-darwin-x64": "0.3.9", "@mariozechner/clipboard-linux-arm64-gnu": "0.3.9", "@mariozechner/clipboard-linux-arm64-musl": "0.3.9", "@mariozechner/clipboard-linux-riscv64-gnu": "0.3.9", "@mariozechner/clipboard-linux-x64-gnu": "0.3.9", "@mariozechner/clipboard-linux-x64-musl": "0.3.9", "@mariozechner/clipboard-win32-arm64-msvc": "0.3.9", "@mariozechner/clipboard-win32-x64-msvc": "0.3.9" } }, "sha512-ABnA53mdfkGZwOFUdZNv2S0CWGO/EIuPj8Vv9xmBFmSYg/qFc7ihO6q5FcQjvoE67kZpWkEc4AhD6B/os04yuA=="],
 

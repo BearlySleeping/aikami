@@ -15,7 +15,7 @@
     "update-packages": "bun update --latest && cd npm && bun update --latest"
   },
   "dependencies": {
-    "@hypabolic/hypa": "^0.1.12",
+    "@hypabolic/hypa": "^0.1.13",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
   }
