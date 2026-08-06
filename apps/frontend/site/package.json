@@ -40,7 +40,7 @@
     "@astrojs/sitemap": "3.7.3",
     "@tailwindcss/vite": "4.3.3",
     "astro": "7.1.6",
-    "astro-compress": "2.4.1",
+    "astro-compress": "2.4.2",
     "astro-robots-txt": "1.0.0",
     "firebase-tools": "15.25.1",
     "tailwindcss": "4.3.3",

@@ -21,19 +21,19 @@
     "test:unit": "bun test --tsconfig=tsconfig.json src/lib"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.20.2",
-    "@sveltejs/kit": "2.68.0",
-    "@sveltejs/vite-plugin-svelte": "7.1.2",
-    "@tailwindcss/vite": "4.3.1",
-    "@types/node": "26.0.1",
-    "daisyui": "5.5.23",
+    "@inlang/paraglide-js": "2.23.1",
+    "@sveltejs/kit": "2.70.2",
+    "@sveltejs/vite-plugin-svelte": "7.2.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.1.2",
+    "daisyui": "5.7.16",
     "rollup-plugin-visualizer": "7.0.1",
-    "svelte": "5.56.4",
+    "svelte": "5.56.8",
     "svelte-adapter-bun": "1.0.1",
-    "svelte-check": "4.7.1",
-    "tailwindcss": "4.3.1",
-    "vite": "7.3.2",
-    "vite-plugin-devtools-json": "1.0.0",
+    "svelte-check": "4.7.4",
+    "tailwindcss": "4.3.3",
+    "vite": "8.2.0",
+    "vite-plugin-devtools-json": "1.1.0",
     "svelte-fast-check": "^0.4.5"
   },
   "dependencies": {
@@ -47,7 +47,7 @@
     "@google-cloud/secret-manager": "*",
     "elysia": "^1.4.29",
     "eruda": "3.4.3",
-    "firebase": "12.15.0",
-    "firebase-admin": "14.1.0"
+    "firebase": "12.17.1",
+    "firebase-admin": "14.2.0"
   }
 }
