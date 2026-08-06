@@ -330,6 +330,8 @@ describe('DialogueOverlayViewModel', () => {
     vm.inputText = 'Tell me about the ward.';
     vm.sendMessage();
 
+    // Expression detection is fire-and-forget async (real expressionService) —
+    // give the detection chain a moment to settle.
     await new Promise((r) => setTimeout(r, 50));
 
     expect(vm.messages.length).toBe(3);
@@ -358,8 +360,7 @@ describe('DialogueOverlayViewModel', () => {
 
     const vm = createViewModel();
     vm.inputText = 'I accept the quest, elder.';
-    vm.sendMessage();
-    await new Promise((r) => setTimeout(r, 50));
+    await vm.sendMessage();
 
     expect(acceptQuestStub).toHaveBeenCalledWith({
       questId: 'fading_ward',
@@ -383,8 +384,7 @@ describe('DialogueOverlayViewModel', () => {
 
     const vm = createViewModel();
     vm.inputText = 'I cannot take this quest.';
-    vm.sendMessage();
-    await new Promise((r) => setTimeout(r, 50));
+    await vm.sendMessage();
 
     expect(declineQuestStub).toHaveBeenCalledWith({ questId: 'fading_ward' });
     expect(acceptQuestStub).not.toHaveBeenCalled();
@@ -409,8 +409,7 @@ describe('DialogueOverlayViewModel', () => {
 
     const vm = createViewModel();
     vm.inputText = 'I will take the quest.';
-    vm.sendMessage();
-    await new Promise((r) => setTimeout(r, 50));
+    await vm.sendMessage();
 
     expect(acceptQuestStub).not.toHaveBeenCalled();
   });

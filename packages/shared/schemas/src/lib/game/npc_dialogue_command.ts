@@ -295,6 +295,7 @@ export const NpcQuestActivationSchema = Type.Object(
   },
   {
     description: 'Only valid for quests the current NPC can offer',
+    additionalProperties: false,
   },
 );
 

@@ -1113,6 +1113,17 @@ class DialogueOverlayViewModel
     const { action, questId } = activation;
 
     if (action === 'decline') {
+      // Only decline quests this NPC can actually offer — never mutate quest
+      // state for an identifier the NPC has no offerable quest for.
+      const offerable = questStateService.getOfferableQuests(this._npcData.npcId);
+      const quest = offerable.find((q) => q.id === questId);
+      if (!quest) {
+        this.warn('_applyQuestActivation:not-offerable', {
+          questId,
+          npcId: this._npcData.npcId,
+        });
+        return;
+      }
       questStateService.declineQuest({ questId });
       this.showSnackbar({ text: 'Quest declined.', type: 'info' });
       this.debug('_applyQuestActivation:declined', { questId, npcId: this._npcData.npcId });

@@ -807,6 +807,17 @@ describe('Quest-activation fallback (AI unavailable)', () => {
     expect(output.questActivation).toBeUndefined();
   });
 
+  test('does not activate when multiple quests are offerable (ambiguous)', async () => {
+    stubOfferableQuests([
+      { id: 'fading_ward', name: 'The Fading Ward' },
+      { id: 'second_quest', name: 'The Second Quest' },
+    ]);
+    const output = await runFallbackAnalyze('Consider it done, I accept the quest, elder.');
+    // Ambiguity guard: with more than one offerable quest the fallback must
+    // not guess which one the player means.
+    expect(output.questActivation).toBeUndefined();
+  });
+
   test('does not activate on ordinary conversation about the quest', async () => {
     stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
     const output = await runFallbackAnalyze('Tell me more about this quest.');

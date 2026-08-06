@@ -979,7 +979,7 @@
             {
               "name": "targetX",
               "type": "float",
-              "value": 480
+              "value": 448
             },
             {
               "name": "targetY",

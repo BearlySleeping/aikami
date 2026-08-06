@@ -413,11 +413,14 @@ export class GameCompositionRoot
           });
           if (added) {
             // Surface dialogue-granted items as pickups so quest objectives
-            // (completeOnItemPickup) advance on the grant.
-            questStateService.evaluateTriggers({
-              type: 'ITEM_PICKED_UP',
-              itemId: _opts.itemId,
-            });
+            // (completeOnItemPickup) advance on the grant — one trigger per
+            // granted unit, not one per giveItem call.
+            for (let i = 0; i < _opts.quantity; i++) {
+              questStateService.evaluateTriggers({
+                type: 'ITEM_PICKED_UP',
+                itemId: _opts.itemId,
+              });
+            }
           }
           return added;
         },
@@ -522,9 +525,11 @@ export class GameCompositionRoot
     worldStateService.recordLootGranted(encounterId);
 
     // Surface combat loot as pickups so quest objectives (completeOnItemPickup)
-    // advance for drops obtained in combat.
+    // advance for drops obtained in combat — one trigger per dropped unit.
     for (const drop of rolled) {
-      questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: drop.itemId });
+      for (let i = 0; i < drop.quantity; i++) {
+        questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: drop.itemId });
+      }
     }
 
     this.debug('_applyEncounterLoot:granted', { encounterId, rolled });

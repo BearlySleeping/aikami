@@ -58,7 +58,9 @@ describe('buildGameStateFacts — quest guidance', () => {
 
     const hint = facts.find((f) => f.includes('Hint (easy mode only)'));
     expect(hint).toBeDefined();
-    expect(hint).toContain('Ward Wand');
+    // Extraction must yield exactly the consecutive capitalized phrase, not
+    // the full objective sentence.
+    expect(hint).toBe('Hint (easy mode only): the player needs "Ward Wand".');
   });
 
   test('medium and hard difficulties do not add explicit item hints', () => {
@@ -98,5 +100,32 @@ describe('buildGameStateFacts — quest guidance', () => {
     const facts = buildGameStateFacts({ npcId: 'village_elder' });
     const guidance = facts.find((f) => f.includes('Game difficulty'));
     expect(guidance).toContain('medium');
+  });
+
+  test('quest facts are capped at MAX_QUEST_FACTS when many quests are active', () => {
+    (questStateService.quests as QuestData[]).push(
+      { ...ACTIVE_QUEST, id: 'quest_a', title: 'Quest A' },
+      { ...ACTIVE_QUEST, id: 'quest_b', title: 'Quest B' },
+      { ...ACTIVE_QUEST, id: 'quest_c', title: 'Quest C' },
+    );
+    const facts = buildGameStateFacts({ npcId: 'village_elder' });
+
+    const questFacts = facts.filter((f) => f.includes('Active quest'));
+    expect(questFacts.length).toBe(2);
+    expect(questFacts.some((f) => f.includes('Quest C'))).toBe(false);
+  });
+
+  test('uses the "Complete the quest" fallback when every objective is complete', () => {
+    (questStateService.quests as QuestData[]).push({
+      ...ACTIVE_QUEST,
+      id: 'all_done',
+      title: 'All Done',
+      objectives: ACTIVE_QUEST.objectives.map((o) => ({ ...o, current: o.max })),
+    });
+    const facts = buildGameStateFacts({ npcId: 'village_elder' });
+
+    const questFact = facts.find((f) => f.includes('Active quest'));
+    expect(questFact).toBeDefined();
+    expect(questFact).toContain('Complete the quest');
   });
 });

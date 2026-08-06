@@ -313,6 +313,9 @@ describe('QuestStateService', () => {
 
     test('returns without the wand does not complete the quest', () => {
       service.acceptQuest({ questId: 'ward_wand', npcId: 'village_elder' });
+      // Advance through the inn objective, but omit ITEM_PICKED_UP so the
+      // player returns to the elder without the wand.
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/inn.json' });
       service.evaluateTriggers({ type: 'NPC_INTERACTED', npcId: 'village_elder' });
       const quest = service.quests.find((q) => q.id === 'ward_wand');
       expect(quest?.status).toBe('active');

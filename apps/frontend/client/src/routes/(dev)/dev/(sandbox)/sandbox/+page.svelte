@@ -96,9 +96,13 @@ const _progressRandomObjective = (): void => {
   if (!trigger) {
     return;
   }
-  // Grant the item so the inventory matches the quest state.
+  // Grant the item so the inventory matches the quest state — only evaluate
+  // the trigger when the grant succeeds (mirrors the Ward Wand action guard).
   if (trigger.type === 'ITEM_PICKED_UP') {
-    inventoryService.addItem({ itemId: trigger.itemId, quantity: 1 });
+    const added = inventoryService.addItem({ itemId: trigger.itemId, quantity: 1 });
+    if (!added) {
+      return;
+    }
   }
   questStateService.evaluateTriggers(trigger);
 };

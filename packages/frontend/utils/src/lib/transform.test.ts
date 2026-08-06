@@ -14,6 +14,8 @@ interface TestData extends Omit<CoreData, 'createdAt'> {
     nestedDate?: Timestamp;
   };
   items?: { name: string; date?: Timestamp }[];
+  /** Regression: key contains the unixLabel earlier (lastUnixUpdatedUnix). */
+  lastUnixUpdated?: Timestamp;
 }
 
 describe('fromJsonData', () => {
@@ -106,5 +108,21 @@ describe('fromJsonData', () => {
     const rawData = {};
     const result = fromJsonData<TestData>(rawData);
     expect(Object.keys(result).length).toBe(0);
+  });
+
+  test('strips only the trailing unixLabel suffix, preserving earlier occurrences', () => {
+    const now = Date.now();
+    const rawData = {
+      id: 'test5',
+      name: 'Trailing Suffix Test',
+      [`lastUnixUpdated${unixLabel}`]: now,
+    };
+
+    const result = fromJsonData<TestData>(rawData);
+
+    // `lastUnixUpdatedUnix` → `lastUnixUpdated` (only the trailing "Unix" is
+    // removed — the earlier occurrence inside the name is preserved).
+    expect(result.lastUnixUpdated?.toMillis()).toBe(now);
+    expect('lastUpdatedUnix' in result).toBe(false);
   });
 });

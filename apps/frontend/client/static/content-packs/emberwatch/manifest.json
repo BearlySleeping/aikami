@@ -3,7 +3,7 @@
   "name": "Emberwatch: The Fading Ward",
   "version": "3.0.0",
   "updatedAt": "2026-07-14T00:00:00.000Z",
-  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade, intimidate, steal, or fight to get it back.",
+  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "tileSize": 32,
   "atlas": {
@@ -156,7 +156,6 @@
       "defaultDialogueKey": "rollo_greeting",
       "appearanceLayers": [3, 123, 23, 22, 7, 95],
       "isVendor": false,
-      "vendorInventory": "wardWand",
       "combatStats": {
         "hitPoints": 20,
         "armorClass": 11,

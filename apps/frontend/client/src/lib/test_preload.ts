@@ -406,6 +406,9 @@ const _localServicesMock = () => ({
       toggleVisible: () => {
         svc.visible = !svc.visible;
       },
+      reset: () => {
+        svc.visible = true;
+      },
     });
     return svc;
   })(),

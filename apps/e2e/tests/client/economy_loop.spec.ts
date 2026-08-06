@@ -13,12 +13,27 @@
 // Requires dev servers + emulator running.
 import { expect, test } from '@playwright/test';
 
-/** Reads the player gold from the vendor gold badge. */
-const readGold = async (page: import('@playwright/test').Page): Promise<number> => {
+/** Parses the player gold from the vendor gold badge. */
+const parseGold = async (page: import('@playwright/test').Page): Promise<number> => {
   const badge = page.locator('.badge-warning', { hasText: '🪙' });
-  await expect(badge).toBeVisible();
   const text = (await badge.textContent()) ?? '';
   return Number.parseInt(text.replace(/[^0-9]/g, ''), 10) || 0;
+};
+
+/**
+ * Polls the vendor gold badge until it parses to the expected amount.
+ * Bounded polling replaces single-read textContent comparisons so the
+ * assertion waits for the badge to settle after a transaction.
+ */
+const expectGold = async (
+  page: import('@playwright/test').Page,
+  expected: number,
+): Promise<void> => {
+  const badge = page.locator('.badge-warning', { hasText: '🪙' });
+  await expect(badge).toBeVisible();
+  await expect
+    .poll(async () => parseGold(page), { timeout: 10_000, intervals: [250, 500, 1000] })
+    .toBe(expected);
 };
 
 /** Clicks the Buy button inside the vendor card for the given item name. */
@@ -44,14 +59,13 @@ test.describe('Economy loop (C-331) — new Emberwatch pack', () => {
   test('AC-1: buying from the vendor decreases gold and adds the item to inventory', async ({
     page,
   }) => {
-    const goldBefore = await readGold(page);
+    const goldBefore = await parseGold(page);
     expect(goldBefore).toBeGreaterThanOrEqual(400);
 
     await buyItem(page, 'Iron Sword'); // 50g
     await buyItem(page, 'Health Potion'); // 10g
 
-    const goldAfter = await readGold(page);
-    expect(goldAfter).toBe(goldBefore - 60);
+    await expectGold(page, goldBefore - 60);
 
     // Inventory badge/sell list reflects the purchase.
     await expect(page.locator('button[aria-label^="Sell Iron Sword"]')).toBeVisible({
@@ -61,8 +75,9 @@ test.describe('Economy loop (C-331) — new Emberwatch pack', () => {
 
   test('AC-2: selling an item back (with confirmation) restores gold', async ({ page }) => {
     // Seed inventory by buying, then sell it back.
-    await buyItem(page, 'Iron Sword');
-    const goldAfterBuy = await readGold(page);
+    const goldBefore = await parseGold(page);
+    await buyItem(page, 'Iron Sword'); // 50g
+    await expectGold(page, goldBefore - 50);
 
     const sellButton = page.locator('button[aria-label^="Sell Iron Sword"]');
     await sellButton.click();
@@ -73,14 +88,19 @@ test.describe('Economy loop (C-331) — new Emberwatch pack', () => {
     await confirmButton.click();
 
     // Iron Sword sells for floor(50 × 0.5) = 25g.
-    const goldAfterSell = await readGold(page);
-    expect(goldAfterSell).toBe(goldAfterBuy + 25);
+    await expectGold(page, goldBefore - 50 + 25);
 
     // No longer sellable.
     await expect(page.locator('button[aria-label^="Sell Iron Sword"]')).toBeHidden();
   });
 
   test('AC-3: quest key items (Ward Wand) are not vendor-tradable', async ({ page }) => {
+    // Wait for the vendor list to render (a known tradable item) before
+    // asserting the Ward Wand is absent — the badge alone does not prove
+    // the inventory list has loaded.
+    await expect(page.locator('h4', { hasText: 'Iron Sword' })).toBeVisible({
+      timeout: 10_000,
+    });
     // The Ward Wand has no basePrice — the vendor must not list or buy it.
     await expect(page.locator('h4', { hasText: 'Ward Wand' })).toHaveCount(0);
     await expect(page.getByText('Nothing the vendor will buy.')).toBeVisible();

@@ -1479,8 +1479,11 @@ export class NpcDialogueService
         }
         case 'flag_set': {
           if (delta.label && delta.label.length > 0) {
-            questStateService.worldStateFlags[delta.label] = true;
-            valid.push(delta);
+            if (questStateService.setWorldStateFlag(delta.label)) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
+            }
           } else {
             this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
           }
@@ -1488,8 +1491,11 @@ export class NpcDialogueService
         }
         case 'flag_clear': {
           if (delta.label && delta.label.length > 0) {
-            delete questStateService.worldStateFlags[delta.label];
-            valid.push(delta);
+            if (questStateService.clearWorldStateFlag(delta.label)) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
+            }
           } else {
             this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
           }
@@ -1497,15 +1503,18 @@ export class NpcDialogueService
         }
         case 'inventory_grant': {
           if (delta.target && delta.target.length > 0) {
-            const quantity = Math.max(1, Math.round(delta.value ?? 1));
+            // Bound the authored quantity to the [1, 99] range.
+            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
             if (inventoryService.addItem({ itemId: delta.target, quantity })) {
               // Advance completeOnItemPickup quest objectives (e.g. the Ward Wand).
               questStateService.evaluateTriggers({
                 type: 'ITEM_PICKED_UP',
                 itemId: delta.target,
               });
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:inventory-grant-failed', { delta });
             }
-            valid.push(delta);
           } else {
             this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
           }
@@ -1513,9 +1522,13 @@ export class NpcDialogueService
         }
         case 'inventory_remove': {
           if (delta.target && delta.target.length > 0) {
-            const quantity = Math.max(1, Math.round(delta.value ?? 1));
-            inventoryService.removeItem({ itemId: delta.target, quantity });
-            valid.push(delta);
+            // Bound the authored quantity to the [1, 99] range.
+            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+            if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
+              valid.push(delta);
+            } else {
+              this.warn('_validateAndApplyDeltas:inventory-remove-failed', { delta });
+            }
           } else {
             this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
           }
@@ -1637,17 +1650,20 @@ export class NpcDialogueService
       return undefined;
     }
 
-    const questContext = /\b(quest|task|help|job|mission|errand|responsibility)\b/.test(text);
+    const questContext = /\b(quest|task|job|mission|errand|responsibility)\b/.test(text);
     if (!questContext) {
       return undefined;
     }
 
-    // Negations (explicit or implicit refusals) win over accept keywords —
-    // e.g. "No thanks, I cannot take on this quest."
+    // Negations — only explicit refusal phrases count, and they must occur
+    // near a quest-related word so ordinary help requests (e.g. "Can you
+    // help me?") are never treated as declines.
+    const refusalMatch = /\b(no thanks?|no thank you|i decline|i refuse)\b/.exec(text);
+    const questMatch = /\b(quest|task|job|mission|errand|responsibility)\b/.exec(text);
     const negated =
-      /\b(no thanks?|no thank you|i decline|i refuse|can'?t|cannot|won'?t|will not|don'?t|not today|maybe later|i'?m? not going to)\b/.test(
-        text,
-      );
+      !!refusalMatch &&
+      !!questMatch &&
+      Math.abs((refusalMatch.index ?? 0) - (questMatch.index ?? 0)) <= 60;
     if (negated) {
       return { action: 'decline', questId: quest.id };
     }

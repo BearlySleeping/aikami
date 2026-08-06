@@ -44,7 +44,16 @@ export const buildGameStateFacts = (options: {
 }): string[] => {
   const facts: string[] = [];
 
-  facts.push(`Gold: ${inventoryService.gold}`);
+  // Every fact goes through the cap so MAX_TOTAL_FACTS bounds the whole
+  // list (gold, inventory, equipped, quest, easy-mode hint, offerable-quest,
+  // and difficulty-guidance facts) before relationship facts are appended.
+  const pushFact = (fact: string): void => {
+    if (facts.length < MAX_TOTAL_FACTS) {
+      facts.push(fact);
+    }
+  };
+
+  pushFact(`Gold: ${inventoryService.gold}`);
 
   const entries = inventoryService.inventory;
   if (entries.length === 0) {
@@ -55,14 +64,14 @@ export const buildGameStateFacts = (options: {
       .map((entry) => `${getItemDefinition(entry.itemId).label} x${entry.quantity}`)
       .join(', ');
     const suffix = entries.length > MAX_LISTED_ITEMS ? ', \u2026' : '';
-    facts.push(`Inventory: ${listed}${suffix}`);
+    pushFact(`Inventory: ${listed}${suffix}`);
   }
 
   const equipped: string[] = [];
   for (const { slot, itemId } of equipmentService.equippedItems) {
     equipped.push(`${getItemDefinition(itemId).label} (${slot})`);
   }
-  facts.push(`Equipped: ${equipped.length > 0 ? equipped.join(', ') : 'nothing'}`);
+  pushFact(`Equipped: ${equipped.length > 0 ? equipped.join(', ') : 'nothing'}`);
 
   // ── Active quest facts (drives GM quest guidance) ────────────────────
   const difficulty = getGameplayDifficulty();
@@ -72,12 +81,12 @@ export const buildGameStateFacts = (options: {
       (o) => o.current < o.max && o.status !== 'completed' && o.status !== 'failed',
     );
     const nextText = next ? next.label : 'Complete the quest';
-    facts.push(`Active quest: "${quest.title}" — next objective: ${nextText}`);
+    pushFact(`Active quest: "${quest.title}" — next objective: ${nextText}`);
     // Easy mode: surface the item the player must obtain so NPCs can name it.
     if (difficulty === 'easy') {
       const itemHint = _extractItemHint(nextText);
       if (itemHint) {
-        facts.push(`Hint (easy mode only): the player needs "${itemHint}".`);
+        pushFact(`Hint (easy mode only): the player needs "${itemHint}".`);
       }
     }
   }
@@ -85,7 +94,7 @@ export const buildGameStateFacts = (options: {
   // ── Offerable quests (the GM's quest-activation tool targets) ────────
   const offerable = questStateService.getOfferableQuests(options.npcId);
   if (offerable.length > 0) {
-    facts.push(
+    pushFact(
       `Offerable quests: ${offerable
         .map((q) => `"${q.name}" (id: ${q.id})`)
         .join(', ')} — ${options.npcId} can offer these.`,
@@ -93,7 +102,7 @@ export const buildGameStateFacts = (options: {
   }
 
   // ── Difficulty guidance for the GM/NPC voice ─────────────────────────
-  facts.push(`Game difficulty: ${difficulty}. ${DIFFICULTY_GUIDANCE[difficulty]}`);
+  pushFact(`Game difficulty: ${difficulty}. ${DIFFICULTY_GUIDANCE[difficulty]}`);
 
   // C-341: Append relationship/faction facts (bounded to total max)
   const remaining = MAX_TOTAL_FACTS - facts.length;
@@ -108,11 +117,6 @@ export const buildGameStateFacts = (options: {
   return facts;
 };
 
-/**
- * Extracts a likely quest-item name from the quest/objective text so the
- * easy-mode GM can name it explicitly. Falls back to the full objective text
- * when no item-like token is found.
- */
 /** Recognizable item nouns used to pick the most likely quest-item phrase. */
 const ITEM_NOUNS =
   /(Wand|Sword|Amulet|Ring|Pendant|Blade|Staff|Shield|Charm|Stone|Key|Gem|Dagger|Bow|Armor|Armour|Potion|Scroll|Crown|Idol|Tome|Relic|Orb|Sigil)\b/i;
@@ -121,9 +125,12 @@ const ITEM_NOUNS =
  * Extracts a likely quest-item name from the objective text so the easy-mode
  * GM can name it explicitly. Prefers capitalized phrases ending in an item
  * noun (e.g. "Ward Wand"); falls back to the longest capitalized phrase.
+ * Matches only consecutive capitalized words so lowercase text and arbitrary
+ * spaces are never consumed by one greedy match (e.g. "Find the Ward Wand's
+ * keeper at the inn" yields "Ward Wand", not the full sentence).
  */
 const _extractItemHint = (objectiveText: string): string | undefined => {
-  const matches = objectiveText.match(/\b([A-Z][a-zA-Z' ]{2,40})\b/g) ?? [];
+  const matches = objectiveText.match(/\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\b/g) ?? [];
   const itemLike = matches.filter((m) => ITEM_NOUNS.test(m));
   if (itemLike.length > 0) {
     return itemLike.sort((a, b) => b.length - a.length)[0] ?? undefined;

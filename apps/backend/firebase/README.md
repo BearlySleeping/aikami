@@ -12,9 +12,10 @@ This app contains the Firebase Cloud Functions for the Aikami project:
 
 ## Tech Stack
 
-- **Runtime**: Node.js / Bun
+- **Runtime**: Node.js (deployed Firebase Cloud Functions runtime)
 - **Platform**: Firebase Cloud Functions
 - **AI**: Server-side providers (`packages/backend/chat`) — client routes through `AiProviderGateway`
+- **Local tooling**: Bun — used for installs, scripts, and tests during local development; the deployed functions always run on the Node.js Firebase runtime
 
 ## Installation
 

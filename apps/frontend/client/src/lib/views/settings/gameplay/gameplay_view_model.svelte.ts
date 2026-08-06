@@ -108,6 +108,8 @@ class GameplayViewModel
     this.tutorialHints = true;
     this.autosave = true;
     this.difficulty = 'medium';
+    // Restore the quest overlay to its default (visible) state.
+    questOverlayService.setVisible(true);
     this._persist();
     this.debug('resetDefaults');
   }

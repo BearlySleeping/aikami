@@ -22,7 +22,9 @@ import {
 import type {
   ActiveQuestState,
   ContentPackQuestEntry,
+  ContentPackQuestObjective,
   QuestObjectiveFailureCondition,
+  QuestObjectiveProgress,
   QuestProgress,
 } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';
@@ -40,12 +42,33 @@ export type QuestTriggerEvent =
   | { type: 'ENCOUNTER_COMPLETED'; encounterId: string; victory: boolean }
   | { type: 'ITEM_PICKED_UP'; itemId: string };
 
+/**
+ * Rejects empty and prototype-sensitive flag names that could pollute the
+ * world-state flags record (e.g. `__proto__`, `constructor`).
+ */
+const _isValidWorldStateFlag = (flag: string): boolean =>
+  flag.length > 0 && flag !== '__proto__' && flag !== 'constructor' && flag !== 'prototype';
+
 export type QuestStateServiceInterface = BaseFrontendClassInterface & {
   /** Quest data for UI consumption (quest log, tracker HUD). */
   readonly quests: QuestData[];
 
   /** World-state flags set by quest endings. */
   readonly worldStateFlags: Record<string, boolean>;
+
+  /**
+   * Sets a world-state flag. Validates the flag name before mutating state;
+   * prototype-sensitive names (e.g. `__proto__`, `constructor`) are rejected.
+   * Returns true when the flag was set.
+   */
+  setWorldStateFlag(flag: string): boolean;
+
+  /**
+   * Clears a world-state flag. Validates the flag name before mutating state;
+   * prototype-sensitive names (e.g. `__proto__`, `constructor`) are rejected.
+   * Returns true when the flag was cleared.
+   */
+  clearWorldStateFlag(flag: string): boolean;
 
   /** Journal entries for completed and failed quests (C-339). */
   readonly journalEntries: readonly QuestJournalEntry[];
@@ -193,8 +216,7 @@ class QuestStateService
       firstEntry.status === 'active' &&
       firstDefinition.completeOnNpcInteract === npcId
     ) {
-      firstEntry.current = Math.min(firstEntry.current + 1, firstDefinition.maxCount ?? 1);
-      firstEntry.status = 'completed';
+      this._advanceObjective(firstEntry, firstDefinition);
       this.debug('acceptQuest:auto-completed-first-objective', { questId, npcId });
     }
 
@@ -204,19 +226,21 @@ class QuestStateService
 
     this._progress = [...this._progress, progress];
 
+    // Emit the accept event immediately after the quest enters the active
+    // set so listeners observe QUEST_ACCEPTED before any retroactive
+    // completion emits QUEST_COMPLETED.
+    this._emitQuestEvent({
+      type: 'QUEST_ACCEPTED',
+      questId,
+      questName: definition.name,
+    });
+
     // Retro-complete zone objectives when the quest is accepted while the
     // player is already standing on the target map (e.g. entering the inn
     // before the elder offered the quest).
     this._applyRetroactiveMapObjectives(progress, definition);
 
     this._syncQuests();
-
-    // Emit bridge event
-    this._emitQuestEvent({
-      type: 'QUEST_ACCEPTED',
-      questId,
-      questName: definition.name,
-    });
 
     this.debug('acceptQuest', { questId, name: definition.name });
     return true;
@@ -229,6 +253,32 @@ class QuestStateService
       this._declinedQuestIds = [...this._declinedQuestIds, questId];
       this.debug('declineQuest', { questId });
     }
+  }
+
+  /** @inheritdoc */
+  setWorldStateFlag(flag: string): boolean {
+    if (!_isValidWorldStateFlag(flag)) {
+      this.warn('setWorldStateFlag:invalid-name', { flag });
+      return false;
+    }
+    if (!this.worldStateFlags[flag]) {
+      this.worldStateFlags = { ...this.worldStateFlags, [flag]: true };
+    }
+    return true;
+  }
+
+  /** @inheritdoc */
+  clearWorldStateFlag(flag: string): boolean {
+    if (!_isValidWorldStateFlag(flag)) {
+      this.warn('clearWorldStateFlag:invalid-name', { flag });
+      return false;
+    }
+    if (this.worldStateFlags[flag]) {
+      const next = { ...this.worldStateFlags };
+      delete next[flag];
+      this.worldStateFlags = next;
+    }
+    return true;
   }
 
   /** @inheritdoc */
@@ -1037,6 +1087,24 @@ class QuestStateService
   }
 
   /**
+   * Advances an objective by one step and marks it completed once its current
+   * count reaches the authored threshold (requiredCount ?? maxCount ?? 1).
+   * Returns true when the objective completed on this increment.
+   */
+  private _advanceObjective(
+    progressEntry: QuestObjectiveProgress,
+    objectiveDef: ContentPackQuestObjective,
+  ): boolean {
+    progressEntry.current = Math.min(progressEntry.current + 1, objectiveDef.maxCount ?? 1);
+    const required = objectiveDef.requiredCount ?? objectiveDef.maxCount ?? 1;
+    if (progressEntry.current >= required) {
+      progressEntry.status = 'completed';
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Completes active zone objectives (completeOnMapEnter) when the quest is
    * accepted while the player is already standing on the target map.
    */
@@ -1059,8 +1127,7 @@ class QuestStateService
       }
       const def = definition.objectives[entry.objectiveIndex];
       if (def?.completeOnMapEnter === mapId) {
-        entry.current = Math.min(entry.current + 1, def.maxCount ?? 1);
-        entry.status = 'completed';
+        this._advanceObjective(entry, def);
         changed = true;
         this.debug('_applyRetroactiveMapObjectives:completed', {
           questId: progress.questId,
