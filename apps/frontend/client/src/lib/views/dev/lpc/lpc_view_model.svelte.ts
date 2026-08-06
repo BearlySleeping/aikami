@@ -462,7 +462,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   setPlaybackFps(fps: number): void {
-    this.playbackFps = fps;
+    this.playbackFps = Math.max(1, fps);
   }
 
   setShowGridOverlay(show: boolean): void {

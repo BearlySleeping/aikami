@@ -1006,7 +1006,15 @@ describe('PersonaCreateViewModel — C-078', () => {
       await vm.enterWorld();
 
       // Verify resets were called: player, inventory, equipment, world state
-      expect(resetCalls).toBe(4);
+      // Each domain service must be reset exactly once, not the retired gameStateService.
+      const { playerStateService, inventoryService, equipmentService, worldStateService } =
+        await import(
+          '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
+        );
+      expect(playerStateService.reset).toHaveBeenCalledTimes(1);
+      expect(inventoryService.reset).toHaveBeenCalledTimes(1);
+      expect(equipmentService.reset).toHaveBeenCalledTimes(1);
+      expect(worldStateService.reset).toHaveBeenCalledTimes(1);
 
       // Verify route to /game
       expect(enterWorldRouteCalls.length).toBeGreaterThanOrEqual(1);

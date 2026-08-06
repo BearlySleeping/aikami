@@ -246,7 +246,7 @@ class LpcPreviewViewModel
   }
 
   setPlaybackFps(fps: number): void {
-    this._playbackFps = fps;
+    this._playbackFps = Math.max(1, fps);
   }
 
   setZoom(zoom: number): void {

@@ -52,10 +52,14 @@ describe('AutonomousMessageService', () => {
     vi.useRealTimers();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     setSystemTime(new Date('2026-07-10T12:00:00Z'));
+
+    // Reset idleDetectionService.isIdle mock to default true value
+    const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
+    idleDetectionService.isIdle.mockReturnValue(true);
   });
 
   it('should start and stop the poller', async () => {

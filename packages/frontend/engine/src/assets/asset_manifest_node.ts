@@ -29,6 +29,8 @@ type ScanContext = {
   assets: Record<string, AssetEntry>;
   byCategory: Record<string, AssetEntry[]>;
   collisionWarnings: string[];
+  /** Set of visited canonical directory paths to prevent symlink cycles. */
+  visitedDirs: Set<string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -79,7 +81,7 @@ export const ensureAssetDirs = async (rootDir: string): Promise<void> => {
  */
 export const buildManifest = async (rootDir?: string): Promise<AssetManifest> => {
   const { join, relative } = await import('node:path');
-  const { readdir, stat, writeFile, mkdir } = await import('node:fs/promises');
+  const { readdir, stat, writeFile, mkdir, realpath } = await import('node:fs/promises');
 
   const resolvedRoot = rootDir ?? join(process.cwd(), DEFAULT_ASSETS_DIR);
 
@@ -91,6 +93,7 @@ export const buildManifest = async (rootDir?: string): Promise<AssetManifest> =>
     assets: {},
     byCategory: {},
     collisionWarnings: [],
+    visitedDirs: new Set(),
   };
 
   // Initialize byCategory with empty arrays for all known categories
@@ -100,6 +103,19 @@ export const buildManifest = async (rootDir?: string): Promise<AssetManifest> =>
 
   // Recursive scan helper
   const scanDir = async (dirPath: string): Promise<void> => {
+    // Track canonical path to prevent symlink cycles
+    let canonicalPath: string;
+    try {
+      canonicalPath = await realpath(dirPath);
+    } catch {
+      return; // Skip directories that can't be resolved (e.g. broken symlinks)
+    }
+
+    if (ctx.visitedDirs.has(canonicalPath)) {
+      return; // Already visited — skip to prevent cycles
+    }
+    ctx.visitedDirs.add(canonicalPath);
+
     let entries: string[];
     try {
       entries = await readdir(dirPath);

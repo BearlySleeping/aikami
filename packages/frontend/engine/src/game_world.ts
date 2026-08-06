@@ -711,9 +711,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._worker = this._workerFactory();
     } else {
       if (!this._workerConstructor) {
-        const workerModule = await import('./worker/ecs_worker_bootstrap.ts?worker&type=module');
-        this._workerConstructor = workerModule.default as EcsWorkerConstructor;
+        try {
+          const workerModule = await import('./worker/ecs_worker_bootstrap.ts?worker&type=module');
+          this._workerConstructor = workerModule.default as EcsWorkerConstructor;
+        } catch (error) {
+          this.error('spawnWorker:import-failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Clean up partial state so initialize() can be retried
+          this._workerConstructor = undefined;
+          this._worker = undefined;
+          throw error;
+        }
       }
+
+      // Check if destroy() was called during the await above
+      if (this._disposed) {
+        this.warn('spawnWorker:aborted-after-import', {
+          reason: 'GameWorld was destroyed during worker module import',
+        });
+        return;
+      }
+
       this._worker = new this._workerConstructor();
       this.debug('spawnWorker:created', { name: this._workerConstructor.name });
     }
