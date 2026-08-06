@@ -1,5 +1,6 @@
 {
   "name": "@aikami/scripts",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

@@ -1,5 +1,6 @@
 {
   "name": "@aikami/client",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite dev --mode emulator",

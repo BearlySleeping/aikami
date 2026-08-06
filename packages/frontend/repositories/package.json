@@ -1,5 +1,6 @@
 {
   "name": "@aikami/frontend-repositories",
+  "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",

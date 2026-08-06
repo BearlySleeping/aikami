@@ -1,5 +1,6 @@
 {
   "name": "@aikami/e2e",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,5 +1,6 @@
 {
   "name": "@aikami/utils",
+  "license": "MIT",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",

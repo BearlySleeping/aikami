@@ -1,5 +1,6 @@
 {
   "name": "@aikami/backend-auth",
+  "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",

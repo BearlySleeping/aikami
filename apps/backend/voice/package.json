@@ -1,5 +1,6 @@
 {
   "name": "@aikami/voice",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "lint": "true",

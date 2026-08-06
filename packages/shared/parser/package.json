@@ -1,5 +1,6 @@
 {
   "name": "@aikami/parser",
+  "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
