@@ -13,7 +13,7 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { playSceneBgm, resolveBgmUrl } from '$lib/services/audio/audio_asset_resolver';
+import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
 import {
   audioService,
   diceService,

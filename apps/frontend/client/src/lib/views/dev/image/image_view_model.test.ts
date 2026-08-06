@@ -124,6 +124,8 @@ const _setupBarrelMock = () => {
     UserService: class {},
     routerService: _createServiceStub(),
     pixiTextureInjector: _createServiceStub(),
+    compileImagePrompt: mock(() => ({ positive: '', negative: '' })),
+    styleProfileService: _createServiceStub(),
     __esModule: true,
   }));
 };

@@ -174,9 +174,7 @@ const currentPresetName = $derived.by(() => {
                       const target = e.target as HTMLTextAreaElement;
                       viewModel.updateSectionContent({ id: section.id, content: target.value });
                     }}
-                  >
-                    {section.content}
-                  </textarea>
+                  >{section.content}</textarea>
                 </div>
               </div>
             {/each}

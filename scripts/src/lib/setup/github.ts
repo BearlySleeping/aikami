@@ -33,7 +33,7 @@ async function setGitHubSecret(name: string, value: string, env?: string): Promi
     args.push('--env', env);
   }
   const proc = Bun.spawn({
-    cmd: args,
+    cmd: ['gh', ...args],
     stdin: 'pipe',
     stdout: 'inherit',
     stderr: 'inherit',

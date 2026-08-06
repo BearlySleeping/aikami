@@ -10,7 +10,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
-import { PORTS } from '../../../packages/shared/constants/src/index';
+import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');

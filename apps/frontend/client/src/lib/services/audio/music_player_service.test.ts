@@ -112,11 +112,11 @@ describe('MusicPlayerService — visibility', () => {
   });
 
   test('initialize restores visible state from storage', () => {
-    const MUSIC_PLAYER_VISIBLE_KEY = 'aikami-music-player-visible';
-    localStorage.setItem(MUSIC_PLAYER_VISIBLE_KEY, '1');
+    const MusicPlayerVisibleKey = 'aikami-music-player-visible';
+    localStorage.setItem(MusicPlayerVisibleKey, '1');
     musicPlayerService.initialize();
     expect(musicPlayerService.visible).toBe(true);
-    localStorage.removeItem(MUSIC_PLAYER_VISIBLE_KEY);
+    localStorage.removeItem(MusicPlayerVisibleKey);
   });
 });
 

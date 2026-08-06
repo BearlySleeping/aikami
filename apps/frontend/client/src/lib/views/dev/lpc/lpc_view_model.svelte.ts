@@ -23,7 +23,7 @@ import {
 } from '$lib/data/lpc_asset_catalog';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
-import { loadLpcSheet } from '$lib/data/lpc_renderer';
+import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
 import { lpcStateSuffix } from '$lib/data/lpc_tags';
 import {
   type LpcUrlState,
@@ -579,29 +579,33 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        // Extract frame from spritesheet
-        const columns = Math.max(1, Math.floor(texture.width / 64));
-        const rows = Math.max(1, Math.floor(texture.height / 64));
+        // Extract frame from spritesheet (auto-detects standard 64px vs
+        // universal 128px cell layouts — e.g. bow walk sheets).
+        const layout = detectLpcSheetLayout(texture);
 
-        const col = currentFrame % columns;
-        const row = rows > 1 ? currentDirection % rows : 0;
-        const x = col * 64;
-        const y = row * 64;
+        const col = currentFrame % layout.columns;
+        const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
+        const x = col * layout.pitch;
+        const y = row * layout.pitch;
 
-        if (x + 64 > texture.width || y + 64 > texture.height) {
+        if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
           return;
         }
 
         const { Rectangle } = await import('./lpc_pixi_facade');
         const frameTexture = new Texture({
           source: texture.source,
-          frame: new Rectangle(x, y, 64, 64),
+          frame: new Rectangle(x, y, layout.pitch, layout.pitch),
         });
 
+        const anchor = getLpcSpriteAnchor(layout, recipeAssetId);
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
-        sprite.x = -32;
-        sprite.y = -32;
+        // Anchor at the 64px logical frame origin; universal 128px cells keep
+        // the same anchor after scaling so the weapon lands in the hand.
+        sprite.x = anchor.x;
+        sprite.y = anchor.y;
+        sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
         sprite.zIndex = i * 10;
 
@@ -644,18 +648,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const message = error instanceof Error ? error.message : String(error);
       this.error('lpcDebugger.composeFailed', { error: message });
 
-      const fallbackGfx = new Graphics();
-      fallbackGfx.rect(0, 0, 64, 64);
-      fallbackGfx.fill({ color: 0xff00ff, alpha: 0.9 });
-      fallbackGfx.rect(0, 0, 64, 64);
-      fallbackGfx.stroke({ color: 0xff0000, width: 2 });
-      fallbackGfx.x = CanvasWidth / 2 - 32;
-      fallbackGfx.y = CanvasHeight / 2 - 32;
-      fallbackGfx.eventMode = 'none';
-
-      this.pixiApp.stage.addChild(fallbackGfx);
-      this._characterContainer = undefined;
-      this._layerSprites = [];
+      // Graceful degradation: drop any partial composite and let the status
+      // banner + compositionFailed chip surface the failure. No loud magenta
+      // square covering the viewport.
+      this._destroyAllSprites();
       this.compositionFailed = true;
 
       this._setStatus(`Composition failed: ${message}`, 'error');

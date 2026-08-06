@@ -15,14 +15,14 @@ import type { AssetEntry, AssetManifest } from '@aikami/types';
 import {
   buildAssetTagList,
   buildAssetTree,
-  buildManifest,
-  ensureAssetDirs,
   pathToTag,
   resolveAssetUrl,
   sanitizeAssetFilename,
   tagToPath,
   validUniquePath,
 } from '../assets/asset_manifest.ts';
+// Node-only manifest disk operations — kept out of the browser bundle.
+import { buildManifest, ensureAssetDirs } from '../assets/asset_manifest_node.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers

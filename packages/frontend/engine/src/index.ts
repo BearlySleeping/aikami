@@ -190,13 +190,17 @@ export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer
 // Rendering
 
 // Asset Manifest (C-243)
+//
+// Node-only filesystem operations (ensureAssetDirs / buildManifest /
+// loadManifest) live in asset_manifest_node.ts and are intentionally NOT
+// re-exported here — importing them from the browser bundle would pull
+// `node:fs/promises` / `node:path` into the client (externalized to empty
+// modules with build warnings). Consumers that need disk scanning import
+// them from the module path directly (e.g. scripts, engine tests).
 export {
   buildAssetTagList,
   buildAssetTree,
-  buildManifest,
-  ensureAssetDirs,
   hasNativeMarker,
-  loadManifest,
   pathToTag,
   resolveAssetUrl,
   sanitizeAssetFilename,
@@ -292,11 +296,12 @@ export { MinHeap } from './math/jps/min_heap.ts';
 export { castDdaVisionCone } from './math/vision/dda_raycaster.ts';
 export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
 // Turso hydration bridge (C-195)
-export type {
-  TursoRegistryHydrationOptions,
-  TursoStringRow,
-} from './persistence/turso_registry_hydration.ts';
-export { TursoRegistryHydration } from './persistence/turso_registry_hydration.ts';
+//
+// Intentionally NOT re-exported from the barrel: TursoRegistryHydration
+// dynamically imports @tursodatabase/database (a Rust native client that
+// imports `node:module`), which Vite externalizes with
+// browser-compatibility warnings. Node-side consumers import it from the
+// module path directly (e.g. engine tests).
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {

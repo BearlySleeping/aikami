@@ -345,12 +345,7 @@ async function main(): Promise<void> {
   // Validate all required platform keys are present before uploading — a
   // partial manifest silently drops updater support for entire platforms
   // (e.g. darwin-x86_64 when macOS was built arm64-only).
-  const requiredPlatforms = [
-    'linux-x86_64',
-    'windows-x86_64',
-    'darwin-x86_64',
-    'darwin-aarch64',
-  ];
+  const requiredPlatforms = ['linux-x86_64', 'windows-x86_64', 'darwin-x86_64', 'darwin-aarch64'];
   const missingPlatforms = requiredPlatforms.filter((key) => !platforms[key]);
   if (missingPlatforms.length > 0) {
     error(

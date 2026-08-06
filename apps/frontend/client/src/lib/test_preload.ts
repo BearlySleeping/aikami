@@ -354,6 +354,7 @@ const _localServicesMock = () => ({
   npcChatService: _createServiceStub(),
   configService: _createServiceStub(),
   ConfigService: class {},
+  lorebookStore: _createServiceStub(),
   diceService: _createServiceStub(),
   DiceService: class {},
   draftStore: _createServiceStub(),
@@ -484,6 +485,44 @@ const _localServicesMock = () => ({
   buildGameStateFacts: mock(() => ['Gold: 100', 'Inventory: (empty)', 'Equipped: nothing']),
   imageGenerationService: _createServiceStub(),
   ImageGenerationService: class {},
+  IMAGE_PROVIDERS: [
+    { id: 'comfyui', label: 'ComfyUI (local)' },
+    { id: 'openai-compat', label: 'OpenAI Compatible' },
+  ] as const,
+  PROVIDER_MODEL_FETCH: {},
+  choiceHistoryStore: _createServiceStub(),
+  getExpressionAssetResolver: _createCallableStub(),
+  sceneToMusicTags: _createCallableStub(),
+  styleProfileService: _createServiceStub(),
+  vendorService: _createServiceStub(),
+  worldGenSeedingService: _createServiceStub(),
+  compileImagePrompt: _createCallableStub(),
+  narrativeDirectorService: _createServiceStub(),
+  buildVerifyHeaders: _createCallableStub(),
+  buildVerifyUrl: _createCallableStub(),
+  DEFAULT_VOICE_ARCHETYPES: [] as const,
+  KOKORO_VOICES: [] as const,
+  VOICE_ENGINES: [] as const,
+  MEMORY_TYPES: [] as const,
+  EMBEDDING_MODELS: [] as const,
+  EMOTION_METHODS: [] as const,
+  TEXT_PROVIDERS: [] as const,
+  VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
+  PROVIDER_ENDPOINTS: {},
+  fetchOpenRouterModels: _createCallableStub(),
+  LocalServiceDetector: class {
+    status = {
+      comfyUi: 'disconnected',
+      text: 'disconnected',
+      voice: 'disconnected',
+    };
+    async detectAll() {
+      return this.status;
+    }
+    async detectService(key: string) {
+      return this.status[key as keyof typeof this.status] ?? 'disconnected';
+    }
+  },
   notificationService: _createServiceStub(),
   NotificationService: class {},
   npcService: _createServiceStub(),
@@ -505,6 +544,10 @@ const _localServicesMock = () => ({
   UserService: class {},
   routerService: _createServiceStub(),
   pixiTextureInjector: _createServiceStub(),
+  idleDetectionService: Object.assign(_createServiceStub(), {
+    isDnd: false,
+    isIdle: mock(() => true),
+  }),
   gameOverlayService: {
     openEndSession: mock(() => {}),
     closeEndSession: mock(() => {}),

@@ -1,6 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LpcAnimationDebugPanel from '$lib/components/game/lpc_animation_debug_panel.svelte';
 import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
 import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
 
@@ -253,113 +254,8 @@ let showControls = $state(true);
             >
           </div>
 
-          <!-- Animation Controls -->
-          <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
-            <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
-              Animation
-            </legend>
-
-            <div class="flex gap-2 mb-2">
-              <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
-                State
-                <select
-                  class="select select-sm w-full bg-base-100"
-                  value={viewModel.animationState}
-                  onchange={(e: Event) => {
-                  const target = e.target as HTMLSelectElement;
-                  viewModel.setAnimationState(Number.parseInt(target.value, 10) as number);
-                }}
-                >
-                  {#each viewModel.animationStateOptions as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
-                Direction
-                <select
-                  class="select select-sm w-full bg-base-100"
-                  value={viewModel.facingDirection}
-                  onchange={(e: Event) => {
-                  const target = e.target as HTMLSelectElement;
-                  viewModel.setFacingDirection(Number.parseInt(target.value, 10) as number);
-                }}
-                >
-                  {#each viewModel.directionOptions as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              </label>
-            </div>
-
-            <!-- Animation Playback Ticker Deck -->
-            <fieldset
-              class="border border-base-300 rounded-lg p-2.5 mt-1 bg-base-300 flex flex-col gap-1.5"
-            >
-              <legend class="text-[0.7rem] font-semibold text-primary/70 uppercase tracking-wider">
-                Playback Ticker
-              </legend>
-
-              <div class="flex gap-1.5 items-center">
-                <button
-                  type="button"
-                  class="btn btn-sm flex-1"
-                  class:btn-success={!viewModel.isPlaying}
-                  class:btn-warning={viewModel.isPlaying}
-                  onclick={() => viewModel.togglePlayback()}
-                  aria-label={viewModel.isPlaying ? 'Pause animation' : 'Play animation'}
-                >
-                  {viewModel.isPlaying ? '⏸ Pause' : '▶ Play'}
-                </button>
-
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm flex-1"
-                  onclick={() => viewModel.stepPrev()}
-                  disabled={viewModel.isPlaying}
-                  aria-label="Step previous frame"
-                >
-                  ◀ Prev
-                </button>
-
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm flex-1"
-                  onclick={() => viewModel.stepNext()}
-                  disabled={viewModel.isPlaying}
-                  aria-label="Step next frame"
-                >
-                  Next ▶
-                </button>
-              </div>
-
-              <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
-                Speed: {viewModel.playbackFps} FPS
-                <input
-                  type="range"
-                  class="range range-sm range-primary w-full mt-1"
-                  min="1"
-                  max="60"
-                  value={viewModel.playbackFps}
-                  oninput={(e: Event) => viewModel.setPlaybackFps(Number.parseInt((e.target as HTMLInputElement).value, 10))}
-                >
-              </label>
-
-              <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
-                Frame: {viewModel.animationFrame} / {viewModel.maxFrame}
-                <input
-                  type="range"
-                  class="range range-sm range-primary w-full mt-1 disabled:opacity-40"
-                  min="0"
-                  value={viewModel.animationFrame}
-                  max={viewModel.maxFrame}
-                  disabled={viewModel.isPlaying}
-                  oninput={(e: Event) => viewModel.setAnimationFrame(Number.parseInt((e.target as HTMLInputElement).value, 10))}
-                >
-              </label>
-            </fieldset>
-          </fieldset>
+          <!-- Animation Controls (reusable panel) -->
+          <LpcAnimationDebugPanel controller={viewModel} />
 
           <!-- Zoom Control -->
           <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">

@@ -11,7 +11,9 @@
 // Contract: C-233
 
 import { describe, expect, test } from 'bun:test';
-import { worldGenSeedingService } from '$services';
+// The barrel mock in test_preload stubs worldGenSeedingService; these tests
+// exercise the REAL prompt assembly, so import the actual singleton.
+import { worldGenSeedingService } from '../../services/worldgen/world_gen_seeding_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Fixtures

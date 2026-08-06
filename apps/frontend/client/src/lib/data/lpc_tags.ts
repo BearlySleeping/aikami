@@ -41,8 +41,11 @@ export type LpcTag = `lpc:${string}`;
  * @example lpcTag('torso/aprons/apron_female', LpcAnimationState.Walk)
  *          → "lpc:torso:aprons:apron_female:walk"
  * @param assetId - Renderer asset ID (path segments joined with "/").
- * @param state - Numeric LpcAnimationState value.
+ * @param state - Numeric `LpcAnimationState` value, or a raw spritesheet
+ *   filename suffix (e.g. "idle") for state-fallback lookups.
  * @returns The manifest tag.
  */
-export const lpcTag = (assetId: string, state: number): LpcTag =>
-  `lpc:${assetId.replaceAll('/', ':')}:${lpcStateSuffix(state)}`;
+export const lpcTag = (assetId: string, state: number | string): LpcTag => {
+  const suffix = typeof state === 'string' ? state : lpcStateSuffix(state);
+  return `lpc:${assetId.replaceAll('/', ':')}:${suffix}`;
+};

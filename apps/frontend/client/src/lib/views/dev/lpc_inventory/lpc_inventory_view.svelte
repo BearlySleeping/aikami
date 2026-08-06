@@ -6,6 +6,7 @@ import type { EquipmentSlot } from '@aikami/types';
 // paperdoll + bag. Equipping/unequipping gear updates the LPC render in
 // real time (C-374).
 import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import LpcAnimationDebugPanel from '$components/game/lpc_animation_debug_panel.svelte';
 import LpcPreviewView from '$views/character/lpc_preview/lpc_preview_view.svelte';
 import type { LpcInventoryViewModel } from './lpc_inventory_view_model.svelte';
 
@@ -32,10 +33,37 @@ const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
   <div class="grid grid-cols-[1fr_420px] h-full">
     <!-- Left: live LPC preview -->
     <div
-      class="flex flex-col items-center justify-center bg-base-200 border-r border-base-300 gap-4 p-6"
+      class="flex flex-col items-center justify-center bg-base-200 border-r border-base-300 gap-4 p-6 overflow-y-auto"
     >
       <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">Live Character</h2>
       <LpcPreviewView viewModel={viewModel.lpcPreview} />
+
+      <!-- Canvas zoom -->
+      <fieldset class="border border-base-300 rounded-lg p-3 w-full max-w-sm bg-base-100 shrink-0">
+        <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+          Canvas Zoom
+        </legend>
+        <label class="flex flex-col gap-1 text-xs text-base-content/60">
+          Zoom: {viewModel.lpcPreview.zoom.toFixed(1)}x
+          <input
+            type="range"
+            class="range range-sm range-primary w-full mt-1"
+            min="0.5"
+            max="8"
+            step="0.1"
+            value={viewModel.lpcPreview.zoom}
+            oninput={(e: Event) => viewModel.lpcPreview.setZoom(Number.parseFloat((e.target as HTMLInputElement).value))}
+          >
+        </label>
+      </fieldset>
+
+      <!-- Animation debug panel (state / direction / playback ticker) -->
+      <div
+        class="w-full max-w-sm bg-base-100 rounded-lg border border-base-300 overflow-hidden shrink-0"
+      >
+        <LpcAnimationDebugPanel controller={viewModel.lpcPreview} />
+      </div>
+
       <p class="text-xs text-base-content/50 max-w-sm text-center">
         Equip or unequip items on the right — the character updates instantly.
       </p>
