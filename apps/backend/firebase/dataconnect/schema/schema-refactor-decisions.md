@@ -34,15 +34,18 @@ Secondary items (not blocking, recorded here so they are not lost):
   FEATURES.md `PersonaData.uid` is required and Firestore create enforces the
   request uid, so the SQL schema treats it as required. TypeBox should be
   tightened to match.
-- **Existing `ListUsers` connector query is `@auth(level: PUBLIC)` and returns
-  `email`** — PII exposed without authentication. The documented policy for
-  `User` is read: `USER`. Fix in the connector pass.
+- **`ListUsers` connector query** — updated to `@auth(level: USER)` and the
+  `email` selection removed (only `id` is returned now). Note: the generated
+  SDK is stale until `firebase:generate` runs — the connector pass must
+  regenerate it and check for consumers of the removed `email` field.
 - **Npc field name mismatch:** Firestore uses `creatorUid`; the SQL column is
   `uid` (preserved from the draft). The sync layer maps between them — no
   schema change needed, but be aware when writing filters.
 - **`User.role` vs claims naming:** the SQL field is `role` (kept from the
   draft); the Firebase custom claim and TypeBox use `userRole`. Admin checks
-  in CEL must use `auth.token.userRole == 'superAdmin'`.
+  in CEL must use `auth.token.userRole == 'superAdmin'`. The `role` column
+  only ever stores the enum spellings `MEMBER`/`SUPER_ADMIN` — the sync layer
+  maps claim values; `auth.token.userRole` is never written to the column.
 - **`Config` auth ambiguity:** Firestore's `configs/{uid}` is owner-only, but a
   generic KV store may need different rules. Tied to ND-3.
 
@@ -51,47 +54,53 @@ Secondary items (not blocking, recorded here so they are not lost):
 ## 2. Breaking changes (downstream code must adapt)
 
 | Table | Field | Draft → New | Impact |
-|-------|-------|-------------|--------|
 | all (except AudioTrack) | `createdAt`, `updatedAt` | `Date` (nullable) → `Timestamp! @default(expr: "request.time")` | Wire format changes from `YYYY-MM-DD` (Date scalar) to RFC 3339 (Timestamp scalar); columns become `NOT NULL` — inserts that passed `null` now fail; the app no longer needs to pass these (server-set), and `updatedAt` on update must be set via `updatedAt_expr: "request.time"`. |
 | `Message` | `chatOwnerUid`, `chatVisibility` | **removed** | These were Firestore security-rule denormalizations (O(1) rule evaluation without a parent-chat `get()`). SQL Connect enforces the same policy by joining through `Message.chat`, so they are redundant. Any SQL-side writer that sets them must stop. Firestore rules may keep using them Firestore-side (out of scope). |
-| `Message.sender` | `String` → `Sender!` enum | Generated SDK type changes from `string` to enum; inserts without a valid `user`/`ai` value now fail. |
-| `Message.editedBy` | `String` → `Sender` enum | Same, nullable. |
-| `Message.text` | nullable → `String!` | Inserts with missing/`null` text now fail (TypeBox already requires `text`). |
-| `Message.chatId` | scalar only | + `chat: Chat! @ref(...)` relation field. The `chatId` scalar **remains** (column `chat_id` unchanged), so existing filters keep working; queries can now also traverse `chat { … }`. |
-| `Chat.uid` | scalar only | + `owner: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). |
-| `Chat.npcId` | scalar only | + `npc: Npc @ref(...)` optional relation (see ND-2). `npcId` scalar remains (column `npc_id` unchanged). |
-| `Chat.visibility` | `String` → `Visibility!` enum (default `PRIVATE`) | Enum type; value must be `private`/`public`. |
-| `Chat.messageCount`, `Chat.affection` | nullable → `Int! @default(value: 0)` | Inserts without them now default to 0 instead of accepting `null`. |
-| `Chat.lastMessageAt` | `Date` → `Timestamp` | Retype (nullable, no default). |
-| `Npc.uid` | scalar only | + `owner: User @ref(...)` optional relation. `uid` scalar remains (column `uid` unchanged). |
-| `Npc.visibility` | `String` → `Visibility!` enum (default `PRIVATE`) | Enum type. |
-| `Npc.name` | nullable → `String!` | Inserts with missing name fail (TypeBox already requires it). |
-| `Persona.uid` | scalar only | + `owner: User! @ref(...)` relation, and `uid` becomes `String!` (was nullable). |
-| `Persona.name` | nullable → `String!` | Inserts with missing name fail (TypeBox already requires it). |
-| `Notification.uid` | scalar only | + `user: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). |
-| `Notification.type` | `String` → `NotificationType!` enum | Enum type; values per ND-1. |
-| `SaveSlot.uid` | scalar only | + `user: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). `SaveSlot` gains composite `@unique(uid, slotNumber)` — duplicates now rejected. |
-| `User.role` | nullable `String` → `UserRole!` enum (default `MEMBER`) | Enum type; value must be `member`/`superAdmin`. |
-| `User.email` | nullable `String` | + `@unique` — duplicate emails now rejected (Postgres allows multiple NULLs, so absent emails stay legal). |
-| `User.id` | plain PK | + `@default(expr: "auth.uid")` — server falls back to the request uid when id is omitted; Admin SDK writes must set `id` explicitly (auth.uid is null there). |
-| `Config.key` | nullable `String` | + `@unique`, becomes `String!` — two rows with the same key now rejected; missing key rejected. |
-| `AudioTrack` | all fields | Explicit `@col(name:)` added (column names unchanged: `id`, `title`, `mood`, `storage_url`). `mood` gains `@index`. |
+| `Message` | `sender` | `String` → `Sender!` enum | Generated SDK type changes from `string` to enum; inserts without a valid `user`/`ai` value now fail. |
+| `Message` | `editedBy` | `String` → `Sender` enum | Same, nullable. |
+| `Message` | `text` | nullable → `String!` | Inserts with missing/`null` text now fail (TypeBox already requires `text`). |
+| `Message` | `chatId` | scalar only | + `chat: Chat! @ref(...)` relation field. The `chatId` scalar **remains** (column `chat_id` unchanged), so existing filters keep working; queries can now also traverse `chat { … }`. |
+| `Chat` | `uid` | scalar only | + `owner: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). |
+| `Chat` | `npcId` | scalar only | + `npc: Npc @ref(...)` optional relation (see ND-2). `npcId` scalar remains (column `npc_id` unchanged). |
+| `Chat` | `visibility` | `String` → `Visibility!` enum (default `PRIVATE`) | Enum type; value must be `private`/`public` (GraphQL: `PRIVATE`/`PUBLIC`). |
+| `Chat` | `messageCount`, `affection` | nullable → `Int! @default(value: 0)` | Inserts without them now default to 0 instead of accepting `null`. |
+| `Chat` | `lastMessageAt` | `Date` → `Timestamp`, now `@default(expr: "request.time")` | Retype (was nullable, no default). The default ensures newly created chats always have a sortable value in the `uid`/`lastMessageAt` ordering index; explicit last-message updates still overwrite it. |
+| `Npc` | `uid` | scalar only | + `owner: User @ref(...)` optional relation. `uid` scalar remains (column `uid` unchanged). |
+| `Npc` | `visibility` | `String` → `Visibility!` enum (default `PRIVATE`) | Enum type. |
+| `Npc` | `name` | nullable → `String!` | Inserts with missing name fail (TypeBox already requires it). |
+| `Persona` | `uid` | scalar only | + `owner: User! @ref(...)` relation, and `uid` becomes `String!` (was nullable). |
+| `Persona` | `name` | nullable → `String!` | Inserts with missing name fail (TypeBox already requires it). |
+| `Notification` | `uid` | scalar only | + `user: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). |
+| `Notification` | `type` | `String` → `NotificationType!` enum | Enum type; values per ND-1. |
+| `SaveSlot` | `uid` | scalar only | + `user: User! @ref(...)` relation. `uid` scalar remains (column `uid` unchanged). `SaveSlot` gains composite `@unique(uid, slotNumber)` — duplicates now rejected. |
+| `User` | `role` | nullable `String` → `UserRole!` enum (default `MEMBER`) | Enum type; value must be `member`/`superAdmin` (GraphQL: `MEMBER`/`SUPER_ADMIN`). |
+| `User` | `email` | nullable `String` | + `@unique` — duplicate emails now rejected (Postgres allows multiple NULLs, so absent emails stay legal). Uniqueness is case-insensitive in practice: the sync layer normalizes emails to lowercase before persistence. |
+| `User` | `id` | plain PK | + `@default(expr: "auth.uid")` — server falls back to the request uid when id is omitted; Admin SDK writes must set `id` explicitly (auth.uid is null there). |
+| `Config` | `key` | nullable `String` | + `@unique`, becomes `String!` — two rows with the same key now rejected; missing key rejected. |
+| `AudioTrack` | all fields | — | Explicit `@col(name:)` added (column names unchanged: `id`, `title`, `mood`, `storage_url`). `mood` gains `@index`. |
 
 No physical column was renamed — every `@col(name:)` and `@ref(fields:)`
 preserves the draft's column names (`uid`, `npc_id`, `chat_id`, …), so the
-DDL remains compatible with anything already deployed; the breaking surface is
-the GraphQL/SDK type layer, not the SQL layout.
+DDL layout stays compatible with anything already deployed; the breaking
+surface is the GraphQL/SDK type layer, not the SQL layout. **Before applying
+the migration**, existing nullable data must be remediated: backfill
+`Npc.name`, `Persona.name`, `Message.text`, `Message.chatId`, `Config.key`
+and the `uid` FK columns (drop rows that cannot be backfilled), and validate
+that every `uid` value references an existing `User.id` before the foreign
+keys are enforced (delete or reassign orphans first). The same pass must
+normalize `User.email` to lowercase so the case-insensitive uniqueness
+contract holds from day one.
 
 ---
 
 ## 3. New enums
 
-| Enum | Values | Rationale |
-|------|--------|-----------|
-| `Visibility` | `PRIVATE`, `PUBLIC` | Shared by `Npc.visibility` and `Chat.visibility`; mirrors the `_visibilityUnion` TypeBox union. Values map to Postgres enum; only append new values (enum order is meaningful). |
-| `Sender` | `USER`, `AI` | `Message.sender` / `Message.editedBy`; mirrors `_senderUnion` in `database/message.ts`. |
-| `UserRole` | `MEMBER`, `SUPER_ADMIN` | `User.role`; mirrors `UserRoleSchema` in `packages/shared/schemas/src/lib/auth/auth.ts` and the `userRole` custom claim used by Firestore rules' `isAdmin()`. |
-| `NotificationType` | `CHAT_MESSAGE`, `SYSTEM` | `Notification.type`; values from the draft's own comment — **see ND-1** before trusting. |
+| Enum | GraphQL identifiers | Sync-layer source spelling (mapped by the sync layer) | Rationale |
+|------|--------------------|-------------------------------------------------------|-----------|
+| `Visibility` | `PRIVATE`, `PUBLIC` | `'private'`, `'public'` (`_visibilityUnion` TypeBox union) | Shared by `Npc.visibility` and `Chat.visibility`. Values map to Postgres enum; only append new values (enum order is meaningful). |
+| `Sender` | `USER`, `AI` | `'user'`, `'ai'` (`_senderUnion` in `database/message.ts`) | `Message.sender` / `Message.editedBy`. |
+| `UserRole` | `MEMBER`, `SUPER_ADMIN` | `'member'`, `'superAdmin'` (`UserRoleSchema` in `packages/shared/schemas/src/lib/auth/auth.ts` and the `userRole` custom claim) | `User.role`. The sync layer must map `'member'` → `MEMBER` and `'superAdmin'` → `SUPER_ADMIN`; `auth.token.userRole` is never written to the `role` column directly — reads/comparisons use the claim spelling, writes use the enum spelling. |
+| `NotificationType` | `CHAT_MESSAGE`, `SYSTEM` | draft comment values (`"chat_message"`, `"system"`) — **see ND-1** | `Notification.type`; reconcile with the TypeBox model before trusting. |
 
 ---
 
@@ -138,11 +147,11 @@ Recommended shapes:
 | `Notification` | `USER` + `uid_expr: "auth.uid"` (owner only) | rules: `users/{uid}/notifications` |
 | `SaveSlot` | `USER` + `uid_expr: "auth.uid"` (owner only) | no Firestore rule; owner-only per architecture |
 | `AudioTrack` | read: `PUBLIC` (catalog); write: `NO_ACCESS` (Admin SDK) | catalog table, C-151 |
-| `Config` | per Firestore: owner only — but **ND-3** first | rules: `configs/{uid}` |
+| `Config` | **ND-3** first — Firestore `configs/{uid}` is owner-only, but this table has no `uid` column and no per-operation `@auth` can express an owner check; enforcement is not available until the ownership model is resolved | rules: `configs/{uid}` |
 
-Existing connector queries today are `@auth(level: PUBLIC)` (including the
-PII-bearing `ListUsers`) — bringing them in line with the table above is part
-of the connector follow-up.
+Most existing connector queries are `@auth(level: PUBLIC)`; `ListUsers` has
+already been tightened to `USER` (and its `email` selection removed). Bringing
+the rest in line with the table above is part of the connector follow-up.
 
 ---
 
@@ -195,5 +204,8 @@ of the connector follow-up.
   here).
 - `bun moon run firebase:generate`, deploys, migrations, or anything touching
   a live Cloud SQL instance.
-- Connector operation rewrites (`connector/*.gql` untouched) — the next pass
-  must update `@auth` levels per section 5 and re-check the generated SDK.
+- Connector operation rewrites (`connector/*.gql` — only the `ListUsers` PII
+  fix was applied up front; the rest is the next pass): update `@auth` levels
+  per section 5, run `firebase:generate` to refresh the stale SDK (the
+  `ListUsers` change removed `email` from its result type), and re-check the
+  generated SDK for consumers of the removed field.

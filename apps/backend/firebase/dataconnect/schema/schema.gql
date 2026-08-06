@@ -100,9 +100,15 @@ enum Sender {
 }
 
 # User role. Mirrors UserRoleSchema in
-# packages/shared/schemas/src/lib/auth/auth.ts ('member' | 'superAdmin').
-# The Firebase custom claim is named `userRole`; the SQL column keeps the
-# schema.gql field name `role` for stability.
+# packages/shared/schemas/src/lib/auth/auth.ts and the Firebase custom claim
+# `userRole` ('member' | 'superAdmin').
+#
+# The GraphQL enum identifiers (MEMBER, SUPER_ADMIN) are the accepted SDK
+# values for the role column. The sync layer must map the camelCase claim
+# spellings to them ('member' → MEMBER, 'superAdmin' → SUPER_ADMIN).
+# auth.token.userRole must NOT be written to the role column directly —
+# reads/comparisons use the claim spelling, writes use the enum spelling.
+# The SQL column keeps the schema.gql field name `role` for stability.
 enum UserRole {
   MEMBER
   SUPER_ADMIN
@@ -141,6 +147,10 @@ type User @table(key: "id") {
 
   # Auth / profile fields
   displayName: String @col(name: "display_name")
+  # Case-insensitive uniqueness: Postgres @unique is case-sensitive, so the
+  # sync layer must normalize emails to lowercase before persistence (writes
+  # that would insert a differently-cased duplicate are rejected at the
+  # database boundary). Multiple NULLs stay legal (absent emails are allowed).
   email: String @col(name: "email") @unique
   photoURL: String @col(name: "photo_url")
   phoneNumber: String @col(name: "phone_number")
@@ -299,7 +309,10 @@ type Chat @table(key: "id") @index(fields: ["uid", "lastMessageAt"]) {
   affection: Int! @col(name: "affection") @default(value: 0)
 
   # Timestamp of the last message (drives the chat list ordering index above).
-  lastMessageAt: Timestamp @col(name: "last_message_at")
+  # Defaults to the row creation time so newly created chats always have a
+  # sortable value; explicit last-message updates still overwrite it when a
+  # chat receives messages.
+  lastMessageAt: Timestamp @col(name: "last_message_at") @default(expr: "request.time")
 
   # Background image URL.
   backgroundImageUrl: String @col(name: "background_image_url")
@@ -429,8 +442,9 @@ type SaveSlot @table(key: "id") @unique(fields: ["uid", "slotNumber"]) {
   createdAt: Timestamp! @col(name: "created_at") @default(expr: "request.time")
   updatedAt: Timestamp! @col(name: "updated_at") @default(expr: "request.time")
 
-  # Slot number (1-based). Composite @unique(uid, slotNumber) above enforces
-  # one slot per number per user.
+  # Slot number (1-based; values >= 1 only). Composite @unique(uid, slotNumber)
+  # above enforces one slot per number per user. Connector-layer validation and
+  # the TypeBox schema must enforce the same lower bound (min: 1).
   slotNumber: Int! @col(name: "slot_number")
 
   # Human-readable location name for the save thumbnail.
@@ -474,9 +488,10 @@ type AudioTrack @table(key: "id") {
 # (theme/locale/notificationsEnabled/...). Decide which model this table
 # should be before building on it.
 #
-# Auth (operation level): per Firestore rules (owner only) — read and write
-# where uid == auth.uid; if this stays a generic KV store, that needs
-# rethinking.
+# Auth (operation level): pending ND-3 — Firestore's configs/{uid} is
+# owner-only, but this table has no uid column and no per-operation @auth can
+# express an owner check yet, so enforcement is not available until the
+# ownership model is resolved (see ND-3).
 type Config @table(key: "id") {
   id: String! @col(name: "id")
 

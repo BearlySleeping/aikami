@@ -65,7 +65,7 @@ const FORCE_EXTERNAL = new Set([
 ]);
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
-// suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
+// suppressed via `build.rolldownOptions.onwarn` (rolldown emits some warnings,
 // e.g. EVAL, through the logger instead).
 const viteLogger = createLogger();
 
@@ -132,7 +132,9 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      rollupOptions: {
+      // build.rollupOptions is a deprecated alias for rolldownOptions in
+      // Vite 8 — use the current option directly.
+      rolldownOptions: {
         // Rewrite bare Node builtins (e.g. `crypto`, `util`) to their `node:`
         // prefixed form in the output. svelte-adapter-bun's rolldown pass only
         // externalizes `/^node:/` specifiers, so bare builtins left in the SSR

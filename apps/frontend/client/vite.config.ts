@@ -18,14 +18,29 @@ import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 // logger instead).
 const viteLogger = createLogger();
 
-/** True for warnings that are expected for this codebase and can be dropped. */
+/** True for warnings that are expected for this codebase and can be dropped.
+ *  Matched narrowly to their known sources so unrelated warnings stay visible. */
 function isIgnoredWarning(msg: string): boolean {
-  return (
-    typeof msg === 'string' &&
-    (msg.includes('strongly discouraged') || // rolldown EVAL warning (eruda debug console)
-      msg.includes('PLUGIN_TIMINGS') || // plugin timing diagnostics
-      msg.includes('is dynamically imported by')) // services barrel dynamic imports (circular-dep avoidance)
-  );
+  if (typeof msg !== 'string') {
+    return false;
+  }
+  // rolldown EVAL warning — emitted only when bundling the eruda debug
+  // console (the message carries the eruda module path)
+  if (msg.includes('strongly discouraged') && msg.includes('eruda')) {
+    return true;
+  }
+  // plugin timing diagnostics
+  if (msg.includes('PLUGIN_TIMINGS')) {
+    return true;
+  }
+  // The services barrel (src/lib/services/index.ts) is statically imported
+  // by 150+ modules, so `import('$services')` can never split a chunk. Those
+  // dynamic imports exist to break circular dependencies at module-init time,
+  // not for code-splitting — the warning is expected for this architecture.
+  if (msg.includes('src/lib/services/index.ts is dynamically imported')) {
+    return true;
+  }
+  return false;
 }
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
@@ -136,11 +151,15 @@ export default defineConfig(({ mode }) => {
     build: {
       emptyOutDir: true,
       // The app bundles a game engine (PixiJS), Firebase, and a large services
-      // layer; the largest JS chunk is ~600 kB (plus lazy-loaded ONNX/SQLite
-      // worker assets far above this limit). Keep the warning useful without
+      // layer. Measured budget (staging build, 2026-08): largest JS chunk
+      // ~596 kB raw / ~150 kB gzip (services + engine), plus the kokoro TTS
+      // worker at ~520 kB and lazy-loaded ONNX/SQLite worker assets far above
+      // this limit. 1000 keeps the warning useful for real regressions without
       // false positives for the inherent engine/barrel chunk sizes.
       chunkSizeWarningLimit: 1000,
-      rollupOptions: {
+      // build.rollupOptions is a deprecated alias for rolldownOptions in
+      // Vite 8 — use the current option directly.
+      rolldownOptions: {
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings
