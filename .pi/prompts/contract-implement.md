@@ -200,7 +200,7 @@ Decide from the contract's Target/Overview:
 
 3. Knowledge sync ownership:
    - Automated contract pipeline (`CONTRACT_PIPELINE_RUN_ID` set): do **not** run `bun knowledge:sync`; the pre-commit hook regenerates and stages contract dashboards.
-   - Manual `/contract` session: run `bun knowledge:sync` when reviewers need PROGRESS.md updated before commit.
+   - Manual `/contract-implement` session: run `bun knowledge:sync` when reviewers need PROGRESS.md updated before commit.
    - 🔴 NEVER hand-edit PROGRESS.md, PROMOTION.md, or INDEX.md.
 
 4. Present a diff summary + suggested Conventional Commit message:

@@ -84,7 +84,7 @@ See individual skill files for details.
 
 | Prompt          | Purpose                                     |
 | --------------- | ------------------------------------------- |
-| `contract.md`   | Writing feature contracts                   |
+| `contract-implement.md` | Implementing feature contracts           |
 | `dev.md`        | Development workflow and debugging protocol |
 | `pre-commit.md` | Pre-commit checklist                        |
 | `handoff.md`    | Session handoff for $0 context spend        |

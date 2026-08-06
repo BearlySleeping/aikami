@@ -6,7 +6,7 @@ import type { ContractWorkerRole } from './types.ts';
 const ROLE_PROMPTS: Record<ContractWorkerRole, string> = {
   writer: '.pi/prompts/contract-create.md',
   critic: '.pi/prompts/contract-critique.md',
-  implementer: '.pi/prompts/contract.md',
+  implementer: '.pi/prompts/contract-implement.md',
   verifier: '.pi/prompts/contract-verify.md',
 };
 
