@@ -1,5 +1,6 @@
 {
   "name": "@aikami/mocks",
+  "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
     "test": "bun test",

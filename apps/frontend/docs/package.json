@@ -1,5 +1,6 @@
 {
   "name": "@aikami/docs",
+  "license": "MIT",
   "scripts": {
     "dev": "astro dev",
     "start": "astro start",

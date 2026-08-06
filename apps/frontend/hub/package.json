@@ -1,15 +1,16 @@
 {
   "name": "@aikami/hub",
+  "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "dev:development": "vite dev --mode development",
+    "dev": "vite dev --mode emulator",
+    "dev:staging": "vite dev --mode staging",
     "dev:emulator": "vite dev --mode emulator",
     "dev:production": "vite dev --mode production",
     "build": "vite build",
     "build:staging": "vite build --mode staging",
-    "build:production": "vite build --mode production",
     "build:emulator": "vite build --mode emulator",
+    "build:production": "vite build --mode production",
     "preview": "vite preview",
     "preview-hub": "bun run ../../../scripts/src/lib/ops/preview_hub.ts",
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -18,7 +19,8 @@
     "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
     "fix": "biome check --write src",
     "test": "bun run test:unit",
-    "test:unit": "bun test --tsconfig=tsconfig.json src/lib"
+    "test:unit": "bun test --tsconfig=tsconfig.json src/lib",
+    "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.23.1",
