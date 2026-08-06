@@ -128,7 +128,7 @@ N/A — no persistent state changes. All dashboards are auto-generated from sour
   - Archiving, deleting, or moving legacy contract files (separate cleanup contract)
   - Writing execution reports for legacy contracts (impossible without original implementation context)
   - Changing the TODO.md format or stable IDs
-  - Modifying the contract-implementer workflow or `/contract` prompt
+  - Modifying the contract-implementer workflow or `/contract-implement` prompt
   - Creating new Pi tools beyond the existing `contract_scan_backlog` and `contract_generate`
 
 ## Contract Size & Split Rule
@@ -276,7 +276,7 @@ draft → superseded
 ```
 
 Rules:
-- `implemented`: implementer believes code is ready. Set by `/contract`.
+- `implemented`: implementer believes code is ready. Set by `/contract-implement`.
 - `verified`: independent verifier passed all mandatory ACs. Set by `/contract-verify`.
 - `completed`: merged and CI passed. Set manually after merge.
 - Any mandatory AC marked ⚠️ or ❌ prevents `verified` and `completed`.

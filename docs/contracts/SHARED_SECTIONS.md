@@ -32,7 +32,7 @@ draft → superseded
 ```
 
 Rules:
-- `implemented`: implementer believes code is ready. Set by `/contract`.
+- `implemented`: implementer believes code is ready. Set by `/contract-implement`.
 - `verified`: independent verifier passed all mandatory ACs. Set by `/contract-verify`.
 - `completed`: merged and CI passed. Set manually after merge.
 - Any mandatory AC marked ⚠️ or ❌ prevents `verified` and `completed`.

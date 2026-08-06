@@ -10,7 +10,7 @@ description: >-
 
 # Contract Implementer
 
-The authoritative phase-by-phase flow lives in the `/contract` prompt (`.pi/prompts/contract.md`). This skill carries the supporting reference material.
+The authoritative phase-by-phase flow lives in the `/contract-implement` prompt (`.pi/prompts/contract-implement.md`). This skill carries the supporting reference material.
 
 For the complete pipeline user guide (source modes, CLI options, workflows), see:
 📄 **`docs/guides/contract-pipeline.md`**
@@ -88,7 +88,7 @@ When the PR is merged:
 - `draft`: contract written but not approved for implementation.
 - `approved`: contract reviewed (via `/contract-critique`) and approved by user.
 - `in_progress`: implementation has started.
-- `implemented`: implementer believes code is ready. Set BY `/contract` prompt.
+- `implemented`: implementer believes code is ready. Set BY `/contract-implement` prompt.
 - `verified`: independent verifier passed all mandatory ACs. Set BY `/contract-verify` prompt.
 - `completed`: merged and CI passed. Set manually after merge.
 - `verification_failed`: verifier found issues. Returns to implementer.
