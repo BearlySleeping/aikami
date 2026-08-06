@@ -738,9 +738,16 @@ export default function (pi: ExtensionAPI) {
             for (const session of sessions) {
               for (const svcStatus of session.services) {
                 if (svcStatus.running) {
-                  const icon = svcStatus.portOpen ? '✅' : '⏳';
+                  const icon =
+                    svcStatus.state === 'crashed' ? '❌' : svcStatus.portOpen ? '✅' : '⏳';
                   const port = svcStatus.readyPort ? ` — :${svcStatus.readyPort}` : '';
-                  lines.push(`${icon} **${svcStatus.name}**${port}`);
+                  const stateNote =
+                    svcStatus.state === 'crashed'
+                      ? ' — CRASHED'
+                      : svcStatus.state === 'booting'
+                        ? ' — booting'
+                        : '';
+                  lines.push(`${icon} **${svcStatus.name}**${port}${stateNote}`);
                 } else {
                   lines.push(`⏸️ **${svcStatus.name}** — not running`);
                 }
