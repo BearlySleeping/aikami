@@ -22,6 +22,7 @@ export type ErrorType =
   | 'invalid-credentials'
   | 'data-loss'
   | 'unauthenticated'
+  | 'captcha-required'
   | 'activity-not-found'
   | 'team-not-found'
   | 'user-not-found'

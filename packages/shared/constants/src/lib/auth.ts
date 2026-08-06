@@ -1,3 +1,5 @@
+export const AUTH_COOKIE_NAME = '__aikami_session';
+
 export const userRoles = ['member', 'superAdmin'] as const;
 
 export const userStatuses = [

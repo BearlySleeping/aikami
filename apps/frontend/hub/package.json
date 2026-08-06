@@ -1,0 +1,53 @@
+{
+  "name": "@aikami/hub",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "dev:development": "vite dev --mode development",
+    "dev:emulator": "vite dev --mode emulator",
+    "dev:production": "vite dev --mode production",
+    "build": "vite build",
+    "build:staging": "vite build --mode staging",
+    "build:production": "vite build --mode production",
+    "build:emulator": "vite build --mode emulator",
+    "preview": "vite preview",
+    "preview-hub": "bun run ../../../scripts/src/lib/ops/preview_hub.ts",
+    "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "lint": "biome lint src",
+    "format": "biome format src",
+    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
+    "fix": "biome check --write src",
+    "test": "bun run test:unit",
+    "test:unit": "bun test --tsconfig=tsconfig.json src/lib"
+  },
+  "devDependencies": {
+    "@inlang/paraglide-js": "2.20.2",
+    "@sveltejs/kit": "2.68.0",
+    "@sveltejs/vite-plugin-svelte": "7.1.2",
+    "@tailwindcss/vite": "4.3.1",
+    "@types/node": "26.0.1",
+    "daisyui": "5.5.23",
+    "rollup-plugin-visualizer": "7.0.1",
+    "svelte": "5.56.4",
+    "svelte-adapter-bun": "1.0.1",
+    "svelte-check": "4.7.1",
+    "tailwindcss": "4.3.1",
+    "vite": "7.3.2",
+    "vite-plugin-devtools-json": "1.0.0",
+    "svelte-fast-check": "^0.4.5"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "@elysiajs/eden": "^1.4.9",
+    "@google-analytics/data": "*",
+    "@google-cloud/firestore": "*",
+    "@google-cloud/secret-manager": "*",
+    "elysia": "^1.4.29",
+    "eruda": "3.4.3",
+    "firebase": "12.15.0",
+    "firebase-admin": "14.1.0"
+  }
+}

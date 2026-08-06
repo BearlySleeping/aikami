@@ -47,6 +47,7 @@ export const EMULATOR_PORTS = {
   // Aikami app dev servers (emulator):
   client: 5274,
   site: 5280,
+  hub: 5276,
   voice: 8089,
   image: 8188,
   text: 11434,
@@ -55,6 +56,7 @@ export const EMULATOR_PORTS = {
 export const STAGING_PORTS = {
   client: 5273,
   site: 5281,
+  hub: 5275,
   voice: 8088,
   image: 8187,
   text: 11433,
@@ -63,6 +65,7 @@ export const STAGING_PORTS = {
 export const PRODUCTION_PORTS = {
   client: 5277,
   site: 5282,
+  hub: 5279,
   voice: 8092,
   image: 8193,
   text: 11435,
