@@ -27,6 +27,20 @@
  *   Firebase Hosting (site, docs)    → checksum → build (moon) → deploy via moon
  *   Firebase Functions (firebase)    → deploy via moon (firestack)
  *   Docker Release (image,text,voice)→ checksum → docker build → push
+ *
+ * CI-only flags (no effect on local runs, and not shown in the usage block
+ * above on purpose — they exist purely so release.yml can share a single
+ * SvelteKit build between the desktop matrix and the Cloud Run deploy):
+ *   --version=<string>          Use this exact version instead of calling
+ *                                generateVersionString(). Required whenever
+ *                                --skip-build-for is used, so the reused
+ *                                build's embedded version matches what the
+ *                                shared build job actually produced.
+ *   --skip-build-for=<targets>  Comma-separated moon build targets (e.g.
+ *                                "client") to skip in Phase 1 because their
+ *                                dist is already sitting on disk — the
+ *                                caller downloaded it from a shared build
+ *                                artifact before invoking this script.
  */
 
 import { execSync } from 'node:child_process';
@@ -182,6 +196,9 @@ async function main(): Promise<void> {
     force: { type: 'boolean', aliases: ['f'] },
     yes: { type: 'boolean', aliases: ['y'] },
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
+    // CI-only — see the header comment above.
+    version: { type: 'string' },
+    'skip-build-for': { type: 'string' },
   });
 
   if (opts.verbose) {
@@ -318,7 +335,10 @@ async function main(): Promise<void> {
   // ── Pre-flight: Check deployment caches (before any builds) ──
   log(`\n${c.bold}Checking deployment caches...${c.reset}`);
 
-  const version = generateVersionString();
+  // CI passes --version explicitly when reusing a shared build (see
+  // --skip-build-for below) so the embedded version matches byte-for-byte;
+  // local runs and normal CI runs fall back to the usual fresh version.
+  const version = (opts.version as string | undefined) || generateVersionString();
   const cachedApps = new Set<string>();
   const preflightChecksums = new Map<string, string>();
 
@@ -360,6 +380,27 @@ async function main(): Promise<void> {
   // Docker builds, pushes, and gcloud deploys can still run in parallel (Phase 2).
   log(`\n${c.bold}Phase 1: Building apps (sequential)...${c.reset}`);
 
+  // CI-only: targets to skip because a shared build artifact was already
+  // downloaded into place for them (see --skip-build-for in the header
+  // comment). Empty on every local run.
+  const skipBuildTargets = new Set(
+    ((opts['skip-build-for'] as string | undefined) ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
+  // Enforce that --version is explicitly provided when skipping builds —
+  // otherwise deployment proceeds with a fresh generateVersionString() that
+  // doesn't match the reused pre-built artifacts.
+  if (skipBuildTargets.size > 0 && !opts.version) {
+    error(
+      '--skip-build-for requires --version to be explicitly provided. ' +
+        'The version must match the shared build artifacts being reused.',
+    );
+    process.exit(1);
+  }
+
   // Collect unique moon build targets
   const targetsToBuild = new Map<string, string>(); // moonTarget → representative appName
 
@@ -386,6 +427,10 @@ async function main(): Promise<void> {
   const errors: string[] = [];
 
   for (const [moonTarget, appName] of targetsToBuild) {
+    if (skipBuildTargets.has(moonTarget)) {
+      ok(`  ${moonTarget} build skipped — reusing a pre-built shared bundle (for ${appName})`);
+      continue;
+    }
     try {
       log(`  🏗️  Building ${c.cyan}${moonTarget}:build${c.reset} (for ${appName})...`);
       const forceFlag = isForce ? ' --force' : '';
