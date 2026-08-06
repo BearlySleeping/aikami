@@ -454,9 +454,10 @@ type PaneProcessInfo = {
   };
 };
 
-/** Elapsed seconds since a PID started (`ps -o etimes=`), or undefined. */
+/** Elapsed seconds since a PID started (`ps -o etimes=` or `ps -o etime=` fallback), or undefined. */
 const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
-  const out = await new Promise<string>((res) => {
+  // Try GNU/Linux etimes (seconds) first
+  const etimesOut = await new Promise<string>((res) => {
     const p = spawn('ps', ['-o', 'etimes=', '-p', String(pid)], {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
@@ -467,8 +468,52 @@ const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
     p.on('close', () => res(o));
     p.on('error', () => res(''));
   });
-  const v = Number.parseInt(out.trim(), 10);
-  return Number.isFinite(v) ? v : undefined;
+  const etimesVal = Number.parseInt(etimesOut.trim(), 10);
+  if (Number.isFinite(etimesVal)) {
+    return etimesVal;
+  }
+
+  // Fallback to BSD/macOS etime ([[dd-]hh:]mm:ss format)
+  const etimeOut = await new Promise<string>((res) => {
+    const p = spawn('ps', ['-o', 'etime=', '-p', String(pid)], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    let o = '';
+    p.stdout?.on('data', (d) => {
+      o += String(d);
+    });
+    p.on('close', () => res(o));
+    p.on('error', () => res(''));
+  });
+
+  // Parse [[dd-]hh:]mm:ss into total seconds
+  const parts = etimeOut.trim().split(/[-:]/);
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  let totalSeconds = 0;
+  if (parts.length === 2) {
+    // mm:ss
+    const [mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(mm) && Number.isFinite(ss) && mm !== undefined && ss !== undefined) {
+      totalSeconds = mm * 60 + ss;
+    }
+  } else if (parts.length === 3) {
+    // hh:mm:ss
+    const [hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && hh !== undefined && mm !== undefined && ss !== undefined) {
+      totalSeconds = hh * 3600 + mm * 60 + ss;
+    }
+  } else if (parts.length === 4) {
+    // dd-hh:mm:ss
+    const [dd, hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
+    if (Number.isFinite(dd) && Number.isFinite(hh) && Number.isFinite(mm) && Number.isFinite(ss) && dd !== undefined && hh !== undefined && mm !== undefined && ss !== undefined) {
+      totalSeconds = dd * 86400 + hh * 3600 + mm * 60 + ss;
+    }
+  }
+
+  return totalSeconds > 0 ? totalSeconds : undefined;
 };
 
 /**
@@ -741,7 +786,8 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     const paneByTab = new Map(panes.map((p) => [p.tab_id, p]));
     const crashedOthers: string[] = [];
     for (const tabName of tabNames) {
-      const service = tabName as DevService;
+      // Map "pi" tab to preview-client service (matches herdr:list's mapping)
+      const service = (tabName === 'pi' ? 'preview-client' : tabName) as DevService;
       if (!SERVICE_DEFS[service] || services.includes(service)) {
         continue;
       }

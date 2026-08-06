@@ -390,6 +390,17 @@ async function main(): Promise<void> {
       .filter(Boolean),
   );
 
+  // Enforce that --version is explicitly provided when skipping builds —
+  // otherwise deployment proceeds with a fresh generateVersionString() that
+  // doesn't match the reused pre-built artifacts.
+  if (skipBuildTargets.size > 0 && !opts.version) {
+    error(
+      '--skip-build-for requires --version to be explicitly provided. ' +
+        'The version must match the shared build artifacts being reused.',
+    );
+    process.exit(1);
+  }
+
   // Collect unique moon build targets
   const targetsToBuild = new Map<string, string>(); // moonTarget → representative appName
 

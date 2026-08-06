@@ -104,7 +104,7 @@ function tokenizeCommand(input: string): string[] {
   let quote: '"' | "'" | null = null;
   let i = 0;
   while (i < input.length) {
-    const ch = input[i];
+    const ch = input[i]!;
     if (quote) {
       if (ch === '\\' && quote === '"' && i + 1 < input.length) {
         current += input[i + 1];
@@ -222,6 +222,8 @@ export default function (pi: ExtensionAPI) {
           description:
             'Timeout in milliseconds before the command is killed. Default 180000 (3 min).',
           default: 180_000,
+          minimum: 1,
+          maximum: 600_000, // 10 min — well under the 32-bit signed int ms limit
         }),
       ),
     }),
@@ -273,7 +275,8 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      const destructiveMatch = DESTRUCTIVE_PATTERN.exec(rawCommand);
+      const normalizedCommand = tokens.join(' ');
+      const destructiveMatch = DESTRUCTIVE_PATTERN.exec(normalizedCommand);
       if (destructiveMatch && !params.confirm) {
         return {
           content: [
@@ -289,11 +292,23 @@ export default function (pi: ExtensionAPI) {
       }
 
       const hasProjectFlag = tokens.some((t) => t === '--project' || t.startsWith('--project='));
+      if (hasProjectFlag) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                'Caller-provided --project flag is not allowed. This tool always injects the ' +
+                `correct project (${projectId}) for the requested mode (${mode}). Remove the ` +
+                '--project flag from your command and let this tool set it automatically.',
+            },
+          ],
+          details: { code: 1, source: 'project_flag_rejected' },
+        };
+      }
       const hasQuietFlag = tokens.some((t) => t === '--quiet' || t === '-q');
       const finalArgs = [...tokens];
-      if (!hasProjectFlag) {
-        finalArgs.push('--project', projectId);
-      }
+      finalArgs.push('--project', projectId);
       if (!hasQuietFlag) {
         // Non-interactive by construction — there's no TTY for pi to answer
         // a `y/N` prompt, so an unconfirmed prompt would just hang until
@@ -335,7 +350,8 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      const timeout = params.timeout ?? DefaultTimeout;
+      const rawTimeout = params.timeout ?? DefaultTimeout;
+      const timeout = Math.min(Math.max(rawTimeout, 1), 600_000);
       const result = await pi.exec(
         'env',
         [
@@ -347,7 +363,10 @@ export default function (pi: ExtensionAPI) {
         { signal, timeout },
       );
 
-      const raw = result.stdout || result.stderr || '';
+      const stdout = result.stdout ?? '';
+      const stderr = result.stderr ?? '';
+      const raw =
+        stdout && stderr ? `${stdout}\n${stderr}` : stdout || stderr || '';
       return {
         content: [{ type: 'text', text: smartTruncate(raw, 100) }],
         details: { code: result.code, source: 'gcloud', mode, projectId },

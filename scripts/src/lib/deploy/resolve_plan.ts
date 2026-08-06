@@ -60,9 +60,20 @@ function main(): void {
     const requested = raw.split(/\s+/).filter(Boolean);
     const unknown = requested.filter((a) => !deployableSet.has(a));
     if (unknown.length > 0) {
-      warn(`DEPLOY_APPS contains unknown app(s), ignoring: ${unknown.join(', ')}`);
+      log(`\n${c.bold}❌ Invalid DEPLOY_APPS${c.reset}`);
+      log(`  Unknown app(s): ${unknown.join(', ')}`);
+      log(`  Valid apps: ${DEPLOYABLE_APPS.join(', ')}`);
+      process.exit(1);
     }
-    apps = requested.filter((a) => deployableSet.has(a));
+    // De-duplicate while preserving requested order
+    const seen = new Set<string>();
+    apps = requested.filter((a) => {
+      if (deployableSet.has(a) && !seen.has(a)) {
+        seen.add(a);
+        return true;
+      }
+      return false;
+    });
   }
 
   log(`\n${c.bold}📋 Resolving deploy plan${c.reset}`);
