@@ -22,27 +22,37 @@ type IssuesApi = { total_count?: number };
 
 let cached: RepoStats | null = null;
 
+/** Decode a settled fetch result, returning null unless it resolved OK. */
+async function decode<T>(result: PromiseSettledResult<Response>): Promise<T | null> {
+  if (result.status !== 'fulfilled' || !result.value.ok) {
+    return null;
+  }
+  try {
+    return (await result.value.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function getRepoStats(): Promise<RepoStats> {
   if (cached) {
     return cached;
   }
   const api = 'https://api.github.com';
-  try {
-    const [repoRes, issuesRes] = await Promise.all([
-      fetch(`${api}/repos/${REPO}`, { signal: AbortSignal.timeout(4_000) }),
-      fetch(`${api}/search/issues?q=is:issue+state:open+label:feature+repo:${REPO}`, {
-        signal: AbortSignal.timeout(4_000),
-      }),
-    ]);
-    const repoRaw = repoRes.ok ? ((await repoRes.json()) as RepoApi) : null;
-    const issuesRaw = issuesRes.ok ? ((await issuesRes.json()) as IssuesApi) : null;
-    cached = {
-      stars: typeof repoRaw?.stargazers_count === 'number' ? repoRaw.stargazers_count : null,
-      openFeatures: typeof issuesRaw?.total_count === 'number' ? issuesRaw.total_count : null,
-    };
-  } catch {
-    cached = { stars: null, openFeatures: null };
-  }
+  // allSettled keeps the two requests independent — a rate-limited repo call
+  // must not wipe out a successful issues count, and vice versa.
+  const [repoResult, issuesResult] = await Promise.allSettled([
+    fetch(`${api}/repos/${REPO}`, { signal: AbortSignal.timeout(4_000) }),
+    fetch(`${api}/search/issues?q=is:issue+state:open+label:feature+repo:${REPO}`, {
+      signal: AbortSignal.timeout(4_000),
+    }),
+  ]);
+  const repoRaw = await decode<RepoApi>(repoResult);
+  const issuesRaw = await decode<IssuesApi>(issuesResult);
+  cached = {
+    stars: typeof repoRaw?.stargazers_count === 'number' ? repoRaw.stargazers_count : null,
+    openFeatures: typeof issuesRaw?.total_count === 'number' ? issuesRaw.total_count : null,
+  };
   return cached;
 }
 

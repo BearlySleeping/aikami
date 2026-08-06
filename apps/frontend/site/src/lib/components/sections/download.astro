@@ -172,9 +172,18 @@ const downloadUrl = (ext: string): string =>
 <script>
 // apps/frontend/site/src/lib/components/sections/download.astro (client script)
 
-/** Detect the user's OS from navigator.userAgent. */
+/**
+ * Detect the user's OS from navigator.userAgent.
+ * Mobile check happens first: iPhone/iPad/iPod report "Macintosh"/"Mac OS X"
+ * and Android reports no desktop marker, so they are classified as 'unknown'
+ * rather than macos or linux. Returns a supported desktop platform id
+ * ('windows' | 'macos' | 'linux') or 'unknown'.
+ */
 function detectOS(): string {
   const ua = navigator.userAgent.toLowerCase();
+  if (/iphone|ipad|ipod|android/.test(ua)) {
+    return 'unknown';
+  }
   if (ua.includes('win')) {
     return 'windows';
   }
@@ -206,19 +215,20 @@ const INACTIVE_CHIP =
 
 function init(): void {
   const userOS = detectOS();
+  const isSupportedDesktop = userOS !== 'unknown';
 
-  // Detected OS badge
+  // Detected OS badge — only shown for a supported desktop OS
   const osBadge = document.getElementById('download-os-badge');
   const osName = document.getElementById('download-os-name');
-  if (osBadge && osName) {
+  if (isSupportedDesktop && osBadge && osName) {
     osBadge.classList.remove('hidden');
     osName.textContent = userOS.charAt(0).toUpperCase() + userOS.slice(1);
   }
 
-  // Highlight the detected OS card's download button
+  // Highlight the detected OS card's download button (desktop OS only)
   const cards = Array.from(document.querySelectorAll<HTMLElement>('.download-card'));
   for (const card of cards) {
-    if (card.dataset.platform === userOS) {
+    if (isSupportedDesktop && card.dataset.platform === userOS) {
       const link = card.querySelector<HTMLAnchorElement>('.download-link');
       link?.classList.add('ring-1', 'ring-rune/40');
     }

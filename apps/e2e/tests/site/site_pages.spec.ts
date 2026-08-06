@@ -11,8 +11,10 @@ const PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    // Hero rewritten around the memory hook (2025 refactor).
-    criticalText: ['Every NPC', 'Play now, free in your browser'],
+    // Hero rewritten around the memory hook (2025 refactor). The h1 renders
+    // the hook across three <br>-separated lines, so the full phrase is
+    // asserted as a regex that tolerates the missing textContent whitespace.
+    criticalText: [/Every NPC\s*remembers what\s*you did\./, 'Play now, free in your browser'],
   },
 ];
 
@@ -158,6 +160,18 @@ test.describe('Site pages — download section', () => {
       // Linux card offers the three package formats
       const formatChips = linuxCard.locator('.linux-format-chip');
       expect(await formatChips.count()).toBe(3);
+
+      // Clicking a format chip swaps the direct download URL and marks the
+      // chip as selected — exercises applyFormat(), not just chip rendering.
+      const debChip = linuxCard.locator('.linux-format-chip[data-format="deb"]');
+      await debChip.click();
+      const linuxLink = linuxCard.locator('.download-link');
+      await expect(linuxLink).toHaveAttribute('href', /aikami\.deb$/);
+      await expect(debChip).toHaveAttribute('aria-pressed', 'true');
+
+      // The previously-default AppImage chip is deselected
+      const appimageChip = linuxCard.locator('.linux-format-chip[data-format="appimage"]');
+      await expect(appimageChip).toHaveAttribute('aria-pressed', 'false');
     });
   }
 });

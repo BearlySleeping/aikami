@@ -16,7 +16,8 @@ import { PORTS } from '../../../packages/shared/constants/src/index';
 /**
  * Resolve the Astro build mode.
  *
- * Priority: CLI `--mode <mode>` flag (e.g. `astro build --mode production`, or
+ * Priority: CLI `--mode <mode>` flag (either `--mode production` or
+ * `--mode=production`; e.g. `astro build --mode production`, or
  * `moon run site:build -- --mode staging` via bun passthrough) > ambient env
  * (AIKAMI_MODE / MODE, set by direnv or the deploy pipeline) > 'emulator'.
  *
@@ -24,12 +25,22 @@ import { PORTS } from '../../../packages/shared/constants/src/index';
  * `.env.*` file into `process.env`, so relying on process.env alone meant the
  * ambient direnv value (AIKAMI_MODE=emulator) leaked into production builds
  * and produced the wrong canonical URL (https://stg.bearlysleeping.com).
+ *
+ * The candidate is validated against the known PORTS keys before being
+ * returned, so `PORTS[_mode]` below can never index an unknown mode.
  */
 function resolveMode(): Mode {
   const argv = process.argv;
+  // Support both `--mode <value>` and `--mode=<value>` CLI forms.
+  let cliMode: string | undefined;
   const modeFlagIndex = argv.indexOf('--mode');
-  const cliMode = modeFlagIndex !== -1 ? argv[modeFlagIndex + 1] : undefined;
-  return (cliMode || process.env.AIKAMI_MODE || process.env.MODE || 'emulator') as Mode;
+  if (modeFlagIndex !== -1) {
+    cliMode = argv[modeFlagIndex + 1];
+  } else {
+    cliMode = argv.find((arg) => arg.startsWith('--mode='))?.slice('--mode='.length);
+  }
+  const candidate = cliMode || process.env.AIKAMI_MODE || process.env.MODE || 'emulator';
+  return (candidate in PORTS ? candidate : 'emulator') as Mode;
 }
 
 const _mode = resolveMode();
