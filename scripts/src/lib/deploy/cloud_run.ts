@@ -27,6 +27,7 @@ import {
   resolveProjectId,
   resolveRegion,
   run,
+  runArgs,
   shortSha,
   versionSha,
 } from './utils';
@@ -175,11 +176,54 @@ export async function deployCloudRunSveltekit(
     }
   }
 
-  // 6. Deploy
+  // 6. Derive the runtime service account from FIREBASE_SERVICE_ACCOUNT in
+  // .env.{mode} — Cloud Run runs as this SA so Firebase Admin SDK calls
+  // (verifyIdToken / verifySessionCookie with revocation checks,
+  // createSessionCookie) have the required firebaseauth permissions. The
+  // default compute SA cannot perform the accounts:lookup call that
+  // revocation-checked verification needs.
+  let serviceAccount = '';
+  if (existsSync(modeEnvPath)) {
+    const saJson = parseEnvKeys(modeEnvPath)['FIREBASE_SERVICE_ACCOUNT'];
+    if (saJson) {
+      try {
+        // Parse as unknown and validate before use: only a non-empty
+        // string client_email is accepted. Malformed or invalid payloads
+        // fall back to the default runtime SA.
+        const parsed: unknown = JSON.parse(saJson);
+        const clientEmail =
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'client_email' in parsed &&
+          typeof (parsed as { client_email: unknown }).client_email === 'string'
+            ? (parsed as { client_email: string }).client_email.trim()
+            : '';
+        serviceAccount = clientEmail;
+      } catch {
+        // Malformed SA — fall back to the default runtime SA.
+      }
+    }
+  }
+
+  // 7. Deploy
   log('🚀 Deploying...');
   let envVars = `,AIKAMI_MODE=${mode},MODE=${mode},FIRESTORE_PREFER_REST=true,PUBLIC_APP_VERSION=${shortSha()}${extraEnvVars}`;
   envVars = deduplicateEnvVars(envVars, secretArgs);
-  run(buildGcloudRunArgs(config, serviceId, tag, projectId, mode, envVars, secretArgs));
+  // Execute through the argument-array path (no shell) so the
+  // service account email — read from an untrusted .env file — can never
+  // be shell-interpreted.
+  runArgs(
+    buildGcloudRunArgs(
+      config,
+      serviceId,
+      tag,
+      projectId,
+      mode,
+      envVars,
+      secretArgs,
+      serviceAccount,
+    ),
+  );
 
   // 7. Save checksum on success — use the pre-build consistent checksum
   await saveDeployCache(mode, appName, checksum, version);

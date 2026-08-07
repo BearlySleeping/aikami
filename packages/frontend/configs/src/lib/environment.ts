@@ -129,6 +129,27 @@ export const isDevelopmentModePublic = () => publicEnv.PUBLIC_MODE !== 'producti
 export const getPublicMode = () => publicEnv.PUBLIC_MODE;
 
 /**
+ * Shared App Check enablement predicate — used by both the client
+ * (initializeAppCheckInstance in app_check.ts) and the Hub SSR
+ * (hooks.server.ts) so both sides apply identical rules.
+ *
+ * App Check is enabled only when:
+ * - PUBLIC_DISABLE_APP_CHECK is not set to '1' or 'true'
+ * - a real reCAPTCHA site key is configured
+ * - the mode is production (non-production modes disable App Check on
+ *   the client because no debug token is registered — the server must
+ *   not demand tokens the client cannot produce)
+ */
+export const isAppCheckEnabled = (): boolean => {
+  const { PUBLIC_DISABLE_APP_CHECK: disableAppCheck, PUBLIC_RECAPTCHA_SITE_KEY: recaptchaSiteKey } =
+    publicEnv;
+  const isDisabled = disableAppCheck === '1' || disableAppCheck === 'true';
+  const mode = getPublicMode();
+  const isNonProductionMode = mode && mode !== 'production';
+  return !isDisabled && !!recaptchaSiteKey && !isNonProductionMode;
+};
+
+/**
  * The Firebase/GCP project ID for the current mode.
  */
 export const getProjectId = (): string => {

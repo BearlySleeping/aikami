@@ -12,7 +12,7 @@ import {
 } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
 import { verifyAppCheck } from '@aikami/backend/svelte-kit/verify_app_check';
-import { publicEnv } from '@aikami/frontend/configs';
+import { isAppCheckEnabled } from '@aikami/frontend/configs';
 import type { LogContext } from '@aikami/types';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { logger } from '$logger';
@@ -21,11 +21,18 @@ import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
 
-// App Check is enabled unless explicitly disabled via env (PUBLIC_DISABLE_APP_CHECK=1),
-// so production can enforce it without a code change.
-const enforceAppCheck = publicEnv.PUBLIC_DISABLE_APP_CHECK !== 'true';
+// App Check is enabled via the shared predicate in
+// packages/frontend/configs/environment.ts (isAppCheckEnabled) — the same
+// rules the client uses: not explicitly disabled (PUBLIC_DISABLE_APP_CHECK
+// = 1 or true), a real reCAPTCHA site key is configured, and the mode is
+// production. Aligning server and client prevents the hub from demanding
+// tokens the client cannot produce (e.g. non-production modes or no
+// recaptcha key).
+const enforceAppCheck = isAppCheckEnabled();
 
-const appCheckExcludePaths: string[] = [];
+// Browser log ingestion must never be gated on App Check — the logger's
+// HTTP sink is fire-and-forget and cannot attach an App Check token.
+const appCheckExcludePaths = ['/api/internal_logging'];
 
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
@@ -146,11 +153,13 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     // ── App Check verification (skip OPTIONS + excluded paths) ──
-    if (
-      enforceAppCheck &&
-      method !== 'OPTIONS' &&
-      !appCheckExcludePaths?.some((prefix) => pathname.startsWith(prefix))
-    ) {
+    // Exclude /api/internal_logging only when the pathname is EXACTLY that
+    // endpoint or begins with it followed by '/' — never a bare unbounded
+    // startsWith() so similarly prefixed routes stay protected.
+    const isAppCheckExcluded = appCheckExcludePaths.some(
+      (excludedPath) => pathname === excludedPath || pathname.startsWith(`${excludedPath}/`),
+    );
+    if (enforceAppCheck && method !== 'OPTIONS' && !isAppCheckExcluded) {
       try {
         await verifyAppCheck(request);
       } catch {

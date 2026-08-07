@@ -84,9 +84,9 @@ export default defineConfig(({ mode }) => {
       },
     } as PluginOption,
     {
-      name: 'api-logs-endpoint',
+      name: 'internal-logging-endpoint',
       configureServer(server) {
-        server.middlewares.use('/api/logs', (req, res) => {
+        server.middlewares.use('/api/internal_logging', (req, res) => {
           if (req.method !== 'POST') {
             res.writeHead(405).end();
             return;
@@ -100,8 +100,8 @@ export default defineConfig(({ mode }) => {
               const ts = new Date().toISOString();
               const label = parsed.label || 'api';
               const payload = parsed.payload;
-              // biome-ignore lint/suspicious/noConsole: /api/logs server-side endpoint — writes to herdr stdout
-              console.log(`[api-logs] ${ts} [${label}]`, JSON.stringify(payload));
+              // biome-ignore lint/suspicious/noConsole: /api/internal_logging dev endpoint — writes to herdr stdout
+              console.log(`[internal-logs] ${ts} [${label}]`, JSON.stringify(payload));
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ ok: true }));
             } catch {

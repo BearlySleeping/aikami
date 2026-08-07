@@ -3,7 +3,7 @@
  * Shared utilities for the deploy pipeline — local and CI.
  */
 
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { c, error, log } from '../cli_utils';
@@ -81,6 +81,45 @@ export function run(
   }
 }
 
+/**
+ * Runs a command from an argument array WITHOUT a shell (`shell: false`).
+ *
+ * Use this for commands whose arguments may contain untrusted values
+ * (e.g. service-account emails read from .env files) — argument arrays
+ * cannot be shell-interpreted, so no quoting/escaping is needed and no
+ * injection is possible.
+ */
+export function runArgs(
+  cmd: string[],
+  opts: { cwd?: string; quiet?: boolean; env?: Record<string, string>; live?: boolean } = {},
+): string {
+  const stdio: 'pipe' | 'inherit' = opts.live || (_verbose && !opts.quiet) ? 'inherit' : 'pipe';
+  const suppressPrefix = _quiet || opts.quiet === true;
+  try {
+    if (!suppressPrefix && !_verbose) {
+      log(`${c.dim}> ${cmd.join(' ')}${c.reset}`);
+    }
+    const result = spawnSync(cmd[0], cmd.slice(1), {
+      cwd: opts.cwd,
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
+      encoding: 'utf-8',
+      stdio,
+      maxBuffer: 100 * 1024 * 1024,
+      shell: false,
+    });
+    if (result.status !== 0 && !(opts.quiet || _quiet)) {
+      error(`Command failed: ${cmd.join(' ')}`);
+      throw new Error(result.stderr?.trim() || `exit code ${result.status}`);
+    }
+    return result.stdout?.trim() || '';
+  } catch (e) {
+    if (opts.quiet || _quiet) {
+      return '';
+    }
+    throw e;
+  }
+}
+
 // ── Git ──────────────────────────────────────────────────────────────────
 
 export function getCurrentBranch(): string {
@@ -152,7 +191,10 @@ export function authenticateDocker(region: string = GCP_REGION): void {
 
 /**
  * Build common Cloud Run deploy args.
- * Returns the complete `gcloud run deploy ...` command string.
+ * Returns the complete `gcloud run deploy ...` argument array.
+ *
+ * The array is executed via {@link runArgs} (no shell), so values like
+ * `serviceAccount` read from .env files are never shell-interpolated.
  */
 export function buildGcloudRunArgs(
   config: AppConfig,
@@ -162,7 +204,8 @@ export function buildGcloudRunArgs(
   mode: string,
   extraEnvVars = '',
   secretArgs = '',
-): string {
+  serviceAccount = '',
+): string[] {
   const region = resolveRegion(mode, config.region);
   const memory = config.memory ?? '1Gi';
   const args = [
@@ -184,6 +227,17 @@ export function buildGcloudRunArgs(
     '--project',
     projectId,
   ];
+
+  // Run as the mode's Firebase Admin SA (derived from FIREBASE_SERVICE_ACCOUNT
+  // in .env.{mode}) so Admin SDK calls like verifySessionCookie(checkRevoked)
+  // and createSessionCookie work — the default compute SA cannot perform the
+  // accounts:lookup call that revocation-checked verification needs, which
+  // silently breaks session cookies on Cloud Run. The runtime SA needs
+  // roles/secretmanager.secretAccessor + roles/logging.logWriter (granted in
+  // both aikami-production and aikami-staging).
+  if (serviceAccount) {
+    args.push('--service-account', serviceAccount);
+  }
 
   // CPU allocation
   if (config.cpu) {
@@ -210,7 +264,7 @@ export function buildGcloudRunArgs(
     args.push(secretArgs);
   }
 
-  return args.join(' ');
+  return args;
 }
 
 // ── Env File ─────────────────────────────────────────────────────────────

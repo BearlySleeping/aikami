@@ -13,8 +13,9 @@ import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
 
 // ─── Session cookie helpers ──────────────────────────────────────────
-// Mirrors the aikami session store shape: the `__aikami_session` cookie
-// holds a JSON blob `{ session: <firebase session cookie jwt>, ... }`
+// Mirrors the aikami session store shape: the `__session` cookie
+// (AUTH_COOKIE_NAME, see @aikami/constants) holds a JSON blob
+// `{ session: <firebase session cookie jwt>, ... }`
 // (see @aikami/backend/svelte-kit/cookies.ts getStore/saveStore).
 //
 // 🔴 The blob is SHARED with SvelteKit's hooks (manageSessionId stores the
@@ -24,7 +25,7 @@ import { logger } from '$logger';
 
 const SESSION_COOKIE_MAX_AGE_SECONDS = sessionAge;
 
-/** Decode and parse the existing `__aikami_session` blob from a request. */
+/** Decode and parse the existing `__session` blob from a request. */
 const parseExistingStore = (cookieValue: unknown): Record<string, string> => {
   if (typeof cookieValue !== 'string' || !cookieValue) {
     return {};
@@ -69,20 +70,6 @@ const clearSessionCookieHeader = (existingStore: Record<string, string>): string
 
 const sessionRequestSchema = t.Object({
   token: t.Optional(t.String()),
-});
-
-const logEntrySchema = t.Object({
-  logLevel: t.Optional(t.String()),
-  logType: t.Optional(t.String()),
-  message: t.Optional(t.String()),
-  data: t.Optional(t.Unknown()),
-});
-
-const logsRequestSchema = t.Object({
-  label: t.Optional(t.String()),
-  payload: t.Object({
-    batch: t.Array(logEntrySchema),
-  }),
 });
 
 // ─── Handlers ────────────────────────────────────────────────────────
@@ -153,53 +140,11 @@ const handleSession = async ({
   return null;
 };
 
-/**
- * POST /api/logs
- *
- * Accepts buffered browser log batches from the shared frontend logger
- * (@aikami/logger logger_browser.ts HTTP sink) and re-emits them through
- * the SSR logger so browser logs surface in Cloud Run / dev output.
- */
-const handleLogs = ({
-  body,
-}: {
-  body: {
-    label?: string;
-    payload: {
-      batch: Array<{ logLevel?: string; logType?: string; message?: string; data?: unknown }>;
-    };
-  };
-}) => {
-  const { payload } = body;
-  for (const entry of payload.batch) {
-    const message = entry.message ?? 'browser-log';
-    switch (entry.logLevel) {
-      case 'ERROR':
-        logger.error(message, entry.data);
-        break;
-      case 'WARN':
-        logger.warn(message, entry.data);
-        break;
-      case 'INFO':
-        logger.log(message, entry.data);
-        break;
-      default:
-        logger.debug(message, entry.data);
-    }
-  }
-  return null;
-};
-
 // ─── App ─────────────────────────────────────────────────────────────
 
-export const app = new Elysia({ prefix: '/api' })
-  .post('/auth/session', handleSession, {
-    body: sessionRequestSchema,
-    response: t.Null(),
-  })
-  .post('/logs', handleLogs, {
-    body: logsRequestSchema,
-    response: t.Null(),
-  });
+export const app = new Elysia({ prefix: '/api' }).post('/auth/session', handleSession, {
+  body: sessionRequestSchema,
+  response: t.Null(),
+});
 
 export type App = typeof app;

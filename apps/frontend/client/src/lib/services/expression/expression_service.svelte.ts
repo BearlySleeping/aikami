@@ -68,6 +68,46 @@ export type ExpressionServiceInterface = BaseFrontendClassInterface & {
 
 // ── Implementation ───────────────────────────────────────────────────────
 
+/**
+ * Maps freeform agent mood labels to canonical ExpressionId values.
+ * Unknown labels are treated as unrecognized (see _isRecognizedMood) —
+ * callers decide whether to fall back to keyword detection.
+ */
+const MOOD_TO_EXPRESSION_ID: Record<string, ExpressionId> = {
+  neutral: 'neutral',
+  happy: 'happy',
+  sad: 'sad',
+  angry: 'angry',
+  surprised: 'surprised',
+  fearful: 'fearful',
+  fear: 'fearful',
+  disgusted: 'disgusted',
+  disgust: 'disgusted',
+  amused: 'amused',
+  annoyed: 'annoyed',
+  blushing: 'blushing',
+  blush: 'blushing',
+  confused: 'confused',
+  determined: 'determined',
+  flirty: 'flirty',
+  innocent: 'innocent',
+  mischievous: 'mischievous',
+  pained: 'pained',
+  relieved: 'relieved',
+  sleepy: 'sleepy',
+  tired: 'sleepy',
+  thoughtful: 'thoughtful',
+  pensive: 'thoughtful',
+  excited: 'happy',
+  joyful: 'happy',
+  sorrowful: 'sad',
+  furious: 'angry',
+  enraged: 'angry',
+  shocked: 'surprised',
+  terrified: 'fearful',
+  horrified: 'fearful',
+};
+
 class ExpressionService
   extends BaseFrontendClass<BaseFrontendClassOptions>
   implements ExpressionServiceInterface
@@ -131,12 +171,13 @@ class ExpressionService
     characters?: string[];
     availableExpressions?: readonly string[];
   }): Promise<DetectExpressionResult | undefined> {
-    const { message, characters, availableExpressions } = options;
+    const { message, characters } = options;
 
-    const expressionSchema: Record<string, unknown> = availableExpressions?.length
-      ? { type: 'string', enum: [...availableExpressions] }
-      : { type: 'string' };
-
+    // NOTE: the expression field is intentionally left unconstrained (plain
+    // string). Free models frequently return synonyms, capitalized labels, or
+    // multi-word moods that a strict enum would reject — validation-failed
+    // warnings on every dialogue turn. The runtime maps freeform moods to
+    // canonical ExpressionIds via _mapMoodToExpressionId (unknown → neutral).
     const prompt = [
       'Analyze the following message and determine character expressions.',
       '',
@@ -156,7 +197,7 @@ class ExpressionService
               type: 'object',
               properties: {
                 name: { type: 'string' },
-                expression: expressionSchema,
+                expression: { type: 'string' },
               },
               required: ['name', 'expression'],
               additionalProperties: false,
@@ -178,6 +219,17 @@ class ExpressionService
       .characters;
     if (characters_ && Array.isArray(characters_)) {
       for (const char of characters_) {
+        // Unrecognized freeform labels (e.g. "very happy") must NOT silently
+        // degrade to a successful neutral result — that would suppress the
+        // keyword fallback. Return undefined so detectExpression falls
+        // through to Tier 2 keyword detection.
+        if (!this._isRecognizedMood(char.expression)) {
+          logger.debug(
+            'ExpressionService: agent returned unrecognized mood — falling back to keyword',
+            { expression: char.expression },
+          );
+          return undefined;
+        }
         const exprId = this._mapMoodToExpressionId(char.expression);
         expressionMap[char.name] = exprId;
       }
@@ -297,43 +349,13 @@ class ExpressionService
    */
   private _mapMoodToExpressionId(mood: string): ExpressionId {
     const normalized = mood.toLowerCase().trim();
+    return MOOD_TO_EXPRESSION_ID[normalized] ?? 'neutral';
+  }
 
-    const moodMap: Record<string, ExpressionId> = {
-      neutral: 'neutral',
-      happy: 'happy',
-      sad: 'sad',
-      angry: 'angry',
-      surprised: 'surprised',
-      fearful: 'fearful',
-      fear: 'fearful',
-      disgusted: 'disgusted',
-      disgust: 'disgusted',
-      amused: 'amused',
-      annoyed: 'annoyed',
-      blushing: 'blushing',
-      blush: 'blushing',
-      confused: 'confused',
-      determined: 'determined',
-      flirty: 'flirty',
-      innocent: 'innocent',
-      mischievous: 'mischievous',
-      pained: 'pained',
-      relieved: 'relieved',
-      sleepy: 'sleepy',
-      tired: 'sleepy',
-      thoughtful: 'thoughtful',
-      pensive: 'thoughtful',
-      excited: 'happy',
-      joyful: 'happy',
-      sorrowful: 'sad',
-      furious: 'angry',
-      enraged: 'angry',
-      shocked: 'surprised',
-      terrified: 'fearful',
-      horrified: 'fearful',
-    };
-
-    return moodMap[normalized] ?? 'neutral';
+  /** Returns true when the mood label is a recognized mapping target. */
+  private _isRecognizedMood(mood: string): boolean {
+    const normalized = mood.toLowerCase().trim();
+    return normalized in MOOD_TO_EXPRESSION_ID;
   }
 }
 

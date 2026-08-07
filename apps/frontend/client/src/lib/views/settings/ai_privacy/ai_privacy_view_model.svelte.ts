@@ -51,6 +51,10 @@ export type AIPrivacyViewModelOptions = BaseViewModelOptions;
 
 const STORAGE_KEY = 'aikami_ai_privacy_settings';
 
+// Local providers don't need API keys — they are usable out of the box.
+// Cloud providers require a non-empty API key to be usable.
+const LOCAL_PROVIDERS = new Set(['ollama', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox']);
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -72,12 +76,17 @@ class AIPrivacyViewModel
       return 'loading';
     }
 
-    const hasConnections = configService.state.connections.length > 0;
-    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
-      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
+    // C-230: API keys live in connections[] — the legacy text.apiKeys map
+    // was removed from ConfigService and is always undefined.
+    //
+    // 'connected' requires at least one USABLE connection: local providers
+    // are always usable (keyless), cloud providers need a non-empty API key.
+    const { connections } = configService.state;
+    const hasUsableConnection = connections.some(
+      (c) => LOCAL_PROVIDERS.has(c.provider) || (c.apiKey?.trim().length ?? 0) > 0,
     );
 
-    if (!hasConnections && !hasApiKey) {
+    if (!hasUsableConnection) {
       return 'not_configured';
     }
 

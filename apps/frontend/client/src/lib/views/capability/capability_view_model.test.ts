@@ -212,6 +212,21 @@ describe('CapabilityViewModel', () => {
     expect(vm.connectionEntries).toEqual([]);
   });
 
+  test('initialize does NOT auto-run detection (local probes are user-initiated)', async () => {
+    const { capabilityService } = await import('$services');
+    const detectMock = capabilityService.detect as ReturnType<typeof mock>;
+    detectMock.mockClear();
+
+    const vm = createVm();
+    await vm.initialize();
+
+    // Detection must not run on page load — probing localhost from an HTTPS
+    // origin triggers the browser's private-network permission prompt. It
+    // only runs when the user explicitly picks Ollama or hits Retry.
+    expect(detectMock).not.toHaveBeenCalled();
+    expect(vm.isDetecting).toBe(false);
+  });
+
   test('startCampaign calls campaignService.startNewCampaign', async () => {
     setDetectionResult('detected');
     const vm = createVm();

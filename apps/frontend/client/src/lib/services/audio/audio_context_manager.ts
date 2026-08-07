@@ -29,8 +29,9 @@ class AudioContextManager {
 
   /**
    * Attaches a one-shot pointerdown / keydown listener that resumes the
-   * AudioContext. The listener removes itself after the first successful
-   * resume (or immediately if the context is already running).
+   * AudioContext. The listeners are removed after the first successful
+   * resume — either via a later user gesture or the immediate resume
+   * attempt below.
    */
   unlock(): void {
     const ctx = this.context;
@@ -38,6 +39,9 @@ class AudioContextManager {
       return;
     }
 
+    // Register the gesture listeners FIRST so the immediate resume attempt
+    // can also remove them on success — otherwise they would leak when the
+    // direct resume succeeds without any subsequent user gesture.
     const resume = async () => {
       try {
         await ctx.resume();
@@ -52,6 +56,22 @@ class AudioContextManager {
 
     window.addEventListener('pointerdown', resume);
     window.addEventListener('keydown', resume);
+
+    // Actively attempt resume — succeeds only when called within a user
+    // gesture (e.g. clicking "New Game"). On success, remove both gesture
+    // listeners immediately. Outside a gesture this is a harmless rejected
+    // promise; the gesture listeners above cover the next interaction.
+    void ctx
+      .resume()
+      .then(() => {
+        if (ctx.state === 'running') {
+          window.removeEventListener('pointerdown', resume);
+          window.removeEventListener('keydown', resume);
+        }
+      })
+      .catch(() => {
+        // Autoplay policy still blocks — the gesture listener will retry.
+      });
   }
 }
 
