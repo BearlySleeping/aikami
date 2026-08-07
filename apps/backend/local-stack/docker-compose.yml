@@ -76,6 +76,10 @@ services:
       dockerfile: Dockerfile.sherpa
     ports:
       - "6006:6006"
+      - "6007:6007"
+    environment:
+      # Opt-in STT: set to true to also start the Moonshine STT server on :6007
+      - ENABLE_STT=false
     volumes:
       - ./models/tts:/models/tts
       - ./models/stt:/models/stt

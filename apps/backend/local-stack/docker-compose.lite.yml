@@ -16,5 +16,5 @@ services:
       # VOICE_ENDPOINT env vars, see README).
       - LLM_ENDPOINT=http://localhost:8080/v1
       - IMAGE_ENDPOINT=http://localhost:8188
-      - VOICE_ENDPOINT=ws://localhost:6006
+      - VOICE_ENDPOINT=http://localhost:6006
     restart: unless-stopped

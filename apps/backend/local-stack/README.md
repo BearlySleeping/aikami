@@ -19,7 +19,7 @@ apps/backend/local-stack/
 ├── Dockerfile.client               # Lightweight client UI container (nginx SPA)
 ├── Dockerfile.ultimate             # Single all-in-one container (Models + Runtimes + Client)
 ├── bin/                            # Native Host Binary Mode Launchers (No-Docker)
-│   ├── run-native-tts.sh           # sherpa-onnx Kokoro TTS (websocket, :6006)
+│   ├── run-native-tts.sh           # sherpa-onnx Kokoro TTS (HTTP /v1/audio/speech, :6006)
 │   ├── run-native-stt.sh           # sherpa-onnx Moonshine STT (websocket, :6007)
 │   └── run-native-llm.sh           # shimmy / llama.cpp LLM (OpenAI-compatible, :8080)
 ├── docker/
@@ -28,7 +28,7 @@ apps/backend/local-stack/
 │   │   └── entrypoint.sh           # Model auto-download + server supervisor
 │   ├── scripts/
 │   │   └── entrypoint-ultimate.sh  # Auto-model downloader & multi-process supervisor
-│   ├── runtime/                    # Bun static server used by the Ultimate container
+│   ├── client-server/              # Bun static server used by the Ultimate container
 │   └── client/                     # nginx SPA config
 └── models/                         # Git-ignored local model store
     ├── llm/  image/  tts/  stt/
@@ -76,7 +76,7 @@ bun moon run local-stack:run-native-voice
 | Client UI | `aikami-app` | http://localhost:3000 | HTTP (SPA) |
 | Text (LLM) | `text-engine` | http://localhost:8080/v1 | OpenAI-compatible |
 | Image (ComfyUI) | `image-engine` | http://localhost:8188 | HTTP |
-| Voice TTS | `voice-engine` | ws://localhost:6006 | WebSocket |
+| Voice TTS | `voice-engine` | http://localhost:6006 | HTTP `/v1/audio/speech` |
 | Voice STT | `voice-engine` | ws://localhost:6007 | WebSocket (`ENABLE_STT=true`) |
 
 ### Services & profiles
@@ -86,7 +86,7 @@ bun moon run local-stack:run-native-voice
 | `aikami-app` | built (`Dockerfile.client`) | always | SvelteKit SPA served by nginx |
 | `text-engine` | `ghcr.io/michael-a-kuykendall/shimmy:latest` | `text`, `full` | llama.cpp OpenAI-compatible LLM server |
 | `image-engine` | `comfyui/comfyui:latest` | `vision`, `full` | Headless ComfyUI image generation |
-| `voice-engine` | built (`docker/voice/Dockerfile.sherpa`) | `voice`, `full` | sherpa-onnx C++ TTS + STT websocket servers |
+| `voice-engine` | built (`docker/voice/Dockerfile.sherpa`) | `voice`, `full` | sherpa-onnx Kokoro TTS (HTTP) + Moonshine STT (websocket) |
 
 **GPU:** `text-engine` and `image-engine` request NVIDIA GPUs through the
 compose `deploy` schema. Install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
@@ -106,7 +106,7 @@ compose stack's host-mapped ports:
 | --- | --- |
 | `PUBLIC_OLLAMA_BASE_URL` (from `LLM_ENDPOINT`) | `http://localhost:8080/v1` |
 | `PUBLIC_IMAGE_URL` (from `IMAGE_ENDPOINT`) | `http://localhost:8188` |
-| `PUBLIC_VOICE_URL` (from `VOICE_ENDPOINT`) | `ws://localhost:6006` |
+| `PUBLIC_VOICE_URL` (from `VOICE_ENDPOINT`) | `http://localhost:6006` |
 
 Overrides:
 
@@ -155,14 +155,17 @@ and supervises all processes.
 ```bash
 bun run build:ultimate    # host SPA build + stage + image build
 
-docker run --rm -p 3000:3000 -p 8080:8080 -p 6006:6006 \
+docker run --rm -p 3000:3000 -p 8080:8080 -p 6006:6006 -p 6007:6007 \
   -v "$(pwd)/models:/models" \
   aikami-ultimate
 ```
 
-Environment toggles: `ENABLE_VOICE` / `ENABLE_TEXT` (default `true`), model
-paths under `/models`. The LLM only starts when `/models/llm/model.gguf`
-exists.
+Environment toggles: `ENABLE_VOICE` / `ENABLE_STT` / `ENABLE_TEXT` (default
+`true`), model paths under `/models`. The LLM only starts when
+`/models/llm/model.gguf` exists. The container runs as the image's
+unprivileged `shimmy` user (uid 999) — when bind-mounting host models, make
+sure they are writable by uid 999 (`chown -R 999:999 ./models`), or omit the
+mount so the container downloads into its own store.
 
 ---
 
@@ -171,11 +174,12 @@ exists.
 For CPU-bound voice workloads the C++ sherpa-onnx binaries run **directly on
 the host** — no containers, no PyTorch, no CUDA image layers.
 
-Prerequisites: install `sherpa-onnx` (`pip install sherpa-onnx` provides the
-native binaries) and optionally `llama.cpp` (`llama-server`) for the LLM.
+Prerequisites: `python3` with `sherpa-onnx` installed (`pip install sherpa-onnx`
+— provides the native STT binaries and the Python TTS bindings) and
+optionally `llama.cpp` (`llama-server`) for the LLM.
 
 ```bash
-bash bin/run-native-tts.sh   # Kokoro TTS  → ws://localhost:6006
+bash bin/run-native-tts.sh   # Kokoro TTS  → http://localhost:6006/v1/audio/speech
 bash bin/run-native-stt.sh   # Moonshine   → ws://localhost:6007
 bash bin/run-native-llm.sh   # llama-server → http://localhost:8080/v1
 ```
@@ -191,7 +195,8 @@ Model weights are **never committed** (`models/.gitignore` ignores `*.gguf`,
 `*.safetensors`, `*.onnx`, `*.bin`, `*.pt`, archives and caches) and are
 excluded from every build context. They are auto-downloaded on first start:
 
-- **TTS:** Kokoro-82M (`kokoro-v1.0.onnx` + `voices.bin`) → `models/tts/`
+- **TTS:** Kokoro-82M multilingual (k2-fsa tarball with `model.onnx`,
+  `voices.bin`, `tokens.txt`, `espeak-ng-data`) → `models/tts/kokoro-multi-lang-v1_0/`
 - **STT:** Moonshine tiny int8 (sherpa-onnx tarball) → `models/stt/`
 - **LLM:** drop a `model.gguf` into `models/llm/` (native launcher offers an
   auto-download default)
@@ -212,14 +217,14 @@ Bind mounts: `models/llm` → text-engine `/models`, `models/tts` + `models/stt`
   invocations.
 - `text-engine` shimmy serves an OpenAI-compatible API; the client's Ollama
   provider talks to it via `/v1`.
-- The Ultimate entrypoint downloads the raw HuggingFace Moonshine `model.onnx`
-  (per the original design); the sherpa-onnx STT server needs the full
-  preprocessor/encoder/decoder/tokens layout — see
-  `bin/run-native-stt.sh` / `docker/voice/entrypoint.sh` for the working
-  tarball download.
-- Kokoro TTS benefits from `tokens.txt` + `espeak-ng-data` (full sherpa-onnx
-  tarball layout); the minimal hexgrad download works without them for basic
-  synthesis.
+- The Ultimate image pins the shimmy base to an immutable digest and installs
+  Bun from a checksum-verified release artifact (`curl | bash` is never used).
+- Voice containers run as non-root users: the sherpa container uses a
+  configurable `VOICE_UID`/`VOICE_GID` (default 1000:1000 — the typical host
+  user) so the bind-mounted `./models` tree stays writable; override with
+  `--build-arg VOICE_UID=$(id -u) VOICE_GID=$(id -g)` when your host user
+  differs. (Rootless podman maps container UIDs into a subuid range — the
+  bind-mounted model store then needs matching host permissions.)
 
 ## References
 

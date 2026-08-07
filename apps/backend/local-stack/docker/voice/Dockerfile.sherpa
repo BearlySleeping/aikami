@@ -9,19 +9,41 @@
 # (see docker-compose.yml). docker/voice/entrypoint.sh auto-downloads the
 # default Kokoro TTS model on first start.
 #
+# The container runs as a dedicated non-root user. The model store is made
+# writable through a configurable UID/GID: default 1000:1000 (the typical
+# host user), so the bind-mounted ./models tree stays writable. Override
+# with --build-arg VOICE_UID=$(id -u) VOICE_GID=$(id -g) when your host user
+# differs.
+#
 # ── Build context ──────────────────────────────────────────────────────────
 # docker/voice (`.` in docker-compose.yml).
 
 FROM python:3.11-slim
 
-# sherpa-onnx is manylinux — prebuilt wheels, no compilation needed.
-# Pinned for reproducible builds; bump with the upstream release cadence.
 ARG SHERPA_ONNX_VERSION=1.13.4
-RUN pip install --no-cache-dir "sherpa-onnx==${SHERPA_ONNX_VERSION}"
+ARG VOICE_UID=1000
+ARG VOICE_GID=1000
 
-# Entrypoint: model auto-download + TTS websocket server supervisor
+# curl/tar/bzip2 are needed by entrypoint.sh (model downloads + STT archive
+# extraction). sherpa-onnx is manylinux — prebuilt wheels, no compilation.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        tar \
+        bzip2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir "sherpa-onnx==${SHERPA_ONNX_VERSION}" \
+    && groupadd --gid "$VOICE_GID" aikami-voice \
+    && useradd --uid "$VOICE_UID" --gid "$VOICE_GID" --create-home --shell /usr/sbin/nologin aikami-voice
+
+# Entrypoint: model auto-download + TTS/STT server supervisor
 COPY entrypoint.sh /entrypoint.sh
+COPY tts_server.py /tts_server.py
 RUN chmod +x /entrypoint.sh
+
+# Model store — grant the runtime user ownership so the bind-mounted
+# ./models/tts and ./models/stt remain writable (see VOICE_UID/VOICE_GID).
+RUN mkdir -p /models/tts /models/stt \
+    && chown -R "$VOICE_UID:$VOICE_GID" /models /entrypoint.sh
 
 ENV TTS_PORT=6006 \
     STT_PORT=6007 \
@@ -29,4 +51,5 @@ ENV TTS_PORT=6006 \
 
 EXPOSE 6006 6007
 
+USER aikami-voice
 ENTRYPOINT ["/entrypoint.sh"]
