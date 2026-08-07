@@ -6,7 +6,11 @@ import { Appearance, registerAppearanceObservers } from '../components/appearanc
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
-import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
+import {
+  deserializeWorld,
+  serializePlayer,
+  serializeWorld,
+} from '../serialization/ecs_serializer.ts';
 
 // ---------------------------------------------------------------------------
 // AC-1 & AC-2: ECS Snapshot Serializer
@@ -662,5 +666,111 @@ describe('Edge Cases', () => {
     // Source world should be unchanged
     expect(Position.x[sourceEid]).toBe(sourceXBefore);
     expect(Position.y[sourceEid]).toBe(sourceYBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-3: serializePlayer produces a player-scoped snapshot (map-authoritative
+// restore — the save envelope carries only the player's own state)
+// ---------------------------------------------------------------------------
+
+describe('AC-3: serializePlayer produces player-scoped snapshot', () => {
+  let world: World;
+
+  beforeEach(() => {
+    _resetComponentArrays();
+    world = createTestWorld();
+  });
+
+  afterEach(() => {
+    _resetComponentArrays();
+  });
+
+  it('serializes only the player entity, not world entities', () => {
+    // Player (eid 1)
+    createPersistentEntity(world, {
+      x: 111,
+      y: 222,
+      layer0: 0,
+      layer1: 1,
+      layer2: 2,
+      layer3: 3,
+      layer4: 4,
+      health: 100,
+      maxHealth: 100,
+      initiative: 10,
+    });
+    // A second world entity (NPC/prop) — must NOT appear in the player snapshot
+    createPersistentEntity(world, {
+      x: 999,
+      y: 888,
+      layer0: 9,
+      layer1: 9,
+      layer2: 9,
+      layer3: 9,
+      layer4: 9,
+      health: 1,
+      maxHealth: 1,
+      initiative: 1,
+    });
+
+    const payload = serializePlayer(world);
+    const snapshot = JSON.parse(payload) as {
+      entities: number[];
+      components: Record<string, Record<string, number[]>>;
+    };
+
+    expect(snapshot.entities).toEqual([1]);
+    // Only the player's position is captured
+    expect(snapshot.components.Position.x).toEqual([111]);
+    expect(snapshot.components.Position.y).toEqual([222]);
+    // World entity data is absent
+    expect(snapshot.components.Position.x).not.toContain(999);
+  });
+
+  it('round-trips through deserializeWorld and restores only registered components', () => {
+    createPersistentEntity(world, {
+      x: 42,
+      y: 84,
+      layer0: 0,
+      layer1: 0,
+      layer2: 0,
+      layer3: 0,
+      layer4: 0,
+      health: 77,
+      maxHealth: 100,
+      initiative: 8,
+    });
+
+    const payload = serializePlayer(world);
+    const restored = createTestWorld();
+    const eidMap = deserializeWorld(restored, payload);
+
+    // Exactly one entity restored
+    expect(eidMap.size).toBe(1);
+    const restoredEid = [...eidMap.values()][0];
+
+    expect(Position.x[restoredEid]).toBe(42);
+    expect(Position.y[restoredEid]).toBe(84);
+    expect(CombatStats.health[restoredEid]).toBe(77);
+    expect(CombatStats.maxHealth[restoredEid]).toBe(100);
+    expect(CombatStats.initiative[restoredEid]).toBe(8);
+  });
+
+  it('does not register components for entities that have no data (no ghost combat stats)', () => {
+    // Entity with ONLY Position — no Appearance, no CombatStats
+    const bareEid = addEntity(world);
+    addComponent(world, bareEid, set(Position, { x: 5, y: 6 }));
+
+    const payload = serializeWorld(world);
+    const restored = createTestWorld();
+    const eidMap = deserializeWorld(restored, payload);
+
+    const restoredEid = [...eidMap.values()][0];
+    // Position data restored
+    expect(Position.x[restoredEid]).toBe(5);
+    // CombatStats must NOT be registered on this entity
+    expect(CombatStats.health[restoredEid]).toBeUndefined();
+    expect(CombatStats.maxHealth[restoredEid]).toBeUndefined();
   });
 });

@@ -156,6 +156,21 @@
           ]
         },
         {
+          "id": 6,
+          "type": "spawn",
+          "x": 256,
+          "y": 344,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "spawnId",
+              "type": "string",
+              "value": "shop_entrance"
+            }
+          ]
+        },
+        {
           "id": 4,
           "type": "prop",
           "x": 256,
@@ -209,6 +224,11 @@
               "name": "targetY",
               "type": "float",
               "value": 576
+            },
+            {
+              "name": "targetSpawnId",
+              "type": "string",
+              "value": "from_merchant"
             }
           ]
         }

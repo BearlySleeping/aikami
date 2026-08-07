@@ -122,10 +122,18 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       // pack before loading — otherwise the raw ID resolves relative to the
       // current route and the SPA fallback returns HTML, breaking JSON parse.
       let mapUrl = event.targetMap;
+      // defaultSpawnHash: the destination map's manifest `defaultSpawnId`
+      // (e.g. 'village_gate'). The worker resolves it when the portal has no
+      // targetSpawnId, so unpaired portals still land on the map's default.
+      let defaultSpawnHash: number | undefined;
       try {
-        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const { loadContentPack, djb2Hash } = await import('@aikami/frontend/engine');
         const pack = await loadContentPack({ packId: gameEngineService.contentPackId });
         mapUrl = pack.resolveMapUrl(event.targetMap);
+        const targetEntry = pack.manifest.maps[event.targetMap];
+        if (targetEntry?.defaultSpawnId) {
+          defaultSpawnHash = djb2Hash(targetEntry.defaultSpawnId);
+        }
       } catch {
         // targetMap was already an absolute URL/path (or unknown map ID) —
         // fall back to passing it through; the engine surfaces fetch errors.
@@ -136,7 +144,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         targetY: event.targetY,
         defeatedEnemies: gameOverlayService.getDefeatedEnemies(),
         collectedPickups: gameOverlayService.getCollectedPickups(),
+        interactableStates: gameOverlayService.getInteractableStates(),
         targetSpawnHash: event.targetSpawnHash,
+        defaultSpawnHash,
       });
     })();
   });

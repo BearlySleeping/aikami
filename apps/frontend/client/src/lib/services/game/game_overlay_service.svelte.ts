@@ -28,6 +28,7 @@ import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
+import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -641,6 +642,20 @@ export class GameOverlayService
     return [...worldStateService.defeatedEnemies];
   }
 
+  /** Returns the current per-spawnId interactable state map (C-342). */
+  getInteractableStates(): Record<
+    string,
+    {
+      isOpen?: boolean;
+      isLocked?: boolean;
+      isLooted?: boolean;
+      isToggled?: boolean;
+      isTriggered?: boolean;
+    }
+  > {
+    return { ...worldStateService.interactableStates };
+  }
+
   /** @inheritdoc */
   getCollectedPickups(): string[] {
     return [...worldStateService.collectedPickups];
@@ -726,12 +741,14 @@ export class GameOverlayService
       }
 
       const campaignId = campaignService.activeCampaign?.id;
-      const mapName = worldStateService.currentLocation?.name ?? 'World';
+      const mapName = await getCurrentMapName();
+      const map = await buildSaveMapBlock();
 
       await saveService.saveGame({
         slotId: 'auto-save',
         campaignId,
         mapName,
+        map,
       });
       this.autoSaveStatus = 'saved';
       this.showSnackbar({ text: 'Auto-saved', type: 'success' });
@@ -992,12 +1009,14 @@ export class GameOverlayService
       }
 
       const campaignId = campaignService.activeCampaign?.id;
-      const mapName = worldStateService.currentLocation?.name ?? 'World';
+      const mapName = await getCurrentMapName();
+      const map = await buildSaveMapBlock();
 
       await saveService.saveGame({
         slotId: 'manual-1',
         campaignId,
         mapName,
+        map,
       });
       this.saveMessage = 'Game Saved!';
     } catch (error) {

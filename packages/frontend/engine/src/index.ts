@@ -185,7 +185,11 @@ export { GameApiService } from './services/api_service.ts';
 
 // Serialization
 
-export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer.ts';
+export {
+  deserializeWorld,
+  serializePlayer,
+  serializeWorld,
+} from './serialization/ecs_serializer.ts';
 
 // Rendering
 
