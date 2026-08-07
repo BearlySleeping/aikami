@@ -21,7 +21,7 @@ resolved.
 
 | ID | Where | Question |
 |----|-------|----------|
-| **ND-1** | `Notification.type` | Enum values. The draft hinted `"chat_message" \| "system"` (→ `CHAT_MESSAGE`, `SYSTEM`), but `packages/shared/schemas/src/lib/database/notification.ts` defines `NotificationTypeSchema = 'ctaClicked' \| 'videoViewed'` — a *different* notification model (marketing/analytics events), not in-app notifications. The enum currently uses the draft's own values; reconcile the two models or define the real in-app vocabulary. |
+| **ND-1** | `Notification.type` | Enum values. The draft hinted `"chat_message" \| "system"` (→ `CHAT_MESSAGE`, `SYSTEM`), but `packages/shared/schemas/src/lib/firestore/notification.ts` defines `NotificationTypeSchema = 'ctaClicked' \| 'videoViewed'` — a *different* notification model (marketing/analytics events), not in-app notifications. The enum currently uses the draft's own values; reconcile the two models or define the real in-app vocabulary. |
 | **ND-2** | `Chat.npc` | Delete semantics. Made an **optional** `@ref` (→ `ON DELETE SET NULL`) so chat history survives NPC deletion — this matches current Firestore behavior (deleting an NPC does not cascade its chats; messages stay renderable via the denormalized `npcName`/`npcAvatarUrl`). But `ChatSchema.npcId` in TypeBox is **required**, which would imply `Npc!` + `ON DELETE CASCADE`. Decide: preserve chat history (current choice) or cascade chats+messages on NPC delete. |
 | **ND-3** | `Config` | Table semantics. Draft models a generic key→value store (`key`/`value`), but Firestore `configs/{uid}` and TypeBox `ConfigSchema` model per-user settings (theme/locale/…). Pick one model — if per-user settings, the table needs a `uid` FK instead of `key`. |
 | **ND-4** | `Persona` | Read policy. Firestore rules allow **fully public** reads (`allow read: if true`) and `Persona` has no `visibility` field. The intended product behavior may be visibility-gated like NPCs. Either accept public read or add a `visibility: Visibility!` column. |
@@ -159,7 +159,7 @@ the rest in line with the table above is part of the connector follow-up.
 
 | Column | Governing TypeBox schema | Status |
 |--------|--------------------------|--------|
-| `User.connectedEmails` | `UserSchema` in `packages/shared/schemas/src/lib/database/user.ts` (`connectedEmails: Optional(Array(String))`) | documented |
+| `User.connectedEmails` | `UserSchema` in `packages/shared/schemas/src/lib/firestore/user.ts` (`connectedEmails: Optional(Array(String))`) | documented |
 | `User.signInProviders` | `UserSchema` in `…/database/user.ts`; vocabulary from `SignInProviderSchema` in `…/lib/auth/auth.ts` (`'email' \| 'google' \| 'github'`) | documented |
 | `Npc.stats` | `NpcSheetSchema` in `…/database/npc.ts` (extends `BaseCharacterSheetSchema` in `…/database/character.ts`) | documented |
 | `Npc.tags` | — none exists | **ND-6** (`# TODO`) |

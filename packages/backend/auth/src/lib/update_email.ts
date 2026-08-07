@@ -1,4 +1,4 @@
-import { updateUserData } from '@aikami/backend/database/user.ts';
+import { updateUserData } from '@aikami/backend/firestore/user.ts';
 import { updateFirebaseAuthUser } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { toAppError } from '@aikami/utils';

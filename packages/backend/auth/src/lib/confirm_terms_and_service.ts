@@ -1,4 +1,4 @@
-import { updateUserClaimsOptional, updateUserData } from '@aikami/backend/database/user.ts';
+import { updateUserClaimsOptional, updateUserData } from '@aikami/backend/firestore/user.ts';
 import type { AuthMessagePayload, AuthMessageResponse, UserClaims } from '@aikami/types';
 import { logger } from '$logger';
 

@@ -1,10 +1,10 @@
 <script lang="ts">
-  // apps/frontend/hub/src/lib/views/personas/personas_view.svelte
-  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
-  import type { PersonasViewModelInterface } from './personas_view_model.svelte.ts';
+// apps/frontend/hub/src/lib/views/personas/personas_view.svelte
+import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import type { PersonasViewModelInterface } from './personas_view_model.svelte.ts';
 
-  type Props = { viewModel: PersonasViewModelInterface };
-  const { viewModel }: Props = $props();
+type Props = { viewModel: PersonasViewModelInterface };
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="flex flex-col gap-6 p-6">
@@ -32,7 +32,10 @@
     }}
   >
     <div class="flex-1">
-      <label for="persona-name" class="mb-1 block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      <label
+        for="persona-name"
+        class="mb-1 block font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+      >
         New persona name
       </label>
       <input
@@ -91,15 +94,21 @@
               {/if}
               <div class="min-w-0">
                 <div class="truncate font-display text-base text-foreground">{persona.name}</div>
-                <div class="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div
+                  class="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
+                >
                   {persona.race}
                   {persona.class}
-                  {#if persona.level}· Lvl {persona.level}{/if}
+                  {#if persona.level}
+                    · Lvl {persona.level}
+                  {/if}
                 </div>
               </div>
             </div>
             {#if persona.isActive}
-              <span class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-medium text-primary">
+              <span
+                class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-medium text-primary"
+              >
                 Active
               </span>
             {/if}

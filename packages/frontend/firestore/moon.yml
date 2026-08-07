@@ -1,0 +1,22 @@
+# packages/frontend/firestore/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'firestore'
+  - 'frontend'
+  - 'library'
+
+project:
+  name: 'frontend-firestore'
+  description: 'Shared frontend Firestore repositories for data management and state.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+  - 'frontend-utils'

@@ -8,7 +8,7 @@
 // Contract: C-327 AC-3 — optional onboarding section added
 
 import Type, { type Static } from 'typebox';
-import { ConsumableEffectSchema, EquipmentSlotSchema } from '../database/item.ts';
+import { ConsumableEffectSchema, EquipmentSlotSchema } from '../firestore/item.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
@@ -126,8 +126,9 @@ export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
 // ContentPackItemEntry — item definition in the pack
 // ---------------------------------------------------------------------------
 
-// Re-exported from database/item.ts — single source of truth (C-331).
-export { type ItemType, ItemTypeSchema } from '../database/item.ts';
+// ItemType / ItemTypeSchema are exported once from firestore/item.ts — the
+// single source of truth (C-331). Do NOT re-export them here to avoid an
+// ambiguous barrel re-export in @aikami/schemas.
 
 const BaseContentPackItemSchema = Type.Object({
   /** Display name */

@@ -12,6 +12,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@aikami/backend-database": "workspace:*"
+    "@aikami/backend-firestore": "workspace:*"
   }
 }

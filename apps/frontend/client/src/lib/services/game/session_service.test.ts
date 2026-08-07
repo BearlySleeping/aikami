@@ -236,7 +236,7 @@ describe('SessionService', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Verify compacted_summaries row exists
-      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const { getLocalDatabase } = await import('@aikami/frontend/storage');
       const db = await getLocalDatabase();
       const result = await db.query({
         sql: 'SELECT id FROM compacted_summaries WHERE campaign_id = ?',

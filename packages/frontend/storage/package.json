@@ -1,0 +1,21 @@
+{
+  "name": "@aikami/frontend-storage",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/frontend-utils": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "3.51.2-build4",
+    "@tursodatabase/database": "0.7.2"
+  }
+}

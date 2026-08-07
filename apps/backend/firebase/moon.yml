@@ -16,7 +16,7 @@ project:
 dependsOn:
   - 'backend-configs'
   - 'backend-utils'
-  - 'backend-database'
+  - 'backend-firestore'
   - 'schemas'
   - 'types'
   - 'constants'
@@ -73,3 +73,10 @@ tasks:
     options:
       cache: false
       runInCI: true
+  generate-dataconnect-schemas:
+    command: 'bun run generate:dataconnect-schemas'
+    inputs:
+      - 'dataconnect/schema/schema.gql'
+      - 'scripts/generate_dataconnect_schemas.ts'
+    options:
+      cache: false

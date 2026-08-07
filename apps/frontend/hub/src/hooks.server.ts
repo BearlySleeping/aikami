@@ -126,8 +126,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       const origin = request.headers.get('origin');
       // Only answer preflight for trusted extension origins — never fall
       // back to a wildcard, and omit CORS headers for disallowed origins.
-      const isAllowedOrigin =
-        origin?.startsWith('chrome-extension://') || origin === 'null';
+      const isAllowedOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
       const preflightHeaders = new Headers();
       if (origin && isAllowedOrigin) {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');

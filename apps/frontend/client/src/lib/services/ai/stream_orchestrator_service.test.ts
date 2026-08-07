@@ -19,7 +19,7 @@ afterAll(() => {
 });
 
 import type { AudioQueuePlayerInterface } from './audio_queue_player';
-import type { ConversationRepositoryInterface } from './conversation_repository.svelte.ts';
+import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
 import type { PixiTextureInjectorInterface } from './pixi_texture_injector';
 import {
   type ImageStreamConnection,
@@ -112,7 +112,7 @@ const createMockTextureInjector = (): PixiTextureInjectorInterface => ({
   clearTexture: mock(() => {}),
 });
 
-const createMockConversationRepository = (): ConversationRepositoryInterface => ({
+const createMockConversationStorage = (): ConversationStorageInterface => ({
   saveDialogueTurn: mock(() => Promise.resolve()),
 });
 
@@ -362,7 +362,7 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
   let internalImage: ReturnType<typeof createMockImageStream>;
   let audioQueue: ReturnType<typeof createMockAudioQueue>;
   let textureInjector: ReturnType<typeof createMockTextureInjector>;
-  let conversationRepo: ReturnType<typeof createMockConversationRepository>;
+  let conversationRepo: ReturnType<typeof createMockConversationStorage>;
 
   const createOptions = (): StreamOrchestratorOptions => ({
     className: 'TestStreamOrchestratorAC2',
@@ -370,7 +370,7 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
     imageStream: internalImage,
     audioQueuePlayer: audioQueue,
     textureInjector,
-    conversationRepository: conversationRepo,
+    conversationStorage: conversationRepo,
   });
 
   beforeEach(() => {
@@ -378,7 +378,7 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
     internalImage = createMockImageStream();
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
-    conversationRepo = createMockConversationRepository();
+    conversationRepo = createMockConversationStorage();
     orchestrator = new StreamOrchestrator(createOptions());
   });
 
@@ -516,7 +516,7 @@ describe('StreamOrchestrator — C-062 AC3: Abort Exclusion', () => {
   let internalImage: ReturnType<typeof createMockImageStream>;
   let audioQueue: ReturnType<typeof createMockAudioQueue>;
   let textureInjector: ReturnType<typeof createMockTextureInjector>;
-  let conversationRepo: ReturnType<typeof createMockConversationRepository>;
+  let conversationRepo: ReturnType<typeof createMockConversationStorage>;
 
   const createOptions = (): StreamOrchestratorOptions => ({
     className: 'TestStreamOrchestratorAC3',
@@ -524,7 +524,7 @@ describe('StreamOrchestrator — C-062 AC3: Abort Exclusion', () => {
     imageStream: internalImage,
     audioQueuePlayer: audioQueue,
     textureInjector,
-    conversationRepository: conversationRepo,
+    conversationStorage: conversationRepo,
   });
 
   beforeEach(() => {
@@ -532,7 +532,7 @@ describe('StreamOrchestrator — C-062 AC3: Abort Exclusion', () => {
     internalImage = createMockImageStream();
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
-    conversationRepo = createMockConversationRepository();
+    conversationRepo = createMockConversationStorage();
     orchestrator = new StreamOrchestrator(createOptions());
   });
 

@@ -5,9 +5,10 @@
 // catch-all route (src/routes/api/[...slugs]/+server.ts).
 // The client consumes this server with the Eden treaty client
 // (src/lib/client/services/api/internal.svelte.ts).
-import { AUTH_COOKIE_NAME } from '@aikami/constants';
+
 import { sessionAge } from '@aikami/backend/svelte-kit/cookies.ts';
 import { createSessionCookie, verifyIdToken } from '@aikami/backend/utils/auth.ts';
+import { AUTH_COOKIE_NAME } from '@aikami/constants';
 import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
 
@@ -159,7 +160,16 @@ const handleSession = async ({
  * (@aikami/logger logger_browser.ts HTTP sink) and re-emits them through
  * the SSR logger so browser logs surface in Cloud Run / dev output.
  */
-const handleLogs = ({ body }: { body: { label?: string; payload: { batch: Array<{ logLevel?: string; logType?: string; message?: string; data?: unknown }> } } }) => {
+const handleLogs = ({
+  body,
+}: {
+  body: {
+    label?: string;
+    payload: {
+      batch: Array<{ logLevel?: string; logType?: string; message?: string; data?: unknown }>;
+    };
+  };
+}) => {
   const { payload } = body;
   for (const entry of payload.batch) {
     const message = entry.message ?? 'browser-log';

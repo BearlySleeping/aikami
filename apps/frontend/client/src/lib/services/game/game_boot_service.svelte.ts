@@ -21,7 +21,7 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
-import { personaService } from '../persona/persona_repository.svelte';
+import { personaService } from '../persona/persona_firestore.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
@@ -187,13 +187,13 @@ class GameBootService
               type: 'LOAD_FAILED',
               error: message,
             });
-            const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
+            const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
             const updated = {
               ...this._campaign,
               state: failedState,
               updatedAt: new Date().toISOString(),
             };
-            await campaignRepository.update(updated);
+            await campaignStorage.update(updated);
             this._campaign = updated;
           } catch (transitionError) {
             this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
@@ -217,13 +217,13 @@ class GameBootService
     if (this._campaign && this._campaign.state !== 'playing') {
       try {
         const playingState = transition(this._campaign.state, { type: 'LOAD_COMPLETE' });
-        const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
+        const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
         const updated = {
           ...this._campaign,
           state: playingState,
           updatedAt: new Date().toISOString(),
         };
-        await campaignRepository.update(updated);
+        await campaignStorage.update(updated);
         this._campaign = updated;
       } catch (error) {
         // Campaign persistence failure is a boot failure
@@ -370,8 +370,8 @@ class GameBootService
     let campaign: Campaign | undefined;
     if (input.campaignId) {
       // Load specific campaign via repository
-      const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
-      campaign = await campaignRepository.getById(input.campaignId);
+      const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
+      campaign = await campaignStorage.getById(input.campaignId);
     }
 
     // Check generation after async operation
@@ -410,9 +410,9 @@ class GameBootService
             campaignId: campaign.id,
           });
           // Persist the loading state
-          const { campaignRepository } = await import('../campaign/campaign_repository.svelte');
+          const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
           campaign = { ...campaign, state: loadingState, updatedAt: new Date().toISOString() };
-          await campaignRepository.update(campaign);
+          await campaignStorage.update(campaign);
           // Only mutate if generation is still current after await
           if (generation === this._bootGeneration) {
             this._campaign = campaign;
@@ -601,7 +601,7 @@ class GameBootService
       //    network-dependent manifest/sidecar checks below must never block cache
       //    rehydration.
       const { getLocalDatabase, AssetRegistryRepository } = await import(
-        '@aikami/frontend/repositories'
+        '@aikami/frontend/storage'
       );
       const db = await getLocalDatabase();
       if (generation !== this._bootGeneration) {

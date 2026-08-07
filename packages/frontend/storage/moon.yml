@@ -1,0 +1,39 @@
+# packages/frontend/storage/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'storage'
+  - 'frontend'
+  - 'library'
+
+project:
+  name: 'frontend-storage'
+  description: 'Shared frontend local storage adapters (Turso/libSQL, WASM/OPFS) and asset registry.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+  - 'frontend-utils'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'src/**/*.test.ts'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

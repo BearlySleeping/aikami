@@ -8,8 +8,10 @@
     "paths": {
       "@aikami/frontend/components": ["../components/src/index.ts"],
       "@aikami/frontend/components/*": ["../components/src/lib/*"],
-      "@aikami/frontend/repositories": ["../repositories/src/index.ts"],
-      "@aikami/frontend/repositories/*": ["../repositories/src/lib/*"],
+      "@aikami/frontend/firestore": ["../firestore/src/index.ts"],
+      "@aikami/frontend/firestore/*": ["../firestore/src/lib/*"],
+      "@aikami/frontend/storage": ["../storage/src/index.ts"],
+      "@aikami/frontend/storage/*": ["../storage/src/lib/*"],
       "@aikami/frontend/services": ["../services/src/index.ts"],
       "@aikami/frontend/services/*": ["../services/src/lib/*"],
       "@aikami/frontend/utils": ["./src/index.ts"],
