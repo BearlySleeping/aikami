@@ -1,6 +1,6 @@
 // packages/backend/auth/src/lib/complete_device_handoff.ts
 
-import { getFirestore } from '@aikami/backend/configs/database';
+import { getFirestore } from '@aikami/backend/configs/firestore';
 import { createCustomFirebaseToken } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessageResponse } from '@aikami/types';
 import { toAppError } from '@aikami/utils';

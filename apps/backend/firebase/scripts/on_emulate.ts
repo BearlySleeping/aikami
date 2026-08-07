@@ -4,9 +4,9 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getAuth } from '@aikami/backend/configs/auth';
 import { serverTimestamp } from '@aikami/backend/configs/firestore';
-import { npcRepository } from '@aikami/backend/database/npc';
-import { personaRepository } from '@aikami/backend/database/persona';
-import { setUserData } from '@aikami/backend/database/user';
+import { npcFirestoreRepository } from '@aikami/backend/firestore/npc';
+import { personaFirestoreRepository } from '@aikami/backend/firestore/persona';
+import { setUserData } from '@aikami/backend/firestore/user';
 import { uploadToFirebase } from '@aikami/backend/utils/storage';
 import {
   EMULATOR_GOOGLE_PERSONA_DATA,
@@ -76,7 +76,7 @@ const createPersona = async (
     uid,
   } as PersonaCreateData;
 
-  const id = await personaRepository.addDocument({
+  const id = await personaFirestoreRepository.addDocument({
     getCollectionPathArgument: { uid },
     createData: personaData,
   });
@@ -109,7 +109,7 @@ const createNpcs = async () => {
         avatarUrl: expressions.neutral || expressions.happy || Object.values(expressions)[0],
       };
 
-      const id = await npcRepository.addDocument({
+      const id = await npcFirestoreRepository.addDocument({
         getCollectionPathArgument: {} as Record<string, never>,
         createData: npcWithExpressions,
       });

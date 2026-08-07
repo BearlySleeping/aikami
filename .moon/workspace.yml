@@ -32,7 +32,7 @@ projects:
   backend-chat: "packages/backend/chat"
   backend-configs: "packages/backend/configs"
   backend-utils: "packages/backend/utils"
-  backend-database: "packages/backend/database"
+  backend-firestore: "packages/backend/firestore"
   backend-auth: "packages/backend/auth"
   backend-svelte-kit: "packages/backend/svelte-kit"
 
@@ -42,7 +42,8 @@ projects:
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-ai-gateway: "packages/frontend/ai-gateway"
-  frontend-repositories: "packages/frontend/repositories"
+  frontend-firestore: "packages/frontend/firestore"
+  frontend-storage: "packages/frontend/storage"
   frontend-configs: "packages/frontend/configs"
 
 vcs:

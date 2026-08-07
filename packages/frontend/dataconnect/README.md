@@ -11,7 +11,7 @@ This package wraps the auto-generated Firebase Data Connect SDK for typed, safe 
 
 ## Where It's Used
 
-Used by `packages/frontend/repositories` and any frontend code that reads/writes via Data Connect.
+Used by `packages/frontend/firestore` and any frontend code that reads/writes via Data Connect.
 
 ## Installation
 

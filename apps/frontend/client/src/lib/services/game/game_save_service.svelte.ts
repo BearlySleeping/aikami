@@ -6,7 +6,7 @@
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 
 import type { EngineBridge } from '@aikami/frontend/engine';
-import { getLocalDatabase } from '@aikami/frontend/repositories';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

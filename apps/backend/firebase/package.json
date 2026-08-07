@@ -23,12 +23,13 @@
     "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun test tests/controllers.test.ts",
     "test:rules": "firestack test:rules --flavor staging",
-    "populate-npcs": "bun run scripts/populate-npcs.ts"
+    "populate-npcs": "bun run scripts/populate-npcs.ts",
+    "generate:dataconnect-schemas": "bun run scripts/generate_dataconnect_schemas.ts"
   },
   "dependencies": {
     "@aikami/backend-auth": "workspace:*",
     "@aikami/backend-configs": "workspace:*",
-    "@aikami/backend-database": "workspace:*",
+    "@aikami/backend-firestore": "workspace:*",
     "@aikami/backend-utils": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",

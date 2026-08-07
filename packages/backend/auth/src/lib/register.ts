@@ -1,4 +1,4 @@
-import { deleteUserData, setUserData, toUserCreateData } from '@aikami/backend/database/user.ts';
+import { deleteUserData, setUserData, toUserCreateData } from '@aikami/backend/firestore/user.ts';
 import {
   createCustomFirebaseToken,
   createFirebaseAuthUser,

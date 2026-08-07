@@ -7,7 +7,7 @@
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { getLocalDatabase } from '@aikami/frontend/repositories';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

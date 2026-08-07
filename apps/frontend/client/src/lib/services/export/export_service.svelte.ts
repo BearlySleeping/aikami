@@ -5,7 +5,7 @@
 // download triggering for all export operations.
 
 import { AIKAMI_PNG_CHUNK_KEYWORD, EXPORT_FORMAT_VERSION } from '@aikami/constants';
-import { chatRepository } from '@aikami/frontend/repositories/chat.ts';
+import { chatFirestoreRepository } from '@aikami/frontend/firestore/chat.ts';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -225,7 +225,7 @@ class ExportService
   // ── Chat ────────────────────────────────────────────────────────────
 
   async listChats(): Promise<ChatData[]> {
-    return await chatRepository.getDocumentsByCollection(undefined);
+    return await chatFirestoreRepository.getDocumentsByCollection(undefined);
   }
 
   async exportChatAsJsonl(options: { chat: ChatData; npcName?: string }): Promise<void> {

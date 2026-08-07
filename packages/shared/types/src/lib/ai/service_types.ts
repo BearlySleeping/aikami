@@ -4,7 +4,7 @@
 // self-hosted LLM serving) and the client AiServiceInterface contract.
 // Formerly lived in lib/endpoints/ai.ts alongside callable-specific types.
 
-import type { PersonaData } from '../database/persona.ts';
+import type { PersonaData } from '../firestore/persona.ts';
 
 /** Supported AI provider backends. */
 export type AIProviderType = 'openai' | 'anthropic' | 'openrouter' | 'gemini';

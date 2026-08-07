@@ -1,5 +1,25 @@
 // packages/backend/configs/src/lib/firestore.ts
-import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import {
+  FieldPath,
+  FieldValue,
+  type Firestore,
+  initializeFirestore,
+  Timestamp,
+} from 'firebase-admin/firestore';
+import { getApp } from './app.ts';
+
+let _firestore: Firestore | undefined;
+
+export const getFirestore = (): Firestore => {
+  if (_firestore) {
+    return _firestore;
+  }
+  const app = getApp();
+  const preferRest = true;
+  _firestore = initializeFirestore(app, { preferRest });
+
+  return _firestore;
+};
 
 export const serverTimestamp = () => FieldValue.serverTimestamp();
 export const serverIncrement = (n: number) => FieldValue.increment(n);

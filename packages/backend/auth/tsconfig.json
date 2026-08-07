@@ -6,8 +6,8 @@
     "paths": {
       "@aikami/backend/auth/*": ["./src/lib/*"],
       "@aikami/backend/configs/*": ["../configs/src/lib/*"],
-      "@aikami/backend/database": ["../database/src/index.ts"],
-      "@aikami/backend/database/*": ["../database/src/lib/*"],
+      "@aikami/backend/firestore": ["../firestore/src/index.ts"],
+      "@aikami/backend/firestore/*": ["../firestore/src/lib/*"],
       "@aikami/backend/utils": ["../utils/src/index.ts"],
       "@aikami/backend/utils/*": ["../utils/src/lib/*"],
       "@aikami/constants": ["../../shared/constants/src/index.ts"],

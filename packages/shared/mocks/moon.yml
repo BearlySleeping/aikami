@@ -15,7 +15,7 @@ project:
   owner: 'Core Team'
 
 dependsOn:
-  - 'backend-database'
+  - 'backend-firestore'
   - 'constants'
   - 'schemas'
   - 'types'

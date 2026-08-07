@@ -46,7 +46,7 @@ This app depends on the following packages:
 - `@aikami/logger`
 - `@aikami/backend-configs`
 - `@aikami/backend-utils`
-- `@aikami/backend-database`
+- `@aikami/backend-firestore`
 
 ## Deployment
 

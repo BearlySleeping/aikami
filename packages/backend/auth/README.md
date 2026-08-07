@@ -25,7 +25,7 @@ bun install
 - `@aikami/constants` - Constant values
 - `@aikami/schemas` - Zod schemas for validation
 - `@aikami/types` - Type definitions
-- `@aikami/backend-database` - User database operations
+- `@aikami/backend-firestore` - User database operations
 
 ## Tasks
 

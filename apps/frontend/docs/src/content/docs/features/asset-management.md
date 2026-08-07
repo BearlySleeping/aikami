@@ -84,7 +84,7 @@ How it works:
 
 - Engine scanner: `packages/frontend/engine/src/assets/asset_manifest.ts`
 - CLI scanner: `scripts/src/lib/ops/scan_assets.ts`
-- Registry: `packages/frontend/repositories/src/lib/assets.ts`
+- Registry: `packages/frontend/storage/src/lib/assets.ts`
 - Cache + manager: `apps/frontend/client/src/lib/services/assets/`
 - UI: `apps/frontend/client/src/lib/views/asset-browser/`
 - Store: `apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts`

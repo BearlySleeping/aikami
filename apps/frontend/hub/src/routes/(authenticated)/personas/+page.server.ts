@@ -8,7 +8,7 @@
 //
 // The client-side +page.ts casts the deserialized data to PersonaData.
 
-import { personaRepository } from '@aikami/backend/database/persona';
+import { personaFirestoreRepository } from '@aikami/backend/firestore/persona';
 import { toJsonData } from '@aikami/backend/utils/transform';
 import { error } from '@sveltejs/kit';
 import { logger } from '$logger';
@@ -32,7 +32,7 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
   try {
     logger.debug('/personas:load fetching personas', { uid });
 
-    const personas = await personaRepository.getDocumentsByQuery({
+    const personas = await personaFirestoreRepository.getDocumentsByQuery({
       filters: [
         {
           field: 'uid',
