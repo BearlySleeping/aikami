@@ -19,6 +19,7 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
 import {
   type AikamiMode,
   ALL_SERVICES,
@@ -32,6 +33,11 @@ import {
   startServices,
   stopServices,
 } from '../../scripts/src/lib/herdr/session';
+import {
+  openPullRequest,
+  publishWorktree,
+  worktreeRepoRoot,
+} from '../../scripts/src/lib/herdr/worktree';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -694,6 +700,127 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // TOOL: task_pr — publish the current task worktree + open a PR
+  // ─────────────────────────────────────────────────────────────
+
+  pi.registerTool({
+    name: 'task_pr',
+    label: 'Task: Open PR from Worktree',
+    description:
+      'Publish the current herdr-native task worktree (commit all changes, push ' +
+      'the branch, with remote-collision guard) and open a GitHub PR to the ' +
+      'requested base branch (default: main). Run from inside a task worktree ' +
+      '(bun herdr:task new <slug>) or pass an explicit checkoutPath.',
+    promptSnippet: 'Use task_pr to ship the current task worktree as a PR to main',
+    promptGuidelines: [
+      'Call after the task work is complete and tests pass.',
+      'Default base is main — pass baseBranch to retarget.',
+      'Set draft=true for a work-in-progress PR.',
+      'The branch is pushed automatically; the worktree is preserved.',
+    ],
+    parameters: Type.Object({
+      checkoutPath: Type.Optional(
+        Type.String({ description: 'Absolute worktree checkout path. Defaults to cwd.' }),
+      ),
+      baseBranch: Type.Optional(Type.String({ default: 'main' })),
+      title: Type.Optional(Type.String()),
+      body: Type.Optional(Type.String()),
+      draft: Type.Optional(Type.Boolean({ default: false })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const checkoutPath = (params.checkoutPath as string | undefined) ?? ctx.cwd;
+      const base = (params.baseBranch as string | undefined) ?? 'main';
+
+      // Shared repo-root resolution (single implementation — worktree.ts).
+      let repoRoot: string;
+      let branch: string;
+      try {
+        repoRoot = worktreeRepoRoot(checkoutPath);
+        branch = runGit('rev-parse --abbrev-ref HEAD', { cwd: checkoutPath });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `❌ Could not resolve the task checkout \`${checkoutPath}\`: ${message}`,
+            },
+          ],
+          details: { step: 'resolve_checkout', checkoutPath },
+        };
+      }
+
+      const slug = sanitizeBranchName(branch.replace(/^task\//, '').replace(/^worktree\//, ''));
+      const title = (params.title as string | undefined) ?? `Task: ${slug}`;
+
+      // Publish (commit + push). If this fails nothing was pushed.
+      let headBranch: string;
+      let headCommit: string;
+      try {
+        ({ headBranch, headCommit } = await publishWorktree({
+          checkoutPath,
+          repoRoot,
+          base,
+          message: `Feat: ${slug}`,
+          authorName: 'Pi Agent',
+          authorEmail: 'agent@pi.internal',
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `❌ Publish failed (nothing was pushed): ${message}` }],
+          details: { step: 'publish_worktree', checkoutPath, base },
+        };
+      }
+
+      // Open the PR. The branch IS already pushed at this point — the caller
+      // must not re-publish, only retry the PR step.
+      let prUrl: string;
+      let prNumber: string;
+      try {
+        ({ prUrl, prNumber } = await openPullRequest({
+          headBranch,
+          base,
+          title,
+          body: params.body as string | undefined,
+          draft: (params.draft as boolean | undefined) ?? false,
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text:
+                `❌ Branch \`${headBranch}\` was pushed, but \`gh pr create\` failed: ${message}\n` +
+                'Retry the PR step only; do not publish again.',
+            },
+          ],
+          details: { step: 'open_pull_request', headBranch, headCommit, base },
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ **PR #${prNumber} opened** (branch \`${headBranch}\` @ \`${headCommit.slice(0, 7)}\`)`,
+              `→ ${prUrl}`,
+              '',
+              'Merge it with gh_merge_pr when CI passes. The worktree is preserved.',
+            ].join('\n'),
+          },
+        ],
+        details: { headBranch, headCommit, prUrl, prNumber, base },
+      };
+    },
+  });
 
   // ─────────────────────────────────────────────────────────────
   // TOOL: herdr_session — aikami dev service lifecycle

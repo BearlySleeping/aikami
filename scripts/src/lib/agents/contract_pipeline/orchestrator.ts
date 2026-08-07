@@ -10,15 +10,9 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { findWorkspace, stopContractSession } from '../../herdr/session.ts';
-import {
-  commitAll,
-  provisionGitWorktree,
-  pushBranch,
-  remoteBranchExists,
-  removeWorktree,
-  runGit,
-} from '../git_worktree.ts';
+import { findWorkspace } from '../../herdr/session.ts';
+import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
+import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
@@ -196,72 +190,65 @@ const waitForReviewDecision = async (options: {
 
 // ── Reconciliation ───────────────────────────────────────────
 
-const reconcileWorkspace = (options: {
+/**
+ * Publish the run's branch for PR creation.
+ *
+ * Worktree mode: the herdr-native worktree (created by the adapter at
+ * initialize time, at ~/.herdr/worktrees/<repo>/<slug>) already carries the
+ * `contract-task-{id}-{token}` branch with all implementer/verifier commits.
+ * publishWorktree commits remaining changes and pushes — no re-provisioning,
+ * no branch rename, no base-restore dance (skip-worktree handles that).
+ *
+ * Root mode: unchanged — commit + push the root contract branch directly.
+ */
+const reconcileWorkspace = async (options: {
   manifest: RunManifest;
   repoRoot: string;
   baseBranch?: string;
   rootMode?: boolean;
-}): ReconciliationResult => {
+}): Promise<ReconciliationResult> => {
   const b = options.baseBranch ?? PIPELINE_BASE_BRANCH;
   const rootMode = options.rootMode ?? false;
 
-  let workspacePath: string;
-  let headBranch: string;
-
-  if (rootMode) {
-    // Root mode: no worktree — the implementation lives in the repo root on
-    // the contract branch (e.g. contract/C-372). Commit remaining changes and
-    // push that branch directly.
-    workspacePath = options.repoRoot;
-    try {
-      headBranch = runGit('rev-parse --abbrev-ref HEAD', { cwd: workspacePath });
-    } catch {
-      headBranch = `contract/${options.manifest.contractId}`;
+  if (!rootMode) {
+    const checkoutPath = options.manifest.worktreeCheckoutPath;
+    if (!checkoutPath || !existsSync(checkoutPath)) {
+      throw new Error(
+        `Cannot reconcile: worktree checkout missing for ${options.manifest.runId} ` +
+          `(path: ${checkoutPath ?? 'unset'}). ` +
+          'Resume the run to recover the worktree, or use --root mode.',
+      );
     }
-  } else {
-    const workspaceRunName = options.manifest.runId;
-    const provisioned = provisionGitWorktree({
+    const { headBranch, headCommit } = await publishWorktree({
+      checkoutPath,
       repoRoot: options.repoRoot,
-      name: workspaceRunName,
-      baseRevision: b,
+      base: b,
+      message: `Feat: Contract ${options.manifest.contractId} (run ${options.manifest.runId})`,
+      authorName: 'Pi Agent',
+      authorEmail: 'agent@pi.internal',
     });
-    workspacePath = provisioned.workspacePath;
+    // publishWorktree may rename the branch on a remote collision — persist
+    // the published name so recovery and cleanup use one value.
+    options.manifest.worktreeBranch = headBranch;
+    return {
+      changeId: headCommit,
+      bookmarkName: headBranch,
+      headBranch,
+      baseBranch: b,
+      prTitle: `Contract ${options.manifest.contractId}`,
+      prBody: '',
+    };
+  }
 
-    // Restore .envrc / .pi/settings.json from base (origin/main), not HEAD.
-    let resolvedBase: string | undefined;
-    try {
-      resolvedBase = runGit(`rev-parse --verify origin/${b}`, { cwd: options.repoRoot });
-    } catch {
-      try {
-        resolvedBase = runGit(`rev-parse --verify ${b}`, { cwd: options.repoRoot });
-      } catch {}
-    }
-    if (resolvedBase) {
-      for (const fp of [
-        '.envrc',
-        '.pi/settings.json',
-        'docs/contracts/PROGRESS.md',
-        'docs/contracts/PROMOTION.md',
-      ]) {
-        try {
-          runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
-        } catch {}
-      }
-    }
-
-    const runToken = options.manifest.runId.replace(/^run-/, '').split('-')[0];
-    const baseBranchName = `contract-task-${options.manifest.contractId.toLowerCase()}-${runToken}`;
-    headBranch = baseBranchName;
-    if (remoteBranchExists({ branchName: baseBranchName, repoRoot: options.repoRoot })) {
-      headBranch = `${baseBranchName}-${Date.now().toString(36).slice(-6)}`;
-    }
-    if (provisioned.branchName !== headBranch) {
-      try {
-        runGit(`branch -m ${provisioned.branchName} ${headBranch}`, { cwd: workspacePath });
-      } catch {
-        headBranch = provisioned.branchName;
-      }
-    }
+  // Root mode: no worktree — the implementation lives in the repo root on
+  // the contract branch (e.g. contract/C-372). Commit remaining changes and
+  // push that branch directly.
+  const workspacePath = options.repoRoot;
+  let headBranch: string;
+  try {
+    headBranch = runGit('rev-parse --abbrev-ref HEAD', { cwd: workspacePath });
+  } catch {
+    headBranch = `contract/${options.manifest.contractId}`;
   }
 
   const finalMsg = `Feat: Contract ${options.manifest.contractId} (run ${options.manifest.runId})`;
@@ -485,17 +472,17 @@ const syncMainOnMerge = (repoRoot: string): void => {
   }
 };
 
-const cleanupAfterMerge = (options: {
+const cleanupAfterMerge = async (options: {
   repoRoot: string;
   workspacePath: string;
   branchName: string;
   contractId: string;
-}): void => {
+}): Promise<void> => {
   try {
-    removeWorktree({
-      workspacePath: options.workspacePath,
+    await removeWorktree({
+      checkoutPath: options.workspacePath,
       repoRoot: options.repoRoot,
-      branchName: options.branchName,
+      branch: options.branchName,
       deleteRemoteBranch: true,
     });
     console.log(`\n🧹 Worktree cleaned: ${options.branchName}\n`);
@@ -504,17 +491,6 @@ const cleanupAfterMerge = (options: {
       `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
     );
   }
-
-  // Stop the contract-scoped herdr session (client, firebase, etc.).
-  const mode: 'emulator' | 'staging' | 'production' =
-    process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
-      ? process.env.AIKAMI_MODE
-      : 'emulator';
-  stopContractSession(mode, options.contractId).catch((e: unknown) => {
-    console.warn(
-      `⚠️  Herdr session cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
-    );
-  });
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
@@ -677,6 +653,13 @@ export const runContractPipeline = async (options: {
     const ws = await adapter.initialize();
     manifest.workspaceId = ws.workspaceId;
     manifest.pipelinePaneId = ws.pipelinePaneId;
+    if (!rootMode) {
+      // Persist herdr-native worktree state so resume-after-crash can
+      // recover the checkout without re-deriving paths.
+      manifest.worktreeWorkspaceId = ws.workspaceId;
+      manifest.worktreeCheckoutPath = adapter.getWorkspacePath() || undefined;
+      manifest.worktreeBranch = adapter.getWorktreeBranch() || undefined;
+    }
     writeManifest({ manifest, cwd: options.repoRoot });
     options.onReady?.(manifest);
     pipelineLog({
@@ -905,7 +888,7 @@ export const runContractPipeline = async (options: {
               }
             } else {
               try {
-                manifest.reconciliation = reconcileWorkspace({
+                manifest.reconciliation = await reconcileWorkspace({
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
@@ -950,7 +933,7 @@ export const runContractPipeline = async (options: {
             // Force reconciliation: commit + push the branch so a PR can be created.
             if (!manifest.reconciliation?.headBranch) {
               try {
-                manifest.reconciliation = reconcileWorkspace({
+                manifest.reconciliation = await reconcileWorkspace({
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
@@ -1142,7 +1125,7 @@ export const runContractPipeline = async (options: {
               if (options.yolo) {
                 syncMainOnMerge(options.repoRoot);
                 if (headBranch && adapter.getWorkspacePath()) {
-                  cleanupAfterMerge({
+                  await cleanupAfterMerge({
                     repoRoot: options.repoRoot,
                     workspacePath: adapter.getWorkspacePath(),
                     branchName: headBranch,
@@ -1168,7 +1151,7 @@ export const runContractPipeline = async (options: {
                 });
                 syncMainOnMerge(options.repoRoot);
                 if (headBranch && adapter.getWorkspacePath()) {
-                  cleanupAfterMerge({
+                  await cleanupAfterMerge({
                     repoRoot: options.repoRoot,
                     workspacePath: adapter.getWorkspacePath(),
                     branchName: headBranch,
@@ -1240,7 +1223,7 @@ export const runContractPipeline = async (options: {
             console.log('\n🚀 YOLO: Captain merged — syncing main + cleanup.\n');
             syncMainOnMerge(options.repoRoot);
             if (headBranch && adapter.getWorkspacePath()) {
-              cleanupAfterMerge({
+              await cleanupAfterMerge({
                 repoRoot: options.repoRoot,
                 workspacePath: adapter.getWorkspacePath(),
                 branchName: headBranch,
@@ -1272,7 +1255,7 @@ export const runContractPipeline = async (options: {
             });
             syncMainOnMerge(options.repoRoot);
             if (headBranch && adapter.getWorkspacePath()) {
-              cleanupAfterMerge({
+              await cleanupAfterMerge({
                 repoRoot: options.repoRoot,
                 workspacePath: adapter.getWorkspacePath(),
                 branchName: headBranch,
@@ -1344,30 +1327,26 @@ export const runContractPipeline = async (options: {
     if (manifest.currentStage !== 'merged') {
       const wsPath = adapter.getWorkspacePath();
       const branchName = manifest.reconciliation?.headBranch;
+      // 🔴 `pr_created` leaves an OPEN PR — deleting its head branch closes
+      // the PR on GitHub. Only delete the remote branch when no PR remains.
+      const keepRemoteBranch = manifest.currentStage === 'pr_created';
       if (wsPath) {
         try {
-          removeWorktree({
-            workspacePath: wsPath,
+          await removeWorktree({
+            checkoutPath: wsPath,
             repoRoot: options.repoRoot,
-            branchName,
-            deleteRemoteBranch: true,
+            branch: keepRemoteBranch ? undefined : branchName,
+            deleteRemoteBranch: !keepRemoteBranch,
           });
-          console.log(`\n🧹 Worktree + branch cleaned: ${branchName ?? 'unknown'}\n`);
+          console.log(
+            `\n🧹 Worktree cleaned${keepRemoteBranch ? ' (remote branch kept for open PR)' : ''}: ${branchName ?? 'unknown'}\n`,
+          );
         } catch (e: unknown) {
           console.warn(
             `⚠️  Cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
           );
         }
       }
-    }
-
-    // Stop the contract-scoped herdr session on pipeline exit.
-    if (adapter.getWorkspacePath()) {
-      const mode: 'emulator' | 'staging' | 'production' =
-        process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
-          ? process.env.AIKAMI_MODE
-          : 'emulator';
-      stopContractSession(mode, manifest.contractId).catch(() => {});
     }
 
     return manifest;
