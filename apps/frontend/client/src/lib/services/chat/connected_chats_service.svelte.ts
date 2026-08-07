@@ -22,7 +22,7 @@ import type { BridgeContext, ChatLink } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { chatService } from './chat.svelte.ts';
-import { npcChatService } from './npc_chat_repository.svelte.ts';
+import { npcChatService } from './npc_chat_firestore.svelte.ts';
 
 type FirestoreModule = typeof import('@aikami/frontend/configs/firestore.ts');
 

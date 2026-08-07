@@ -15,7 +15,7 @@ import { AiTextProviderRequiredError } from '@aikami/utils';
 import { aiSettingsService } from '$services';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
-import { campaignRepository } from './campaign_repository.svelte.ts';
+import { campaignStorage } from './campaign_storage.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -174,7 +174,7 @@ class CampaignService
         capabilityProfile,
       };
 
-      await campaignRepository.create(campaign);
+      await campaignStorage.create(campaign);
       this.activeCampaign = campaign;
       this.campaigns = [campaign, ...this.campaigns];
 
@@ -194,7 +194,7 @@ class CampaignService
     this.isBusy = true;
 
     try {
-      const campaign = await campaignRepository.getById(options.campaignId);
+      const campaign = await campaignStorage.getById(options.campaignId);
       if (!campaign) {
         throw new Error(`Campaign not found: ${options.campaignId}`);
       }
@@ -210,7 +210,7 @@ class CampaignService
         state: 'loading',
         updatedAt: new Date().toISOString(),
       };
-      await campaignRepository.update(updated);
+      await campaignStorage.update(updated);
 
       // Transition to playing via LOAD_COMPLETE
       const playing: Campaign = {
@@ -218,7 +218,7 @@ class CampaignService
         state: transition('loading', { type: 'LOAD_COMPLETE' }),
         updatedAt: new Date().toISOString(),
       };
-      await campaignRepository.update(playing);
+      await campaignStorage.update(playing);
 
       this.activeCampaign = playing;
       await this.refreshCampaigns();
@@ -252,7 +252,7 @@ class CampaignService
       updatedAt: new Date().toISOString(),
     };
     this.activeCampaign = updated;
-    void campaignRepository.update(updated);
+    void campaignStorage.update(updated);
   }
 
   /** @inheritdoc */
@@ -267,7 +267,7 @@ class CampaignService
       updatedAt: new Date().toISOString(),
     };
     this.activeCampaign = updated;
-    void campaignRepository.update(updated);
+    void campaignStorage.update(updated);
   }
 
   /** @inheritdoc */
@@ -293,7 +293,7 @@ class CampaignService
         lastSaveSlotId: options?.slotId ?? 'auto-save',
         updatedAt: now,
       };
-      await campaignRepository.update(complete);
+      await campaignStorage.update(complete);
       this.activeCampaign = complete;
       await this.refreshCampaigns();
 
@@ -338,7 +338,7 @@ class CampaignService
   /** @inheritdoc */
   async refreshCampaigns(): Promise<void> {
     try {
-      const all = await campaignRepository.getAll();
+      const all = await campaignStorage.getAll();
       this.campaigns = all;
       this.debug('refreshCampaigns', { count: all.length });
     } catch (error) {
@@ -368,7 +368,7 @@ class CampaignService
       updatedAt: new Date().toISOString(),
     };
     this.activeCampaign = updated;
-    void campaignRepository.update(updated);
+    void campaignStorage.update(updated);
 
     // Keep the campaigns list in sync so getLatestCampaign() returns accurate state
     this.campaigns = this.campaigns.map((c) => (c.id === updated.id ? updated : c));

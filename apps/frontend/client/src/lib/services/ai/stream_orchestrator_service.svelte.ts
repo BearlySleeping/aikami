@@ -6,7 +6,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationMessage } from '../chat/context_builder.ts';
-import type { ConversationRepositoryInterface } from '../chat/conversation_repository.svelte.ts';
+import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
 import type { ExpressionAssetResolverInterface } from '../expression/expression_asset_resolver';
 import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
 import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';
@@ -55,7 +55,7 @@ export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
   imageStream: ImageStreamConnection;
   audioQueuePlayer: AudioQueuePlayerInterface;
   textureInjector: PixiTextureInjectorInterface;
-  conversationRepository?: ConversationRepositoryInterface;
+  conversationStorage?: ConversationStorageInterface;
   onEmotionExtracted?: (options: { npcId: string; emotion: string }) => void;
   tagBufferTimeoutMs?: number;
   expressionAssetResolver?: ExpressionAssetResolverInterface;
@@ -105,7 +105,7 @@ export class StreamOrchestrator
   private readonly _imageStream: ImageStreamConnection;
   private readonly _audioQueue: AudioQueuePlayerInterface;
   private readonly _textureInjector: PixiTextureInjectorInterface;
-  private readonly _conversationRepository: ConversationRepositoryInterface | undefined;
+  private readonly _conversationStorage: ConversationStorageInterface | undefined;
   private readonly _chunker: SentenceBoundaryChunker;
 
   private _abortController: AbortController | undefined;
@@ -138,7 +138,7 @@ export class StreamOrchestrator
     this._imageStream = options.imageStream;
     this._audioQueue = options.audioQueuePlayer;
     this._textureInjector = options.textureInjector;
-    this._conversationRepository = options.conversationRepository;
+    this._conversationStorage = options.conversationStorage;
     this._onEmotionExtracted = options.onEmotionExtracted;
     this._tagBufferTimeoutMs = options.tagBufferTimeoutMs ?? 500;
     this._expressionAssetResolver = options.expressionAssetResolver;
@@ -171,7 +171,7 @@ export class StreamOrchestrator
     this._sentenceIndex = 0;
 
     this._pendingSaveOptions =
-      chatId && this._conversationRepository
+      chatId && this._conversationStorage
         ? { chatId, npcId, playerMessage: { role: 'user', content: prompt } }
         : undefined;
 
@@ -364,7 +364,7 @@ export class StreamOrchestrator
     const saveOptions = this._pendingSaveOptions;
     this._pendingSaveOptions = undefined;
 
-    if (!saveOptions || !this._conversationRepository) {
+    if (!saveOptions || !this._conversationStorage) {
       return;
     }
 
@@ -374,7 +374,7 @@ export class StreamOrchestrator
     }
 
     try {
-      await this._conversationRepository.saveDialogueTurn({
+      await this._conversationStorage.saveDialogueTurn({
         chatId: saveOptions.chatId,
         npcId: saveOptions.npcId,
         playerMessage: saveOptions.playerMessage,

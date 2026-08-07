@@ -15,7 +15,7 @@
 // uncached assets degrade to the C-372 static-URL fallback.
 
 import { ASSET_CATEGORIES } from '@aikami/constants';
-import type { AssetRegistryRepository } from '@aikami/frontend/repositories';
+import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

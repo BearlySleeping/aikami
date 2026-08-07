@@ -88,7 +88,7 @@ globalThis.crypto = {
 
 beforeEach(async () => {
   // Reset the fake database before each test
-  const reposMod = await import('@aikami/frontend/repositories');
+  const reposMod = await import('@aikami/frontend/storage');
   (reposMod as unknown as { resetLocalDatabase: () => void }).resetLocalDatabase();
 });
 

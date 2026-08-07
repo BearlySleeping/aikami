@@ -18,14 +18,15 @@ dependsOn:
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-configs'
-  - 'frontend-repositories'
+  - 'frontend-firestore'
+  - 'frontend-storage'
   - 'schemas'
   - 'types'
   - 'constants'
   - 'logger'
   - 'utils'
   - 'backend-configs'
-  - 'backend-database'
+  - 'backend-firestore'
   - 'backend-utils'
 
 fileGroups:

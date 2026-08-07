@@ -48,8 +48,8 @@ const config = {
       '$utils/*': toSrcPath('lib/utils/*'),
       '$views/*': toSrcPath('lib/views/*'),
 
-      '@aikami/backend/database': toPackagesPath('backend/database/src'),
-      '@aikami/backend/database/*': toPackagesPath('backend/database/src/lib/*'),
+      '@aikami/backend/firestore': toPackagesPath('backend/firestore/src'),
+      '@aikami/backend/firestore/*': toPackagesPath('backend/firestore/src/lib/*'),
       '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
       '@aikami/backend/onboarding': toPackagesPath('backend/onboarding/src'),
       '@aikami/backend/agent': toPackagesPath('backend/agent/src'),
@@ -80,8 +80,10 @@ const config = {
       '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
       '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
-      '@aikami/frontend/repositories': toPackagesPath('frontend/repositories/src'),
-      '@aikami/frontend/repositories/*': toPackagesPath('frontend/repositories/src/lib'),
+      '@aikami/frontend/firestore': toPackagesPath('frontend/firestore/src'),
+      '@aikami/frontend/firestore/*': toPackagesPath('frontend/firestore/src/lib'),
+      '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
+      '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
 
       '@aikami/mocks': toPackagesPath('shared/mocks/src'),
       '@aikami/schemas': toPackagesPath('shared/schemas/src'),

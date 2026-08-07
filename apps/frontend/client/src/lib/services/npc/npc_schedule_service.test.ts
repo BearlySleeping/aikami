@@ -39,10 +39,10 @@ const restoreRealDate = (): void => {
 
 /**
  * Seeds a schedule row into the fake in-memory database provided by
- * test_preload's mock of @aikami/frontend/repositories.
+ * test_preload's mock of @aikami/frontend/storage.
  */
 const seedSchedule = async (npcId: string, schedule: NpcSchedule): Promise<void> => {
-  const repos = await import('@aikami/frontend/repositories');
+  const repos = await import('@aikami/frontend/storage');
   const db = await repos.getLocalDatabase();
   await db.execute({
     sql: 'INSERT OR REPLACE INTO npc_schedules (npc_id, data, updated_at) VALUES (?, ?, ?)',
@@ -54,7 +54,7 @@ const seedSchedule = async (npcId: string, schedule: NpcSchedule): Promise<void>
  * Resets the fake database tables between tests.
  */
 const resetDb = async (): Promise<void> => {
-  const repos = await import('@aikami/frontend/repositories');
+  const repos = await import('@aikami/frontend/storage');
   (repos as unknown as { resetLocalDatabase: () => void }).resetLocalDatabase();
 };
 
@@ -120,7 +120,7 @@ describe('NpcScheduleService', () => {
     await npcScheduleService.setSchedule('npc-789', schedule);
 
     // Verify persistence by reading from the database directly
-    const repos = await import('@aikami/frontend/repositories');
+    const repos = await import('@aikami/frontend/storage');
     const db = await repos.getLocalDatabase();
     const result = await db.query({
       sql: 'SELECT data FROM npc_schedules WHERE npc_id = ?',

@@ -1,6 +1,7 @@
 // packages/frontend/configs/src/lib/auth.ts
-import { type Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
+
 import type { FrontendAppId } from '@aikami/schemas';
+import { type Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
 import app from './app.ts';
 import { EMULATOR_PORTS, isEmulatorModePublic, publicEnv } from './environment.ts';
 

@@ -1,4 +1,4 @@
-import { getUserByEmail } from '@aikami/backend/database/user.ts';
+import { getUserByEmail } from '@aikami/backend/firestore/user.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 
 /**

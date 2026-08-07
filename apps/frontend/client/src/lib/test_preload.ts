@@ -351,7 +351,7 @@ const _localServicesMock = () => ({
   PersonaCreationTextStreamService: class {},
   chatService: _createServiceStub(),
   contextBuilder: _createServiceStub(),
-  conversationRepository: _createServiceStub(),
+  conversationStorage: _createServiceStub(),
   npcChatService: _createServiceStub(),
   configService: _createServiceStub(),
   ConfigService: class {},
@@ -713,7 +713,7 @@ delete process.env.PUBLIC_OPENROUTER_MODEL;
 delete process.env.OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OLLAMA_MODEL;
 
-// ── Mock @aikami/frontend/repositories (C-321: Turso persistence) ──────────
+// ── Mock @aikami/frontend/storage (C-321: Turso persistence) ──────────
 //
 // Provides an in-memory LocalDatabaseInterface fake so that repository
 // tests don't require a real SQLite connection.
@@ -873,7 +873,7 @@ const _fakeLocalDatabase = {
   },
 };
 
-mock.module('@aikami/frontend/repositories', () => ({
+mock.module('@aikami/frontend/storage', () => ({
   getLocalDatabase: mock(async () => _fakeLocalDatabase),
   closeLocalDatabase: mock(async () => {}),
   resetLocalDatabase: mock(() => {

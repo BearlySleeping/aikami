@@ -11,7 +11,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // test_preload.ts provides a fake getLocalDatabase() — the in-memory tables
 // are reset on every module reload. We import the reset helper directly.
 
-import { resetLocalDatabase } from '@aikami/frontend/repositories';
+import { resetLocalDatabase } from '@aikami/frontend/storage';
 
 // ---------------------------------------------------------------------------
 // Mock EngineBridge
@@ -172,7 +172,7 @@ describe('GameSaveService (C-334)', () => {
 
   test('loadGame should detect corrupted v2 payload (checksum mismatch)', async () => {
     // Pre-populate with a tampered v2 payload (correct version, wrong checksum)
-    const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
     const db = await getLocalDatabase();
     const tamperedPayload = JSON.stringify({
       version: 2,
@@ -193,7 +193,7 @@ describe('GameSaveService (C-334)', () => {
 
   test('loadGame should accept v1 payload (no checksum validation)', async () => {
     // Pre-populate with a v1-style payload (no version field)
-    const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
     const db = await getLocalDatabase();
     const v1Payload = JSON.stringify({
       ecsSnapshot: MOCK_SNAPSHOT_PAYLOAD,
@@ -212,7 +212,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('loadGame should accept plain ECS snapshot', async () => {
-    const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
     const db = await getLocalDatabase();
     await db.execute({
       sql: 'INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)',
@@ -264,7 +264,7 @@ describe('GameSaveService (C-334)', () => {
 
   test('should work without a bridge for read-only operations', async () => {
     // Pre-populate with a save
-    const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
     const db = await getLocalDatabase();
     const payload = JSON.stringify({
       version: 2,

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Frontend Storage",
+  "extends": "../../../config/tsconfig/tsconfig.frontend.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "rootDir": "../..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/frontend/configs": ["../configs/src/index.ts"],
+      "@aikami/frontend/configs/*": ["../configs/src/lib/*"],
+      "@aikami/frontend/components": ["../components/src/index.ts"],
+      "@aikami/frontend/components/*": ["../components/src/lib/*"],
+      "@aikami/frontend/firestore": ["../firestore/src/index.ts"],
+      "@aikami/frontend/firestore/*": ["../firestore/src/lib/*"],
+      "@aikami/frontend/storage": ["./src/index.ts"],
+      "@aikami/frontend/storage/*": ["./src/lib/*"],
+      "@aikami/frontend/services": ["../services/src/index.ts"],
+      "@aikami/frontend/services/*": ["../services/src/lib/*"],
+      "@aikami/frontend/utils": ["../utils/src/index.ts"],
+      "@aikami/frontend/utils/*": ["../utils/src/lib/*"],
+      "@aikami/constants": ["../../shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../shared/constants/src/*"],
+      "@aikami/mocks": ["../../shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["../../shared/mocks/src/*"],
+      "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../shared/schemas/src/*"],
+      "@aikami/types": ["../../shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../shared/types/src/*"],
+      "@aikami/utils": ["../../shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../shared/utils/src/*"],
+      "$logger": ["../../shared/logger/src/index.ts"],
+      "$logger/*": ["../../shared/logger/src/*"],
+      "$router": ["../services/src/index.ts"],
+      "$router/*": ["../services/src/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
