@@ -34,7 +34,6 @@ import {
   PROVIDER_ENDPOINTS,
   type ProviderEndpoint,
   TEXT_PROVIDERS,
-  type TextProvider,
   VOICE_ENGINES,
   VOICE_PROVIDERS,
   type VoiceArchetype,
@@ -451,17 +450,37 @@ export class ProvidersViewModel
   }
 
   setTextProvider(provider: string): void {
-    configService.setTextProvider(provider as TextProvider);
+    configService.setTextProvider(provider);
     this.scheduleSave();
   }
 
+  /**
+   * Legacy text-tab setter. API keys are managed via Connections (C-230) —
+   * write through to the matching text connection when one exists.
+   */
   setTextApiKey(provider: string, key: string): void {
-    configService.setTextApiKey(provider, key);
+    const connection = configService.state.connections.find(
+      (c) => (c.capability ?? 'text') === 'text' && c.provider === provider,
+    );
+    if (connection) {
+      configService.updateConnection(connection.id, { apiKey: key });
+    } else {
+      this.warn('setTextApiKey:no-connection', { provider });
+    }
     this.scheduleSave();
   }
 
+  /** Legacy text-tab setter — mirrors setTextApiKey for the custom URL. */
   setTextUrl(url: string): void {
-    configService.setTextUrl(url);
+    const connection = configService.state.connections.find(
+      (c) =>
+        (c.capability ?? 'text') === 'text' && c.provider === configService.state.text.provider,
+    );
+    if (connection) {
+      configService.updateConnection(connection.id, { baseUrl: url });
+    } else {
+      this.warn('setTextUrl:no-connection');
+    }
     this.scheduleSave();
   }
 
@@ -481,7 +500,7 @@ export class ProvidersViewModel
       return;
     }
 
-    const apiKey: string | undefined = configService.state.text.apiKeys[provider];
+    const apiKey: string | undefined = configService.getApiKey(provider);
     if (!apiKey) {
       this.verificationStatus = { ...this.verificationStatus, [provider]: 'invalid' };
       return;
@@ -607,7 +626,7 @@ export class ProvidersViewModel
 
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
-    const apiKey = configService.state.text.apiKeys.openrouter;
+    const apiKey = configService.getApiKey('openrouter');
     if (!apiKey) {
       this.warn('fetchModels: no OpenRouter API key configured');
       return;
@@ -656,7 +675,7 @@ export class ProvidersViewModel
    * to manually click "Verify" on the API Keys tab.
    */
   private _verifyExistingOpenRouterKey(): void {
-    const apiKey = configService.state.text.apiKeys.openrouter;
+    const apiKey = configService.getApiKey('openrouter');
     if (apiKey && apiKey.length > 0) {
       this.debug('_verifyExistingOpenRouterKey: found key, auto-verifying');
       void this.verifyApiKey('openrouter');

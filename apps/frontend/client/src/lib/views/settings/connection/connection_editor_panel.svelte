@@ -47,14 +47,14 @@ const {
         <div class="form-control">
           <label class="label py-1" for="conn-name">
             <span class="label-text font-mono text-xs uppercase tracking-wider text-[#938ea1]"
-              >Name *</span
+              >Name</span
             >
           </label>
           <input
             id="conn-name"
             type="text"
             class="input input-bordered input-sm font-mono text-sm"
-            placeholder="My Connection"
+            placeholder="Defaults to provider name"
             value={viewModel.draft.name ?? ''}
             oninput={(e) => viewModel.setDraftField('name', (e.target as HTMLInputElement).value)}
           >
@@ -184,6 +184,126 @@ const {
             >
           {/if}
         </div>
+
+        <!-- Local provider (Ollama) probe + setup guide -->
+        {#if viewModel.showLocalGuide}
+          <div class="rounded-lg border border-[#00e3fd]/20 bg-[#00e3fd]/[0.04] p-3 space-y-2">
+            <!-- Live probe status -->
+            <div class="flex items-center justify-between gap-2">
+              {#if viewModel.localProviderStatus?.checking}
+                <span class="inline-flex items-center gap-2 text-xs font-mono text-[#00e3fd]">
+                  <span class="loading loading-spinner loading-xs"></span>
+                  Checking local Ollama...
+                </span>
+              {:else if viewModel.localProviderStatus?.ok}
+                <span class="inline-flex items-center gap-2 text-xs font-mono text-success">
+                  <span>✓</span>
+                  Ollama connected
+                  {#if viewModel.localProviderStatus.modelCount !== undefined}
+                    <span class="badge badge-sm badge-ghost"
+                      >{viewModel.localProviderStatus.modelCount}
+                      models</span
+                    >
+                  {/if}
+                </span>
+              {:else if viewModel.localProviderStatus}
+                <span class="inline-flex items-center gap-2 text-xs font-mono text-error">
+                  <span>✗</span>
+                  <span class="truncate">
+                    {viewModel.localProviderStatus.error ?? 'Ollama unreachable'}
+                  </span>
+                </span>
+              {:else}
+                <span class="text-xs font-mono text-[#938ea1]">Ollama (local)</span>
+              {/if}
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd] shrink-0"
+                disabled={viewModel.localProviderStatus?.checking}
+                onclick={() => viewModel.checkLocalProvider()}
+              >
+                Re-check
+              </button>
+            </div>
+
+            <!-- Setup guide (deployed HTTPS site) -->
+            <div class="collapse collapse-arrow bg-base-300/50 border border-white/[0.04]">
+              <input type="checkbox" checked>
+              <div
+                class="collapse-title font-mono text-xs uppercase tracking-wider text-[#938ea1] py-2 min-h-0"
+              >
+                Setup Guide — Ollama on a deployed HTTPS site
+              </div>
+              <div class="collapse-content pt-0 space-y-2 text-xs font-mono text-[#938ea1]">
+                <p>
+                  A deployed HTTPS site can reach Ollama on
+                  <code class="text-[#00e3fd]">http://localhost:11434</code>, but you must clear two
+                  browser security barriers:
+                </p>
+
+                <div>
+                  <p class="font-bold text-base-content/80">1. Allow local network access</p>
+                  <p>
+                    The first time you connect, the browser will prompt
+                    <em>"Allow this site to access your local network?"</em>
+                    — click
+                    <strong class="text-success">Allow</strong>. Without this permission, requests
+                    to <code class="text-[#00e3fd]">localhost</code> are blocked even with CORS
+                    configured.
+                  </p>
+                </div>
+
+                <div>
+                  <p class="font-bold text-base-content/80">2. Fix Ollama CORS (OLLAMA_ORIGINS)</p>
+                  <p>
+                    By default Ollama rejects requests from external origins like
+                    <code class="text-[#00e3fd]">https://aikami.bearlysleeping.com</code>. Set the
+                    <code class="text-[#00e3fd]">OLLAMA_ORIGINS</code>
+                    environment variable on the machine running Ollama:
+                  </p>
+                  <ul class="list-disc list-inside space-y-1 mt-1">
+                    <li>
+                      <strong class="text-base-content/80">Windows:</strong>
+                      quit Ollama from the tray → Environment Variables → add
+                      <code class="text-[#00e3fd]">OLLAMA_ORIGINS</code>
+                      = <code class="text-[#00e3fd]">https://aikami.bearlysleeping.com</code>
+                      → restart Ollama.
+                    </li>
+                    <li>
+                      <strong class="text-base-content/80">macOS:</strong>
+                      run
+                      <code class="text-[#00e3fd]"
+                        >launchctl setenv OLLAMA_ORIGINS "https://aikami.bearlysleeping.com"</code
+                      >, restart the app, or start via CLI:
+                      <code class="text-[#00e3fd]"
+                        >OLLAMA_ORIGINS="https://aikami.bearlysleeping.com" ollama serve</code
+                      >.
+                    </li>
+                    <li>
+                      <strong class="text-base-content/80">Linux (systemd):</strong>
+                      <code class="text-[#00e3fd]">sudo systemctl edit ollama.service</code>
+                      → add
+                      <code class="text-[#00e3fd]">[Service]</code>
+                      <code class="text-[#00e3fd]"
+                        >Environment="OLLAMA_ORIGINS=https://aikami.bearlysleeping.com"</code
+                      >
+                      → then
+                      <code class="text-[#00e3fd]"
+                        >sudo systemctl daemon-reload && sudo systemctl restart ollama</code
+                      >.
+                    </li>
+                  </ul>
+                  <p class="mt-1">
+                    <span class="text-warning">⚠ Insecure, development only:</span>
+                    <code class="text-[#00e3fd]">*</code>
+                    allows any origin — use it only for local testing, never as the default on a
+                    deployed site.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        {/if}
 
         <!-- Test Connection + Test Model -->
         <div class="flex flex-wrap items-center gap-3">
@@ -431,7 +551,6 @@ const {
         <button
           type="button"
           class="btn btn-sm font-mono text-xs uppercase tracking-wider border-[#00e3fd]/30 text-[#00e3fd] hover:bg-[#00e3fd]/10"
-          disabled={!viewModel.draft.name?.trim()}
           onclick={() => viewModel.saveDraft()}
         >
           {viewModel.isEditing ? 'Save Changes' : 'Create Connection'}

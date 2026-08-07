@@ -16,7 +16,6 @@ import {
   fetchOpenRouterModels,
   PROVIDER_ENDPOINTS,
   TEXT_PROVIDERS,
-  type TextProvider,
 } from '$services';
 import {
   type AuxiliaryModels,
@@ -93,15 +92,29 @@ class TextTabViewModel
   }
 
   get textApiKey(): string {
-    return this.config.text.apiKeys[this.textProvider] ?? '';
+    return configService.getApiKey(this.textProvider) ?? '';
   }
 
   get textUrl(): string {
-    return this.config.text.url ?? '';
+    // C-230: custom URLs live on connections (baseUrl) — legacy text.url removed.
+    // Match the ACTIVE provider so switching providers reads the right connection.
+    return (
+      this.config.connections.find(
+        (c) => (c.capability ?? 'text') === 'text' && c.provider === this.textProvider,
+      )?.baseUrl ?? ''
+    );
   }
 
   get savedKeys(): Record<string, string> {
-    return this.config.text.apiKeys;
+    // C-230: API keys live in connections[] — derive the legacy-shaped
+    // provider → key map from text-capability connections.
+    const keys: Record<string, string> = {};
+    for (const c of this.config.connections) {
+      if ((c.capability ?? 'text') === 'text' && c.apiKey) {
+        keys[c.provider] = c.apiKey;
+      }
+    }
+    return keys;
   }
 
   private get _selectedProvider(): (typeof TEXT_PROVIDERS)[number] {
@@ -125,7 +138,7 @@ class TextTabViewModel
   }
 
   get hasOpenRouterKey(): boolean {
-    return (this.config.text.apiKeys.openrouter?.length ?? 0) > 0;
+    return (configService.getApiKey('openrouter')?.length ?? 0) > 0;
   }
 
   get isOpenRouterKeyVerified(): boolean {
@@ -137,7 +150,7 @@ class TextTabViewModel
 
     // Auto-detect Ollama: if it's running locally, default to ollama provider.
     // Runs even when provider is already ollama to fill in missing URL/model.
-    const keys = configService.state.text.apiKeys;
+    const keys = this.savedKeys;
     const hasNoKeys = Object.values(keys).every((k) => !k);
     const isOllamaProvider = configService.state.text.provider === 'ollama';
     if (hasNoKeys || isOllamaProvider) {
@@ -151,8 +164,11 @@ class TextTabViewModel
             configService.setTextProvider('ollama');
             needsSave = true;
           }
-          if (!configService.state.text.url) {
-            configService.setTextUrl('http://localhost:11434/v1');
+          const textUrl = this.config.connections.find(
+            (c) => (c.capability ?? 'text') === 'text' && c.provider === 'ollama',
+          )?.baseUrl;
+          if (!textUrl) {
+            this.setTextUrl('http://localhost:11434/v1');
             needsSave = true;
           }
           if (
@@ -179,17 +195,49 @@ class TextTabViewModel
   }
 
   setTextProvider(provider: string): void {
-    configService.setTextProvider(provider as TextProvider);
+    configService.setTextProvider(provider);
     this.onSaveRequested();
   }
 
+  /**
+   * Legacy text-tab setter. API keys are managed via Connections (C-230) —
+   * write through to the matching text connection when one exists.
+   */
   setTextApiKey(provider: string, key: string): void {
-    configService.setTextApiKey(provider, key);
+    const connection = configService.state.connections.find(
+      (c) => (c.capability ?? 'text') === 'text' && c.provider === provider,
+    );
+    if (connection) {
+      configService.updateConnection(connection.id, { apiKey: key });
+    } else {
+      this.warn('setTextApiKey:no-connection', { provider });
+    }
     this.onSaveRequested();
   }
 
+  /** Legacy text-tab setter — mirrors setTextApiKey for the custom URL. */
   setTextUrl(url: string): void {
-    configService.setTextUrl(url);
+    const connection = configService.state.connections.find(
+      (c) => (c.capability ?? 'text') === 'text' && c.provider === this.textProvider,
+    );
+    if (connection) {
+      configService.updateConnection(connection.id, { baseUrl: url });
+    } else {
+      // Resolve-or-create: no connection for the active provider yet —
+      // create one so the URL (e.g. the auto-detected Ollama endpoint)
+      // is persisted instead of being dropped.
+      configService.addConnection({
+        provider: this.textProvider,
+        capability: 'text',
+        name: this._selectedProvider.label,
+        apiKey: '',
+        baseUrl: url,
+        model: '',
+        generationParams: { ...configService.state.generationParams },
+        isDefault: false,
+        source: 'stored',
+      });
+    }
     this.onSaveRequested();
   }
 
@@ -208,7 +256,7 @@ class TextTabViewModel
     if (!endpoint) {
       return;
     }
-    const apiKey = configService.state.text.apiKeys[provider];
+    const apiKey = configService.getApiKey(provider);
     if (!apiKey) {
       this.verificationStatus = { ...this.verificationStatus, [provider]: 'invalid' };
       return;
@@ -228,7 +276,7 @@ class TextTabViewModel
   }
 
   async fetchModels(): Promise<void> {
-    const apiKey = configService.state.text.apiKeys.openrouter;
+    const apiKey = configService.getApiKey('openrouter');
     if (!apiKey) {
       return;
     }

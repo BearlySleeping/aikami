@@ -100,7 +100,7 @@ class CapabilityViewModel
     textStatus: 'pending',
     imageStatus: 'pending',
     voiceStatus: 'detected',
-    summary: 'Detecting AI providers...',
+    summary: 'Connect an AI provider to get started.',
   });
 
   isDetecting = $state(false);
@@ -194,7 +194,12 @@ class CapabilityViewModel
   // ── Lifecycle ────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    await this.startDetection();
+    // Detection is intentionally NOT auto-run on page load. Probing local
+    // providers from an HTTPS origin triggers the browser's Private Network
+    // Access permission prompt (and CORS errors when Ollama isn't configured).
+    // Instead, users opt in by picking Ollama in the connection editor, which
+    // probes localhost and shows the setup guide. Detection stays available
+    // via the explicit "Retry Detection" action.
     return super.initialize();
   }
 
@@ -343,8 +348,8 @@ class CapabilityViewModel
     if (LOCAL_PROVIDERS.has(connection.provider)) {
       return true;
     }
-    // Cloud providers require a real API key
-    return connection.apiKey && connection.apiKey.length > 0;
+    // Cloud providers require a real (non-whitespace) API key
+    return (connection.apiKey?.trim().length ?? 0) > 0;
   }
 
   private _sourceBadge(connection: Connection): string | undefined {

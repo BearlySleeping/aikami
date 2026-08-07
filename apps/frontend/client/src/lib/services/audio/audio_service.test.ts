@@ -44,6 +44,7 @@ type MockSourceNode = {
   buffer: AudioBuffer | null;
   started: boolean;
   startTime: number;
+  startOffset: number;
   stopped: boolean;
   loop: boolean;
   connectCalls: number;
@@ -108,6 +109,7 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
     buffer: null,
     started: false,
     startTime: 0,
+    startOffset: 0,
     stopped: false,
     loop: false,
     connectCalls: 0,
@@ -134,6 +136,9 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
     get startTime(): number {
       return state.startTime;
     },
+    get startOffset(): number {
+      return state.startOffset;
+    },
     get stopped(): boolean {
       return state.stopped;
     },
@@ -142,9 +147,12 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
       return {} as AudioNode;
     }),
     disconnect: mock(() => {}),
-    start: mock((when?: number) => {
+    start: mock((when?: number, offset?: number) => {
       state.started = true;
-      state.startTime = when ?? fakeCurrentTime;
+      // source.start(0, offset) means "start at the current audio context
+      // time" — record the later of the explicit `when` and currentTime.
+      state.startTime = Math.max(when ?? fakeCurrentTime, fakeCurrentTime);
+      state.startOffset = offset ?? 0;
     }),
     stop: mock(() => {
       state.stopped = true;
@@ -492,11 +500,14 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
   test('resumeBgm recreates the source and clears paused state', async () => {
     await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    // Advance mock time while the track plays — pause then captures this
+    // elapsed time as the resume offset.
+    fakeCurrentTime += 5;
     audioService.pauseBgm();
     const sourcesBefore = createdSources.length;
 
-    // Advance mock time to simulate elapsed pause duration
-    mockContext.currentTime += 5;
+    // Advance mock time to simulate the pause duration
+    fakeCurrentTime += 5;
 
     await audioService.resumeBgm();
 
@@ -526,5 +537,67 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
     expect(audioService.isBgmPaused).toBe(false);
     expect(audioService.activeTrackUrl).toBeNull();
+  });
+
+  // ── AC-9: Deferred playback while the context is suspended ──
+
+  test('playback is deferred while the context is suspended and starts on unlock', async () => {
+    // Build a suspended AudioContext that fires statechange on resume.
+    let ctxState: AudioContextState = 'suspended';
+    const stateChangeListeners: Array<() => void> = [];
+    const suspendedCtx = createMockAudioContext();
+    Object.defineProperty(suspendedCtx, 'state', {
+      configurable: true,
+      get: () => ctxState,
+    });
+    Object.assign(suspendedCtx, {
+      resume: mock(async () => {
+        ctxState = 'running';
+        for (const listener of stateChangeListeners) {
+          listener();
+        }
+      }),
+      addEventListener: mock((type: string, cb: () => void) => {
+        if (type === 'statechange') {
+          stateChangeListeners.push(cb);
+        }
+      }),
+      removeEventListener: mock((type: string, cb: () => void) => {
+        if (type === 'statechange') {
+          const idx = stateChangeListeners.indexOf(cb);
+          if (idx !== -1) {
+            stateChangeListeners.splice(idx, 1);
+          }
+        }
+      }),
+    });
+
+    // Re-mock the audio context manager with the suspended context and
+    // re-import to get a fresh service instance bound to it.
+    mock.module('./audio_context_manager', () => ({
+      audioContextManager: {
+        get context(): AudioContext {
+          return suspendedCtx as unknown as AudioContext;
+        },
+        unlock: mock(() => {}),
+      },
+    }));
+
+    const mod = await import('./audio_service.svelte');
+    const deferredService = new mod.AudioService({ className: 'DeferredAudioService' });
+
+    const sourcesBefore = createdSources.length;
+    await deferredService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+
+    // The source exists but must NOT have started while suspended.
+    expect(createdSources.length).toBe(sourcesBefore + 1);
+    const deferredSource = createdSources[createdSources.length - 1];
+    expect(deferredSource.started).toBe(false);
+
+    // Unlock: transition to running and dispatch statechange — the source
+    // may now start.
+    await suspendedCtx.resume();
+
+    expect(deferredSource.started).toBe(true);
   });
 });

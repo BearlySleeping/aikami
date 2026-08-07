@@ -6,7 +6,8 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write .",
+    "test": "bun test src/lib"
   },
   "dependencies": {
     "@aikami/backend-configs": "workspace:*",

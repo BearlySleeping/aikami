@@ -329,7 +329,7 @@ export class AudioService
         return;
       }
       source.connect(this._activeGain);
-      source.start(0);
+      this._startSourceWhenRunning(source);
 
       // Track playback origin for pause/resume offset math.
       this._bgmStartTime = ctx.currentTime;
@@ -404,7 +404,7 @@ export class AudioService
         return;
       }
       source.connect(this._sfxGain);
-      source.start(0);
+      this._startSourceWhenRunning(source);
 
       // Auto-cleanup: disconnect when playback ends
       source.onended = () => {
@@ -482,8 +482,7 @@ export class AudioService
         return;
       }
       source.connect(this._activeGain);
-      // Continue from the retained offset.
-      source.start(0, this._bgmPausedOffset);
+      this._startSourceWhenRunning(source, this._bgmPausedOffset);
 
       this._activeSource = source;
       this._bgmStartTime = ctx.currentTime;
@@ -520,6 +519,65 @@ export class AudioService
   }
 
   // ── Private helpers ──
+
+  /**
+   * Starts a source only when the AudioContext is running, deferring the
+   * start until a user gesture unlocks it (autoplay policy).
+   *
+   * Calling `source.start()` on a suspended context logs
+   * "The AudioContext was not allowed to start" and the audio stays
+   * silent until the context resumes. Deferring avoids the warning and
+   * guarantees the buffer actually plays once unlocked.
+   *
+   * @param source - The AudioBufferSourceNode to start.
+   * @param offset - Optional playback offset in seconds (BGM resume).
+   */
+  private _startSourceWhenRunning(source: AudioBufferSourceNode, offset = 0): void {
+    const ctx = audioContextManager.context;
+
+    const start = () => {
+      try {
+        source.start(0, offset);
+      } catch {
+        // Already started or stopped — ignore
+      }
+    };
+
+    if (ctx.state === 'running') {
+      start();
+      return;
+    }
+
+    // Context is suspended (autoplay policy) — defer until it resumes.
+    const onStateChange = () => {
+      if (ctx.state === 'running') {
+        cleanup();
+        start();
+      }
+    };
+
+    // Also retry on the next user gesture (some browsers resume without
+    // firing statechange if the resume call raced the gesture).
+    const onGesture = () => {
+      if (ctx.state === 'running') {
+        cleanup();
+        start();
+      }
+    };
+
+    // Single cleanup shared by both paths — removes the statechange and
+    // both gesture listeners before the source starts, so no listener
+    // survives a successful start.
+    const cleanup = () => {
+      ctx.removeEventListener('statechange', onStateChange);
+      window.removeEventListener('pointerdown', onGesture);
+      window.removeEventListener('keydown', onGesture);
+    };
+
+    ctx.addEventListener('statechange', onStateChange);
+    window.addEventListener('pointerdown', onGesture);
+    window.addEventListener('keydown', onGesture);
+  }
 
   /**
    * Loads and decodes an audio buffer, caching the result.

@@ -20,3 +20,19 @@ dependsOn:
   - 'types'
   - 'logger'
   - 'backend-utils'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      mergeArgs: 'replace'

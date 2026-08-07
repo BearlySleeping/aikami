@@ -24,6 +24,7 @@ import {
   NpcDialogueAiEnvelopeSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
+  NpcQuestActivationSchema,
   NpcRollResolutionOutputSchema,
   NpcSuggestionChipSchema,
 } from '@aikami/schemas';
@@ -35,6 +36,7 @@ import type {
   NpcDialogueTurn,
   NpcIntentAnalysisInput,
   NpcIntentAnalysisOutput,
+  NpcQuestActivation,
   NpcRollResolutionInput,
   NpcRollResolutionOutput,
   NpcStateDelta,

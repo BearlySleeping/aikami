@@ -56,6 +56,14 @@ tasks:
       - '@group(configs)'
       - '@group(deployment)'
       - '.env'
+    options:
+      # 🔴 Never cache: the SvelteKit build bundles workspace packages
+      # FROM SOURCE via TS aliases, and moon's cache key can't cover those
+      # files (no package build tasks, no `..` globs). A stale cache shipped
+      # /api/logs to prod after logger_browser.ts changed — a fresh build
+      # every time is a few seconds and always correct. Deploys are already
+      # gated by their own checksum cache.
+      cache: false
     outputs:
       - '.svelte-kit'
       - 'build'
