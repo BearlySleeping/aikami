@@ -24,6 +24,7 @@ import {
   bootstrapWorktree,
   createWorktree,
   listWorktrees,
+  removeWorktree,
 } from '../../scripts/src/lib/herdr/worktree';
 
 // ── Inline parser ───────────────────────────────────────────────
@@ -523,6 +524,7 @@ export default function (pi: ExtensionAPI) {
       'Call this before any file mutations or build steps in a contract pipeline.',
       'Use the returned branch_name for reference.',
       'Checkouts live in ~/.herdr/worktrees/<repo>/ and are opened as herdr workspaces (aikami-task-<id>).',
+      'The checkout is NOT your active working directory (created with --no-focus) — use the returned path (w.checkoutPath) for every file and command operation.',
       'Clean up with `bun herdr:task rm <id>` or `bun run workspace:cleanup`.',
       'For local interactive development, prefer `bun run contract C-XXX --root` which switches the branch directly in the repo root instead of creating a worktree.',
     ],
@@ -538,10 +540,17 @@ export default function (pi: ExtensionAPI) {
       const sanitized = sanitizeBranchName(params.taskId);
 
       // Check for an existing herdr-native worktree for this task.
-      const existing = (await listWorktrees(cwd)).find(
-        (w) => w.branch === `task/${sanitized}` || w.branch.endsWith(`/${sanitized}`),
-      );
+      const existing = (await listWorktrees(cwd)).find((w) => w.branch === `task/${sanitized}`);
       if (existing) {
+        // Existing (possibly incomplete) worktree — retry bootstrap so a
+        // previous failure is not silently reported as ready.
+        let installed = false;
+        try {
+          const r = await bootstrapWorktree({ checkoutPath: existing.path, repoRoot: cwd });
+          installed = r.installed;
+        } catch {
+          installed = false;
+        }
         const existingId = (() => {
           try {
             return getGitHeadCommit(existing.path);
@@ -557,6 +566,7 @@ export default function (pi: ExtensionAPI) {
                 `⚠️ Worktree already exists: \`${existing.path}\``,
                 `Branch: \`${existing.branch}\``,
                 `HEAD: \`${existingId}\``,
+                installed ? '' : '⚠️  bootstrap incomplete — dependencies may be missing.',
                 '',
                 'Use this existing worktree or run `bun herdr:task rm <id>` if you need a fresh one.',
               ].join('\n'),
@@ -567,6 +577,7 @@ export default function (pi: ExtensionAPI) {
             branchName: existing.branch,
             headCommit: existingId,
             alreadyExists: true,
+            bootstrapped: installed,
           },
         };
       }
@@ -576,7 +587,22 @@ export default function (pi: ExtensionAPI) {
         slug: params.taskId,
         repoRoot: cwd,
       });
-      await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
+      // If bootstrap fails, remove the newly created worktree so a retry
+      // starts clean instead of finding a half-provisioned checkout.
+      let installed = false;
+      try {
+        const r = await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
+        installed = r.installed;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        await removeWorktree({
+          workspaceId: w.workspaceId,
+          checkoutPath: w.checkoutPath,
+          branch: w.branch,
+          repoRoot: cwd,
+        }).catch(() => {});
+        throw new Error(`Worktree bootstrap failed (${message}) — created worktree removed.`);
+      }
       const headCommit = getGitHeadCommit(w.checkoutPath);
 
       return {
@@ -588,8 +614,11 @@ export default function (pi: ExtensionAPI) {
               `Branch: \`${w.branch}\``,
               `Workspace: \`${w.workspaceId}\` (label aikami-task-${sanitized})`,
               `HEAD: \`${headCommit}\``,
+              installed ? '' : '⚠️  bun install failed — run `bun install` manually.',
               '',
-              'This worktree is now the active working directory for the task.',
+              // --no-focus is used at creation: the checkout is NOT the
+              // agent's active cwd. Use it explicitly for all file/command ops.
+              'Use `w.checkoutPath` as the working directory for subsequent file and command operations.',
               'Use `contract_workspace_checkpoint` to save progress snapshots.',
               'Use `contract_workspace_complete` when the task is done.',
               'Ship a PR with `bun herdr:task pr <id>` (or the task_pr tool).',
@@ -602,6 +631,7 @@ export default function (pi: ExtensionAPI) {
           headCommit,
           workspaceId: w.workspaceId,
           alreadyExists: false,
+          bootstrapped: installed,
         },
       };
     },

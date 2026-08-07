@@ -17,8 +17,6 @@
 //                     read, list)
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
-import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
@@ -35,7 +33,11 @@ import {
   startServices,
   stopServices,
 } from '../../scripts/src/lib/herdr/session';
-import { openPullRequest, publishWorktree } from '../../scripts/src/lib/herdr/worktree';
+import {
+  openPullRequest,
+  publishWorktree,
+  worktreeRepoRoot,
+} from '../../scripts/src/lib/herdr/worktree';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -731,39 +733,77 @@ export default function (pi: ExtensionAPI) {
       const checkoutPath = (params.checkoutPath as string | undefined) ?? ctx.cwd;
       const base = (params.baseBranch as string | undefined) ?? 'main';
 
-      // Resolve the main repo root from the worktree's .git file.
-      let repoRoot = ctx.cwd;
+      // Shared repo-root resolution (single implementation — worktree.ts).
+      let repoRoot: string;
+      let branch: string;
       try {
-        const gitFile = readFileSync(join(checkoutPath, '.git'), 'utf-8');
-        const m = gitFile.match(/^gitdir:\s*(.+)$/);
-        if (m?.[1]) {
-          const gitDir = resolve(m[1]);
-          const idx = gitDir.indexOf('/.git/worktrees/');
-          repoRoot = idx !== -1 ? gitDir.slice(0, idx) : gitDir;
-        }
-      } catch {
-        // Not a linked worktree — fall back to cwd.
+        repoRoot = worktreeRepoRoot(checkoutPath);
+        branch = runGit('rev-parse --abbrev-ref HEAD', { cwd: checkoutPath });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `❌ Could not resolve the task checkout \`${checkoutPath}\`: ${message}`,
+            },
+          ],
+          details: { step: 'resolve_checkout', checkoutPath },
+        };
       }
 
-      const branch = runGit('rev-parse --abbrev-ref HEAD', { cwd: checkoutPath });
       const slug = sanitizeBranchName(branch.replace(/^task\//, '').replace(/^worktree\//, ''));
       const title = (params.title as string | undefined) ?? `Task: ${slug}`;
 
-      const { headBranch, headCommit } = await publishWorktree({
-        checkoutPath,
-        repoRoot,
-        base,
-        message: `Feat: ${slug}`,
-        authorName: 'Pi Agent',
-        authorEmail: 'agent@pi.internal',
-      });
-      const { prUrl, prNumber } = await openPullRequest({
-        headBranch,
-        base,
-        title,
-        body: params.body as string | undefined,
-        draft: (params.draft as boolean | undefined) ?? false,
-      });
+      // Publish (commit + push). If this fails nothing was pushed.
+      let headBranch: string;
+      let headCommit: string;
+      try {
+        ({ headBranch, headCommit } = await publishWorktree({
+          checkoutPath,
+          repoRoot,
+          base,
+          message: `Feat: ${slug}`,
+          authorName: 'Pi Agent',
+          authorEmail: 'agent@pi.internal',
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `❌ Publish failed (nothing was pushed): ${message}` }],
+          details: { step: 'publish_worktree', checkoutPath, base },
+        };
+      }
+
+      // Open the PR. The branch IS already pushed at this point — the caller
+      // must not re-publish, only retry the PR step.
+      let prUrl: string;
+      let prNumber: string;
+      try {
+        ({ prUrl, prNumber } = await openPullRequest({
+          headBranch,
+          base,
+          title,
+          body: params.body as string | undefined,
+          draft: (params.draft as boolean | undefined) ?? false,
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text:
+                `❌ Branch \`${headBranch}\` was pushed, but \`gh pr create\` failed: ${message}\n` +
+                'Retry the PR step only; do not publish again.',
+            },
+          ],
+          details: { step: 'open_pull_request', headBranch, headCommit, base },
+        };
+      }
 
       return {
         content: [

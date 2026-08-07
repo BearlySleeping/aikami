@@ -11,7 +11,7 @@ import {
   listWorktrees,
   openWorktree,
 } from '../../herdr/worktree.ts';
-import { remoteBranchExists } from '../git_worktree.ts';
+import { remoteBranchExists, runGit } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
 import { getContractModelForRole, getContractThinkingForRole } from './models.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
@@ -107,6 +107,19 @@ const runHerdr = async (args: string[]): Promise<void> => {
     throw new Error(`Herdr command failed: herdr ${args.join(' ')}`);
   }
 };
+
+/** Expand base tab args with --env KEY=VALUE entries (shared by workers + review). */
+const withEnvArgs = (base: string[], env: string[]): string[] => {
+  const args = [...base];
+  for (const kv of env) {
+    args.push('--env', kv);
+  }
+  return args;
+};
+
+/** Path of the per-run GH_TOKEN file (mode 0600 — never passed as a CLI arg). */
+const ghTokenFilePath = (options: { repoRoot: string; runId: string }): string =>
+  join(options.repoRoot, '.pi/contract-runs', options.runId, 'gh-token');
 
 const atomicWrite = (options: { path: string; content: string }): void => {
   const temporaryPath = `${options.path}.${process.pid}.tmp`;
@@ -323,12 +336,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     //    root-scoped workspace, no custom .pi/workspaces provisioning.
     //    Checkouts live in ~/.herdr/worktrees/<repo>/<slug> (outside the
     //    repo), so concurrent sessions on the root checkout are unaffected.
-    const contractId = extractContractId(this._contractId);
-    const runToken = this._runId.replace(/^run-/, '').split('-')[0];
-    const baseBranchName = `contract-task-${contractId.toLowerCase()}-${runToken}`;
-    const branch = remoteBranchExists({ branchName: baseBranchName, repoRoot: this._repoRoot })
-      ? `${baseBranchName}-${Date.now().toString(36).slice(-6)}`
-      : baseBranchName;
+    const baseBranchName = this._baseContractBranch();
+    // Collision guard: a LOCAL branch with the same name (surviving a prior
+    // run that was never pushed, or whose remote branch was deleted) breaks
+    // `herdr worktree create --branch <existing>` just like a remote one.
+    const localExists = ((): boolean => {
+      try {
+        runGit(`rev-parse --verify refs/heads/${baseBranchName}`, { cwd: this._repoRoot });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    const branch =
+      localExists || remoteBranchExists({ branchName: baseBranchName, repoRoot: this._repoRoot })
+        ? `${baseBranchName}-${Date.now().toString(36).slice(-6)}`
+        : baseBranchName;
 
     const w = await createWorktree({
       slug: this._runId,
@@ -347,7 +370,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `🔧 herdr worktree: ${w.checkoutPath} (branch: ${w.branch}, workspace: ${w.workspaceId})`,
     );
 
-    await runHerdr(['tab', 'rename', `${this._workspaceId}:1`, 'pipeline']);
+    // Rename the worktree's root tab by its real tab id (positional
+    // `${workspaceId}:1` selectors can drift).
+    await runHerdr(['tab', 'rename', w.tabId || `${this._workspaceId}:1`, 'pipeline']);
     await runPaneCommand({
       paneId: this._pipelinePaneId,
       command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
@@ -380,27 +405,55 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       this._workspacePath = '';
       return;
     }
+    const worktrees = await listWorktrees(this._repoRoot);
     // 1. Look up the open worktree by workspace id.
-    let entry = (await listWorktrees(this._repoRoot)).find(
-      (w) => w.openWorkspaceId === workspaceId,
-    );
+    let entry = worktrees.find((w) => w.openWorkspaceId === workspaceId);
     // 2. Fall back: the workspace may have been closed but the checkout
-    //    persists — find it by branch name and re-open it.
+    //    persists — find it by branch name and re-open it. Accept only the
+    //    exact branch or its single collision-suffix form, and prefer the
+    //    exact name (publishWorktree may append a further suffix after a
+    //    remote collision, so a looser tail is tolerated for the exact base).
     if (!entry) {
-      const contractId = extractContractId(this._contractId);
-      const runToken = this._runId.replace(/^run-/, '').split('-')[0];
-      const branch = `contract-task-${contractId.toLowerCase()}-${runToken}`;
-      const candidates = (await listWorktrees(this._repoRoot)).filter((w) =>
-        w.branch.startsWith(branch),
+      const branch = this._baseContractBranch();
+      const singleSuffix = new RegExp(`^${branch}-[0-9a-z]{1,6}$`);
+      const candidates = worktrees.filter(
+        (w) => w.branch === branch || singleSuffix.test(w.branch),
       );
-      const candidate = candidates.sort((a, b) => b.branch.localeCompare(a.branch))[0];
+      const candidate =
+        candidates.find((w) => w.branch === branch) ??
+        candidates.sort((a, b) => b.branch.localeCompare(a.branch))[0];
       if (candidate) {
         const opened = await openWorktree({
           checkoutPath: candidate.path,
           label: this._workspaceLabel,
           repoRoot: this._repoRoot,
         });
-        this._workspaceId = opened.workspaceId;
+        if (opened.workspaceId !== workspaceId) {
+          // The workspace changed — the old `_pipelinePaneId` points into a
+          // closed workspace. Re-create the pipeline tab in the new one so
+          // `_workspaceId` and `_pipelinePaneId` stay consistent.
+          this._workspaceId = opened.workspaceId;
+          const tab = await herdrJson<TabCreateResult>([
+            'tab',
+            'create',
+            '--workspace',
+            opened.workspaceId,
+            '--cwd',
+            this._repoRoot,
+            '--label',
+            'pipeline',
+            '--no-focus',
+          ]);
+          if (tab?.result) {
+            this._pipelinePaneId = tab.result.root_pane.pane_id;
+            await runPaneCommand({
+              paneId: this._pipelinePaneId,
+              command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+            });
+          }
+        } else {
+          this._workspaceId = opened.workspaceId;
+        }
         entry = candidate;
         entry.openWorkspaceId = opened.workspaceId;
       }
@@ -416,6 +469,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     console.log(
       `🔧 herdr worktree recovered: ${entry.path} (branch: ${entry.branch}, workspace: ${this._workspaceId})`,
     );
+  }
+
+  /** Base branch name for this run's worktree (no collision suffix). */
+  private _baseContractBranch(): string {
+    const contractId = extractContractId(this._contractId);
+    const runToken = this._runId.replace(/^run-/, '').split('-')[0];
+    return `contract-task-${contractId.toLowerCase()}-${runToken}`;
   }
 
   private async _closeTabByLabel(label: string): Promise<void> {
@@ -536,9 +596,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     if (this._workspacePath) {
       env.push(`CONTRACT_PIPELINE_WORKSPACE_PATH=${this._workspacePath}`);
     }
+    // 🔴 GH_TOKEN is a secret — never pass it as a `--env` CLI argument
+    // (readable via ps /proc/<pid>/cmdline). Write it to a mode-0600 file
+    // and let the worker shell export it from there.
+    let ghExport = '';
     const ghToken = getScriptsEnv('GH_TOKEN') || getScriptsEnv('GITHUB_TOKEN');
     if (ghToken) {
-      env.push(`GH_TOKEN=${ghToken}`);
+      const ghFile = ghTokenFilePath({ repoRoot: this._repoRoot, runId: request.runId });
+      mkdirSync(dirname(ghFile), { recursive: true });
+      writeFileSync(ghFile, ghToken, { mode: 0o600 });
+      env.push(`GH_TOKEN_FILE=${ghFile}`);
+      ghExport = `export GH_TOKEN="$(cat '${ghFile}' 2>/dev/null)"; `;
     }
     const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)?.join(',')] : [];
     const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
@@ -566,6 +634,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       return {
         command: [
           '\n',
+          ghExport,
           'pi',
           '--mode',
           'json',
@@ -585,6 +654,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return {
       command: [
         '\n',
+        ghExport,
         'pi',
         '--approve',
         ...ma,
@@ -619,20 +689,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       options.sessionId,
       this._taskMessagePath(options.request),
     );
-    const tabArgs = [
-      'tab',
-      'create',
-      '--workspace',
-      this._workspaceId,
-      '--cwd',
-      cwd,
-      '--label',
-      options.tabLabel,
-      '--no-focus',
-    ];
-    for (const kv of env) {
-      tabArgs.push('--env', kv);
-    }
+    const tabArgs = withEnvArgs(
+      [
+        'tab',
+        'create',
+        '--workspace',
+        this._workspaceId,
+        '--cwd',
+        cwd,
+        '--label',
+        options.tabLabel,
+        '--no-focus',
+      ],
+      env,
+    );
     const tab = await herdrJson<TabCreateResult>(tabArgs);
     if (!tab?.result) {
       throw new Error(`Failed to create ${options.request.role} worker tab.`);
@@ -775,25 +845,32 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     if (this._workspacePath) {
       reviewEnv.push(`CONTRACT_PIPELINE_WORKSPACE_PATH=${this._workspacePath}`);
     }
+    // GH_TOKEN via a mode-0600 file — never as a --env CLI arg (see
+    // _buildWorkerCommand for the same pattern).
+    let ghExport = '';
     const ghToken = getScriptsEnv('GH_TOKEN') || getScriptsEnv('GITHUB_TOKEN');
     if (ghToken) {
-      reviewEnv.push(`GH_TOKEN=${ghToken}`);
+      const ghFile = ghTokenFilePath({ repoRoot: this._repoRoot, runId: this._runId });
+      mkdirSync(dirname(ghFile), { recursive: true });
+      writeFileSync(ghFile, ghToken, { mode: 0o600 });
+      reviewEnv.push(`GH_TOKEN_FILE=${ghFile}`);
+      ghExport = `export GH_TOKEN="$(cat '${ghFile}' 2>/dev/null)"; `;
     }
 
-    const tabArgs = [
-      'tab',
-      'create',
-      '--workspace',
-      this._workspaceId,
-      '--cwd',
-      options.yolo && this._workspacePath ? this._workspacePath : this._repoRoot,
-      '--label',
-      'review',
-      '--no-focus',
-    ];
-    for (const kv of reviewEnv) {
-      tabArgs.push('--env', kv);
-    }
+    const tabArgs = withEnvArgs(
+      [
+        'tab',
+        'create',
+        '--workspace',
+        this._workspaceId,
+        '--cwd',
+        options.yolo && this._workspacePath ? this._workspacePath : this._repoRoot,
+        '--label',
+        'review',
+        '--no-focus',
+      ],
+      reviewEnv,
+    );
     const tab = await herdrJson<TabCreateResult>(tabArgs);
     if (!tab?.result) {
       throw new Error('Failed to create review tab.');
@@ -817,6 +894,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // newline so the dropped char is never the first letter of the command.
     const command = [
       '\n',
+      ghExport,
       'pi',
       '--approve',
       '--model',

@@ -19,10 +19,24 @@
 // (~/.herdr/worktrees/<repo>/). herdr-native worktrees are also removed via
 // `herdr worktree remove` (closes herdr workspace state + checkout together).
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { removeWorktree } from '../herdr/worktree.ts';
+
+/** Run an argv array with execFileSync — no shell interpolation of values. */
+const runArgv = (command: string, args: string[], cwd: string): string => {
+  try {
+    return execFileSync(command, args, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd,
+      timeout: 10000,
+    }).trim();
+  } catch {
+    return '';
+  }
+};
 
 const runGit = (command: string, cwd: string): string => {
   try {
@@ -49,7 +63,7 @@ type WorkspaceInfo = {
 
 /** Parse `git worktree list --porcelain` into entries. */
 const listAllWorktrees = (): Array<{ path: string; branch?: string; detached?: boolean }> => {
-  const out = execSync('git worktree list --porcelain', {
+  const out = execFileSync('git', ['worktree', 'list', '--porcelain'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 10000,
@@ -83,15 +97,12 @@ const listAllWorktrees = (): Array<{ path: string; branch?: string; detached?: b
 };
 
 const prMergedForBranch = (branchName: string): boolean => {
-  try {
-    const prList = execSync(
-      `gh pr list --head "${branchName}" --state merged --json number --jq 'length'`,
-      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 },
-    ).trim();
-    return prList !== '0' && prList !== '';
-  } catch {
-    return false;
-  }
+  const prList = runArgv(
+    'gh',
+    ['pr', 'list', '--head', branchName, '--state', 'merged', '--json', 'number', '--jq', 'length'],
+    process.cwd(),
+  );
+  return prList !== '' && prList !== '0';
 };
 
 const listWorkspaces = async (): Promise<WorkspaceInfo[]> => {
@@ -110,24 +121,24 @@ const listWorkspaces = async (): Promise<WorkspaceInfo[]> => {
     }
     const branchName = wt.branch ?? '(detached)';
     const desc = runGit('log -1 --format=%s', wt.path);
-    const isLegacy = wt.path.startsWith(legacyParent);
+    // Path-boundary check: exactly the legacy parent or a child directory,
+    // NOT a sibling like `.pi/workspaces-old`.
+    const isLegacy = wt.path === legacyParent || wt.path.startsWith(`${legacyParent}${sep}`);
 
     // Resolve the herdr workspace id for herdr-native worktrees so cleanup
     // can tear herdr state + checkout together.
     let herdrWorkspaceId: string | undefined;
     if (!isLegacy) {
       try {
-        const r = execSync('herdr worktree list --cwd ' + `'${repoRoot}'`, {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: 10000,
-        }).trim();
-        const parsed = JSON.parse(r) as {
-          result: { worktrees: Array<{ path: string; open_workspace_id?: string }> };
-        };
-        herdrWorkspaceId = parsed.result.worktrees.find(
-          (w) => w.path === wt.path,
-        )?.open_workspace_id;
+        const r = runArgv('herdr', ['worktree', 'list', '--cwd', repoRoot], process.cwd());
+        if (r) {
+          const parsed = JSON.parse(r) as {
+            result: { worktrees: Array<{ path: string; open_workspace_id?: string }> };
+          };
+          herdrWorkspaceId = parsed.result.worktrees.find(
+            (w) => w.path === wt.path,
+          )?.open_workspace_id;
+        }
       } catch {
         // herdr unavailable — fall back to plain git removal.
       }
@@ -161,9 +172,15 @@ const cleanupWorkspace = async (ws: WorkspaceInfo, repoRoot: string): Promise<vo
 
 const main = async (): Promise<void> => {
   const args = process.argv.slice(2);
+  // Flags and the optional target path are parsed independently so
+  // `--legacy <path>` cleans that path with legacy filtering applied.
+  const FLAG_SET = new Set(['--all', '--pr-merged', '--legacy', '--force']);
+  const flags = args.filter((a) => FLAG_SET.has(a));
+  const targetPath = args.find((a) => !FLAG_SET.has(a));
+  const legacyOnly = flags.includes('--legacy');
+
   const repoRoot = resolve(process.cwd());
   const workspaces = await listWorkspaces();
-  const legacyOnly = args.includes('--legacy');
   const filtered = legacyOnly ? workspaces.filter((ws) => ws.isLegacy) : workspaces;
 
   if (filtered.length === 0) {
@@ -174,7 +191,7 @@ const main = async (): Promise<void> => {
   }
 
   // Just list
-  if (args.length === 0 || (args.length === 1 && legacyOnly)) {
+  if (flags.length === 0 && !targetPath) {
     console.log(`Active worktrees (${filtered.length}):\n`);
     for (const ws of filtered) {
       const merged = ws.prMerged ? ' 🔀 MERGED' : '';
@@ -193,8 +210,8 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  // Clean all
-  if (args.includes('--all')) {
+  // Clean all (optionally legacy-filtered: `--legacy --all`)
+  if (flags.includes('--all')) {
     console.log(`Cleaning up ${filtered.length} worktree(s)...\n`);
     for (const ws of filtered) {
       await cleanupWorkspace(ws, repoRoot);
@@ -203,8 +220,8 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  // Clean only PR-merged
-  if (args.includes('--pr-merged')) {
+  // Clean only PR-merged (optionally legacy-filtered)
+  if (flags.includes('--pr-merged')) {
     const merged = filtered.filter((ws) => ws.prMerged);
     if (merged.length === 0) {
       console.log('No worktrees with merged PRs found.');
@@ -218,8 +235,11 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  // Clean specific path
-  const targetPath = args[0];
+  // Clean specific path (`--legacy <path>` keeps the legacy filter)
+  if (!targetPath) {
+    console.log('Run without arguments to list worktrees.');
+    return;
+  }
   const match = filtered.find(
     (ws) => ws.path === targetPath || relative(repoRoot, ws.path) === targetPath,
   );

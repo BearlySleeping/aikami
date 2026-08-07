@@ -36,7 +36,8 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { runGit, sanitizeBranchName } from '../agents/git_worktree.ts';
 import { findWorkspace, herdr, herdrJson, wrapCommand } from './session.ts';
 import {
@@ -54,8 +55,11 @@ import {
 
 // ── Constants ──────────────────────────────────────────────
 
-const DEV_STACK_OWNER_FILE = '.pi/dev-stack-owner.json';
 const DEFAULT_BASE = 'main';
+
+/** Dev-stack ownership marker — stored OUTSIDE the repo (herdr state dir) so
+ *  task sessions never write into the root checkout or a worktree checkout. */
+const devStackOwnerPath = (): string => join(homedir(), '.herdr', 'aikami', 'dev-stack-owner.json');
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -69,6 +73,25 @@ const argValue = (args: string[], flag: string): string | undefined => {
 
 const hasFlag = (args: string[], flag: string): boolean => args.includes(flag);
 
+/** Flags that take a following value. */
+const VALUE_FLAGS = new Set(['--base', '--title', '--body']);
+
+/** Positional arguments, excluding flags and the values they consume. */
+const positionalArgs = (args: string[]): string[] => {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('-')) {
+      if (VALUE_FLAGS.has(a)) {
+        i++; // skip the flag's value
+      }
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+};
+
 /** Resolve the repo root (cwd or env). */
 const resolveRepoRoot = (): string => {
   const cwd = resolve(process.cwd());
@@ -81,7 +104,7 @@ const resolveRepoRoot = (): string => {
 
 /** Resolve the task slug + checkout from CLI args or the current directory. */
 const resolveTask = async (args: string[]): Promise<{ slug: string; w: TaskWorktree }> => {
-  const positional = args.filter((a) => !a.startsWith('-'));
+  const positional = positionalArgs(args);
   const repoRoot = resolveRepoRoot();
 
   let slug: string | undefined;
@@ -131,6 +154,7 @@ const resolveTask = async (args: string[]): Promise<{ slug: string; w: TaskWorkt
       checkoutPath,
       workspaceId: (await findWorkspace(`${TASK_WORKSPACE_PREFIX}${slug}`)) ?? '',
       rootPaneId: '',
+      tabId: '',
       repoRoot,
     },
   };
@@ -151,7 +175,7 @@ const launchPiInWorktree = async (w: TaskWorktree): Promise<void> => {
 // ── Subcommands ────────────────────────────────────────────
 
 const cmdNew = async (args: string[]): Promise<void> => {
-  const positional = args.filter((a) => !a.startsWith('-'));
+  const positional = positionalArgs(args);
   const slug = positional.length > 0 ? sanitizeBranchName(positional[0]) : undefined;
   if (!slug) {
     throw new Error('Usage: bun herdr:task new <slug> [--base main] [--join] [--no-install]');
@@ -176,38 +200,51 @@ const cmdNew = async (args: string[]): Promise<void> => {
   ok(`worktree: ${w.checkoutPath} (branch ${w.branch})`);
   ok(`workspace: ${w.workspaceId} (label ${TASK_WORKSPACE_PREFIX}${slug})`);
 
-  console.log(
-    `\n🔧 Bootstrapping worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'})...`,
-  );
-  await bootstrapWorktree({
-    checkoutPath: w.checkoutPath,
-    repoRoot,
-    install: doInstall,
-  });
-  ok('bootstrap complete');
-
-  if (withServices) {
-    // Record dev-stack ownership. The stack itself must be restarted by the
-    // user — ports are per-mode constants, exactly one stack can run, and
-    // restarting it would kill the current owner's servers.
-    const owner = {
+  try {
+    console.log(
+      `\n🔧 Bootstrapping worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'})...`,
+    );
+    const { installed } = await bootstrapWorktree({
       checkoutPath: w.checkoutPath,
-      branch: w.branch,
-      mode: process.env.AIKAMI_MODE ?? 'emulator',
-      claimedAt: new Date().toISOString(),
-    };
-    const ownerPath = join(repoRoot, DEV_STACK_OWNER_FILE);
-    mkdirSync(join(repoRoot, '.pi'), { recursive: true });
-    writeFileSync(ownerPath, JSON.stringify(owner, undefined, 2));
-    warn(
-      `dev stack ownership recorded for ${w.branch}. To serve the stack FROM this worktree:\n` +
-        `    bun herdr:stop all && bun herdr:start all\n` +
-        `  after cd ${w.checkoutPath} (or pass --mode explicitly).`,
+      repoRoot,
+      install: doInstall,
+    });
+    if (doInstall && !installed) {
+      warn(`bun install failed — run it manually: cd ${w.checkoutPath} && bun install`);
+    } else {
+      ok('bootstrap complete');
+    }
+
+    if (withServices) {
+      // Record dev-stack ownership OUTSIDE the repo (herdr state dir). The
+      // stack itself must be restarted by the user — ports are per-mode
+      // constants, exactly one stack can run, and restarting it would kill
+      // the current owner's servers.
+      const owner = {
+        checkoutPath: w.checkoutPath,
+        branch: w.branch,
+        mode: process.env.AIKAMI_MODE ?? 'emulator',
+        claimedAt: new Date().toISOString(),
+      };
+      const ownerPath = devStackOwnerPath();
+      mkdirSync(dirname(ownerPath), { recursive: true });
+      writeFileSync(ownerPath, JSON.stringify(owner, undefined, 2));
+      warn(
+        `dev stack ownership recorded for ${w.branch}. To serve the stack FROM this worktree:\n` +
+          `    bun herdr:stop all && bun herdr:start all\n` +
+          `  after cd ${w.checkoutPath} (or pass --mode explicitly).`,
+      );
+    }
+
+    await launchPiInWorktree(w);
+    ok(`task "${slug}" ready`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `${message}\n  The worktree was created at ${w.checkoutPath}. ` +
+        `Clean it up with: bun herdr:task rm ${slug} --force`,
     );
   }
-
-  await launchPiInWorktree(w);
-  ok(`task "${slug}" ready`);
 
   console.log(`\nAttach:  herdr session attach default`);
   console.log(`PR:      bun herdr:task pr ${slug} --base ${base}`);
@@ -288,7 +325,7 @@ const cmdRm = async (args: string[]): Promise<void> => {
   const force = hasFlag(args, '--force');
 
   console.log(`🧹 Removing task "${w.slug}"...`);
-  await removeWorktree({
+  const result = await removeWorktree({
     workspaceId: w.workspaceId || undefined,
     checkoutPath: w.checkoutPath,
     branch: keepBranch ? undefined : w.branch,
@@ -296,10 +333,14 @@ const cmdRm = async (args: string[]): Promise<void> => {
     force,
     repoRoot: w.repoRoot,
   });
-  ok(`removed ${w.checkoutPath}${keepBranch ? ' (branch kept)' : ` and branch ${w.branch}`}`);
+  if (result.removed) {
+    ok(`removed ${w.checkoutPath}${keepBranch ? ' (branch kept)' : ` and branch ${w.branch}`}`);
+  } else {
+    warn(`removal incomplete: ${result.reason ?? 'unknown reason'}`);
+  }
 
   // Also clear dev-stack ownership if this worktree owned it.
-  const ownerPath = join(w.repoRoot, DEV_STACK_OWNER_FILE);
+  const ownerPath = devStackOwnerPath();
   if (existsSync(ownerPath)) {
     try {
       const owner = JSON.parse(readFileSync(ownerPath, 'utf-8')) as { checkoutPath?: string };
@@ -414,7 +455,7 @@ worktree (exactly one stack per mode — ports are constants).`);
 };
 
 try {
-  if (!subcommand || !handlers[subcommand]) {
+  if (!subcommand || !Object.hasOwn(handlers, subcommand)) {
     await handlers.help([]);
     process.exit(subcommand ? 1 : 0);
   }

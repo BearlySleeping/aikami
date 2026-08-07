@@ -227,6 +227,9 @@ const reconcileWorkspace = async (options: {
       authorName: 'Pi Agent',
       authorEmail: 'agent@pi.internal',
     });
+    // publishWorktree may rename the branch on a remote collision — persist
+    // the published name so recovery and cleanup use one value.
+    options.manifest.worktreeBranch = headBranch;
     return {
       changeId: headCommit,
       bookmarkName: headBranch,
@@ -1324,15 +1327,20 @@ export const runContractPipeline = async (options: {
     if (manifest.currentStage !== 'merged') {
       const wsPath = adapter.getWorkspacePath();
       const branchName = manifest.reconciliation?.headBranch;
+      // 🔴 `pr_created` leaves an OPEN PR — deleting its head branch closes
+      // the PR on GitHub. Only delete the remote branch when no PR remains.
+      const keepRemoteBranch = manifest.currentStage === 'pr_created';
       if (wsPath) {
         try {
           await removeWorktree({
             checkoutPath: wsPath,
             repoRoot: options.repoRoot,
-            branch: branchName,
-            deleteRemoteBranch: true,
+            branch: keepRemoteBranch ? undefined : branchName,
+            deleteRemoteBranch: !keepRemoteBranch,
           });
-          console.log(`\n🧹 Worktree + branch cleaned: ${branchName ?? 'unknown'}\n`);
+          console.log(
+            `\n🧹 Worktree cleaned${keepRemoteBranch ? ' (remote branch kept for open PR)' : ''}: ${branchName ?? 'unknown'}\n`,
+          );
         } catch (e: unknown) {
           console.warn(
             `⚠️  Cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,

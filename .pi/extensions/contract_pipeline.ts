@@ -405,10 +405,12 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // (<repo>/.git/worktrees/<name> → <repo>).
       let repoRoot = cwd;
       try {
-        const gitFile = readFileSync(join(wsPath, '.git'), 'utf-8');
-        const m = gitFile.match(/^gitdir:\s*(.+)$/);
+        // Git writes linked-worktree .git files as `gitdir: <path>\n` —
+        // trim first so the regex is not defeated by the trailing newline.
+        const gitFile = readFileSync(join(wsPath, '.git'), 'utf-8').trim();
+        const m = gitFile.match(/^gitdir:\s*(.+)$/m);
         if (m?.[1]) {
-          const gitDir = resolve(m[1]);
+          const gitDir = resolve(m[1].trim());
           const idx = gitDir.indexOf('/.git/worktrees/');
           repoRoot = idx !== -1 ? gitDir.slice(0, idx) : gitDir;
         }
