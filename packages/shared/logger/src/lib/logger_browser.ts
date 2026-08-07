@@ -6,8 +6,9 @@ export type { LogEntry };
 export type FrontendLoggerInterface = LoggerInterface;
 
 /**
- * HTTP log sink — sends structured log entries to the Vite dev server's
- * /api/logs endpoint so they appear in `herdr_session read client` output.
+ * HTTP log sink — sends structured log entries to the server's
+ * /api/internal_logging endpoint so they surface in dev (herdr) output
+ * and, in production, in Cloud Run logs.
  *
  * Only active when `fetch` is available (browser env). Silently skipped
  * in Bun test environment and production builds.
@@ -19,7 +20,7 @@ class HttpLogSink implements LogSink {
   private _buffer: LogEntry[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Messages matching this pattern are excluded from /api/logs (render spam). */
+  /** Messages matching this pattern are excluded from /api/internal_logging (render spam). */
   private readonly _excludePattern =
     /^\d{2}:\d{2} \[GameWorld\] (render|position_changed|pause|resume|setInputLocked)$/;
 
@@ -27,7 +28,7 @@ class HttpLogSink implements LogSink {
     if (typeof fetch !== 'function') {
       return;
     }
-    // Drop noisy per-frame render logs — they flood /api/logs at 60fps
+    // Drop noisy per-frame render logs — they flood /api/internal_logging at 60fps
     if (entry.message && this._excludePattern.test(entry.message)) {
       return;
     }
@@ -35,7 +36,7 @@ class HttpLogSink implements LogSink {
     this._scheduleFlush();
   }
 
-  /** Flushes buffered log entries to /api/logs immediately. */
+  /** Flushes buffered log entries to /api/internal_logging immediately. */
   flush(): void {
     if (this._flushTimer) {
       clearTimeout(this._flushTimer);
@@ -45,12 +46,12 @@ class HttpLogSink implements LogSink {
       return;
     }
     const batch = this._buffer.splice(0);
-    void fetch('/api/logs', {
+    void fetch('/api/internal_logging', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'logger', payload: { batch } }),
     }).catch(() => {
-      // Dev server may not be running — silent fallback
+      // Server may not be running (dev) or route unavailable — silent fallback
     });
   }
 
@@ -86,7 +87,7 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
         return;
       }
 
-      // Write to sinks (including /api/logs HTTP sink)
+      // Write to sinks (including /api/internal_logging HTTP sink)
       this._flushSinks(entry, ...data);
 
       // Also write to browser console

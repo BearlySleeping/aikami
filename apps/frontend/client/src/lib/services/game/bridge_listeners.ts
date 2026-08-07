@@ -116,14 +116,29 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('ZONE_TRIGGERED', (event) => {
     gameOverlayService.setTransitioning(true);
     audioService.stopAll();
-    void gameEngineService.loadMap({
-      mapUrl: event.targetMap,
-      targetX: event.targetX,
-      targetY: event.targetY,
-      defeatedEnemies: gameOverlayService.getDefeatedEnemies(),
-      collectedPickups: gameOverlayService.getCollectedPickups(),
-      targetSpawnHash: event.targetSpawnHash,
-    });
+    void (async () => {
+      // Transition zones reference maps by ID (e.g. 'inn'), but the engine
+      // fetches maps by file URL. Resolve the ID through the active content
+      // pack before loading — otherwise the raw ID resolves relative to the
+      // current route and the SPA fallback returns HTML, breaking JSON parse.
+      let mapUrl = event.targetMap;
+      try {
+        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const pack = await loadContentPack({ packId: gameEngineService.contentPackId });
+        mapUrl = pack.resolveMapUrl(event.targetMap);
+      } catch {
+        // targetMap was already an absolute URL/path (or unknown map ID) —
+        // fall back to passing it through; the engine surfaces fetch errors.
+      }
+      await gameEngineService.loadMap({
+        mapUrl,
+        targetX: event.targetX,
+        targetY: event.targetY,
+        defeatedEnemies: gameOverlayService.getDefeatedEnemies(),
+        collectedPickups: gameOverlayService.getCollectedPickups(),
+        targetSpawnHash: event.targetSpawnHash,
+      });
+    })();
   });
 
   bridge.on('GAME_READY', () => {

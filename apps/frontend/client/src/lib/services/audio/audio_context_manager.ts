@@ -38,6 +38,14 @@ class AudioContextManager {
       return;
     }
 
+    // Actively attempt resume — succeeds only when called within a user
+    // gesture (e.g. clicking "New Game"). Outside a gesture this is a
+    // harmless rejected promise; the gesture listeners below cover the
+    // next interaction.
+    void ctx.resume().catch(() => {
+      // Autoplay policy still blocks — the gesture listener will retry.
+    });
+
     const resume = async () => {
       try {
         await ctx.resume();

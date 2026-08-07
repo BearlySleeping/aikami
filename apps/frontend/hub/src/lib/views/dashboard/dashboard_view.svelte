@@ -1,10 +1,10 @@
 <script lang="ts">
-  // apps/frontend/hub/src/lib/views/dashboard/dashboard_view.svelte
-  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
-  import type { DashboardViewModelInterface } from './dashboard_view_model.svelte.ts';
+// apps/frontend/hub/src/lib/views/dashboard/dashboard_view.svelte
+import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import type { DashboardViewModelInterface } from './dashboard_view_model.svelte.ts';
 
-  type Props = { viewModel: DashboardViewModelInterface };
-  const { viewModel }: Props = $props();
+type Props = { viewModel: DashboardViewModelInterface };
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="flex flex-col gap-6 p-6">

@@ -10,8 +10,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import type { PersonasPageData } from '$types';
 import { authService, personaDataService } from '$services';
+import type { PersonasPageData } from '$types';
 
 export type PersonasViewModelOptions = BaseViewModelOptions & {
   /** SSR-seeded personas for instant first paint. */
@@ -106,8 +106,7 @@ class PersonasViewModel
       await this.refresh();
     } catch (error) {
       this.error('setActivePersona', error);
-      this.errorMessage =
-        error instanceof Error ? error.message : 'Failed to set active persona';
+      this.errorMessage = error instanceof Error ? error.message : 'Failed to set active persona';
     }
   }
 

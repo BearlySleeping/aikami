@@ -21,11 +21,21 @@ import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
 
-// App Check is enabled unless explicitly disabled via env (PUBLIC_DISABLE_APP_CHECK=1),
-// so production can enforce it without a code change.
-const enforceAppCheck = publicEnv.PUBLIC_DISABLE_APP_CHECK !== 'true';
+// App Check is enabled unless explicitly disabled via env. Accept both
+// `PUBLIC_DISABLE_APP_CHECK=1` and `=true` so the server-side check matches
+// the client-side convention in packages/frontend/configs/app_check.ts
+// (which compares against '1'). Also require a real reCAPTCHA site key:
+// without one the client disables App Check entirely (the Google test key
+// 403s against real projects and throttles App Check for 24h), so the
+// server must not demand tokens the client cannot produce — the hub's own
+// Eden client never attaches X-Firebase-AppCheck anyway.
+const enforceAppCheck =
+  !['1', 'true'].includes(publicEnv.PUBLIC_DISABLE_APP_CHECK ?? '') &&
+  !!publicEnv.PUBLIC_RECAPTCHA_SITE_KEY;
 
-const appCheckExcludePaths: string[] = [];
+// Browser log ingestion must never be gated on App Check — the logger's
+// HTTP sink is fire-and-forget and cannot attach an App Check token.
+const appCheckExcludePaths = ['/api/internal_logging'];
 
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
@@ -126,8 +136,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       const origin = request.headers.get('origin');
       // Only answer preflight for trusted extension origins — never fall
       // back to a wildcard, and omit CORS headers for disallowed origins.
-      const isAllowedOrigin =
-        origin?.startsWith('chrome-extension://') || origin === 'null';
+      const isAllowedOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
       const preflightHeaders = new Headers();
       if (origin && isAllowedOrigin) {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');

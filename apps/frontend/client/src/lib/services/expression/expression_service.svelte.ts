@@ -131,12 +131,13 @@ class ExpressionService
     characters?: string[];
     availableExpressions?: readonly string[];
   }): Promise<DetectExpressionResult | undefined> {
-    const { message, characters, availableExpressions } = options;
+    const { message, characters } = options;
 
-    const expressionSchema: Record<string, unknown> = availableExpressions?.length
-      ? { type: 'string', enum: [...availableExpressions] }
-      : { type: 'string' };
-
+    // NOTE: the expression field is intentionally left unconstrained (plain
+    // string). Free models frequently return synonyms, capitalized labels, or
+    // multi-word moods that a strict enum would reject — validation-failed
+    // warnings on every dialogue turn. The runtime maps freeform moods to
+    // canonical ExpressionIds via _mapMoodToExpressionId (unknown → neutral).
     const prompt = [
       'Analyze the following message and determine character expressions.',
       '',
@@ -156,7 +157,7 @@ class ExpressionService
               type: 'object',
               properties: {
                 name: { type: 'string' },
-                expression: expressionSchema,
+                expression: { type: 'string' },
               },
               required: ['name', 'expression'],
               additionalProperties: false,

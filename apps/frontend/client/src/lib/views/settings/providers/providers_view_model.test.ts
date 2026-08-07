@@ -87,6 +87,11 @@ mock.module(CONFIG_SERVICE_PATH, () => ({
     setTextApiKey: mock(() => {}),
     setTextProvider: mock(() => {}),
     setTextUrl: mock(() => {}),
+    getApiKey: mock((provider: string): string | undefined => {
+      const textState = mockConfigState.text as { apiKeys?: Record<string, string> } | undefined;
+      return textState?.apiKeys?.[provider];
+    }),
+    updateConnection: mock(() => {}),
     setPreferredModel: mock(() => {}),
     setModels: mock(() => {}),
     updateModel: mock(() => {}),

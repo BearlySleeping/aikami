@@ -49,6 +49,11 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+    options:
+      # 🔴 Never cache: bundles workspace packages FROM SOURCE via aliases;
+      # moon's cache key can't cover those files, and a stale cache shipped
+      # old shared-code to prod. Fresh build = few seconds, always correct.
+      cache: false
     outputs:
       - '.svelte-kit'
       - 'build'

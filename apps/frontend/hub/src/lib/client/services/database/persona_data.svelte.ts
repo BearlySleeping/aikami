@@ -14,8 +14,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { PersonaData } from '@aikami/types';
-import type { BatchCommand } from '@aikami/types';
+import type { BatchCommand, PersonaData } from '@aikami/types';
 import { authService } from '$services';
 
 export type PersonaDataServiceOptions = BaseFrontendClassOptions;

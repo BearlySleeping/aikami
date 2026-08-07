@@ -72,12 +72,13 @@ class AIPrivacyViewModel
       return 'loading';
     }
 
-    const hasConnections = configService.state.connections.length > 0;
-    const hasApiKey = Object.keys(configService.state.text.apiKeys).some(
-      (k) => configService.state.text.apiKeys[k] && configService.state.text.apiKeys[k].length > 0,
-    );
+    // C-230: API keys live in connections[] — the legacy text.apiKeys map
+    // was removed from ConfigService and is always undefined.
+    const { connections } = configService.state;
+    const hasConnections = connections.length > 0;
+    const hasConfiguredApiKey = connections.some((c) => (c.apiKey?.length ?? 0) > 0);
 
-    if (!hasConnections && !hasApiKey) {
+    if (!hasConnections && !hasConfiguredApiKey) {
       return 'not_configured';
     }
 

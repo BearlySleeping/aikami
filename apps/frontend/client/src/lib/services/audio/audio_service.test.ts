@@ -44,6 +44,7 @@ type MockSourceNode = {
   buffer: AudioBuffer | null;
   started: boolean;
   startTime: number;
+  startOffset: number;
   stopped: boolean;
   loop: boolean;
   connectCalls: number;
@@ -108,6 +109,7 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
     buffer: null,
     started: false,
     startTime: 0,
+    startOffset: 0,
     stopped: false,
     loop: false,
     connectCalls: 0,
@@ -134,6 +136,9 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
     get startTime(): number {
       return state.startTime;
     },
+    get startOffset(): number {
+      return state.startOffset;
+    },
     get stopped(): boolean {
       return state.stopped;
     },
@@ -142,9 +147,10 @@ const createMockSourceNode = (): AudioBufferSourceNode => {
       return {} as AudioNode;
     }),
     disconnect: mock(() => {}),
-    start: mock((when?: number) => {
+    start: mock((when?: number, offset?: number) => {
       state.started = true;
       state.startTime = when ?? fakeCurrentTime;
+      state.startOffset = offset ?? 0;
     }),
     stop: mock(() => {
       state.stopped = true;
@@ -492,11 +498,14 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
   test('resumeBgm recreates the source and clears paused state', async () => {
     await audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    // Advance mock time while the track plays — pause then captures this
+    // elapsed time as the resume offset.
+    fakeCurrentTime += 5;
     audioService.pauseBgm();
     const sourcesBefore = createdSources.length;
 
-    // Advance mock time to simulate elapsed pause duration
-    mockContext.currentTime += 5;
+    // Advance mock time to simulate the pause duration
+    fakeCurrentTime += 5;
 
     await audioService.resumeBgm();
 

@@ -102,23 +102,55 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       // Request persistent storage — non-fatal if denied
       await this._requestPersistence();
 
-      // Try SAH pool first (works without COOP/COEP headers), fall back to OpfsDb.
-      // If neither is available (e.g. headless Chromium where Atomics.wait() is
-      // blocked on the main thread), fall back to an in-memory database so the
-      // app remains functional — data will not persist across restarts.
-      if (oo1['OpfsSAHPoolDb']) {
-        const SahCtor = oo1['OpfsSAHPoolDb'] as { new (filename: string): WasmDatabase };
-        this._db = new SahCtor(this._databasePath);
-      } else if (oo1['OpfsDb']) {
-        const OpfsCtor = oo1['OpfsDb'] as {
-          new (filename: string, flags?: string): WasmDatabase;
-        };
-        this._db = new OpfsCtor(this._databasePath, 'c');
-      } else {
+      // Main-thread OPFS persistence via the SAH pool VFS. This VFS is the
+      // only OPFS backend that works on the main thread — the classic
+      // sqlite3_vfs (OpfsDb) requires Atomics.wait() and can only run in a
+      // Worker. The SAH pool must be installed first: the OpfsSAHPoolDb
+      // constructor is exposed on the resolved pool utility, NOT on
+      // sqlite3.oo1. Checking oo1['OpfsSAHPoolDb'] directly (as older code
+      // did) always fails and silently drops to in-memory, losing all
+      // campaign/save/chat data on reload.
+      try {
+        const installOpfsSahPoolVfs = sqlite3['installOpfsSAHPoolVfs'] as
+          | ((opts?: Record<string, unknown>) => Promise<{
+              // biome-ignore lint/style/useNamingConvention: sqlite-wasm API name
+              OpfsSAHPoolDb?: new (
+                filename: string,
+              ) => WasmDatabase;
+            }>)
+          | undefined;
+
+        if (installOpfsSahPoolVfs) {
+          const poolUtil = await installOpfsSahPoolVfs.call(sqlite3);
+          const SahCtor = poolUtil?.OpfsSAHPoolDb;
+          if (SahCtor) {
+            this._db = new SahCtor(this._databasePath);
+            logger.debug('WasmStorageAdapter:opened-opfs-sahpool', {
+              databasePath: this._databasePath,
+            });
+          } else {
+            logger.warn(
+              'WasmStorageAdapter: OPFS SAH pool installed but no OpfsSAHPoolDb — ' +
+                'falling back to in-memory database. Campaign data will NOT persist ' +
+                'across page reloads in this environment.',
+            );
+          }
+        } else {
+          logger.warn(
+            'WasmStorageAdapter: OPFS SAH pool API unavailable — falling back to ' +
+              'in-memory database. Campaign data will NOT persist across page reloads.',
+          );
+        }
+      } catch (error) {
+        // OPFS not available (missing FileSystem APIs, sandboxed iframe, etc.)
         logger.warn(
-          'WasmStorageAdapter: OPFS VFS not available — falling back to in-memory database. ' +
+          'WasmStorageAdapter: OPFS unavailable — falling back to in-memory database. ' +
             'Campaign data will NOT persist across page reloads in this environment.',
+          { error: error instanceof Error ? error.message : String(error) },
         );
+      }
+
+      if (!this._db) {
         const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
         this._db = new DbCtor(':memory:', 'c');
       }

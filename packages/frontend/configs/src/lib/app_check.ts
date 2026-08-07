@@ -22,29 +22,29 @@ const initializeAppCheckInstance = (): AppCheck | undefined => {
     // Disable App Check for non-production modes when the debug token
     // isn't registered in the Firebase Console (otherwise exchangeDebugToken
     // returns 403 and cascades to break Firebase Auth entirely).
-    if (isDisabled || isNonProductionMode) {
+    //
+    // Also skip when no reCAPTCHA site key is configured: the Google test
+    // key always returns 403 against real projects and throttles App Check
+    // for 24h (appCheck/initial-throttle), breaking Firebase Auth.
+    if (isDisabled || isNonProductionMode || !recaptchaSiteKey) {
       if (isNonProductionMode && !isDisabled) {
         logger.info(
           `App Check disabled for mode "${mode}". ` +
             'Set PUBLIC_DISABLE_APP_CHECK=0 and register the debug token in Firebase Console to enable it.',
         );
       }
-      return;
-    }
-
-    if (!recaptchaSiteKey) {
-      if (!import.meta.env.DEV) {
+      if (!recaptchaSiteKey && !isDisabled) {
         logger.warn(
-          'No PUBLIC_RECAPTCHA_SITE_KEY set. Using Google test key — App Check will NOT work against production Firebase. Set a real key for production deployments.',
+          'No PUBLIC_RECAPTCHA_SITE_KEY set. App Check disabled — ' +
+            'set a real reCAPTCHA site key for production deployments.',
         );
       }
+      return;
     }
 
     return initializeAppCheck(app, {
       isTokenAutoRefreshEnabled: true,
-      provider: new ReCaptchaV3Provider(
-        recaptchaSiteKey || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-      ),
+      provider: new ReCaptchaV3Provider(recaptchaSiteKey),
     });
   } catch (error) {
     logger.warn('Failed to initialize app check', error);

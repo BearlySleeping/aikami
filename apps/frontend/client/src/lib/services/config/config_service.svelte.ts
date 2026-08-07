@@ -13,7 +13,13 @@ import {
 } from '@aikami/frontend/services';
 import { clearVault, decrypt, encrypt } from '$lib/utils/crypto_vault';
 import { logger } from '$logger';
-import type { Connection, ConnectionId, Lorebook, LorebookEntry } from '$types';
+import type {
+  Connection,
+  ConnectionCapability,
+  ConnectionId,
+  Lorebook,
+  LorebookEntry,
+} from '$types';
 import {
   type AuxiliaryModels,
   type GenerationParams,
@@ -414,6 +420,14 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   setDefaultConnection(id: ConnectionId): void;
   /** Returns a connection by ID, or undefined. */
   getConnection(id: ConnectionId): Connection | undefined;
+
+  /**
+   * Returns the stored API key for a provider within a capability.
+   *
+   * Reads from `connections[]` (the canonical store since C-230). Returns
+   * `undefined` when no matching connection exists or no key is set.
+   */
+  getApiKey(provider: string, capability?: ConnectionCapability): string | undefined;
 
   // ── Preset management (C-230) ─────────────────────────────────────
 
@@ -947,6 +961,13 @@ class ConfigService
 
   getConnection(id: ConnectionId): Connection | undefined {
     return this.state.connections.find((c) => c.id === id);
+  }
+
+  getApiKey(provider: string, capability: ConnectionCapability = 'text'): string | undefined {
+    const connection = this.state.connections.find(
+      (c) => (c.capability ?? 'text') === capability && c.provider === provider,
+    );
+    return connection?.apiKey || undefined;
   }
 
   // ── Preset management (C-230) ─────────────────────────────────────

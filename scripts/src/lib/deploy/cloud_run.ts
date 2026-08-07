@@ -175,11 +175,40 @@ export async function deployCloudRunSveltekit(
     }
   }
 
-  // 6. Deploy
+  // 6. Derive the runtime service account from FIREBASE_SERVICE_ACCOUNT in
+  // .env.{mode} — Cloud Run runs as this SA so Firebase Admin SDK calls
+  // (verifyIdToken / verifySessionCookie with revocation checks,
+  // createSessionCookie) have the required firebaseauth permissions. The
+  // default compute SA cannot perform the accounts:lookup call that
+  // revocation-checked verification needs.
+  let serviceAccount = '';
+  if (existsSync(modeEnvPath)) {
+    const saJson = parseEnvKeys(modeEnvPath)['FIREBASE_SERVICE_ACCOUNT'];
+    if (saJson) {
+      try {
+        serviceAccount = (JSON.parse(saJson) as { client_email?: string }).client_email ?? '';
+      } catch {
+        // Malformed SA — fall back to the default runtime SA.
+      }
+    }
+  }
+
+  // 7. Deploy
   log('🚀 Deploying...');
   let envVars = `,AIKAMI_MODE=${mode},MODE=${mode},FIRESTORE_PREFER_REST=true,PUBLIC_APP_VERSION=${shortSha()}${extraEnvVars}`;
   envVars = deduplicateEnvVars(envVars, secretArgs);
-  run(buildGcloudRunArgs(config, serviceId, tag, projectId, mode, envVars, secretArgs));
+  run(
+    buildGcloudRunArgs(
+      config,
+      serviceId,
+      tag,
+      projectId,
+      mode,
+      envVars,
+      secretArgs,
+      serviceAccount,
+    ),
+  );
 
   // 7. Save checksum on success — use the pre-build consistent checksum
   await saveDeployCache(mode, appName, checksum, version);

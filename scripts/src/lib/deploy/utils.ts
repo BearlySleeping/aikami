@@ -162,6 +162,7 @@ export function buildGcloudRunArgs(
   mode: string,
   extraEnvVars = '',
   secretArgs = '',
+  serviceAccount = '',
 ): string {
   const region = resolveRegion(mode, config.region);
   const memory = config.memory ?? '1Gi';
@@ -184,6 +185,17 @@ export function buildGcloudRunArgs(
     '--project',
     projectId,
   ];
+
+  // Run as the mode's Firebase Admin SA (derived from FIREBASE_SERVICE_ACCOUNT
+  // in .env.{mode}) so Admin SDK calls like verifySessionCookie(checkRevoked)
+  // and createSessionCookie work — the default compute SA cannot perform the
+  // accounts:lookup call that revocation-checked verification needs, which
+  // silently breaks session cookies on Cloud Run. The runtime SA needs
+  // roles/secretmanager.secretAccessor + roles/logging.logWriter (granted in
+  // both aikami-production and aikami-staging).
+  if (serviceAccount) {
+    args.push('--service-account', serviceAccount);
+  }
 
   // CPU allocation
   if (config.cpu) {

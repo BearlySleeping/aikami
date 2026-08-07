@@ -55,6 +55,14 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   readonly providerOptions: ReadonlyArray<{ id: string; label: string }>;
   readonly needsApiKey: boolean;
   readonly needsUrl: boolean;
+  /** True when the draft provider runs locally (no API key, no cloud auth). */
+  readonly isLocalProvider: boolean;
+  /** Whether to show the local (Ollama) web setup guide. */
+  readonly showLocalGuide: boolean;
+  /** Live probe result for the selected local provider (Ollama). */
+  readonly localProviderStatus:
+    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
+    | undefined;
   readonly draftParams: Connection['generationParams'];
   readonly presetOptions: ReadonlyArray<{ id: string; name: string }>;
   readonly formattedParams: {
@@ -87,6 +95,8 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   testDraftConnection(): Promise<void>;
   testDraftModel(): Promise<void>;
   fetchModels(): Promise<void>;
+  /** Probes the selected local provider (Ollama) — triggers the browser's local-network prompt. */
+  checkLocalProvider(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -101,6 +111,13 @@ export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {};
 
 const TEST_TIMEOUT_MS = 15_000;
 const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
+
+/**
+ * Local providers that get a live probe + web setup guide when selected.
+ * Probing localhost from an HTTPS origin triggers the browser's Private
+ * Network Access permission prompt — that's intentional and user-initiated.
+ */
+const LOCAL_GUIDE_PROVIDERS = new Set(['ollama']);
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -122,6 +139,9 @@ class ConnectionManagerViewModel
   isTestingDraftModel = $state(false);
   draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
   isFetchingModels = $state(false);
+  localProviderStatus:
+    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
+    | undefined = $state(undefined);
   private _availableModels: FetchedModel[] = $state([]);
   private _providerCache: Record<string, { apiKey: string; model: string }> = {};
 
@@ -157,7 +177,12 @@ class ConnectionManagerViewModel
 
   get needsApiKey(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    return this._capabilityProviders().find((p) => p.id === provider)?.needsKey ?? true;
+    const desc = this._capabilityProviders().find((p) => p.id === provider);
+    if (!desc) {
+      return true;
+    }
+    // Local providers never need an API key — hide the field entirely.
+    return !desc.isLocal && desc.needsKey;
   }
 
   get needsUrl(): boolean {
@@ -170,6 +195,17 @@ class ConnectionManagerViewModel
       return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
     }
     return ['ollama', 'ooba', 'custom'].includes(provider);
+  }
+
+  /** True when the draft provider runs locally (no API key, no cloud auth). */
+  get isLocalProvider(): boolean {
+    const provider = this.draft.provider ?? 'openrouter';
+    return this._capabilityProviders().find((p) => p.id === provider)?.isLocal ?? false;
+  }
+
+  /** Whether to show the local provider (Ollama) web setup guide. */
+  get showLocalGuide(): boolean {
+    return LOCAL_GUIDE_PROVIDERS.has(this.draft.provider ?? '');
   }
 
   get draftParams(): Connection['generationParams'] {
@@ -232,7 +268,7 @@ class ConnectionManagerViewModel
    * Returns the provider registry for the draft's current capability.
    * Falls back to TEXT_PROVIDERS for backward compatibility.
    */
-  private _capabilityProviders(): ReadonlyArray<{
+  private _capabilityProviders(capabilityOverride?: ConnectionCapability): ReadonlyArray<{
     id: string;
     label: string;
     description: string;
@@ -240,7 +276,7 @@ class ConnectionManagerViewModel
     needsUrl?: boolean;
     isLocal: boolean;
   }> {
-    const capability = this.draft.capability ?? 'text';
+    const capability = capabilityOverride ?? this.draft.capability ?? 'text';
     if (capability === 'image') {
       return IMAGE_PROVIDERS.map((p) => ({
         ...p,
@@ -278,6 +314,7 @@ class ConnectionManagerViewModel
     this.draftModelTestResult = undefined;
     this.editingConnectionId = undefined;
     this.isEditorOpen = true;
+    const provider = 'openrouter';
     this.draft = {
       apiKey: '',
       baseUrl: '',
@@ -285,9 +322,11 @@ class ConnectionManagerViewModel
       generationParams: { ...configService.state.generationParams },
       isDefault: false,
       model: '',
-      name: '',
-      provider: 'openrouter',
+      // Name is optional — default it to the selected provider's label.
+      name: this._capabilityProviders('text').find((p) => p.id === provider)?.label ?? provider,
+      provider,
     };
+    this.localProviderStatus = undefined;
   }
 
   openCreateFor(capability: ConnectionCapability): void {
@@ -308,9 +347,19 @@ class ConnectionManagerViewModel
       generationParams: { ...configService.state.generationParams },
       isDefault: false,
       model: '',
-      name: '',
+      // Name is optional — default it to the selected provider's label.
+      name:
+        this._capabilityProviders(capability).find((p) => p.id === defaultProvider)?.label ??
+        defaultProvider,
       provider: defaultProvider,
     };
+    // Local providers (e.g. Ollama) are probed on selection — user-initiated,
+    // which is what triggers the browser's local-network permission prompt.
+    if (LOCAL_GUIDE_PROVIDERS.has(defaultProvider)) {
+      void this.checkLocalProvider();
+    } else {
+      this.localProviderStatus = undefined;
+    }
   }
 
   openEdit(id: ConnectionId): void {
@@ -328,6 +377,12 @@ class ConnectionManagerViewModel
     this.editingConnectionId = id;
     this.isEditorOpen = true;
     this.draft = { ...connection };
+    // Editing a local provider re-probes availability (user-initiated).
+    if (LOCAL_GUIDE_PROVIDERS.has(connection.provider)) {
+      void this.checkLocalProvider();
+    } else {
+      this.localProviderStatus = undefined;
+    }
   }
 
   cancelEdit(): void {
@@ -349,6 +404,7 @@ class ConnectionManagerViewModel
     const oldProvider = this.draft.provider;
     const oldApiKey = this.draft.apiKey;
     const oldModel = this.draft.model;
+    const oldName = this.draft.name;
 
     // Save current values to cache
     if (oldProvider && (oldApiKey || oldModel)) {
@@ -361,44 +417,78 @@ class ConnectionManagerViewModel
     this.draftTestResult = undefined;
     this.draftModelTestResult = undefined;
 
+    // Name is optional and defaults to the provider's label. When the name was
+    // auto-filled from the previous provider (or left empty), keep it in sync.
+    const previousLabel = oldProvider ? this._providerLabel(oldProvider) : undefined;
+    const nameWasAuto = !oldName?.trim() || oldName === previousLabel;
+
     this.draft = {
       ...this.draft,
       apiKey: cached?.apiKey ?? this._getDefaultApiKey(provider) ?? '',
       model: '',
+      name: nameWasAuto ? this._providerLabel(provider) : oldName,
       provider,
     };
+
+    // Selecting a local provider (Ollama) triggers a live probe — this is what
+    // makes the browser ask for local-network permission and lets us show the
+    // setup guide when the server is unreachable.
+    if (LOCAL_GUIDE_PROVIDERS.has(provider)) {
+      void this.checkLocalProvider();
+    } else {
+      this.localProviderStatus = undefined;
+    }
+  }
+
+  /** Resolves the human-readable label for a provider in the draft's capability. */
+  private _providerLabel(provider: string): string {
+    return this._capabilityProviders().find((p) => p.id === provider)?.label ?? provider;
   }
 
   /** Returns the default API key for a provider based on current capability. */
   private _getDefaultApiKey(provider: string): string | undefined {
     const capability = this.draft.capability ?? 'text';
+    return this._getFallbackApiKey(provider, capability);
+  }
+
+  /**
+   * Legacy fallback API key lookup per capability.
+   *
+   * C-230: text keys live in connections[] (getApiKey); image/voice keys
+   * are still read from the legacy image/voice config for backward compat.
+   */
+  private _getFallbackApiKey(
+    provider: string,
+    capability: ConnectionCapability,
+  ): string | undefined {
     if (capability === 'image') {
       return configService.state.image.apiKey;
     }
     if (capability === 'voice') {
       return configService.state.voice.apiKey;
     }
-    return configService.state.text.apiKeys[provider];
+    return configService.getApiKey(provider, 'text');
   }
 
   saveDraft(): void {
     this.debug('saveDraft');
-    if (!this.draft.name?.trim()) {
-      this.warn('saveDraft: name is required');
-      return;
-    }
+    // Name is optional — default it to the selected provider's label.
+    const provider = this.draft.provider ?? 'openrouter';
+    const name = this.draft.name?.trim() || this._providerLabel(provider);
 
     const model = this.isModelCustom ? '' : (this.draft.model ?? '');
 
     if (this.editingConnectionId) {
       configService.updateConnection(this.editingConnectionId, {
         ...this.draft,
+        name,
         model,
         updatedAt: new Date().toISOString(),
       });
     } else {
       configService.addConnection({
         ...(this.draft as Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>),
+        name,
         model,
         source: 'stored',
       });
@@ -410,6 +500,7 @@ class ConnectionManagerViewModel
     this._availableModels = [];
     this.draftTestResult = undefined;
     this.draftModelTestResult = undefined;
+    this.localProviderStatus = undefined;
     void configService.save();
   }
 
@@ -557,7 +648,8 @@ class ConnectionManagerViewModel
       return;
     }
 
-    const apiKey = this.draft.apiKey || configService.state.text.apiKeys[provider];
+    const capability = this.draft.capability ?? 'text';
+    const apiKey = this.draft.apiKey || this._getFallbackApiKey(provider, capability);
     if (config.auth.location === 'header' && config.auth.name && !apiKey) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
       return;
@@ -660,7 +752,8 @@ class ConnectionManagerViewModel
       return;
     }
 
-    const apiKey = this.draft.apiKey || configService.state.text.apiKeys[provider];
+    const capability = this.draft.capability ?? 'text';
+    const apiKey = this.draft.apiKey || this._getFallbackApiKey(provider, capability);
 
     this.isFetchingModels = true;
 
@@ -672,6 +765,64 @@ class ConnectionManagerViewModel
       });
     } finally {
       this.isFetchingModels = false;
+    }
+  }
+
+  /**
+   * Probes the selected local provider (Ollama) on localhost. From an HTTPS
+   * origin this triggers the browser's Private Network Access permission
+   * prompt; the result drives the inline status and the setup guide.
+   */
+  async checkLocalProvider(): Promise<void> {
+    const provider = this.draft.provider ?? 'openrouter';
+    this.debug('checkLocalProvider', { provider });
+    if (!LOCAL_GUIDE_PROVIDERS.has(provider)) {
+      this.localProviderStatus = undefined;
+      return;
+    }
+
+    this.localProviderStatus = { checking: true, ok: false };
+    const startMs = performance.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
+      const elapsed = Math.round(performance.now() - startMs);
+
+      if (response.ok) {
+        const data = (await response.json()) as { models?: unknown[] };
+        const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
+        this.localProviderStatus = { checking: false, ok: true, latencyMs: elapsed, modelCount };
+        this.debug('checkLocalProvider:ok', { elapsed, modelCount });
+        // Populate the model list right away so the user can pick one.
+        if (provider in PROVIDER_MODEL_FETCH) {
+          void this.fetchModels();
+        }
+      } else {
+        this.localProviderStatus = {
+          checking: false,
+          ok: false,
+          latencyMs: elapsed,
+          error: `HTTP ${response.status}`,
+        };
+        this.debug('checkLocalProvider:failed', { status: response.status, elapsed });
+      }
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Connection timed out'
+          : String(err);
+      this.localProviderStatus = {
+        checking: false,
+        ok: false,
+        latencyMs: elapsed,
+        error: message,
+      };
+      this.debug('checkLocalProvider:exception', { elapsed, error: message });
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

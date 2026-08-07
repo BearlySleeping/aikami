@@ -43,6 +43,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       onMapLoaded: mock(() => {}),
       onInventoryCountChange: mock(() => {}),
       getDefeatedEnemies: mock(() => []),
+      getCollectedPickups: mock(() => []),
       startCombat: mock(() => {}),
       endDialogue: mock(() => {}),
     };
@@ -56,6 +57,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       pauseEngine: mock(() => {}),
       resumeEngine: mock(() => {}),
       loadMap: mock(async (_opts: unknown) => {}),
+      contentPackId: 'emberwatch',
     };
 
     mockCombatService = {
@@ -75,6 +77,9 @@ describe('setupBridgeListeners (AC-5)', () => {
     // Mock createEngineBridge to return our mock bridge
     mock.module('@aikami/frontend/engine', () => ({
       createEngineBridge: mock(() => mockBridge),
+      loadContentPack: mock(async () => ({
+        resolveMapUrl: mock((mapId: string) => `/content-packs/emberwatch/maps/${mapId}.json`),
+      })),
     }));
 
     const mod = await import('./bridge_listeners');
@@ -185,6 +190,39 @@ describe('setupBridgeListeners (AC-5)', () => {
     expect(updateEnvironment).toHaveBeenCalled();
   });
 
+  // ── Zone Transitions ──
+
+  test('ZONE_TRIGGERED should resolve map ID via content pack before loadMap', async () => {
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+    });
+
+    const handler = bridgeListeners.get('ZONE_TRIGGERED');
+    expect(handler).toBeDefined();
+
+    handler?.({
+      targetMap: 'inn',
+      targetX: 32,
+      targetY: 192,
+    });
+
+    // The ZONE_TRIGGERED handler resolves the map ID asynchronously —
+    // flush the microtask queue before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const loadMap = mockGameEngineService.loadMap as ReturnType<typeof mock>;
+    expect(loadMap).toHaveBeenCalled();
+    const opts = loadMap.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(opts.mapUrl).toBe('/content-packs/emberwatch/maps/inn.json');
+    expect(opts.targetX).toBe(32);
+    expect(opts.targetY).toBe(192);
+  });
+
   // ── Combat Events ──
 
   test('COMBAT_STARTED should call combatService.startCombat', async () => {
@@ -235,8 +273,8 @@ describe('setupBridgeListeners (AC-5)', () => {
       'MAP_LOADED',
       'COMBAT_STARTED',
       'COMBAT_LOG',
-      'INVENTORY_UPDATED',
       'COMBAT_ENDED',
+      'INTERACTION_TARGET_CHANGED',
     ];
 
     for (const event of expectedEvents) {

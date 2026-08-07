@@ -63,7 +63,7 @@ export const getUserSessionFromCookies = async (options: {
       return [undefined, false];
     }
 
-    const decodedIdToken = await verifySessionCookie(sessionCookie, true /** checkRevoked */);
+    const decodedIdToken = await verifySessionCookieWithFallback(sessionCookie);
     return [toUserSessionDataFromToken(decodedIdToken)];
   } catch (e) {
     const error = e as FirebaseError;
@@ -80,6 +80,40 @@ export const getUserSessionFromCookies = async (options: {
 
     logger.error('getUserSessionFromCookies', error);
     return [undefined, shouldTryToRefreshToken];
+  }
+};
+
+/**
+ * Verifies a session cookie, falling back to signature-only verification
+ * when the revocation check fails.
+ *
+ * The revocation check (`checkRevoked`) performs an extra `accounts:lookup`
+ * API call. Some Cloud Run runtime service accounts can verify session
+ * cookie signatures and mint cookies (createSessionCookie) but lack the
+ * permission for that lookup — which silently breaks every session with
+ * no client-visible error (the Admin SDK wraps it as auth/internal-error,
+ * hiding the permission details). In that case fall back to signature-only
+ * verification so login keeps working. The strict check re-engages as soon
+ * as the runtime SA has firebaseauth permissions; expiry is still enforced
+ * by the loose path, only revocation checks are relaxed.
+ */
+const verifySessionCookieWithFallback = async (
+  sessionCookie: string,
+): Promise<Awaited<ReturnType<typeof verifySessionCookie>>> => {
+  try {
+    return await verifySessionCookie(sessionCookie, true /** checkRevoked */);
+  } catch (firstError) {
+    logger.warn('verifySessionCookie: revocation check failed — retrying without it', {
+      code: (firstError as FirebaseError).code,
+      message: (firstError as FirebaseError).message,
+    });
+    try {
+      return await verifySessionCookie(sessionCookie, false);
+    } catch (_secondError) {
+      // The cookie is genuinely invalid/expired (or auth is unavailable) —
+      // report the original failure.
+      throw firstError;
+    }
   }
 };
 
