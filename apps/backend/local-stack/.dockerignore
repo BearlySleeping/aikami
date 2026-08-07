@@ -1,0 +1,5 @@
+# apps/backend/local-stack/.dockerignore
+# Context for the voice-engine image is `.` (this directory). Exclude the
+# local model store — it is bind-mounted at runtime and can hold gigabytes
+# of downloaded weights.
+models/

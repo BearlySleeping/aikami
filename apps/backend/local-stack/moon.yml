@@ -1,0 +1,74 @@
+# apps/backend/local-stack/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'backend'
+  - 'container'
+  - 'orchestration'
+  - 'local-ai'
+
+project:
+  name: 'local-stack'
+  description: 'Orchestration package for local AI engines (Docker Compose profiles, Ultimate single container, and Native Host Binary modes).'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn: []
+
+fileGroups:
+  configs:
+    - 'docker-compose*.yml'
+    - 'Dockerfile*'
+    - 'package.json'
+    - 'moon.yml'
+  binaries:
+    - 'bin/**/*'
+
+tasks:
+  # Docker builds are heavy/host-dependent — keep them out of `moon ci`
+  # (same convention as the voice/image projects).
+  build:
+    command: 'true'
+    options:
+      runInCI: false
+
+  build-client:
+    command: 'bun run build:client'
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    command: 'bun run test'
+
+  up:
+    command: 'docker compose up -d'
+    options:
+      cache: false
+      runInCI: false
+
+  up-full:
+    command: 'docker compose --profile full up -d'
+    options:
+      cache: false
+      runInCI: false
+
+  up-voice:
+    command: 'docker compose --profile voice up -d'
+    options:
+      cache: false
+      runInCI: false
+
+  up-lite:
+    command: 'docker compose -f docker-compose.lite.yml up -d'
+    options:
+      cache: false
+      runInCI: false
+
+  run-native-voice:
+    command: 'bash bin/run-native-tts.sh'
+    options:
+      cache: false
+      runInCI: false
