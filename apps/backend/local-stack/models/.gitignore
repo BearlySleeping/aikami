@@ -1,0 +1,22 @@
+# apps/backend/local-stack/models/.gitignore
+# Local model store — never commit model weights or archives.
+# Models are re-downloaded by the launcher scripts / container entrypoints.
+
+# Model weights
+*.gguf
+*.ggml
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.bin
+
+# Model archives / caches
+*.tar.bz2
+*.tar.gz
+*.zip
+huggingface/
+.cache/
+
+# Keep the subdirectory scaffolding (.gitkeep)
+!.gitkeep

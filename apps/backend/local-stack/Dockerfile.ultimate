@@ -1,0 +1,102 @@
+# apps/backend/local-stack/Dockerfile.ultimate
+# Single all-in-one container: Models + Runtimes + Client.
+#
+# Bundles:
+#   • shimmy (llama.cpp OpenAI-compatible LLM server) — from the official image
+#   • sherpa-onnx C++ TTS/STT websocket servers
+#   • Bun runtime + the PREBUILT Aikami client SPA (staged in .build/client)
+#
+# The client is built on the host first (`bun run build:client`), then only
+# its static output is copied in — the monorepo source never enters the image.
+# The container entrypoint (docker/scripts/entrypoint-ultimate.sh) auto-
+# downloads default models into /models on first start and supervises the
+# voice / STT / text / client processes.
+#
+# Root is used only for setup (apt, /opt extraction, ownership); the runtime
+# drops to the image's existing unprivileged `shimmy` user. When bind-mounting
+# host models, ensure they are writable by uid 999 (shimmy) — e.g.
+# `chown -R 999:999 ./models` — or omit the mount so the container downloads
+# into its own store.
+#
+# ── Build context ──────────────────────────────────────────────────────────
+# This directory (`.`) — `docker build -f Dockerfile.ultimate -t aikami-ultimate .`
+
+# ghcr.io/michael-a-kuykendall/shimmy is debian:bookworm-slim with the shimmy
+# binary at /usr/local/bin/shimmy (llama.cpp server + OpenAI-compatible API).
+# Pinned to an immutable digest (tag: latest @ 2026-08-07) for reproducibility.
+FROM ghcr.io/michael-a-kuykendall/shimmy@sha256:8a81cd993f189daaa981b49833c9534faee9bd2cc246f95e65fa41e38c5ab04d
+
+# The shimmy image runs as non-root uid 999; switch to root for the system
+# install steps (apt, Bun installer, /opt extraction), then drop back to
+# `shimmy` before the entrypoint runs.
+USER root
+
+ARG SHERPA_ONNX_VERSION=1.13.4
+ARG BUN_VERSION=1.3.14
+ARG BUN_SHA256=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f
+
+ENV SHERPA_ONNX_VERSION=${SHERPA_ONNX_VERSION}
+
+# Runtime tooling: curl (model downloads), unzip (Bun artifact), bzip2
+# (sherpa tarballs), python3 + pip (TTS server: sherpa-onnx ships no TTS
+# websocket server, so docker/voice/tts_server.py wraps OfflineTts).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        unzip \
+        bzip2 \
+        python3 \
+        python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --break-system-packages --no-cache-dir "sherpa-onnx==${SHERPA_ONNX_VERSION}"
+
+# Install Bun from a pinned release artifact with a recorded checksum —
+# never `curl | bash`.
+RUN curl -fsSL -o /tmp/bun.zip \
+        "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+    && echo "${BUN_SHA256}  /tmp/bun.zip" | sha256sum -c - \
+    && unzip -q /tmp/bun.zip -d /opt/bun \
+    && chmod +x /opt/bun/bun-linux-x64/bun \
+    && ln -s /opt/bun/bun-linux-x64/bun /usr/local/bin/bun \
+    && rm -f /tmp/bun.zip
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Install sherpa-onnx C++ binaries (offline TTS/STT websocket servers)
+RUN curl -fsSL -o /tmp/sherpa-onnx.tar.bz2 \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_ONNX_VERSION}/sherpa-onnx-v${SHERPA_ONNX_VERSION}-linux-x64-shared.tar.bz2" \
+    && mkdir -p /opt/sherpa-onnx \
+    && tar xjf /tmp/sherpa-onnx.tar.bz2 -C /opt/sherpa-onnx --strip-components=1 \
+    && rm -f /tmp/sherpa-onnx.tar.bz2
+ENV PATH="/opt/sherpa-onnx/bin:${PATH}" \
+    LD_LIBRARY_PATH="/opt/sherpa-onnx/lib:${LD_LIBRARY_PATH:-}"
+
+# Client runtime (prebuilt SPA + tiny Bun static server)
+WORKDIR /app
+COPY .build/client /app/build
+COPY docker/client-server/package.json /app/package.json
+COPY docker/client-server/client_server.ts /app/client_server.ts
+
+# TTS server (OpenAI-compatible /v1/audio/speech via sherpa-onnx Kokoro)
+COPY docker/voice/tts_server.py /tts_server.py
+
+# Model store (bind-mount or let the entrypoint download into it)
+RUN mkdir -p /models/llm /models/image /models/tts /models/stt
+
+# Auto-model downloader & multi-process supervisor
+COPY docker/scripts/entrypoint-ultimate.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh \
+    # Runtime user owns the model store, app dir and entrypoint
+    && chown -R shimmy:shimmy /models /app /entrypoint.sh
+
+ENV ENABLE_VOICE=true \
+    ENABLE_STT=true \
+    ENABLE_TEXT=true \
+    CLIENT_PORT=3000 \
+    TEXT_PORT=8080 \
+    VOICE_PORT=6006 \
+    STT_PORT=6007
+
+EXPOSE 3000 6006 6007 8080
+
+USER shimmy
+ENTRYPOINT ["/entrypoint.sh"]
