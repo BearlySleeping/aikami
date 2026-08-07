@@ -19,7 +19,7 @@
     "@aikami/types": "workspace:*"
   },
   "devDependencies": {
-    "firebase-tools": "15.25.1",
+    "firebase-tools": "15.26.0",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.3"
   }
