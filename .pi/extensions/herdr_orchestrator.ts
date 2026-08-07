@@ -17,8 +17,11 @@
 //                     read, list)
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
 import {
   type AikamiMode,
   ALL_SERVICES,
@@ -32,6 +35,7 @@ import {
   startServices,
   stopServices,
 } from '../../scripts/src/lib/herdr/session';
+import { openPullRequest, publishWorktree } from '../../scripts/src/lib/herdr/worktree';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -694,6 +698,89 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // TOOL: task_pr — publish the current task worktree + open a PR
+  // ─────────────────────────────────────────────────────────────
+
+  pi.registerTool({
+    name: 'task_pr',
+    label: 'Task: Open PR from Worktree',
+    description:
+      'Publish the current herdr-native task worktree (commit all changes, push ' +
+      'the branch, with remote-collision guard) and open a GitHub PR to the ' +
+      'requested base branch (default: main). Run from inside a task worktree ' +
+      '(bun herdr:task new <slug>) or pass an explicit checkoutPath.',
+    promptSnippet: 'Use task_pr to ship the current task worktree as a PR to main',
+    promptGuidelines: [
+      'Call after the task work is complete and tests pass.',
+      'Default base is main — pass baseBranch to retarget.',
+      'Set draft=true for a work-in-progress PR.',
+      'The branch is pushed automatically; the worktree is preserved.',
+    ],
+    parameters: Type.Object({
+      checkoutPath: Type.Optional(
+        Type.String({ description: 'Absolute worktree checkout path. Defaults to cwd.' }),
+      ),
+      baseBranch: Type.Optional(Type.String({ default: 'main' })),
+      title: Type.Optional(Type.String()),
+      body: Type.Optional(Type.String()),
+      draft: Type.Optional(Type.Boolean({ default: false })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const checkoutPath = (params.checkoutPath as string | undefined) ?? ctx.cwd;
+      const base = (params.baseBranch as string | undefined) ?? 'main';
+
+      // Resolve the main repo root from the worktree's .git file.
+      let repoRoot = ctx.cwd;
+      try {
+        const gitFile = readFileSync(join(checkoutPath, '.git'), 'utf-8');
+        const m = gitFile.match(/^gitdir:\s*(.+)$/);
+        if (m?.[1]) {
+          const gitDir = resolve(m[1]);
+          const idx = gitDir.indexOf('/.git/worktrees/');
+          repoRoot = idx !== -1 ? gitDir.slice(0, idx) : gitDir;
+        }
+      } catch {
+        // Not a linked worktree — fall back to cwd.
+      }
+
+      const branch = runGit('rev-parse --abbrev-ref HEAD', { cwd: checkoutPath });
+      const slug = sanitizeBranchName(branch.replace(/^task\//, '').replace(/^worktree\//, ''));
+      const title = (params.title as string | undefined) ?? `Task: ${slug}`;
+
+      const { headBranch, headCommit } = await publishWorktree({
+        checkoutPath,
+        repoRoot,
+        base,
+        message: `Feat: ${slug}`,
+        authorName: 'Pi Agent',
+        authorEmail: 'agent@pi.internal',
+      });
+      const { prUrl, prNumber } = await openPullRequest({
+        headBranch,
+        base,
+        title,
+        body: params.body as string | undefined,
+        draft: (params.draft as boolean | undefined) ?? false,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ **PR #${prNumber} opened** (branch \`${headBranch}\` @ \`${headCommit.slice(0, 7)}\`)`,
+              `→ ${prUrl}`,
+              '',
+              'Merge it with gh_merge_pr when CI passes. The worktree is preserved.',
+            ].join('\n'),
+          },
+        ],
+        details: { headBranch, headCommit, prUrl, prNumber, base },
+      };
+    },
+  });
 
   // ─────────────────────────────────────────────────────────────
   // TOOL: herdr_session — aikami dev service lifecycle

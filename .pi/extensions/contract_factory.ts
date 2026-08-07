@@ -17,11 +17,14 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
   getGitHeadCommit,
-  provisionGitWorktree,
   runGit,
   sanitizeBranchName,
-  WORKSPACES_DIR,
 } from '../../scripts/src/lib/agents/git_worktree';
+import {
+  bootstrapWorktree,
+  createWorktree,
+  listWorktrees,
+} from '../../scripts/src/lib/herdr/worktree';
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -507,17 +510,20 @@ export default function (pi: ExtensionAPI) {
     name: 'contract_workspace_create',
     label: 'Contract: Create Workspace',
     description:
-      'Provision an isolated Git Worktree for a contract task. ' +
-      'Creates a worktree at .pi/workspaces/<id> on a new branch and returns ' +
-      'the absolute path and branch name. Use BEFORE writing files or ' +
-      'running compilation tools in a contract task. ' +
+      'Provision an isolated herdr-native Git Worktree for a contract task. ' +
+      'Creates a worktree under ~/.herdr/worktrees/<repo>/ (outside the repo) ' +
+      'on branch task/<id>, opens it as a herdr workspace grouped with the repo, ' +
+      'and bootstraps it (direnv, seeds, bun install). Returns the checkout path, ' +
+      'branch name, and herdr workspace id. Use BEFORE writing files or running ' +
+      'compilation tools in a contract task. ' +
       'For interactive development, use `bun run contract C-XXX --root` instead — ' +
       'it works directly in the repo root without a worktree.',
     promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated Git Worktree.',
     promptGuidelines: [
       'Call this before any file mutations or build steps in a contract pipeline.',
       'Use the returned branch_name for reference.',
-      'Workspace directories live under .pi/workspaces/ and are .gitignored.',
+      'Checkouts live in ~/.herdr/worktrees/<repo>/ and are opened as herdr workspaces (aikami-task-<id>).',
+      'Clean up with `bun herdr:task rm <id>` or `bun run workspace:cleanup`.',
       'For local interactive development, prefer `bun run contract C-XXX --root` which switches the branch directly in the repo root instead of creating a worktree.',
     ],
     parameters: Type.Object({
@@ -530,18 +536,15 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
       const sanitized = sanitizeBranchName(params.taskId);
-      const wsDir = join(cwd, WORKSPACES_DIR, sanitized);
 
-      // Ensure parent directory exists
-      if (!existsSync(join(cwd, WORKSPACES_DIR))) {
-        mkdirSync(join(cwd, WORKSPACES_DIR), { recursive: true });
-      }
-
-      // Check for existing workspace
-      if (existsSync(wsDir)) {
+      // Check for an existing herdr-native worktree for this task.
+      const existing = (await listWorktrees(cwd)).find(
+        (w) => w.branch === `task/${sanitized}` || w.branch.endsWith(`/${sanitized}`),
+      );
+      if (existing) {
         const existingId = (() => {
           try {
-            return getGitHeadCommit(wsDir);
+            return getGitHeadCommit(existing.path);
           } catch {
             return 'unknown';
           }
@@ -551,46 +554,53 @@ export default function (pi: ExtensionAPI) {
             {
               type: 'text',
               text: [
-                `⚠️ Workspace already exists: \`${wsDir}\``,
+                `⚠️ Worktree already exists: \`${existing.path}\``,
+                `Branch: \`${existing.branch}\``,
                 `HEAD: \`${existingId}\``,
                 '',
-                'Use this existing workspace or run `bun workspace:cleanup` if you need a fresh one.',
+                'Use this existing worktree or run `bun herdr:task rm <id>` if you need a fresh one.',
               ].join('\n'),
             },
           ],
           details: {
-            path: wsDir,
+            path: existing.path,
+            branchName: existing.branch,
             headCommit: existingId,
             alreadyExists: true,
           },
         };
       }
 
-      // Create the Git Worktree
-      const { branchName, headCommit } = provisionGitWorktree({
+      // Create the herdr-native worktree (checkout + workspace in one call).
+      const w = await createWorktree({
+        slug: params.taskId,
         repoRoot: cwd,
-        name: params.taskId,
       });
+      await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
+      const headCommit = getGitHeadCommit(w.checkoutPath);
 
       return {
         content: [
           {
             type: 'text',
             text: [
-              `✅ Git Worktree created: \`${wsDir}\``,
-              `Branch: \`${branchName}\``,
+              `✅ herdr worktree created: \`${w.checkoutPath}\``,
+              `Branch: \`${w.branch}\``,
+              `Workspace: \`${w.workspaceId}\` (label aikami-task-${sanitized})`,
               `HEAD: \`${headCommit}\``,
               '',
               'This worktree is now the active working directory for the task.',
               'Use `contract_workspace_checkpoint` to save progress snapshots.',
               'Use `contract_workspace_complete` when the task is done.',
+              'Ship a PR with `bun herdr:task pr <id>` (or the task_pr tool).',
             ].join('\n'),
           },
         ],
         details: {
-          path: wsDir,
-          branchName,
+          path: w.checkoutPath,
+          branchName: w.branch,
           headCommit,
+          workspaceId: w.workspaceId,
           alreadyExists: false,
         },
       };
@@ -732,7 +742,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'contract_workspace_list',
     label: 'Contract: List Workspaces',
-    description: 'List all active Git Worktrees managed under .pi/workspaces/.',
+    description:
+      'List all active herdr-native + legacy Git Worktrees (git worktree list --porcelain).',
     promptSnippet: 'Use contract_workspace_list to inspect active agent workspaces.',
     promptGuidelines: [
       'Use for diagnostics — find orphaned or incomplete workspaces.',
@@ -741,23 +752,16 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
-      const wsParent = join(cwd, WORKSPACES_DIR);
+      const out = runGit('worktree list --porcelain', { cwd });
+      const entries = out
+        .split('\n')
+        .filter((l) => l.startsWith('worktree '))
+        .map((l) => l.slice('worktree '.length).trim())
+        .filter((p) => p !== cwd);
       const items: { path: string; headCommit: string; branchName: string; description: string }[] =
         [];
 
-      if (!existsSync(wsParent)) {
-        return {
-          content: [{ type: 'text', text: 'No workspaces directory found.' }],
-          details: { workspaces: [] },
-        };
-      }
-
-      const entries = readdirSync(wsParent, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) {
-          continue;
-        }
-        const wsPath = join(wsParent, entry.name);
+      for (const wsPath of entries) {
         try {
           const headCommit = getGitHeadCommit(wsPath);
           const branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });

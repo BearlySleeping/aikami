@@ -1,7 +1,13 @@
 // scripts/src/lib/agents/git_worktree.ts
 //
-// Git Worktree utilities used by the contract pipeline orchestrator,
-// herdr adapter, and Pi extensions. Single source of truth — do not fork.
+// Pure git primitives shared by the herdr-native worktree module
+// (scripts/src/lib/herdr/worktree.ts — THE source of truth for worktree
+// lifecycle), the contract pipeline orchestrator, and Pi extensions.
+// Do not fork; keep low-level (no herdr calls here).
+//
+// 🔴 Worktree PROVISIONING (create/bootstrap/remove via herdr) moved to
+//    scripts/src/lib/herdr/worktree.ts. `provisionGitWorktree` was removed
+//    when the pipeline switched to herdr-native worktrees.
 
 import { execSync } from 'node:child_process';
 import {

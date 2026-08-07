@@ -14,11 +14,8 @@ import type {
   ContractWorkerRole,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import {
-  getGitHeadCommit,
-  runGit,
-  sanitizeBranchName,
-} from '../../scripts/src/lib/agents/git_worktree';
+import { getGitHeadCommit, runGit } from '../../scripts/src/lib/agents/git_worktree';
+import { publishWorktree } from '../../scripts/src/lib/herdr/worktree';
 import { runSyncOrThrow } from './lib/process_runner.ts';
 
 const MUTATING_GIT_RE =
@@ -396,87 +393,42 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         };
       }
 
-      // Phase C: Task Completion — GitHub PR Reconciliation
-      let headCommit: string;
-      let branchName: string;
-      try {
-        headCommit = getGitHeadCommit(wsPath);
-        branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Could not read git state from worktree: ${message}`,
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // Derive a safe branch name from the contract ID, workspace name,
-      // or pipeline run ID. Idempotency guard: if a branch with this name
-      // already exists on the remote (from a prior partial run), append a
-      // timestamp token to avoid non-fast-forward push rejection.
+      // Phase C: Task Completion — GitHub PR Reconciliation.
+      // Delegates to the shared herdr-native publishWorktree (single source
+      // of truth): collision-guard + commit all + push. Branch renaming for
+      // native worktrees happens at creation time, so no rename here.
       const contractId =
         params.contractId ?? process.env.CONTRACT_PIPELINE_RUN_ID ?? basename(wsPath);
-      const baseBranchName = `contract-task-${sanitizeBranchName(contractId)}`;
       const baseBranch = params.baseBranch ?? PIPELINE_BASE_BRANCH;
 
-      let headBranch = baseBranchName;
-
-      // Check if the branch already exists on the remote.
+      // Resolve the main repo root from the worktree's .git file
+      // (<repo>/.git/worktrees/<name> → <repo>).
+      let repoRoot = cwd;
       try {
-        const remoteCheck = runSyncOrThrow(
-          'git',
-          ['ls-remote', '--heads', 'origin', `refs/heads/${baseBranchName}`],
-          { cwd, timeoutMs: 10000 },
-        );
-        if (remoteCheck) {
-          // Branch exists — append a short unique token to avoid collision
-          const token = Date.now().toString(36).slice(-6);
-          headBranch = `${baseBranchName}-${token}`;
-          console.log(
-            `  ⚠️  Branch \`${baseBranchName}\` already exists on remote. Using \`${headBranch}\`.`,
-          );
+        const gitFile = readFileSync(join(wsPath, '.git'), 'utf-8');
+        const m = gitFile.match(/^gitdir:\s*(.+)$/);
+        if (m?.[1]) {
+          const gitDir = resolve(m[1]);
+          const idx = gitDir.indexOf('/.git/worktrees/');
+          repoRoot = idx !== -1 ? gitDir.slice(0, idx) : gitDir;
         }
       } catch {
-        // If we can't check, assume the name is safe and proceed.
+        // Not a linked worktree — fall back to cwd.
       }
 
-      // Rename the worktree branch if needed.
-      if (branchName !== headBranch) {
-        try {
-          runGit(`branch -m ${branchName} ${headBranch}`, { cwd: wsPath });
-          branchName = headBranch;
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `❌ Failed to rename branch \`${branchName}\` → \`${headBranch}\`: ${message}`,
-              },
-            ],
-            isError: true,
-            details: { headCommit, branchName },
-          };
-        }
-      }
-
-      // Finalize: commit all changes.
-      const finalMsg = `Feat: Completed contract pipeline task — PR as \`${headBranch}\` (commit: ${headCommit})`;
+      let headBranch: string;
+      let headCommit: string;
       try {
-        runGit(`commit -a --no-verify -m "${finalMsg}"`, { cwd: wsPath });
-      } catch {
-        // No changes to commit — proceed with push.
-      }
-
-      // Push the branch to origin.
-      try {
-        runGit(`push -u origin ${headBranch}`, { cwd: wsPath });
+        const result = await publishWorktree({
+          checkoutPath: wsPath,
+          repoRoot,
+          base: baseBranch,
+          message: `Feat: Contract ${contractId} — pipeline reconcile`,
+          authorName: 'Pi Agent',
+          authorEmail: 'agent@pi.internal',
+        });
+        headBranch = result.headBranch;
+        headCommit = result.headCommit;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -484,17 +436,18 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             {
               type: 'text',
               text: [
-                `❌ Failed to push branch \`${headBranch}\` to remote: ${message}`,
+                `❌ Reconciliation failed: ${message}`,
                 '',
-                'The worktree has been preserved. Manual push:',
+                `The worktree has been preserved: ${wsPath}`,
+                'Manual push:',
                 `  1. cd ${wsPath}`,
-                `  2. git push -u origin ${headBranch}`,
-                `  3. gh pr create --head "${headBranch}" --base ${baseBranch}`,
+                `  2. git push -u origin HEAD`,
+                `  3. gh pr create --head <branch> --base ${baseBranch}`,
               ].join('\n'),
             },
           ],
           isError: true,
-          details: { headCommit, headBranch, workspacePath: wsPath },
+          details: { workspacePath: wsPath },
         };
       }
 
