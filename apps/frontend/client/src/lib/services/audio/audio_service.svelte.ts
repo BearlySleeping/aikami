@@ -551,22 +551,30 @@ export class AudioService
     // Context is suspended (autoplay policy) — defer until it resumes.
     const onStateChange = () => {
       if (ctx.state === 'running') {
-        ctx.removeEventListener('statechange', onStateChange);
+        cleanup();
         start();
       }
     };
-    ctx.addEventListener('statechange', onStateChange);
 
     // Also retry on the next user gesture (some browsers resume without
     // firing statechange if the resume call raced the gesture).
     const onGesture = () => {
       if (ctx.state === 'running') {
-        ctx.removeEventListener('statechange', onStateChange);
-        window.removeEventListener('pointerdown', onGesture);
-        window.removeEventListener('keydown', onGesture);
+        cleanup();
         start();
       }
     };
+
+    // Single cleanup shared by both paths — removes the statechange and
+    // both gesture listeners before the source starts, so no listener
+    // survives a successful start.
+    const cleanup = () => {
+      ctx.removeEventListener('statechange', onStateChange);
+      window.removeEventListener('pointerdown', onGesture);
+      window.removeEventListener('keydown', onGesture);
+    };
+
+    ctx.addEventListener('statechange', onStateChange);
     window.addEventListener('pointerdown', onGesture);
     window.addEventListener('keydown', onGesture);
   }

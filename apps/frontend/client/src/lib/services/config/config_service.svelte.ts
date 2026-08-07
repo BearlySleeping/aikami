@@ -964,9 +964,16 @@ class ConfigService
   }
 
   getApiKey(provider: string, capability: ConnectionCapability = 'text'): string | undefined {
-    const connection = this.state.connections.find(
-      (c) => (c.capability ?? 'text') === capability && c.provider === provider,
-    );
+    const matches = (c: Connection): boolean =>
+      (c.capability ?? 'text') === capability && c.provider === provider;
+
+    // Prefer the default connection, but only when it also matches the
+    // requested provider and capability; otherwise fall back to the first
+    // matching connection.
+    const defaultConnection = this.state.defaultConnectionId
+      ? this.state.connections.find((c) => c.id === this.state.defaultConnectionId && matches(c))
+      : undefined;
+    const connection = defaultConnection ?? this.state.connections.find(matches);
     return connection?.apiKey || undefined;
   }
 

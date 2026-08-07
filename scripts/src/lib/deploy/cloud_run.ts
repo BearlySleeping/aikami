@@ -27,6 +27,7 @@ import {
   resolveProjectId,
   resolveRegion,
   run,
+  runArgs,
   shortSha,
   versionSha,
 } from './utils';
@@ -186,7 +187,18 @@ export async function deployCloudRunSveltekit(
     const saJson = parseEnvKeys(modeEnvPath)['FIREBASE_SERVICE_ACCOUNT'];
     if (saJson) {
       try {
-        serviceAccount = (JSON.parse(saJson) as { client_email?: string }).client_email ?? '';
+        // Parse as unknown and validate before use: only a non-empty
+        // string client_email is accepted. Malformed or invalid payloads
+        // fall back to the default runtime SA.
+        const parsed: unknown = JSON.parse(saJson);
+        const clientEmail =
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'client_email' in parsed &&
+          typeof (parsed as { client_email: unknown }).client_email === 'string'
+            ? (parsed as { client_email: string }).client_email.trim()
+            : '';
+        serviceAccount = clientEmail;
       } catch {
         // Malformed SA — fall back to the default runtime SA.
       }
@@ -197,7 +209,10 @@ export async function deployCloudRunSveltekit(
   log('🚀 Deploying...');
   let envVars = `,AIKAMI_MODE=${mode},MODE=${mode},FIRESTORE_PREFER_REST=true,PUBLIC_APP_VERSION=${shortSha()}${extraEnvVars}`;
   envVars = deduplicateEnvVars(envVars, secretArgs);
-  run(
+  // Execute through the argument-array path (no shell) so the
+  // service account email — read from an untrusted .env file — can never
+  // be shell-interpreted.
+  runArgs(
     buildGcloudRunArgs(
       config,
       serviceId,

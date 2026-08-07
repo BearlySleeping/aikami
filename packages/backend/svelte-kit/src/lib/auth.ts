@@ -103,8 +103,17 @@ const verifySessionCookieWithFallback = async (
   try {
     return await verifySessionCookie(sessionCookie, true /** checkRevoked */);
   } catch (firstError) {
+    // Revoked sessions are a definitive authentication failure — never
+    // downgrade to signature-only verification. The cookie must be rejected
+    // so the client re-authenticates instead of silently keeping a dead
+    // session alive.
+    const code = (firstError as FirebaseError).code;
+    if (code === 'auth/session-cookie-revoked' || code === 'auth/id-token-revoked') {
+      throw firstError;
+    }
+
     logger.warn('verifySessionCookie: revocation check failed — retrying without it', {
-      code: (firstError as FirebaseError).code,
+      code,
       message: (firstError as FirebaseError).message,
     });
     try {

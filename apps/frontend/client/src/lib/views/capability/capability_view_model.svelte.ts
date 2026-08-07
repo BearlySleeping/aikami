@@ -348,8 +348,8 @@ class CapabilityViewModel
     if (LOCAL_PROVIDERS.has(connection.provider)) {
       return true;
     }
-    // Cloud providers require a real API key
-    return (connection.apiKey?.length ?? 0) > 0;
+    // Cloud providers require a real (non-whitespace) API key
+    return (connection.apiKey?.trim().length ?? 0) > 0;
   }
 
   private _sourceBadge(connection: Connection): string | undefined {

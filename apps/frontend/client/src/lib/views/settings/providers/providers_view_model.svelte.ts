@@ -473,7 +473,8 @@ export class ProvidersViewModel
   /** Legacy text-tab setter — mirrors setTextApiKey for the custom URL. */
   setTextUrl(url: string): void {
     const connection = configService.state.connections.find(
-      (c) => (c.capability ?? 'text') === 'text',
+      (c) =>
+        (c.capability ?? 'text') === 'text' && c.provider === configService.state.text.provider,
     );
     if (connection) {
       configService.updateConnection(connection.id, { baseUrl: url });

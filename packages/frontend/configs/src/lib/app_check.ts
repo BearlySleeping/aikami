@@ -7,7 +7,7 @@ import {
 } from 'firebase/app-check';
 import { logger } from '$logger';
 import app from './app.ts';
-import { getPublicMode, publicEnv } from './environment';
+import { getPublicMode, isAppCheckEnabled, publicEnv } from './environment';
 
 const initializeAppCheckInstance = (): AppCheck | undefined => {
   try {
@@ -15,9 +15,18 @@ const initializeAppCheckInstance = (): AppCheck | undefined => {
       PUBLIC_DISABLE_APP_CHECK: disableAppCheck,
       PUBLIC_RECAPTCHA_SITE_KEY: recaptchaSiteKey,
     } = publicEnv;
-    const isDisabled = disableAppCheck === '1';
+    const isDisabled = disableAppCheck === '1' || disableAppCheck === 'true';
     const mode = getPublicMode();
     const isNonProductionMode = mode && mode !== 'production';
+
+    // Shared predicate (also used by the Hub SSR hooks.server.ts) so the
+    // client and server always agree on whether App Check is active.
+    if (isAppCheckEnabled()) {
+      return initializeAppCheck(app, {
+        isTokenAutoRefreshEnabled: true,
+        provider: new ReCaptchaV3Provider(recaptchaSiteKey as string),
+      });
+    }
 
     // Disable App Check for non-production modes when the debug token
     // isn't registered in the Firebase Console (otherwise exchangeDebugToken
@@ -26,26 +35,19 @@ const initializeAppCheckInstance = (): AppCheck | undefined => {
     // Also skip when no reCAPTCHA site key is configured: the Google test
     // key always returns 403 against real projects and throttles App Check
     // for 24h (appCheck/initial-throttle), breaking Firebase Auth.
-    if (isDisabled || isNonProductionMode || !recaptchaSiteKey) {
-      if (isNonProductionMode && !isDisabled) {
-        logger.info(
-          `App Check disabled for mode "${mode}". ` +
-            'Set PUBLIC_DISABLE_APP_CHECK=0 and register the debug token in Firebase Console to enable it.',
-        );
-      }
-      if (!recaptchaSiteKey && !isDisabled) {
-        logger.warn(
-          'No PUBLIC_RECAPTCHA_SITE_KEY set. App Check disabled — ' +
-            'set a real reCAPTCHA site key for production deployments.',
-        );
-      }
-      return;
+    if (isNonProductionMode && !isDisabled) {
+      logger.info(
+        `App Check disabled for mode "${mode}". ` +
+          'Set PUBLIC_DISABLE_APP_CHECK=0 and register the debug token in Firebase Console to enable it.',
+      );
     }
-
-    return initializeAppCheck(app, {
-      isTokenAutoRefreshEnabled: true,
-      provider: new ReCaptchaV3Provider(recaptchaSiteKey),
-    });
+    if (!recaptchaSiteKey && !isDisabled) {
+      logger.warn(
+        'No PUBLIC_RECAPTCHA_SITE_KEY set. App Check disabled — ' +
+          'set a real reCAPTCHA site key for production deployments.',
+      );
+    }
+    return;
   } catch (error) {
     logger.warn('Failed to initialize app check', error);
     return;

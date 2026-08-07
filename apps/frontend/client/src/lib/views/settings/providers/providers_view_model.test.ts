@@ -20,9 +20,9 @@ const CONFIG_SERVICE_PATH =
 const getDefaultConfig = () => ({
   advancedOverrides: { thinkingLevel: 0 },
   text: {
-    apiKeys: {},
     provider: 'openrouter',
   },
+  connections: [],
   auxiliaryModels: {
     embedding: undefined,
     summarization: undefined,
@@ -87,11 +87,27 @@ mock.module(CONFIG_SERVICE_PATH, () => ({
     setTextApiKey: mock(() => {}),
     setTextProvider: mock(() => {}),
     setTextUrl: mock(() => {}),
-    getApiKey: mock((provider: string): string | undefined => {
-      const textState = mockConfigState.text as { apiKeys?: Record<string, string> } | undefined;
-      return textState?.apiKeys?.[provider];
+    getApiKey: mock((provider: string, capability = 'text'): string | undefined => {
+      // C-230: credentials live on connections[] — derive the provider key
+      // from its matching connection instead of the removed text.apiKeys map.
+      const connections = (mockConfigState.connections ?? []) as Array<{
+        provider: string;
+        capability?: string;
+        apiKey?: string;
+      }>;
+      const conn = connections.find(
+        (c) => (c.capability ?? 'text') === capability && c.provider === provider,
+      );
+      return conn?.apiKey || undefined;
     }),
-    updateConnection: mock(() => {}),
+    updateConnection: mock((id: string, patch: Record<string, unknown>) => {
+      // Mutate the matching connection so tests validate credential persistence.
+      const connections = mockConfigState.connections as Array<Record<string, unknown>>;
+      const conn = connections.find((c) => c.id === id);
+      if (conn) {
+        Object.assign(conn, patch);
+      }
+    }),
     setPreferredModel: mock(() => {}),
     setModels: mock(() => {}),
     updateModel: mock(() => {}),
@@ -384,10 +400,10 @@ describe('ProvidersViewModel — C-079', () => {
       expect(vm.config.image.height).toBe(1024);
     });
 
-    test('should expose apiKeys as empty by default', async () => {
+    test('should expose connections as empty by default', async () => {
       const vm = await getViewModel();
 
-      expect(vm.config.text.apiKeys).toEqual({});
+      expect(vm.config.connections).toEqual([]);
     });
 
     test('should expose models as empty array by default', async () => {

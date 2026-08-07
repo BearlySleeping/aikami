@@ -97,7 +97,12 @@ class TextTabViewModel
 
   get textUrl(): string {
     // C-230: custom URLs live on connections (baseUrl) — legacy text.url removed.
-    return this.config.connections.find((c) => (c.capability ?? 'text') === 'text')?.baseUrl ?? '';
+    // Match the ACTIVE provider so switching providers reads the right connection.
+    return (
+      this.config.connections.find(
+        (c) => (c.capability ?? 'text') === 'text' && c.provider === this.textProvider,
+      )?.baseUrl ?? ''
+    );
   }
 
   get savedKeys(): Record<string, string> {
@@ -160,7 +165,7 @@ class TextTabViewModel
             needsSave = true;
           }
           const textUrl = this.config.connections.find(
-            (c) => (c.capability ?? 'text') === 'text',
+            (c) => (c.capability ?? 'text') === 'text' && c.provider === 'ollama',
           )?.baseUrl;
           if (!textUrl) {
             this.setTextUrl('http://localhost:11434/v1');
@@ -213,12 +218,25 @@ class TextTabViewModel
   /** Legacy text-tab setter — mirrors setTextApiKey for the custom URL. */
   setTextUrl(url: string): void {
     const connection = configService.state.connections.find(
-      (c) => (c.capability ?? 'text') === 'text',
+      (c) => (c.capability ?? 'text') === 'text' && c.provider === this.textProvider,
     );
     if (connection) {
       configService.updateConnection(connection.id, { baseUrl: url });
     } else {
-      this.warn('setTextUrl:no-connection');
+      // Resolve-or-create: no connection for the active provider yet —
+      // create one so the URL (e.g. the auto-detected Ollama endpoint)
+      // is persisted instead of being dropped.
+      configService.addConnection({
+        provider: this.textProvider,
+        capability: 'text',
+        name: this._selectedProvider.label,
+        apiKey: '',
+        baseUrl: url,
+        model: '',
+        generationParams: { ...configService.state.generationParams },
+        isDefault: false,
+        source: 'stored',
+      });
     }
     this.onSaveRequested();
   }

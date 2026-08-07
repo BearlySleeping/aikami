@@ -461,13 +461,21 @@ class ConnectionManagerViewModel
     provider: string,
     capability: ConnectionCapability,
   ): string | undefined {
+    // Connection-backed keys take precedence for every capability (C-230).
+    const connectionKey = configService.getApiKey(provider, capability);
+    if (connectionKey) {
+      return connectionKey;
+    }
+    // Legacy fallbacks: image/voice keys may still live in the legacy
+    // image/voice config for backward compat.
     if (capability === 'image') {
       return configService.state.image.apiKey;
     }
     if (capability === 'voice') {
       return configService.state.voice.apiKey;
     }
-    return configService.getApiKey(provider, 'text');
+    // Text has no legacy key store — getApiKey above already covered it.
+    return undefined;
   }
 
   saveDraft(): void {

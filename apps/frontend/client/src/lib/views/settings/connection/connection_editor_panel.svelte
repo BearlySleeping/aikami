@@ -266,27 +266,39 @@ const {
                       <strong class="text-base-content/80">Windows:</strong>
                       quit Ollama from the tray → Environment Variables → add
                       <code class="text-[#00e3fd]">OLLAMA_ORIGINS</code>
-                      = <code class="text-[#00e3fd]">*</code> (or your site URL) → restart Ollama.
+                      = <code class="text-[#00e3fd]">https://aikami.bearlysleeping.com</code>
+                      → restart Ollama.
                     </li>
                     <li>
                       <strong class="text-base-content/80">macOS:</strong>
                       run
-                      <code class="text-[#00e3fd]">launchctl setenv OLLAMA_ORIGINS "*"</code>,
-                      restart the app, or start via CLI:
-                      <code class="text-[#00e3fd]">OLLAMA_ORIGINS="*" ollama serve</code>.
+                      <code class="text-[#00e3fd]"
+                        >launchctl setenv OLLAMA_ORIGINS "https://aikami.bearlysleeping.com"</code
+                      >, restart the app, or start via CLI:
+                      <code class="text-[#00e3fd]"
+                        >OLLAMA_ORIGINS="https://aikami.bearlysleeping.com" ollama serve</code
+                      >.
                     </li>
                     <li>
                       <strong class="text-base-content/80">Linux (systemd):</strong>
                       <code class="text-[#00e3fd]">sudo systemctl edit ollama.service</code>
                       → add
                       <code class="text-[#00e3fd]">[Service]</code>
-                      <code class="text-[#00e3fd]">Environment="OLLAMA_ORIGINS=*"</code>
+                      <code class="text-[#00e3fd]"
+                        >Environment="OLLAMA_ORIGINS=https://aikami.bearlysleeping.com"</code
+                      >
                       → then
                       <code class="text-[#00e3fd]"
                         >sudo systemctl daemon-reload && sudo systemctl restart ollama</code
                       >.
                     </li>
                   </ul>
+                  <p class="mt-1">
+                    <span class="text-warning">⚠ Insecure, development only:</span>
+                    <code class="text-[#00e3fd]">*</code>
+                    allows any origin — use it only for local testing, never as the default on a
+                    deployed site.
+                  </p>
                 </div>
               </div>
             </div>
