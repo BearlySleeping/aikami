@@ -10,7 +10,7 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
-    "@aikami/backend-database": "workspace:*",
+    "@aikami/backend-firestore": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",

@@ -19,5 +19,5 @@ dependsOn:
   - 'constants'
   - 'schemas'
   - 'types'
-  - 'backend-database'
+  - 'backend-firestore'
 

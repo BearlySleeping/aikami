@@ -1301,7 +1301,7 @@ export class GameOverlayService
       if (!campaignId) {
         return;
       }
-      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const { getLocalDatabase } = await import('@aikami/frontend/storage');
       const db = await getLocalDatabase();
       await db.execute({
         sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)',
@@ -1318,7 +1318,7 @@ export class GameOverlayService
    */
   private async _clearSessionMarker(): Promise<void> {
     try {
-      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const { getLocalDatabase } = await import('@aikami/frontend/storage');
       const db = await getLocalDatabase();
       await db.execute({
         sql: 'DELETE FROM meta WHERE key = ?',
@@ -1338,7 +1338,7 @@ export class GameOverlayService
    */
   async checkSessionMarker(): Promise<string | undefined> {
     try {
-      const { getLocalDatabase } = await import('@aikami/frontend/repositories');
+      const { getLocalDatabase } = await import('@aikami/frontend/storage');
       const db = await getLocalDatabase();
       const result = await db.query({
         sql: 'SELECT value FROM meta WHERE key = ?',

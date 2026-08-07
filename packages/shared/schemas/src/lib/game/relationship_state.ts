@@ -7,7 +7,7 @@
 // Contract: C-341 Add Relationships, Factions, Reputation, and Persistent Consequences
 
 import Type, { type Static } from 'typebox';
-import { CharacterRelationshipSchema } from '../database/relationship.ts';
+import { CharacterRelationshipSchema } from '../firestore/relationship.ts';
 import { FactionStandingSchema } from './faction_standing.ts';
 
 // ---------------------------------------------------------------------------

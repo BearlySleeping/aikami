@@ -1,0 +1,39 @@
+# packages/backend/firestore/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'firestore'
+  - 'firebase'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-firestore'
+  description: 'Firestore services and utilities for Firestore operations.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

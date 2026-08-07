@@ -51,8 +51,7 @@ const getEmulatorOptions = (projectId: string): AppOptions => {
   // Set emulator hosts for Firebase Admin SDK
   process.env.FIREBASE_AUTH_EMULATOR_HOST =
     process.env.FIREBASE_AUTH_EMULATOR_HOST || 'localhost:9098';
-  process.env.FIRESTORE_EMULATOR_HOST =
-    process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8081';
+  process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8081';
   process.env.GCLOUD_PROJECT = projectId;
 
   return { projectId, storageBucket: `${projectId}.firebasestorage.app` };

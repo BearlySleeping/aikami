@@ -18,7 +18,7 @@ import {
 } from '@aikami/frontend/services';
 import { NpcScheduleSchema, schemaCheck } from '@aikami/schemas';
 import type { AvailabilityStatus, NpcSchedule } from '@aikami/types';
-import { npcScheduleRepository } from './npc_schedule_repository.svelte.ts';
+import { npcScheduleStorage } from './npc_schedule_storage.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ class NpcScheduleService
       return cached;
     }
 
-    const stored = await npcScheduleRepository.getByNpcId(npcId);
+    const stored = await npcScheduleStorage.getByNpcId(npcId);
 
     if (!stored) {
       const defaultSchedule = this._createDefaultSchedule(npcId);
@@ -107,7 +107,7 @@ class NpcScheduleService
       updatedAt: new Date().toISOString(),
     };
 
-    await npcScheduleRepository.upsert({ npcId, schedule: data });
+    await npcScheduleStorage.upsert({ npcId, schedule: data });
     this._cache.set(npcId, data);
   }
 

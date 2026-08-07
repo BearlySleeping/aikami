@@ -1,0 +1,46 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
+// packages/shared/schemas/src/lib/firestore/persona.ts
+import Type, { Composite } from 'typebox';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
+import { BaseCharacterSheetSchema } from './character.ts';
+
+export const PersonaSheetSchema = Composite(BaseCharacterSheetSchema, Type.Object({}));
+
+export type PersonaSheet = Type.Static<typeof PersonaSheetSchema>;
+
+export const PersonaSchema = Composite(
+  Composite(CoreSchema, PersonaSheetSchema),
+  Type.Object({
+    avatarUrl: Type.Optional(
+      Type.String({ format: 'uri', description: 'URL of the character image' }),
+    ),
+    voiceConfigId: Type.Optional(
+      Type.String({ description: 'ID of the voice configuration for TTS' }),
+    ),
+    uid: Type.Optional(Type.String({ description: 'ID of the creator' })),
+    isActive: Type.Optional(
+      Type.Boolean({
+        description: 'Is this the active character for the current run',
+        default: false,
+      }),
+    ),
+  }),
+);
+
+export type PersonaData = Type.Static<typeof PersonaSchema>;
+
+export const PersonaCreateSchema = Type.Intersect([
+  Type.Omit(PersonaSchema, [...CoreOmitKeys]),
+  Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
+]);
+
+export type PersonaCreateData = Type.Static<typeof PersonaCreateSchema>;
+
+export const PersonaUpdateSchema = Type.Intersect([
+  Type.Omit(PersonaSchema, [...CoreOmitKeys]),
+  Type.Object(getDeletableFields(PersonaSchema as unknown as Record<string, unknown>)),
+  Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
+]);
+
+export type PersonaUpdateData = Type.Static<typeof PersonaUpdateSchema>;

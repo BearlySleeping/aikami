@@ -89,7 +89,7 @@ const _setupBarrelMock = () => {
     PersonaCreationTextStreamService: class {},
     chatService: _createServiceStub(),
     contextBuilder: _createServiceStub(),
-    conversationRepository: _createServiceStub(),
+    conversationStorage: _createServiceStub(),
     npcChatService: _createServiceStub(),
     configService: _createServiceStub(),
     ConfigService: class {},

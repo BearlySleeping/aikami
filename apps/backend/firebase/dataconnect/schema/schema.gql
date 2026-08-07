@@ -93,7 +93,7 @@ enum Visibility {
 }
 
 # Message author. Mirrors `_senderUnion` in
-# packages/shared/schemas/src/lib/database/message.ts.
+# packages/shared/schemas/src/lib/firestore/message.ts.
 enum Sender {
   USER
   AI
@@ -115,7 +115,7 @@ enum UserRole {
 }
 
 # In-app notification kind. # ND-1: the draft hinted "chat_message" | "system";
-# packages/shared/schemas/src/lib/database/notification.ts models a different
+# packages/shared/schemas/src/lib/firestore/notification.ts models a different
 # shape (ctaClicked/videoViewed). Reconcile before trusting this enum.
 enum NotificationType {
   CHAT_MESSAGE
@@ -164,14 +164,14 @@ type User @table(key: "id") {
 
   """
   Connected Google accounts. Shape validated by UserSchema in
-  packages/shared/schemas/src/lib/database/user.ts
+  packages/shared/schemas/src/lib/firestore/user.ts
   (connectedEmails: Optional(Array(String))).
   """
   connectedEmails: Any @col(name: "connected_emails")
 
   """
   Sign-in providers used by this account. Shape validated by UserSchema in
-  packages/shared/schemas/src/lib/database/user.ts; provider vocabulary from
+  packages/shared/schemas/src/lib/firestore/user.ts; provider vocabulary from
   SignInProviderSchema in packages/shared/schemas/src/lib/auth/auth.ts
   ('email' | 'google' | 'github').
   """
@@ -218,7 +218,7 @@ type Npc @table(key: "id") {
   """
   Character sheet (D&D abilities, skills, saving throws, narrative traits).
   Shape validated by NpcSheetSchema in
-  packages/shared/schemas/src/lib/database/npc.ts (extends
+  packages/shared/schemas/src/lib/firestore/npc.ts (extends
   BaseCharacterSheetSchema in database/character.ts).
   """
   stats: Any @col(name: "stats")
@@ -257,7 +257,7 @@ type Persona @table(key: "id") {
 
   """
   Persona-specific character sheet. Shape validated by PersonaSheetSchema in
-  packages/shared/schemas/src/lib/database/persona.ts (extends
+  packages/shared/schemas/src/lib/firestore/persona.ts (extends
   BaseCharacterSheetSchema in database/character.ts).
   """
   traits: Any @col(name: "traits")
@@ -319,7 +319,7 @@ type Chat @table(key: "id") @index(fields: ["uid", "lastMessageAt"]) {
 
   """
   Simplified in-chat character sheet snapshot. Shape validated by
-  ChatSchema.stats in packages/shared/schemas/src/lib/database/chat.ts
+  ChatSchema.stats in packages/shared/schemas/src/lib/firestore/chat.ts
   ({ hp?, ac?, level?, class?, abilities? }).
   """
   stats: Any @col(name: "stats")
@@ -369,14 +369,14 @@ type Message @table(key: "id") @index(fields: ["chatId", "createdAt"]) {
 
   """
   Attachments. Shape validated by MessageSchema.attachments in
-  packages/shared/schemas/src/lib/database/message.ts
+  packages/shared/schemas/src/lib/firestore/message.ts
   (Array of { type: 'image' | 'file', url, name?, mimeType?, size? }).
   """
   attachments: Any @col(name: "attachments")
 
   """
   Arbitrary per-message metadata. Shape validated by MessageSchema.metadata
-  in packages/shared/schemas/src/lib/database/message.ts
+  in packages/shared/schemas/src/lib/firestore/message.ts
   (Record<string, Unknown>).
   """
   metadata: Any @col(name: "metadata")
@@ -415,7 +415,7 @@ type Notification @table(key: "id") {
   link: String @col(name: "link")
 
   # TODO: no TypeBox schema yet — needs one before this field is trustworthy.
-  # NotificationSchema in packages/shared/schemas/src/lib/database/
+  # NotificationSchema in packages/shared/schemas/src/lib/firestore/
   # notification.ts models a different payload (ctaClicked/videoViewed
   # marketing events), not this in-app notification payload.
   data: Any @col(name: "data")
@@ -502,7 +502,7 @@ type Config @table(key: "id") {
   key: String! @col(name: "key") @unique
 
   # TODO: no TypeBox schema governs this generic key→value shape. ConfigSchema
-  # in packages/shared/schemas/src/lib/database/config.ts models a fixed
+  # in packages/shared/schemas/src/lib/firestore/config.ts models a fixed
   # per-user settings object and does NOT match an arbitrary value.
   value: Any @col(name: "value")
 }
