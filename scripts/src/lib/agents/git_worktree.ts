@@ -1,22 +1,19 @@
 // scripts/src/lib/agents/git_worktree.ts
 //
-// Git Worktree utilities used by the contract pipeline orchestrator,
-// herdr adapter, and Pi extensions. Single source of truth — do not fork.
+// Pure git primitives shared by the herdr-native worktree module
+// (scripts/src/lib/herdr/worktree.ts — THE source of truth for worktree
+// lifecycle), the contract pipeline orchestrator, and Pi extensions.
+// Do not fork; keep low-level (no herdr calls here).
+//
+// 🔴 Worktree PROVISIONING (create/bootstrap/remove via herdr) moved to
+//    scripts/src/lib/herdr/worktree.ts. The legacy provisionGitWorktree /
+//    removeWorktree / WORKSPACES_DIR were deleted when the pipeline switched
+//    to herdr-native worktrees — this file holds only git primitives now.
 
 import { execSync } from 'node:child_process';
-import {
-  appendFileSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
-import { join } from 'node:path';
 
 // ── Constants ────────────────────────────────────────────────
 
-export const WORKSPACES_DIR = '.pi/workspaces';
 export const MAX_BRANCH_NAME_LENGTH = 80;
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -34,11 +31,12 @@ const isGitExecError = (err: unknown): err is GitExecError => err instanceof Err
  * backoff: 100ms → 200ms → 400ms). Throws on any other failure.
  *
  * @param command  git subcommand and args (e.g. `"rev-parse HEAD"`)
- * @param options  cwd, env
+ * @param options  cwd, env, timeoutMs (default: none — callers that can
+ *                 stall, e.g. pushes, should pass an explicit bound)
  */
 export const runGit = (
   command: string,
-  options?: { cwd?: string; env?: Record<string, string> },
+  options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
 ): string => {
   const cmd = `git ${command}`;
 
@@ -47,11 +45,15 @@ export const runGit = (
     stdio: ['pipe', 'pipe', 'pipe'];
     cwd?: string;
     env?: Record<string, string>;
+    timeout?: number;
   } = {
     encoding: 'utf-8' as const,
     stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
     cwd: options?.cwd,
   };
+  if (options?.timeoutMs !== undefined) {
+    opts.timeout = options.timeoutMs;
+  }
   if (options?.env) {
     opts.env = { ...(process.env as Record<string, string>), ...options.env };
   }
@@ -110,261 +112,6 @@ export const isGitRepo = (cwd?: string): boolean => {
   }
 };
 
-/** Check if a git branch exists (local or remote). */
-const branchExistsLocal = (branch: string, cwd: string): boolean => {
-  try {
-    runGit(`rev-parse --verify refs/heads/${branch}`, { cwd });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/**
- * Provision a Git Worktree on a new branch.
- *
- * Creates `{repoRoot}/.pi/workspaces/{sanitizedName}` as an isolated
- * worktree on a new branch derived from `baseRevision` (default `dev`).
- * The root working copy is left untouched.
- *
- * If the worktree directory already exists (from a prior partial run),
- * returns its existing state without recreating.
- *
- * Returns the workspace path, branch name, and HEAD commit hash.
- */
-export const provisionGitWorktree = (options: {
-  repoRoot: string;
-  name: string;
-  baseRevision?: string;
-}): { workspacePath: string; branchName: string; headCommit: string } => {
-  const sanitized = sanitizeBranchName(options.name);
-  const wsDir = join(options.repoRoot, WORKSPACES_DIR, sanitized);
-  const base = options.baseRevision ?? 'dev';
-
-  mkdirSync(join(options.repoRoot, WORKSPACES_DIR), { recursive: true });
-
-  // Check if the worktree already exists (directory present with .git file)
-  const alreadyExists = existsSync(join(wsDir, '.git'));
-
-  if (!alreadyExists) {
-    // Clean up stale worktree references (directory deleted manually).
-    try {
-      runGit('worktree prune', { cwd: options.repoRoot });
-    } catch {}
-    // Generate a unique branch name. If sanitized already exists, append a
-    // short token to avoid collision.
-    let branchName = sanitized;
-    if (branchExistsLocal(branchName, options.repoRoot)) {
-      const token = Date.now().toString(36).slice(-6);
-      branchName = `${sanitized}-${token}`;
-    }
-
-    // Fetch latest from remote so the base revision is current.
-    try {
-      runGit('fetch origin', { cwd: options.repoRoot });
-    } catch {
-      // Non-fatal — may not have a remote configured.
-    }
-
-    // Resolve the base revision to a commit-ish. Try origin/<base> first,
-    // then <base> as a local ref.
-    let baseRef = `origin/${base}`;
-    try {
-      runGit(`rev-parse --verify ${baseRef}`, { cwd: options.repoRoot });
-    } catch {
-      baseRef = base;
-    }
-
-    // Create the worktree on the new branch.
-    runGit(`worktree add -b ${branchName} '${wsDir}' ${baseRef}`, {
-      cwd: options.repoRoot,
-    });
-
-    // Install dependencies so dev servers and tests can run.
-    try {
-      execSync('bun install --frozen-lockfile', {
-        cwd: wsDir,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 60_000,
-      });
-    } catch {
-      // Non-fatal — implementer can run bun install manually.
-    }
-  }
-
-  // Resolve the branch name of the worktree.
-  let branchName: string;
-  try {
-    branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsDir });
-  } catch {
-    branchName = sanitized;
-  }
-
-  // Always ensure direnv is configured — even when recovering an existing
-  // workspace. Nix Flake requires flake.nix to be Git-tracked, but
-  // .pi/workspaces/ is gitignored. Replace .envrc with a source_env
-  // pointing at the repo root.
-  try {
-    writeFileSync(
-      join(wsDir, '.envrc'),
-      `# Workspace direnv — delegate to repo root where flake.nix is Git-tracked
-source_env ${options.repoRoot}
-`,
-    );
-    execSync('direnv allow', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: wsDir,
-      timeout: 5000,
-    });
-  } catch {
-    // direnv may not be installed — not fatal.
-  }
-
-  // 🔴 Safety: mark workspace-local and auto-generated files as
-  // skip-worktree so git ignores modifications. Git worktrees use
-  // a `.git` FILE (not directory) so .git/info/exclude is unavailable.
-  // skip-worktree is the ONLY reliable mechanism here.
-  try {
-    runGit(
-      'update-index --skip-worktree .envrc .pi/settings.json .context/llms.txt docs/contracts/PROGRESS.md docs/contracts/PROMOTION.md',
-      { cwd: wsDir },
-    );
-  } catch {
-    // Non-fatal.
-  }
-
-  // Symlink .pi/npm from root so pi extensions are available.
-  const workspaceNpmDir = join(wsDir, '.pi', 'npm');
-  const rootNpmDir = join(options.repoRoot, '.pi', 'npm');
-  if (existsSync(rootNpmDir)) {
-    try {
-      mkdirSync(join(wsDir, '.pi'), { recursive: true });
-      execSync(`rm -f '${join(workspaceNpmDir, 'npm')}'`, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 5000,
-      });
-      if (existsSync(workspaceNpmDir)) {
-        const rm = join(rootNpmDir, 'node_modules');
-        const wm = join(workspaceNpmDir, 'node_modules');
-        if (existsSync(rm) && !existsSync(wm)) {
-          execSync(`ln -sfn '${rm}' '${wm}'`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            timeout: 5000,
-          });
-        }
-      } else {
-        execSync(`ln -sfn '${rootNpmDir}' '${workspaceNpmDir}'`, {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: 5000,
-        });
-      }
-    } catch {
-      /* fallback: pi auto-installs */
-    }
-  }
-
-  // Copy Pi settings from root to workspace.
-  const rootSettingsPath = join(options.repoRoot, '.pi', 'settings.json');
-  const workspaceSettingsPath = join(wsDir, '.pi', 'settings.json');
-  if (existsSync(rootSettingsPath)) {
-    try {
-      mkdirSync(join(wsDir, '.pi'), { recursive: true });
-      copyFileSync(rootSettingsPath, workspaceSettingsPath);
-    } catch {}
-  }
-
-  // Set env var so knowledge:sync scripts skip in worktrees.
-  // PROGRESS.md and PROMOTION.md are shared files that cause merge
-  // conflicts when modified in parallel contract branches.
-  // Sync should only run on main (after PR merge).
-  try {
-    const envrcPath = join(wsDir, '.envrc');
-    const existing = existsSync(envrcPath) ? readFileSync(envrcPath, 'utf-8') : '';
-    if (!existing.includes('CONTRACT_PIPELINE_WORKTREE')) {
-      appendFileSync(envrcPath, '\nexport CONTRACT_PIPELINE_WORKTREE=1\n');
-    }
-  } catch {
-    // Non-fatal.
-  }
-
-  return {
-    workspacePath: wsDir,
-    branchName,
-    headCommit: getGitHeadCommit(wsDir),
-  };
-};
-
-/**
- * Remove a Git Worktree and optionally delete its remote branch.
- * Used for both successful completions and error recovery.
- *
- * Does NOT abandon commits — git history is preserved on the branch
- * (or orphaned if the branch was never pushed).
- */
-export const removeWorktree = (options: {
-  workspacePath: string;
-  repoRoot: string;
-  branchName?: string;
-  deleteRemoteBranch?: boolean;
-}): void => {
-  // Remove the worktree (--force handles dirty state).
-  try {
-    runGit(`worktree remove '${options.workspacePath}' --force`, {
-      cwd: options.repoRoot,
-    });
-  } catch {
-    // Worktree may already be removed, or directory may not be a worktree.
-    // Fall back to rm -rf if git worktree remove fails.
-    try {
-      execSync(`rm -rf '${options.workspacePath}'`, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 5000,
-      });
-    } catch {
-      // Last resort — nothing to do.
-    }
-  }
-
-  // Optionally delete the remote branch.
-  if (options.deleteRemoteBranch && options.branchName) {
-    try {
-      runGit(`push origin --delete ${options.branchName}`, {
-        cwd: options.repoRoot,
-      });
-    } catch {
-      // Branch may not exist on remote.
-    }
-  }
-
-  // Force-delete the local branch. git worktree remove prunes the branch
-  // when it succeeds, but if the worktree was already deleted manually or
-  // the remove failed, the local branch lingers. This is the safety net.
-  if (options.branchName) {
-    try {
-      runGit(`branch -D ${options.branchName}`, {
-        cwd: options.repoRoot,
-      });
-    } catch {
-      // Branch may already be deleted.
-    }
-  }
-
-  // Clean up the local branch reference (worktree remove may leave it).
-  if (options.branchName) {
-    try {
-      runGit(`branch -D ${options.branchName}`, { cwd: options.repoRoot });
-    } catch {
-      // Branch may already be deleted.
-    }
-  }
-};
-
 /**
  * Stage all changes and commit in the given worktree.
  * Returns the new HEAD commit hash.
@@ -408,10 +155,13 @@ export const pushBranch = (options: {
   cwd: string;
   branchName: string;
   setUpstream?: boolean;
+  /** Push timeout in ms (default 180_000 — a stalled remote must not hang the caller). */
+  timeoutMs?: number;
 }): string => {
   const upstreamFlag = options.setUpstream !== false ? '-u' : '';
   runGit(`push ${upstreamFlag} origin ${options.branchName}`.trim(), {
     cwd: options.cwd,
+    timeoutMs: options.timeoutMs ?? 180_000,
   });
   return options.branchName;
 };

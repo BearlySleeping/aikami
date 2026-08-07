@@ -124,6 +124,12 @@ export type RunManifest = {
   workspaceId?: string;
   pipelinePaneId?: string;
   reviewPaneId?: string;
+  /** herdr-native worktree: workspace id (== pipeline workspace in worktree mode). */
+  worktreeWorkspaceId?: string;
+  /** herdr-native worktree: absolute checkout path (~/.herdr/worktrees/<repo>/...). */
+  worktreeCheckoutPath?: string;
+  /** herdr-native worktree: branch checked out in the worktree. */
+  worktreeBranch?: string;
   blockedReason?: string;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
