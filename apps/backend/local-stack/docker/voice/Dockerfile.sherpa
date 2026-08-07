@@ -1,0 +1,32 @@
+# apps/backend/local-stack/docker/voice/Dockerfile.sherpa
+# Dedicated lightweight C++ STT/TTS container based on sherpa-onnx.
+#
+# The `sherpa-onnx` pip wheel bundles the native C++ binaries (including
+# sherpa-onnx-offline-websocket-server) — no PyTorch, no CUDA, no heavy
+# Python ML stack at runtime.
+#
+# Models are bind-mounted from the host at /models/tts and /models/stt
+# (see docker-compose.yml). docker/voice/entrypoint.sh auto-downloads the
+# default Kokoro TTS model on first start.
+#
+# ── Build context ──────────────────────────────────────────────────────────
+# docker/voice (`.` in docker-compose.yml).
+
+FROM python:3.11-slim
+
+# sherpa-onnx is manylinux — prebuilt wheels, no compilation needed.
+# Pinned for reproducible builds; bump with the upstream release cadence.
+ARG SHERPA_ONNX_VERSION=1.13.4
+RUN pip install --no-cache-dir "sherpa-onnx==${SHERPA_ONNX_VERSION}"
+
+# Entrypoint: model auto-download + TTS websocket server supervisor
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV TTS_PORT=6006 \
+    STT_PORT=6007 \
+    ENABLE_STT=false
+
+EXPOSE 6006 6007
+
+ENTRYPOINT ["/entrypoint.sh"]

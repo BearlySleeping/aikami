@@ -1,0 +1,23 @@
+# apps/backend/local-stack/.dockerignore
+# Root .dockerignore — the local-stack images NEVER receive the monorepo
+# source. The client is built on the host (bun run build:production, see
+# apps/backend/local-stack/package.json) and only its static output is
+# packaged into the container.
+#
+# Deny everything, then re-include exactly what the Dockerfiles COPY:
+#   • apps/frontend/client/build/    — prebuilt SPA output
+#   • apps/backend/local-stack/      — Dockerfiles, entrypoints, compose files
+#   • apps/frontend/hub/build/       — hub's prebuilt output (CI compatibility)
+*
+!apps/
+!apps/frontend/
+!apps/frontend/client/
+!apps/frontend/client/build/
+!apps/backend/
+!apps/backend/local-stack/
+!apps/frontend/hub/
+!apps/frontend/hub/build/
+!apps/frontend/hub/start.js
+
+# Local model store is bind-mounted at runtime — never in a build context
+apps/backend/local-stack/models/

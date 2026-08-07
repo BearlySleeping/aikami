@@ -1,0 +1,81 @@
+# apps/backend/local-stack/docker-compose.yml
+# Modular, profile-based multi-container stack for the Aikami local AI engines.
+#
+# Profiles:
+#   (default)  -> client only (aikami-app)
+#   --profile text   -> + Local LLM engine (shimmy / llama.cpp)
+#   --profile vision -> + Headless ComfyUI image engine
+#   --profile voice  -> + C++ sherpa-onnx STT/TTS engine
+#   --profile full   -> everything (text + vision + voice + client)
+#
+# Build contexts are self-contained (this directory / docker/voice) — the
+# client SPA is built on the host and staged into .build/client first
+# (`bun run build:client`); the monorepo source never enters a build context.
+#
+# GPU: text-engine and image-engine request all available NVIDIA GPUs via the
+# compose `deploy` schema. Install nvidia-container-toolkit on the host and
+# remove the `deploy` blocks if you want CPU-only inference.
+version: "3.8"
+
+services:
+  # App / Frontend Orchestrator
+  aikami-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    ports:
+      - "3000:3000"
+    environment:
+      - LLM_ENDPOINT=http://text-engine:8080/v1
+      - IMAGE_ENDPOINT=http://image-engine:8188
+      - VOICE_ENDPOINT=ws://voice-engine:6006
+    restart: unless-stopped
+
+  # Local LLM Text Engine
+  text-engine:
+    profiles: ["text", "full"]
+    image: ghcr.io/michael-a-kuykendall/shimmy:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # Point shimmy at the bind-mounted model store and expose OpenAI API on 8080
+      - SHIMMY_BASE_GGUF=/models
+      - SHIMMY_PORT=8080
+      - SHIMMY_HOST=0.0.0.0
+    volumes:
+      - ./models/llm:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Headless ComfyUI Image Engine
+  image-engine:
+    profiles: ["vision", "full"]
+    image: comfyui/comfyui:latest
+    ports:
+      - "8188:8188"
+    volumes:
+      - ./models/image:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # C++ Native Sherpa-ONNX Voice Engine (TTS + STT)
+  voice-engine:
+    profiles: ["voice", "full"]
+    build:
+      context: ./docker/voice
+      dockerfile: Dockerfile.sherpa
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./models/tts:/models/tts
+      - ./models/stt:/models/stt

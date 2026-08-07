@@ -1,0 +1,20 @@
+# apps/backend/local-stack/docker-compose.lite.yml
+# Minimal client-only compose configuration.
+# Builds and runs just the Aikami client UI container against whatever AI
+# engines are already running on the host (or none at all).
+
+services:
+  aikami-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    ports:
+      - "3000:3000"
+    environment:
+      # Informational — engine endpoints are baked into the SPA at build time
+      # by `bun run build:client` (override with LLM_ENDPOINT/IMAGE_ENDPOINT/
+      # VOICE_ENDPOINT env vars, see README).
+      - LLM_ENDPOINT=http://localhost:8080/v1
+      - IMAGE_ENDPOINT=http://localhost:8188
+      - VOICE_ENDPOINT=ws://localhost:6006
+    restart: unless-stopped

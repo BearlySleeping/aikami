@@ -1,0 +1,30 @@
+{
+  "name": "@aikami/local-stack",
+  "license": "MIT",
+  "type": "module",
+  "description": "Docker Compose profiles, Ultimate single container, and Native Host Binary launchers for the local AI engine stack.",
+  "scripts": {
+    "lint": "true",
+    "format": "true",
+    "typecheck": "true",
+    "fix": "true",
+    "up": "docker compose up -d",
+    "up:full": "docker compose --profile full up -d",
+    "up:voice": "docker compose --profile voice up -d",
+    "up:lite": "docker compose -f docker-compose.lite.yml up -d",
+    "down": "docker compose down",
+    "down:full": "docker compose --profile full down",
+    "logs": "docker compose logs -f",
+    "build": "bun run build:client && docker compose build",
+    "build:client": "cd ../../frontend/client && PUBLIC_OLLAMA_BASE_URL=${LLM_ENDPOINT:-http://localhost:8080/v1} PUBLIC_IMAGE_URL=${IMAGE_ENDPOINT:-http://localhost:8188} PUBLIC_VOICE_URL=${VOICE_ENDPOINT:-ws://localhost:6006} bun run build:${CLIENT_MODE:-production} && bun run stage:client",
+    "stage:client": "rm -rf .build/client && mkdir -p .build && cp -a ../../frontend/client/build .build/client",
+    "build:client:docker": "bun run build:client && docker build -f Dockerfile.client -t aikami-client .",
+    "build:ultimate": "bun run build:client && docker build -f Dockerfile.ultimate -t aikami-ultimate .",
+    "run:native-tts": "bash bin/run-native-tts.sh",
+    "run:native-stt": "bash bin/run-native-stt.sh",
+    "run:native-llm": "bash bin/run-native-llm.sh",
+    "test": "true"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

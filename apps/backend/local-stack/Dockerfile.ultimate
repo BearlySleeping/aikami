@@ -1,0 +1,73 @@
+# apps/backend/local-stack/Dockerfile.ultimate
+# Single all-in-one container: Models + Runtimes + Client.
+#
+# Bundles:
+#   • shimmy (llama.cpp OpenAI-compatible LLM server) — from the official image
+#   • sherpa-onnx C++ TTS/STT websocket servers
+#   • Bun runtime + the PREBUILT Aikami client SPA (staged in .build/client)
+#
+# The client is built on the host first (`bun run build:client`), then only
+# its static output is copied in — the monorepo source never enters the image.
+# The container entrypoint (docker/scripts/entrypoint-ultimate.sh) auto-
+# downloads default models into /models on first start and supervises the
+# voice / text / client processes.
+#
+# ── Build context ──────────────────────────────────────────────────────────
+# This directory (`.`) — `docker build -f Dockerfile.ultimate -t aikami-ultimate .`
+
+# ghcr.io/michael-a-kuykendall/shimmy is debian:bookworm-slim with the shimmy
+# binary at /usr/local/bin/shimmy (llama.cpp server + OpenAI-compatible API).
+FROM ghcr.io/michael-a-kuykendall/shimmy:latest
+
+# The shimmy image runs as non-root uid 999; switch to root for the system
+# install steps (apt, Bun installer, /opt extraction). Runtime stays root so
+# the entrypoint can download models into bind-mounted /models regardless of
+# host ownership — standard for local AI engine containers.
+USER root
+
+ARG SHERPA_ONNX_VERSION=1.13.4
+ENV SHERPA_ONNX_VERSION=${SHERPA_ONNX_VERSION}
+
+# Runtime tooling: curl (model downloads), unzip (Bun installer), bzip2 (sherpa tarball)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        unzip \
+        bzip2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Bun (runs the client static server via `bun run start`)
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Install sherpa-onnx C++ binaries (offline TTS/STT websocket servers)
+RUN curl -fsSL -o /tmp/sherpa-onnx.tar.bz2 \
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_ONNX_VERSION}/sherpa-onnx-v${SHERPA_ONNX_VERSION}-linux-x64-shared.tar.bz2" \
+    && mkdir -p /opt/sherpa-onnx \
+    && tar xjf /tmp/sherpa-onnx.tar.bz2 -C /opt/sherpa-onnx --strip-components=1 \
+    && rm -f /tmp/sherpa-onnx.tar.bz2
+ENV PATH="/opt/sherpa-onnx/bin:${PATH}" \
+    LD_LIBRARY_PATH="/opt/sherpa-onnx/lib:${LD_LIBRARY_PATH:-}"
+
+# Client runtime (prebuilt SPA + tiny Bun static server)
+WORKDIR /app
+COPY .build/client /app/build
+COPY docker/runtime/package.json /app/package.json
+COPY docker/runtime/client-server.ts /app/client-server.ts
+
+# Model store (bind-mount or let the entrypoint download into it)
+RUN mkdir -p /models/llm /models/image /models/tts /models/stt
+
+# Auto-model downloader & multi-process supervisor
+COPY docker/scripts/entrypoint-ultimate.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV ENABLE_VOICE=true \
+    ENABLE_TEXT=true \
+    CLIENT_PORT=3000 \
+    TEXT_PORT=8080 \
+    VOICE_PORT=6006
+
+EXPOSE 3000 6006 8080
+
+ENTRYPOINT ["/entrypoint.sh"]
