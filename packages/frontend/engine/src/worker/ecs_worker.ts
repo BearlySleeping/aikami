@@ -11,8 +11,9 @@ import {
   set,
 } from 'bitecs';
 import { logger } from '$logger';
-import type { SpawnPointEntity, TransitionZone } from '../assets/map_loader.ts';
+import { djb2Hash, type SpawnPointEntity, type TransitionZone } from '../assets/map_loader.ts';
 import {
+  Appearance,
   DEFAULT_BODY_LAYER_ID,
   getAppearanceLayers,
   type LpcLayerRecipe,
@@ -31,7 +32,10 @@ import {
 } from '../components/engine_state.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
-import { registerInteractableStateObservers } from '../components/interactable_state.ts';
+import {
+  type InteractableStateMap,
+  registerInteractableStateObservers,
+} from '../components/interactable_state.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
 import { registerMoveIntentObservers } from '../components/move_intent.ts';
@@ -55,7 +59,11 @@ import { createPlayer, type PlayerCreateOptions } from '../entities/create_playe
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
 
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
-import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
+import {
+  deserializeWorld,
+  serializePlayer,
+  serializeWorld,
+} from '../serialization/ecs_serializer.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
 import {
   endDialogueZoom,
@@ -1303,6 +1311,30 @@ const serializeEntityStates = (_w: World, view: Float32Array): void => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Copies every SoA field of a component from one entity to another.
+ *
+ * Used by RESTORE_PLAYER to merge a deserialized player payload onto the
+ * live player entity without recreating the entity.
+ *
+ * @param component - The SoA component object (e.g. `Position`).
+ * @param fromEid - Source entity.
+ * @param toEid - Destination entity.
+ */
+const copyComponentSoA = (
+  component: Record<string, Array<unknown>>,
+  fromEid: number,
+  toEid: number,
+): void => {
+  for (const field of Object.keys(component)) {
+    const source = component[field] as Array<unknown>;
+    const value = source[fromEid];
+    if (value !== undefined) {
+      (component[field] as Array<unknown>)[toEid] = value;
+    }
+  }
+};
+
+/**
  * Resolves a target spawn hash to pixel coordinates using a temporary
  * staging world.
  *
@@ -1455,7 +1487,16 @@ self.onmessage = (event: MessageEvent): void => {
           break;
         }
         try {
-          const payload = serializeWorld(world);
+          // Player-scoped by default: the map file is the source of truth for
+          // world entities, so saves only need the player's own state.
+          // When no map block can be produced (e.g. early-boot autosave race),
+          // the save requests a full-world snapshot so the legacy restore path
+          // can still reconstruct the world.
+          const scope = message.scope === 'world' ? 'world' : 'player';
+          const payload =
+            scope === 'world'
+              ? serializeWorld(world)
+              : serializePlayer(world, playerEntityId > 0 ? playerEntityId : 1);
           postMessage({ type: 'SNAPSHOT_RESPONSE', payload });
         } catch (err) {
           postMessage({
@@ -1463,6 +1504,75 @@ self.onmessage = (event: MessageEvent): void => {
             payload: undefined,
             error: err instanceof Error ? err.message : String(err),
           });
+        }
+        break;
+      }
+
+      case 'RESTORE_PLAYER': {
+        if (!world) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: 'Cannot restore player: world not initialized',
+          });
+          break;
+        }
+
+        // ── Map-authoritative restore: apply the player snapshot onto the
+        // existing world (which was just rebuilt via LOAD_MAP). Does NOT
+        // clear entities or re-spawn zones — the map load already did that. ──
+        const wasRunning = running;
+        stopTickLoop();
+        try {
+          const payload = message.payload as string;
+          const eidMap = deserializeWorld(world, payload);
+
+          // The snapshot carries a single entity (the player). Take its
+          // restored data and merge it onto the live player entity.
+          let restoredEid: number | undefined;
+          for (const [, newEid] of eidMap) {
+            restoredEid = newEid;
+            break;
+          }
+
+          if (restoredEid === undefined) {
+            postMessage({ type: 'ENGINE_ERROR', message: 'RESTORE_PLAYER: empty snapshot' });
+            break;
+          }
+
+          if (playerEntityId > 0 && playerEntityId !== restoredEid) {
+            // Copy persistent components from the temp entity to the player,
+            // then discard the temp entity.
+            copyComponentSoA(Position, restoredEid, playerEntityId);
+            copyComponentSoA(Appearance, restoredEid, playerEntityId);
+            copyComponentSoA(CombatStats, restoredEid, playerEntityId);
+            copyComponentSoA(Visual, restoredEid, playerEntityId);
+            incrementEntityGeneration(restoredEid);
+            removeEntity(world, restoredEid);
+          } else {
+            // No player yet — adopt the restored entity as the player.
+            playerEntityId = restoredEid;
+            addComponent(world, restoredEid, CameraFocus);
+          }
+
+          // Snap the camera to the restored position and refresh the
+          // player's LPC textures immediately. _refreshPlayerAppearance
+          // applies the C-370 body-layer fallback before emitting.
+          const px = Position.x[playerEntityId] ?? 0;
+          const py = Position.y[playerEntityId] ?? 0;
+          postMessage({ type: 'CAMERA_SNAP', x: px, y: py });
+
+          _refreshPlayerAppearance(playerEntityId);
+
+          postMessage({ type: 'ENGINE_READY' });
+        } catch (err) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: `Restore player failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        } finally {
+          if (wasRunning) {
+            startTickLoop();
+          }
         }
         break;
       }
@@ -1652,27 +1762,44 @@ self.onmessage = (event: MessageEvent): void => {
             targetX,
             targetY,
             targetSpawnHash,
+            defaultSpawnHash,
             defeatedEnemies,
             collectedPickups,
             interactableStates,
             spawnPointEntities,
             disableClamping,
+            mapId,
           } = message;
 
           // ── C-172: Resolve spawn coordinates ──
-          // If a targetSpawnHash is provided, resolve it via a staging world.
-          // Otherwise fall back to targetX/targetY.
+          // Resolution chain (each step a fallback):
+          //   1. targetSpawnHash (portal's targetSpawnId, e.g. 'shop_entrance')
+          //   2. defaultSpawnHash (destination map's manifest defaultSpawnId)
+          //   3. targetX/targetY (hardcoded portal fallback)
+          // The walkability clamp below runs last and repositions onto
+          // walkable terrain if the resolved point is blocked.
           let resolvedX = targetX as number;
           let resolvedY = targetY as number;
 
-          if (typeof targetSpawnHash === 'number' && targetSpawnHash > 0) {
-            const resolved = _resolveSpawnInStaging(
-              spawnPointEntities as SpawnPointEntity[] | undefined,
-              targetSpawnHash,
-            );
+          const markers = spawnPointEntities as SpawnPointEntity[] | undefined;
+          const spawnCandidates: Array<{ hash: unknown; label: string }> = [
+            { hash: targetSpawnHash, label: 'targetSpawnHash' },
+            { hash: defaultSpawnHash, label: 'defaultSpawnHash' },
+          ];
+
+          for (const candidate of spawnCandidates) {
+            if (typeof candidate.hash !== 'number' || candidate.hash <= 0) {
+              continue;
+            }
+            const resolved = _resolveSpawnInStaging(markers, candidate.hash);
             if (resolved) {
+              logger.debug(
+                'LOAD_MAP',
+                `spawn resolved via ${candidate.label} ${candidate.hash} -> (${resolved.x},${resolved.y})`,
+              );
               resolvedX = resolved.x;
               resolvedY = resolved.y;
+              break;
             }
           }
 
@@ -1705,18 +1832,7 @@ self.onmessage = (event: MessageEvent): void => {
             spawnPoints,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
             collectedPickups: collectedPickups as string[] | undefined,
-            interactableStates: interactableStates as
-              | Record<
-                  string,
-                  {
-                    isOpen?: boolean;
-                    isLocked?: boolean;
-                    isLooted?: boolean;
-                    isToggled?: boolean;
-                    isTriggered?: boolean;
-                  }
-                >
-              | undefined,
+            interactableStates: interactableStates as InteractableStateMap | undefined,
           });
 
           // 4. Spawn transition zone trigger entities
@@ -1907,10 +2023,15 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           // ── C-194: Hydrate the new active zone ──
-          // Derive a zone entity ID from the map pixel dimensions
-          // (deterministic hash for the active sector).
+          // Derive a zone entity ID from the stable map id string so
+          // same-sized maps (inn vs merchant_shop, both 512×384) do not
+          // collide to the same zone entity. The hash is constrained to the
+          // valid bitECS entity range (< MAX_ENTITIES) with a nonzero guard.
           const newZoneEid =
-            ((mapPixelWidth as number) * 31 + (mapPixelHeight as number) * 17) & 0x7fffffff;
+            typeof mapId === 'string' && mapId.length > 0
+              ? djb2Hash(mapId) % MAX_ENTITIES || 1
+              : ((mapPixelWidth as number) * 31 + (mapPixelHeight as number) * 17) % MAX_ENTITIES ||
+                1;
           _activeZoneEntityId = newZoneEid;
           hydrateZone(world, newZoneEid, {
             zonePixelOriginX: 0,

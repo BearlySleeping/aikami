@@ -158,6 +158,51 @@
           ]
         },
         {
+          "id": 7,
+          "type": "spawn",
+          "x": 64,
+          "y": 336,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "spawnId",
+              "type": "string",
+              "value": "from_merchant"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "spawn",
+          "x": 576,
+          "y": 336,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "spawnId",
+              "type": "string",
+              "value": "from_inn"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "type": "spawn",
+          "x": 320,
+          "y": 560,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "spawnId",
+              "type": "string",
+              "value": "village_gate"
+            }
+          ]
+        },
+        {
           "id": 4,
           "type": "prop",
           "x": 320,
@@ -211,6 +256,11 @@
               "name": "targetY",
               "type": "float",
               "value": 192
+            },
+            {
+              "name": "targetSpawnId",
+              "type": "string",
+              "value": "shop_entrance"
             }
           ]
         },
@@ -236,6 +286,11 @@
               "name": "targetY",
               "type": "float",
               "value": 192
+            },
+            {
+              "name": "targetSpawnId",
+              "type": "string",
+              "value": "inn_entrance"
             }
           ]
         }

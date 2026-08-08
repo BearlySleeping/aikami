@@ -99,12 +99,17 @@ describe('GameSaveService (C-334)', () => {
     expect(service.availableSaves).toEqual([]);
   });
 
-  // ── AC-1/AC-2: saveGame writes v2 envelope ─────────────────────────
+  // ── AC-1/AC-2: saveGame writes v3 envelope ─────────────────────────
 
-  test('saveGame should write v2 envelope with version, checksum, and metadata', async () => {
+  test('saveGame should write v3 envelope with version, checksum, and metadata', async () => {
     const service = await getService(bridge);
 
-    await service.saveGame({ slotId: 'manual-1', campaignId: 'camp-c1', mapName: 'Forest' });
+    await service.saveGame({
+      slotId: 'manual-1',
+      campaignId: 'camp-c1',
+      mapName: 'Forest',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 160, playerY: 192 },
+    });
 
     expect(mockSnapshotCalls).toBe(1);
     expect(service.isSaving).toBe(false);
@@ -146,11 +151,16 @@ describe('GameSaveService (C-334)', () => {
 
   // ── AC-3: loadGame restores from save ──────────────────────────────
 
-  test('loadGame should restore from a v2 save with checksum validation', async () => {
+  test('loadGame should restore from a v3 save with checksum validation', async () => {
     const service = await getService(bridge);
 
-    // Save first (creates v2 envelope with checksum)
-    await service.saveGame({ slotId: 'test-slot', campaignId: 'camp-1', mapName: 'TestMap' });
+    // Save first (creates v3 envelope with checksum)
+    await service.saveGame({
+      slotId: 'test-slot',
+      campaignId: 'camp-1',
+      mapName: 'TestMap',
+      map: { packId: 'emberwatch', mapId: 'inn', playerX: 256, playerY: 344 },
+    });
 
     // Reset bridge counters
     resetMockBridge();
@@ -162,6 +172,31 @@ describe('GameSaveService (C-334)', () => {
     expect(service.isLoading).toBe(false);
   });
 
+  test('loadGame should still accept a v2 payload (no map block)', async () => {
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
+    const db = await getLocalDatabase();
+    // Build a valid v2 envelope: checksum over { ecsSnapshot, serviceSnapshots } only
+    const v2Data = JSON.stringify({ ecsSnapshot: MOCK_SNAPSHOT_PAYLOAD, serviceSnapshots: [] });
+    const { sha256 } = await import('./game_save_service.svelte');
+    const checksum = await sha256(v2Data);
+    const v2Payload = JSON.stringify({
+      version: 2,
+      checksum,
+      ecsSnapshot: MOCK_SNAPSHOT_PAYLOAD,
+      serviceSnapshots: [],
+      savedAt: new Date().toISOString(),
+    });
+    await db.execute({
+      sql: 'INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)',
+      args: ['aikami_save_v2legacy', 'v2legacy', 'camp-1', Date.now(), 'OldMap', v2Payload],
+    });
+
+    const service = await getService(bridge);
+
+    await service.loadGame('v2legacy');
+    expect(mockRestoreCalls).toBe(1);
+  });
+
   test('loadGame should throw when save is not found', async () => {
     const service = await getService(bridge);
 
@@ -170,15 +205,16 @@ describe('GameSaveService (C-334)', () => {
 
   // ── AC-4: Corruption detection ─────────────────────────────────────
 
-  test('loadGame should detect corrupted v2 payload (checksum mismatch)', async () => {
-    // Pre-populate with a tampered v2 payload (correct version, wrong checksum)
+  test('loadGame should detect corrupted v3 payload (checksum mismatch)', async () => {
+    // Pre-populate with a tampered v3 payload (correct version, wrong checksum)
     const { getLocalDatabase } = await import('@aikami/frontend/storage');
     const db = await getLocalDatabase();
     const tamperedPayload = JSON.stringify({
-      version: 2,
+      version: 3,
       checksum: '0000000000000000000000000000000000000000000000000000000000000000',
       ecsSnapshot: MOCK_SNAPSHOT_PAYLOAD,
       serviceSnapshots: [],
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 1, playerY: 2 },
       savedAt: new Date().toISOString(),
     });
     await db.execute({
@@ -247,9 +283,9 @@ describe('GameSaveService (C-334)', () => {
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
 
-    // Should be valid JSON with v2 envelope
+    // Should be valid JSON with v3 envelope
     const parsed = JSON.parse(payload);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(typeof parsed.checksum).toBe('string');
     expect(parsed.checksum.length).toBe(64); // SHA-256 hex
   });
@@ -323,7 +359,33 @@ describe('GameSaveService (C-334)', () => {
     expect(hash.length).toBe(64);
   });
 
-  // ── parseSavePayloadEnvelope v2 ────────────────────────────────────
+  // ── parseSavePayloadEnvelope v3 ────────────────────────────────────
+
+  test('parseSavePayloadEnvelope should surface map block for v3 payload', async () => {
+    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+
+    const raw = JSON.stringify({
+      version: 3,
+      checksum: 'abc123',
+      ecsSnapshot: '{"entities":[]}',
+      serviceSnapshots: [{ serviceKey: 'test', data: {} }],
+      map: { packId: 'emberwatch', mapId: 'merchant_shop', playerX: 256, playerY: 344 },
+      savedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = parseSavePayloadEnvelope(raw);
+    expect(result.ecsSnapshot).toBe('{"entities":[]}');
+    expect(result.version).toBe(3);
+    expect(result.storedChecksum).toBe('abc123');
+    expect(result.checksumValid).toBe(false); // caller must validate async
+    expect(result.serviceSnapshots).toHaveLength(1);
+    expect(result.map).toEqual({
+      packId: 'emberwatch',
+      mapId: 'merchant_shop',
+      playerX: 256,
+      playerY: 344,
+    });
+  });
 
   test('parseSavePayloadEnvelope should handle v2 payload', async () => {
     const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
@@ -342,6 +404,45 @@ describe('GameSaveService (C-334)', () => {
     expect(result.storedChecksum).toBe('abc123');
     expect(result.checksumValid).toBe(false); // caller must validate async
     expect(result.serviceSnapshots).toHaveLength(1);
+  });
+
+  test('validateEnvelopeChecksum should be version-aware (v3 includes map, v2 does not)', async () => {
+    const { validateEnvelopeChecksum } = await import('./game_save_service.svelte');
+    const ecsSnapshot = '{"entities":[1]}';
+    const serviceSnapshots = [];
+    const map = { packId: 'emberwatch', mapId: 'village', playerX: 10, playerY: 20 };
+
+    // v3 digest includes the map block
+    const v3Data = JSON.stringify({ ecsSnapshot, serviceSnapshots, map });
+    const v3Checksum = await sha256(v3Data);
+    const v3Valid = await validateEnvelopeChecksum({
+      ecsSnapshot,
+      serviceSnapshots,
+      map,
+      storedChecksum: v3Checksum,
+      version: 3,
+    });
+    expect(v3Valid).toBe(true);
+
+    // The same checksum must NOT validate for v2 (different digest shape)
+    const v2Valid = await validateEnvelopeChecksum({
+      ecsSnapshot,
+      serviceSnapshots,
+      storedChecksum: v3Checksum,
+      version: 2,
+    });
+    expect(v2Valid).toBe(false);
+
+    // v2 digest without the map block validates against its own checksum
+    const v2Data = JSON.stringify({ ecsSnapshot, serviceSnapshots });
+    const v2Checksum = await sha256(v2Data);
+    const v2ValidOk = await validateEnvelopeChecksum({
+      ecsSnapshot,
+      serviceSnapshots,
+      storedChecksum: v2Checksum,
+      version: 2,
+    });
+    expect(v2ValidOk).toBe(true);
   });
 
   test('parseSavePayloadEnvelope should handle v1 payload', async () => {

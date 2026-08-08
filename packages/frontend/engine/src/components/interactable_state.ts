@@ -41,6 +41,24 @@ export type InteractableStateData = {
   lootTableKey?: number;
 };
 
+/**
+ * Per-spawnId interactable persistence map (C-342).
+ *
+ * Maps a Tiled spawn point ID to its persisted door/chest/lever state.
+ * Passed through loadMap → LOAD_MAP so interactables restore their state
+ * when a map is rebuilt (authoritative source: worldStateService).
+ */
+export type InteractableStateMap = Record<
+  string,
+  {
+    isOpen?: boolean;
+    isLocked?: boolean;
+    isLooted?: boolean;
+    isToggled?: boolean;
+    isTriggered?: boolean;
+  }
+>;
+
 /** Loot table index lookup — resolves string keys to integer handles. */
 export type LootTableRegistry = Map<string, number>;
 

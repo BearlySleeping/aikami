@@ -11,6 +11,7 @@ import {
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
+import type { InteractableStateMap } from './components/interactable_state.ts';
 import {
   BUFFER_SIZE,
   COMPONENT_STRIDE,
@@ -238,6 +239,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Lazily-loaded Vite `?worker` constructor (see module top comment). */
   private _workerConstructor: EcsWorkerConstructor | undefined;
+  /** Set by destroy() so in-flight async init paths can abort early. */
+  private _disposed = false;
 
   /** Resolves layer IDs to LPC layer recipes. */
   private readonly _recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
@@ -557,6 +560,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   destroy(): void {
     // Diagnostic: trace who calls destroy
     this.error('[GameWorld] destroy:called', { stack: new Error().stack });
+    // Flag disposal so in-flight async init paths (worker import) abort
+    this._disposed = true;
     // Stop the render loop
     this._running = false;
 
@@ -1354,12 +1359,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _setupSnapshotHandlers(): void {
     const bridgeWithHandlers = this._bridge as unknown as {
-      setSnapshotHandler: (handler: () => Promise<string>) => void;
+      setSnapshotHandler: (handler: (scope?: 'player' | 'world') => Promise<string>) => void;
       setRestoreHandler: (handler: (snapshot: string) => Promise<void>) => void;
     };
 
     if (typeof bridgeWithHandlers.setSnapshotHandler === 'function') {
-      bridgeWithHandlers.setSnapshotHandler(() => this.snapshotWorld());
+      bridgeWithHandlers.setSnapshotHandler((scope?: 'player' | 'world') =>
+        this.snapshotWorld(scope),
+      );
     }
 
     if (typeof bridgeWithHandlers.setRestoreHandler === 'function') {
@@ -1745,15 +1752,38 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
+   * Returns the player's current world-space pixel position, or undefined
+   * if the engine has not booted yet.
+   *
+   * Used by the save pipeline to persist exact coordinates in the envelope
+   * map block (v3+). Reads the active render buffer directly.
+   */
+  getPlayerPosition(): { x: number; y: number } | undefined {
+    if (!this._activeRenderView || this._playerEntityId <= 0) {
+      return undefined;
+    }
+    const offset = this._playerEntityId * COMPONENT_STRIDE;
+    const x = this._activeRenderView[offset];
+    const y = this._activeRenderView[offset + 1];
+    if (x === undefined || y === undefined || (x === 0 && y === 0)) {
+      return undefined;
+    }
+    return { x, y };
+  }
+
+  /**
    * Requests a serialized ECS snapshot from the worker.
    *
    * Posts a REQUEST_SNAPSHOT message to the worker and returns a promise
    * that resolves with the JSON payload string. Rejects if the worker
    * is not running or the snapshot fails.
    *
+   * @param scope - 'player' (default) serializes only the player entity
+   *   (map-authoritative saves). 'world' serializes the full ECS world
+   *   (legacy/fallback saves without a map block).
    * @returns The serialized ECS world state as a JSON string.
    */
-  snapshotWorld(): Promise<string> {
+  snapshotWorld(scope: 'player' | 'world' = 'player'): Promise<string> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
         reject(new Error('Worker not running — cannot snapshot'));
@@ -1777,7 +1807,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       };
 
       this._worker.addEventListener('message', handler);
-      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT' });
+      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT', scope });
     });
   }
 
@@ -1860,6 +1890,79 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
+   * Applies a player-scoped ECS snapshot onto the live world.
+   *
+   * Used by the map-authoritative restore pipeline: the world is rebuilt
+   * from the saved map via {@link loadMap} (which spawns NPCs, props,
+   * portals, and collision), then this method merges the player's saved
+   * Position/Appearance/CombatStats/Visual onto the existing player
+   * entity — without clearing the freshly spawned world.
+   *
+   * Unlike {@link restoreWorld}, render entries are preserved: the player's
+   * display object survives and is repositioned by the worker's next
+   * STATE_UPDATE + the CAMERA_SNAP message.
+   *
+   * @param payload - A player-scoped ECS snapshot JSON string.
+   * @throws If the worker is not running or the restore fails.
+   */
+  restorePlayer(payload: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this._worker) {
+        reject(new Error('Worker not running — cannot restore player'));
+        return;
+      }
+
+      // ═══ Timeout: 15s max wait for worker response ═══
+      const RestoreTimeoutMs = 15_000;
+      let settled = false;
+
+      const finish = (fn: () => void): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        this._worker?.removeEventListener('message', handler);
+        this._pendingWorkerReject = undefined;
+        fn();
+      };
+
+      const timeout = setTimeout(() => {
+        this.error('restorePlayer:timeout', { timeoutMs: RestoreTimeoutMs });
+        finish(() =>
+          reject(
+            new Error(
+              'Worker did not respond to RESTORE_PLAYER within 15s — worker may have crashed',
+            ),
+          ),
+        );
+      }, RestoreTimeoutMs);
+
+      this._pendingWorkerReject = (reason: Error): void => {
+        finish(() => reject(reason));
+      };
+
+      const handler = (event: MessageEvent): void => {
+        const message = event.data;
+
+        if (message.type === 'ENGINE_ERROR') {
+          finish(() => reject(new Error(message.message as string)));
+          return;
+        }
+
+        if (message.type !== 'ENGINE_READY') {
+          return;
+        }
+
+        finish(() => resolve());
+      };
+
+      this._worker.addEventListener('message', handler);
+      this._worker.postMessage({ type: 'RESTORE_PLAYER', payload });
+    });
+  }
+
+  /**
    * Loads a new map at the given URL and places the player at the target
    * coordinates. Orchestrates the full map transition lifecycle:
    *
@@ -1881,6 +1984,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param options.defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
    * @param options.collectedPickups - Array of collected item pickup spawn IDs to suppress (C-331).
    * @param options.targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
+   * @param options.defaultSpawnHash - Numeric hash of the destination map's manifest
+   *   `defaultSpawnId`. Used as a fallback when targetSpawnHash is absent (C-172 resolution chain).
    * @param options.disableClamping - Bypass viewport boundary clamping for visual testing (C-199).
    * @throws If the worker is not running or the map fails to load.
    *
@@ -1892,17 +1997,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
+    defaultSpawnHash?: number;
     disableClamping?: boolean;
     /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
     waterGids?: Set<number>;
@@ -1915,6 +2012,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       collectedPickups,
       interactableStates,
       targetSpawnHash,
+      defaultSpawnHash,
       disableClamping,
       waterGids,
     } = options;
@@ -1958,6 +2056,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       const mapPixelWidth = tilemap.width * tilemap.tilewidth;
       const mapPixelHeight = tilemap.height * tilemap.tileheight;
+
+      // Stable map id for the worker (zone entity derivation — C-194 fix):
+      // same filename → same id, regardless of pixel dimensions, so
+      // same-sized maps (inn vs merchant_shop, both 512×384) no longer
+      // collide to the same zone entity.
+      const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
 
       // 5. Render the new tilemap background
       if (this._app && this._worldContainer) {
@@ -2005,8 +2109,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         collectedPickups,
         interactableStates,
         targetSpawnHash,
+        defaultSpawnHash,
         spawnPointEntities,
         disableClamping,
+        mapId,
       });
 
       // 7. Resume the engine
@@ -2050,19 +2156,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
+    defaultSpawnHash?: number;
     spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
     disableClamping?: boolean;
+    /** Stable map id (URL filename without extension) for zone derivation. */
+    mapId: string;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
@@ -2147,8 +2247,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         collectedPickups: options.collectedPickups,
         interactableStates: options.interactableStates,
         targetSpawnHash: options.targetSpawnHash,
+        defaultSpawnHash: options.defaultSpawnHash,
         spawnPointEntities: options.spawnPointEntities,
         disableClamping: options.disableClamping,
+        mapId: options.mapId,
       });
     });
   }

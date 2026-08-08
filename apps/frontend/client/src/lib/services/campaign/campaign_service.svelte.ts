@@ -38,6 +38,15 @@ export type CampaignServiceInterface = BaseFrontendClassInterface & {
   }): Promise<Campaign>;
   /** Loads an existing campaign (idle/creating/failed → loading → playing). */
   loadCampaign(options: { campaignId: string }): Promise<Campaign>;
+  /**
+   * Ensures a campaign exists for the current session.
+   *
+   * Returns the active campaign when present, otherwise reuses or creates the
+   * stable default Emberwatch campaign. This lets the game work when entered
+   * straight to /game without running setup — saves still get a campaignId
+   * and Continue-after-refresh can resume.
+   */
+  ensureDefaultCampaign(): Promise<Campaign>;
   /** Resumes the active campaign from paused → playing. */
   resumeCampaign(): void;
   /** Pauses the active campaign (playing → paused). */
@@ -62,6 +71,13 @@ export type CampaignServiceInterface = BaseFrontendClassInterface & {
 
 /** Creates a new unique campaign identifier. */
 const generateCampaignId = (): string => crypto.randomUUID();
+
+/**
+ * Stable ID of the auto-created campaign used when the game is entered
+ * without running setup (straight to /game). Deterministic so re-boots find
+ * the same record and stay idempotent.
+ */
+const DEFAULT_CAMPAIGN_ID = 'default-emberwatch';
 
 /** Creates a deterministic seed from the current timestamp. */
 const generateSeed = (): number => Math.floor(Date.now() / 1000);
@@ -186,6 +202,50 @@ class CampaignService
   }
 
   /** @inheritdoc */
+  async ensureDefaultCampaign(): Promise<Campaign> {
+    if (this.activeCampaign) {
+      return this.activeCampaign;
+    }
+
+    const buildDefault = (): Campaign => {
+      const now = new Date().toISOString();
+      return {
+        id: DEFAULT_CAMPAIGN_ID,
+        name: 'Emberwatch',
+        state: 'playing',
+        contentPackId: 'emberwatch',
+        seed: generateSeed(),
+        createdAt: now,
+        updatedAt: now,
+        capabilityProfile: buildCapabilityProfile(),
+      };
+    };
+
+    try {
+      const existing = await campaignStorage.getById(DEFAULT_CAMPAIGN_ID);
+      if (existing) {
+        this.activeCampaign = existing;
+        this.debug('ensureDefaultCampaign:reused', { campaignId: existing.id });
+        return existing;
+      }
+
+      const campaign = buildDefault();
+      await campaignStorage.create(campaign);
+      this.activeCampaign = campaign;
+      await this.refreshCampaigns();
+      this.debug('ensureDefaultCampaign:created', { campaignId: campaign.id });
+      return campaign;
+    } catch (error) {
+      // Storage unavailable (e.g. in-memory fallback DB) — return a transient
+      // campaign so the save flow still records a campaignId this session.
+      this.warn('ensureDefaultCampaign:storage-failed', { error: String(error) });
+      const transient = buildDefault();
+      this.activeCampaign = transient;
+      return transient;
+    }
+  }
+
+  /** @inheritdoc */
   async loadCampaign(options: { campaignId: string }): Promise<Campaign> {
     if (this.isBusy) {
       throw new Error('Campaign operation already in progress');
@@ -197,6 +257,18 @@ class CampaignService
       const campaign = await campaignStorage.getById(options.campaignId);
       if (!campaign) {
         throw new Error(`Campaign not found: ${options.campaignId}`);
+      }
+
+      // Already playing (e.g. resumed from a saved session or the default
+      // Emberwatch campaign) — activate without re-running the
+      // LOAD_REQUESTED → LOAD_COMPLETE transitions (the state machine only
+      // allows LOAD_REQUESTED from idle/failed). Mirrors the boot pipeline's
+      // playing-state handling.
+      if (campaign.state === 'playing') {
+        this.activeCampaign = campaign;
+        await this.refreshCampaigns();
+        this.debug('loadCampaign:already-playing', { campaignId: campaign.id });
+        return campaign;
       }
 
       // Validate transition is legal; if invalid, transition() throws.

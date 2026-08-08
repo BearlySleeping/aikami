@@ -182,21 +182,28 @@ class GameBootService
 
         // Drive campaign state machine to failed
         if (this._campaign) {
-          try {
-            const failedState = transition(this._campaign.state, {
-              type: 'LOAD_FAILED',
-              error: message,
+          const { canTransition, transition } = await import('../campaign/boot_state_machine.ts');
+          if (canTransition(this._campaign.state, { type: 'LOAD_FAILED', error: message })) {
+            try {
+              const failedState = transition(this._campaign.state, {
+                type: 'LOAD_FAILED',
+                error: message,
+              });
+              const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
+              const updated = {
+                ...this._campaign,
+                state: failedState,
+                updatedAt: new Date().toISOString(),
+              };
+              await campaignStorage.update(updated);
+              this._campaign = updated;
+            } catch (transitionError) {
+              this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
+            }
+          } else {
+            this.debug('boot:campaign-fail-transition:skipped', {
+              state: this._campaign.state,
             });
-            const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
-            const updated = {
-              ...this._campaign,
-              state: failedState,
-              updatedAt: new Date().toISOString(),
-            };
-            await campaignStorage.update(updated);
-            this._campaign = updated;
-          } catch (transitionError) {
-            this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
           }
         }
 
@@ -386,10 +393,10 @@ class GameBootService
         campaign = latest;
         this.debug('stage:loading_campaign:latest-campaign', { campaignId: latest.id });
       } else {
-        // Default transient campaign (logged as fallback)
-        this.warn('stage:loading_campaign:no-campaign-fallback', {
-          fallback: 'emberwatch',
-        });
+        // No campaign exists (e.g. straight to /game without setup) — create
+        // the default Emberwatch campaign so save/continue work end-to-end.
+        campaign = await campaignService.ensureDefaultCampaign();
+        this.debug('stage:loading_campaign:default-created', { campaignId: campaign.id });
       }
     }
 
@@ -471,15 +478,16 @@ class GameBootService
       if (generation !== this._bootGeneration) {
         return;
       }
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } = parseSavePayloadEnvelope(
-        input.pendingSavePayload,
-      );
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+        parseSavePayloadEnvelope(input.pendingSavePayload);
 
       if (version && version >= 2 && storedChecksum) {
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
+          map,
           storedChecksum,
+          version,
         });
         // Check generation after async validation
         if (generation !== this._bootGeneration) {
@@ -523,14 +531,16 @@ class GameBootService
       }
 
       // C-334 AC-4: Validate checksum for v2+ payloads
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(payload);
 
       if (version && version >= 2 && storedChecksum) {
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
+          map,
           storedChecksum,
+          version,
         });
         // Check generation after async validation
         if (generation !== this._bootGeneration) {
@@ -891,7 +901,7 @@ class GameBootService
 
     if (input.pendingSavePayload) {
       // Restore from save snapshot — the payload may be a full envelope
-      // ({ ecsSnapshot, serviceSnapshots }) or a plain ECS snapshot.
+      // ({ ecsSnapshot, serviceSnapshots, map }) or a plain ECS snapshot.
       this.bootProgress.detail = 'Restoring saved world...';
       const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
       const { hydrateAllServices } = await import('./serializable_service');
@@ -899,7 +909,9 @@ class GameBootService
       if (generation !== this._bootGeneration) {
         return;
       }
-      const { ecsSnapshot, serviceSnapshots } = parseSavePayloadEnvelope(input.pendingSavePayload);
+      const { ecsSnapshot, serviceSnapshots, map } = parseSavePayloadEnvelope(
+        input.pendingSavePayload,
+      );
 
       // Hydrate domain services FIRST so world flags (collected pickups,
       // loot-granted encounters) are in place before any map load (C-331).
@@ -910,14 +922,60 @@ class GameBootService
         });
       }
 
-      await this._gameWorld.restoreWorld(ecsSnapshot);
-      // Check generation after async restore
-      if (generation !== this._bootGeneration) {
-        return;
+      if (map?.mapId && map.packId) {
+        // ── Map-authoritative restore (v3+ envelope) ──
+        // The map file is the source of truth for the world: rebuild the
+        // saved map (tilemap, collision, NPCs, props, portals) at the saved
+        // coordinates, then overlay the player-scoped ECS snapshot. This
+        // replaces the old LOAD_GAME full-world rebuild, which could never
+        // reconstruct map-derived entities from a 4-component snapshot.
+        this.bootProgress.detail = `Loading map: ${map.mapId}`;
+        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const pack = await loadContentPack({ packId: map.packId });
+        const { worldStateService } = await import('./world_state_service.svelte');
+        // Check generation after async imports
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+
+        await gameEngineService.loadMap({
+          mapUrl: pack.resolveMapUrl(map.mapId),
+          targetX: map.playerX,
+          targetY: map.playerY,
+          defeatedEnemies: [...worldStateService.defeatedEnemies],
+          collectedPickups: [...worldStateService.collectedPickups],
+          interactableStates: { ...worldStateService.interactableStates },
+        });
+        // Check generation after map load
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+
+        // Overlay the player's saved appearance/combat stats/position.
+        await gameEngineService.restorePlayer(ecsSnapshot);
+        // Check generation after async restore
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        this.debug('stage:hydrating_snapshot:map-restored', {
+          mapId: map.mapId,
+          playerX: map.playerX,
+          playerY: map.playerY,
+          bytes: input.pendingSavePayload.length,
+        });
+      } else {
+        // ── Legacy v2/pre-v2 save without map routing ──
+        // Best-effort full-world restore (no tilemap/collision/portals can
+        // be reconstructed — the envelope has no map identity).
+        await this._gameWorld.restoreWorld(ecsSnapshot);
+        // Check generation after async restore
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        this.debug('stage:hydrating_snapshot:legacy-restored', {
+          bytes: input.pendingSavePayload.length,
+        });
       }
-      this.debug('stage:hydrating_snapshot:restored', {
-        bytes: input.pendingSavePayload.length,
-      });
     } else {
       // Fresh spawn — load the pack's declared starting map
       const packId = input.contentPackId;
@@ -1341,14 +1399,16 @@ class GameBootService
       for (const save of saves) {
         try {
           const payload = await gameSaveService.getRawSavePayload(save.id);
-          const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+          const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
             parseSavePayloadEnvelope(payload);
 
           if (version && version >= 2 && storedChecksum) {
             const valid = await validateEnvelopeChecksum({
               ecsSnapshot,
               serviceSnapshots,
+              map,
               storedChecksum,
+              version,
             });
             if (!valid) {
               continue; // skip this corrupt save, try next

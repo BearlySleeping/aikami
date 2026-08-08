@@ -122,6 +122,8 @@ export type RelationshipServiceInterface = BaseFrontendClassInterface & {
   serialize(): RelationshipState;
   /** Deserialize full state on load. */
   deserialize(state: RelationshipState): void;
+  /** Hydrate alias used by the save/load registry (C-334). */
+  hydrate(state: RelationshipState): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -345,6 +347,11 @@ class RelationshipService
       factionStandings: Object.fromEntries(this._factionStandings),
       rememberedPromises: this._promises,
     };
+  }
+
+  /** @inheritdoc */
+  hydrate(state: RelationshipState): void {
+    this.deserialize(state);
   }
 
   /** @inheritdoc */

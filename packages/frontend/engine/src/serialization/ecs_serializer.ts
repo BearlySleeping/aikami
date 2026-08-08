@@ -180,6 +180,42 @@ export const serializeWorld = (world: World): string => {
 };
 
 /**
+ * Serializes ONLY the player entity's persistent components.
+ *
+ * The map file is the source of truth for world entities (NPCs, props,
+ * portals, spawn markers) — they are re-created from Tiled data on every
+ * map load. The save snapshot therefore only needs the player's own state
+ * (Position, Appearance, CombatStats, Visual). Keeping the snapshot
+ * player-scoped avoids restoring ghost entities (transition zones,
+ * combat-statted props) that the world rebuild already replaces.
+ *
+ * @param world - The bitECS world to snapshot.
+ * @param playerEid - The player entity ID (defaults to 1, the engine's
+ *   convention for the first spawned player entity).
+ * @returns A JSON string with a single-entity EcsSnapshot.
+ */
+export const serializePlayer = (_world: World, playerEid = 1): string => {
+  const eids = [playerEid];
+  const components: Record<string, ComponentSlice> = {};
+
+  for (const [name, component] of PERSISTENT_COMPONENTS) {
+    const slice = _extractComponentSlice(component, eids);
+    if (Object.keys(slice).length > 0) {
+      components[name] = slice as Record<string, Array<number | string | boolean>>;
+    }
+  }
+
+  const snapshot: EcsSnapshot = {
+    version: '1.0.0',
+    timestamp: Date.now(),
+    entities: eids,
+    components: components as EcsSnapshot['components'],
+  };
+
+  return JSON.stringify(snapshot);
+};
+
+/**
  * Hydrates a bitECS world from a previously-serialized snapshot payload.
  *
  * Creates new entities (bitECS assigns sequential IDs) and restores all
@@ -221,16 +257,25 @@ export const deserializeWorld = (world: World, payload: string): Map<number, num
     newEids.push(newEid);
   }
 
-  // Restore component data for each persistent component
+  // Restore component data for each persistent component.
+  // Components are only registered on entities that actually have a
+  // concrete value in the slice — previously every entity received every
+  // component, so restored props/portals carried CombatStats and matched
+  // enemy/combat queries as garbage entities.
   for (const [name, component] of PERSISTENT_COMPONENTS) {
     const slice = snapshot.components[name];
     if (!slice) {
       continue;
     }
 
-    // Register the component on each new entity, then restore data
-    for (const newEid of newEids) {
-      addComponent(world, newEid, component);
+    for (let i = 0; i < newEids.length; i++) {
+      const newEid = newEids[i];
+      const hasValue = Object.values(slice).some(
+        (values) => values[i] !== undefined && values[i] !== null,
+      );
+      if (hasValue) {
+        addComponent(world, newEid, component);
+      }
     }
 
     _restoreComponentSlice(world, component, newEids, slice);
