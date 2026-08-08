@@ -26,6 +26,7 @@ import { setupArtifactRegistry } from './artifact_registry';
 import { setupCdnHosting } from './cdn_hosting_setup';
 import { setupFirebaseHosting } from './firebase_hosting_setup';
 import { setupGcpApis } from './gcp_apis';
+import { setupIam } from './iam';
 import { setupSecrets } from './secrets_manager';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -123,6 +124,13 @@ async function main() {
   // ── Artifact Registry ─────────────────────────────────────────────
   {
     const { checks } = await setupArtifactRegistry(projectId, CLOUD_FUNCTIONS_REGION, DRY_RUN);
+    allChecks.push(...checks);
+  }
+
+  // ── IAM (deploy service account roles) ────────────────────────────
+  {
+    const saEmail = `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
+    const { checks } = await setupIam(projectId, saEmail, DRY_RUN);
     allChecks.push(...checks);
   }
 

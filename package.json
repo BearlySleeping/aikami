@@ -26,6 +26,7 @@
     "ci": "bun run validate && bun run test",
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/setup/index.ts",
+    "setup:iam": "bun run scripts/src/lib/setup/iam.ts",
     "dev:all": "bun run scripts/src/lib/ops/dev_all.ts",
     "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
     "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
