@@ -65,6 +65,7 @@ import { type AppResult, type NotificationInput, notifyDeployment } from './noti
 import { deployTauriRelease } from './tauri_release';
 import {
   authenticateDocker,
+  ensureGcloudAuth,
   getCurrentBranch,
   isVerbose,
   resolveProjectId,
@@ -108,6 +109,10 @@ const isCI = !!process.env.BUILD_ID || !!process.env.CI;
 
 let _autoYes = false;
 
+/**
+ * Prompt for a yes/no confirmation, honoring --yes (auto-yes) and
+ * defaulting to no on non-TTY input.
+ */
 async function confirm(msg: string): Promise<boolean> {
   if (_autoYes) {
     log(`${c.dim}(auto-yes)${c.reset} ${msg}`);
@@ -125,6 +130,10 @@ async function confirm(msg: string): Promise<boolean> {
 
 // ── Deploy Orchestrator ──────────────────────────────────────────────────
 
+/**
+ * Deploy one app end-to-end for the given mode: checksum cache check,
+ * build, package, push and deploy per its service type.
+ */
 async function deployApp(
   config: AppConfig,
   appName: string,
@@ -182,6 +191,10 @@ async function deployApp(
 
 // ── Main ─────────────────────────────────────────────────────────────────
 
+/**
+ * Deploy CLI entry: parse args, detect affected apps, authenticate, then
+ * run the deploy phases (build, push, deploy) for the requested apps.
+ */
 async function main(): Promise<void> {
   const rawArgs = Bun.argv.slice(2);
   // args[0] is 'deploy' if called via the scripts runner, or the first app name
@@ -323,12 +336,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // Auth check
-  const authCheck = run('gcloud auth print-access-token', { quiet: true });
-  if (!authCheck) {
-    error('Not authenticated with gcloud. Run: gcloud auth login');
-    process.exit(1);
-  }
+  // Auth check — user credentials first, then fall back to the mode's
+  // service-account key (.secrets/gcp_sa_key.{mode}.json) so deploys work
+  // without an interactive `gcloud auth login`.
+  ensureGcloudAuth(mode, projectId, ROOT_DIR);
 
   authenticateDocker();
 

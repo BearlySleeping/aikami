@@ -299,14 +299,41 @@ The root `package.json` provides shortcuts for common operations:
 
 ### Logging
 
-| Script                | Command                                        | Purpose            |
-| --------------------- | ---------------------------------------------- | ------------------ |
-| `logs:functions`      | `bun run scripts/ops/logs.ts functions`        | View function logs |
-| `logs:functions:tail` | `bun run scripts/ops/logs.ts functions --tail` | Tail function logs |
-| `logs:client`            | `bun run scripts/ops/logs.ts client`              | View Client logs      |
-| `logs:client:tail`       | `bun run scripts/ops/logs.ts client --tail`       | Tail Client logs      |
-| `logs:landing`        | `bun run scripts/ops/logs.ts landing`          | View landing logs  |
-| `logs:landing:tail`   | `bun run scripts/ops/logs.ts landing --tail`   | Tail landing logs  |
+Single source of truth for logs across every service — `scripts/src/lib/ops/logs.ts`,
+driven entirely by `deployment_config.ts`'s `APP_CONFIG` (no separate per-app scripts to
+keep in sync). Same command for manual use and for pi/agents (the `service_logs` tool in
+`.pi/extensions/log_viewer.ts` is a thin wrapper around it).
+
+```bash
+bun run scripts -- logs <app> [flags]
+```
+
+| App(s)                          | Behavior                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `hub`                             | Cloud Run SSR service — direct `gcloud logging read`/`tail`              |
+| `firebase`                        | Firebase Functions (gen2 = Cloud Run under the hood) — pass `--only <fn>` to scope to one function, else all functions in the region interleave |
+| `client`                          | Static Firebase Hosting, no server — transparently redirected to hub's log stream, filtered to `jsonPayload.app="client"` (its browser logger forwards there cross-origin) |
+| `site`, `docs`, `client-tauri`   | No server-side logs at all (static hosting / desktop release) — command says so |
+| `image`, `text`, `voice`          | Self-hosted GPU boxes, not on Cloud Run yet — command says so; once their `serviceType` moves to a Cloud Run type in `deployment_config.ts`, this picks them up automatically |
+
+| Flag                | Purpose                                                        |
+| -------------------- | --------------------------------------------------------------- |
+| `--mode`             | `staging` \| `production` (default: `$AIKAMI_MODE` or staging) |
+| `--tail`              | Stream live instead of a one-shot read                          |
+| `--since <dur>`       | e.g. `1h`, `30m`, `2d`                                          |
+| `--lines <n>`         | Max entries for a one-shot read (default 50)                    |
+| `--severity <lvl>`    | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR`\|`CRITICAL` — filters `severity>=lvl` |
+| `--only <name>`       | Function name — required to scope `firebase` to one function    |
+| `--message <text>`    | Substring match against the log message                         |
+| `--filter <raw>`      | Raw Cloud Logging filter fragment, ANDed onto the base filter    |
+| `--json`              | Full structured JSON instead of the compact default              |
+
+```bash
+bun run scripts -- logs hub --mode staging --tail
+bun run scripts -- logs firebase --only pollGmail --since 1h
+bun run scripts -- logs client --mode production --severity ERROR
+bun run scripts -- logs client --filter 'jsonPayload.sessionId="abc-123"'
+```
 
 ### CI / Build
 

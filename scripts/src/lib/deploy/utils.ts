@@ -5,7 +5,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { c, error, log } from '../cli_utils';
 import {
   type AppConfig,
@@ -35,22 +35,33 @@ let _verbose = false;
 let _quiet = false;
 const _dockerAuthenticated = new Set<string>();
 
+/** Enable verbose shell output for subsequent run()/runArgs() calls. */
 export function setVerbose(v: boolean): void {
   _verbose = v;
 }
 
+/** Whether verbose shell output is enabled. */
 export function isVerbose(): boolean {
   return _verbose;
 }
 
+/** Suppress non-essential output for subsequent run()/runArgs() calls. */
 export function setQuiet(v: boolean): void {
   _quiet = v;
 }
 
+/** Whether quiet mode is enabled. */
 export function isQuiet(): boolean {
   return _quiet;
 }
 
+/**
+ * Run a shell command and return its trimmed stdout.
+ *
+ * verbose or live → inherit stdio (direct terminal output, streams in CI);
+ * quiet → pipe and suppress everything; default → pipe and show a command
+ * prefix. Throws when the command fails unless quiet.
+ */
 export function run(
   cmd: string,
   opts: { cwd?: string; quiet?: boolean; env?: Record<string, string>; live?: boolean } = {},
@@ -122,11 +133,16 @@ export function runArgs(
 
 // ── Git ──────────────────────────────────────────────────────────────────
 
+/** Return the current git branch name (defaults to 'dev' on failure). */
 export function getCurrentBranch(): string {
   const branch = run('git rev-parse --abbrev-ref HEAD', { quiet: true });
   return branch || 'dev';
 }
 
+/**
+ * Short git SHA of HEAD, suffixed with a dirty-tree hash when the working
+ * tree has uncommitted changes (ensures unique Docker tags).
+ */
 export function shortSha(length = 8): string {
   const sha = run(`git rev-parse --short=${length} HEAD`, { quiet: true });
   // Append dirty suffix when working tree has uncommitted changes.
@@ -138,6 +154,7 @@ export function shortSha(length = 8): string {
   return `${sha}-d${dirtyHash.slice(0, 8)}`;
 }
 
+/** Version string used to tag images: the short SHA plus dirty suffix. */
 export function versionSha(): string {
   return shortSha();
 }
@@ -158,10 +175,15 @@ export function dirtyTreeHash(): string {
 
 // ── GCP / Deploy ─────────────────────────────────────────────────────────
 
+/** Resolve the GCP project id for a deployment mode. */
 export function resolveProjectId(mode: string): string {
   return MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP] || MODE_PROJECT_MAP.staging;
 }
 
+/**
+ * Fully-qualified Artifact Registry image tag for an app config:
+ * {region}-docker.pkg.dev/{projectId}/aikami/{shortName}:{tag}.
+ */
 export function dockerImageTag(
   config: AppConfig,
   projectId: string,
@@ -174,6 +196,7 @@ export function dockerImageTag(
   return `${region}-docker.pkg.dev/${projectId}/${imageName}:${tag}`;
 }
 
+/** Resolve the Cloud Run service id for an app config. */
 export function resolveCloudRunServiceName(config: AppConfig, appName: string): string {
   return resolveCloudRunServiceId(appName as never) || `aikami-${config.shortName}`;
 }
@@ -187,6 +210,44 @@ export function authenticateDocker(region: string = GCP_REGION): void {
   }
   _dockerAuthenticated.add(region);
   run(`gcloud auth configure-docker ${region}-docker.pkg.dev --quiet`, { quiet: true });
+}
+
+/**
+ * Ensures gcloud is authenticated — user credentials first, then fall back
+ * to the mode's service-account key (.secrets/gcp_sa_key.{mode}.json) so
+ * deploys and log queries work in CI and for agents/pi without an
+ * interactive `gcloud auth login`.
+ *
+ * Exits the process when neither credential source is available or the
+ * service-account activation fails.
+ *
+ * @param mode      Deployment mode ('staging' | 'production') — selects the SA key file.
+ * @param projectId GCP project id — passed to activate-service-account.
+ * @param rootDir   Repo root — `.secrets/` lives at its top level.
+ */
+export function ensureGcloudAuth(mode: string, projectId: string, rootDir: string): void {
+  const authCheck = run('gcloud auth print-access-token', { quiet: true });
+  if (authCheck) {
+    return;
+  }
+  const saKeyPath = resolve(rootDir, `.secrets/gcp_sa_key.${mode}.json`);
+  if (!existsSync(saKeyPath)) {
+    error('Not authenticated with gcloud and no service-account fallback found.');
+    error('  Run: gcloud auth login');
+    error(`  Or place a key at: ${saKeyPath}`);
+    process.exit(1);
+  }
+  log(
+    `${c.yellow}No gcloud user credentials — activating service account from ${saKeyPath}${c.reset}`,
+  );
+  run(`gcloud auth activate-service-account --key-file="${saKeyPath}" --project=${projectId}`, {
+    quiet: true,
+  });
+  const retry = run('gcloud auth print-access-token', { quiet: true });
+  if (!retry) {
+    error(`Service account activation failed (${saKeyPath}). Run: gcloud auth login`);
+    process.exit(1);
+  }
 }
 
 /**
