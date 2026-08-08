@@ -1,88 +1,79 @@
 // packages/frontend/storage/src/lib/__tests__/jsstorage_fallback.test.ts
 //
-// C-321: Verifies the localStorage-backed kvvfs (JsStorageDb) fallback used
-// by WasmStorageAdapter when OPFS is unavailable — data must survive
-// close/reopen (i.e. page reloads), and the kvvfs xFileControl workaround
-// must prevent the production crash where kvvfs.internal is undefined.
+// C-321: Verifies the IndexedDB-snapshot fallback used by WasmStorageAdapter
+// when OPFS is unavailable — an in-memory kvvfs DB whose full export is
+// snapshotted to a persistence backend (IndexedDB in production, a Map here)
+// so data survives close/reopen (i.e. page reloads).
+//
+// Also verifies the kvvfs xFileControl workaround: without it, PRAGMA
+// handling crashes because kvvfs.internal is undefined in production builds.
 
 import { describe, expect, test } from 'bun:test';
 
-// Minimal Storage-like mock so `globalThis.localStorage instanceof
-// globalThis.Storage` passes inside sqlite-wasm's storage-pool init.
-class MockStorage implements Storage {
-  private map = new Map<string, string>();
-  get length() {
-    return this.map.size;
-  }
-  clear() {
-    this.map.clear();
-  }
-  getItem(k: string) {
-    return this.map.get(k) ?? null;
-  }
-  key(i: number) {
-    return [...this.map.keys()][i] ?? null;
-  }
-  removeItem(k: string) {
-    this.map.delete(k);
-  }
-  setItem(k: string, v: string) {
-    this.map.set(k, v);
-  }
-}
+import { _setPersistenceBackendForTests } from '../wasm_storage_adapter.ts';
 
-/** Mirrors the workaround in WasmStorageAdapter.open(). */
-const applyKvvfsWorkaround = (sqlite3: Record<string, unknown>): void => {
-  const kvvfs = sqlite3['kvvfs'] as { internal?: object } | undefined;
-  if (kvvfs && !kvvfs.internal) {
-    kvvfs.internal = { disablePageSizeChange: true };
-  }
+/** In-memory stand-in for IndexedDB. */
+const makeMemoryBackend = () => {
+  const map = new Map<string, unknown>();
+  return {
+    get: async (key: string) => map.get(key) ?? null,
+    set: async (key: string, value: unknown) => {
+      map.set(key, value);
+    },
+    peek: (key: string) => map.get(key),
+  };
 };
 
-describe('JsStorageDb localStorage fallback (WasmStorageAdapter)', () => {
-  test('survives the production kvvfs xFileControl bug + persists across close/reopen', async () => {
-    const mockStorage = new MockStorage();
-    (globalThis as Record<string, unknown>).Storage = MockStorage;
-    (globalThis as Record<string, unknown>).localStorage = mockStorage;
-    (globalThis as Record<string, unknown>).sessionStorage = mockStorage;
+describe('WasmStorageAdapter IndexedDB-snapshot fallback', () => {
+  test('kvvfs xFileControl workaround + snapshot persists across close/reopen', async () => {
+    const backend = makeMemoryBackend();
+    _setPersistenceBackendForTests(backend);
 
     const sqlite3Module = await import('@sqlite.org/sqlite-wasm');
     const sqlite3 = (await sqlite3Module.default()) as Record<string, unknown>;
     const oo1 = sqlite3['oo1'] as Record<string, unknown>;
 
-    // Simulate production: kvvfs.log is not set, so kvvfs.internal is
-    // undefined — this is what crashed xFileControl in the browser.
-    const kvvfs = sqlite3['kvvfs'] as { internal?: object };
+    // Simulate production: kvvfs.internal is undefined (kvvfs.log unset).
+    const kvvfs = sqlite3['kvvfs'] as {
+      internal?: object;
+      export(name: string): unknown;
+      import(exp: unknown, overwrite?: boolean): void;
+    };
     delete kvvfs.internal;
 
-    // Without the workaround, any prepare crashes:
     const JsStorageDbCtor = oo1['JsStorageDb'] as {
       new (
-        mode: 'local' | 'session',
+        mode: string,
       ): {
         exec(options: Record<string, unknown>): unknown;
         close(): void;
       };
     };
-    const dbBefore = new JsStorageDbCtor('local');
-    // PRAGMA statements trigger SQLITE_FCNTL_PRAGMA → xFileControl, which
-    // reads kvvfs.internal.disablePageSizeChange → TypeError in production.
-    // (Browser: TypeError reading disablePageSizeChange; Bun: SQL logic
-    // error — both are failures caused by the missing internal object.)
+
+    // Without the workaround, PRAGMA handling crashes (browser: TypeError
+    // reading disablePageSizeChange; Bun: SQL logic error).
+    const dbBefore = new JsStorageDbCtor('.');
     expect(() => dbBefore.exec({ sql: 'PRAGMA foreign_keys = ON' })).toThrow();
     dbBefore.close();
 
     // Apply the adapter's workaround — now everything works.
-    applyKvvfsWorkaround(sqlite3);
+    kvvfs.internal = { disablePageSizeChange: true };
 
-    const db1 = new JsStorageDbCtor('local');
+    // ── First session: write data, export snapshot, close ──
+    const db1 = new JsStorageDbCtor('.');
     db1.exec({ sql: 'CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, val TEXT)' });
     db1.exec({ sql: 'PRAGMA foreign_keys = ON' });
     db1.exec({ sql: 'INSERT INTO t (val) VALUES (?)', bind: ['persisted!'] });
+
+    // Simulate the adapter's debounced snapshot write.
+    const snapshot = kvvfs.export('.') as unknown;
+    await backend.set('kvvfs-export', snapshot);
     db1.close();
 
-    // Reopen a NEW instance — data must still be there (persisted via kvvfs)
-    const db2 = new JsStorageDbCtor('local');
+    // ── Second session (page reload): import snapshot, reopen ──
+    const restored = (await backend.get('kvvfs-export')) as unknown;
+    kvvfs.import(restored, true);
+    const db2 = new JsStorageDbCtor('.');
     const rows: Record<string, unknown>[] = [];
     db2.exec({
       sql: 'SELECT val FROM t',
@@ -93,9 +84,7 @@ describe('JsStorageDb localStorage fallback (WasmStorageAdapter)', () => {
     expect(rows).toEqual([{ val: 'persisted!' }]);
     db2.close();
 
-    // Cleanup globals so other tests are unaffected
-    delete (globalThis as Record<string, unknown>).Storage;
-    delete (globalThis as Record<string, unknown>).localStorage;
-    delete (globalThis as Record<string, unknown>).sessionStorage;
+    // Reset the backend to the real IndexedDB implementation for other tests.
+    _setPersistenceBackendForTests({ get: async () => null, set: async () => {} });
   });
 });

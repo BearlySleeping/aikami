@@ -182,21 +182,28 @@ class GameBootService
 
         // Drive campaign state machine to failed
         if (this._campaign) {
-          try {
-            const failedState = transition(this._campaign.state, {
-              type: 'LOAD_FAILED',
-              error: message,
+          const { canTransition, transition } = await import('../campaign/boot_state_machine.ts');
+          if (canTransition(this._campaign.state, { type: 'LOAD_FAILED', error: message })) {
+            try {
+              const failedState = transition(this._campaign.state, {
+                type: 'LOAD_FAILED',
+                error: message,
+              });
+              const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
+              const updated = {
+                ...this._campaign,
+                state: failedState,
+                updatedAt: new Date().toISOString(),
+              };
+              await campaignStorage.update(updated);
+              this._campaign = updated;
+            } catch (transitionError) {
+              this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
+            }
+          } else {
+            this.debug('boot:campaign-fail-transition:skipped', {
+              state: this._campaign.state,
             });
-            const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
-            const updated = {
-              ...this._campaign,
-              state: failedState,
-              updatedAt: new Date().toISOString(),
-            };
-            await campaignStorage.update(updated);
-            this._campaign = updated;
-          } catch (transitionError) {
-            this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
           }
         }
 

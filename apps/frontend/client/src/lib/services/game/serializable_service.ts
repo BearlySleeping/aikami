@@ -5,6 +5,8 @@
 // The GameSaveService iterates a registry of these to capture/restore
 // the full game state without reaching into private internals.
 
+import { logger } from '$logger';
+
 /** Contract for domain services that support save/load. */
 export type SerializableService<T> = {
   /** Serializes the service's current state into a plain object. */
@@ -46,14 +48,22 @@ export const serializeAllServices = (): ServiceSnapshot[] => {
 
 /**
  * Hydrates all registered services from an array of snapshots.
- * Called by GameSaveService when loading a saved game.
+ *
+ * Iterates the registry (not the snapshots) so services added later still
+ * hydrate older saves. Services whose registration predates a hydrate()
+ * implementation are skipped with a warning instead of crashing the boot.
  */
 export const hydrateAllServices = (snapshots: ServiceSnapshot[]): void => {
   const map = new Map(snapshots.map((s) => [s.serviceKey, s.data]));
   for (const { key, service } of _registry) {
     const data = map.get(key);
-    if (data !== undefined) {
-      service.hydrate(data);
+    if (data === undefined) {
+      continue;
     }
+    if (typeof service.hydrate !== 'function') {
+      logger.warn('hydrateAllServices:skipped-no-hydrate', { serviceKey: key });
+      continue;
+    }
+    service.hydrate(data);
   }
 };
