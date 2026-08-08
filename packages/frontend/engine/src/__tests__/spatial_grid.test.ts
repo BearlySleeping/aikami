@@ -171,6 +171,61 @@ describe('isWalkable — boundary clamping', () => {
   });
 });
 
+describe('isCellBlocked — NPC / prop layer blocking (C-375 AC-3)', () => {
+  beforeEach(() => {
+    initializeSpatialGrid(MAP_W, MAP_H);
+  });
+
+  afterEach(() => {
+    resetCollisionGrid();
+  });
+
+  /** Registers a static entity at a cell with the given collision layer. */
+  const place = (eid: number, gx: number, gy: number, layer: number): void => {
+    GridPosition.x[eid] = gx;
+    GridPosition.y[eid] = gy;
+    CollisionData.layer[eid] = layer;
+    CollisionData.mask[eid] = 0;
+    SpatialLink.next[eid] = 0;
+    SpatialLink.prev[eid] = 0;
+    insertIntoSpatialGrid(eid);
+  };
+
+  test('an NPC-layer entity blocks the player collision mask', () => {
+    place(8001, 5, 5, CollisionLayer.npc);
+    const playerMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+    expect(isCellBlocked(5, 5, playerMask)).toBe(true);
+  });
+
+  test('an NPC-layer entity does not block a wall-only mask', () => {
+    place(8002, 5, 5, CollisionLayer.npc);
+    // A mover that only collides with walls passes through NPC cells.
+    expect(isCellBlocked(5, 5, CollisionLayer.wall)).toBe(false);
+  });
+
+  test('a solid prop (wall layer) blocks the player collision mask', () => {
+    place(8003, 6, 6, CollisionLayer.wall);
+    const playerMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+    expect(isCellBlocked(6, 6, playerMask)).toBe(true);
+  });
+
+  test('isWalkable returns false for a solid prop (wall-layer) cell', () => {
+    setCollisionGrid(_makeBorderGrid());
+    // Interior cell (5,5) is walkable until a wall-layer prop occupies it.
+    expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(true);
+    place(8004, 5, 5, CollisionLayer.wall);
+    expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(false);
+  });
+
+  test('isWalkable remains true for an NPC-layer cell (walkable, non-wall)', () => {
+    setCollisionGrid(_makeBorderGrid());
+    place(8005, 5, 5, CollisionLayer.npc);
+    // NPCs do not turn the tile into a wall — the movement system blocks
+    // them via the bitmask path (isCellBlocked), not via isWalkable.
+    expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(true);
+  });
+});
+
 describe('insertIntoSpatialGrid — OOB handling', () => {
   beforeEach(() => {
     initializeSpatialGrid(MAP_W, MAP_H);

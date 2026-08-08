@@ -11,14 +11,17 @@ import { logger } from '$logger';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { djb2Hash } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
+import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
+import { GridPosition } from '../components/grid_position.ts';
 import { Interactable } from '../components/interactable.ts';
 import { InteractableState, type InteractableStateMap } from '../components/interactable_state.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
+import { SpatialLink } from '../components/spatial_link.ts';
 import { Transition } from '../components/transition.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
@@ -86,6 +89,59 @@ const DEFAULT_COMPANION_APPROVAL = 0;
 
 /** Default tint for props (white = no tint). */
 const PROP_TINT = 0xffffff;
+
+// ---------------------------------------------------------------------------
+// Spatial grid collision (C-375 AC-3)
+// ---------------------------------------------------------------------------
+
+/** Tile size in world pixels — matches movement_system + tilemap renderer. */
+const TILE_SIZE = 32;
+
+/**
+ * NPC collision mask: blocks walls, other NPCs, and the player (two-way
+ * blocking so a future GOAP/moving NPC cannot walk through the player).
+ */
+const NPC_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
+
+/**
+ * Prop collision mask: solid props block walls, NPCs, the player, and
+ * enemies (tile-granular MVP — sub-tile `collision.width/height` is a
+ * follow-up per C-375 scope).
+ */
+const PROP_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy;
+
+/**
+ * Attaches spatial-grid collision components to a spawned entity.
+ *
+ * The entity receives GridPosition (tile coords from pixel coords ÷ 32),
+ * SpatialLink (linked-list pointers), and CollisionData (layer/mask). The
+ * caller must insert the entity into the spatial grid AFTER the collision
+ * grid is set — `initializeSpatialGrid` re-allocates the grid and wipes
+ * any earlier inserts (C-375 AC-3 worker ordering).
+ */
+const _addSpatialCollision = (
+  world: World,
+  eid: number,
+  pixelX: number,
+  pixelY: number,
+  layer: number,
+  mask: number,
+): void => {
+  addComponent(world, eid, GridPosition);
+  addComponent(
+    world,
+    eid,
+    set(GridPosition, {
+      x: Math.floor(pixelX / TILE_SIZE),
+      y: Math.floor(pixelY / TILE_SIZE),
+    }),
+  );
+  addComponent(world, eid, SpatialLink);
+  addComponent(world, eid, set(SpatialLink, { next: 0, prev: 0 }));
+  addComponent(world, eid, CollisionData);
+  addComponent(world, eid, set(CollisionData, { layer, mask }));
+};
 
 /** Default Appearance layer IDs for NPCs — 6-layer stack (body, hair, torso, legs, feet, head).
  * 1-indexed variant numbers within each engine slot.
@@ -321,6 +377,17 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
+  // C-375 AC-3: NPCs are solid — register in the spatial grid so the
+  // player cannot walk through them (PLAYER_COLLISION_MASK includes npc).
+  _addSpatialCollision(
+    world,
+    eid,
+    spawnPoint.x,
+    spawnPoint.y,
+    CollisionLayer.npc,
+    NPC_COLLISION_MASK,
+  );
+
   addComponent(world, eid, Visual);
   addComponent(
     world,
@@ -551,6 +618,23 @@ const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
+
+  // C-375 AC-3: solid props block movement (tile-granular MVP). Walkable
+  // props (manifest `isWalkable: true`, e.g. the village gate) get NO
+  // collision components and are never inserted into the spatial grid.
+  // `isWalkable` is enriched onto the spawn point by game_world.loadMap
+  // from the content-pack manifest before the worker sees it.
+  const isWalkable = _getBoolProperty(spawnPoint.properties, 'isWalkable', false);
+  if (!isWalkable) {
+    _addSpatialCollision(
+      world,
+      eid,
+      spawnPoint.x,
+      spawnPoint.y,
+      CollisionLayer.wall,
+      PROP_COLLISION_MASK,
+    );
+  }
 
   addComponent(world, eid, Visual);
   addComponent(

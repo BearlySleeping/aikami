@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/systems/render_system.ts
 import type { World } from 'bitecs';
 import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bitecs';
-import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
+import { Buffer, BufferUsage, type Container, Graphics, Rectangle, type Texture } from 'pixi.js';
 import { logger } from '$logger';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
@@ -210,6 +210,16 @@ const _loadVisualTextureAsync = (options: {
   world: World;
   stage: Container;
   visualData: VisualData;
+  /**
+   * Deterministic prop frame resolver (C-375 AC-1). When present, props
+   * with a named `frame` resolve through the parsed spritesheet instead of
+   * the fragile global `Texture.from(frame)` cache. When absent, a frame
+   * carrying prop logs an explicit error and keeps its placeholder.
+   */
+  propFrameResolver?: (frame: string) => {
+    texture: Texture;
+    source: 'hit' | 'fallback';
+  } | null;
 }): void => {
   const { eid, world, stage, visualData } = options;
   const { assetIndex, frame } = visualData;
@@ -219,34 +229,42 @@ const _loadVisualTextureAsync = (options: {
     return;
   }
 
-  // Named atlas frame (props): resolve from the preloaded tileset
-  // spritesheet. The frame must be registered by preloading the
-  // content-pack spritesheet (atlas.json) before the world spawns.
+  // Named atlas frame (props): resolve deterministically through the
+  // injected resolver — never `Texture.from(frame)` (C-375 AC-1).
   if (frame) {
+    const resolver = options.propFrameResolver;
+    if (!resolver) {
+      logger.error(
+        '[render_system] Prop frame set but no propFrameResolver wired — prop keeps placeholder.',
+        {
+          eid,
+          frame,
+          hint: 'Wire createPropFrameResolver() at boot (C-375 AC-1).',
+        },
+      );
+      return;
+    }
+    const resolution = resolver(frame);
+    if (!resolution) {
+      logger.error('[render_system] Prop frame could not be resolved (no fallback available).', {
+        eid,
+        frame,
+      });
+      return;
+    }
+    if (resolution.source === 'fallback') {
+      logger.warn('[render_system] Prop frame missing — rendering fallbackTile.', {
+        eid,
+        frame,
+      });
+    }
     void import('pixi.js')
-      .then(({ Sprite: PixiSprite, Texture }) => {
-        const texture = Texture.from(frame);
-        if (texture === Texture.WHITE || (texture.width <= 1 && texture.height <= 1)) {
-          logger.error(
-            '[render_system] Atlas frame not found for entity — prop will render as a placeholder.',
-            {
-              eid,
-              frame,
-              hint: 'Preload the content-pack spritesheet (atlas.json) before the world loads, or fix the frame name in the spawn point.',
-            },
-          );
-          return null;
-        }
-        return { sprite: PixiSprite, texture };
-      })
+      .then(({ Sprite: PixiSprite }) => ({ sprite: PixiSprite, texture: resolution.texture }))
       .then((resolved) => {
-        if (!resolved) {
-          return;
-        }
         _swapInSprite({ eid, world, stage, resolved });
       })
       .catch((error) => {
-        logger.error('[render_system] Failed to load named frame texture for entity', {
+        logger.error('[render_system] Failed to create prop sprite from resolved frame', {
           eid,
           frame,
           error: error instanceof Error ? error.message : String(error),

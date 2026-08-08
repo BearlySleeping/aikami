@@ -200,6 +200,14 @@ class GameEngineService
   private _initialized = false;
   private _clearContentPackCache: (() => void) | undefined;
 
+  /**
+   * Content-pack prop frame resolver (C-375 AC-1) — built + preloaded in
+   * bootWithCanvas, passed into GameWorld at creation.
+   */
+  private _propFrameResolverHandle:
+    | import('@aikami/frontend/engine').PropFrameResolverHandle
+    | undefined;
+
   /** Content pack ID set by the composition root before boot. */
   contentPackId = $state<string>('emberwatch');
 
@@ -335,7 +343,14 @@ class GameEngineService
     disableClamping?: boolean;
   }): Promise<void> {
     if (this._gameWorld) {
-      await this._gameWorld.loadMap(options);
+      // C-375 AC-3: resolve the pack manifest (cached) and pass prop
+      // walkability so the worker can honor `isWalkable` props.
+      const { loadContentPack } = await import('@aikami/frontend/engine');
+      const pack = await loadContentPack({ packId: this.contentPackId });
+      await this._gameWorld.loadMap({
+        ...options,
+        propWalkability: this._buildPropWalkability(pack.manifest),
+      });
       // Derive the map id from the URL (e.g. .../emberwatch_village.json).
       const file = options.mapUrl.split('/').pop() ?? '';
       this.currentMapId = file.replace(/\.json$/i, '');
@@ -378,6 +393,10 @@ class GameEngineService
       this._gameWorld = undefined;
     }
 
+    // C-375: drop the prop frame resolver handle.
+    this._propFrameResolverHandle?.clearCache();
+    this._propFrameResolverHandle = undefined;
+
     this.isGameReady = false;
     this.playerScene = 'unknown';
     this.currentMapId = '';
@@ -405,6 +424,23 @@ class GameEngineService
     }
 
     this.debug('destroyEngine:complete');
+  }
+
+  /**
+   * Builds a propId → isWalkable map from the pack manifest (C-375 AC-3).
+   *
+   * The manifest lives on the main thread; the worker never sees it. The
+   * map is passed through GameWorld.loadMap and enriched onto prop spawn
+   * points before the worker spawns them.
+   */
+  private _buildPropWalkability(manifest: {
+    props?: Record<string, { isWalkable?: boolean }>;
+  }): Record<string, boolean> {
+    const walkability: Record<string, boolean> = {};
+    for (const [propId, def] of Object.entries(manifest.props ?? {})) {
+      walkability[propId] = def.isWalkable ?? false;
+    }
+    return walkability;
   }
 
   // ── Private: bridge event registration ──
@@ -516,6 +552,9 @@ class GameEngineService
     }
 
     try {
+      // Resolve starting map + build the prop frame resolver from the
+      // content pack (C-375 AC-1). The pack must be loaded BEFORE GameWorld
+      // is created so the resolver is ready for the first ENTITY_CREATED.
       const { GameWorld, TextureManager } = await import('@aikami/frontend/engine');
       const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
       // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
@@ -535,6 +574,15 @@ class GameEngineService
 
       const playerData = this._buildPlayerData();
 
+      // ── C-375: load the pack before world creation for prop wiring ──
+      const { loadContentPack: loadPack, clearContentPackCache: clearCacheFn } = await import(
+        '@aikami/frontend/engine'
+      );
+      this._clearContentPackCache = clearCacheFn;
+      const pack = await loadPack({ packId: this.contentPackId });
+      const { buildPropFrameResolver } = await import('./prop_frame_resolver');
+      this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
+
       this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',
         bridge,
@@ -543,6 +591,8 @@ class GameEngineService
         // C-374: merge equipped items onto the player's base LPC render
         equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
         textureManager,
+        // C-375 AC-1: deterministic prop frame resolution.
+        propFrameResolver: this._propFrameResolverHandle?.resolver,
       });
 
       // Campaign data drives world initialization via the composition root.
@@ -559,11 +609,6 @@ class GameEngineService
 
       // Resolve starting map from the content pack (C-315).
       // Falls back to emberwatch sandbox zone A when no campaign is active.
-      const { loadContentPack: loadPack, clearContentPackCache: clearCacheFn } = await import(
-        '@aikami/frontend/engine'
-      );
-      this._clearContentPackCache = clearCacheFn;
-      const pack = await loadPack({ packId: this.contentPackId });
       const startingMap = pack.getStartingMap();
 
       // ── C-327 AC-3: Load onboarding hints from the content pack ──
@@ -588,6 +633,9 @@ class GameEngineService
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX ?? 160,
         targetY: startingMap.defaultY ?? 192,
+        // C-375 AC-3: pass manifest prop walkability so the worker's
+        // spawner can skip blocking for walkable props (e.g. village_gate).
+        propWalkability: this._buildPropWalkability(pack.manifest),
       });
       // Track the starting map id for scene/vibe context.
       this.currentMapId = pack.manifest.startingMapId;

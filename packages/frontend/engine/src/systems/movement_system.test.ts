@@ -4,8 +4,15 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
+import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
+import { GridPosition } from '../components/grid_position.ts';
+import { SpatialLink } from '../components/spatial_link.ts';
 import type { CollisionGrid } from './collision_system.ts';
-import { resetCollisionGrid, setCollisionGrid } from './collision_system.ts';
+import {
+  insertIntoSpatialGrid,
+  resetCollisionGrid,
+  setCollisionGrid,
+} from './collision_system.ts';
 import { updateMovement } from './movement_system.ts';
 
 // ---------------------------------------------------------------------------
@@ -356,6 +363,79 @@ describe('movement_system — axis-independent wall sliding', () => {
       const pos = getComponent(world, eid, Position);
       expect(pos.x).toBe(100);
       expect(pos.y).toBe(100);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // C-375 AC-3 — NPC / solid prop blocking via the spatial grid
+  // ---------------------------------------------------------------------
+
+  describe('NPC / prop collision (C-375 AC-3)', () => {
+    /** Registers a static entity in the spatial grid at a tile cell. */
+    const placeGridEntity = (eid: number, tileX: number, tileY: number, layer: number): void => {
+      GridPosition.x[eid] = tileX;
+      GridPosition.y[eid] = tileY;
+      CollisionData.layer[eid] = layer;
+      CollisionData.mask[eid] = 0;
+      SpatialLink.next[eid] = 0;
+      SpatialLink.prev[eid] = 0;
+      insertIntoSpatialGrid(eid);
+    };
+
+    it('player is blocked from walking into an NPC grid cell', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // NPC occupies tile (5,5) — pixel x 160..191, y 160..191.
+      // Unique eid range (9000+) avoids SoA collisions with other test files.
+      placeGridEntity(9001, 5, 5, CollisionLayer.npc);
+
+      const player = addEntity(world);
+      addComponent(world, player, Position);
+      // Feet at (160, 130) — tile (5,4); moving down into the NPC cell.
+      addComponent(world, player, set(Position, { x: 160, y: 130 }));
+      addComponent(world, player, Velocity);
+      addComponent(world, player, set(Velocity, { x: 0, y: 60 }));
+
+      updateMovement(world, 1000); // candidate nextY = 190 → box overlaps (5,5)
+
+      const pos = getComponent(world, player, Position);
+      // nextY=190: box top=159, bottom=190 → rows 4 and 5; tile (5,5) occupied
+      // by the NPC → Y blocked, player stays at 130.
+      expect(pos.x).toBe(160);
+      expect(pos.y).toBe(130);
+    });
+
+    it('player is blocked from walking into a solid prop (wall-layer) cell', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // Solid prop (e.g. well) occupies tile (7,4) — pixels x 224..255, y 128..159.
+      placeGridEntity(9002, 7, 4, CollisionLayer.wall);
+
+      const player = addEntity(world);
+      addComponent(world, player, Position);
+      // Feet at (192, 130) — tile (6,4); moving right into the prop cell.
+      addComponent(world, player, set(Position, { x: 192, y: 130 }));
+      addComponent(world, player, Velocity);
+      addComponent(world, player, set(Velocity, { x: 60, y: 0 }));
+
+      updateMovement(world, 1000); // candidate nextX = 252 → box overlaps (7,4)
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.x).toBe(192);
+      expect(pos.y).toBe(130);
+    });
+
+    it('player can move freely when the target cell has no blocking entity', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // A walkable prop (isWalkable: true) is NOT registered in the grid.
+      const player = addEntity(world);
+      addComponent(world, player, Position);
+      addComponent(world, player, set(Position, { x: 160, y: 130 }));
+      addComponent(world, player, Velocity);
+      addComponent(world, player, set(Velocity, { x: 0, y: 60 }));
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.y).toBe(190); // moves through the empty tile
     });
   });
 });
