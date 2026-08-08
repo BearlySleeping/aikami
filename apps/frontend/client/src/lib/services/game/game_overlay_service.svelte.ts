@@ -1104,14 +1104,42 @@ export class GameOverlayService
       const latestSave = saves[0];
       this.debug('loadLastSave', { slotId: latestSave.id, mapName: latestSave.mapName });
 
-      // Map-authoritative load for v3+ saves: rebuild the saved map first,
-      // then overlay the player snapshot. Legacy v2/plain payloads fall back
-      // to the old full-world restore path.
+      // Map-authoritative load for v3+ saves: validate + hydrate domain
+      // services, rebuild the saved map, then overlay the player snapshot.
+      // Legacy v2/plain payloads fall back to the old full-world restore
+      // path (loadGame does its own validation + hydration).
       const rawPayload = await saveService.getRawSavePayload(latestSave.id);
-      const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
-      const { ecsSnapshot, map } = parseSavePayloadEnvelope(rawPayload);
+      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
+        './game_save_service.svelte.ts'
+      );
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+        parseSavePayloadEnvelope(rawPayload);
+
+      // C-334 AC-4: version-aware checksum validation (v3 digest includes map)
+      if (version && version >= 2 && storedChecksum) {
+        const valid = await validateEnvelopeChecksum({
+          ecsSnapshot,
+          serviceSnapshots,
+          map,
+          storedChecksum,
+          version,
+        });
+        if (!valid) {
+          throw new Error(`Save is corrupted: checksum mismatch for slot "${latestSave.id}"`);
+        }
+      }
 
       if (map?.mapId && map.packId) {
+        // Hydrate domain services FIRST (inventory, quests, time, …) so world
+        // flags are in place before the map load — same as the boot pipeline.
+        if (serviceSnapshots) {
+          const { hydrateAllServices } = await import('./serializable_service');
+          hydrateAllServices(serviceSnapshots);
+          this.debug('loadLastSave:services-hydrated', {
+            snapshotCount: serviceSnapshots.length,
+          });
+        }
+
         const { loadContentPack } = await import('@aikami/frontend/engine');
         const pack = await loadContentPack({ packId: map.packId });
         const { worldStateService } = await import('./world_state_service.svelte');

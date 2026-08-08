@@ -250,6 +250,9 @@ export class GameCompositionRoot
 
     // Phase 5b: Thread contentPackId to engine and ensure campaign service is ready
     const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
+    // ── C-372: actually assign it — the engine default is 'emberwatch', so
+    // every save was stamped packId 'emberwatch' regardless of the campaign.
+    gameEngineService.contentPackId = contentPackId;
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway

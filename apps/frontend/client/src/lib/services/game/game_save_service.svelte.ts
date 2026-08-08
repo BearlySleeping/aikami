@@ -366,22 +366,25 @@ class GameSaveService
 
       const db = await getLocalDatabase();
 
-      // Atomic write: write to temp key, then rename (C-334)
+      // Atomic write (C-334): write to a temp key, then rename — all inside
+      // ONE SQLite transaction so a crash mid-sequence can never destroy the
+      // existing save (previously three sequential execute() calls could
+      // leave the slot deleted between the DELETE and the UPDATE).
       const tempId = `${id}_temp_${Date.now()}`;
-      await db.execute({
-        sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)`,
-        args: [tempId, slotId, campaignId ?? null, timestamp, mapName, payload],
-      });
-
-      // Atomically replace the final slot
-      await db.execute({
-        sql: 'DELETE FROM saves WHERE id = ?',
-        args: [id],
-      });
-      await db.execute({
-        sql: `UPDATE saves SET id = ?, slot_id = ? WHERE id = ?`,
-        args: [id, slotId, tempId],
-      });
+      await db.transaction([
+        {
+          sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload) VALUES (?, ?, ?, ?, ?, ?)`,
+          args: [tempId, slotId, campaignId ?? null, timestamp, mapName, payload],
+        },
+        {
+          sql: 'DELETE FROM saves WHERE id = ?',
+          args: [id],
+        },
+        {
+          sql: `UPDATE saves SET id = ?, slot_id = ? WHERE id = ?`,
+          args: [id, slotId, tempId],
+        },
+      ]);
 
       this.debug('saveGame:complete', {
         slotId,

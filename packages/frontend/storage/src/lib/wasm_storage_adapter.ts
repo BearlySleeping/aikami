@@ -148,6 +148,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   /** Debounce delay — settable for tests (0 = immediate). */
   private readonly _persistDebounceMs: number;
 
+  /** pagehide handler — flushes pending snapshot on tab close/navigation. */
+  private _unloadFlush: (() => void) | undefined;
+
   constructor(options: { databasePath: string; persistDebounceMs?: number }) {
     this._databasePath = options.databasePath;
     this._persistDebounceMs = options.persistDebounceMs ?? 300;
@@ -271,6 +274,16 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
             'WasmStorageAdapter: opened in-memory database snapshotted to IndexedDB — persists ' +
               'across reloads (no OPFS available).',
           );
+
+          // ── Durability: the debounce is the only guarantee that a write
+          // reaches IndexedDB. Flush on pagehide (tab close / navigation /
+          // refresh) so a save followed by an immediate unload is not lost.
+          if (typeof window !== 'undefined') {
+            this._unloadFlush = () => {
+              void this._persistNow();
+            };
+            window.addEventListener('pagehide', this._unloadFlush);
+          }
         } catch (error) {
           logger.warn(
             'WasmStorageAdapter: IndexedDB snapshot fallback failed — falling back to in-memory ' +
@@ -303,6 +316,12 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     if (this._persistTimer) {
       clearTimeout(this._persistTimer);
       this._persistTimer = undefined;
+    }
+    if (this._unloadFlush) {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', this._unloadFlush);
+      }
+      this._unloadFlush = undefined;
     }
     if (this._persistMode === 'idb-snapshot') {
       await this._persistNow();
