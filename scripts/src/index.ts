@@ -32,6 +32,7 @@ const SCRIPT_MAP: Record<string, string> = {
   cleanup: 'ops/cleanup_vendor_dirs.ts',
   validate_all: 'ops/validate_all.ts',
   validate: 'ops/validate_all.ts',
+  logs: 'ops/logs.ts',
 
   // Setup scripts
   setup: 'setup/index.ts',
@@ -65,6 +66,7 @@ const EXCLUDED_FILES = new Set(['cli_utils.ts']);
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Recursively find script files (relative to `base`) under `dir`, excluding CLI plumbing. */
 async function findScripts(dir: string, base: string): Promise<string[]> {
   const scripts: string[] = [];
   const entries = await readdir(dir, { withFileTypes: true });
@@ -79,6 +81,7 @@ async function findScripts(dir: string, base: string): Promise<string[]> {
   return scripts.sort();
 }
 
+/** Run one resolved script as a child process, inheriting stdio, and exit with its code. */
 async function runScript(scriptRelPath: string, scriptArgs: string[]): Promise<void> {
   const absPath = join(SCRIPT_DIR, scriptRelPath);
   const file = Bun.file(absPath);
@@ -110,6 +113,7 @@ async function runScript(scriptRelPath: string, scriptArgs: string[]): Promise<v
   ok('Done');
 }
 
+/** Resolve a script name: SCRIPT_MAP short name first, then as a path relative to src/lib/. */
 function resolveScriptPath(nameOrPath: string): string {
   // Check short name map first
   if (SCRIPT_MAP[nameOrPath]) {
@@ -128,6 +132,7 @@ function resolveScriptPath(nameOrPath: string): string {
 // Interactive mode
 // ---------------------------------------------------------------------------
 
+/** Interactive picker: list available scripts and let the user choose one to run. */
 async function interactiveMode(): Promise<void> {
   const scripts = await findScripts(SCRIPT_DIR, SCRIPT_DIR);
 

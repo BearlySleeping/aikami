@@ -35,6 +35,7 @@ export class SSRLogSink implements LogSink {
       userAgent?: string;
       device?: unknown;
       source?: string;
+      app?: string;
     }>,
   ) {}
 
@@ -77,12 +78,22 @@ export class SSRLogSink implements LogSink {
       if (context?.userAgent) {
         payload.userAgent = context.userAgent;
       }
+      if (context?.app) {
+        payload.app = context.app;
+      }
       if (metadata.length > 0) {
         payload.metadata = metadata;
       }
 
-      const isProduction = process.env.AIKAMI_MODE === 'production';
-      if (isProduction) {
+      // Any mode actually deployed to Cloud Run (staging AND production)
+      // needs single-line JSON so Cloud Logging parses it into jsonPayload —
+      // pretty-printing would split it across many textPayload lines,
+      // making it unfilterable (`gcloud logging read`, this repo's own
+      // `bun run scripts -- logs`). Only true local runs (emulator/testing)
+      // get the human-readable pretty-print.
+      const isDeployed =
+        process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production';
+      if (isDeployed) {
         const stream =
           entryLevel === 'ERROR' || entryLevel === 'CRITICAL' ? process.stderr : process.stdout;
         stream.write(`${JSON.stringify(payload)}\n`);

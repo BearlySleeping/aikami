@@ -18,3 +18,20 @@ dependsOn:
   - 'constants'
   - 'types'
 
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'moon.yml'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      mergeArgs: 'replace'
+
