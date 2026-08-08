@@ -1,12 +1,4 @@
-import {
-  ConnectorConfig,
-  DataConnect,
-  ExecuteQueryOptions,
-  MutationPromise,
-  MutationRef,
-  QueryPromise,
-  QueryRef,
-} from 'firebase/data-connect';
+import { ConnectorConfig, DataConnect, QueryRef, QueryPromise, ExecuteQueryOptions, MutationRef, MutationPromise } from 'firebase/data-connect';
 
 export const connectorConfig: ConnectorConfig;
 
@@ -14,6 +6,9 @@ export type TimestampString = string;
 export type UUIDString = string;
 export type Int64String = string;
 export type DateString = string;
+
+
+
 
 export interface ActivatePersonaData {
   persona_updateMany: number;
@@ -189,74 +184,43 @@ interface ListUsersRef {
 export const listUsersRef: ListUsersRef;
 
 export function listUsers(options?: ExecuteQueryOptions): QueryPromise<ListUsersData, undefined>;
-export function listUsers(
-  dc: DataConnect,
-  options?: ExecuteQueryOptions,
-): QueryPromise<ListUsersData, undefined>;
+export function listUsers(dc: DataConnect, options?: ExecuteQueryOptions): QueryPromise<ListUsersData, undefined>;
 
 interface GetTracksByMoodRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: GetTracksByMoodVariables,
-  ): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
+  (dc: DataConnect, vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
   operationName: string;
 }
 export const getTracksByMoodRef: GetTracksByMoodRef;
 
-export function getTracksByMood(
-  vars: GetTracksByMoodVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
-export function getTracksByMood(
-  dc: DataConnect,
-  vars: GetTracksByMoodVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
+export function getTracksByMood(vars: GetTracksByMoodVariables, options?: ExecuteQueryOptions): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
+export function getTracksByMood(dc: DataConnect, vars: GetTracksByMoodVariables, options?: ExecuteQueryOptions): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
 
 interface ListSaveSlotsRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: ListSaveSlotsVariables): QueryRef<ListSaveSlotsData, ListSaveSlotsVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: ListSaveSlotsVariables,
-  ): QueryRef<ListSaveSlotsData, ListSaveSlotsVariables>;
+  (dc: DataConnect, vars: ListSaveSlotsVariables): QueryRef<ListSaveSlotsData, ListSaveSlotsVariables>;
   operationName: string;
 }
 export const listSaveSlotsRef: ListSaveSlotsRef;
 
-export function listSaveSlots(
-  vars: ListSaveSlotsVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<ListSaveSlotsData, ListSaveSlotsVariables>;
-export function listSaveSlots(
-  dc: DataConnect,
-  vars: ListSaveSlotsVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<ListSaveSlotsData, ListSaveSlotsVariables>;
+export function listSaveSlots(vars: ListSaveSlotsVariables, options?: ExecuteQueryOptions): QueryPromise<ListSaveSlotsData, ListSaveSlotsVariables>;
+export function listSaveSlots(dc: DataConnect, vars: ListSaveSlotsVariables, options?: ExecuteQueryOptions): QueryPromise<ListSaveSlotsData, ListSaveSlotsVariables>;
 
 interface UpsertSaveSlotRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: UpsertSaveSlotVariables): MutationRef<UpsertSaveSlotData, UpsertSaveSlotVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: UpsertSaveSlotVariables,
-  ): MutationRef<UpsertSaveSlotData, UpsertSaveSlotVariables>;
+  (dc: DataConnect, vars: UpsertSaveSlotVariables): MutationRef<UpsertSaveSlotData, UpsertSaveSlotVariables>;
   operationName: string;
 }
 export const upsertSaveSlotRef: UpsertSaveSlotRef;
 
-export function upsertSaveSlot(
-  vars: UpsertSaveSlotVariables,
-): MutationPromise<UpsertSaveSlotData, UpsertSaveSlotVariables>;
-export function upsertSaveSlot(
-  dc: DataConnect,
-  vars: UpsertSaveSlotVariables,
-): MutationPromise<UpsertSaveSlotData, UpsertSaveSlotVariables>;
+export function upsertSaveSlot(vars: UpsertSaveSlotVariables): MutationPromise<UpsertSaveSlotData, UpsertSaveSlotVariables>;
+export function upsertSaveSlot(dc: DataConnect, vars: UpsertSaveSlotVariables): MutationPromise<UpsertSaveSlotData, UpsertSaveSlotVariables>;
 
 interface ListPersonasRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -267,114 +231,66 @@ interface ListPersonasRef {
 }
 export const listPersonasRef: ListPersonasRef;
 
-export function listPersonas(
-  vars: ListPersonasVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<ListPersonasData, ListPersonasVariables>;
-export function listPersonas(
-  dc: DataConnect,
-  vars: ListPersonasVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<ListPersonasData, ListPersonasVariables>;
+export function listPersonas(vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
+export function listPersonas(dc: DataConnect, vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
 
 interface CreatePersonaRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: CreatePersonaVariables): MutationRef<CreatePersonaData, CreatePersonaVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: CreatePersonaVariables,
-  ): MutationRef<CreatePersonaData, CreatePersonaVariables>;
+  (dc: DataConnect, vars: CreatePersonaVariables): MutationRef<CreatePersonaData, CreatePersonaVariables>;
   operationName: string;
 }
 export const createPersonaRef: CreatePersonaRef;
 
-export function createPersona(
-  vars: CreatePersonaVariables,
-): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
-export function createPersona(
-  dc: DataConnect,
-  vars: CreatePersonaVariables,
-): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
+export function createPersona(vars: CreatePersonaVariables): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
+export function createPersona(dc: DataConnect, vars: CreatePersonaVariables): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
 
 interface UpdatePersonaRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: UpdatePersonaVariables): MutationRef<UpdatePersonaData, UpdatePersonaVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: UpdatePersonaVariables,
-  ): MutationRef<UpdatePersonaData, UpdatePersonaVariables>;
+  (dc: DataConnect, vars: UpdatePersonaVariables): MutationRef<UpdatePersonaData, UpdatePersonaVariables>;
   operationName: string;
 }
 export const updatePersonaRef: UpdatePersonaRef;
 
-export function updatePersona(
-  vars: UpdatePersonaVariables,
-): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
-export function updatePersona(
-  dc: DataConnect,
-  vars: UpdatePersonaVariables,
-): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
+export function updatePersona(vars: UpdatePersonaVariables): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
+export function updatePersona(dc: DataConnect, vars: UpdatePersonaVariables): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
 
 interface DeletePersonaRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: DeletePersonaVariables): MutationRef<DeletePersonaData, DeletePersonaVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: DeletePersonaVariables,
-  ): MutationRef<DeletePersonaData, DeletePersonaVariables>;
+  (dc: DataConnect, vars: DeletePersonaVariables): MutationRef<DeletePersonaData, DeletePersonaVariables>;
   operationName: string;
 }
 export const deletePersonaRef: DeletePersonaRef;
 
-export function deletePersona(
-  vars: DeletePersonaVariables,
-): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
-export function deletePersona(
-  dc: DataConnect,
-  vars: DeletePersonaVariables,
-): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
+export function deletePersona(vars: DeletePersonaVariables): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
+export function deletePersona(dc: DataConnect, vars: DeletePersonaVariables): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
 
 interface DeactivatePersonasRef {
   /* Allow users to create refs without passing in DataConnect */
-  (
-    vars: DeactivatePersonasVariables,
-  ): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
+  (vars: DeactivatePersonasVariables): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: DeactivatePersonasVariables,
-  ): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
+  (dc: DataConnect, vars: DeactivatePersonasVariables): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
   operationName: string;
 }
 export const deactivatePersonasRef: DeactivatePersonasRef;
 
-export function deactivatePersonas(
-  vars: DeactivatePersonasVariables,
-): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
-export function deactivatePersonas(
-  dc: DataConnect,
-  vars: DeactivatePersonasVariables,
-): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
+export function deactivatePersonas(vars: DeactivatePersonasVariables): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
+export function deactivatePersonas(dc: DataConnect, vars: DeactivatePersonasVariables): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
 
 interface ActivatePersonaRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: ActivatePersonaVariables): MutationRef<ActivatePersonaData, ActivatePersonaVariables>;
   /* Allow users to pass in custom DataConnect instances */
-  (
-    dc: DataConnect,
-    vars: ActivatePersonaVariables,
-  ): MutationRef<ActivatePersonaData, ActivatePersonaVariables>;
+  (dc: DataConnect, vars: ActivatePersonaVariables): MutationRef<ActivatePersonaData, ActivatePersonaVariables>;
   operationName: string;
 }
 export const activatePersonaRef: ActivatePersonaRef;
 
-export function activatePersona(
-  vars: ActivatePersonaVariables,
-): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
-export function activatePersona(
-  dc: DataConnect,
-  vars: ActivatePersonaVariables,
-): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
+export function activatePersona(vars: ActivatePersonaVariables): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
+export function activatePersona(dc: DataConnect, vars: ActivatePersonaVariables): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
+

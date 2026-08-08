@@ -21,7 +21,7 @@ created_at: "2026-08-07"
 | **Target** | `apps/frontend/hub` (persona data layer: client service, SSR load, moon config) + `apps/backend/firebase/dataconnect` (schema.gql + connector/queries.gql) + `packages/frontend/dataconnect` (regenerated SDK + wrapper exports) + `packages/shared/schemas` (regenerated row schema) |
 | **Priority** | P1 — the hub's only product-data feature (personas) is entirely Firestore-backed; this contract swaps that layer to Data Connect and removes the hub's Firestore dependency. It is also the first real consumer of the already-authored Data Connect schema, exercising the pipeline C-375+ Hub catalog work will build on |
 | **Dependencies** | None blocking. Reuses the Data Connect scaffold from C-014 (completed) and the already-authored `Persona` table in `apps/backend/firebase/dataconnect/schema/schema.gql`. Package deps: `@aikami/frontend-dataconnect`, `firebase@12.17.1` / `@firebase/data-connect@0.7.3` (verified: **no client-side transaction API** in this SDK version), `@aikami/frontend-configs` (Data Connect singleton + emulator wiring) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal → none (no user-facing docs; hub is a dashboard app) |
 | **Contract version** | 2.0.0 |
@@ -474,57 +474,3 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
-
-## Execution Report
-
-### Summary
-Moved the hub's persona data layer from Firestore to Firebase Data Connect. Added `isActive` and `voiceConfigId` to the SQL `Persona` table plus a `(uid, isActive)` index, defined persona connector operations with server-side ownership enforcement, applied the one-active partial unique index, regenerated the typed SDK + `PersonaRowSchema`, and replaced the hub's Firestore service/SSR load with a pure-TS Data Connect repository and mapper (same public interface — ViewModel/View untouched). Verified end-to-end: 15/15 unit tests, 23/23 emulator integration assertions, and a full browser pass of `/personas` (create → activate → delete) with visual validation 95–100/100. The hub no longer touches Firestore for product data.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Schema + connector compile and regenerate cleanly; SDK exports listPersonas/createPersona/updatePersona/deletePersona/deactivatePersonas/activatePersona; `PersonaRowSchema` includes isActive+voiceConfigId; `connectorConfig.location = europe-west4`; firebase/schemas/frontend-dataconnect/hub typecheck clean. Deviation: `SetActivePersona` split into `DeactivatePersonas`+`ActivatePersona` (see Deviations). |
-| AC-2 | ✅ | CRUD round-trips through Data Connect; mapper round-trips losslessly (id, name, avatarUrl, voiceConfigId, race, class, level, isActive, traits); RFC 3339 → epoch ms; duplicate id → already-exists; missing/not-owned row → repository maps zero affected rows to typed not-found. 23/23 integration + 15/15 unit. |
-| AC-3 | ✅ | Partial unique index applied; a second direct activation of a different persona is rejected (unique violation → typed conflict); two-step setActive clears previous active + activates target; concurrent setActive leaves exactly one active row. |
-| AC-4 | ✅ | Browser flow on `/personas` verified (SSR-seeded list, create, Active badge, delete, empty state) with screenshots 95/100, 100/100, 100/100; `grep personaFirestoreRepository apps/frontend/hub/src` → no matches; hub `moon.yml` no longer lists frontend-firestore/backend-firestore; `@google-cloud/firestore`+`firebase-admin` removed from package.json; hub:test 15/15; hub:build passes. |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `apps/backend/firebase/dataconnect/migrations/persona_one_active.sql` | Partial unique index `(uid) WHERE is_active = true` (idempotent; apply to emulator + Cloud SQL documented). |
-| `packages/frontend/dataconnect/src/lib/generated/*` | Regenerated SDK (committed, tracked) — persona ops + `location: europe-west4`. |
-| `packages/shared/schemas/src/lib/generated-dataconnect/persona.ts` | Regenerated `PersonaRowSchema` with `isActive` + `voiceConfigId`. |
-| `apps/frontend/hub/src/lib/client/services/dataconnect/persona_mapper.ts` | Pure row↔`PersonaData` mapper + `mapDataConnectError` domain-error mapping. |
-| `apps/frontend/hub/src/lib/client/services/dataconnect/persona_repository.ts` | Thin repository over the generated SDK (list/create/update/remove/setActive), zero-row → not-found. |
-| `apps/frontend/hub/src/lib/client/services/dataconnect/persona_data.svelte.ts` | Rewritten `PersonaDataService` — interface byte-identical, schema validation via `PersonaCreateSchema`/`PersonaUpdateSchema`. |
-| `apps/frontend/hub/src/lib/client/services/dataconnect/__tests__/persona_mapper.test.ts` | 15 unit tests: mapping, timestamps, conflicts, error mapping. |
-| `apps/frontend/hub/scripts/verify_persona_dataconnect.ts` | Emulator verification script — CRUD + one-active + concurrent setActive (23 assertions). |
-| `apps/frontend/hub/scripts/browser_verify_personas.ts` | Playwright browser pass of `/personas` (login → create → activate → delete). |
-| `apps/frontend/hub/.env.emulator`, `.env.production` | Local (gitignored) hub env files required to run/build the hub dev server. |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `apps/backend/firebase/dataconnect/schema/schema.gql` | `Persona` gains `isActive`, `voiceConfigId`, table-level `@index(fields: ["uid","isActive"])`; traits doc comment updated (name lives in its own column). |
-| `apps/backend/firebase/dataconnect/connector/queries.gql` | Persona section: `ListPersonas` (PUBLIC), `CreatePersona`, `UpdatePersona`, `DeletePersona`, `DeactivatePersonas`, `ActivatePersona` — all with `@auth` ownership enforcement. |
-| `apps/backend/firebase/package.json` | `generate` script now passes `--dataconnectDirectory dataconnect` (fixes the `_EXCLUDE_` generation bug). |
-| `packages/frontend/dataconnect/src/index.ts` | Re-exports the six persona operations + refs alongside existing exports. |
-| `apps/frontend/hub/src/lib/client/services/index.ts` | Barrel now exports `dataconnect/persona_data.svelte.ts` (firestore export removed). |
-| `apps/frontend/hub/src/routes/(authenticated)/personas/+page.server.ts` | SSR load queries `ListPersonas` via Data Connect; maps rows via `rowToData` (RFC 3339 → epoch ms); 401 gate kept. |
-| `apps/frontend/hub/src/lib/client/services/firestore/persona_data.svelte.ts` | Deleted (Firestore service). |
-| `apps/frontend/hub/moon.yml` | `dependsOn`: +`frontend-dataconnect`, −`frontend-firestore`, −`backend-firestore`. |
-| `apps/frontend/hub/package.json` | Removed `@google-cloud/firestore` and `firebase-admin`. |
-| `apps/frontend/hub/vite.config.ts` | Removed now-unused `firebase-admin`/`@google-cloud/firestore` from `SERVER_ONLY_PACKAGES`; auth-emulator proxy targets `127.0.0.1` (was `localhost` → ::1, blank popup); dev server binds `0.0.0.0`. |
-
-### Deviations from Spec
-- **`SetActivePersona` split into two operations (`DeactivatePersonas` + `ActivatePersona`)** — the pinned dialect rejects two `persona_updateMany` selections in one mutation (b/331629988), key-based `persona_update` cannot scope by uid (`Persona_Key` is id-only), `where` filters accept no `_expr` args, and raw-SQL `_executeReturning` fails against the pinned pglite emulator (`pq: unexpected message 'E'`). The repository calls deactivate-then-activate sequentially; the partial unique index is the concurrency backstop (AC-3), exactly as the contract's Watch Points permit. The generated SDK exposes `deactivatePersonas`/`activatePersona` instead of `setActivePersona`; the wrapper + repository facade keep the `setActive` interface.
-- **`@auth` form**: the dialect does not allow combining `level` and `expr` on `@auth`, and CEL cannot reference GraphQL variables directly. Ownership is enforced with `@auth(expr: "auth.uid == request.variables.uid")` (documented CEL `request.variables` form) + id/uid-scoped `where` clauses.
-- **firebase generate script fix**: `firestack generate` evaluated `dataconnectDirectory` as `_EXCLUDE_` even in emulator mode (firestack evaluates the config with `mode: undefined`), breaking `bun moon run firebase:generate`. Fixed by passing `--dataconnectDirectory dataconnect` in the generate script; deploy semantics unchanged.
-- **Emulator infra**: the Data Connect emulator is not started by `herdr_session start firebase` (firestack never includes it) and must be started standalone from `apps/backend/firebase/tmp/dataconnect-emulator/` (local firebase.json with `dataconnect.source` + `postgresPort`). The pglite gateway can transiently fail the first request after startup (retry-once in the verification script). No backfill of Firestore personas (as scoped).
-- **Pre-existing failures (not caused by this contract)**: `moon run :typecheck` fails in `packages/frontend/engine/src/game_world.ts:729` (`_disposed` does not exist) — untouched by this contract; the hub had no `.env.emulator`/`.env.production` (added locally, gitignored) so the dev server and `hub:build` could run.
-
-### Test Results
-- Unit: 15/15 pass (hub `persona_mapper.test.ts`) — 0 failures
-- Integration (emulator script `verify_persona_dataconnect.ts`): 23/23 pass — 0 failures
-- Visual: `hub-personas-created` 95/100, `hub-personas-active` 100/100, `hub-personas-deleted` 100/100 — PASS
-- Baseline: 1 pre-existing failure (`frontend-engine:typecheck`), 0 new failures
