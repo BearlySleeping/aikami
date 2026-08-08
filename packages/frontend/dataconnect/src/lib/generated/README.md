@@ -11,8 +11,14 @@ This README will guide you through the process of using the generated JavaScript
   - [*ListUsers*](#listusers)
   - [*GetTracksByMood*](#gettracksbymood)
   - [*ListSaveSlots*](#listsaveslots)
+  - [*ListPersonas*](#listpersonas)
 - [**Mutations**](#mutations)
   - [*UpsertSaveSlot*](#upsertsaveslot)
+  - [*CreatePersona*](#createpersona)
+  - [*UpdatePersona*](#updatepersona)
+  - [*DeletePersona*](#deletepersona)
+  - [*DeactivatePersonas*](#deactivatepersonas)
+  - [*ActivatePersona*](#activatepersona)
 
 # Accessing the connector
 A connector is a collection of Queries and Mutations. One SDK is generated for each connector - this SDK is generated for the connector `aikami-connector`. You can find more information about connectors in the [Data Connect documentation](https://firebase.google.com/docs/data-connect#how-does).
@@ -98,7 +104,6 @@ The `data` property is an object of type `ListUsersData`, which is defined in [g
 export interface ListUsersData {
   users: ({
     id: string;
-    email?: string | null;
   } & User_Key)[];
 }
 ```
@@ -315,8 +320,8 @@ export interface ListSaveSlotsData {
     lastLocationName?: string | null;
     playedTimeSeconds?: number | null;
     storageRef: string;
-    createdAt?: DateString | null;
-    updatedAt?: DateString | null;
+    createdAt: TimestampString;
+    updatedAt: TimestampString;
   } & SaveSlot_Key)[];
 }
 ```
@@ -380,6 +385,126 @@ console.log(data.saveSlots);
 executeQuery(ref).then((response) => {
   const data = response.data;
   console.log(data.saveSlots);
+});
+```
+
+## ListPersonas
+You can execute the `ListPersonas` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+listPersonas(vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
+
+interface ListPersonasRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ListPersonasVariables): QueryRef<ListPersonasData, ListPersonasVariables>;
+}
+export const listPersonasRef: ListPersonasRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+listPersonas(dc: DataConnect, vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
+
+interface ListPersonasRef {
+  ...
+  (dc: DataConnect, vars: ListPersonasVariables): QueryRef<ListPersonasData, ListPersonasVariables>;
+}
+export const listPersonasRef: ListPersonasRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the listPersonasRef:
+```typescript
+const name = listPersonasRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `ListPersonas` query requires an argument of type `ListPersonasVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface ListPersonasVariables {
+  uid: string;
+}
+```
+### Return Type
+Recall that executing the `ListPersonas` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `ListPersonasData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface ListPersonasData {
+  personas: ({
+    id: string;
+    createdAt: TimestampString;
+    updatedAt: TimestampString;
+    name: string;
+    description?: string | null;
+    avatarUrl?: string | null;
+    uid: string;
+    traits?: unknown | null;
+    isActive: boolean;
+    voiceConfigId?: string | null;
+  } & Persona_Key)[];
+}
+```
+### Using `ListPersonas`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, listPersonas, ListPersonasVariables } from '@aikami/frontend-dataconnect';
+
+// The `ListPersonas` query requires an argument of type `ListPersonasVariables`:
+const listPersonasVars: ListPersonasVariables = {
+  uid: ..., 
+};
+
+// Call the `listPersonas()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await listPersonas(listPersonasVars);
+// Variables can be defined inline as well.
+const { data } = await listPersonas({ uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await listPersonas(dataConnect, listPersonasVars);
+
+console.log(data.personas);
+
+// Or, you can use the `Promise` API.
+listPersonas(listPersonasVars).then((response) => {
+  const data = response.data;
+  console.log(data.personas);
+});
+```
+
+### Using `ListPersonas`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, listPersonasRef, ListPersonasVariables } from '@aikami/frontend-dataconnect';
+
+// The `ListPersonas` query requires an argument of type `ListPersonasVariables`:
+const listPersonasVars: ListPersonasVariables = {
+  uid: ..., 
+};
+
+// Call the `listPersonasRef()` function to get a reference to the query.
+const ref = listPersonasRef(listPersonasVars);
+// Variables can be defined inline as well.
+const ref = listPersonasRef({ uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = listPersonasRef(dataConnect, listPersonasVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.personas);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.personas);
 });
 ```
 
@@ -519,6 +644,590 @@ console.log(data.saveSlot_upsert);
 executeMutation(ref).then((response) => {
   const data = response.data;
   console.log(data.saveSlot_upsert);
+});
+```
+
+## CreatePersona
+You can execute the `CreatePersona` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+createPersona(vars: CreatePersonaVariables): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
+
+interface CreatePersonaRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreatePersonaVariables): MutationRef<CreatePersonaData, CreatePersonaVariables>;
+}
+export const createPersonaRef: CreatePersonaRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+createPersona(dc: DataConnect, vars: CreatePersonaVariables): MutationPromise<CreatePersonaData, CreatePersonaVariables>;
+
+interface CreatePersonaRef {
+  ...
+  (dc: DataConnect, vars: CreatePersonaVariables): MutationRef<CreatePersonaData, CreatePersonaVariables>;
+}
+export const createPersonaRef: CreatePersonaRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the createPersonaRef:
+```typescript
+const name = createPersonaRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `CreatePersona` mutation requires an argument of type `CreatePersonaVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface CreatePersonaVariables {
+  id: string;
+  uid: string;
+  name: string;
+  avatarUrl?: string | null;
+  voiceConfigId?: string | null;
+  traits?: unknown | null;
+  isActive: boolean;
+}
+```
+### Return Type
+Recall that executing the `CreatePersona` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `CreatePersonaData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface CreatePersonaData {
+  persona_insert: Persona_Key;
+}
+```
+### Using `CreatePersona`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, createPersona, CreatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `CreatePersona` mutation requires an argument of type `CreatePersonaVariables`:
+const createPersonaVars: CreatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+  name: ..., 
+  avatarUrl: ..., // optional
+  voiceConfigId: ..., // optional
+  traits: ..., // optional
+  isActive: ..., 
+};
+
+// Call the `createPersona()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await createPersona(createPersonaVars);
+// Variables can be defined inline as well.
+const { data } = await createPersona({ id: ..., uid: ..., name: ..., avatarUrl: ..., voiceConfigId: ..., traits: ..., isActive: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await createPersona(dataConnect, createPersonaVars);
+
+console.log(data.persona_insert);
+
+// Or, you can use the `Promise` API.
+createPersona(createPersonaVars).then((response) => {
+  const data = response.data;
+  console.log(data.persona_insert);
+});
+```
+
+### Using `CreatePersona`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, createPersonaRef, CreatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `CreatePersona` mutation requires an argument of type `CreatePersonaVariables`:
+const createPersonaVars: CreatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+  name: ..., 
+  avatarUrl: ..., // optional
+  voiceConfigId: ..., // optional
+  traits: ..., // optional
+  isActive: ..., 
+};
+
+// Call the `createPersonaRef()` function to get a reference to the mutation.
+const ref = createPersonaRef(createPersonaVars);
+// Variables can be defined inline as well.
+const ref = createPersonaRef({ id: ..., uid: ..., name: ..., avatarUrl: ..., voiceConfigId: ..., traits: ..., isActive: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = createPersonaRef(dataConnect, createPersonaVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.persona_insert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.persona_insert);
+});
+```
+
+## UpdatePersona
+You can execute the `UpdatePersona` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+updatePersona(vars: UpdatePersonaVariables): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
+
+interface UpdatePersonaRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdatePersonaVariables): MutationRef<UpdatePersonaData, UpdatePersonaVariables>;
+}
+export const updatePersonaRef: UpdatePersonaRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+updatePersona(dc: DataConnect, vars: UpdatePersonaVariables): MutationPromise<UpdatePersonaData, UpdatePersonaVariables>;
+
+interface UpdatePersonaRef {
+  ...
+  (dc: DataConnect, vars: UpdatePersonaVariables): MutationRef<UpdatePersonaData, UpdatePersonaVariables>;
+}
+export const updatePersonaRef: UpdatePersonaRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the updatePersonaRef:
+```typescript
+const name = updatePersonaRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `UpdatePersona` mutation requires an argument of type `UpdatePersonaVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface UpdatePersonaVariables {
+  id: string;
+  uid: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+  voiceConfigId?: string | null;
+  traits?: unknown | null;
+}
+```
+### Return Type
+Recall that executing the `UpdatePersona` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `UpdatePersonaData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface UpdatePersonaData {
+  persona_updateMany: number;
+}
+```
+### Using `UpdatePersona`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, updatePersona, UpdatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `UpdatePersona` mutation requires an argument of type `UpdatePersonaVariables`:
+const updatePersonaVars: UpdatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+  name: ..., // optional
+  avatarUrl: ..., // optional
+  voiceConfigId: ..., // optional
+  traits: ..., // optional
+};
+
+// Call the `updatePersona()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await updatePersona(updatePersonaVars);
+// Variables can be defined inline as well.
+const { data } = await updatePersona({ id: ..., uid: ..., name: ..., avatarUrl: ..., voiceConfigId: ..., traits: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await updatePersona(dataConnect, updatePersonaVars);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+updatePersona(updatePersonaVars).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
+});
+```
+
+### Using `UpdatePersona`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, updatePersonaRef, UpdatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `UpdatePersona` mutation requires an argument of type `UpdatePersonaVariables`:
+const updatePersonaVars: UpdatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+  name: ..., // optional
+  avatarUrl: ..., // optional
+  voiceConfigId: ..., // optional
+  traits: ..., // optional
+};
+
+// Call the `updatePersonaRef()` function to get a reference to the mutation.
+const ref = updatePersonaRef(updatePersonaVars);
+// Variables can be defined inline as well.
+const ref = updatePersonaRef({ id: ..., uid: ..., name: ..., avatarUrl: ..., voiceConfigId: ..., traits: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = updatePersonaRef(dataConnect, updatePersonaVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
+});
+```
+
+## DeletePersona
+You can execute the `DeletePersona` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+deletePersona(vars: DeletePersonaVariables): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
+
+interface DeletePersonaRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: DeletePersonaVariables): MutationRef<DeletePersonaData, DeletePersonaVariables>;
+}
+export const deletePersonaRef: DeletePersonaRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+deletePersona(dc: DataConnect, vars: DeletePersonaVariables): MutationPromise<DeletePersonaData, DeletePersonaVariables>;
+
+interface DeletePersonaRef {
+  ...
+  (dc: DataConnect, vars: DeletePersonaVariables): MutationRef<DeletePersonaData, DeletePersonaVariables>;
+}
+export const deletePersonaRef: DeletePersonaRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the deletePersonaRef:
+```typescript
+const name = deletePersonaRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `DeletePersona` mutation requires an argument of type `DeletePersonaVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface DeletePersonaVariables {
+  id: string;
+  uid: string;
+}
+```
+### Return Type
+Recall that executing the `DeletePersona` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `DeletePersonaData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface DeletePersonaData {
+  persona_deleteMany: number;
+}
+```
+### Using `DeletePersona`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, deletePersona, DeletePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `DeletePersona` mutation requires an argument of type `DeletePersonaVariables`:
+const deletePersonaVars: DeletePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `deletePersona()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await deletePersona(deletePersonaVars);
+// Variables can be defined inline as well.
+const { data } = await deletePersona({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await deletePersona(dataConnect, deletePersonaVars);
+
+console.log(data.persona_deleteMany);
+
+// Or, you can use the `Promise` API.
+deletePersona(deletePersonaVars).then((response) => {
+  const data = response.data;
+  console.log(data.persona_deleteMany);
+});
+```
+
+### Using `DeletePersona`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, deletePersonaRef, DeletePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `DeletePersona` mutation requires an argument of type `DeletePersonaVariables`:
+const deletePersonaVars: DeletePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `deletePersonaRef()` function to get a reference to the mutation.
+const ref = deletePersonaRef(deletePersonaVars);
+// Variables can be defined inline as well.
+const ref = deletePersonaRef({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = deletePersonaRef(dataConnect, deletePersonaVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.persona_deleteMany);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.persona_deleteMany);
+});
+```
+
+## DeactivatePersonas
+You can execute the `DeactivatePersonas` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+deactivatePersonas(vars: DeactivatePersonasVariables): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
+
+interface DeactivatePersonasRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: DeactivatePersonasVariables): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
+}
+export const deactivatePersonasRef: DeactivatePersonasRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+deactivatePersonas(dc: DataConnect, vars: DeactivatePersonasVariables): MutationPromise<DeactivatePersonasData, DeactivatePersonasVariables>;
+
+interface DeactivatePersonasRef {
+  ...
+  (dc: DataConnect, vars: DeactivatePersonasVariables): MutationRef<DeactivatePersonasData, DeactivatePersonasVariables>;
+}
+export const deactivatePersonasRef: DeactivatePersonasRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the deactivatePersonasRef:
+```typescript
+const name = deactivatePersonasRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `DeactivatePersonas` mutation requires an argument of type `DeactivatePersonasVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface DeactivatePersonasVariables {
+  uid: string;
+}
+```
+### Return Type
+Recall that executing the `DeactivatePersonas` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `DeactivatePersonasData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface DeactivatePersonasData {
+  persona_updateMany: number;
+}
+```
+### Using `DeactivatePersonas`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, deactivatePersonas, DeactivatePersonasVariables } from '@aikami/frontend-dataconnect';
+
+// The `DeactivatePersonas` mutation requires an argument of type `DeactivatePersonasVariables`:
+const deactivatePersonasVars: DeactivatePersonasVariables = {
+  uid: ..., 
+};
+
+// Call the `deactivatePersonas()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await deactivatePersonas(deactivatePersonasVars);
+// Variables can be defined inline as well.
+const { data } = await deactivatePersonas({ uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await deactivatePersonas(dataConnect, deactivatePersonasVars);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+deactivatePersonas(deactivatePersonasVars).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
+});
+```
+
+### Using `DeactivatePersonas`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, deactivatePersonasRef, DeactivatePersonasVariables } from '@aikami/frontend-dataconnect';
+
+// The `DeactivatePersonas` mutation requires an argument of type `DeactivatePersonasVariables`:
+const deactivatePersonasVars: DeactivatePersonasVariables = {
+  uid: ..., 
+};
+
+// Call the `deactivatePersonasRef()` function to get a reference to the mutation.
+const ref = deactivatePersonasRef(deactivatePersonasVars);
+// Variables can be defined inline as well.
+const ref = deactivatePersonasRef({ uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = deactivatePersonasRef(dataConnect, deactivatePersonasVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
+});
+```
+
+## ActivatePersona
+You can execute the `ActivatePersona` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+activatePersona(vars: ActivatePersonaVariables): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
+
+interface ActivatePersonaRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ActivatePersonaVariables): MutationRef<ActivatePersonaData, ActivatePersonaVariables>;
+}
+export const activatePersonaRef: ActivatePersonaRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+activatePersona(dc: DataConnect, vars: ActivatePersonaVariables): MutationPromise<ActivatePersonaData, ActivatePersonaVariables>;
+
+interface ActivatePersonaRef {
+  ...
+  (dc: DataConnect, vars: ActivatePersonaVariables): MutationRef<ActivatePersonaData, ActivatePersonaVariables>;
+}
+export const activatePersonaRef: ActivatePersonaRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the activatePersonaRef:
+```typescript
+const name = activatePersonaRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `ActivatePersona` mutation requires an argument of type `ActivatePersonaVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface ActivatePersonaVariables {
+  id: string;
+  uid: string;
+}
+```
+### Return Type
+Recall that executing the `ActivatePersona` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `ActivatePersonaData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface ActivatePersonaData {
+  persona_updateMany: number;
+}
+```
+### Using `ActivatePersona`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, activatePersona, ActivatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `ActivatePersona` mutation requires an argument of type `ActivatePersonaVariables`:
+const activatePersonaVars: ActivatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `activatePersona()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await activatePersona(activatePersonaVars);
+// Variables can be defined inline as well.
+const { data } = await activatePersona({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await activatePersona(dataConnect, activatePersonaVars);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+activatePersona(activatePersonaVars).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
+});
+```
+
+### Using `ActivatePersona`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, activatePersonaRef, ActivatePersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `ActivatePersona` mutation requires an argument of type `ActivatePersonaVariables`:
+const activatePersonaVars: ActivatePersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `activatePersonaRef()` function to get a reference to the mutation.
+const ref = activatePersonaRef(activatePersonaVars);
+// Variables can be defined inline as well.
+const ref = activatePersonaRef({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = activatePersonaRef(dataConnect, activatePersonaVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.persona_updateMany);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.persona_updateMany);
 });
 ```
 

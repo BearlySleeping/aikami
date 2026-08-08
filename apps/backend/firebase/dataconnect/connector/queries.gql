@@ -61,3 +61,117 @@ mutation UpsertSaveSlot(
     }
   )
 }
+
+# Personas
+
+# Read: PUBLIC — mirrors Firestore rules `personas/{personaId}: allow read: if true`.
+# Public read is what makes SSR seeding work without re-authenticating the server.
+# ListPersonas is capped at 100 rows (performance budget in C-374).
+query ListPersonas($uid: String!) @auth(level: PUBLIC) {
+  personas(where: { uid: { eq: $uid } }, orderBy: { createdAt: DESC }, limit: 100) {
+    id
+    createdAt
+    updatedAt
+    name
+    description
+    avatarUrl
+    uid
+    traits
+    isActive
+    voiceConfigId
+  }
+}
+
+# Write: USER + owner — the server rejects any caller whose uid differs from
+# auth.uid via @auth(expr: "auth.uid == request.variables.uid") (the CEL
+# environment exposes the mutation variables as request.variables — `$uid`
+# syntax is not valid CEL, and `level`+`expr` cannot be combined in this
+# dialect). $id is caller-generated ("persona_<uuid>") following the
+# UpsertSaveSlot precedent (Persona.id is String! with no default). Duplicate
+# id → Postgres PK conflict → typed error.
+mutation CreatePersona(
+  $id: String!
+  $uid: String!
+  $name: String!
+  $avatarUrl: String
+  $voiceConfigId: String
+  $traits: Any
+  $isActive: Boolean!
+) @auth(expr: "auth.uid == request.variables.uid") {
+  persona_insert(
+    data: {
+      id: $id
+      uid: $uid
+      name: $name
+      avatarUrl: $avatarUrl
+      voiceConfigId: $voiceConfigId
+      traits: $traits
+      isActive: $isActive
+    }
+  )
+}
+
+# 🔴 OWNERSHIP ENFORCEMENT: @auth(expr: "auth.uid == request.variables.uid")
+# proves the caller passed their own uid — it does NOT scope the target row.
+# Every row-level write therefore filters by BOTH id and uid in its `where`
+# clause, so a caller can never address another user's row by id (the
+# Firestore path enforced the same via `_getOwnedPersona` → "Persona not
+# found").
+#
+# 🔴 `persona_updateMany` / `persona_deleteMany` return Int (affected row
+# count) in this Data Connect dialect — they do NOT return row selections.
+# The repository maps a zero count to a typed not-found error.
+# updatedAt_expr: "request.time" keeps the row's updatedAt fresh (see
+# schema-refactor-decisions.md §2).
+mutation UpdatePersona(
+  $id: String!
+  $uid: String!
+  $name: String
+  $avatarUrl: String
+  $voiceConfigId: String
+  $traits: Any
+) @auth(expr: "auth.uid == request.variables.uid") {
+  persona_updateMany(
+    where: { id: { eq: $id }, uid: { eq: $uid } }
+    data: {
+      name: $name
+      avatarUrl: $avatarUrl
+      voiceConfigId: $voiceConfigId
+      traits: $traits
+      updatedAt_expr: "request.time"
+    }
+  )
+}
+
+mutation DeletePersona($id: String!, $uid: String!)
+@auth(expr: "auth.uid == request.variables.uid") {
+  persona_deleteMany(where: { id: { eq: $id }, uid: { eq: $uid } })
+}
+
+# One active persona per user — implemented as TWO server-side operations
+# (the dialect rejects two `persona_updateMany` selections in one mutation
+# (b/331629988), key-based `persona_update` cannot scope by uid (Persona_Key
+# is id-only), and raw-SQL `_executeReturning` fails against the pinned
+# pglite emulator (pq: unexpected message 'E'; verified during C-374)). The
+# repository calls DeactivatePersonas then ActivatePersona sequentially, both
+# uid-scoped and @auth-verified. Atomicity is NOT client-side; the partial
+# unique index (uid) WHERE is_active is the concurrency backstop: a
+# concurrent activation of a different persona fails with a unique-violation
+# conflict instead of creating two active rows (AC-3). A transient
+# zero-active window between the two steps is acceptable (the invariant that
+# matters — never two active — is enforced by the index; the UI recovers on
+# refresh).
+mutation DeactivatePersonas($uid: String!) @auth(expr: "auth.uid == request.variables.uid") {
+  persona_updateMany(
+    where: { uid: { eq: $uid }, isActive: { eq: true } }
+    data: { isActive: false, updatedAt_expr: "request.time" }
+  )
+}
+
+mutation ActivatePersona($id: String!, $uid: String!)
+@auth(expr: "auth.uid == request.variables.uid") {
+  persona_updateMany(
+    where: { id: { eq: $id }, uid: { eq: $uid } }
+    data: { isActive: true, updatedAt_expr: "request.time" }
+  )
+}

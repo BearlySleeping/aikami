@@ -14,7 +14,7 @@ If a user is not using a supported framework, they can use the generated SDK dir
 Here's an example of how to use it with the first 5 operations:
 
 ```js
-import { listUsers, getTracksByMood, listSaveSlots, upsertSaveSlot } from '@aikami/frontend-dataconnect';
+import { listUsers, getTracksByMood, listSaveSlots, upsertSaveSlot, listPersonas, createPersona, updatePersona, deletePersona, deactivatePersonas, activatePersona } from '@aikami/frontend-dataconnect';
 
 
 // Operation ListUsers: 
@@ -28,6 +28,24 @@ const { data } = await ListSaveSlots(dataConnect, listSaveSlotsVars);
 
 // Operation UpsertSaveSlot:  For variables, look at type UpsertSaveSlotVars in ../index.d.ts
 const { data } = await UpsertSaveSlot(dataConnect, upsertSaveSlotVars);
+
+// Operation ListPersonas:  For variables, look at type ListPersonasVars in ../index.d.ts
+const { data } = await ListPersonas(dataConnect, listPersonasVars);
+
+// Operation CreatePersona:  For variables, look at type CreatePersonaVars in ../index.d.ts
+const { data } = await CreatePersona(dataConnect, createPersonaVars);
+
+// Operation UpdatePersona:  For variables, look at type UpdatePersonaVars in ../index.d.ts
+const { data } = await UpdatePersona(dataConnect, updatePersonaVars);
+
+// Operation DeletePersona:  For variables, look at type DeletePersonaVars in ../index.d.ts
+const { data } = await DeletePersona(dataConnect, deletePersonaVars);
+
+// Operation DeactivatePersonas:  For variables, look at type DeactivatePersonasVars in ../index.d.ts
+const { data } = await DeactivatePersonas(dataConnect, deactivatePersonasVars);
+
+// Operation ActivatePersona:  For variables, look at type ActivatePersonaVars in ../index.d.ts
+const { data } = await ActivatePersona(dataConnect, activatePersonaVars);
 
 
 ```

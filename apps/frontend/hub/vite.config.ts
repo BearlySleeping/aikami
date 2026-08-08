@@ -15,17 +15,20 @@ const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
 /** Firebase Auth emulator proxies so the SDK's popup/relay share one origin. */
+// The auth emulator binds 127.0.0.1 only — target it directly (a `localhost`
+// target resolves to ::1 first and the proxy fails, leaving the popup
+// handler blank).
 const emulatorAuthProxy: Record<string, string | ProxyOptions> = {
   '/emulator/auth': {
-    target: `http://localhost:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
     changeOrigin: true,
   },
   '/identitytoolkit.googleapis.com': {
-    target: `http://localhost:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
     changeOrigin: true,
   },
   '/securetoken.googleapis.com': {
-    target: `http://localhost:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
     changeOrigin: true,
   },
 };
@@ -35,12 +38,7 @@ const NODE_BUILTINS = [...builtinModules, ...builtinModules.map((m) => `node:${m
 
 // Packages that are Node-only and should NEVER be bundled.
 const SERVER_ONLY_PACKAGES = [
-  'firebase-admin',
-  'firebase-admin/app',
-  'firebase-admin/auth',
-  'firebase-admin/firestore',
   'firebase-functions',
-  '@google-cloud/firestore',
   '@google-cloud/secret-manager',
   'genkit',
   '@genkit-ai/google-genai',
@@ -208,6 +206,9 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
+      // Bind all interfaces (IPv4 + IPv6) so headless browsers and the
+      // e2e suite can reach the dev server via localhost.
+      host: '0.0.0.0',
       fs: {
         allow: [rootDirectory],
       },

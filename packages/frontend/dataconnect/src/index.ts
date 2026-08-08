@@ -17,10 +17,22 @@ export type * from './lib/generated';
 // Re-export generated query/mutation action shortcut functions.
 // Re-export refs for advanced usage.
 export {
+  activatePersona,
+  activatePersonaRef,
+  createPersona,
+  createPersonaRef,
+  deactivatePersonas,
+  deactivatePersonasRef,
+  deletePersona,
+  deletePersonaRef,
   getTracksByMood,
   getTracksByMoodRef,
+  listPersonas,
+  listPersonasRef,
   listSaveSlots,
   listSaveSlotsRef,
+  updatePersona,
+  updatePersonaRef,
   upsertSaveSlot,
   upsertSaveSlotRef,
 } from './lib/generated';

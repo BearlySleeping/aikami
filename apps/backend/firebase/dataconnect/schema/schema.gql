@@ -239,7 +239,7 @@ type Npc @table(key: "id") {
 # everyone — personas have no visibility field); write → owner (uid ==
 # auth.uid) or admin. # ND-4: confirm whether personas should be
 # visibility-gated like NPCs.
-type Persona @table(key: "id") {
+type Persona @table(key: "id") @index(fields: ["uid", "isActive"]) {
   id: String! @col(name: "id")
 
   createdAt: Timestamp! @col(name: "created_at") @default(expr: "request.time")
@@ -255,8 +255,19 @@ type Persona @table(key: "id") {
   owner: User! @ref(fields: "uid", references: "id")
   uid: String! @col(name: "uid")
 
+  # Hub one-active-persona flag. Atomicity is enforced by a partial unique
+  # index on (uid) WHERE is_active = true — see
+  # dataconnect/migrations/persona_one_active.sql. No client-side transaction
+  # exists in @firebase/data-connect@0.7.3.
+  isActive: Boolean! @col(name: "is_active") @default(value: false)
+
+  # TTS voice configuration id (PersonaData.voiceConfigId parity).
+  voiceConfigId: String @col(name: "voice_config_id")
+
   """
-  Persona-specific character sheet. Shape validated by PersonaSheetSchema in
+  Persona-specific character sheet (everything in PersonaSheetSchema EXCEPT
+  `name`, which lives in the dedicated `name` column above — never duplicated
+  inside traits). Shape validated by PersonaSheetSchema in
   packages/shared/schemas/src/lib/firestore/persona.ts (extends
   BaseCharacterSheetSchema in database/character.ts).
   """
