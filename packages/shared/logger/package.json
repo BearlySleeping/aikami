@@ -6,6 +6,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
+    "test": "bun test src/lib",
     "fix": "biome check --write . --error-on-warnings"
   },
   "devDependencies": {

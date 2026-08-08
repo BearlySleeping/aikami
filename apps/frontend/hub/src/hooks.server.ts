@@ -7,6 +7,8 @@ import {
   buildLogContext,
   detectDevice,
   getClientIp,
+  isAikamiWebOrigin,
+  isPathExcluded,
   manageSessionId,
   rewriteForwardedHost,
 } from '@aikami/backend/svelte-kit/hooks_helpers';
@@ -20,6 +22,15 @@ import { logContextStore } from '$loggerServer';
 import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
+
+// The `client` app (Firebase Hosting, no server of its own) forwards its
+// browser logger's HTTP sink here cross-origin — see
+// packages/shared/logger/src/lib/logger_browser.ts and
+// apps/frontend/client's PUBLIC_LOG_ENDPOINT. Any first-party
+// *.bearlysleeping.com origin is allowed for this endpoint only (never a
+// wildcard, and no credentials — this route needs none). The origin check
+// lives in packages/backend/svelte-kit/src/lib/hooks_helpers.ts
+// (isAikamiWebOrigin), shared with tests.
 
 // App Check is enabled via the shared predicate in
 // packages/frontend/configs/environment.ts (isAppCheckEnabled) — the same
@@ -125,24 +136,32 @@ export const handle: Handle = async ({ event, resolve }) => {
     userId: userSession?.id,
   }) as LogContext;
 
-  // ── 7. API route: method guard + extension CORS ──
+  // ── 7. API route: method guard + extension/logging CORS ──
   if (pathname.startsWith('/api/')) {
     const method = request.method;
+    // Only /api/internal_logging gets the *.bearlysleeping.com allowance —
+    // scoped narrowly so other /api/ routes don't inherit broadened CORS.
+    const isLoggingEndpoint = isPathExcluded(pathname, appCheckExcludePaths);
 
-    if (allowExtensionCors && method === 'OPTIONS') {
+    if (method === 'OPTIONS' && (allowExtensionCors || isLoggingEndpoint)) {
       const origin = request.headers.get('origin');
-      // Only answer preflight for trusted extension origins — never fall
-      // back to a wildcard, and omit CORS headers for disallowed origins.
-      const isAllowedOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
+      // Only answer preflight for trusted origins — never fall back to a
+      // wildcard, and omit CORS headers for disallowed origins.
+      const isExtensionOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
+      const isLoggingOrigin = isLoggingEndpoint && isAikamiWebOrigin(origin);
       const preflightHeaders = new Headers();
-      if (origin && isAllowedOrigin) {
+      if (origin && (isExtensionOrigin || isLoggingOrigin)) {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
         preflightHeaders.set(
           'Access-Control-Allow-Headers',
           'Content-Type, Cookie, x-aikami-session',
         );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
-        preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
+        // The logging endpoint needs no cookies/credentials — only grant
+        // Allow-Credentials for the extension case, which does.
+        if (isExtensionOrigin) {
+          preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
+        }
       }
       return new Response(null, { status: 204, headers: preflightHeaders });
     }
@@ -156,10 +175,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     // Exclude /api/internal_logging only when the pathname is EXACTLY that
     // endpoint or begins with it followed by '/' — never a bare unbounded
     // startsWith() so similarly prefixed routes stay protected.
-    const isAppCheckExcluded = appCheckExcludePaths.some(
-      (excludedPath) => pathname === excludedPath || pathname.startsWith(`${excludedPath}/`),
-    );
-    if (enforceAppCheck && method !== 'OPTIONS' && !isAppCheckExcluded) {
+    if (enforceAppCheck && method !== 'OPTIONS' && !isLoggingEndpoint) {
       try {
         await verifyAppCheck(request);
       } catch {
@@ -169,13 +185,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 
     const response = await logContextStore.run(logContext, () => resolve(event));
 
-    // Attach CORS headers for extension origins
-    if (allowExtensionCors) {
-      const origin = request.headers.get('origin');
-      if (origin?.startsWith('chrome-extension://') || origin === 'null') {
-        response.headers.set('Access-Control-Allow-Origin', origin);
-        response.headers.set('Access-Control-Allow-Credentials', 'true');
-      }
+    // Attach CORS headers for extension origins and (logging endpoint only)
+    // first-party *.bearlysleeping.com origins.
+    const origin = request.headers.get('origin');
+    if (allowExtensionCors && (origin?.startsWith('chrome-extension://') || origin === 'null')) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    } else if (isLoggingEndpoint && isAikamiWebOrigin(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
     }
 
     return response;

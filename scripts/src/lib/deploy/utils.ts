@@ -5,7 +5,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { c, error, log } from '../cli_utils';
 import {
   type AppConfig,
@@ -187,6 +187,44 @@ export function authenticateDocker(region: string = GCP_REGION): void {
   }
   _dockerAuthenticated.add(region);
   run(`gcloud auth configure-docker ${region}-docker.pkg.dev --quiet`, { quiet: true });
+}
+
+/**
+ * Ensures gcloud is authenticated — user credentials first, then fall back
+ * to the mode's service-account key (.secrets/gcp_sa_key.{mode}.json) so
+ * deploys and log queries work in CI and for agents/pi without an
+ * interactive `gcloud auth login`.
+ *
+ * Exits the process when neither credential source is available or the
+ * service-account activation fails.
+ *
+ * @param mode      Deployment mode ('staging' | 'production') — selects the SA key file.
+ * @param projectId GCP project id — passed to activate-service-account.
+ * @param rootDir   Repo root — `.secrets/` lives at its top level.
+ */
+export function ensureGcloudAuth(mode: string, projectId: string, rootDir: string): void {
+  const authCheck = run('gcloud auth print-access-token', { quiet: true });
+  if (authCheck) {
+    return;
+  }
+  const saKeyPath = resolve(rootDir, `.secrets/gcp_sa_key.${mode}.json`);
+  if (!existsSync(saKeyPath)) {
+    error('Not authenticated with gcloud and no service-account fallback found.');
+    error('  Run: gcloud auth login');
+    error(`  Or place a key at: ${saKeyPath}`);
+    process.exit(1);
+  }
+  log(
+    `${c.yellow}No gcloud user credentials — activating service account from ${saKeyPath}${c.reset}`,
+  );
+  run(`gcloud auth activate-service-account --key-file="${saKeyPath}" --project=${projectId}`, {
+    quiet: true,
+  });
+  const retry = run('gcloud auth print-access-token', { quiet: true });
+  if (!retry) {
+    error(`Service account activation failed (${saKeyPath}). Run: gcloud auth login`);
+    process.exit(1);
+  }
 }
 
 /**

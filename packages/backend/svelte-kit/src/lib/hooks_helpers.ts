@@ -152,3 +152,40 @@ export const rewriteForwardedHost = (event: RequestEvent): RequestEvent => {
     request: new Request(originalUrl.toString(), event.request),
   };
 };
+
+// ── Log-ingestion / CORS helpers ─────────────────────────────────────────
+
+/**
+ * Matches a pathname against a list of excluded paths. A path matches when
+ * it is exactly an excluded path or starts with it followed by '/'
+ * (never a bare unbounded startsWith(), so similarly prefixed routes stay
+ * protected).
+ */
+export const isPathExcluded = (pathname: string, excludedPaths: string[]): boolean =>
+  excludedPaths.some(
+    (excludedPath) => pathname === excludedPath || pathname.startsWith(`${excludedPath}/`),
+  );
+
+/**
+ * Matches first-party web origins: `https://*.bearlysleeping.com`
+ * (e.g. https://aikami.bearlysleeping.com, https://hub.stg.bearlysleeping.com).
+ * HTTPS only — `http://` and cross-site lookalikes (evil.com,
+ * bearlysleeping.com.evil.com) fail.
+ */
+const aikamiWebOriginPattern = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.bearlysleeping\.com$/i;
+
+/**
+ * Whether an Origin header value is a trusted first-party Aikami web
+ * origin. Returns false for null/undefined/empty values. Doubles as a type
+ * predicate so callers get `origin: string` narrowed in the true branch.
+ */
+export const isAikamiWebOrigin = (origin: string | null | undefined): origin is string =>
+  !!origin && aikamiWebOriginPattern.test(origin);
+
+/**
+ * Sanitize the `app` tag from a browser-log-ingestion request body.
+ * Returns the trimmed tag when it is a non-empty string of at most 64
+ * characters, otherwise undefined (the tag is omitted entirely).
+ */
+export const sanitizeLogAppTag = (raw: unknown): string | undefined =>
+  typeof raw === 'string' && raw.length > 0 && raw.length <= 64 ? raw : undefined;

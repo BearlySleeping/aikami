@@ -11,6 +11,8 @@
 // `/api/[...slugs]` Elysia catch-all. It is also excluded from App Check
 // enforcement in hooks.server.ts (appCheckExcludePaths) so log uploads
 // are never blocked by a missing token.
+
+import { sanitizeLogAppTag } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { logger } from '$logger';
 import { logContextStore } from '$loggerServer';
@@ -24,6 +26,11 @@ type LogEntryInput = {
 
 type InternalLogsBody = {
   label?: string;
+  /** Originating app id (PUBLIC_APP_ID), e.g. "hub" or "client" — see
+   *  packages/shared/logger/src/lib/logger_browser.ts. Distinguishes
+   *  hub's own browser-side logs from other apps forwarding here
+   *  cross-origin (e.g. client, which has no server of its own). */
+  app?: string;
   payload?: { batch?: LogEntryInput[] };
 };
 
@@ -135,6 +142,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!Array.isArray(batch)) {
     return json({ error: 'Invalid logs array' }, { status: 400 });
   }
+  // Cap length defensively — this is a public, App Check-excluded field.
+  const app = sanitizeLogAppTag((body as InternalLogsBody).app);
 
   // 4. Batch- and entry-size limits — all validated BEFORE emitEntry so
   //    nothing is emitted or counted for a rejected request.
@@ -157,7 +166,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   try {
     const requestContext = logContextStore.getStore();
     let count = 0;
-    await logContextStore.run({ ...requestContext, source: 'client' }, () => {
+    await logContextStore.run({ ...requestContext, source: 'client', app }, () => {
       for (const entry of batch) {
         emitEntry(entry as LogEntryInput);
         count += 1;

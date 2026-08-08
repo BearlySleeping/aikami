@@ -32,6 +32,7 @@ const SCRIPT_MAP: Record<string, string> = {
   cleanup: 'ops/cleanup_vendor_dirs.ts',
   validate_all: 'ops/validate_all.ts',
   validate: 'ops/validate_all.ts',
+  logs: 'ops/logs.ts',
 
   // Setup scripts
   setup: 'setup/index.ts',

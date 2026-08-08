@@ -166,6 +166,9 @@ export type LoggerInterface = {
  */
 export type LogContext = {
   source: 'client' | 'ssr' | 'functions';
+  /** Originating app id (e.g. "hub", "client") for entries forwarded through
+   *  another app's ingestion endpoint — see internal_logging's +server.ts. */
+  app?: string;
   userId?: string;
   companyId?: string;
   sessionId?: string;

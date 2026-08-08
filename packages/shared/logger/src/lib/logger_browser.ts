@@ -15,8 +15,12 @@ export type FrontendLoggerInterface = LoggerInterface;
  *
  * Entries matching the {@link _excludePattern} are silently dropped to
  * avoid flooding the endpoint with per-frame render logs.
+ *
+ * Exported for unit tests (packages/shared/logger/src/lib/logger_browser.test.ts)
+ * — reads PUBLIC_LOG_ENDPOINT / PUBLIC_APP_ID from import.meta.env at
+ * construction time.
  */
-class HttpLogSink implements LogSink {
+export class HttpLogSink implements LogSink {
   private _buffer: LogEntry[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -36,7 +40,17 @@ class HttpLogSink implements LogSink {
     this._scheduleFlush();
   }
 
-  /** Flushes buffered log entries to /api/internal_logging immediately. */
+  /**
+   * Ingestion endpoint. Defaults to the relative same-origin route (works
+   * for hub, which serves its own /api/internal_logging). Apps with no
+   * server of their own (e.g. client, static Firebase Hosting) set
+   * PUBLIC_LOG_ENDPOINT to an absolute cross-origin URL — see hub's
+   * hooks.server.ts for the matching CORS allowance.
+   */
+  private readonly _endpoint: string =
+    (import.meta.env.PUBLIC_LOG_ENDPOINT as string | undefined) || '/api/internal_logging';
+
+  /** Flushes buffered log entries to the ingestion endpoint immediately. */
   flush(): void {
     if (this._flushTimer) {
       clearTimeout(this._flushTimer);
@@ -46,10 +60,11 @@ class HttpLogSink implements LogSink {
       return;
     }
     const batch = this._buffer.splice(0);
-    void fetch('/api/internal_logging', {
+    const app = import.meta.env.PUBLIC_APP_ID as string | undefined;
+    void fetch(this._endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'logger', payload: { batch } }),
+      body: JSON.stringify({ label: 'logger', app, payload: { batch } }),
     }).catch(() => {
       // Server may not be running (dev) or route unavailable — silent fallback
     });

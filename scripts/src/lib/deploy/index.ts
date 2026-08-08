@@ -65,6 +65,7 @@ import { type AppResult, type NotificationInput, notifyDeployment } from './noti
 import { deployTauriRelease } from './tauri_release';
 import {
   authenticateDocker,
+  ensureGcloudAuth,
   getCurrentBranch,
   isVerbose,
   resolveProjectId,
@@ -323,12 +324,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // Auth check
-  const authCheck = run('gcloud auth print-access-token', { quiet: true });
-  if (!authCheck) {
-    error('Not authenticated with gcloud. Run: gcloud auth login');
-    process.exit(1);
-  }
+  // Auth check — user credentials first, then fall back to the mode's
+  // service-account key (.secrets/gcp_sa_key.{mode}.json) so deploys work
+  // without an interactive `gcloud auth login`.
+  ensureGcloudAuth(mode, projectId, ROOT_DIR);
 
   authenticateDocker();
 
