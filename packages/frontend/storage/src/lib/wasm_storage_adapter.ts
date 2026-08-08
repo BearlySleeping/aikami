@@ -7,10 +7,10 @@
 //
 // Persistence backends, in preference order:
 //   1. OPFS SAH pool VFS (main-thread OPFS) — preferred, no size limit.
-//   2. In-memory kvvfs + IndexedDB snapshot (C-321 fallback) — used when
-//      OPFS APIs are missing. The DB runs on the in-memory kvvfs storage
-//      (no localStorage quota) and the whole storage is exported to
-//      IndexedDB (debounced) after writes, then re-imported on open.
+//   2. In-memory DB + whole-file IndexedDB snapshot (C-321 fallback) — used
+//      when OPFS APIs are missing. A plain :memory: database is snapshotted
+//      as whole-file bytes (sqlite3_js_db_export) to IndexedDB (debounced)
+//      after writes, and restored via sqlite3_deserialize on open.
 //      IndexedDB quotas are ~10% of disk, so the asset registry + saves
 //      fit comfortably. localStorage was rejected as a fallback because
 //      its ~5MB quota overflows with the asset registry.
@@ -42,14 +42,6 @@ type WasmDatabase = {
   transaction<T>(callback: () => T): T;
   close(): void;
   isOpen(): boolean;
-};
-
-/** Shape of `sqlite3.kvvfs.export()` — persisted to IndexedDB. */
-type KvvfsExport = {
-  name: string;
-  timestamp: number;
-  size: number;
-  pages: Uint8Array[];
 };
 
 /** Async key/value persistence backend (IndexedDB in production). */
@@ -144,14 +136,11 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   /** Whether the adapter has been closed. */
   private _closed = false;
 
-  /** sqlite3 module ref — needed for kvvfs export in snapshot mode. */
+  /** sqlite3 module ref — needed for DB export in snapshot mode. */
   private _sqlite3: unknown = null;
 
   /** Which persistence mode is active (set during open()). */
-  private _persistMode: 'opfs' | 'kvvfs-idb' | 'memory' = 'memory';
-
-  /** kvvfs storage name used in snapshot mode ('.' = in-memory pool). */
-  private readonly _kvvfsStorageName = '.';
+  private _persistMode: 'opfs' | 'idb-snapshot' | 'memory' = 'memory';
 
   /** Debounced persistence timer (snapshot mode). */
   private _persistTimer: ReturnType<typeof setTimeout> | undefined;
@@ -173,7 +162,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
    *
    * Dynamically imports @sqlite.org/sqlite-wasm and initialises the
    * WASM runtime. Persistence is OPFS-first, falling back to an
-   * in-memory kvvfs DB snapshotted to IndexedDB, then pure in-memory.
+   * in-memory DB snapshotted to IndexedDB, then pure in-memory.
    *
    * Must be called before any query/execute operations. Safe to call
    * multiple times — subsequent calls are no-ops.
@@ -256,35 +245,32 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
         );
       }
 
-      // ── 2. In-memory kvvfs + IndexedDB snapshot ──
-      // localStorage was rejected here: its ~5MB quota overflows with the
-      // asset registry. The in-memory kvvfs pool has no quota, and the full
-      // storage export is snapshotted to IndexedDB (debounced) so data
-      // survives page reloads.
+      // ── 2. In-memory DB + whole-file IndexedDB snapshot ──
+      // localStorage was rejected: its ~5MB quota overflows with the asset
+      // registry. The kvvfs export/import VFS was also rejected — it sorts
+      // page contents and loses the page-id mapping (SQLITE_CORRUPT after
+      // import in this sqlite-wasm version). Instead we run a plain
+      // :memory: database and snapshot the ENTIRE db file (sqlite3_js_db_
+      // export) to IndexedDB after writes, restoring via sqlite3_deserialize
+      // on open. IndexedDB quotas are ~10% of disk.
       if (!this._db) {
         try {
+          const DbCtor = oo1['DB'] as { new (filename?: string, flags?: string): WasmDatabase };
+          this._db = new DbCtor(':memory:', 'c');
+
           const saved = await _persistenceBackend.get(SNAPSHOT_KEY);
-          if (saved) {
-            // Import before opening the DB — the storage must be idle.
-            const kvvfsApi = (
-              sqlite3 as unknown as {
-                kvvfs?: { import(exp: unknown, overwrite?: boolean): void };
-              }
-            ).kvvfs;
-            kvvfsApi?.import(saved, true);
+          if (saved instanceof Uint8Array && saved.byteLength > 0) {
+            this._restoreSnapshotBytes(saved);
+            logger.debug('WasmStorageAdapter:restored-snapshot', {
+              bytes: saved.byteLength,
+            });
           }
 
-          const JsStorageDbCtor = oo1['JsStorageDb'] as
-            | { new (mode: string): WasmDatabase }
-            | undefined;
-          if (JsStorageDbCtor) {
-            this._db = new JsStorageDbCtor(this._kvvfsStorageName);
-            this._persistMode = 'kvvfs-idb';
-            logger.warn(
-              'WasmStorageAdapter: opened IndexedDB-snapshotted in-memory database — persists ' +
-                'across reloads via snapshots (no OPFS available).',
-            );
-          }
+          this._persistMode = 'idb-snapshot';
+          logger.warn(
+            'WasmStorageAdapter: opened in-memory database snapshotted to IndexedDB — persists ' +
+              'across reloads (no OPFS available).',
+          );
         } catch (error) {
           logger.warn(
             'WasmStorageAdapter: IndexedDB snapshot fallback failed — falling back to in-memory ' +
@@ -318,7 +304,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       clearTimeout(this._persistTimer);
       this._persistTimer = undefined;
     }
-    if (this._persistMode === 'kvvfs-idb') {
+    if (this._persistMode === 'idb-snapshot') {
       await this._persistNow();
     }
 
@@ -426,7 +412,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
 
   /** Debounced persistence of the kvvfs storage to IndexedDB. */
   private _schedulePersist(): void {
-    if (this._persistMode !== 'kvvfs-idb') {
+    if (this._persistMode !== 'idb-snapshot') {
       return;
     }
     if (this._persistTimer) {
@@ -440,22 +426,62 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
 
   /** Exports the whole kvvfs storage and snapshots it to IndexedDB. */
   private async _persistNow(): Promise<void> {
-    if (this._persistMode !== 'kvvfs-idb' || !this._sqlite3) {
+    if (this._persistMode !== 'idb-snapshot' || !this._sqlite3) {
       return;
     }
     try {
-      const kvvfsApi = (
-        this._sqlite3 as unknown as { kvvfs?: { export(name: string): KvvfsExport } }
-      ).kvvfs;
-      if (!kvvfsApi) {
+      const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi;
+      const db = this._db as unknown as { pointer: number };
+      const exportFn = capi?.['sqlite3_js_db_export'] as
+        | ((pDb: number, schema?: number) => Uint8Array)
+        | undefined;
+      if (!exportFn) {
         return;
       }
-      const snapshot = kvvfsApi.export(this._kvvfsStorageName);
-      await _persistenceBackend.set(SNAPSHOT_KEY, snapshot);
+      const bytes = exportFn(db.pointer);
+      await _persistenceBackend.set(SNAPSHOT_KEY, bytes);
     } catch (error) {
       logger.warn('WasmStorageAdapter:persist-snapshot-failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /** Restores a whole-DB byte snapshot into the open :memory: database. */
+  private _restoreSnapshotBytes(bytes: Uint8Array): void {
+    if (!this._db || !this._sqlite3) {
+      return;
+    }
+    const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi;
+    const wasm = (this._sqlite3 as unknown as { wasm?: Record<string, unknown> }).wasm;
+    const sqlite3 = this._sqlite3 as unknown as {
+      capi?: { SQLITE_DESERIALIZE_FREEONCLOSE?: number; SQLITE_DESERIALIZE_RESIZEABLE?: number };
+    };
+    const deserialize = capi?.['sqlite3_deserialize'] as
+      | ((
+          pDb: number,
+          schema: string,
+          data: number,
+          dbSize: number,
+          bufferSize: number,
+          flags: number,
+        ) => number)
+      | undefined;
+    const allocFromTypedArray = wasm?.['allocFromTypedArray'] as
+      | ((bytes: Uint8Array) => number)
+      | undefined;
+    if (!deserialize || !allocFromTypedArray) {
+      return;
+    }
+
+    const db = this._db as unknown as { pointer: number };
+    const pData = allocFromTypedArray(bytes);
+    const flags =
+      (sqlite3.capi?.SQLITE_DESERIALIZE_FREEONCLOSE ?? 1) |
+      (sqlite3.capi?.SQLITE_DESERIALIZE_RESIZEABLE ?? 2);
+    const rc = deserialize(db.pointer, 'main', pData, bytes.byteLength, bytes.byteLength, flags);
+    if (rc !== 0) {
+      logger.warn('WasmStorageAdapter:deserialize-failed', { rc });
     }
   }
 }

@@ -1,12 +1,10 @@
 // packages/frontend/storage/src/lib/__tests__/jsstorage_fallback.test.ts
 //
-// C-321: Verifies the IndexedDB-snapshot fallback used by WasmStorageAdapter
-// when OPFS is unavailable — an in-memory kvvfs DB whose full export is
-// snapshotted to a persistence backend (IndexedDB in production, a Map here)
-// so data survives close/reopen (i.e. page reloads).
-//
-// Also verifies the kvvfs xFileControl workaround: without it, PRAGMA
-// handling crashes because kvvfs.internal is undefined in production builds.
+// C-321: Verifies the IndexedDB whole-file snapshot fallback used by
+// WasmStorageAdapter when OPFS is unavailable — a :memory: DB whose full
+// byte image (sqlite3_js_db_export) is snapshotted to a persistence backend
+// (IndexedDB in production, a Map here) so data survives close/reopen
+// (i.e. page reloads), restored via sqlite3_deserialize.
 
 import { describe, expect, test } from 'bun:test';
 
@@ -20,68 +18,78 @@ const makeMemoryBackend = () => {
     set: async (key: string, value: unknown) => {
       map.set(key, value);
     },
-    peek: (key: string) => map.get(key),
   };
 };
 
-describe('WasmStorageAdapter IndexedDB-snapshot fallback', () => {
-  test('kvvfs xFileControl workaround + snapshot persists across close/reopen', async () => {
+describe('WasmStorageAdapter IndexedDB snapshot fallback', () => {
+  test('whole-file export/deserialize round-trip survives close/reopen', async () => {
     const backend = makeMemoryBackend();
     _setPersistenceBackendForTests(backend);
 
     const sqlite3Module = await import('@sqlite.org/sqlite-wasm');
     const sqlite3 = (await sqlite3Module.default()) as Record<string, unknown>;
     const oo1 = sqlite3['oo1'] as Record<string, unknown>;
-
-    // Simulate production: kvvfs.internal is undefined (kvvfs.log unset).
-    const kvvfs = sqlite3['kvvfs'] as {
-      internal?: object;
-      export(name: string): unknown;
-      import(exp: unknown, overwrite?: boolean): void;
-    };
-    delete kvvfs.internal;
-
-    const JsStorageDbCtor = oo1['JsStorageDb'] as {
+    const capi = sqlite3['capi'] as Record<string, unknown>;
+    const wasm = sqlite3['wasm'] as Record<string, unknown>;
+    const Db = oo1['DB'] as {
       new (
-        mode: string,
+        filename?: string,
+        flags?: string,
       ): {
+        pointer: number;
         exec(options: Record<string, unknown>): unknown;
+        transaction<T>(cb: () => T): T;
         close(): void;
+        isOpen(): boolean;
       };
     };
+    const exportFn = capi['sqlite3_js_db_export'] as (pDb: number) => Uint8Array;
+    const deserialize = capi['sqlite3_deserialize'] as (
+      pDb: number,
+      schema: string,
+      data: number,
+      dbSize: number,
+      bufferSize: number,
+      flags: number,
+    ) => number;
+    const allocFromTypedArray = wasm['allocFromTypedArray'] as (b: Uint8Array) => number;
 
-    // Without the workaround, PRAGMA handling crashes (browser: TypeError
-    // reading disablePageSizeChange; Bun: SQL logic error).
-    const dbBefore = new JsStorageDbCtor('.');
-    expect(() => dbBefore.exec({ sql: 'PRAGMA foreign_keys = ON' })).toThrow();
-    dbBefore.close();
-
-    // Apply the adapter's workaround — now everything works.
-    kvvfs.internal = { disablePageSizeChange: true };
-
-    // ── First session: write data, export snapshot, close ──
-    const db1 = new JsStorageDbCtor('.');
+    // ── First session: write data, snapshot, close ──
+    const db1 = new Db(':memory:', 'c');
     db1.exec({ sql: 'CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, val TEXT)' });
-    db1.exec({ sql: 'PRAGMA foreign_keys = ON' });
-    db1.exec({ sql: 'INSERT INTO t (val) VALUES (?)', bind: ['persisted!'] });
+    db1.transaction(() => {
+      for (let i = 0; i < 600; i++) {
+        db1.exec({ sql: 'INSERT INTO t (val) VALUES (?)', bind: [`value-${i}`] });
+      }
+    });
 
-    // Simulate the adapter's debounced snapshot write.
-    const snapshot = kvvfs.export('.') as unknown;
-    await backend.set('kvvfs-export', snapshot);
+    const bytes = exportFn(db1.pointer);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+    await backend.set('kvvfs-export', bytes);
     db1.close();
 
-    // ── Second session (page reload): import snapshot, reopen ──
-    const restored = (await backend.get('kvvfs-export')) as unknown;
-    kvvfs.import(restored, true);
-    const db2 = new JsStorageDbCtor('.');
+    // ── Second session (page reload): restore bytes, reopen ──
+    const restored = (await backend.get('kvvfs-export')) as Uint8Array;
+    const db2 = new Db(':memory:', 'c');
+    const pData = allocFromTypedArray(restored);
+    const rc = deserialize(
+      db2.pointer,
+      'main',
+      pData,
+      restored.byteLength,
+      restored.byteLength,
+      1 | 2, // FREEONCLOSE | RESIZEABLE
+    );
+    expect(rc).toBe(0);
+
     const rows: Record<string, unknown>[] = [];
     db2.exec({
-      sql: 'SELECT val FROM t',
+      sql: 'SELECT COUNT(*) AS c FROM t',
       returnValue: 'resultRows',
       resultRows: rows,
       rowMode: 'object',
     });
-    expect(rows).toEqual([{ val: 'persisted!' }]);
+    expect(rows).toEqual([{ c: 600 }]);
     db2.close();
 
     // Reset the backend to the real IndexedDB implementation for other tests.
