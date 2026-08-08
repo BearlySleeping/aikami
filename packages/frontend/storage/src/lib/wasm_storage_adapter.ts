@@ -128,26 +128,43 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
             logger.debug('WasmStorageAdapter:opened-opfs-sahpool', {
               databasePath: this._databasePath,
             });
-          } else {
-            logger.warn(
-              'WasmStorageAdapter: OPFS SAH pool installed but no OpfsSAHPoolDb — ' +
-                'falling back to in-memory database. Campaign data will NOT persist ' +
-                'across page reloads in this environment.',
-            );
           }
-        } else {
-          logger.warn(
-            'WasmStorageAdapter: OPFS SAH pool API unavailable — falling back to ' +
-              'in-memory database. Campaign data will NOT persist across page reloads.',
-          );
         }
       } catch (error) {
-        // OPFS not available (missing FileSystem APIs, sandboxed iframe, etc.)
+        // OPFS not available (missing FileSystem APIs, sandboxed iframe, no
+        // cross-origin isolation). Fall through to the persistent kvvfs
+        // fallback below instead of silently dropping to in-memory.
         logger.warn(
-          'WasmStorageAdapter: OPFS unavailable — falling back to in-memory database. ' +
-            'Campaign data will NOT persist across page reloads in this environment.',
+          'WasmStorageAdapter: OPFS unavailable — falling back to localStorage-backed database.',
           { error: error instanceof Error ? error.message : String(error) },
         );
+      }
+
+      // ── Persistent fallback: localStorage-backed kvvfs (JsStorageDb) ──
+      // OPFS is the preferred backend, but when it is unavailable the
+      // built-in kvvfs VFS persists SQLite pages in localStorage — which
+      // survives page reloads (quota-limited to ~5MB). Last resort is an
+      // in-memory database (no persistence across reloads).
+      if (!this._db) {
+        try {
+          const JsStorageDbCtor = oo1['JsStorageDb'] as
+            | { new (mode: 'local' | 'session'): WasmDatabase }
+            | undefined;
+          if (JsStorageDbCtor) {
+            this._db = new JsStorageDbCtor('local');
+            logger.warn(
+              'WasmStorageAdapter: opened localStorage-backed database — persists across ' +
+                'reloads but is quota-limited (~5MB). OPFS would be preferred.',
+            );
+          }
+        } catch (storageError) {
+          // localStorage kvvfs unavailable (private mode, storage disabled)
+          logger.warn(
+            'WasmStorageAdapter: localStorage kvvfs unavailable — falling back to ' +
+              'in-memory database. Campaign data will NOT persist across page reloads.',
+            { error: storageError instanceof Error ? storageError.message : String(storageError) },
+          );
+        }
       }
 
       if (!this._db) {
