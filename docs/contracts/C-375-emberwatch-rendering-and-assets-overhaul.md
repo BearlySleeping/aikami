@@ -2,7 +2,7 @@
 id: C-375
 title: "Emberwatch Rendering & Asset Overhaul: Props, Depth Ordering, NPC Collision, Tileset & Maps"
 source: "direct_user_feature_request"
-status: implemented
+status: draft
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-05"
 | **Target** | `apps/frontend/client/static/content-packs/emberwatch/` (manifest + 3 maps), `apps/frontend/client/static/game-data/sprites/tilesets/` (atlas.webp + atlas.json), `packages/frontend/engine` (prop rendering, entity depth sort, NPC/prop collision, spatial-grid integration), `apps/frontend/client/src/lib/services/game/` (boot/engine wiring) |
 | **Priority** | P1 — the playable demo release gate (C-335) requires the flagship Emberwatch pack to render correctly: props visible, correct depth ordering, and blocked-by-NPC collision are core playability defects, not optional polish |
 | **Dependencies** | C-315 (content pack loader — **completed**), C-316 (authored Emberwatch demo — **verified**), C-173 (spatial hash grid collision — **completed**), C-370 (LPC body-layer fallback — **approved**), C-372 (manifest-driven LPC asset resolution — **implemented**), C-135/C-136/C-138 (map parsing / entity-prop spawner / transitions — legacy, built on by C-316), C-331 (demo inventory/equipment/loot/vendor — **approved**) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | `sandbox` — |
 | **Docs Impact** | Internal — none |
 | **Contract version** | 2.0.0 |
@@ -375,72 +375,3 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
-
-## Execution Report
-
-### Summary
-Implemented all 5 ACs of the Emberwatch rendering & asset overhaul. Engine: replaced the fragile `Texture.from(frame)` prop path with a deterministic `PropTextureResolver` (parsed-spritesheet lookup, `fallbackTile` on miss, wired through `GameWorld` options and both client boot services), added stable y-depth entity sorting (tie-broken by spawn order; tilemap/debug/zone children stay below), and registered NPC/prop entities in the spatial grid (`CollisionData`/`GridPosition`/`SpatialLink` in the spawner, insertion after `setCollisionGrid` in `LOAD_MAP`, grid removal on teardown) with manifest `isWalkable` plumbing for props like the village gate. Assets: regenerated `atlas.webp` (512×256, 48 procedural pixel-art frames) + `atlas.json`, rebuilt all three maps around it (visible stone walls + wall-top rims, grass/cobble village, wood-floor inn, stone-floor shop, distinct furniture props, collision matching visuals), bumped manifest to 3.1.0 with a re-keyed `tiles` map and new furniture `props`. Also fixed a pre-existing WebGL2 tilemap fallback bug (`uTexture` sampler binding) and widened village transition gaps so the 32px player box can reach the inn/shop exits. Verified end-to-end on the production `/game` path: props render (90/100), depth occlusion north/south of the well (95/95), NPC blocking (Elder Thalia), village→inn transition, quest_flow + economy_loop E2E (10/10), new C-375 E2E specs (4/4), and the new emberwatch visual suite (95/100).
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Props render atlas frames via `PropTextureResolver`; fallbackTile + warn on miss; E2E asserts zero `prop-frame-texture-missing` errors and zero `/game-data/lpc/props/` requests. Visual: well prop 90/100. |
-| AC-2 | ✅ | Stable y-sort by container world-Y with spawn-order tie-break; verified visually north (player behind well, 95/100) and south (player in front, 95/100); unit tests in `rendering.test.ts`. |
-| AC-3 | ✅ | NPCs (layer npc) and solid props (layer wall) block movement; walkable props skipped; insertion after `setCollisionGrid`; grid removal on teardown; functional E2E confirms Elder Thalia blocks the player at the adjacent cell; unit tests in `spatial_grid.test.ts`, `movement_system.test.ts`, `entity_spawner.test.ts`. |
-| AC-4 | ✅ | 48-frame coherent atlas (grass/paths/floors/walls/roof/water/fences/furniture), <512KB WebP, atlas.json frames match grid; content audit tests verify map tileset blocks, frame/GID consistency, fallbackTile existence, and no LPC-head cells. Visual: 95/100. |
-| AC-5 | ✅ | Maps rebuilt with visible walls/floors/furniture; all spawn/transition/NPC/prop IDs preserved (audit test); collision matches visuals (audit test); village→inn transition verified live; quest_flow + economy_loop E2E pass (10/10); manifest 3.1.0. |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `packages/frontend/engine/src/rendering/prop_texture_resolver.ts` | Deterministic prop frame resolver (spritesheet-based, fallbackTile on miss, never Texture.WHITE). |
-| `packages/frontend/engine/src/rendering/depth_sort.ts` | Pure y-depth sort helper with spawn-order tie-break. |
-| `packages/frontend/engine/src/__tests__/prop_texture_resolver.test.ts` | Resolver unit tests (hit/fallback/null/memoization/lifecycle). |
-| `packages/frontend/engine/src/__tests__/entity_spawner.test.ts` | Spawner collision-component tests (NPC/solid prop/walkable prop). |
-| `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts` | AC-4/AC-5 static-content audit (frames, GIDs, tileset blocks, ID stability, collision-vs-visuals). |
-| `apps/frontend/client/src/lib/services/game/prop_frame_resolver.ts` | Client-side resolver builder/preload shared by both boot paths. |
-| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Production `/game` Emberwatch visual suite (95/100). |
-| `scripts/src/lib/ops/generate_emberwatch_atlas.ts` | Reproducible atlas generator (procedural 48-frame tileset → PNG → cwebp WebP + atlas.json). |
-| `scripts/src/lib/ops/generate_emberwatch_maps.ts` | Reproducible map generator (rebuilds the 3 maps preserving all spawn/transition IDs). |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `packages/frontend/engine/src/game_world.ts` | `propFrameResolver` option + resolver-based `_loadPropFrameTexture`; y-depth sort in `_updateRenderFromBuffer`; `spawnOrder` on render entries; `propWalkability` enrichment in `loadMap`. |
-| `packages/frontend/engine/src/systems/entity_spawner.ts` | `_addSpatialCollision` in `_spawnNpc` (layer npc) + `_spawnProp` (layer wall, skip when `isWalkable`). |
-| `packages/frontend/engine/src/worker/ecs_worker.ts` | Grid insertion after `setCollisionGrid` in LOAD_MAP; `removeFromSpatialGrid` on teardown (LOAD_MAP + LOAD_GAME). |
-| `packages/frontend/engine/src/systems/render_system.ts` | Removed `Texture.from(frame)`; prop frames resolve through the injected resolver. |
-| `packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts` | Bind tileset source under `uTexture` (GLSL fallback) in addition to `uTextures` (WGSL) — fixes dark tiles under WebGL2. |
-| `packages/frontend/engine/src/index.ts` | Export prop resolver + depth sort. |
-| `packages/shared/schemas/src/lib/game/content_pack.ts` | Added `fallbackTile`, `tiles`, `props`, `entities` to `ContentPackManifestSchema` (additive; see deviation). |
-| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Schema tests for the new manifest fields. |
-| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Build + preload resolver in preload stage; pass into GameWorld; teardown clear. |
-| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Load pack before GameWorld creation; build resolver; `propWalkability` in loadMap; teardown clear. |
-| `apps/frontend/client/static/game-data/sprites/tilesets/atlas.webp` + `atlas.json` | Regenerated coherent 48-frame tileset (512×256). |
-| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | Version 3.1.0; re-keyed `tiles` to new GIDs; added furniture `props`. |
-| `apps/frontend/client/static/content-packs/emberwatch/maps/{village,inn,merchant_shop}.json` | Rebuilt with visible walls/floors/furniture; tileset block updated; all gameplay IDs stable; prop frames fixed (barrels/crates/counters no longer reuse chest art). |
-| `packages/frontend/engine/src/__tests__/rendering.test.ts` | Depth-sort unit tests. |
-| `packages/frontend/engine/src/__tests__/spatial_grid.test.ts` | NPC/prop layer blocking tests. |
-| `packages/frontend/engine/src/systems/movement_system.test.ts` | Player-blocked-by-NPC/prop movement tests. |
-| `apps/e2e/tests/client/game_page.spec.ts` | C-375 production-path E2E specs (AC-1 no prop errors, AC-2 boot hook, AC-3 NPC blocking). |
-
-### Deviations from Spec
-1. **Shared schema change (contract said "no schema changes")**: the contract asserted `ContentPackManifestSchema` "already carries `atlas`, `tiles`, `props`" — it only carried `atlas`. The manifest at runtime carried the extra fields (TypeBox allows additional properties), but the TS type did not expose them. Added `fallbackTile`, `tiles`, `props`, `entities` to the schema (additive, runtime-compatible — the Emberwatch manifest validates unchanged). Required for AC-1 (`fallbackTile`) and AC-3 (`props[].isWalkable`) manifest plumbing.
-2. **Composition-root wiring (contract named `game_composition_root.svelte.ts:259`)**: that file has no direct `GameWorld` construction — GameWorld is created in `game_boot_service` (/game) and `game_engine_service` (sandbox). The resolver is wired at both actual construction points (mirroring C-372's `wireLpcUrlResolver` discipline) instead.
-3. **GLSL tilemap fallback fix**: fixed a pre-existing bug (missing `uTexture` sampler binding) that rendered tilemaps dark under WebGL2 headless. Small, in-scope-adjacent (degraded-mode robustness); needed to verify the production path in a WebGPU-less environment.
-4. **Transition-gap widening**: village wall-top rim/border gaps widened to rows 8–12 (from 9–11) so the player's 32px bounding box can physically reach the inn/shop transitions.
-5. **`interaction_ux.spec.ts` / `/game/dev`**: the spec targets a stale `/game/dev` route (404 — no such route in the tree); AC-3 E2E evidence was added to `game_page.spec.ts` instead (production `/game`). The `game_page.spec.ts` HUD/overlay tests have a pre-existing strict-mode violation (two `#game-ui-layer` elements in the page markup — untouched by this contract).
-6. **E2E timing**: game_boot/game_page HUD tests fail under the slow headless environment at their built-in 15–30s timeouts even though the game boots and renders the HUD (~40s in that environment, verified manually); quest_flow/economy_loop and the new C-375 specs pass with adequate timeouts.
-
-### Test Results
-- Unit (frontend-engine): 874/874 PASS (0 fail) — includes 24 new tests (resolver 9, depth sort 6, spawner 4, spatial grid 5, content audit 11).
-- Client: 1528 pass / 128 fail — identical failing set to baseline (pre-existing, unrelated areas); 0 new failures.
-- Schemas: 295/295 PASS.
-- E2E: quest_flow + economy_loop 10/10 PASS; new C-375 game_page specs 4/4 PASS; pre-existing failures in game_boot/game_page HUD (strict-mode + timing) and interaction_ux (stale `/game/dev` route) unchanged.
-- Visual: emberwatch suite 95/100 PASS; manual production-path captures — AC-1 well 90/100, AC-2 north 95/100, AC-2 south 95/100.
-- Baseline: client 128 pre-existing failures, 0 new failures.
-
-### Known Follow-ups (out of scope)
-- Sub-tile (rect) prop collision honoring `collision.width/height` (tile-granular MVP per contract).
-- `/game/dev` route + `interaction_ux.spec.ts` repair (pre-existing, unrelated).
-- WebGL2 tilemap fallback is now functional but animations remain WGSL-only (pre-existing C-179 design).
