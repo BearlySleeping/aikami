@@ -32,7 +32,7 @@
 import { initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { connectDataConnectEmulator, getDataConnect } from 'firebase/data-connect';
-import pg from '../../../../apps/backend/firebase/node_modules/pg/lib/index.js';
+import pg from 'pg';
 import {
   activatePersona,
   connectorConfig,
@@ -163,9 +163,8 @@ const main = async (): Promise<void> => {
   const uid = credential.user.uid;
   console.log(`  Signed in as ${EMAIL} (uid=${uid})`);
 
-  seedSqlUser(uid);
+  await seedSqlUser(uid);
   console.log('  Seeded SQL user row (persona.uid FK satisfied)');
-
   console.log('🔌 Connecting to Data Connect emulator...');
   const dataConnect = getDataConnect(app, connectorConfig);
   connectDataConnectEmulator(dataConnect, DATACONNECT_HOST, DATACONNECT_PORT);

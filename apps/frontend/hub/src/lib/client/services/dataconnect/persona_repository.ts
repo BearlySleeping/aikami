@@ -23,6 +23,7 @@ import {
   dataConnect,
   deactivatePersonas,
   deletePersona,
+  getPersona,
   listPersonas,
   updatePersona,
 } from '@aikami/frontend/dataconnect';
@@ -71,6 +72,14 @@ const mapAndLogError = (operation: string, raw: unknown): Error => {
   return mapDataConnectError(operation, raw);
 };
 
+/**
+ * Maximum personas a user may own. Mirrors the ListPersonas `limit: 100` so
+ * the list is never silently truncated: create fails with resource-exhausted
+ * at this ceiling, and every write path resolves the target row by id via
+ * GetPersona (never via the capped list).
+ */
+const MAX_PERSONAS_PER_USER = 100;
+
 const listByOwner = async (options: { uid: string }): Promise<PersonaData[]> => {
   const { uid } = options;
   logger.debug('personaRepository.listByOwner', { uid });
@@ -86,10 +95,48 @@ const listByOwner = async (options: { uid: string }): Promise<PersonaData[]> => 
   }
 };
 
+/**
+ * Resolves a single owned persona by id (owner-scoped, id+uid where). Throws
+ * the typed not-found error when the row is missing or belongs to another
+ * user. Used by update/setActive so those paths never depend on the
+ * 100-row ListPersonas cap.
+ */
+const getOwnedPersona = async (options: {
+  uid: string;
+  personaId: string;
+}): Promise<PersonaData> => {
+  const { uid, personaId } = options;
+  try {
+    const result = await getPersona(dataConnect, { id: personaId, uid });
+    const row = result.data.personas?.[0];
+    if (!row) {
+      throw toAppError({ errorType: 'not-found', errorMessage: 'Persona not found' });
+    }
+    return rowToData(row);
+  } catch (error) {
+    if (isAppError(error)) {
+      throw error;
+    }
+    throw mapAndLogError('getOwnedPersona', error);
+  }
+};
+
 const create = async (options: { uid: string; data: PersonaCreateRowInput }): Promise<string> => {
   const { uid, data } = options;
   const id = `persona_${crypto.randomUUID()}`;
   logger.debug('personaRepository.create', { uid, personaId: id });
+
+  // Enforce the ListPersonas ceiling so no user can ever exceed the 100-row
+  // list (which would silently hide personas from the UI and from
+  // listByOwner-based flows).
+  const existing = await listByOwner({ uid });
+  if (existing.length >= MAX_PERSONAS_PER_USER) {
+    throw toAppError({
+      errorType: 'resource-exhausted',
+      errorMessage: `Persona limit reached (${MAX_PERSONAS_PER_USER}). Delete a persona before creating another.`,
+    });
+  }
+
   try {
     const result = await createPersona(dataConnect, toCreateRow({ id, uid, data }));
     return result.data.persona_insert.id;
@@ -108,11 +155,9 @@ const update = async (options: {
 
   // Partial updates need the current row to merge unmentioned fields (the
   // mutation overwrites every provided column; null would clear them).
-  const rows = await listByOwner({ uid });
-  const existing = rows.find((persona: PersonaData) => persona.id === personaId);
-  if (!existing) {
-    throw toAppError({ errorType: 'not-found', errorMessage: 'Persona not found' });
-  }
+  // Resolve by id via GetPersona — never via the capped list — so a persona
+  // beyond the first 100 stays updatable.
+  const existing = await getOwnedPersona({ uid, personaId });
 
   try {
     const result = await updatePersona(
@@ -151,6 +196,14 @@ const remove = async (options: { uid: string; personaId: string }): Promise<void
 const setActive = async (options: { uid: string; personaId: string }): Promise<void> => {
   const { uid, personaId } = options;
   logger.debug('personaRepository.setActive', { uid, personaId });
+
+  // Validate the target row exists AND belongs to the caller BEFORE any
+  // mutation: deactivating-all first would otherwise clear the current active
+  // persona and then fail on a missing/foreign target, leaving zero active
+  // rows. Resolving via GetPersona also keeps this path independent of the
+  // 100-row list cap.
+  await getOwnedPersona({ uid, personaId });
+
   try {
     // Two server-side steps (the dialect rejects two `persona_updateMany`
     // selections in one mutation, and raw-SQL _executeReturning fails
@@ -161,7 +214,9 @@ const setActive = async (options: { uid: string; personaId: string }): Promise<v
     // conflict instead of two active rows.
     await deactivatePersonas(dataConnect, { uid });
     const result = await activatePersona(dataConnect, { id: personaId, uid });
-    // Zero affected rows ⇒ the target persona is missing OR not owned.
+    // Zero affected rows ⇒ the target persona is missing OR not owned
+    // (already validated above; a race between validation and activation is
+    // possible and fails closed here).
     if (result.data.persona_updateMany === 0) {
       throw toAppError({ errorType: 'not-found', errorMessage: 'Persona not found' });
     }

@@ -217,6 +217,28 @@ describe('mapDataConnectError', () => {
     expect(mapped.message).toContain('already exists');
   });
 
+  test('maps the one-active partial-index violation to aborted (activation conflict)', () => {
+    const error = new Error(
+      'duplicate key value violates unique constraint "persona_one_active_per_user"',
+    );
+
+    const mapped = mapDataConnectError('create', error);
+
+    expect(appErrorType(mapped)).toBe('aborted');
+    expect(mapped.message).toContain('already active');
+  });
+
+  test('maps a unique violation during setActive to aborted (concurrent activation won)', () => {
+    const error = new Error(
+      'duplicate key value violates unique constraint "persona_one_active_per_user"',
+    );
+
+    const mapped = mapDataConnectError('setActive', error);
+
+    expect(appErrorType(mapped)).toBe('aborted');
+    expect(mapped.message).toContain('already active');
+  });
+
   test('maps not-found messages to not-found domain errors', () => {
     const error = new Error('persona not found');
 

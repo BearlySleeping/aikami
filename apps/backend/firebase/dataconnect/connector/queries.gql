@@ -66,9 +66,32 @@ mutation UpsertSaveSlot(
 
 # Read: PUBLIC — mirrors Firestore rules `personas/{personaId}: allow read: if true`.
 # Public read is what makes SSR seeding work without re-authenticating the server.
-# ListPersonas is capped at 100 rows (performance budget in C-374).
+# ListPersonas is capped at 100 rows (performance budget in C-374). The hub
+# enforces the same 100-persona ceiling on create (resource-exhausted), so the
+# list is never silently truncated; GetPersona below keeps rows updatable and
+# discoverable by id regardless of the list cap.
 query ListPersonas($uid: String!) @auth(level: PUBLIC) {
   personas(where: { uid: { eq: $uid } }, orderBy: { createdAt: DESC }, limit: 100) {
+    id
+    createdAt
+    updatedAt
+    name
+    description
+    avatarUrl
+    uid
+    traits
+    isActive
+    voiceConfigId
+  }
+}
+
+# Owner-scoped single-persona read used by the repository's update and
+# setActive paths (which must not depend on the 100-row ListPersonas cap).
+# Mirrors ListPersonas' PUBLIC read so SSR seeding keeps working; the row is
+# additionally scoped by BOTH id and uid so a caller can never read another
+# user's row.
+query GetPersona($id: String!, $uid: String!) @auth(level: PUBLIC) {
+  personas(where: { id: { eq: $id }, uid: { eq: $uid } }, limit: 1) {
     id
     createdAt
     updatedAt

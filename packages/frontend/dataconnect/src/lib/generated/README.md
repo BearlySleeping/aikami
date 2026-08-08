@@ -12,6 +12,7 @@ This README will guide you through the process of using the generated JavaScript
   - [*GetTracksByMood*](#gettracksbymood)
   - [*ListSaveSlots*](#listsaveslots)
   - [*ListPersonas*](#listpersonas)
+  - [*GetPersona*](#getpersona)
 - [**Mutations**](#mutations)
   - [*UpsertSaveSlot*](#upsertsaveslot)
   - [*CreatePersona*](#createpersona)
@@ -494,6 +495,129 @@ const ref = listPersonasRef({ uid: ..., });
 // You can also pass in a `DataConnect` instance to the `QueryRef` function.
 const dataConnect = getDataConnect(connectorConfig);
 const ref = listPersonasRef(dataConnect, listPersonasVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.personas);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.personas);
+});
+```
+
+## GetPersona
+You can execute the `GetPersona` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getPersona(vars: GetPersonaVariables, options?: ExecuteQueryOptions): QueryPromise<GetPersonaData, GetPersonaVariables>;
+
+interface GetPersonaRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetPersonaVariables): QueryRef<GetPersonaData, GetPersonaVariables>;
+}
+export const getPersonaRef: GetPersonaRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getPersona(dc: DataConnect, vars: GetPersonaVariables, options?: ExecuteQueryOptions): QueryPromise<GetPersonaData, GetPersonaVariables>;
+
+interface GetPersonaRef {
+  ...
+  (dc: DataConnect, vars: GetPersonaVariables): QueryRef<GetPersonaData, GetPersonaVariables>;
+}
+export const getPersonaRef: GetPersonaRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getPersonaRef:
+```typescript
+const name = getPersonaRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetPersona` query requires an argument of type `GetPersonaVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetPersonaVariables {
+  id: string;
+  uid: string;
+}
+```
+### Return Type
+Recall that executing the `GetPersona` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetPersonaData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetPersonaData {
+  personas: ({
+    id: string;
+    createdAt: TimestampString;
+    updatedAt: TimestampString;
+    name: string;
+    description?: string | null;
+    avatarUrl?: string | null;
+    uid: string;
+    traits?: unknown | null;
+    isActive: boolean;
+    voiceConfigId?: string | null;
+  } & Persona_Key)[];
+}
+```
+### Using `GetPersona`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getPersona, GetPersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `GetPersona` query requires an argument of type `GetPersonaVariables`:
+const getPersonaVars: GetPersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `getPersona()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getPersona(getPersonaVars);
+// Variables can be defined inline as well.
+const { data } = await getPersona({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getPersona(dataConnect, getPersonaVars);
+
+console.log(data.personas);
+
+// Or, you can use the `Promise` API.
+getPersona(getPersonaVars).then((response) => {
+  const data = response.data;
+  console.log(data.personas);
+});
+```
+
+### Using `GetPersona`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getPersonaRef, GetPersonaVariables } from '@aikami/frontend-dataconnect';
+
+// The `GetPersona` query requires an argument of type `GetPersonaVariables`:
+const getPersonaVars: GetPersonaVariables = {
+  id: ..., 
+  uid: ..., 
+};
+
+// Call the `getPersonaRef()` function to get a reference to the query.
+const ref = getPersonaRef(getPersonaVars);
+// Variables can be defined inline as well.
+const ref = getPersonaRef({ id: ..., uid: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getPersonaRef(dataConnect, getPersonaVars);
 
 // Call `executeQuery()` on the reference to execute the query.
 // You can use the `await` keyword to wait for the promise to resolve.

@@ -65,6 +65,26 @@ export interface DeletePersonaVariables {
   uid: string;
 }
 
+export interface GetPersonaData {
+  personas: ({
+    id: string;
+    createdAt: TimestampString;
+    updatedAt: TimestampString;
+    name: string;
+    description?: string | null;
+    avatarUrl?: string | null;
+    uid: string;
+    traits?: unknown | null;
+    isActive: boolean;
+    voiceConfigId?: string | null;
+  } & Persona_Key)[];
+}
+
+export interface GetPersonaVariables {
+  id: string;
+  uid: string;
+}
+
 export interface GetTracksByMoodData {
   audioTracks: ({
     id: UUIDString;
@@ -233,6 +253,18 @@ export const listPersonasRef: ListPersonasRef;
 
 export function listPersonas(vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
 export function listPersonas(dc: DataConnect, vars: ListPersonasVariables, options?: ExecuteQueryOptions): QueryPromise<ListPersonasData, ListPersonasVariables>;
+
+interface GetPersonaRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetPersonaVariables): QueryRef<GetPersonaData, GetPersonaVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetPersonaVariables): QueryRef<GetPersonaData, GetPersonaVariables>;
+  operationName: string;
+}
+export const getPersonaRef: GetPersonaRef;
+
+export function getPersona(vars: GetPersonaVariables, options?: ExecuteQueryOptions): QueryPromise<GetPersonaData, GetPersonaVariables>;
+export function getPersona(dc: DataConnect, vars: GetPersonaVariables, options?: ExecuteQueryOptions): QueryPromise<GetPersonaData, GetPersonaVariables>;
 
 interface CreatePersonaRef {
   /* Allow users to create refs without passing in DataConnect */

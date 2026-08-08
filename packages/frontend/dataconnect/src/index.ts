@@ -25,6 +25,8 @@ export {
   deactivatePersonasRef,
   deletePersona,
   deletePersonaRef,
+  getPersona,
+  getPersonaRef,
   getTracksByMood,
   getTracksByMoodRef,
   listPersonas,

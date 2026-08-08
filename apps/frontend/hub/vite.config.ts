@@ -206,9 +206,12 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
-      // Bind all interfaces (IPv4 + IPv6) so headless browsers and the
-      // e2e suite can reach the dev server via localhost.
-      host: '0.0.0.0',
+      // Bind the IPv4 loopback explicitly: with `0.0.0.0` the server listens
+      // on all interfaces but Vite's generated localhost URLs can resolve to
+      // ::1 (IPv6) first, which the IPv4-only listener refuses. 127.0.0.1
+      // keeps browser + e2e access working (scripts target 127.0.0.1) without
+      // relying on IPv6 localhost resolution.
+      host: '127.0.0.1',
       fs: {
         allow: [rootDirectory],
       },

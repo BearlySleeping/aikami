@@ -14,7 +14,7 @@ If a user is not using a supported framework, they can use the generated SDK dir
 Here's an example of how to use it with the first 5 operations:
 
 ```js
-import { listUsers, getTracksByMood, listSaveSlots, upsertSaveSlot, listPersonas, createPersona, updatePersona, deletePersona, deactivatePersonas, activatePersona } from '@aikami/frontend-dataconnect';
+import { listUsers, getTracksByMood, listSaveSlots, upsertSaveSlot, listPersonas, getPersona, createPersona, updatePersona, deletePersona, deactivatePersonas } from '@aikami/frontend-dataconnect';
 
 
 // Operation ListUsers: 
@@ -32,6 +32,9 @@ const { data } = await UpsertSaveSlot(dataConnect, upsertSaveSlotVars);
 // Operation ListPersonas:  For variables, look at type ListPersonasVars in ../index.d.ts
 const { data } = await ListPersonas(dataConnect, listPersonasVars);
 
+// Operation GetPersona:  For variables, look at type GetPersonaVars in ../index.d.ts
+const { data } = await GetPersona(dataConnect, getPersonaVars);
+
 // Operation CreatePersona:  For variables, look at type CreatePersonaVars in ../index.d.ts
 const { data } = await CreatePersona(dataConnect, createPersonaVars);
 
@@ -43,9 +46,6 @@ const { data } = await DeletePersona(dataConnect, deletePersonaVars);
 
 // Operation DeactivatePersonas:  For variables, look at type DeactivatePersonasVars in ../index.d.ts
 const { data } = await DeactivatePersonas(dataConnect, deactivatePersonasVars);
-
-// Operation ActivatePersona:  For variables, look at type ActivatePersonaVars in ../index.d.ts
-const { data } = await ActivatePersona(dataConnect, activatePersonaVars);
 
 
 ```

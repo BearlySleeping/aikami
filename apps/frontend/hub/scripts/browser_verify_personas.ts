@@ -2,12 +2,19 @@
 // Signs in via the Auth emulator Google popup, exercises create/activate/
 // delete on /personas, and captures screenshots for visual QA.
 
-import pg from '../../../../apps/backend/firebase/node_modules/pg/lib/index.js';
-import { chromium } from '../../../../apps/e2e/node_modules/playwright/index.mjs';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import pg from 'pg';
+import { chromium, type Page } from 'playwright';
 
 const HUB_URL = 'http://127.0.0.1:5276';
-const SHOT_DIR =
-  '/home/sonny/.herdr/worktrees/aikami/contract-task-c-374-msjad3uy/.pi/.screenshots';
+// Repository-relative screenshot dir (script lives at
+// apps/frontend/hub/scripts/ → repo root is three levels up).
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, '../../..');
+const SHOT_DIR = resolve(REPO_ROOT, '.pi/.screenshots');
+mkdirSync(SHOT_DIR, { recursive: true });
 const SQL = 'postgresql://postgres@127.0.0.1:5432/fdcdb?sslmode=disable';
 
 const seedUserRow = async (uid: string): Promise<void> => {
@@ -26,9 +33,7 @@ const seedUserRow = async (uid: string): Promise<void> => {
   }
 };
 
-const readSignedInUid = async (
-  page: import('../../../../apps/e2e/node_modules/playwright/index.mjs').Page,
-): Promise<string> => {
+const readSignedInUid = async (page: Page): Promise<string> => {
   // The Firebase Auth SDK persists the session in IndexedDB
   // (firebaseLocalStorageDb → firebaseLocalStorage store).
   const uid = await page.evaluate(async () => {
@@ -116,27 +121,31 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: `${SHOT_DIR}/hub-personas-empty.png`, fullPage: true });
 
 console.log('6. Creating a persona');
+const personaName = `Browser Verifier ${Date.now()}`;
 const nameInput = page.locator('#persona-name');
-await nameInput.fill('Browser Verifier');
+await nameInput.fill(personaName);
 await page.getByRole('button', { name: 'Create persona' }).click();
-await page.waitForTimeout(2500);
-await page.screenshot({ path: `${SHOT_DIR}/hub-personas-created.png`, fullPage: true });
-
-const personaCard = page.locator('div', { hasText: 'Browser Verifier' }).last();
+// Reuse ONE exact locator for the created persona across creation, activation
+// and deletion checks below (no mixed personaCard/card/card2 selectors).
+const personaCard = page.locator('.grid .rounded-lg', { hasText: personaName }).first();
 await personaCard.waitFor({ timeout: 10000 });
 console.log('   persona card visible');
+await page.screenshot({ path: `${SHOT_DIR}/hub-personas-created.png`, fullPage: true });
 
 console.log('7. Setting persona active');
-const card = page.locator('.grid .rounded-lg', { hasText: 'Browser Verifier' }).first();
-await card.getByRole('button', { name: /Set active|Activate/i }).click();
-await page.waitForTimeout(2500);
+await personaCard.getByRole('button', { name: /Set active|Activate/i }).click();
+// Assert the mutation completed: the card's active-state indicator (the
+// "Active" badge) must appear — not just a fixed wait.
+await personaCard.getByText('Active', { exact: true }).waitFor({ timeout: 10000 });
+console.log('   persona active');
 await page.screenshot({ path: `${SHOT_DIR}/hub-personas-active.png`, fullPage: true });
 
 console.log('8. Deleting the persona');
-const card2 = page.locator('.grid .rounded-lg', { hasText: 'Browser Verifier' }).first();
-await card2.getByRole('button', { name: /Delete/i }).click();
+await personaCard.getByRole('button', { name: /Delete/i }).click();
 await page.getByRole('button', { name: 'Delete', exact: true }).last().click();
-await page.waitForTimeout(2500);
+// Assert the mutation completed: the created persona card must disappear.
+await personaCard.waitFor({ state: 'detached', timeout: 10000 });
+console.log('   persona deleted');
 await page.screenshot({ path: `${SHOT_DIR}/hub-personas-deleted.png`, fullPage: true });
 
 await browser.close();

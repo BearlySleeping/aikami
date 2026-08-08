@@ -173,6 +173,20 @@ export const mapDataConnectError = (operation: string, raw: unknown): Error => {
   }
 
   if (
+    message.includes('persona_one_active_per_user') ||
+    // A unique violation during the activation flow means the one-active
+    // invariant was tripped (a concurrent activation won), not a duplicate
+    // persona id.
+    (operation === 'setActive' &&
+      (message.includes('unique') || message.includes('duplicate') || message.includes('23505')))
+  ) {
+    return toAppError({
+      errorType: 'aborted',
+      errorMessage: 'Another persona is already active. Refresh to see the current state.',
+    });
+  }
+
+  if (
     message.includes('already exists') ||
     message.includes('duplicate key') ||
     message.includes('unique constraint') ||
