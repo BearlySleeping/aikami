@@ -1,16 +1,17 @@
 // apps/frontend/hub/src/routes/(authenticated)/personas/+page.server.ts
 //
 // Server load function for the personas page.
-// Loads personas from the database for SSR hydration.
+// Loads personas from Data Connect (SQL `Persona` table) for SSR hydration.
 // Uses static top-level imports — Bun's module resolution is fast and
 // dynamic import() adds unnecessary Promise overhead on every request.
 // Vite already chunks and optimizes server dependencies at build time.
 //
-// The client-side +page.ts casts the deserialized data to PersonaData.
-
-import { personaFirestoreRepository } from '@aikami/backend/firestore/persona';
-import { toJsonData } from '@aikami/backend/utils/transform';
+// The client-side +page.ts casts the deserialized data to PersonaData. The
+// mapper converts the SQL rows' RFC 3339 timestamps to Unix epoch ms so the
+// SSR wire format matches the schema shapes directly.
+import { dataConnect, listPersonas } from '@aikami/frontend/dataconnect';
 import { error } from '@sveltejs/kit';
+import { type PersonaRow, rowToData } from '$lib/client/services/dataconnect/persona_mapper.ts';
 import { logger } from '$logger';
 import type { PageServerLoad } from './$types';
 
@@ -32,35 +33,18 @@ export const load: PageServerLoad<PersonasPageServerData> = async (event) => {
   try {
     logger.debug('/personas:load fetching personas', { uid });
 
-    const personas = await personaFirestoreRepository.getDocumentsByQuery({
-      filters: [
-        {
-          field: 'uid',
-          operator: '==',
-          value: uid,
-        },
-      ],
-      getCollectionPathArgument: { uid },
-      limit: 10,
-    });
+    // SERVER_ONLY fetch policy — explicit, so the SSR payload is always
+    // freshly read (the SDK default PREFER_CACHE can serve stale rows).
+    const result = await listPersonas(dataConnect, { uid }, { fetchPolicy: 'SERVER_ONLY' });
+    const rows = result.data.personas ?? [];
 
-    if (!personas) {
-      logger.debug('/personas:load personas not found', { uid });
-      return { personas: [] };
-    }
+    // Map rows to the flat PersonaData shape (RFC 3339 → epoch ms) so the
+    // SSR wire format matches the client-side +page.ts cast contract.
+    const personas = rows.map((row: PersonaRow) => rowToData(row));
 
-    // toJsonData converts any nested Timestamp instances → numbers for safe
-    // SSR serialization. Persona timestamps are Unix epoch ms numbers, so the
-    // wire format matches the schema shapes directly.
-    const serializedPersonas = personas.map((persona) =>
-      toJsonData(persona as unknown as Parameters<typeof toJsonData>[0]),
-    );
+    logger.debug('/personas:load success', { personaCount: personas.length });
 
-    logger.debug('/personas:load success', {
-      personaCount: serializedPersonas.length,
-    });
-
-    return { personas: serializedPersonas };
+    return { personas: personas as unknown as Record<string, unknown>[] };
   } catch (err) {
     // Rethrow SvelteKit HttpErrors (e.g. redirects) — only fall back to an
     // empty list for unexpected repository failures.

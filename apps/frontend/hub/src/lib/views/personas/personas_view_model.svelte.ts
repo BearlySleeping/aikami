@@ -106,6 +106,12 @@ class PersonasViewModel
       await this.refresh();
     } catch (error) {
       this.error('setActivePersona', error);
+      // A one-active conflict (aborted) means a concurrent activation won —
+      // the local list is stale, so reload it to reflect the true state.
+      const cause = error instanceof Error ? (error.cause as { errorType?: unknown }) : undefined;
+      if (cause?.errorType === 'aborted') {
+        await this.refresh();
+      }
       this.errorMessage = error instanceof Error ? error.message : 'Failed to set active persona';
     }
   }

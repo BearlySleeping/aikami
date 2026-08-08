@@ -1,21 +1,26 @@
-// apps/frontend/hub/src/lib/client/services/firestore/persona_data.svelte.ts
+// apps/frontend/hub/src/lib/client/services/dataconnect/persona_data.svelte.ts
 //
 // Persona management service for the Hub. Lets a signed-in user browse,
 // create, activate and delete their own personas (community content).
 // Mirrors the client's persona service (apps/frontend/client/src/lib/services/
 // persona/persona_firestore.svelte.ts) plus a createPersona method.
 //
-// Personas live in a shared top-level `personas` collection where each
-// document carries an owner `uid` field — every query here filters by the
-// current user's uid so only their own personas are ever touched.
-import { personaFirestoreRepository } from '@aikami/frontend/firestore/persona.ts';
+// Data layer: personas live in the SQL `Persona` table behind Firebase Data
+// Connect. The public interface is byte-identical to the previous Firestore
+// service — the ViewModel and View are untouched consumers. Ownership is
+// enforced server-side (@auth(expr: "auth.uid == request.variables.uid") +
+// id/uid-scoped writes); the repository maps rows to the shared PersonaData
+// shape and wraps SDK errors into typed domain errors.
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { BatchCommand, PersonaData } from '@aikami/types';
+import { PersonaCreateSchema, PersonaUpdateSchema, schemaCheck } from '@aikami/schemas';
+import type { PersonaCreateData, PersonaData } from '@aikami/types';
+import { toAppError } from '@aikami/utils';
 import { authService } from '$services';
+import { personaRepository } from './persona_repository.ts';
 
 export type PersonaDataServiceOptions = BaseFrontendClassOptions;
 
@@ -75,81 +80,46 @@ class PersonaDataService
     return user;
   }
 
-  /** Verifies the persona exists and is owned by the current user. */
-  private async _getOwnedPersona(personaId: string): Promise<PersonaData> {
-    const user = this._requireUser();
-    const persona = await personaFirestoreRepository.getDocument({ uid: user.id, personaId });
-    if (!persona || persona.uid !== user.id) {
-      throw new Error('Persona not found');
-    }
-    return persona;
-  }
-
   async getPersonas(uid: string): Promise<PersonaData[]> {
-    return await personaFirestoreRepository.getDocumentsByQuery({
-      filters: [
-        {
-          field: 'uid',
-          operator: '==',
-          value: uid,
-        },
-      ],
-      getCollectionPathArgument: { uid },
-    });
+    return await personaRepository.listByOwner({ uid });
   }
 
   async createPersona(data: { name: string }): Promise<string> {
     const user = this._requireUser();
-    return await personaFirestoreRepository.addDocument({
-      getCollectionPathArgument: { uid: user.id },
-      createData: {
-        ...data,
-        uid: user.id,
-        isActive: false,
-      },
-    });
+
+    const createData: PersonaCreateData & { isActive: boolean } = {
+      ...data,
+      isActive: false,
+    };
+
+    // Repository-level schema enforcement (replaces the Firestore path's
+    // createSchema validation) — `traits` has no server-side validation, so
+    // this is the only gate on what gets written.
+    if (!schemaCheck(PersonaCreateSchema, createData)) {
+      throw toAppError({ errorType: 'invalid-argument', errorMessage: 'Invalid persona data' });
+    }
+
+    return await personaRepository.create({ uid: user.id, data: createData });
   }
 
   async setActivePersona(personaId: string): Promise<void> {
     const user = this._requireUser();
-
-    const personas = await this.getPersonas(user.id);
-    const target = personas.find((persona: PersonaData) => persona.id === personaId);
-    if (!target) {
-      throw new Error('Persona not found');
-    }
-
-    // Apply the activation change as one atomic Firestore write batch, so
-    // concurrent requests cannot leave multiple personas active.
-    // (data is cast to BatchCommand['data'] — the repository class applies
-    // the same cast internally when committing.)
-    const commands = personas
-      .filter((persona: PersonaData) => persona.isActive !== (persona.id === personaId))
-      .map(
-        (persona: PersonaData) =>
-          ({
-            type: 'update' as const,
-            data: { isActive: persona.id === personaId },
-            documentPathArgument: { uid: user.id, personaId: persona.id },
-          }) as unknown as BatchCommand,
-      );
-
-    await personaFirestoreRepository.commit(commands);
+    await personaRepository.setActive({ uid: user.id, personaId });
   }
 
   async updatePersona(personaId: string, data: PersonaUpdateFields): Promise<void> {
-    await this._getOwnedPersona(personaId);
     const user = this._requireUser();
-    await personaFirestoreRepository.updateDocument({
-      getDocumentPathArgument: { uid: user.id, personaId },
-      updateData: data,
-    });
+
+    if (!schemaCheck(PersonaUpdateSchema, data)) {
+      throw toAppError({ errorType: 'invalid-argument', errorMessage: 'Invalid persona data' });
+    }
+
+    await personaRepository.update({ uid: user.id, personaId, data });
   }
 
   async deletePersona(personaId: string): Promise<void> {
-    await this._getOwnedPersona(personaId);
     const user = this._requireUser();
-    await personaFirestoreRepository.deleteDocument({ uid: user.id, personaId });
+    await personaRepository.remove({ uid: user.id, personaId });
   }
 }
 
