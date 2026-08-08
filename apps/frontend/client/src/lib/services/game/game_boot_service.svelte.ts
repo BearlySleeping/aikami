@@ -386,10 +386,10 @@ class GameBootService
         campaign = latest;
         this.debug('stage:loading_campaign:latest-campaign', { campaignId: latest.id });
       } else {
-        // Default transient campaign (logged as fallback)
-        this.warn('stage:loading_campaign:no-campaign-fallback', {
-          fallback: 'emberwatch',
-        });
+        // No campaign exists (e.g. straight to /game without setup) — create
+        // the default Emberwatch campaign so save/continue work end-to-end.
+        campaign = await campaignService.ensureDefaultCampaign();
+        this.debug('stage:loading_campaign:default-created', { campaignId: campaign.id });
       }
     }
 

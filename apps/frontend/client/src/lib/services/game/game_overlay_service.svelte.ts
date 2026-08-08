@@ -733,7 +733,8 @@ export class GameOverlayService
         return;
       }
 
-      const campaignId = campaignService.activeCampaign?.id;
+      const campaignId =
+        campaignService.activeCampaign?.id ?? (await campaignService.ensureDefaultCampaign()).id;
       const mapName = await getCurrentMapName();
       const map = await buildSaveMapBlock();
 
@@ -1011,7 +1012,8 @@ export class GameOverlayService
         throw new Error('Engine bridge not available for save');
       }
 
-      const campaignId = campaignService.activeCampaign?.id;
+      const campaignId =
+        campaignService.activeCampaign?.id ?? (await campaignService.ensureDefaultCampaign()).id;
       const mapName = await getCurrentMapName();
       const map = await buildSaveMapBlock();
 
