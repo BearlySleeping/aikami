@@ -15,7 +15,9 @@ export const PersonaRowSchema = Type.Object({
   avatarUrl: Type.Optional(Type.String()),
   // Relation 'owner' → User is not part of the row schema; the FK column below stays.
   uid: Type.String(),
-  traits: Type.Optional(Type.Unknown({ description: "Persona-specific character sheet. Shape validated by PersonaSheetSchema in packages/shared/schemas/src/lib/firestore/persona.ts (extends BaseCharacterSheetSchema in database/character.ts)." })),
+  isActive: Type.Boolean({ description: "Hub one-active-persona flag. Atomicity is enforced by a partial unique index on (uid) WHERE is_active = true — see dataconnect/migrations/persona_one_active.sql. No client-side transaction exists in @firebase/data-connect@0.7.3." }),
+  voiceConfigId: Type.Optional(Type.String({ description: "TTS voice configuration id (PersonaData.voiceConfigId parity)." })),
+  traits: Type.Optional(Type.Unknown({ description: "Persona-specific character sheet (everything in PersonaSheetSchema EXCEPT `name`, which lives in the dedicated `name` column above — never duplicated inside traits). Shape validated by PersonaSheetSchema in packages/shared/schemas/src/lib/firestore/persona.ts (extends BaseCharacterSheetSchema in dat" })),
 });
 
 export type PersonaRowData = Type.Static<typeof PersonaRowSchema>;

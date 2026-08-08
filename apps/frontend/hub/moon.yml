@@ -18,7 +18,7 @@ dependsOn:
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-configs'
-  - 'frontend-firestore'
+  - 'frontend-dataconnect'
   - 'frontend-storage'
   - 'schemas'
   - 'types'
@@ -26,7 +26,6 @@ dependsOn:
   - 'logger'
   - 'utils'
   - 'backend-configs'
-  - 'backend-firestore'
   - 'backend-utils'
 
 fileGroups:

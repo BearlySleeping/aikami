@@ -365,8 +365,7 @@ export default function (pi: ExtensionAPI) {
 
       const stdout = result.stdout ?? '';
       const stderr = result.stderr ?? '';
-      const raw =
-        stdout && stderr ? `${stdout}\n${stderr}` : stdout || stderr || '';
+      const raw = stdout && stderr ? `${stdout}\n${stderr}` : stdout || stderr || '';
       return {
         content: [{ type: 'text', text: smartTruncate(raw, 100) }],
         details: { code: result.code, source: 'gcloud', mode, projectId },
