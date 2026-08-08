@@ -19,8 +19,13 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import type { PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
-import { createPixiApp } from './pixi_app.ts';
+import {
+  createPixiApp,
+  type PixiAppInstance,
+  type PixiAppOptions,
+} from './pixi_app.ts';
+import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
+import { computeDepthOrder, type DepthSortable } from './rendering/depth_sort.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
@@ -73,6 +78,11 @@ type EcsWorkerConstructor = new () => Worker;
 type RenderEntry = {
   /** The PixiJS display object (Sprite or Container). */
   displayObject: Container;
+  /**
+   * Monotonic spawn order — tie-break for y-depth sorting so equal-Y
+   * entities render deterministically without per-frame flicker (C-375 AC-2).
+   */
+  spawnOrder: number;
   /**
    * Per-entity animation controller for directional walk/idle.
    *
@@ -174,6 +184,15 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    * Texture manager instance for LRU caching and frame slicing.
    */
   textureManager?: TextureManager;
+  /**
+   * Resolves a content-pack prop frame key (e.g. "well.png") to a PixiJS
+   * Texture via the parsed spritesheet — deterministic, WebGPU-safe, with
+   * `fallbackTile` on missing frames (C-375 AC-1).
+   *
+   * When omitted, props keep their tinted placeholder and a warning is
+   * logged — never the old global TextureCache lookup.
+   */
+  propFrameResolver?: PropTextureResolver;
 };
 
 /**
@@ -378,6 +397,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _renderEntries = new Map<number, RenderEntry>();
 
   /**
+   * Monotonic spawn counter — increments per ENTITY_CREATED to provide
+   * the stable tie-break for the y-depth sort (C-375 AC-2).
+   */
+  private _entitySpawnCounter = 0;
+
+  /**
    * Per-entity revision counter for appearance loads.
    * Prevents stale async loads from overwriting newer equipment changes.
    */
@@ -388,6 +413,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * The `.create()` factory wraps the instance with auto-debug proxy.
    */
+  /**
+   * Resolves content-pack prop frames to textures (C-375 AC-1).
+   */
+  private readonly _propFrameResolver?: PropTextureResolver;
+
   constructor(options: GameWorldOptions) {
     super(options);
     this._bridge = options.bridge;
@@ -398,6 +428,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._assetUrlResolver = options.assetUrlResolver;
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
     this._textureManager = options.textureManager;
+    this._propFrameResolver = options.propFrameResolver;
   }
 
   /**
@@ -1138,6 +1169,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._renderEntries.set(eid, {
       displayObject: container,
+      spawnOrder: ++this._entitySpawnCounter,
       animationController,
       tint,
       cullable: true,
@@ -1151,10 +1183,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Loads a prop's named atlas frame texture and swaps it into the entity
    * container, replacing the white placeholder sprite.
    *
-   * The tileset spritesheet (atlas.json) is preloaded during boot so the
-   * frame is registered in the Pixi TextureCache. When the frame cannot be
-   * resolved, an error is logged and the placeholder remains (visible bug,
-   * not silent).
+   * The frame is resolved through the injected {@link PropTextureResolver}
+   * (C-375 AC-1) — a parsed spritesheet lookup with `fallbackTile` on miss.
+   * Never routes into the LPC head fallback and never renders a white
+   * 1×1 placeholder for a frame that is missing from the atlas.
    */
   private async _loadPropFrameTexture(options: {
     eid: number;
@@ -1163,14 +1195,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }): Promise<void> {
     const { eid, frame, container } = options;
     try {
-      const { Sprite: PixiSprite, Texture } = await import('pixi.js');
-      const texture = Texture.from(frame);
+      const { Sprite: PixiSprite } = await import('pixi.js');
 
-      if (texture === Texture.WHITE || (texture.width <= 1 && texture.height <= 1)) {
+      const resolution = this._propFrameResolver?.(frame);
+      if (!resolution) {
         this.error('prop-frame-texture-missing', {
           eid,
           frame,
-          hint: 'The frame must exist in the content-pack tileset spritesheet (atlas.json), preloaded before the world loads.',
+          hint: 'No prop frame resolver wired (or atlas not preloaded) — prop keeps its placeholder. Wire createPropFrameResolver() at boot (C-375 AC-1).',
         });
         return;
       }
@@ -1181,7 +1213,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         child.destroy();
       }
 
-      const propSprite = new PixiSprite(texture);
+      const propSprite = new PixiSprite(resolution.texture);
       propSprite.width = 32;
       propSprite.height = 32;
       // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
@@ -1192,8 +1224,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('prop-frame-texture-loaded', {
         eid,
         frame,
-        width: texture.width,
-        height: texture.height,
+        source: resolution.source,
+        width: resolution.texture.width,
+        height: resolution.texture.height,
       });
     } catch (error) {
       this.error('prop-frame-texture-failed', {
@@ -2003,6 +2036,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     disableClamping?: boolean;
     /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
     waterGids?: Set<number>;
+    /**
+     * Manifest-derived prop walkability map (propId → isWalkable), from the
+     * content pack manifest (`props[propId].isWalkable`, C-375 AC-3). The
+     * worker's `_spawnProp` reads `properties.isWalkable` to decide whether
+     * the prop blocks movement — the manifest lives on the main thread, so
+     * the client passes it in per loadMap.
+     */
+    propWalkability?: Record<string, boolean>;
   }): Promise<void> {
     const {
       mapUrl,
@@ -2051,6 +2092,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         : await loadTilemap({ url: mapUrl });
       const collisionGridData = extractCollisionGrid(tilemap, { waterGids });
       const spawnPoints = extractSpawnPoints(tilemap);
+      // C-375 AC-3: enrich prop spawn points with the manifest's
+      // isWalkable flag BEFORE the sanitize/postMessage step so the worker's
+      // _spawnProp can honor `isWalkable: true` (e.g. the village gate) and
+      // skip blocking. The manifest itself never crosses the worker boundary.
+      if (options.propWalkability) {
+        for (const spawnPoint of spawnPoints) {
+          if (spawnPoint.type === 'prop') {
+            const propId = spawnPoint.properties.propId;
+            const walkable = typeof propId === 'string' ? options.propWalkability[propId] : undefined;
+            if (typeof walkable === 'boolean') {
+              spawnPoint.properties.isWalkable = walkable;
+            }
+          }
+        }
+      }
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
 
@@ -2430,6 +2486,34 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Hardcoded outside any if-block to guarantee visibility.
       entry.displayObject.visible = true;
       visibleCount++;
+    }
+
+    // ── C-375 AC-2: y-depth entity sort ──
+    // Top-down occlusion: an entity with a larger world-space Y (feet,
+    // lower on screen) renders ON TOP of an entity with a smaller Y.
+    // Only entity containers are re-sorted — tilemap chunks (added at
+    // index 0), the debug grid and zone overlays stay below entities.
+    // The camera transform is applied to _worldContainer itself, so
+    // re-ordering children does not affect it.
+    if (this._worldContainer && this._renderEntries.size > 1) {
+      const world = this._worldContainer;
+      const items: DepthSortable[] = [];
+      for (const [eid, entry] of this._renderEntries) {
+        items.push({ eid, y: entry.displayObject.y, order: entry.spawnOrder ?? eid });
+      }
+      const ordered = computeDepthOrder(items);
+      for (const eid of ordered) {
+        const entry = this._renderEntries.get(eid);
+        if (entry && entry.displayObject.parent === world) {
+          world.removeChild(entry.displayObject);
+        }
+      }
+      for (const eid of ordered) {
+        const entry = this._renderEntries.get(eid);
+        if (entry) {
+          world.addChild(entry.displayObject);
+        }
+      }
     }
 
     // Camera transform: center the world container at the camera position

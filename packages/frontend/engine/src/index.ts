@@ -333,6 +333,14 @@ export {
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type {
+  CreatePropFrameResolverOptions,
+  PropFrameResolverHandle,
+  PropSpritesheet,
+  PropTextureResolution,
+  PropTextureResolver,
+} from './rendering/prop_texture_resolver.ts';
+export { createPropFrameResolver } from './rendering/prop_texture_resolver.ts';
+export type {
   TilemapChunkRendererOptions,
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';

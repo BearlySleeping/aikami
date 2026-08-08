@@ -672,7 +672,86 @@ export const ContentPackManifestSchema = Type.Object({
       /** Pixel size of a single tile (must match map tilewidth/tileheight). */
       tileSize: Type.Optional(Type.Integer({ minimum: 8, description: 'Pixel size of one tile' })),
     }),
-  ) /** All maps in this pack, keyed by map ID */,
+  ),
+  /**
+   * Optional: frame key rendered when a tile/prop frame is missing from the
+   * atlas (C-375 AC-1 degraded mode). Must exist in the spritesheet.
+   */
+  fallbackTile: Type.Optional(
+    Type.String({ description: 'Spritesheet frame key rendered on missing frame lookups' }),
+  ),
+  /**
+   * Optional: tile ID → tile definition mapping (1-based string keys). The
+   * tilemap renderer resolves GIDs through this map (C-375 AC-4).
+   */
+  tiles: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Object({
+        name: Type.String({ description: 'Human-readable tile name' }),
+        frame: Type.String({ description: 'Spritesheet frame key (e.g. "grass.png")' }),
+        isWalkable: Type.Boolean({ description: 'Whether entities can walk on this tile' }),
+        isWall: Type.Optional(Type.Boolean({ description: 'Whether this tile is a solid wall' })),
+        movementCost: Type.Optional(
+          Type.Number({ description: 'Optional movement speed multiplier (e.g. 0.8)' }),
+        ),
+      }),
+      { description: 'Tile definitions keyed by 1-based tile ID' },
+    ),
+  ),
+  /**
+   * Optional: prop definitions keyed by prop ID. The entity spawner uses
+   * `isWalkable` to decide whether a spawned prop blocks movement (C-375 AC-3).
+   */
+  props: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Object({
+        name: Type.String({ description: 'Human-readable prop name' }),
+        frame: Type.String({ description: 'Spritesheet frame key (e.g. "well.png")' }),
+        anchor: Type.Optional(
+          Type.Object({ x: Type.Number(), y: Type.Number() }),
+        ),
+        isWalkable: Type.Optional(
+          Type.Boolean({ description: 'False (or omitted) = solid prop that blocks movement' }),
+        ),
+        collision: Type.Optional(
+          Type.Object({
+            type: Type.Union([Type.Literal('rect'), Type.Literal('circle')]),
+            width: Type.Optional(Type.Number()),
+            height: Type.Optional(Type.Number()),
+            radius: Type.Optional(Type.Number()),
+          }),
+        ),
+      }),
+      { description: 'Prop definitions keyed by prop ID' },
+    ),
+  ),
+  /**
+   * Optional: entity definitions (e.g. player spawn) keyed by entity key.
+   */
+  entities: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Object({
+        name: Type.String({ description: 'Human-readable entity name' }),
+        frame: Type.String({ description: 'Spritesheet frame key or image filename' }),
+        anchor: Type.Optional(
+          Type.Object({ x: Type.Number(), y: Type.Number() }),
+        ),
+        collision: Type.Optional(
+          Type.Object({
+            type: Type.Union([Type.Literal('rect'), Type.Literal('circle')]),
+            width: Type.Optional(Type.Number()),
+            height: Type.Optional(Type.Number()),
+            radius: Type.Optional(Type.Number()),
+          }),
+        ),
+      }),
+      { description: 'Entity definitions keyed by entity key' },
+    ),
+  ),
+  /** All maps in this pack, keyed by map ID */
   maps: Type.Record(Type.String(), ContentPackMapEntrySchema, {
     description: 'Map definitions keyed by map ID',
   }),

@@ -565,3 +565,67 @@ describe('ContentPackManifestSchema', () => {
     expect(item.attackBonus).toBeUndefined();
   });
 });
+
+describe('ContentPackManifestSchema — atlas tiles/props/entities (C-375)', () => {
+  test('should accept tiles, props, entities and fallbackTile', () => {
+    const manifest = {
+      ...validManifest,
+      fallbackTile: 'grass.png',
+      atlas: {
+        textureUrl: '/game-data/sprites/tilesets/atlas.webp',
+        spritesheetUrl: '/game-data/sprites/tilesets/atlas.json',
+        tileSize: 32,
+      },
+      tiles: {
+        '1': { name: 'grass', frame: 'grass.png', isWalkable: true, isWall: false },
+        '2': { name: 'wall_brick', frame: 'brick.png', isWalkable: false, isWall: true },
+        '3': {
+          name: 'path_tough',
+          frame: 'tough.png',
+          isWalkable: true,
+          movementCost: 0.8,
+        },
+      },
+      props: {
+        village_well: {
+          name: 'Old Stone Well',
+          frame: 'well.png',
+          anchor: { x: 0.5, y: 1.0 },
+          isWalkable: false,
+          collision: { type: 'rect', width: 22, height: 14 },
+        },
+        village_gate: {
+          name: 'Emberwatch Village Gate',
+          frame: 'village_gate.png',
+          isWalkable: true,
+        },
+      },
+      entities: {
+        player_spawn: {
+          name: 'Hero Spawn',
+          frame: 'char_hero_idle.png',
+          anchor: { x: 0.5, y: 1.0 },
+          collision: { type: 'rect', width: 16, height: 16 },
+        },
+      },
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    expect(result.fallbackTile).toBe('grass.png');
+    expect(result.tiles?.['2']?.isWall).toBe(true);
+    expect(result.tiles?.['3']?.movementCost).toBe(0.8);
+    expect(result.props?.village_well?.collision?.width).toBe(22);
+    expect(result.props?.village_well?.isWalkable).toBe(false);
+    expect(result.props?.village_gate?.isWalkable).toBe(true);
+    expect(result.entities?.player_spawn?.frame).toBe('char_hero_idle.png');
+  });
+
+  test('should reject a tile def missing frame', () => {
+    const manifest = {
+      ...validManifest,
+      tiles: {
+        '1': { name: 'grass', isWalkable: true },
+      },
+    };
+    expect(() => Value.Parse(ContentPackManifestSchema, manifest)).toThrow();
+  });
+});
