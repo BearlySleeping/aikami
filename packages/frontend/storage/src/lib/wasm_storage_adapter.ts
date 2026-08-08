@@ -91,6 +91,20 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     // Initialise the WASM runtime
     const sqlite3 = await sqlite3Module.default();
 
+    // ── Workaround: @sqlite.org/sqlite-wasm only assigns kvvfs.internal
+    // when sqlite3.__isUnderTest is truthy, but kvvfs xFileControl ALWAYS
+    // reads kvvfs.internal.disablePageSizeChange. In production builds the
+    // internal object stays undefined, so ANY statement prepare on a
+    // localStorage-backed (kvvfs) database crashes with
+    // 'Cannot read properties of undefined (reading disablePageSizeChange)'.
+    // Provide the internal object explicitly so the kvvfs VFS works outside
+    // test mode (page-size changes are disabled — kvvfs uses a fixed page
+    // size internally).
+    const kvvfs = (sqlite3 as unknown as { kvvfs?: { internal?: object } }).kvvfs;
+    if (kvvfs && !kvvfs.internal) {
+      kvvfs.internal = { disablePageSizeChange: true };
+    }
+
     // Access oo1 API via bracket notation (library exports PascalCase names)
     const oo1 = sqlite3.oo1 as Record<string, unknown>;
 
