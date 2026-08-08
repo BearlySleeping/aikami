@@ -780,6 +780,18 @@ const _parseTransitionZone = (object: Record<string, unknown>): TransitionZone |
     return undefined;
   }
 
+  const targetSpawnId =
+    typeof properties.targetSpawnId === 'string' ? properties.targetSpawnId : undefined;
+
+  if (!targetSpawnId) {
+    logger.warn(
+      '[map_loader] Transition without targetSpawnId — spawn will fall back to hardcoded ' +
+        `targetX/targetY (${targetX},${targetY}). Add a "targetSpawnId" property referencing ` +
+        `a "spawn" marker on map "${targetMap}" to keep portals synced.`,
+      { id: String(id) },
+    );
+  }
+
   return {
     id: String(id),
     x: typeof object.x === 'number' ? object.x : 0,
@@ -789,7 +801,6 @@ const _parseTransitionZone = (object: Record<string, unknown>): TransitionZone |
     targetMap,
     targetX,
     targetY,
-    targetSpawnId:
-      typeof properties.targetSpawnId === 'string' ? properties.targetSpawnId : undefined,
+    targetSpawnId,
   };
 };

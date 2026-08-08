@@ -75,12 +75,16 @@ export type EngineBridge = {
    * Creates a serialized snapshot of the current ECS world state.
    *
    * Delegates to the worker which calls {@link import('./serialization/ecs_serializer.ts').serializeWorld}
-   * on the active bitECS world. Returns the JSON payload string.
+   * or {@link import('./serialization/ecs_serializer.ts').serializePlayer} on the
+   * active bitECS world. Returns the JSON payload string.
    *
+   * @param scope - 'player' (default) serializes only the player entity
+   *   (map-authoritative saves). 'world' serializes the full ECS world
+   *   (legacy/fallback saves without a map block).
    * @returns The serialized ECS world state as a JSON string.
    * @throws If the engine is not initialized or the worker is not running.
    */
-  createSnapshot(): Promise<string>;
+  createSnapshot(scope?: 'player' | 'world'): Promise<string>;
 
   /**
    * Restores the ECS world state from a previously-created snapshot.
@@ -245,7 +249,7 @@ class EngineBridgeImpl implements EngineBridge {
   }
 
   /** Snapshot handler registered by the GameWorld. */
-  private _snapshotHandler: (() => Promise<string>) | undefined;
+  private _snapshotHandler: ((scope?: 'player' | 'world') => Promise<string>) | undefined;
 
   /** Restore handler registered by the GameWorld. */
   private _restoreHandler: ((snapshot: string) => Promise<void>) | undefined;
@@ -273,7 +277,7 @@ class EngineBridgeImpl implements EngineBridge {
    * Registers the snapshot handler callback. Called by GameWorld during
    * initialization so {@link createSnapshot} delegates to the worker.
    */
-  setSnapshotHandler(handler: () => Promise<string>): void {
+  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
     this._snapshotHandler = handler;
   }
 
@@ -286,11 +290,11 @@ class EngineBridgeImpl implements EngineBridge {
   }
 
   /** @inheritdoc */
-  async createSnapshot(): Promise<string> {
+  async createSnapshot(scope?: 'player' | 'world'): Promise<string> {
     if (!this._snapshotHandler) {
       throw new Error('EngineBridge: no snapshot handler registered (engine not initialized)');
     }
-    return this._snapshotHandler();
+    return this._snapshotHandler(scope);
   }
 
   /** @inheritdoc */
@@ -371,7 +375,7 @@ export class MockEngineBridge implements EngineBridge {
   }
 
   /** @see EngineBridgeImpl.setSnapshotHandler */
-  setSnapshotHandler(handler: () => Promise<string>): void {
+  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
     this.impl.setSnapshotHandler(handler);
   }
 
@@ -381,8 +385,8 @@ export class MockEngineBridge implements EngineBridge {
   }
 
   /** @inheritdoc */
-  async createSnapshot(): Promise<string> {
-    return this.impl.createSnapshot();
+  async createSnapshot(scope?: 'player' | 'world'): Promise<string> {
+    return this.impl.createSnapshot(scope);
   }
 
   /** @inheritdoc */

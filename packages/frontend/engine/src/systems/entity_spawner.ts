@@ -15,7 +15,7 @@ import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
-import { InteractableState } from '../components/interactable_state.ts';
+import { InteractableState, type InteractableStateMap } from '../components/interactable_state.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
@@ -68,16 +68,7 @@ export type SpawnEntitiesOptions = {
    *
    * Contract: C-342 — interactable state persistence
    */
-  interactableStates?: Record<
-    string,
-    {
-      isOpen?: boolean;
-      isLocked?: boolean;
-      isLooted?: boolean;
-      isToggled?: boolean;
-      isTriggered?: boolean;
-    }
-  >;
+  interactableStates?: InteractableStateMap;
 };
 
 // ---------------------------------------------------------------------------

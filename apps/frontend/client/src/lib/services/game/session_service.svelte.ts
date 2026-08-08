@@ -7,13 +7,13 @@
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import { playerStateService } from '$services';
 import { textGenerationService } from '$services/ai/text_generation_service.svelte';
 import type {
@@ -451,7 +451,9 @@ class SessionService
 
     // Trigger a game save to the checkpoint slot
     try {
-      await gameSaveService.saveGame({ slotId: saveSlotId, campaignId });
+      const { buildSaveMapBlock, getCurrentMapName } = await import('./save_map_block');
+      const [map, mapName] = await Promise.all([buildSaveMapBlock(), getCurrentMapName()]);
+      await gameSaveService.saveGame({ slotId: saveSlotId, campaignId, mapName, map });
     } catch (error) {
       // Rollback checkpoint record on save failure
       await db.execute({
@@ -575,14 +577,27 @@ class SessionService
     const newSlotId = `fork-${crypto.randomUUID()}`;
     const envelope = JSON.parse(rawPayload) as Record<string, unknown>;
 
-    // Preserve the envelope data for the forked session
+    // Preserve the envelope data for the forked session.
+    // map_name is display-only — prefer the saved map's display name over
+    // the hardcoded 'World' (which was never accurate).
     const newPayload = JSON.stringify(envelope);
     const newSaveId = `aikami_save_${newSlotId}`;
+    const mapBlock = (envelope.map ?? undefined) as { packId?: string; mapId?: string } | undefined;
+    let forkMapName = 'World';
+    if (mapBlock?.packId && mapBlock.mapId) {
+      try {
+        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const pack = await loadContentPack({ packId: mapBlock.packId });
+        forkMapName = pack.manifest.maps[mapBlock.mapId]?.name ?? mapBlock.mapId;
+      } catch {
+        forkMapName = mapBlock.mapId;
+      }
+    }
 
     await db.execute({
       sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
             VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [newSaveId, newSlotId, campaignId, Date.now(), 'World', newPayload],
+      args: [newSaveId, newSlotId, campaignId, Date.now(), forkMapName, newPayload],
     });
 
     // Mark the checkpoint as having forks

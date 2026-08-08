@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { EngineBridge, GameCommand, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
+import type {
+  EngineBridge,
+  GameCommand,
+  GameWorld,
+  InteractableStateMap,
+  LpcLayerRecipe,
+} from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -98,12 +104,30 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
+    defaultSpawnHash?: number;
     disableClamping?: boolean;
   }): Promise<void>;
 
   /** Restores the game world from a saved ECS snapshot payload. */
   loadSave(payload: string): Promise<void>;
+
+  /**
+   * Applies a player-scoped ECS snapshot onto the live world.
+   *
+   * Used by the map-authoritative restore pipeline: loadMap rebuilds the
+   * map's entities, then this merges the player's saved components without
+   * clearing the freshly spawned world.
+   */
+  restorePlayer(payload: string): Promise<void>;
+
+  /**
+   * Returns the player's current world-space pixel position, or undefined
+   * if the engine has not booted. Used by the save pipeline for the
+   * envelope map block (v3+).
+   */
+  getPlayerPosition(): { x: number; y: number } | undefined;
 
   /** Destroys the engine and resets all state (on route navigation). */
   destroyEngine(): void;
@@ -305,7 +329,9 @@ class GameEngineService
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
+    defaultSpawnHash?: number;
     disableClamping?: boolean;
   }): Promise<void> {
     if (this._gameWorld) {
@@ -323,6 +349,19 @@ class GameEngineService
       throw new Error('Engine not initialized — cannot load save');
     }
     await this._gameWorld.restoreWorld(payload);
+  }
+
+  /** @inheritdoc */
+  async restorePlayer(payload: string): Promise<void> {
+    if (!this._gameWorld) {
+      throw new Error('Engine not initialized — cannot restore player');
+    }
+    await this._gameWorld.restorePlayer(payload);
+  }
+
+  /** @inheritdoc */
+  getPlayerPosition(): { x: number; y: number } | undefined {
+    return this._gameWorld?.getPlayerPosition();
   }
 
   /** @inheritdoc */

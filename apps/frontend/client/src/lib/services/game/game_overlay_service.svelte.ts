@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts
 /** biome-ignore-all lint/style/useNamingConvention: GameOverlayType enum-like keys use SCREAMING_SNAKE_CASE */
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import type { EngineBridge, InteractableStateMap } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -28,6 +28,7 @@ import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
+import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -250,6 +251,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   canOpenOverlay(type: GameOverlayType): boolean;
   setTransitioning(value: boolean): void;
   getDefeatedEnemies(): string[];
+  /** Returns the per-spawnId interactable state map for map-load persistence (C-342). */
+  getInteractableStates(): InteractableStateMap;
   /** Returns the collected item pickup spawn IDs for map-load suppression (C-331). */
   getCollectedPickups(): string[];
   setCameraZoom(options: { npcScreenX?: number; npcScreenY?: number }): void;
@@ -641,6 +644,11 @@ export class GameOverlayService
     return [...worldStateService.defeatedEnemies];
   }
 
+  /** Returns the current per-spawnId interactable state map (C-342). */
+  getInteractableStates(): InteractableStateMap {
+    return { ...worldStateService.interactableStates };
+  }
+
   /** @inheritdoc */
   getCollectedPickups(): string[] {
     return [...worldStateService.collectedPickups];
@@ -725,14 +733,27 @@ export class GameOverlayService
         return;
       }
 
-      const campaignId = campaignService.activeCampaign?.id;
-      const mapName = worldStateService.currentLocation?.name ?? 'World';
+      const campaignId =
+        campaignService.activeCampaign?.id ?? (await campaignService.ensureDefaultCampaign()).id;
+      const mapName = await getCurrentMapName();
+      const map = await buildSaveMapBlock();
 
       await saveService.saveGame({
         slotId: 'auto-save',
         campaignId,
         mapName,
+        map,
       });
+
+      // Keep the campaign's lastSaveSlotId pointing at the newest state so
+      // Continue after refresh resumes the most recent position/map.
+      try {
+        await campaignService.saveCampaign({ slotId: 'auto-save' });
+      } catch (campaignError) {
+        this.warn('autosave:campaign-slot-update-failed', {
+          error: String(campaignError),
+        });
+      }
       this.autoSaveStatus = 'saved';
       this.showSnackbar({ text: 'Auto-saved', type: 'success' });
       setTimeout(() => {
@@ -991,14 +1012,28 @@ export class GameOverlayService
         throw new Error('Engine bridge not available for save');
       }
 
-      const campaignId = campaignService.activeCampaign?.id;
-      const mapName = worldStateService.currentLocation?.name ?? 'World';
+      const campaignId =
+        campaignService.activeCampaign?.id ?? (await campaignService.ensureDefaultCampaign()).id;
+      const mapName = await getCurrentMapName();
+      const map = await buildSaveMapBlock();
 
       await saveService.saveGame({
         slotId: 'manual-1',
         campaignId,
         mapName,
+        map,
       });
+
+      // Point the campaign at this slot so Continue/refresh resumes here.
+      // Without this, the boot pipeline finds no lastSaveSlotId and fresh-
+      // spawns at the starting map (C-334).
+      try {
+        await campaignService.saveCampaign({ slotId: 'manual-1' });
+      } catch (campaignError) {
+        this.warn('saveGame:campaign-slot-update-failed', {
+          error: String(campaignError),
+        });
+      }
       this.saveMessage = 'Game Saved!';
     } catch (error) {
       this.warn('saveGame:error', { error: String(error) });
@@ -1068,7 +1103,62 @@ export class GameOverlayService
 
       const latestSave = saves[0];
       this.debug('loadLastSave', { slotId: latestSave.id, mapName: latestSave.mapName });
-      await saveService.loadGame(latestSave.id);
+
+      // Map-authoritative load for v3+ saves: validate + hydrate domain
+      // services, rebuild the saved map, then overlay the player snapshot.
+      // Legacy v2/plain payloads fall back to the old full-world restore
+      // path (loadGame does its own validation + hydration).
+      const rawPayload = await saveService.getRawSavePayload(latestSave.id);
+      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
+        './game_save_service.svelte.ts'
+      );
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+        parseSavePayloadEnvelope(rawPayload);
+
+      // C-334 AC-4: version-aware checksum validation (v3 digest includes map)
+      if (version && version >= 2 && storedChecksum) {
+        const valid = await validateEnvelopeChecksum({
+          ecsSnapshot,
+          serviceSnapshots,
+          map,
+          storedChecksum,
+          version,
+        });
+        if (!valid) {
+          throw new Error(`Save is corrupted: checksum mismatch for slot "${latestSave.id}"`);
+        }
+      }
+
+      if (map?.mapId && map.packId) {
+        // Hydrate domain services FIRST (inventory, quests, time, …) so world
+        // flags are in place before the map load — same as the boot pipeline.
+        if (serviceSnapshots) {
+          const { hydrateAllServices } = await import('./serializable_service');
+          hydrateAllServices(serviceSnapshots);
+          this.debug('loadLastSave:services-hydrated', {
+            snapshotCount: serviceSnapshots.length,
+          });
+        }
+
+        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const pack = await loadContentPack({ packId: map.packId });
+        const { worldStateService } = await import('./world_state_service.svelte');
+        await gameEngineService.loadMap({
+          mapUrl: pack.resolveMapUrl(map.mapId),
+          targetX: map.playerX,
+          targetY: map.playerY,
+          defeatedEnemies: [...worldStateService.defeatedEnemies],
+          collectedPickups: [...worldStateService.collectedPickups],
+          interactableStates: { ...worldStateService.interactableStates },
+        });
+        await gameEngineService.restorePlayer(ecsSnapshot);
+        this.debug('loadLastSave:map-restored', {
+          slotId: latestSave.id,
+          mapId: map.mapId,
+        });
+      } else {
+        await saveService.loadGame(latestSave.id);
+      }
 
       // Navigate to the game
       await routerService.goToRoute('game', {
