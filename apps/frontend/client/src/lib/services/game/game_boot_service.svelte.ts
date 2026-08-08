@@ -471,14 +471,14 @@ class GameBootService
       if (generation !== this._bootGeneration) {
         return;
       }
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum } = parseSavePayloadEnvelope(
-        input.pendingSavePayload,
-      );
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+        parseSavePayloadEnvelope(input.pendingSavePayload);
 
       if (version && version >= 2 && storedChecksum) {
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
+          map,
           storedChecksum,
           version,
         });
@@ -946,6 +946,10 @@ class GameBootService
 
         // Overlay the player's saved appearance/combat stats/position.
         await gameEngineService.restorePlayer(ecsSnapshot);
+        // Check generation after async restore
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         this.debug('stage:hydrating_snapshot:map-restored', {
           mapId: map.mapId,
           playerX: map.playerX,
@@ -1388,14 +1392,16 @@ class GameBootService
       for (const save of saves) {
         try {
           const payload = await gameSaveService.getRawSavePayload(save.id);
-          const { ecsSnapshot, serviceSnapshots, version, storedChecksum } =
+          const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
             parseSavePayloadEnvelope(payload);
 
           if (version && version >= 2 && storedChecksum) {
             const valid = await validateEnvelopeChecksum({
               ecsSnapshot,
               serviceSnapshots,
+              map,
               storedChecksum,
+              version,
             });
             if (!valid) {
               continue; // skip this corrupt save, try next

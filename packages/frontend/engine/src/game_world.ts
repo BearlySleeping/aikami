@@ -11,6 +11,7 @@ import {
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
+import type { InteractableStateMap } from './components/interactable_state.ts';
 import {
   BUFFER_SIZE,
   COMPONENT_STRIDE,
@@ -1358,12 +1359,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _setupSnapshotHandlers(): void {
     const bridgeWithHandlers = this._bridge as unknown as {
-      setSnapshotHandler: (handler: () => Promise<string>) => void;
+      setSnapshotHandler: (handler: (scope?: 'player' | 'world') => Promise<string>) => void;
       setRestoreHandler: (handler: (snapshot: string) => Promise<void>) => void;
     };
 
     if (typeof bridgeWithHandlers.setSnapshotHandler === 'function') {
-      bridgeWithHandlers.setSnapshotHandler(() => this.snapshotWorld());
+      bridgeWithHandlers.setSnapshotHandler((scope?: 'player' | 'world') =>
+        this.snapshotWorld(scope),
+      );
     }
 
     if (typeof bridgeWithHandlers.setRestoreHandler === 'function') {
@@ -1775,9 +1778,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * that resolves with the JSON payload string. Rejects if the worker
    * is not running or the snapshot fails.
    *
+   * @param scope - 'player' (default) serializes only the player entity
+   *   (map-authoritative saves). 'world' serializes the full ECS world
+   *   (legacy/fallback saves without a map block).
    * @returns The serialized ECS world state as a JSON string.
    */
-  snapshotWorld(): Promise<string> {
+  snapshotWorld(scope: 'player' | 'world' = 'player'): Promise<string> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
         reject(new Error('Worker not running — cannot snapshot'));
@@ -1801,7 +1807,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       };
 
       this._worker.addEventListener('message', handler);
-      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT' });
+      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT', scope });
     });
   }
 
@@ -1991,16 +1997,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
@@ -2159,16 +2156,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];

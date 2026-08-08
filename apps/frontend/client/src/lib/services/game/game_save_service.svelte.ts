@@ -337,7 +337,11 @@ class GameSaveService
     this.isSaving = true;
 
     try {
-      const ecsSnapshot = await this._getBridge().createSnapshot();
+      // Player-scoped snapshot when the envelope carries a map block (the
+      // map file reconstructs the world on load). When no map block can be
+      // produced (e.g. early-boot autosave race), fall back to a full-world
+      // snapshot so the legacy restore path can still rebuild the world.
+      const ecsSnapshot = await this._getBridge().createSnapshot(map ? 'player' : 'world');
       const serviceSnapshots = serializeAllServices();
       const savedAt = new Date().toISOString();
 

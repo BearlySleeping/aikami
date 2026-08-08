@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/__tests__/serializer.test.ts
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, createWorld, getAllEntities, set } from 'bitecs';
+import { addComponent, addEntity, createWorld, getAllEntities, hasComponent, set } from 'bitecs';
 import { Appearance, registerAppearanceObservers } from '../components/appearance.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
@@ -769,8 +769,9 @@ describe('AC-3: serializePlayer produces player-scoped snapshot', () => {
     const restoredEid = [...eidMap.values()][0];
     // Position data restored
     expect(Position.x[restoredEid]).toBe(5);
-    // CombatStats must NOT be registered on this entity
-    expect(CombatStats.health[restoredEid]).toBeUndefined();
-    expect(CombatStats.maxHealth[restoredEid]).toBeUndefined();
+    // CombatStats must NOT be registered on this entity (bitecs membership,
+    // not just SoA values — previously every entity received every component)
+    expect(hasComponent(restored, restoredEid, CombatStats)).toBe(false);
+    expect(hasComponent(restored, restoredEid, Position)).toBe(true);
   });
 });

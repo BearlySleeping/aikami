@@ -114,6 +114,11 @@ export type { GridPositionData } from './components/grid_position.ts';
 export { GridPosition, registerGridPositionObservers } from './components/grid_position.ts';
 export type { InteractableData, InteractableType } from './components/interactable.ts';
 export { Interactable, registerInteractableObservers } from './components/interactable.ts';
+export type {
+  InteractableStateData,
+  InteractableStateMap,
+} from './components/interactable_state.ts';
+export { InteractableState } from './components/interactable_state.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
 export {
   Inventory,

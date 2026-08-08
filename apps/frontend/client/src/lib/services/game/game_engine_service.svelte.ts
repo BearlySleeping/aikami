@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { EngineBridge, GameCommand, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
+import type {
+  EngineBridge,
+  GameCommand,
+  GameWorld,
+  InteractableStateMap,
+  LpcLayerRecipe,
+} from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -98,16 +104,7 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
@@ -332,16 +329,7 @@ class GameEngineService
     targetY: number;
     defeatedEnemies?: string[];
     collectedPickups?: string[];
-    interactableStates?: Record<
-      string,
-      {
-        isOpen?: boolean;
-        isLocked?: boolean;
-        isLooted?: boolean;
-        isToggled?: boolean;
-        isTriggered?: boolean;
-      }
-    >;
+    interactableStates?: InteractableStateMap;
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
