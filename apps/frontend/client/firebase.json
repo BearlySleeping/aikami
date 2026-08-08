@@ -1,7 +1,11 @@
 {
   "hosting": {
     "public": "build",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "**/*.@(webp|webm|mp3|ogg|json|png|jpg|jpeg|gif|avif|svg|wav|flac|m4a|aac|woff|woff2|ttf|eot|ico|txt|pdf)",
@@ -23,6 +27,24 @@
           {
             "key": "Cross-Origin-Embedder-Policy",
             "value": "require-corp"
+          }
+        ]
+      },
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
           }
         ]
       },
