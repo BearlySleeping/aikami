@@ -82,6 +82,11 @@ export class HttpLogSink implements LogSink {
   }
 }
 
+/**
+ * Browser logger service: BaseLoggerService + the HTTP sink, so every
+ * write also flushes toward /api/internal_logging (browser console
+ * included via the base implementation).
+ */
 class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerInterface {
   private readonly _httpSink: HttpLogSink;
 
@@ -120,6 +125,10 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
   }
 }
 
+/**
+ * Create a browser logger instance wired with the HTTP sink.
+ * Prefer the module-level {@link logger} singleton.
+ */
 export function createLogger(): LoggerInterface {
   return new FrontendLoggerService();
 }

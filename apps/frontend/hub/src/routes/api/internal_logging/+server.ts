@@ -54,6 +54,11 @@ const RATE_LIMIT_MAX = 120; // requests per window
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const _rateBuckets = new Map<string, { count: number; windowStart: number }>();
 
+/**
+ * In-memory fixed-window rate limiter keyed by client IP. Single-instance
+ * guard — production (Cloud Run) should layer edge rate limiting on top.
+ * Returns true when the key is over its window budget.
+ */
 const _rateLimited = (key: string): boolean => {
   const now = Date.now();
   const bucket = _rateBuckets.get(key);

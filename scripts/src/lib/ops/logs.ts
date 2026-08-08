@@ -44,6 +44,12 @@ export type LogTarget = {
   note?: string;
 };
 
+/**
+ * Resolve which Cloud Logging target an app maps to: Cloud Run services
+ * and Firebase Functions (gen2) both live under cloud_run_revision
+ * resources; `client` redirects to hub's stream with an app filter;
+ * static/desktop/docker-release apps return an unsupported message.
+ */
 export function resolveLogTarget(
   appId: AppId,
   mode: string,
@@ -110,6 +116,24 @@ export function resolveLogTarget(
 
 // ── Filter builder ───────────────────────────────────────────────────────
 
+/** Valid Cloud Logging severity levels for the severity>= filter. */
+const SEVERITY_LEVELS = [
+  'DEBUG',
+  'INFO',
+  'NOTICE',
+  'WARNING',
+  'ERROR',
+  'CRITICAL',
+  'ALERT',
+  'EMERGENCY',
+] as const;
+
+/**
+ * Build the Cloud Logging filter expression for a target and option set:
+ * base resource/location/service clauses, optional app extraFilter,
+ * validated severity>=, quoted jsonPayload.message substring (with quote
+ * escaping) and a raw filter fragment ANDed on.
+ */
 export function buildFilter(
   target: LogTarget,
   opts: { severity?: string; message?: string; filter?: string },
@@ -119,13 +143,21 @@ export function buildFilter(
     `resource.labels.location="${target.region}"`,
   ];
   if (target.serviceName) {
-    parts.push(`resource.labels.service_name="${target.serviceName}"`);
+    // Escape quotes like the message clause below — service ids come from
+    // APP_CONFIG but defensive escaping keeps the filter expression valid.
+    parts.push(`resource.labels.service_name="${target.serviceName.replace(/"/g, '\\"')}"`);
   }
   if (target.extraFilter) {
     parts.push(target.extraFilter);
   }
   if (opts.severity) {
-    parts.push(`severity>=${opts.severity.toUpperCase()}`);
+    const severity = opts.severity.toUpperCase();
+    if (!SEVERITY_LEVELS.includes(severity as (typeof SEVERITY_LEVELS)[number])) {
+      throw new Error(
+        `Invalid --severity "${opts.severity}". Valid values: ${SEVERITY_LEVELS.join(', ')}`,
+      );
+    }
+    parts.push(`severity>=${severity}`);
   }
   if (opts.message) {
     parts.push(`jsonPayload.message:"${opts.message.replace(/"/g, '\\"')}"`);
@@ -138,6 +170,7 @@ export function buildFilter(
 
 // ── Main ──────────────────────────────────────────────────────────────────
 
+/** Print the `logs <app>` CLI usage to stderr. */
 function printUsage(): void {
   error('Usage: logs <app> [flags]');
   error(`  app                Apps: ${VALID_APPS.join(', ')}`);
@@ -152,6 +185,11 @@ function printUsage(): void {
   error('  --json             Full structured JSON output instead of the compact default');
 }
 
+/**
+ * CLI entry: parse args, resolve the target for the requested app, ensure
+ * gcloud auth, then run a one-shot `gcloud logging read` or a live
+ * `gcloud logging tail`.
+ */
 async function main(): Promise<void> {
   const opts = parseCliArgs(process.argv.slice(2), {
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
@@ -202,7 +240,20 @@ async function main(): Promise<void> {
   );
 
   if (opts.tail) {
-    runArgs(['gcloud', 'logging', 'tail', filter, '--project', target.projectId], { live: true });
+    try {
+      runArgs(['gcloud', 'logging', 'tail', filter, '--project', target.projectId], {
+        live: true,
+      });
+    } catch (err) {
+      // `gcloud logging tail` needs the grpcio Python module; on machines
+      // without it the command fails immediately at startup. Give the user
+      // the fix instead of a bare "Command failed".
+      error('gcloud logging tail failed to start. It requires the grpcio Python module:');
+      error('  pip3 install grpcio');
+      error('  export CLOUDSDK_PYTHON_SITEPACKAGES=1');
+      error('(see https://cloud.google.com/sdk/docs/troubleshooting#grpcio)');
+      throw err;
+    }
     return;
   }
 

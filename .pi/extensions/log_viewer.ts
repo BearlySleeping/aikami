@@ -107,10 +107,13 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+      // Default undefined mode to 'staging' — logs are only available for
+      // staging/production, and the tool help declares staging as the default.
+      // Always pass --mode explicitly so logs.ts never falls back to the
+      // ambient AIKAMI_MODE (which may be 'emulator' in dev).
+      const mode = params.mode ?? 'staging';
       const args = ['bun', 'run', 'scripts', '--', 'logs', params.app];
-      if (params.mode) {
-        args.push('--mode', params.mode);
-      }
+      args.push('--mode', mode);
       if (params.tail) {
         args.push('--tail');
       }
@@ -139,8 +142,15 @@ export default function (pi: ExtensionAPI) {
       const result = await pi.exec('env', args, {
         signal,
         timeout: params.tail ? DefaultTimeout : 60_000,
+        // Run from the repo root (direnv's AIKAMI_ROOT) so `bun run scripts`
+        // resolves the workspace regardless of pi's current cwd.
+        cwd: process.env.AIKAMI_ROOT,
       });
-      const raw = result.stdout || result.stderr || '';
+      // Keep stderr diagnostics (gcloud writes progress/warnings there) and
+      // surface non-zero exits explicitly instead of returning them as log
+      // data.
+      const streams = [result.stdout, result.stderr].filter(Boolean).join('\n');
+      const raw = result.code === 0 ? streams : `Command failed (exit ${result.code}):\n${streams}`;
       return {
         content: [{ type: 'text', text: smartTruncate(raw, 100) }],
         details: { code: result.code, app: params.app, tail: params.tail ?? false },

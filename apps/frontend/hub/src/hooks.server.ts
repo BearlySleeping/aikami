@@ -52,6 +52,10 @@ logger.addSink(new SSRLogSink(logContextStore));
 // Eagerly trigger the lazy SSR logger to load BEFORE the first request.
 void logger.write({ logLevel: 'DEBUG', logType: 'debug', message: 'ssr-logger-init' });
 
+/**
+ * SvelteKit handleError hook: log the error with SSR context (session,
+ * user, IP, route) and return a safe error payload.
+ */
 export const handleError = (({ error, event }) => {
   const pwaError = error as App.Error | undefined;
   const sessionId =
@@ -210,6 +214,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
+/** Resolve the route path from the SvelteKit route id, falling back to the URL. */
 const resolveRoute = (event: Parameters<Handle>[0]['event']) => {
   const routeId = event.route.id;
   if (routeId) {

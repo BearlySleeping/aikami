@@ -89,6 +89,16 @@ describe('sanitizeLogAppTag', () => {
     expect(sanitizeLogAppTag('hub')).toBe('hub');
   });
 
+  it('trims surrounding whitespace before validating', () => {
+    expect(sanitizeLogAppTag('  client  ')).toBe('client');
+    expect(sanitizeLogAppTag('\tclient\n')).toBe('client');
+  });
+
+  it('returns undefined for whitespace-only input', () => {
+    expect(sanitizeLogAppTag('   ')).toBeUndefined();
+    expect(sanitizeLogAppTag('\t\n')).toBeUndefined();
+  });
+
   it('passes a 64-char tag through (boundary)', () => {
     const tag = 'a'.repeat(64);
     expect(sanitizeLogAppTag(tag)).toBe(tag);

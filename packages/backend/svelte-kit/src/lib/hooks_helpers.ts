@@ -184,8 +184,14 @@ export const isAikamiWebOrigin = (origin: string | null | undefined): origin is 
 
 /**
  * Sanitize the `app` tag from a browser-log-ingestion request body.
- * Returns the trimmed tag when it is a non-empty string of at most 64
- * characters, otherwise undefined (the tag is omitted entirely).
+ * Trims surrounding whitespace, then returns the tag when it is a non-empty
+ * string of at most 64 characters; otherwise (or for whitespace-only input)
+ * returns undefined (the tag is omitted entirely).
  */
-export const sanitizeLogAppTag = (raw: unknown): string | undefined =>
-  typeof raw === 'string' && raw.length > 0 && raw.length <= 64 ? raw : undefined;
+export const sanitizeLogAppTag = (raw: unknown): string | undefined => {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  return trimmed.length > 0 && trimmed.length <= 64 ? trimmed : undefined;
+};

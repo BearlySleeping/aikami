@@ -41,6 +41,7 @@ const opts = parseCliArgs(Bun.argv.slice(2), {
 const DRY_RUN = opts['dry-run'] as boolean;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+/** Run a command array without a shell, returning trimmed stdout + exit code. */
 async function runCmd(cmd: string[]): Promise<{ out: string; code: number }> {
   const proc = Bun.spawn({ cmd, stdout: 'pipe', stderr: 'pipe' });
   const out = await new Response(proc.stdout).text();
@@ -48,6 +49,7 @@ async function runCmd(cmd: string[]): Promise<{ out: string; code: number }> {
   return { out: out.trim(), code };
 }
 
+/** Return the ACTIVE gcloud account email, or null if not authenticated. */
 async function checkGcloudAuth(): Promise<string | null> {
   const { out, code } = await runCmd([
     'gcloud',
@@ -67,12 +69,17 @@ async function checkGcloudAuth(): Promise<string | null> {
   }
 }
 
+/** Whether the given GCP project exists and is describable. */
 async function checkProject(projectId: string): Promise<boolean> {
   const { code } = await runCmd(['gcloud', 'projects', 'describe', projectId, '--quiet']);
   return code === 0;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────
+/**
+ * Interactive project setup wizard: runs each setup step (APIs, IAM,
+ * secrets, hosting, registry, CDN) in sequence, honoring dry-run.
+ */
 async function main() {
   console.log(fmt.head('Aikami Project Setup'));
 

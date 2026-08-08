@@ -6,12 +6,8 @@
 // plain objects).
 
 import { describe, expect, it } from 'bun:test';
-import { APP_CONFIG, CLOUD_FUNCTIONS_REGION } from '../deploy/deployment_config';
+import { CLOUD_FUNCTIONS_REGION } from '../deploy/deployment_config';
 import { buildFilter, resolveLogTarget } from './logs.ts';
-
-const hubConfig = APP_CONFIG.hub;
-const hubServiceName = hubConfig.cloudRunServiceId ?? `aikami-${hubConfig.shortName}`;
-const hubRegion = hubConfig.region ?? 'europe-west1';
 
 describe('buildFilter', () => {
   const base = {
@@ -62,6 +58,15 @@ describe('buildFilter', () => {
     expect(filter).toContain('jsonPayload.message:"say \\"hello\\""');
   });
 
+  it('escapes double quotes inside the service_name clause', () => {
+    const filter = buildFilter({ ...base, serviceName: 'a"b"c' }, {});
+    expect(filter).toContain('resource.labels.service_name="a\\"b\\"c"');
+  });
+
+  it('rejects an invalid severity level', () => {
+    expect(() => buildFilter(base, { severity: 'banana' })).toThrow(/Invalid --severity/);
+  });
+
   it('ANDs a raw --filter fragment onto the base', () => {
     const filter = buildFilter(base, { filter: 'logName=~"aikami-hub"' });
     expect(filter).toEndWith('AND logName=~"aikami-hub"');
@@ -92,9 +97,21 @@ describe('resolveLogTarget', () => {
       return;
     }
     expect(target.projectId).toBe('aikami-staging');
-    expect(target.region).toBe(hubRegion);
-    expect(target.serviceName).toBe(hubServiceName);
+    expect(target.region).toBe('europe-west4'); // hub's explicit region override
+    expect(target.serviceName).toBe('aikami-hub');
     expect(target.extraFilter).toBeUndefined();
+  });
+
+  it('production mode → production project, same hub service target', () => {
+    const target = resolveLogTarget('hub', 'production', undefined);
+    expect('unsupported' in target).toBe(false);
+    if ('unsupported' in target) {
+      return;
+    }
+    expect(target.projectId).toBe('aikami-production');
+    expect(target.projectId).not.toBe('aikami-staging');
+    expect(target.region).toBe('europe-west4');
+    expect(target.serviceName).toBe('aikami-hub');
   });
 
   it('firebase without --only → all functions in the region, with a hint note', () => {
@@ -124,8 +141,8 @@ describe('resolveLogTarget', () => {
     if ('unsupported' in target) {
       return;
     }
-    expect(target.serviceName).toBe(hubServiceName);
-    expect(target.region).toBe(hubRegion);
+    expect(target.serviceName).toBe('aikami-hub');
+    expect(target.region).toBe('europe-west4');
     expect(target.extraFilter).toBe('jsonPayload.app="client"');
     expect(target.note).toContain("forwarded through hub's /api/internal_logging");
   });
