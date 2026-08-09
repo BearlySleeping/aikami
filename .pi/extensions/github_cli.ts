@@ -409,15 +409,25 @@ async function fetchRunArtifacts(
 async function runGh(
   pi: ExtensionAPI,
   args: string[],
-  opts?: { timeout?: number; parseJson?: boolean; cwd?: string },
+  opts?: {
+    timeout?: number;
+    parseJson?: boolean;
+    cwd?: string;
+    signal?: AbortSignal;
+    /** Exit codes that are NOT treated as failure. `gh pr checks` uses 1 for
+     *  "failures OR no checks" and 8 for "pending" — both need handling, not
+     *  a hard failure. */
+    allowExitCodes?: number[];
+  },
 ): Promise<{ success: boolean; text: string; json?: unknown }> {
   const result = await pi.exec('gh', args, {
-    signal: undefined,
+    signal: opts?.signal,
     timeout: opts?.timeout ?? DEFAULT_TIMEOUT,
     cwd: opts?.cwd ?? repoRoot(),
   });
 
-  if (result.code !== 0) {
+  const allowed = opts?.allowExitCodes ?? [];
+  if (result.code !== 0 && !allowed.includes(result.code)) {
     return { success: false, text: result.stderr || result.stdout || 'gh exited with error' };
   }
 
@@ -1250,7 +1260,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const selector = resolvePrSelector(params.pr);
       const args = ['pr', 'checks', selector];
 
@@ -1258,13 +1268,38 @@ export default function (pi: ExtensionAPI) {
         args.push('--watch');
       }
 
-      const result = await runGh(pi, args, { timeout: params.watch ? 600_000 : 60_000 });
+      const result = await runGh(pi, args, {
+        timeout: params.watch ? 600_000 : 60_000,
+        signal,
+        // gh pr checks exit codes: 0 = all pass, 1 = failures OR "no checks
+        // reported", 8 = pending. 1 and 8 are handled below, not errors.
+        allowExitCodes: [1, 8],
+      });
 
       if (!result.success) {
         return {
           content: [{ type: 'text', text: `❌ Failed to check PR status: ${result.text}` }],
           isError: true,
-          details: {},
+          details: { pr: selector },
+        };
+      }
+
+      // gh exits 1 with "no checks reported on the '<branch>' branch" when the
+      // PR has zero CI checks — a legitimate empty state, not an error.
+      if (/no checks reported/i.test(result.text)) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `**PR #${selector} Checks**\n\nNo CI checks are configured for this PR.`,
+            },
+          ],
+          details: {
+            pr: selector,
+            overallPassing: null,
+            checkCount: 0,
+            note: 'no_checks_reported',
+          },
         };
       }
 
