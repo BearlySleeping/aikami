@@ -46,6 +46,8 @@ describe('setupBridgeListeners (AC-5)', () => {
       onInventoryCountChange: mock(() => {}),
       getDefeatedEnemies: mock(() => []),
       getCollectedPickups: mock(() => []),
+      // C-342 map-load persistence: ZONE_TRIGGERED passes interactable states.
+      getInteractableStates: mock(() => ({})),
       startCombat: mock(() => {}),
       endDialogue: mock(() => {}),
     };

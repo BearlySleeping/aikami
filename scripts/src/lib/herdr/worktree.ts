@@ -402,17 +402,40 @@ export const createWorktree = async (options: {
   const branch = options.branch ?? `${TASK_BRANCH_PREFIX}${slug}`;
   const label = options.label ?? `${TASK_WORKSPACE_PREFIX}${slug}`;
 
-  const args = ['worktree', 'create', '--branch', branch, '--base', baseRef, '--label', label];
+  // `--cwd` is REQUIRED: herdr resolves commands without an explicit
+  // workspace/cwd against the server's CURRENTLY FOCUSED workspace, which may
+  // be a plain shell (e.g. `~`) rather than a git work tree — herdr then
+  // rejects the call with `not_git_worktree`. Pointing --cwd at the repo root
+  // makes worktree creation deterministic regardless of focus. `worktree
+  // create` performs a git checkout under the hood, so allow well beyond the
+  // default 3s CLI timeout.
+  const args = [
+    'worktree',
+    'create',
+    '--cwd',
+    options.repoRoot,
+    '--branch',
+    branch,
+    '--base',
+    baseRef,
+    '--label',
+    label,
+  ];
   if (options.focus) {
     args.push('--focus');
   } else {
     args.push('--no-focus');
   }
 
-  const r = await herdrJson<WorktreeCreateResult>(args);
+  const r = await herdrJson<WorktreeCreateResult>(args, { timeoutMs: 60_000 });
   const checkoutPath = r?.result?.workspace?.worktree?.checkout_path ?? r?.result?.worktree?.path;
   if (!(r?.result?.workspace && checkoutPath)) {
-    throw new Error(`herdr worktree create failed for slug "${slug}" (branch ${branch})`);
+    throw new Error(
+      `herdr worktree create failed for slug "${slug}" (branch ${branch}). ` +
+        'Check the [herdr] warnings above for the real herdr error — a common ' +
+        'cause is herdr resolving the command against a non-git workspace ' +
+        '(e.g. `~` instead of the repo).',
+    );
   }
 
   return {
@@ -443,7 +466,11 @@ export const openWorktree = async (options: {
   const root = options.repoRoot ?? worktreeRepoRoot(options.checkoutPath);
   const branch = runGit('rev-parse --abbrev-ref HEAD', { cwd: options.checkoutPath });
 
-  const args = ['worktree', 'open', '--path', options.checkoutPath];
+  // Same `--cwd` requirement as createWorktree — herdr worktree commands
+  // resolve against the focused workspace unless pointed at the repo root.
+  // Use the MAIN repo root (not the checkout): the checkout path is itself a
+  // linked worktree, not the repo's primary working tree.
+  const args = ['worktree', 'open', '--cwd', root, '--path', options.checkoutPath];
   if (options.label) {
     args.push('--label', options.label);
   }
@@ -453,7 +480,7 @@ export const openWorktree = async (options: {
     args.push('--no-focus');
   }
 
-  const r = await herdrJson<WorktreeOpenResult>(args);
+  const r = await herdrJson<WorktreeOpenResult>(args, { timeoutMs: 60_000 });
   if (!r?.result?.workspace) {
     throw new Error(`herdr worktree open failed for ${options.checkoutPath}`);
   }
@@ -472,7 +499,7 @@ export const openWorktree = async (options: {
 /** List all herdr-tracked worktrees for the repo (with provenance). */
 export const listWorktrees = async (repoRoot?: string): Promise<WorktreeEntry[]> => {
   const args = repoRoot ? ['worktree', 'list', '--cwd', repoRoot] : ['worktree', 'list'];
-  const r = await herdrJson<WorktreeListResult>(args);
+  const r = await herdrJson<WorktreeListResult>(args, { timeoutMs: 15_000 });
   if (!r?.result?.worktrees) {
     return [];
   }
@@ -644,7 +671,7 @@ export const removeWorktree = async (
     if (options.force) {
       args.push('--force');
     }
-    const r = await herdrJson<WorktreeRemoveResult>(args);
+    const r = await herdrJson<WorktreeRemoveResult>(args, { timeoutMs: 30_000 });
     if (r?.result) {
       checkoutRemoved = true;
     } else {

@@ -20,9 +20,10 @@ describe('InventoryService', () => {
 
   test('getItemDefinition returns hardcoded fallback for known items', () => {
     const { getItemDefinition } = require('./inventory_service.svelte');
-    const wardPendant = getItemDefinition('wardPendant');
-    expect(wardPendant.label).toBe('Ward Pendant');
-    expect(wardPendant.basePrice).toBe(0);
+    // C-375 renamed the Emberwatch quest item wardPendant → wardWand.
+    const wardWand = getItemDefinition('wardWand');
+    expect(wardWand.label).toBe('Ward Wand');
+    expect(wardWand.basePrice).toBe(0);
   });
 
   test('configureCatalog replaces the active catalog', () => {

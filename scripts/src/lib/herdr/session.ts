@@ -243,10 +243,27 @@ export const parseWorkspaceName = (name: string): AikamiMode | null => {
 type HerdrResult = {
   code: number;
   stdout: string;
+  stderr: string;
 };
 
-export const herdr = (args: string[], env?: Record<string, string>): Promise<HerdrResult> => {
-  const timeout = 3000;
+type HerdrOptions = {
+  /** Kill + reject if the herdr CLI takes longer than this (default 10s).
+   *  3s was too tight: `tab create --env` spawns a shell and triggers direnv,
+   *  and under load a 3s reject produced spurious failures. Cheap local-socket
+   *  probes (--version, status server) still complete in ms. */
+  timeoutMs?: number;
+  env?: Record<string, string>;
+};
+
+/**
+ * Run a herdr CLI command. The herdr CLI talks to the headless server over a
+ * unix socket, so the server's CURRENTLY FOCUSED workspace is the implicit
+ * context for commands that do not take an explicit workspace/cwd (e.g.
+ * `worktree create`). Commands that depend on the repo must pass `--cwd`
+ * explicitly — see createWorktree/openWorktree in worktree.ts.
+ */
+export const herdr = (args: string[], opts: HerdrOptions = {}): Promise<HerdrResult> => {
+  const timeout = opts.timeoutMs ?? 10_000;
   return new Promise((resolveH, rejectH) => {
     const timer = setTimeout(() => {
       try {
@@ -254,19 +271,23 @@ export const herdr = (args: string[], env?: Record<string, string>): Promise<Her
       } catch {
         /* already dead */
       }
-      rejectH(new Error(`herdr timed out after ${timeout}ms: ${args[0]}`));
+      rejectH(new Error(`herdr timed out after ${timeout}ms: ${args.join(' ')}`));
     }, timeout);
     const proc = spawn('herdr', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...opts.env },
     });
     let out = '';
+    let errOut = '';
     proc.stdout?.on('data', (d) => {
       out += String(d);
     });
+    proc.stderr?.on('data', (d) => {
+      errOut += String(d);
+    });
     proc.on('close', (code) => {
       clearTimeout(timer);
-      resolveH({ code: code ?? 1, stdout: out });
+      resolveH({ code: code ?? 1, stdout: out, stderr: errOut });
     });
     proc.on('error', (err) => {
       clearTimeout(timer);
@@ -275,17 +296,23 @@ export const herdr = (args: string[], env?: Record<string, string>): Promise<Her
   });
 };
 
-export const herdrJson = async <T>(
-  args: string[],
-  env?: Record<string, string>,
-): Promise<T | null> => {
-  const r = await herdr(args, env);
+export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Promise<T | null> => {
+  const r = await herdr(args, opts);
   if (r.code !== 0 || !r.stdout.trim()) {
+    // herdr reports failures as JSON on stdout, but real CLI errors (bad
+    // invocation context, missing worktree, etc.) land on stderr with a
+    // non-zero code. Surface them instead of silently returning null — the
+    // generic "failed" errors downstream are useless for debugging.
+    const detail = (r.stderr.trim() || r.stdout.trim()).slice(0, 500) || `exit code ${r.code}`;
+    console.warn(`[herdr] ${args.join(' ')} failed: ${detail}`);
     return null;
   }
   try {
     return JSON.parse(r.stdout.trim()) as T;
   } catch {
+    console.warn(
+      `[herdr] ${args.join(' ')} returned non-JSON output: ${r.stdout.trim().slice(0, 200)}`,
+    );
     return null;
   }
 };
@@ -1188,21 +1215,4 @@ export const waitForReady = async (
   );
 
   return failed;
-};
-
-// ── Contract session lifecycle ────────────────────────────
-
-/**
- * Stop the contract-scoped herdr session for a given mode.
- * Closes the entire workspace (stopping all services — client, firebase, etc.).
- * Called during pipeline cleanup after merge/block.
- */
-export const stopContractSession = async (mode: AikamiMode, contractId: string): Promise<void> => {
-  const label = buildSessionName(mode, contractId);
-  const wsId = await findWorkspace(label);
-  if (!wsId) {
-    return; // Already stopped or never started
-  }
-  await herdr(['workspace', 'close', wsId]);
-  console.log(`🧹 Stopped contract session: ${label}`);
 };

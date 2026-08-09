@@ -160,6 +160,22 @@ mock.module('$services', () => ({
 
 const COMBAT_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
+// The DialogueOverlayViewModel imports expressionService directly from its
+// module (not via the $services barrel), so mock the direct path to match
+// the barrel mock below.
+mock.module('$lib/services/expression/expression_service.svelte.ts', () => ({
+  expressionService: {
+    detectExpression: mock(async () => ({
+      expressionMap: { 'Elder Thrain': 'happy' },
+      detectionTier: 'keyword' as const,
+    })),
+    resolveLpcOverlays: mock(() => ({})),
+    catalogEntries: [],
+    getEntry: mock(() => undefined),
+  },
+  __esModule: true,
+}));
+
 mock.module(COMBAT_PATH, () => ({
   combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
 }));

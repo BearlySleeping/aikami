@@ -5,7 +5,7 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { beforeEach, describe, expect, it, spyOn, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, spyOn, vi } from 'vitest';
 
 // Mock document event listeners
 const eventListeners = new Map<string, EventListener[]>();

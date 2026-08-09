@@ -107,7 +107,6 @@ const _idbBackend: PersistenceBackend = {
 /** Swappable backend so unit tests can run without a real IndexedDB. */
 let _persistenceBackend: PersistenceBackend = _idbBackend;
 
-// biome-ignore lint/style/useNamingConvention: test hook
 export const _setPersistenceBackendForTests = (backend: PersistenceBackend): void => {
   _persistenceBackend = backend;
 };
@@ -473,9 +472,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     }
     const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi;
     const wasm = (this._sqlite3 as unknown as { wasm?: Record<string, unknown> }).wasm;
-    const sqlite3 = this._sqlite3 as unknown as {
-      capi?: { SQLITE_DESERIALIZE_FREEONCLOSE?: number; SQLITE_DESERIALIZE_RESIZEABLE?: number };
-    };
+    // capi constants mirror the sqlite3-wasm C API surface (UPPER_SNAKE_CASE
+    // keys are the real property names), so access them via bracket notation.
+    const sqlite3 = this._sqlite3 as unknown as { capi?: Record<string, number | undefined> };
     const deserialize = capi?.['sqlite3_deserialize'] as
       | ((
           pDb: number,
@@ -496,8 +495,8 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     const db = this._db as unknown as { pointer: number };
     const pData = allocFromTypedArray(bytes);
     const flags =
-      (sqlite3.capi?.SQLITE_DESERIALIZE_FREEONCLOSE ?? 1) |
-      (sqlite3.capi?.SQLITE_DESERIALIZE_RESIZEABLE ?? 2);
+      (sqlite3.capi?.['SQLITE_DESERIALIZE_FREEONCLOSE'] ?? 1) |
+      (sqlite3.capi?.['SQLITE_DESERIALIZE_RESIZEABLE'] ?? 2);
     const rc = deserialize(db.pointer, 'main', pData, bytes.byteLength, bytes.byteLength, flags);
     if (rc !== 0) {
       logger.warn('WasmStorageAdapter:deserialize-failed', { rc });

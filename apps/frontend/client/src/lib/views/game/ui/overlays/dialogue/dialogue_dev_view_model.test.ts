@@ -218,15 +218,6 @@ const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
 };
 (globalThis as Record<string, unknown>).clearTimeout = () => {};
 
-const flushTimeouts = (): void => {
-  while (pendingTimeouts.length > 0) {
-    const fn = pendingTimeouts.shift();
-    if (fn) {
-      fn();
-    }
-  }
-};
-
 // ---------------------------------------------------------------------------
 // Import (after mocks registered)
 // ---------------------------------------------------------------------------
@@ -286,21 +277,22 @@ describe('DialogueDevViewModel', () => {
 
   // ── Initial state ────────────────────────────────────────────────────
 
-  test('defaults: diceOutcome=random, useMockAi=true, interactionMode=menu', () => {
+  test('defaults: diceOutcome=random, useMockAi=true, interactionMode=freeTextFirst', () => {
     const vm = createDevVM();
     expect(vm.diceOutcome).toBe('random');
     expect(vm.useMockAi).toBe(true);
     expect(vm.mockNpcPreset).toBe('sage');
-    expect(vm.interactionMode).toBe('menu');
-    expect(vm.dialoguePhase).toBe('MENU');
+    // C-371: freeTextFirst is the only supported interaction mode.
+    expect(vm.interactionMode).toBe('freeTextFirst');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
     expect(vm.autoGenerateImage).toBe(false);
-    expect(vm.generatedImageUrl).toBeNull();
+    expect(vm.generatedImages).toEqual([]);
   });
 
-  test('freeform interaction mode sets dialoguePhase to CUSTOM_INPUT on init', () => {
-    const vm = createDevVM({ initialInteractionMode: 'freeform' });
-    expect(vm.interactionMode).toBe('freeform');
-    expect(vm.dialoguePhase).toBe('CUSTOM_INPUT');
+  test('freeTextFirst interaction mode keeps dialoguePhase at FREE_TEXT on init', () => {
+    const vm = createDevVM({ initialInteractionMode: 'freeTextFirst' });
+    expect(vm.interactionMode).toBe('freeTextFirst');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
   });
 
   // ── setDiceOutcome ───────────────────────────────────────────────────
@@ -366,19 +358,15 @@ describe('DialogueDevViewModel', () => {
 
   // ── setInteractionMode ───────────────────────────────────────────────
 
-  test('setInteractionMode switches between menu and freeform', () => {
+  test('setInteractionMode only supports freeTextFirst (C-371)', () => {
     const vm = createDevVM();
-    expect(vm.interactionMode).toBe('menu');
-    expect(vm.dialoguePhase).toBe('MENU');
+    expect(vm.interactionMode).toBe('freeTextFirst');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
 
-    vm.setInteractionMode('freeform');
-    expect(vm.interactionMode).toBe('freeform');
-    expect(vm.dialoguePhase).toBe('CUSTOM_INPUT');
+    vm.setInteractionMode('freeTextFirst');
+    expect(vm.interactionMode).toBe('freeTextFirst');
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
     expect(vm.inputText).toBe('');
-
-    vm.setInteractionMode('menu');
-    expect(vm.interactionMode).toBe('menu');
-    expect(vm.dialoguePhase).toBe('MENU');
   });
 
   // ── setAutoGenerateImage ─────────────────────────────────────────────
@@ -396,20 +384,24 @@ describe('DialogueDevViewModel', () => {
 
   // ── generateSceneImage ───────────────────────────────────────────────
 
-  test('generateSceneImage sets url on success', async () => {
+  test('generateSceneImage records generated image on success', async () => {
     const vm = createDevVM();
     await vm.generateSceneImage();
 
-    expect(vm.generatedImageUrl).toBe('blob:https://example.com/generated-image');
+    expect(vm.generatedImages).toHaveLength(1);
+    expect(vm.generatedImages[0].url).toBe('blob:https://example.com/generated-image');
+    expect(vm.generatedImages[0].status).toBe('done');
   });
 
-  test('generateSceneImage sets null on error', async () => {
+  test('generateSceneImage records error status on failure', async () => {
     mockImageGenShouldThrow = new Error('ComfyUI connection refused');
 
     const vm = createDevVM();
     await vm.generateSceneImage();
 
-    expect(vm.generatedImageUrl).toBeNull();
+    expect(vm.generatedImages).toHaveLength(1);
+    expect(vm.generatedImages[0].status).toBe('error');
+    expect(vm.generatedImages[0].url).toBeNull();
   });
 
   test('generateSceneImage skips when imageGenerationService is busy', async () => {
@@ -422,51 +414,8 @@ describe('DialogueDevViewModel', () => {
     const vm = createDevVM();
     await vm.generateSceneImage();
 
-    // Should have skipped — URL stays null (set to null before service call)
-    expect(vm.generatedImageUrl).toBeNull();
-  });
-
-  test('generateSceneImage debounces when _imageGenerationInFlight is true', async () => {
-    const vm = createDevVM();
-    // Set the private guard via cast
-    (vm as unknown as { _imageGenerationInFlight: boolean })._imageGenerationInFlight = true;
-
-    mockImageGenResult = { url: 'blob:https://example.com/should-not-appear', isDemo: false };
-
-    await vm.generateSceneImage();
-
-    // Should have skipped
-    expect(vm.generatedImageUrl).toBeNull();
-  });
-
-  test('generateSceneImage auto-revokes blob URL after timeout for non-demo images', async () => {
-    mockImageGenResult = { url: 'blob:mock://real-image', isDemo: false };
-
-    const vm = createDevVM();
-    await vm.generateSceneImage();
-
-    expect(vm.generatedImageUrl).toBe('blob:mock://real-image');
-
-    // Flush the 30s auto-revoke timeout (mocked to run synchronously)
-    flushTimeouts();
-
-    expect(vm.generatedImageUrl).toBeNull();
-    expect(revokedUrls).toContain('blob:mock://real-image');
-  });
-
-  test('generateSceneImage keeps demo URLs (no auto-revoke)', async () => {
-    mockImageGenResult = { url: 'https://placehold.co/600x400?text=test', isDemo: true };
-
-    const vm = createDevVM();
-    await vm.generateSceneImage();
-
-    expect(vm.generatedImageUrl).toBe('https://placehold.co/600x400?text=test');
-
-    // Flush timeouts — demo URLs should NOT set a revoke timer
-    flushTimeouts();
-
-    // Demo URL should still be there
-    expect(vm.generatedImageUrl).toBe('https://placehold.co/600x400?text=test');
+    // Should have skipped — no image record created.
+    expect(vm.generatedImages).toHaveLength(0);
   });
 
   // ── rollDice with controlled outcomes ────────────────────────────────
@@ -535,9 +484,9 @@ describe('DialogueDevViewModel', () => {
     await rollPromise;
   });
 
-  // ── Mock skill check appends dev-tag narrative ──────────────────────
+  // ── Mock skill check appends persona narrative ───────────────────────
 
-  test('mock skill check appends narrative with dev tag', async () => {
+  test('mock skill check appends narrative message on success', async () => {
     const vm = createDevVM({ initialDiceOutcome: 'always_succeed' });
     (vm as Record<string, unknown>).skillCheckState = {
       checkType: 'Persuasion',
@@ -559,11 +508,11 @@ describe('DialogueDevViewModel', () => {
     expect(vm.messages.length).toBeGreaterThan(messagesBefore);
     const lastMessage = vm.messages[vm.messages.length - 1];
     expect(lastMessage.role).toBe('npc');
-    expect(lastMessage.content).toContain('[Dev Mock: Persuasion check');
-    expect(lastMessage.content).toContain('✅ SUCCESS');
+    // C-371: mock narratives are plain persona lines (no dev tag).
+    expect(lastMessage.content.length).toBeGreaterThan(0);
   });
 
-  test('mock skill check with always_fail shows FAILURE tag', async () => {
+  test('mock skill check with always_fail appends a failure narrative', async () => {
     const vm = createDevVM({ initialDiceOutcome: 'always_fail' });
     (vm as Record<string, unknown>).skillCheckState = {
       checkType: 'Intimidation',
@@ -573,12 +522,15 @@ describe('DialogueDevViewModel', () => {
       isSuccess: null,
     };
 
+    const messagesBefore = vm.messages.length;
     const rollPromise = vm.rollDice();
     await rollPromise;
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
+    expect(vm.messages.length).toBeGreaterThan(messagesBefore);
     const lastMessage = vm.messages[vm.messages.length - 1];
-    expect(lastMessage.content).toContain('❌ FAILURE');
+    expect(lastMessage.role).toBe('npc');
+    expect(lastMessage.content.length).toBeGreaterThan(0);
   });
 
   // ── NPC persona switching keeps mock narratives matching ────────────

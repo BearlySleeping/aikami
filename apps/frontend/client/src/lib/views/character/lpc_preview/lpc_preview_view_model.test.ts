@@ -361,9 +361,11 @@ describe('LpcPreviewViewModel — lifecycle', () => {
     mockPixiInitCalled = false;
     const vm = getVM({ className: 'TestPreview' });
     const canvas = { width: 256, height: 256 } as HTMLCanvasElement;
-    await vm.initialize();
+    // The test $effect polyfill runs effects once at registration, so the
+    // canvas must be set before initialize() for the effect to observe it.
     vm.setCanvasElement(canvas);
-    // Allow effect to run
+    await vm.initialize();
+    // Allow the async Pixi init to complete
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(mockPixiInitCalled).toBe(true);
   });
@@ -373,8 +375,8 @@ describe('LpcPreviewViewModel — lifecycle', () => {
     mockPixiDestroyCalled = false;
     const vm = getVM({ className: 'TestPreview' });
     const canvas = { width: 256, height: 256 } as HTMLCanvasElement;
-    await vm.initialize();
     vm.setCanvasElement(canvas);
+    await vm.initialize();
     await new Promise((resolve) => setTimeout(resolve, 10));
     await vm.dispose();
     expect(mockPixiDestroyCalled).toBe(true);

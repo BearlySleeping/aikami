@@ -13,6 +13,12 @@
 //   bun run workspace:cleanup <path>         clean a specific workspace
 //   bun run workspace:cleanup --pr-merged    clean workspaces whose branch has a merged PR
 //   bun run workspace:cleanup --legacy       only legacy .pi/workspaces/ worktrees
+//   bun run workspace:cleanup --include-self force-clean the worktree this process runs inside
+//
+// 🔴 Self-guard: a worktree this process is running inside (the review/worker
+// tab of a contract pipeline, a herdr:task session, etc.) is NEVER removed —
+// cleanup would kill the very session that invoked it. Skipped entries print
+// a loud reason; pass --include-self to override.
 //
 // 🔴 Drive off `git worktree list --porcelain` — the AUTHORITATIVE source.
 // Covers BOTH legacy .pi/workspaces/ checkouts AND herdr-native worktrees
@@ -49,6 +55,24 @@ const runGit = (command: string, cwd: string): string => {
   } catch {
     return '';
   }
+};
+
+/** The worktree this process is running inside (resolved), if any. */
+const selfWorktreePath = (): string | undefined => {
+  const pipelineWs = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  return pipelineWs ? resolve(pipelineWs) : undefined;
+};
+
+/** True when removing `path` would kill the session that invoked this CLI.
+ *  Detected via the pipeline workspace env (set on every worker/review tab)
+ *  and/or the process cwd (running from inside the checkout). */
+const isSelfWorktree = (path: string): boolean => {
+  const resolved = resolve(path);
+  if (resolved === resolve(process.cwd())) {
+    return true;
+  }
+  const self = selfWorktreePath();
+  return self !== undefined && resolved === self;
 };
 
 type WorkspaceInfo = {
@@ -105,7 +129,13 @@ const prMergedForBranch = (branchName: string): boolean => {
   return prList !== '' && prList !== '0';
 };
 
-const listWorkspaces = async (): Promise<WorkspaceInfo[]> => {
+const listWorkspaces = async (options?: {
+  /** Resolve merged-PR status via `gh pr list` per worktree. 🔴 Expensive —
+   *  each call spawns gh with a 10s timeout, so it only runs when
+   *  `--pr-merged` actually needs it. Bare listings and `--all` skip it. */
+  checkPrMerged?: boolean;
+}): Promise<WorkspaceInfo[]> => {
+  const checkPrMerged = options?.checkPrMerged ?? false;
   const repoRoot = resolve(process.cwd());
   const legacyParent = join(repoRoot, '.pi', 'workspaces');
   const worktrees = listAllWorktrees().filter((w) => w.path !== repoRoot); // skip main checkout
@@ -149,7 +179,7 @@ const listWorkspaces = async (): Promise<WorkspaceInfo[]> => {
       branchName,
       headCommit: headCommit.slice(0, 12),
       description: desc.trim(),
-      prMerged: prMergedForBranch(branchName),
+      prMerged: checkPrMerged ? prMergedForBranch(branchName) : false,
       isLegacy,
       herdrWorkspaceId,
     });
@@ -157,13 +187,23 @@ const listWorkspaces = async (): Promise<WorkspaceInfo[]> => {
   return items;
 };
 
-const cleanupWorkspace = async (ws: WorkspaceInfo, repoRoot: string): Promise<void> => {
+const cleanupWorkspace = async (
+  ws: WorkspaceInfo,
+  repoRoot: string,
+  options?: { deleteRemoteBranch?: boolean },
+): Promise<void> => {
+  // Defense in depth: refuse even when --include-self was passed for the
+  // listing filter — this is the last line of protection against suicide.
+  if (isSelfWorktree(ws.path)) {
+    console.warn(`⛔ Refusing to remove ${ws.path} — this process is running inside it.`);
+    return;
+  }
   console.log(`🧹 Cleaning up: ${ws.path} (branch: ${ws.branchName})`);
   await removeWorktree({
     workspaceId: ws.herdrWorkspaceId,
     checkoutPath: ws.path,
     branch: ws.branchName === '(detached)' ? undefined : ws.branchName,
-    deleteRemoteBranch: false,
+    deleteRemoteBranch: options?.deleteRemoteBranch ?? false,
     force: true,
     repoRoot,
   });
@@ -174,16 +214,31 @@ const main = async (): Promise<void> => {
   const args = process.argv.slice(2);
   // Flags and the optional target path are parsed independently so
   // `--legacy <path>` cleans that path with legacy filtering applied.
-  const FLAG_SET = new Set(['--all', '--pr-merged', '--legacy', '--force']);
+  const FLAG_SET = new Set(['--all', '--pr-merged', '--legacy', '--force', '--include-self']);
   const flags = args.filter((a) => FLAG_SET.has(a));
   const targetPath = args.find((a) => !FLAG_SET.has(a));
   const legacyOnly = flags.includes('--legacy');
 
   const repoRoot = resolve(process.cwd());
-  const workspaces = await listWorkspaces();
+  const workspaces = await listWorkspaces({ checkPrMerged: flags.includes('--pr-merged') });
   const filtered = legacyOnly ? workspaces.filter((ws) => ws.isLegacy) : workspaces;
 
-  if (filtered.length === 0) {
+  // 🔴 Self-guard: never remove the worktree this process is running inside.
+  const includeSelf = flags.includes('--include-self');
+  const selfWorktrees = filtered.filter((ws) => isSelfWorktree(ws.path));
+  const targets = includeSelf ? filtered : filtered.filter((ws) => !isSelfWorktree(ws.path));
+  if (selfWorktrees.length > 0 && !includeSelf) {
+    console.warn(
+      `⚠️  Skipping ${selfWorktrees.length} worktree(s) this process is running inside ` +
+        '(removing them would kill this session — e.g. the contract review tab).',
+    );
+    for (const ws of selfWorktrees) {
+      console.warn(`      - ${relative(repoRoot, ws.path)} (${ws.branchName})`);
+    }
+    console.log();
+  }
+
+  if (targets.length === 0) {
     console.log(
       legacyOnly ? 'No legacy .pi/workspaces/ worktrees found.' : 'No active worktrees found.',
     );
@@ -192,8 +247,8 @@ const main = async (): Promise<void> => {
 
   // Just list
   if (flags.length === 0 && !targetPath) {
-    console.log(`Active worktrees (${filtered.length}):\n`);
-    for (const ws of filtered) {
+    console.log(`Active worktrees (${targets.length}):\n`);
+    for (const ws of targets) {
       const merged = ws.prMerged ? ' 🔀 MERGED' : '';
       const herdr = ws.herdrWorkspaceId ? ' [herdr]' : '';
       const legacy = ws.isLegacy ? ' [legacy]' : '';
@@ -212,24 +267,25 @@ const main = async (): Promise<void> => {
 
   // Clean all (optionally legacy-filtered: `--legacy --all`)
   if (flags.includes('--all')) {
-    console.log(`Cleaning up ${filtered.length} worktree(s)...\n`);
-    for (const ws of filtered) {
+    console.log(`Cleaning up ${targets.length} worktree(s)...\n`);
+    for (const ws of targets) {
       await cleanupWorkspace(ws, repoRoot);
     }
     console.log('\nDone.');
     return;
   }
 
-  // Clean only PR-merged (optionally legacy-filtered)
+  // Clean only PR-merged (optionally legacy-filtered). Merged branches are
+  // safe to delete from the remote too — the PR already consumed them.
   if (flags.includes('--pr-merged')) {
-    const merged = filtered.filter((ws) => ws.prMerged);
+    const merged = targets.filter((ws) => ws.prMerged);
     if (merged.length === 0) {
       console.log('No worktrees with merged PRs found.');
       return;
     }
     console.log(`Cleaning up ${merged.length} merged worktree(s)...\n`);
     for (const ws of merged) {
-      await cleanupWorkspace(ws, repoRoot);
+      await cleanupWorkspace(ws, repoRoot, { deleteRemoteBranch: true });
     }
     console.log('\nDone.');
     return;
@@ -240,7 +296,7 @@ const main = async (): Promise<void> => {
     console.log('Run without arguments to list worktrees.');
     return;
   }
-  const match = filtered.find(
+  const match = targets.find(
     (ws) => ws.path === targetPath || relative(repoRoot, ws.path) === targetPath,
   );
   if (!match) {

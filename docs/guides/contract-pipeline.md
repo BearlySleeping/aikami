@@ -458,6 +458,29 @@ bun workspace:list        # List active worktrees
 bun workspace:cleanup     # Remove all
 ```
 
+### Review tab preserved after the pipeline finishes
+
+When the pipeline reaches a terminal state (`merged` / `pr_created` / `blocked`)
+the herdr workspace is **preserved by default** — the review tab stays open so
+you can read the final summary. The orchestrator posts a completion
+notification into the review tab (and plays the completion sound).
+
+Close the tab when you are done reading, then clean up manually:
+
+```bash
+bun run workspace:cleanup --pr-merged   # after a merge
+bun run workspace:cleanup --all         # any remaining workspaces
+```
+
+Notes:
+- `bun run workspace:cleanup` will never remove a worktree you are running
+  inside (e.g. the review tab itself) — pass `--include-self` to override.
+- Pure YOLO runs (no human in the loop) still auto-clean.
+- Set `CONTRACT_PIPELINE_AUTO_CLEANUP=1` to restore unconditional auto-cleanup
+  (no preserved tab).
+- If a review tab is closed without recording a decision, the pipeline blocks
+  with a resume hint instead of waiting forever.
+
 ### Contract not found error
 
 `bun run contract C-999` errors when the ID has no file in `docs/contracts/` and

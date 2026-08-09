@@ -18,8 +18,8 @@ afterAll(() => {
   delete (globalThis as Record<string, unknown>).cancelAnimationFrame;
 });
 
-import type { AudioQueuePlayerInterface } from './audio_queue_player';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
+import type { AudioQueuePlayerInterface } from './audio_queue_player';
 import type { PixiTextureInjectorInterface } from './pixi_texture_injector';
 import {
   type ImageStreamConnection,

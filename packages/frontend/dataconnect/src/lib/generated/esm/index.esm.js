@@ -1,54 +1,79 @@
-import { queryRef, executeQuery, validateArgsWithOptions, mutationRef, executeMutation, validateArgs } from 'firebase/data-connect';
+import {
+  executeMutation,
+  executeQuery,
+  mutationRef,
+  queryRef,
+  validateArgs,
+  validateArgsWithOptions,
+} from 'firebase/data-connect';
 
 export const connectorConfig = {
   connector: 'aikami-connector',
   service: 'firebase',
-  location: 'europe-west4'
+  location: 'europe-west4',
 };
 export const listUsersRef = (dc) => {
-  const { dc: dcInstance} = validateArgs(connectorConfig, dc, undefined);
+  const { dc: dcInstance } = validateArgs(connectorConfig, dc, undefined);
   dcInstance._useGeneratedSdk();
   return queryRef(dcInstance, 'ListUsers');
-}
+};
 listUsersRef.operationName = 'ListUsers';
 
 export function listUsers(dcOrOptions, options) {
-  
-  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrOptions, options, undefined,false, false);
-  return executeQuery(listUsersRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrOptions, options, undefined, false, false);
+  return executeQuery(
+    listUsersRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
 }
 
 export const getTracksByMoodRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return queryRef(dcInstance, 'GetTracksByMood', inputVars);
-}
+};
 getTracksByMoodRef.operationName = 'GetTracksByMood';
 
 export function getTracksByMood(dcOrVars, varsOrOptions, options) {
-  
-  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
-  return executeQuery(getTracksByMoodRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(
+    getTracksByMoodRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
 }
 
 export const listSaveSlotsRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return queryRef(dcInstance, 'ListSaveSlots', inputVars);
-}
+};
 listSaveSlotsRef.operationName = 'ListSaveSlots';
 
 export function listSaveSlots(dcOrVars, varsOrOptions, options) {
-  
-  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
-  return executeQuery(listSaveSlotsRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(
+    listSaveSlotsRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
 }
 
 export const upsertSaveSlotRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'UpsertSaveSlot', inputVars);
-}
+};
 upsertSaveSlotRef.operationName = 'UpsertSaveSlot';
 
 export function upsertSaveSlot(dcOrVars, vars) {
@@ -57,36 +82,48 @@ export function upsertSaveSlot(dcOrVars, vars) {
 }
 
 export const listPersonasRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return queryRef(dcInstance, 'ListPersonas', inputVars);
-}
+};
 listPersonasRef.operationName = 'ListPersonas';
 
 export function listPersonas(dcOrVars, varsOrOptions, options) {
-  
-  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
-  return executeQuery(listPersonasRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(
+    listPersonasRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
 }
 
 export const getPersonaRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return queryRef(dcInstance, 'GetPersona', inputVars);
-}
+};
 getPersonaRef.operationName = 'GetPersona';
 
 export function getPersona(dcOrVars, varsOrOptions, options) {
-  
-  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
-  return executeQuery(getPersonaRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(
+    getPersonaRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
 }
 
 export const createPersonaRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'CreatePersona', inputVars);
-}
+};
 createPersonaRef.operationName = 'CreatePersona';
 
 export function createPersona(dcOrVars, vars) {
@@ -95,10 +132,10 @@ export function createPersona(dcOrVars, vars) {
 }
 
 export const updatePersonaRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'UpdatePersona', inputVars);
-}
+};
 updatePersonaRef.operationName = 'UpdatePersona';
 
 export function updatePersona(dcOrVars, vars) {
@@ -107,10 +144,10 @@ export function updatePersona(dcOrVars, vars) {
 }
 
 export const deletePersonaRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'DeletePersona', inputVars);
-}
+};
 deletePersonaRef.operationName = 'DeletePersona';
 
 export function deletePersona(dcOrVars, vars) {
@@ -119,10 +156,10 @@ export function deletePersona(dcOrVars, vars) {
 }
 
 export const deactivatePersonasRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'DeactivatePersonas', inputVars);
-}
+};
 deactivatePersonasRef.operationName = 'DeactivatePersonas';
 
 export function deactivatePersonas(dcOrVars, vars) {
@@ -131,14 +168,13 @@ export function deactivatePersonas(dcOrVars, vars) {
 }
 
 export const activatePersonaRef = (dcOrVars, vars) => {
-  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
   return mutationRef(dcInstance, 'ActivatePersona', inputVars);
-}
+};
 activatePersonaRef.operationName = 'ActivatePersona';
 
 export function activatePersona(dcOrVars, vars) {
   const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   return executeMutation(activatePersonaRef(dcInstance, inputVars));
 }
-

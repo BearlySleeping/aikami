@@ -321,6 +321,14 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './rendering/animation_controller.ts';
+export type {
+  CreatePropFrameResolverOptions,
+  PropFrameResolverHandle,
+  PropSpritesheet,
+  PropTextureResolution,
+  PropTextureResolver,
+} from './rendering/prop_texture_resolver.ts';
+export { createPropFrameResolver } from './rendering/prop_texture_resolver.ts';
 // Scene Background (C-243)
 export type { SceneBackgroundOptions } from './rendering/scene_background.ts';
 export { SceneBackground } from './rendering/scene_background.ts';
@@ -332,14 +340,6 @@ export {
 } from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
-export type {
-  CreatePropFrameResolverOptions,
-  PropFrameResolverHandle,
-  PropSpritesheet,
-  PropTextureResolution,
-  PropTextureResolver,
-} from './rendering/prop_texture_resolver.ts';
-export { createPropFrameResolver } from './rendering/prop_texture_resolver.ts';
 export type {
   TilemapChunkRendererOptions,
   TilemapChunkRenderResult,

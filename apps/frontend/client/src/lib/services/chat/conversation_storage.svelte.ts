@@ -70,5 +70,4 @@ class TursoConversationStorage implements ConversationStorageInterface {
 }
 
 /** Shared singleton instance. */
-export const conversationStorage: ConversationStorageInterface =
-  new TursoConversationStorage();
+export const conversationStorage: ConversationStorageInterface = new TursoConversationStorage();
