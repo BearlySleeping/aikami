@@ -20,7 +20,7 @@ import {
   registerAppearanceObservers,
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
-import { registerCollisionDataObservers } from '../components/collision_data.ts';
+import { CollisionData, registerCollisionDataObservers } from '../components/collision_data.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
@@ -30,7 +30,7 @@ import {
   SimulationState,
   setSimulationState,
 } from '../components/engine_state.ts';
-import { registerGridPositionObservers } from '../components/grid_position.ts';
+import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import {
   type InteractableStateMap,
@@ -78,7 +78,10 @@ import {
 } from '../systems/camera_system.ts';
 import {
   type CollisionGrid,
+  insertIntoSpatialGrid,
+  isCellBlocked,
   isWalkable,
+  removeFromSpatialGrid,
   resolveMoveIntents,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
@@ -1613,6 +1616,9 @@ self.onmessage = (event: MessageEvent): void => {
           // Clear all existing entities
           const allEids = getAllEntities(world);
           for (const eid of allEids) {
+            // C-375 AC-3: defense-in-depth — drop spatial-grid entries before
+            // entity teardown so stale entries never block movement.
+            removeFromSpatialGrid(eid);
             incrementEntityGeneration(eid);
             removeEntity(world, eid);
           }
@@ -1625,6 +1631,39 @@ self.onmessage = (event: MessageEvent): void => {
           // Deserialize from the snapshot payload
           const loadPayload = message.payload as string;
           const eidMap = deserializeWorld(world, loadPayload);
+
+          // C-375 AC-3 (CodeRabbit): re-register restored entities in the
+          // spatial grid. deserializeWorld restores persistent components
+          // only; any entity that carries GridPosition (solid NPCs /
+          // non-walkable props) must be re-inserted after the teardown loop
+          // above removed every grid entry. Placement is validated with
+          // isCellBlocked so overlapping solid entities surface a diagnostic
+          // instead of silently stacking in one cell.
+          {
+            let restoredGridCount = 0;
+            for (const [, newEid] of eidMap) {
+              const gx = GridPosition.x[newEid];
+              const gy = GridPosition.y[newEid];
+              if (gx === undefined || gy === undefined) {
+                continue;
+              }
+              const mask = CollisionData.mask[newEid];
+              if (mask !== undefined && isCellBlocked(gx, gy, mask)) {
+                logger.warn(
+                  'LOAD_GAME',
+                  `restored entity ${newEid} overlaps a blocking occupant at (${gx},${gy})`,
+                );
+              }
+              insertIntoSpatialGrid(newEid);
+              restoredGridCount++;
+            }
+            if (restoredGridCount > 0) {
+              logger.debug(
+                'LOAD_GAME',
+                `registered ${restoredGridCount} restored entities in the spatial grid (C-375 AC-3)`,
+              );
+            }
+          }
 
           // Re-attach CameraFocus to the player (not serialized — tag component)
           for (const [oldEid, newEid] of eidMap) {
@@ -1810,9 +1849,12 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 1. Clear non-player entities (NPCs, props, transitions, spawn points).
           //    Preserve the player entity and the EngineState singleton.
+          //    C-375 AC-3: remove spatial-grid entries before entity teardown
+          //    so stale entries never block the next map.
           const allEids = getAllEntities(world);
           for (const eid of allEids) {
             if (eid !== playerEntityId) {
+              removeFromSpatialGrid(eid);
               incrementEntityGeneration(eid);
               removeEntity(world, eid);
             }
@@ -1850,6 +1892,27 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 6. Set the new collision grid
           setCollisionGrid(collisionGrid as CollisionGrid);
+
+          // 6d. C-375 AC-3: register spawned NPC/prop entities in the
+          //     spatial grid. MUST run AFTER setCollisionGrid — the grid was
+          //     re-allocated (initializeSpatialGrid) inside setCollisionGrid,
+          //     which wipes any earlier inserts. Only entities carrying
+          //     GridPosition (solid NPCs + non-walkable props) are inserted.
+          {
+            let gridInsertCount = 0;
+            for (const result of results) {
+              if (GridPosition.x[result.eid] !== undefined) {
+                insertIntoSpatialGrid(result.eid);
+                gridInsertCount++;
+              }
+            }
+            if (gridInsertCount > 0) {
+              logger.debug(
+                'LOAD_MAP',
+                `registered ${gridInsertCount} NPC/prop entities in the spatial grid (C-375 AC-3)`,
+              );
+            }
+          }
 
           // 6b. C-196: Initialize JPS pathfinder for time-sliced navigation.
           //     The collision grid boolean array (true = solid) serves as

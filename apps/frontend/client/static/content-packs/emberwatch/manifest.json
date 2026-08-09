@@ -1,8 +1,8 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "3.0.0",
-  "updatedAt": "2026-07-14T00:00:00.000Z",
+  "version": "3.1.0",
+  "updatedAt": "2026-08-08T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "tileSize": 32,
@@ -19,33 +19,286 @@
       "isWall": false
     },
     "2": {
-      "name": "wall_brick",
+      "name": "grass_variant",
+      "frame": "grass_variant.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "3": {
+      "name": "grass_dark",
+      "frame": "grass_dark.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "4": {
+      "name": "dirt",
+      "frame": "dirt.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "5": {
+      "name": "path_tough",
+      "frame": "path_tough.png",
+      "isWalkable": true,
+      "isWall": false,
+      "movementCost": 0.8
+    },
+    "6": {
+      "name": "stone_floor",
+      "frame": "stone_floor.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "7": {
+      "name": "wood_floor",
+      "frame": "wood_floor.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "8": {
+      "name": "brick",
       "frame": "brick.png",
       "isWalkable": false,
       "isWall": true
     },
-    "3": {
-      "name": "path_tough",
-      "frame": "tough.png",
-      "isWalkable": true,
-      "movementCost": 0.8
-    },
-    "4": {
-      "name": "wall_brick_variant",
+    "9": {
+      "name": "brick_wall",
       "frame": "brick_wall.png",
       "isWalkable": false,
       "isWall": true
     },
-    "5": {
+    "10": {
+      "name": "wood_wall",
+      "frame": "wood_wall.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "11": {
+      "name": "stone_wall",
+      "frame": "stone_wall.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "12": {
+      "name": "wall_top",
+      "frame": "wall_top.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "13": {
+      "name": "roof",
+      "frame": "roof.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "14": {
+      "name": "water",
+      "frame": "water.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "15": {
+      "name": "fence",
+      "frame": "fence.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "16": {
+      "name": "wood_fence",
+      "frame": "wood_fence.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "17": {
+      "name": "well",
+      "frame": "well.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "18": {
+      "name": "notice_board",
+      "frame": "notice_board.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "19": {
+      "name": "village_gate",
+      "frame": "village_gate.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "20": {
       "name": "chest",
       "frame": "chest.png",
       "isWalkable": false,
       "isWall": false
     },
-    "6": {
+    "21": {
       "name": "red_chest",
       "frame": "red_chest.png",
       "isWalkable": false,
+      "isWall": false
+    },
+    "22": {
+      "name": "barrel",
+      "frame": "barrel.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "23": {
+      "name": "crate",
+      "frame": "crate.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "24": {
+      "name": "counter",
+      "frame": "counter.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "25": {
+      "name": "table",
+      "frame": "table.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "26": {
+      "name": "bed",
+      "frame": "bed.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "27": {
+      "name": "rug",
+      "frame": "rug.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "28": {
+      "name": "bookshelf",
+      "frame": "bookshelf.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "29": {
+      "name": "fireplace",
+      "frame": "fireplace.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "30": {
+      "name": "candle",
+      "frame": "candle.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "31": {
+      "name": "plant",
+      "frame": "plant.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "32": {
+      "name": "anvil",
+      "frame": "anvil.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "33": {
+      "name": "path_tough_variant",
+      "frame": "path_tough_variant.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "34": {
+      "name": "stone_floor_variant",
+      "frame": "stone_floor_variant.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "35": {
+      "name": "wood_floor_variant",
+      "frame": "wood_floor_variant.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "36": {
+      "name": "sand",
+      "frame": "sand.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "37": {
+      "name": "grass_edge_n",
+      "frame": "grass_edge_n.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "38": {
+      "name": "grass_edge_s",
+      "frame": "grass_edge_s.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "39": {
+      "name": "grass_edge_w",
+      "frame": "grass_edge_w.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "40": {
+      "name": "grass_edge_e",
+      "frame": "grass_edge_e.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "41": {
+      "name": "water_edge",
+      "frame": "water_edge.png",
+      "isWalkable": false,
+      "isWall": false
+    },
+    "42": {
+      "name": "bridge",
+      "frame": "bridge.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "43": {
+      "name": "steps",
+      "frame": "steps.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "44": {
+      "name": "column",
+      "frame": "column.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "45": {
+      "name": "window",
+      "frame": "window.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "46": {
+      "name": "wood_door",
+      "frame": "wood_door.png",
+      "isWalkable": false,
+      "isWall": true
+    },
+    "47": {
+      "name": "flagstone",
+      "frame": "flagstone.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "48": {
+      "name": "rug_round",
+      "frame": "rug_round.png",
+      "isWalkable": true,
       "isWall": false
     }
   },
@@ -101,6 +354,90 @@
         "y": 1.0
       },
       "isWalkable": true
+    },
+    "inn_barrel": {
+      "name": "Barrel",
+      "frame": "barrel.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "inn_barrel_2": {
+      "name": "Barrel",
+      "frame": "barrel.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "inn_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_counter_l": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "shop_counter_r": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "shop_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
     }
   },
   "maps": {
