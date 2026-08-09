@@ -2252,3 +2252,61 @@ describe('C-039 Animation Controller — animateEntitySystem (bitECS Integration
     expect(getEntityAnimationFrame(eid)).toBe(-1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-375 AC-2 — Y-depth sort key unit tests
+// ---------------------------------------------------------------------------
+
+import { computeDepthOrder } from '../rendering/depth_sort.ts';
+
+describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
+  it('renders larger world Y on top (back-to-front order by Y)', () => {
+    // Player north of a well: well (y=384) must be drawn AFTER the player (y=192).
+    const order = computeDepthOrder([
+      { eid: 1, y: 192, order: 0 }, // player (north)
+      { eid: 2, y: 384, order: 1 }, // well (south)
+    ]);
+    expect(order).toEqual([1, 2]);
+  });
+
+  it('is stable for equal Y — tie-breaks by spawn order', () => {
+    const order = computeDepthOrder([
+      { eid: 10, y: 256, order: 5 },
+      { eid: 11, y: 256, order: 2 },
+      { eid: 12, y: 256, order: 9 },
+    ]);
+    expect(order).toEqual([11, 10, 12]);
+  });
+
+  it('does not reorder when input is already back-to-front', () => {
+    const order = computeDepthOrder([
+      { eid: 3, y: 100, order: 1 },
+      { eid: 4, y: 200, order: 2 },
+      { eid: 5, y: 300, order: 3 },
+    ]);
+    expect(order).toEqual([3, 4, 5]);
+  });
+
+  it('handles mixed order and negative coordinates', () => {
+    const order = computeDepthOrder([
+      { eid: 7, y: -50, order: 1 },
+      { eid: 6, y: 500, order: 2 },
+      { eid: 8, y: 0, order: 3 },
+    ]);
+    expect(order).toEqual([7, 8, 6]);
+  });
+
+  it('returns an empty array for no entities', () => {
+    expect(computeDepthOrder([])).toEqual([]);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = [
+      { eid: 1, y: 300, order: 0 },
+      { eid: 2, y: 100, order: 1 },
+    ];
+    computeDepthOrder(input);
+    expect(input[0]).toEqual({ eid: 1, y: 300, order: 0 });
+    expect(input[1]).toEqual({ eid: 2, y: 100, order: 1 });
+  });
+});

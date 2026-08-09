@@ -117,6 +117,14 @@ class GameBootService
   private _bridge: EngineBridge | undefined;
   private _gameWorld: GameWorld | undefined;
   private _clearContentPackCache: (() => void) | undefined;
+
+  /**
+   * Content-pack prop frame resolver (C-375 AC-1) — built + preloaded in
+   * the preload stage, passed into GameWorld at engine creation.
+   */
+  private _propFrameResolverHandle:
+    | import('@aikami/frontend/engine').PropFrameResolverHandle
+    | undefined;
   private _resizeCleanup: (() => void) | undefined;
 
   /** Chosen renderer (set during creating_engine stage). */
@@ -793,6 +801,20 @@ class GameBootService
       }
     }
 
+    // C-375 AC-1: build + preload the deterministic prop frame resolver
+    // from the pack manifest (atlas + fallbackTile). It must be ready
+    // before the first ENTITY_CREATED swaps prop placeholders.
+    const { buildPropFrameResolver } = await import('./prop_frame_resolver');
+    const propFrameHandle = await buildPropFrameResolver(pack.manifest);
+    // Check generation immediately after the await and BEFORE mutating
+    // _propFrameResolverHandle — a stale boot must never clobber the
+    // resolver of the current boot.
+    if (generation !== this._bootGeneration) {
+      propFrameHandle.clearCache();
+      return;
+    }
+    this._propFrameResolverHandle = propFrameHandle;
+
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
       elapsedMs: elapsed,
@@ -843,6 +865,9 @@ class GameBootService
       // C-374: merge equipped items onto the player's base LPC render
       equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
+      // C-375 AC-1: deterministic prop frame resolution (spritesheet-based,
+      // fallbackTile on miss) — never the global Texture.from cache.
+      propFrameResolver: this._propFrameResolverHandle?.resolver,
     });
 
     // Build player init data from resolved persona
@@ -945,6 +970,9 @@ class GameBootService
           defeatedEnemies: [...worldStateService.defeatedEnemies],
           collectedPickups: [...worldStateService.collectedPickups],
           interactableStates: { ...worldStateService.interactableStates },
+          // The saved map may belong to a different pack than the engine's
+          // boot default — loadMap resolves its manifest by this packId.
+          packId: map.packId,
         });
         // Check generation after map load
         if (generation !== this._bootGeneration) {
@@ -1440,6 +1468,11 @@ class GameBootService
       this._gameWorld.destroy();
       this._gameWorld = undefined;
     }
+
+    // C-375: drop the prop frame resolver handle (drops memoized frames;
+    // the atlas itself is ref-counted by Pixi's Assets cache).
+    this._propFrameResolverHandle?.clearCache();
+    this._propFrameResolverHandle = undefined;
 
     // ── C-332: Unbind from GameEngineService so stale reference doesn't
     // survive teardown. Next boot will re-register via registerWorld(). ──

@@ -664,6 +664,10 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   // Create a Shader per chunk — binds globalUniforms, animation table, texture.
   // Passes both gpuProgram (WGSL for WebGPU) and glProgram (GLSL for WebGL2
   // fallback) so the shader works on both backends without console spam.
+  //
+  // C-375 AC-4: the GLSL fallback declares `uniform sampler2D uTexture`, so
+  // the source must ALSO be bound under `uTexture` (not just `uTextures` for
+  // WGSL) — otherwise WebGL2 renders blank/dark tiles (missing sampler).
   const shader = new Shader({
     gpuProgram,
     glProgram: _getSharedGlProgram(),
@@ -671,6 +675,7 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
       globals: globalUniforms,
       animTable: animStorageBuffer,
       uTextures: tilesetTexture.source,
+      uTexture: tilesetTexture.source,
       uSampler: tilesetTexture.source.style,
     },
   });
