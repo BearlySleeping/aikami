@@ -20,6 +20,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
+import { assertHerdrCompatible } from '../herdr/session.ts';
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
 import { readManifest } from './contract_pipeline/manifest_store.ts';
@@ -773,6 +774,23 @@ const main = async (): Promise<void> => {
   if (cli.help && !cli.resumeRunId) {
     printHelp();
     return;
+  }
+
+  // 🔴 Preflight: herdr client/server protocol skew (old server still running
+  // after a herdr update) makes EVERY herdr call fail with protocol_mismatch
+  // — the pipeline then crashes with a confusing "herdr worktree create
+  // failed" error after burning 180s waiting for readiness. Detect it before
+  // creating any placeholder/contract file or spawning the background child.
+  // Skipped for modes that never touch herdr (issue freeze, dry-run).
+  const needsHerdr = !cli.dryRun && !cli.issueTarget && cli.source !== 'issue';
+  if (needsHerdr) {
+    try {
+      await assertHerdrCompatible();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ ${msg}`);
+      process.exit(1);
+    }
   }
 
   // 🔴 Resume hydration: when continuing an incomplete run, remember the

@@ -304,7 +304,16 @@ export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Pro
     // non-zero code. Surface them instead of silently returning null — the
     // generic "failed" errors downstream are useless for debugging.
     const detail = (r.stderr.trim() || r.stdout.trim()).slice(0, 500) || `exit code ${r.code}`;
-    console.warn(`[herdr] ${args.join(' ')} failed: ${detail}`);
+    if (/protocol_mismatch/i.test(detail)) {
+      console.warn(
+        `[herdr] ${args.join(' ')} failed: ${detail}\n` +
+          '  💡 herdr client/server protocol mismatch — the running herdr server is older ' +
+          'than the installed client. Fix: run `herdr server stop`, then `herdr` again to ' +
+          'start a fresh server with the new binary.',
+      );
+    } else {
+      console.warn(`[herdr] ${args.join(' ')} failed: ${detail}`);
+    }
     return null;
   }
   try {
@@ -328,10 +337,123 @@ const serverRunning = async (): Promise<boolean> => {
   return r.code === 0 && /status:\s*running/i.test(r.stdout);
 };
 
-/** Ensure the herdr headless server is running. */
+// ── Client/server compatibility ────────────────────────────
+
+/** Structured view of `herdr status` output. */
+export type HerdrCompatibility = {
+  clientVersion?: string;
+  clientProtocol?: number;
+  serverStatus?: string;
+  serverVersion?: string;
+  serverProtocol?: number;
+  /** The `compatible: yes|no` verdict from the server status block. */
+  compatible?: boolean;
+  restartNeeded?: boolean;
+};
+
+/** Parse `herdr status` output into structured fields. */
+export const parseHerdrStatus = (stdout: string): HerdrCompatibility => {
+  const result: HerdrCompatibility = {};
+  let section: 'client' | 'server' | 'update' | null = null;
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed === 'client:') {
+      section = 'client';
+      continue;
+    }
+    if (trimmed === 'server:') {
+      section = 'server';
+      continue;
+    }
+    if (trimmed === 'update:') {
+      section = 'update';
+      continue;
+    }
+    if (!section || !trimmed) {
+      continue;
+    }
+    const [key, value] = trimmed.split(/:\s*/, 2);
+    if (!key || value === undefined) {
+      continue;
+    }
+    const v = value.trim();
+    switch (section) {
+      case 'client':
+        if (key === 'version') {
+          result.clientVersion = v;
+        }
+        if (key === 'protocol') {
+          result.clientProtocol = Number(v) || undefined;
+        }
+        break;
+      case 'server':
+        if (key === 'status') {
+          result.serverStatus = v;
+        }
+        if (key === 'version') {
+          result.serverVersion = v;
+        }
+        if (key === 'protocol') {
+          result.serverProtocol = Number(v) || undefined;
+        }
+        if (key === 'compatible') {
+          result.compatible = v === 'yes';
+        }
+        break;
+      case 'update':
+        if (key === 'restart_needed') {
+          result.restartNeeded = v === 'yes';
+        }
+        break;
+    }
+  }
+  return result;
+};
+
+/**
+ * Fail fast when the installed herdr client and the running herdr server are
+ * on incompatible socket protocols. This happens when herdr is updated (e.g.
+ * a `flake.lock` bump / devShell rebuild) while the OLD server daemon keeps
+ * running: the client talks protocol N+1, the server answers N, and every
+ * `herdr` API call fails with `protocol_mismatch`. Instead of letting that
+ * surface as a cryptic `[herdr] ... failed` warning deep inside some script
+ * (e.g. the contract pipeline), detect it up front and print the fix.
+ * No-op when the server is down or the verdict is missing — starting a
+ * fresh server from the current client binary is always compatible.
+ */
+export const assertHerdrCompatible = async (): Promise<void> => {
+  const r = await herdr(['status']);
+  if (r.code !== 0) {
+    return; // Server down / status unavailable — ensureServer() handles that.
+  }
+  const status = parseHerdrStatus(r.stdout);
+  if (status.compatible === false) {
+    throw new Error(
+      'herdr client/server protocol mismatch detected.\n' +
+        `  client: ${status.clientVersion ?? '?'} (protocol ${status.clientProtocol ?? '?'})\n` +
+        `  server: ${status.serverVersion ?? '?'} (protocol ${status.serverProtocol ?? '?'})\n` +
+        '\n' +
+        'The herdr server is still running the OLD binary from before an update. ' +
+        'Every herdr command will fail with `protocol_mismatch` until it is restarted.\n' +
+        '\n' +
+        'Fix: stop the old server and start a fresh one with the new binary:\n' +
+        '  herdr server stop\n' +
+        '  herdr\n' +
+        '\n' +
+        '⚠️  Stopping the server exits running panes — save work in other panes first.',
+    );
+  }
+};
+
+/** Ensure the herdr headless server is running and client-compatible. */
 export const ensureServer = async (): Promise<void> => {
   // Quick check first — avoid double spawn
   if (await serverRunning()) {
+    // Server is up — but is it the SAME version as the installed client?
+    // After a herdr update the old daemon keeps running and every API call
+    // fails with protocol_mismatch. Fail fast with actionable instructions
+    // instead of a cryptic failure later.
+    await assertHerdrCompatible();
     return;
   }
 
