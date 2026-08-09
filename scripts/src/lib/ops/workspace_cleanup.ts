@@ -27,7 +27,7 @@
 
 import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { removeWorktree } from '../herdr/worktree.ts';
 
 /** Run an argv array with execFileSync — no shell interpolation of values. */
@@ -63,16 +63,23 @@ const selfWorktreePath = (): string | undefined => {
   return pipelineWs ? resolve(pipelineWs) : undefined;
 };
 
+/** True when `child` is `parent` itself or lies beneath it (path-aware). */
+const isSameOrDescendant = (child: string, parent: string): boolean => {
+  const rel = relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+};
+
 /** True when removing `path` would kill the session that invoked this CLI.
  *  Detected via the pipeline workspace env (set on every worker/review tab)
- *  and/or the process cwd (running from inside the checkout). */
+ *  and/or the process cwd (running from inside the checkout). Either anchor
+ *  matches when `path` is the anchor itself OR lies beneath it. */
 const isSelfWorktree = (path: string): boolean => {
   const resolved = resolve(path);
-  if (resolved === resolve(process.cwd())) {
+  if (isSameOrDescendant(resolved, resolve(process.cwd()))) {
     return true;
   }
   const self = selfWorktreePath();
-  return self !== undefined && resolved === self;
+  return self !== undefined && isSameOrDescendant(resolved, self);
 };
 
 type WorkspaceInfo = {
@@ -131,8 +138,8 @@ const prMergedForBranch = (branchName: string): boolean => {
 
 const listWorkspaces = async (options?: {
   /** Resolve merged-PR status via `gh pr list` per worktree. 🔴 Expensive —
-   *  each call spawns gh with a 10s timeout, so it only runs when
-   *  `--pr-merged` actually needs it. Bare listings and `--all` skip it. */
+   *  each call spawns gh with a 10s timeout, so bare listings enable it only
+   *  so the 🔀 MERGED marker renders accurately; `--all` skips it. */
   checkPrMerged?: boolean;
 }): Promise<WorkspaceInfo[]> => {
   const checkPrMerged = options?.checkPrMerged ?? false;
@@ -190,11 +197,10 @@ const listWorkspaces = async (options?: {
 const cleanupWorkspace = async (
   ws: WorkspaceInfo,
   repoRoot: string,
-  options?: { deleteRemoteBranch?: boolean },
+  options?: { deleteRemoteBranch?: boolean; includeSelf?: boolean },
 ): Promise<void> => {
-  // Defense in depth: refuse even when --include-self was passed for the
-  // listing filter — this is the last line of protection against suicide.
-  if (isSelfWorktree(ws.path)) {
+  // Self-guard: refuse unless the explicit --include-self override was passed.
+  if (!options?.includeSelf && isSelfWorktree(ws.path)) {
     console.warn(`⛔ Refusing to remove ${ws.path} — this process is running inside it.`);
     return;
   }
@@ -220,7 +226,9 @@ const main = async (): Promise<void> => {
   const legacyOnly = flags.includes('--legacy');
 
   const repoRoot = resolve(process.cwd());
-  const workspaces = await listWorkspaces({ checkPrMerged: flags.includes('--pr-merged') });
+  const workspaces = await listWorkspaces({
+    checkPrMerged: flags.includes('--pr-merged') || (flags.length === 0 && !targetPath),
+  });
   const filtered = legacyOnly ? workspaces.filter((ws) => ws.isLegacy) : workspaces;
 
   // 🔴 Self-guard: never remove the worktree this process is running inside.
@@ -269,7 +277,7 @@ const main = async (): Promise<void> => {
   if (flags.includes('--all')) {
     console.log(`Cleaning up ${targets.length} worktree(s)...\n`);
     for (const ws of targets) {
-      await cleanupWorkspace(ws, repoRoot);
+      await cleanupWorkspace(ws, repoRoot, { includeSelf });
     }
     console.log('\nDone.');
     return;
@@ -285,7 +293,7 @@ const main = async (): Promise<void> => {
     }
     console.log(`Cleaning up ${merged.length} merged worktree(s)...\n`);
     for (const ws of merged) {
-      await cleanupWorkspace(ws, repoRoot, { deleteRemoteBranch: true });
+      await cleanupWorkspace(ws, repoRoot, { deleteRemoteBranch: true, includeSelf });
     }
     console.log('\nDone.');
     return;
@@ -304,7 +312,7 @@ const main = async (): Promise<void> => {
     console.log('Run without arguments to list worktrees.');
     return;
   }
-  await cleanupWorkspace(match, repoRoot);
+  await cleanupWorkspace(match, repoRoot, { includeSelf });
 };
 
 await main();

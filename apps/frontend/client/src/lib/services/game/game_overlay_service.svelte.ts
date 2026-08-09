@@ -290,7 +290,7 @@ export class GameOverlayService
   implements GameOverlayServiceInterface
 {
   /** Internal overlay stack — the top entry is the active overlay. Empty stack = no overlay. */
-  _overlayStack = $state<OverlayStackEntry[]>([]);
+  private _overlayStack = $state<OverlayStackEntry[]>([]);
 
   /**
    * Runtime-readonly view of the overlay stack (defensive copy so external

@@ -1,6 +1,6 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -179,6 +179,18 @@ const readReviewDecision = (path: string, runId: string): ContractReviewDecision
   }
 };
 
+/**
+ * Thrown when the review pane is closed without recording a decision.
+ * Distinct from a 'reject' decision: abandonment must NOT close the PR —
+ * the run transitions to blocked with a resume hint instead.
+ */
+export class ReviewAbandonedError extends Error {
+  constructor(summary: string) {
+    super(summary);
+    this.name = 'ReviewAbandonedError';
+  }
+}
+
 const waitForReviewDecision = async (options: {
   path: string;
   runId: string;
@@ -197,16 +209,14 @@ const waitForReviewDecision = async (options: {
     if (options.isPaneAlive && poll % 30 === 0) {
       const alive = await options.isPaneAlive().catch(() => true);
       if (!alive) {
-        return {
-          runId: options.runId,
-          decision: 'reject',
-          summary:
-            'The review tab was closed without a decision. Resume with `bun run contract ' +
+        // Abandoned review: the tab was closed without a decision. Throw a
+        // dedicated signal instead of fabricating a 'reject' decision — a
+        // fabricated reject would close the PR in the normal/blocked review
+        // paths. The call site transitions to blocked without touching GitHub.
+        throw new ReviewAbandonedError(
+          'The review tab was closed without a decision. Resume with `bun run contract ' +
             `--resume ${options.runId}\` — the branch and worktree are preserved.`,
-          diffHash: '',
-          contractChanged: false,
-          createdAt: new Date().toISOString(),
-        };
+        );
       }
     }
     await sleep(1_000);
@@ -631,26 +641,8 @@ const finalizeWorkspace = async (options: {
     return;
   }
 
-  if (stage === 'merged') {
-    const wsPath = options.adapter.getWorkspacePath();
-    if (wsPath) {
-      try {
-        await removeWorktree({
-          checkoutPath: wsPath,
-          repoRoot: options.repoRoot,
-          branch: manifest.reconciliation?.headBranch,
-          deleteRemoteBranch: true,
-        });
-        console.log(`\n🧹 Worktree cleaned: ${manifest.reconciliation?.headBranch ?? 'unknown'}\n`);
-      } catch (e: unknown) {
-        console.warn(
-          `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
-        );
-      }
-    }
-    return;
-  }
-
+  // Every non-keepAlive terminal stage funnels through cleanupRunWorktree,
+  // which decides remote-branch deletion from the manifest stage.
   await cleanupRunWorktree({ adapter: options.adapter, manifest, repoRoot: options.repoRoot });
 };
 
@@ -1139,10 +1131,6 @@ export const runContractPipeline = async (options: {
           'review',
           'decision.json',
         );
-        if (existsSync(reviewPath)) {
-          unlinkSync(reviewPath);
-        }
-
         // Read any decision left behind by a crashed orchestrator BEFORE
         // clearing the file — the file may be the only copy (crash between
         // the captain recording the decision and writeManifest persisting it
@@ -1233,15 +1221,30 @@ export const runContractPipeline = async (options: {
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
-        const decision =
-          manifest.reviewDecision ??
-          (await waitForReviewDecision({
-            path: reviewPath,
-            runId: manifest.runId,
-            isPaneAlive: manifest.reviewPaneId
-              ? () => adapter.isPaneAlive(manifest.reviewPaneId as string).catch(() => true)
-              : undefined,
-          }));
+        let decision: ContractReviewDecision;
+        try {
+          decision =
+            manifest.reviewDecision ??
+            (await waitForReviewDecision({
+              path: reviewPath,
+              runId: manifest.runId,
+              isPaneAlive: manifest.reviewPaneId
+                ? () => adapter.isPaneAlive(manifest.reviewPaneId as string).catch(() => true)
+                : undefined,
+            }));
+        } catch (e: unknown) {
+          if (e instanceof ReviewAbandonedError) {
+            // Tab closed without a decision — do NOT fabricate a 'reject'
+            // (that would close the PR). Transition to blocked with a resume
+            // hint; the branch and worktree stay intact for `--resume`.
+            console.log(`\n🛑 Review abandoned (tab closed): ${e.message}\n`);
+            manifest.blockedReason = e.message;
+            manifest = transition({ manifest, next: 'blocked' });
+            writeManifest({ manifest, cwd: options.repoRoot });
+            continue;
+          }
+          throw e;
+        }
         manifest.reviewDecision = decision;
         if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');
@@ -1310,7 +1313,7 @@ export const runContractPipeline = async (options: {
                     timeout: 15000,
                   });
                 } catch {}
-                execSync(`gh pr merge ${prUrl} --squash`, {
+                execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
                   encoding: 'utf-8',
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
@@ -1399,7 +1402,7 @@ export const runContractPipeline = async (options: {
                 timeout: 15000,
               });
             } catch {}
-            execSync(`gh pr merge ${prUrl} --squash`, {
+            execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],
               cwd: options.repoRoot,
@@ -1498,7 +1501,18 @@ export const runContractPipeline = async (options: {
         `⚠️  Could not persist blocked state: ${persistErr instanceof Error ? persistErr.message : String(persistErr)}`,
       );
     }
-    await finalizeWorkspace({ adapter, manifest, repoRoot: options.repoRoot, yolo: options.yolo });
+    try {
+      await finalizeWorkspace({
+        adapter,
+        manifest,
+        repoRoot: options.repoRoot,
+        yolo: options.yolo,
+      });
+    } catch (finalizeErr: unknown) {
+      console.warn(
+        `⚠️  Workspace finalization failed: ${finalizeErr instanceof Error ? finalizeErr.message : String(finalizeErr)}`,
+      );
+    }
     throw e;
   } finally {
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });

@@ -279,13 +279,27 @@ describe('ConfigService — C-079', () => {
     });
 
     test('load should restore connections from vault', async () => {
-      // Pre-populate vault with a stored connection (source: 'stored' survives
-      // the load-time pruning filter).
+      // Pre-populate vault with stored connections (source: 'stored' survives
+      // the load-time pruning filter). The default connection (conn-1) is NOT
+      // the first match, so the assertion proves default selection rather than
+      // first-match fallback.
       vaultStore.set(
         '__vault',
         JSON.stringify({
           connections: [
             {
+              id: 'conn-2',
+              name: 'OpenRouter (legacy)',
+              provider: 'openrouter',
+              apiKey: 'sk-fallback',
+              baseUrl: '',
+              model: 'openrouter/auto',
+              generationParams: {},
+              isDefault: false,
+              source: 'stored',
+            },
+            {
+              id: 'conn-1',
               name: 'OpenRouter',
               provider: 'openrouter',
               apiKey: 'sk-restored',
@@ -303,6 +317,7 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       await service.load();
 
+      // The default connection (conn-1) wins over the first match (conn-2).
       expect(service.getApiKey('openrouter')).toBe('sk-restored');
     });
 

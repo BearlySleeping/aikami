@@ -284,9 +284,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       const entry = (await listWorktrees(this._repoRoot)).find(
         (w) => w.openWorkspaceId === existingWorkspaceId,
       );
-      const branchMatches =
-        entry !== undefined && (entry.branch === expected || singleSuffix.test(entry.branch));
-      if (!branchMatches) {
+      // Only tear down when the branch mismatch is CONFIRMED. An absent
+      // entry (workspace open but no worktree record) is unknown — never
+      // destroy a workspace whose branch we cannot verify.
+      const isStale =
+        entry !== undefined && entry.branch !== expected && !singleSuffix.test(entry.branch);
+      if (isStale) {
         console.log(
           `🧹 Removing stale contract workspace (branch ${entry?.branch ?? 'unknown'} ≠ ${expected}).`,
         );

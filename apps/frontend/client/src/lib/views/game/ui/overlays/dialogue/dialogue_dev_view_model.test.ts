@@ -222,7 +222,11 @@ const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
 // Import (after mocks registered)
 // ---------------------------------------------------------------------------
 
-import { type DevNpcPreset, DialogueDevViewModel } from './dialogue_overlay_view_model.dev.svelte';
+import {
+  type DevInteractionMode,
+  type DevNpcPreset,
+  DialogueDevViewModel,
+} from './dialogue_overlay_view_model.dev.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -242,7 +246,8 @@ const createDevVM = (options?: {
   initialDiceOutcome?: 'random' | 'always_succeed' | 'always_fail';
   initialUseMockAi?: boolean;
   initialNpcPreset?: DevNpcPreset;
-  initialInteractionMode?: 'menu' | 'freeform';
+  // C-371: freeTextFirst is the only supported interaction mode.
+  initialInteractionMode?: DevInteractionMode;
 }) => {
   return new DialogueDevViewModel({
     className: 'TestDialogueDevVM',
