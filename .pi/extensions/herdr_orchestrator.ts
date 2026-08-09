@@ -82,12 +82,15 @@ type ManagedPane = { paneId: string; workspaceId: string };
 // HERDR CLI HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
+const HERDR_TIMEOUT_MS = 600_000; // 10 min safety net; herdr CLI waits are bounded by their own --timeout args
+
 const execHerdr = async (
   pi: ExtensionAPI,
   args: string[],
   signal?: AbortSignal,
+  timeoutMs: number = HERDR_TIMEOUT_MS,
 ): Promise<{ code: number; stdout: string; stderr: string }> => {
-  const result = await pi.exec('herdr', args, { signal });
+  const result = await pi.exec('herdr', args, { signal, timeout: timeoutMs });
   if (signal?.aborted || result.killed) {
     throw new Error('Aborted');
   }

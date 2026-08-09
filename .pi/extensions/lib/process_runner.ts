@@ -217,7 +217,8 @@ export type RunSyncOptions = {
 export type RunSyncResult = {
   stdout: string;
   stderr: string;
-  code: number;
+  /** Exit code, or null when the process was killed (timeout/signal). */
+  code: number | null;
 };
 
 /**
@@ -245,7 +246,7 @@ export function runSync(
 
   const stdout = Buffer.from(result.stdout).toString('utf8').trim();
   const stderr = Buffer.from(result.stderr).toString('utf8').trim();
-  const code = result.exitCode;
+  const code: number | null = result.exitCode;
 
   return { stdout, stderr, code };
 }
