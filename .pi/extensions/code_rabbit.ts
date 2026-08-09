@@ -83,10 +83,16 @@ const tokenizeArgs = (args: string): string[] => {
   return tokens;
 };
 
+/** stderr of the most recent failed gh call — surfaced in tool output for diagnostics. */
+let _lastGhError = '';
+
 const gh = (args: string): string => {
   try {
-    return runSyncOrThrow('gh', tokenizeArgs(args), { timeoutMs: TIMEOUT });
-  } catch {
+    const out = runSyncOrThrow('gh', tokenizeArgs(args), { timeoutMs: TIMEOUT });
+    _lastGhError = '';
+    return out;
+  } catch (err) {
+    _lastGhError = err instanceof Error ? err.message : String(err);
     return '';
   }
 };
@@ -94,37 +100,73 @@ const gh = (args: string): string => {
 const ghJson = <T>(args: string): T | undefined => {
   try {
     const raw = runSyncOrThrow('gh', tokenizeArgs(args), { timeoutMs: TIMEOUT });
+    _lastGhError = '';
     if (!raw) {
       return undefined;
     }
     return JSON.parse(raw) as T;
-  } catch {
+  } catch (err) {
+    _lastGhError = err instanceof Error ? err.message : String(err);
     return undefined;
   }
 };
+
+/** Diagnostics for the most recent gh failure ('' when the last call succeeded). */
+const ghError = (): string => _lastGhError;
 
 const prNumber = (pr: string): string => {
   const m = pr.match(/(\d+)$/);
   return m?.[1] ?? pr;
 };
 
-/** Sleep that throws if the signal is aborted (user pressed Esc/Ctrl+C). */
-const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => {
+/**
+ * Sleep that resolves `true` on normal completion and `false` if the signal
+ * aborts (user pressed Esc/Ctrl+C). The abort listener is always removed, so
+ * long polling loops do not leak listeners.
+ */
+const abortableSleep = async (ms: number, signal?: AbortSignal): Promise<boolean> => {
   if (signal?.aborted) {
-    throw new Error('Aborted');
+    return false;
   }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(new Error('Aborted'));
+  return new Promise((resolve) => {
+    let timer: Timer | undefined;
+    let settled = false;
+    const finish = (result: boolean): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
     };
+    const onAbort = (): void => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      finish(false);
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      finish(true);
+    }, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 };
 
-/** Module-level abort signal set at tool entry. Checked by ensureReview + pollForAutofixCommit. */
-let _signal: AbortSignal | undefined;
+/** Graceful cancellation result — returned when the user aborts a poll loop. */
+const cancelledResult = (
+  num: string,
+): {
+  content: Array<{ type: string; text: string }>;
+  details: Record<string, unknown>;
+} => ({
+  content: [
+    {
+      type: 'text',
+      text: `⏹️ Cancelled — CodeRabbit operation on PR #${num} was aborted. No changes made.`,
+    },
+  ],
+  details: { pr: num, cancelled: true },
+});
 
 type PrViewResult = {
   headRefOid: string;
@@ -140,14 +182,18 @@ const getReviewState = (num: string): string =>
     `pr view ${num} --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state] | join(",")'`,
   ).trim();
 
-/** Parse rate-limit wait minutes from CodeRabbit comments. Returns undefined if no limit. */
+/**
+ * Parse rate-limit wait minutes from the NEWEST CodeRabbit comment only.
+ * Scanning the full history would let one stale "available in N minutes"
+ * comment pin the PR as rate-limited forever.
+ */
 const parseRateLimitMinutes = (num: string): number | undefined => {
-  const comments = gh(
-    `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
+  const latest = gh(
+    `pr view ${num} --json comments --jq '([.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]")] | last | .body) // ""'`,
   );
   // CodeRabbit formats: "Next review available in: **4 minutes**"
   // or "available in: 15 minutes". Match flexibly around markdown.
-  const m = comments.match(/available in[\s\S]*?(\d+)\s*min/);
+  const m = latest.match(/available in[\s\S]*(\d+)\s*min/);
   return m?.[1] ? Number.parseInt(m[1], 10) + 1 : undefined;
 };
 
@@ -156,7 +202,7 @@ const parseRateLimitMinutes = (num: string): number | undefined => {
  * Returns the terminal review state (APPROVED / COMMENTED / CHANGES_REQUESTED / DISMISSED)
  * or undefined if timed out.
  */
-const ensureReview = async (num: string): Promise<string | undefined> => {
+const ensureReview = async (num: string, signal?: AbortSignal): Promise<string | undefined> => {
   // Check if review already exists.
   const existing = getReviewState(num);
   if (existing && TERMINAL_REVIEW_STATES.some((s) => existing.includes(s))) {
@@ -182,14 +228,18 @@ const ensureReview = async (num: string): Promise<string | undefined> => {
     const waitMins = parseRateLimitMinutes(num);
     if (waitMins) {
       console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-      await abortableSleep(waitMins * 60_000, _signal);
+      if (!(await abortableSleep(waitMins * 60_000, signal))) {
+        return undefined;
+      }
       gh(`pr comment ${num} --body "@coderabbitai review"`);
       deadline = Date.now() + MAX_WAIT_MS;
       continue;
     }
 
     console.log('  ⏳ Waiting for review...');
-    await abortableSleep(POLL_INTERVAL, _signal);
+    if (!(await abortableSleep(POLL_INTERVAL, signal))) {
+      return undefined;
+    }
   }
 
   return undefined;
@@ -211,8 +261,7 @@ const getAutofixCommentState = (num: string): AutofixCommentState => {
   }
   try {
     const last = JSON.parse(lastCommentRaw) as { author: string; body: string };
-    const isAutofixRequest =
-      last.body.includes('@coderabbitai autofix') || last.body.includes('@coderabbitai autofix');
+    const isAutofixRequest = last.body.includes('@coderabbitai autofix');
     const isCoderabbit = CODERABBIT_LOGINS.includes(last.author);
 
     // If the last comment is @coderabbitai autofix from a non-coderabbit user,
@@ -274,8 +323,10 @@ const getAutofixCommentState = (num: string): AutofixCommentState => {
  * Returns 'in_progress', 'skipped', 'completed', or undefined (not started).
  */
 const getAutofixStatus = (num: string): string | undefined => {
+  // Only the newest CodeRabbit comment — a stale "unexpected error" from an
+  // earlier run must not pin this PR as failed forever.
   const comments = gh(
-    `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join("\\n")'`,
+    `pr view ${num} --json comments --jq '([.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]")] | last | .body) // ""'`,
   );
   if (!comments) {
     return undefined;
@@ -334,7 +385,7 @@ const getChecksPending = (num: string): { pending: boolean; pendingCount: number
  * Wait for all CI checks to complete (pass or fail), not just pending.
  * Returns true if all checks completed (none pending), false if timed out.
  */
-const waitForChecks = async (num: string): Promise<boolean> => {
+const waitForChecks = async (num: string, signal?: AbortSignal): Promise<boolean> => {
   const deadline = Date.now() + MAX_CHECKS_WAIT_MS;
   console.log('⏳ Waiting for CI checks to complete (max 90s)...');
   while (Date.now() < deadline) {
@@ -344,7 +395,9 @@ const waitForChecks = async (num: string): Promise<boolean> => {
       return true;
     }
     console.log(`  ⏳ ${pendingCount} check(s) pending...`);
-    await abortableSleep(CHECKS_POLL_INTERVAL, _signal);
+    if (!(await abortableSleep(CHECKS_POLL_INTERVAL, signal))) {
+      return false;
+    }
   }
   console.log('⚠️  CI checks still running after 90s — bailing out gracefully.');
   return false;
@@ -355,7 +408,11 @@ const waitForChecks = async (num: string): Promise<boolean> => {
  * Phase 3: Poll for autofix commit
  * Returns the new commit SHA or undefined.
  */
-const pollForAutofixCommit = async (num: string, baseline: string): Promise<string | undefined> => {
+const pollForAutofixCommit = async (
+  num: string,
+  baseline: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> => {
   console.log('⏳ Waiting for CodeRabbit autofix commit...');
   let deadline = Date.now() + MAX_WAIT_MS;
 
@@ -395,7 +452,9 @@ const pollForAutofixCommit = async (num: string, baseline: string): Promise<stri
     const waitMins = parseRateLimitMinutes(num);
     if (waitMins) {
       console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-      await abortableSleep(waitMins * 60_000, _signal);
+      if (!(await abortableSleep(waitMins * 60_000, signal))) {
+        return undefined;
+      }
       gh(`pr comment ${num} --body "@coderabbitai autofix"`);
       deadline = Date.now() + MAX_WAIT_MS;
       continue;
@@ -409,7 +468,9 @@ const pollForAutofixCommit = async (num: string, baseline: string): Promise<stri
     }
 
     console.log('  ⏳ Waiting for autofix...');
-    await abortableSleep(POLL_INTERVAL, _signal);
+    if (!(await abortableSleep(POLL_INTERVAL, signal))) {
+      return undefined;
+    }
   }
 
   return undefined;
@@ -430,7 +491,6 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       ),
     }),
     async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
-      _signal = signal;
       const num = prNumber(params.pr);
 
       // ── Capture baseline ────────────────────────────────
@@ -448,7 +508,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       // ── Phase 0: Wait for CI checks ───────────────────
       // Don't trigger CodeRabbit while CI is still running — the review
       // needs the full code context including build/lint results.
-      const checksReady = await waitForChecks(num);
+      const checksReady = await waitForChecks(num, signal);
       if (!checksReady) {
         return {
           content: [
@@ -473,7 +533,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       }
 
       // ── Phase 1: Ensure review exists ───────────────────
-      const reviewState = await ensureReview(num);
+      const reviewState = await ensureReview(num, signal);
       if (!reviewState) {
         return {
           content: [
@@ -562,6 +622,11 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       } else if (preAutofixState === 'autofix_failed') {
         console.log('⚠️  Previous autofix failed — re-triggering.');
         gh(`pr comment ${num} --body "@coderabbitai autofix"`);
+      } else {
+        // Fresh PR with no autofix history — post the command exactly once.
+        // 🔴 CRITICAL: without this else branch, state 'none' (the dominant
+        // path on a fresh PR) falls through and autofix is never requested,
+        // leaving the poll loop waiting for a commit that will never come.
         console.log(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
         gh(`pr comment ${num} --body "@coderabbitai autofix"`);
       }
@@ -570,7 +635,9 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       // ran (from a previous session or manual trigger), the head commit
       // may have already advanced. We need the post-trigger baseline to
       // correctly detect the NEXT autofix commit.
-      await abortableSleep(2000, _signal);
+      if (!(await abortableSleep(2000, signal))) {
+        return cancelledResult(num);
+      }
       const postTriggerHead = gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`).trim();
       if (postTriggerHead && postTriggerHead !== baselineCommit) {
         // Autofix already completed before our trigger — adopt the existing commit.
@@ -586,7 +653,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       } else {
         // Use the post-trigger head as the new baseline for polling.
         const activeBaseline = postTriggerHead || baselineCommit;
-        autofixCommit = await pollForAutofixCommit(num, activeBaseline);
+        autofixCommit = await pollForAutofixCommit(num, activeBaseline, signal);
       }
 
       // 🔴 POST-AUTOFIX SYNC: Verify remote HEAD matches local worktree.
@@ -740,8 +807,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       pr: Type.String({ description: 'PR number' }),
     }),
-    async execute(_toolCallId, params: Params, signal, _onUpdate, _ctx): Promise<any> {
-      _signal = signal;
+    async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx): Promise<any> {
       const num = prNumber(params.pr);
 
       // Fetch PR metadata (owner/repo from gh)
@@ -752,8 +818,21 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         `pr view ${num} --json headRepositoryOwner,headRepository --jq '{headRepositoryOwner: .headRepositoryOwner, headRepository: .headRepository}'`,
       );
       if (!prData) {
+        const diag = ghError();
         return {
-          content: [{ type: 'text', text: `❌ Could not read PR #${num}.` }],
+          content: [
+            {
+              type: 'text',
+              text: [
+                `❌ Could not read PR #${num}.`,
+                diag
+                  ? `gh error: ${diag.slice(0, 300)}`
+                  : 'Check `gh auth status` — the gh CLI returned no data.',
+              ].join('\n'),
+            },
+          ],
+          isError: true,
+          details: { pr: num },
         };
       }
       const owner = prData.headRepositoryOwner.login;
@@ -783,13 +862,17 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
       // Parse severity and fix prompts from comment bodies
       const findings = comments.map((c) => {
-        const severityMatch = c.body.match(/🟢|🟠|🔴|_🟢|_🟠|_🔴/);
+        // CodeRabbit marks severities with an optional leading underscore in
+        // markdown (_🔴 Critical_, _🟠 Major_, _🟢 Minor_, _🔵 Trivial_).
+        const severityMatch = c.body.match(/🔴|🟠|🟢|🔵/);
         const severity = severityMatch
-          ? severityMatch[0].includes('🔴')
+          ? severityMatch[0] === '🔴'
             ? 'critical'
-            : severityMatch[0].includes('🟠')
+            : severityMatch[0] === '🟠'
               ? 'major'
-              : 'minor'
+              : severityMatch[0] === '🔵'
+                ? 'trivial'
+                : 'minor'
           : 'unknown';
 
         // Extract the AI fix prompt from CodeRabbit's template
@@ -836,7 +919,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                     '',
                     ...findings.map((f) =>
                       [
-                        `#### ${f.severity === 'critical' ? '🔴' : f.severity === 'major' ? '🟠' : '🟢'} \`${f.path}:${f.line ?? '?'}\``,
+                        `#### ${f.severity === 'critical' ? '🔴' : f.severity === 'major' ? '🟠' : f.severity === 'trivial' ? '🔵' : '🟢'} \`${f.path}:${f.line ?? '?'}\``,
                         f.description,
                         f.fixPrompt
                           ? `\n<details><summary>🤖 Fix prompt</summary>\n\n\`\`\`\n${f.fixPrompt}\n\`\`\`\n</details>`
@@ -880,7 +963,6 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx): Promise<any> {
-      _signal = signal;
       const num = prNumber(params.pr);
       const maxWaitMs = params.maxWaitMs ?? 30 * 60 * 1000;
       const intervalMs = params.intervalMs ?? 15_000;
@@ -914,20 +996,19 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         ).trim();
         const currentCount = currentComments ? Number.parseInt(currentComments, 10) : 0;
         if (currentCount > lastCommentCount) {
-          console.log(
-            `📊 New comments: ${currentCount - lastCommentCount} (total: ${currentCount})`,
+          const newCount = currentCount - lastCommentCount;
+          console.log(`📊 New comments: ${newCount} (total: ${currentCount})`);
+          // Fetch the new comments — slice from the previous baseline count.
+          const newComments = gh(
+            `pr view ${num} --json comments --jq '[.comments[${lastCommentCount}:] | .[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join("\\n---\\n")'`,
           );
           lastCommentCount = currentCount;
-          // Fetch the new comments
-          const newComments = gh(
-            `pr view ${num} --json comments --jq '[.comments[${lastCommentCount - (currentCount - lastCommentCount)}:] | .[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join("\\n---\\n")'`,
-          );
           return {
             content: [
               {
                 type: 'text',
                 text: [
-                  `📊 ${currentCount - (lastCommentCount - (currentCount - lastCommentCount))} new comments on PR #${num}.`,
+                  `📊 ${newCount} new comment(s) on PR #${num}.`,
                   newComments
                     ? `\n### Latest CodeRabbit comment:\n${newComments.slice(0, 800)}`
                     : '',
@@ -942,12 +1023,16 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
         const waitMins = parseRateLimitMinutes(num);
         if (waitMins) {
           console.log(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-          await abortableSleep(waitMins * 60_000, _signal);
+          if (!(await abortableSleep(waitMins * 60_000, signal))) {
+            return cancelledResult(num);
+          }
           continue;
         }
 
         console.log(`  ⏳ Waiting... (${Math.round((deadline - Date.now()) / 1000)}s remaining)`);
-        await abortableSleep(intervalMs, _signal);
+        if (!(await abortableSleep(intervalMs, signal))) {
+          return cancelledResult(num);
+        }
       }
 
       return {
