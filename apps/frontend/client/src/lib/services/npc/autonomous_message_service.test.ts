@@ -6,7 +6,7 @@
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
 import { mock, setSystemTime } from 'bun:test';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies — bun:test mock.module (vitest's vi.mock is not
 // available under the bun test runner).

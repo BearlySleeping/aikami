@@ -407,7 +407,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('validateEnvelopeChecksum should be version-aware (v3 includes map, v2 does not)', async () => {
-    const { validateEnvelopeChecksum } = await import('./game_save_service.svelte');
+    const { sha256, validateEnvelopeChecksum } = await import('./game_save_service.svelte');
     const ecsSnapshot = '{"entities":[1]}';
     const serviceSnapshots = [];
     const map = { packId: 'emberwatch', mapId: 'village', playerX: 10, playerY: 20 };

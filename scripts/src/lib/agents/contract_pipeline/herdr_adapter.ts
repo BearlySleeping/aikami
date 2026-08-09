@@ -10,6 +10,7 @@ import {
   createWorktree,
   listWorktrees,
   openWorktree,
+  removeWorktree,
 } from '../../herdr/worktree.ts';
 import { remoteBranchExists, runGit } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
@@ -104,7 +105,10 @@ const runPaneCommand = async (options: { paneId: string; command: string }): Pro
 const runHerdr = async (args: string[]): Promise<void> => {
   const result = await herdr(args);
   if (result.code !== 0) {
-    throw new Error(`Herdr command failed: herdr ${args.join(' ')}`);
+    // Include stderr — herdr CLI errors (e.g. not_git_worktree) land there
+    // and were previously dropped, producing useless "command failed" errors.
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(0, 500);
+    throw new Error(`Herdr command failed: herdr ${args.join(' ')}${detail ? ` — ${detail}` : ''}`);
   }
 };
 
@@ -135,31 +139,48 @@ const extractContractId = (contractPath: string): string => {
 const buildSessionId = (options: { contractId: string; runId: string; role: string }): string =>
   `pi-${options.contractId}-${options.runId}-agent-${options.role}`;
 
-const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
-  if (role === 'writer') {
-    return [
-      'read',
-      'grep',
-      'find',
-      'ls',
-      'edit',
-      'write',
-      'contract_scan_backlog',
-      'contract_generate',
-      'contract_stage_complete',
-    ];
-  }
-  if (role === 'critic') {
-    return [
-      'read',
-      'grep',
-      'find',
-      'ls',
-      'edit',
-      'contract_scan_backlog',
-      'contract_stage_complete',
-    ];
-  }
+/**
+ * Tool whitelist per role.
+ *
+ * 🔴 DISABLED FOR NOW: the per-role `--tools` whitelist is removed so every
+ * pipeline role gets the full toolset — including user-installed custom
+ * extensions such as pi-claude-bridge (AskClaude), web-browsing / web-search
+ * tools, ai_describe_image / ai_validate_image vision tools, GitHub CLI tools,
+ * context-mode (ctx_execute / ctx_search), browser_inspect / browser_screenshot,
+ * etc. The old whitelist is kept below, commented out, to re-enable tight
+ * sandboxing later if needed (e.g. restricting writer/critic to read-only
+ * analysis + contract-file edits).
+ *
+ * With `undefined`, {@link _buildWorkerCommand} omits the `--tools` flag
+ * entirely, so `pi` loads every registered tool (project + user-level
+ * extensions).
+ */
+const toolsForRole = (_role: ContractWorkerRole): string[] | undefined => {
+  // ── Old per-role whitelist (disabled 2026-08-08) ──
+  // if (role === 'writer') {
+  //   return [
+  //     'read',
+  //     'grep',
+  //     'find',
+  //     'ls',
+  //     'edit',
+  //     'write',
+  //     'contract_scan_backlog',
+  //     'contract_generate',
+  //     'contract_stage_complete',
+  //   ];
+  // }
+  // if (role === 'critic') {
+  //   return [
+  //     'read',
+  //     'grep',
+  //     'find',
+  //     'ls',
+  //     'edit',
+  //     'contract_scan_backlog',
+  //     'contract_stage_complete',
+  //   ];
+  // }
   return undefined;
 };
 
@@ -246,7 +267,53 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
     await ensureServer();
     const label = this._workspaceLabel;
-    const existingWorkspaceId = await findWorkspace(label);
+    let existingWorkspaceId = await findWorkspace(label);
+
+    // 🔴 Stale-workspace guard (worktree mode only). The workspace label is
+    // contract-scoped (aikami-contract-C-XXX), NOT run-scoped — a leftover
+    // workspace from a TERMINAL run of the same contract would otherwise be
+    // adopted below, silently handing the new run the OLD run's checkout and
+    // branch (cross-run contamination). The branch embeds the runId token
+    // (contract-task-c-XXX-<runToken>), so the branch is the discriminator:
+    // adopt only when it matches THIS run; otherwise tear the stale workspace
+    // down and provision fresh. Root mode is exempt — aikami-{mode} is shared
+    // with dev services and must never be closed.
+    if (existingWorkspaceId && !this._rootMode) {
+      const expected = this._baseContractBranch();
+      const singleSuffix = new RegExp(`^${expected}-[0-9a-z]{1,6}$`);
+      const entry = (await listWorktrees(this._repoRoot)).find(
+        (w) => w.openWorkspaceId === existingWorkspaceId,
+      );
+      // Only tear down when the branch mismatch is CONFIRMED. An absent
+      // entry (workspace open but no worktree record) is unknown — never
+      // destroy a workspace whose branch we cannot verify.
+      const isStale =
+        entry !== undefined && entry.branch !== expected && !singleSuffix.test(entry.branch);
+      if (isStale) {
+        console.log(
+          `🧹 Removing stale contract workspace (branch ${entry?.branch ?? 'unknown'} ≠ ${expected}).`,
+        );
+        try {
+          await removeWorktree({
+            workspaceId: existingWorkspaceId,
+            repoRoot: this._repoRoot,
+            // Keep the old branch — it may back an open PR (pr_created).
+            // Only the workspace + checkout go away; `bun run workspace:cleanup`
+            // handles branches.
+            branch: undefined,
+          });
+          // Give herdr a beat to reap the workspace before we recreate it.
+          await sleep(500);
+          existingWorkspaceId = null;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `⚠️  Could not remove stale workspace ${existingWorkspaceId}: ${msg.slice(0, 200)} — ` +
+              'proceeding with the existing workspace (recovery path).',
+          );
+        }
+      }
+    }
     if (existingWorkspaceId) {
       const tabs = await herdrJson<TabListResult>([
         'tab',

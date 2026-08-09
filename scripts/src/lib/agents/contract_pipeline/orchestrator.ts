@@ -1,12 +1,13 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   unlinkSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -42,7 +43,12 @@ import type {
   ReviewDecision,
   RunManifest,
 } from './types.ts';
-import { MAX_AUTOFIX_CYCLES, PIPELINE_BASE_BRANCH, STATUS_TO_START_STAGE } from './types.ts';
+import {
+  isTerminalStage,
+  MAX_AUTOFIX_CYCLES,
+  PIPELINE_BASE_BRANCH,
+  STATUS_TO_START_STAGE,
+} from './types.ts';
 
 /** Hard wall-clock caps — only hit when herdr is unreachable. Working agents never killed. */
 const STAGE_HARD_CAPS: Record<string, number> = {
@@ -63,8 +69,6 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
 
 const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-const TERMINAL_STAGES: readonly ContractPipelineStage[] = ['pr_created', 'merged'];
-
 const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
   const d = join(options.cwd, '.pi/contract-runs');
   if (!existsSync(d)) {
@@ -76,7 +80,7 @@ const findPreviousRuns = (options: { contractId: string; cwd: string }): string 
     .sort()
     .reverse()) {
     const m = readManifest({ runId: rid, cwd: options.cwd });
-    if (m && !TERMINAL_STAGES.includes(m.currentStage)) {
+    if (m && !isTerminalStage(m.currentStage)) {
       return rid;
     }
   }
@@ -175,14 +179,45 @@ const readReviewDecision = (path: string, runId: string): ContractReviewDecision
   }
 };
 
+/**
+ * Thrown when the review pane is closed without recording a decision.
+ * Distinct from a 'reject' decision: abandonment must NOT close the PR —
+ * the run transitions to blocked with a resume hint instead.
+ */
+export class ReviewAbandonedError extends Error {
+  constructor(summary: string) {
+    super(summary);
+    this.name = 'ReviewAbandonedError';
+  }
+}
+
 const waitForReviewDecision = async (options: {
   path: string;
   runId: string;
+  /** Polled periodically; return true when the review pane is gone (tab
+   *  closed without a decision). Lets the orchestrator stop waiting instead
+   *  of spinning forever at 1 Hz holding the contract lock. */
+  isPaneAlive?: () => Promise<boolean>;
 }): Promise<ContractReviewDecision> => {
+  let poll = 0;
   while (true) {
     const d = readReviewDecision(options.path, options.runId);
     if (d) {
       return d;
+    }
+    poll += 1;
+    if (options.isPaneAlive && poll % 30 === 0) {
+      const alive = await options.isPaneAlive().catch(() => true);
+      if (!alive) {
+        // Abandoned review: the tab was closed without a decision. Throw a
+        // dedicated signal instead of fabricating a 'reject' decision — a
+        // fabricated reject would close the PR in the normal/blocked review
+        // paths. The call site transitions to blocked without touching GitHub.
+        throw new ReviewAbandonedError(
+          'The review tab was closed without a decision. Resume with `bun run contract ' +
+            `--resume ${options.runId}\` — the branch and worktree are preserved.`,
+        );
+      }
     }
     await sleep(1_000);
   }
@@ -419,25 +454,21 @@ const SOUNDS_DIR = join(process.cwd(), '.pi/sounds');
 
 const playSound = (name: string): void => {
   const path = join(SOUNDS_DIR, `${name}.wav`);
-  if (!existsSync(path)) {
-    return;
-  }
   // Check file size — skip if still a placeholder (0 bytes).
   try {
-    const stat = readFileSync(path);
-    if (stat.length === 0) {
+    if (!existsSync(path) || statSync(path).size === 0) {
       return;
     }
   } catch {
     return;
   }
-  // Try common Linux audio players.
+  // Try common Linux audio players. Quote the path (spaces are legal in it).
   for (const cmd of ['aplay', 'paplay', 'ffplay -nodisp -autoexit', 'play']) {
     try {
-      execSync(`${cmd} ${path}`, {
+      execSync(`${cmd} '${path}'`, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 5000,
+        timeout: 3000,
       });
       return;
     } catch {
@@ -464,6 +495,13 @@ const syncMainOnMerge = (repoRoot: string): void => {
         timeout: 30000,
       });
       console.log('\n📥 Pulled latest main\n');
+    } else {
+      // Root mode (`--root`) leaves the checkout on contract/C-XXX after a
+      // merge. Never surprise the user by switching their main working tree
+      // — print the exact commands instead of silently doing nothing.
+      console.log(`\nℹ️  Skipped main sync — repo is on \`${branch}\` (not main).`);
+      console.log('   After the merge, sync manually:');
+      console.log('     git checkout main && git pull --ff-only origin main\n');
     }
   } catch (e: unknown) {
     console.warn(
@@ -472,25 +510,140 @@ const syncMainOnMerge = (repoRoot: string): void => {
   }
 };
 
-const cleanupAfterMerge = async (options: {
-  repoRoot: string;
-  workspacePath: string;
-  branchName: string;
+const buildTerminalNotification = (options: {
+  stage: ContractPipelineStage;
   contractId: string;
+  prUrl?: string;
+  branch?: string;
+}): string => {
+  const pr = options.prUrl ? ` PR: ${options.prUrl}` : '';
+  const branch = options.branch ? ` Branch: \`${options.branch}\`.` : '';
+  const cleanupHint =
+    'Workspace cleanup is manual — the user runs `bun run workspace:cleanup` ' +
+    '(use `--pr-merged` after a merge) once they are done reading.';
+  const header =
+    options.stage === 'merged'
+      ? '✅ Pipeline complete — PR merged.'
+      : options.stage === 'pr_created'
+        ? '✅ Pipeline complete — PR ready for review.'
+        : '🚫 Pipeline blocked — see the summary above.';
+  return [
+    `## ${header}`,
+    `Contract ${options.contractId} finished at \`${options.stage}\`.${pr}${branch}`,
+    '',
+    'The orchestrator has finished — no further pipeline work will run. Read the',
+    'summary above and close this tab whenever you are ready.',
+    cleanupHint,
+    '🔴 Do NOT run `bun run workspace:cleanup`, `herdr worktree remove`, or any',
+    'cleanup command — this tab IS the pipeline workspace; cleanup would kill',
+    'your own session. The workspace is preserved for you to inspect.',
+    '',
+    'Reply with a single line acknowledging completion (no commands).',
+  ].join('\n');
+};
+
+/**
+ * Remove the run's worktree + branch on terminal exits where auto-clean
+ * applies (merged, or blocked/pr_created with no live review pane).
+ */
+const cleanupRunWorktree = async (options: {
+  adapter: ContractHerdrAdapterInterface;
+  manifest: RunManifest;
+  repoRoot: string;
 }): Promise<void> => {
+  const wsPath = options.adapter.getWorkspacePath();
+  if (!wsPath) {
+    return;
+  }
+  const branchName = options.manifest.reconciliation?.headBranch;
+  // 🔴 `pr_created` leaves an OPEN PR — deleting its head branch closes the
+  // PR on GitHub. `blocked` may still hold the implementer's pushed work for
+  // recovery (the blocked summary tells the user to fix issues manually).
+  // Only delete the remote branch when no PR remains and the work is merged.
+  const keepRemoteBranch =
+    options.manifest.currentStage === 'pr_created' || options.manifest.currentStage === 'blocked';
   try {
     await removeWorktree({
-      checkoutPath: options.workspacePath,
+      checkoutPath: wsPath,
       repoRoot: options.repoRoot,
-      branch: options.branchName,
-      deleteRemoteBranch: true,
+      branch: keepRemoteBranch ? undefined : branchName,
+      deleteRemoteBranch: !keepRemoteBranch,
     });
-    console.log(`\n🧹 Worktree cleaned: ${options.branchName}\n`);
-  } catch (e: unknown) {
-    console.warn(
-      `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+    console.log(
+      `\n🧹 Worktree cleaned${keepRemoteBranch ? ' (remote branch kept)' : ''}: ${branchName ?? 'unknown'}\n`,
     );
+  } catch (e: unknown) {
+    console.warn(`⚠️  Cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
   }
+};
+
+/**
+ * Terminal-exit workspace handling — the single funnel for EVERY way the
+ * pipeline ends (merged / pr_created / blocked / crash catch-path).
+ *
+ * 🔴 Default: KEEP the pipeline workspace alive so the review tab (and its
+ * summary) survives for the user to read. The orchestrator posts a
+ * completion notification into the tab; the user closes it manually and
+ * cleans up with `bun run workspace:cleanup`. Auto-clean only when nobody
+ * is reading the tab:
+ *   - CONTRACT_PIPELINE_AUTO_CLEANUP=1      → always clean (escape hatch)
+ *   - pure YOLO (autofix cycles not exhausted) → clean (no human in the loop)
+ *   - no live review pane                    → clean (crash/block before review)
+ */
+const finalizeWorkspace = async (options: {
+  adapter: ContractHerdrAdapterInterface;
+  manifest: RunManifest;
+  repoRoot: string;
+  yolo?: boolean;
+}): Promise<void> => {
+  const { manifest } = options;
+  const stage = manifest.currentStage;
+  const reviewPaneAlive =
+    manifest.reviewPaneId !== undefined &&
+    (await options.adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false));
+  const pureYolo = options.yolo === true && manifest.autofixCycles < MAX_AUTOFIX_CYCLES;
+  const keepAlive =
+    process.env.CONTRACT_PIPELINE_AUTO_CLEANUP !== '1' && reviewPaneAlive && !pureYolo;
+
+  if (keepAlive) {
+    const wsPath = options.adapter.getWorkspacePath();
+    console.log(`\n🧘 Workspace preserved — the review tab stays open for you.`);
+    console.log(`   Read the final summary in the review tab, then close it when done.`);
+    if (wsPath) {
+      console.log(
+        `   Manual cleanup: bun run workspace:cleanup${stage === 'merged' ? ' --pr-merged' : ''}\n`,
+      );
+    } else {
+      // Root mode: no worktree — the contract branch stays checked out.
+      console.log(
+        `   When done, switch back to main: git checkout main && git pull --ff-only origin main\n`,
+      );
+    }
+    try {
+      await options.adapter.sendReviewMessage({
+        paneId: manifest.reviewPaneId as string,
+        message: buildTerminalNotification({
+          stage,
+          contractId: manifest.contractId,
+          prUrl: manifest.prUrl,
+          branch: manifest.reconciliation?.headBranch,
+        }),
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`⚠️  Could not notify review pane: ${msg.slice(0, 200)}`);
+    }
+    pipelineLog({
+      runId: manifest.runId,
+      cwd: options.repoRoot,
+      message: `Pipeline terminal at ${stage}. Workspace preserved; review tab notified. Manual cleanup required.`,
+    });
+    return;
+  }
+
+  // Every non-keepAlive terminal stage funnels through cleanupRunWorktree,
+  // which decides remote-branch deletion from the manifest stage.
+  await cleanupRunWorktree({ adapter: options.adapter, manifest, repoRoot: options.repoRoot });
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
@@ -978,12 +1131,19 @@ export const runContractPipeline = async (options: {
           'review',
           'decision.json',
         );
+        // Read any decision left behind by a crashed orchestrator BEFORE
+        // clearing the file — the file may be the only copy (crash between
+        // the captain recording the decision and writeManifest persisting it
+        // to the run manifest). Process it immediately; do NOT nudge the
+        // captain first (the nudge would kick it into redoing work the
+        // orchestrator is about to consume).
+        const existingDecision = readReviewDecision(reviewPath, manifest.runId);
         if (existsSync(reviewPath)) {
           unlinkSync(reviewPath);
         }
 
-        // Reconnect to live pane on resume.
-        if (manifest.reviewPaneId) {
+        // Reconnect to live pane on resume — only when no decision is pending.
+        if (!existingDecision && manifest.reviewPaneId) {
           const alive = await adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false);
           if (alive) {
             if (manifest.reviewDecision === undefined) {
@@ -997,10 +1157,6 @@ export const runContractPipeline = async (options: {
             writeManifest({ manifest, cwd: options.repoRoot });
           }
         }
-
-        // If a decision already exists (pipeline died after it was recorded),
-        // process it immediately instead of starting a new session.
-        const existingDecision = readReviewDecision(reviewPath, manifest.runId);
         if (existingDecision) {
           manifest.reviewDecision = existingDecision;
           console.log(`📋 Processing existing review decision: ${existingDecision.decision}`);
@@ -1065,9 +1221,30 @@ export const runContractPipeline = async (options: {
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
-        const decision =
-          manifest.reviewDecision ??
-          (await waitForReviewDecision({ path: reviewPath, runId: manifest.runId }));
+        let decision: ContractReviewDecision;
+        try {
+          decision =
+            manifest.reviewDecision ??
+            (await waitForReviewDecision({
+              path: reviewPath,
+              runId: manifest.runId,
+              isPaneAlive: manifest.reviewPaneId
+                ? () => adapter.isPaneAlive(manifest.reviewPaneId as string).catch(() => true)
+                : undefined,
+            }));
+        } catch (e: unknown) {
+          if (e instanceof ReviewAbandonedError) {
+            // Tab closed without a decision — do NOT fabricate a 'reject'
+            // (that would close the PR). Transition to blocked with a resume
+            // hint; the branch and worktree stay intact for `--resume`.
+            console.log(`\n🛑 Review abandoned (tab closed): ${e.message}\n`);
+            manifest.blockedReason = e.message;
+            manifest = transition({ manifest, next: 'blocked' });
+            writeManifest({ manifest, cwd: options.repoRoot });
+            continue;
+          }
+          throw e;
+        }
         manifest.reviewDecision = decision;
         if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');
@@ -1121,19 +1298,12 @@ export const runContractPipeline = async (options: {
               manifest = transition({ manifest, next: 'pr_created' });
             } else {
               // In YOLO mode, Captain already merged via gh_merge_pr.
-              // Orchestrator just syncs main + cleans up.
+              // Orchestrator just syncs main; workspace handling is deferred
+              // to finalizeWorkspace after the loop.
               if (options.yolo) {
                 syncMainOnMerge(options.repoRoot);
-                if (headBranch && adapter.getWorkspacePath()) {
-                  await cleanupAfterMerge({
-                    repoRoot: options.repoRoot,
-                    workspacePath: adapter.getWorkspacePath(),
-                    branchName: headBranch,
-                    contractId: manifest.contractId,
-                  });
-                }
                 manifest = transition({ manifest, next: 'merged' });
-                console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+                console.log(`\n🚀 PR merged: ${prUrl}\n`);
               } else {
                 try {
                   execSync(`gh pr ready ${prUrl}`, {
@@ -1143,23 +1313,15 @@ export const runContractPipeline = async (options: {
                     timeout: 15000,
                   });
                 } catch {}
-                execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
+                execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
                   encoding: 'utf-8',
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 60000,
                 });
                 syncMainOnMerge(options.repoRoot);
-                if (headBranch && adapter.getWorkspacePath()) {
-                  await cleanupAfterMerge({
-                    repoRoot: options.repoRoot,
-                    workspacePath: adapter.getWorkspacePath(),
-                    branchName: headBranch,
-                    contractId: manifest.contractId,
-                  });
-                }
                 manifest = transition({ manifest, next: 'merged' });
-                console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+                console.log(`\n🚀 PR merged: ${prUrl}\n`);
               }
             }
           } else if (decision.decision === 'change') {
@@ -1218,25 +1380,18 @@ export const runContractPipeline = async (options: {
           manifest = transition({ manifest, next: 'pr_created' });
         } else if (decision.decision === 'merge') {
           // In YOLO mode, the Captain already executed the merge via gh_merge_pr.
-          // The orchestrator just syncs main and cleans up.
+          // The orchestrator just syncs main; workspace handling is deferred
+          // to finalizeWorkspace after the loop.
           if (options.yolo) {
-            console.log('\n🚀 YOLO: Captain merged — syncing main + cleanup.\n');
+            console.log('\n🚀 YOLO: Captain merged — syncing main.\n');
             syncMainOnMerge(options.repoRoot);
-            if (headBranch && adapter.getWorkspacePath()) {
-              await cleanupAfterMerge({
-                repoRoot: options.repoRoot,
-                workspacePath: adapter.getWorkspacePath(),
-                branchName: headBranch,
-                contractId: manifest.contractId,
-              });
-            }
             manifest = transition({ manifest, next: 'merged' });
             pipelineLog({
               runId: manifest.runId,
               cwd: options.repoRoot,
               message: `PR merged by Captain: ${prUrl}`,
             });
-            console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+            console.log(`\n🚀 PR merged: ${prUrl}\n`);
           } else {
             // Non-YOLO: orchestrator handles the merge.
             try {
@@ -1247,28 +1402,20 @@ export const runContractPipeline = async (options: {
                 timeout: 15000,
               });
             } catch {}
-            execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
+            execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],
               cwd: options.repoRoot,
               timeout: 60000,
             });
             syncMainOnMerge(options.repoRoot);
-            if (headBranch && adapter.getWorkspacePath()) {
-              await cleanupAfterMerge({
-                repoRoot: options.repoRoot,
-                workspacePath: adapter.getWorkspacePath(),
-                branchName: headBranch,
-                contractId: manifest.contractId,
-              });
-            }
             manifest = transition({ manifest, next: 'merged' });
             pipelineLog({
               runId: manifest.runId,
               cwd: options.repoRoot,
               message: `PR merged: ${prUrl}`,
             });
-            console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+            console.log(`\n🚀 PR merged: ${prUrl}\n`);
           }
         } else if (decision.decision === 'change') {
           pipelineLog({
@@ -1322,34 +1469,51 @@ export const runContractPipeline = async (options: {
       playSound('pipeline-complete');
     }
 
-    // Clean up worktree + branch on any terminal exit (merged, blocked, pr_created).
-    // cleanupAfterMerge handles the happy path. This handles blocked/rejected exits.
-    if (manifest.currentStage !== 'merged') {
-      const wsPath = adapter.getWorkspacePath();
-      const branchName = manifest.reconciliation?.headBranch;
-      // 🔴 `pr_created` leaves an OPEN PR — deleting its head branch closes
-      // the PR on GitHub. Only delete the remote branch when no PR remains.
-      const keepRemoteBranch = manifest.currentStage === 'pr_created';
-      if (wsPath) {
-        try {
-          await removeWorktree({
-            checkoutPath: wsPath,
-            repoRoot: options.repoRoot,
-            branch: keepRemoteBranch ? undefined : branchName,
-            deleteRemoteBranch: !keepRemoteBranch,
-          });
-          console.log(
-            `\n🧹 Worktree cleaned${keepRemoteBranch ? ' (remote branch kept for open PR)' : ''}: ${branchName ?? 'unknown'}\n`,
-          );
-        } catch (e: unknown) {
-          console.warn(
-            `⚠️  Cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
-          );
-        }
-      }
-    }
+    // Terminal workspace handling — one funnel for merged / pr_created /
+    // blocked / crash. Default keeps the workspace alive (review tab stays
+    // open with a completion notification); auto-clean applies only when no
+    // human is reading the tab (pure YOLO, early crash before review, or
+    // CONTRACT_PIPELINE_AUTO_CLEANUP=1).
+    await finalizeWorkspace({ adapter, manifest, repoRoot: options.repoRoot, yolo: options.yolo });
 
     return manifest;
+  } catch (e: unknown) {
+    // 🔴 Infrastructure failures (herdr hiccup, git error, gh failure) must
+    // not vanish silently. Without this catch, an exception left the manifest
+    // at a non-terminal stage, the launcher never saw a ready file, and the
+    // next `bun run contract` resumed the same broken state forever (the
+    // C-375 crash loop — three byte-identical failures). Record the failure
+    // as a terminal `blocked` state so findPreviousRuns skips it, attempt
+    // worktree cleanup, then rethrow so the launcher surfaces the real error.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`\n❌ Pipeline crashed: ${msg}`);
+    try {
+      manifest.blockedReason = `Infrastructure failure: ${msg.slice(0, 1500)}`;
+      manifest = transition({ manifest, next: 'blocked' });
+      writeManifest({ manifest, cwd: options.repoRoot });
+      pipelineLog({
+        runId: manifest.runId,
+        cwd: options.repoRoot,
+        message: `Pipeline blocked after infrastructure failure: ${msg.slice(0, 300)}`,
+      });
+    } catch (persistErr: unknown) {
+      console.warn(
+        `⚠️  Could not persist blocked state: ${persistErr instanceof Error ? persistErr.message : String(persistErr)}`,
+      );
+    }
+    try {
+      await finalizeWorkspace({
+        adapter,
+        manifest,
+        repoRoot: options.repoRoot,
+        yolo: options.yolo,
+      });
+    } catch (finalizeErr: unknown) {
+      console.warn(
+        `⚠️  Workspace finalization failed: ${finalizeErr instanceof Error ? finalizeErr.message : String(finalizeErr)}`,
+      );
+    }
+    throw e;
   } finally {
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });
   }

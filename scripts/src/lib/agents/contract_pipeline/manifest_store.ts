@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import type { ContractPipelineStage, RunManifest } from './types.ts';
+import { type ContractPipelineStage, isTerminalStage, type RunManifest } from './types.ts';
 
 const RUNS_DIR = '.pi/contract-runs';
 const _lockCleanups = new Map<
@@ -105,8 +105,7 @@ export const acquireLock = async (options: {
         const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
           currentStage?: string;
         };
-        const terminalStages = new Set(['blocked', 'merged', 'pr_created']);
-        if (raw.currentStage && terminalStages.has(raw.currentStage)) {
+        if (raw.currentStage && isTerminalStage(raw.currentStage as ContractPipelineStage)) {
           // Run is in a terminal state — orphaned lock. Break it.
           console.log(
             `🔓 Breaking stale lock for ${existing.contractId} (run ${existing.runId} at ${raw.currentStage}).`,
@@ -195,6 +194,7 @@ const isPipelineStage = (value: unknown): value is ContractPipelineStage =>
     'verify',
     'review',
     'accepted',
+    'reconciling',
     'blocked',
     'pr_created',
     'merged',

@@ -15,12 +15,12 @@
 // uncached assets degrade to the C-372 static-URL fallback.
 
 import { ASSET_CATEGORIES } from '@aikami/constants';
-import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import { sha256Hex } from './asset_hasher.ts';
 import './blob_url_loader.ts';
 import type { AssetCacheBackend } from './cache_backend.ts';

@@ -127,7 +127,8 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
 
       expect(service.state.preferredModel).toBe('');
-      expect(service.state.text.apiKeys).toEqual({});
+      // C-230: API keys now live in connections[] (no text.apiKeys).
+      expect(service.state.connections).toEqual([]);
       expect(service.state.models).toEqual([]);
       expect(service.state.memory.contextWindow).toBe(8192);
       expect(service.state.voice.engine).toBe('kokoro');
@@ -146,43 +147,81 @@ describe('ConfigService — C-079', () => {
     });
   });
 
-  describe('AC-2: API key mutations', () => {
-    test('setApiKeys should merge keys into state', async () => {
-      const service = await createService();
-      service.setTextApiKey('openrouter', 'sk-or-abc123');
+  describe('AC-2: Connection API key management (C-230)', () => {
+    const _testParams = {
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+      repetitionPenalty: 1.1,
+      presencePenalty: 0,
+      maxTokens: 1024,
+      contextSize: 4096,
+    };
 
-      expect(service.state.text.apiKeys.openrouter).toBe('sk-or-abc123');
+    const _textConn = (apiKey: string, provider = 'openrouter') => ({
+      name: 'Test provider',
+      provider,
+      apiKey,
+      baseUrl: '',
+      model: 'provider/model',
+      generationParams: _testParams,
+      isDefault: false,
     });
 
-    test('setApiKeys should preserve existing keys on partial update', async () => {
+    test('addConnection stores the API key readable via getApiKey', async () => {
       const service = await createService();
-      service.setTextApiKey('openrouter', 'sk-or-abc');
-      service.setTextApiKey('openai', 'sk-oa-xyz');
-      service.setTextApiKey('gemini', 'gm-123');
+      service.addConnection(_textConn('sk-or-abc123'));
 
-      expect(service.state.text.apiKeys.openrouter).toBe('sk-or-abc');
-      expect(service.state.text.apiKeys.openai).toBe('sk-oa-xyz');
-      expect(service.state.text.apiKeys.gemini).toBe('gm-123');
+      expect(service.getApiKey('openrouter')).toBe('sk-or-abc123');
     });
 
-    test('setApiKeys should overwrite existing key', async () => {
+    test('multiple providers keep independent API keys', async () => {
       const service = await createService();
-      service.setTextApiKey('openrouter', 'old');
-      service.setTextApiKey('openrouter', 'new');
+      service.addConnection(_textConn('sk-or-abc', 'openrouter'));
+      service.addConnection(_textConn('sk-oa-xyz', 'openai'));
+      service.addConnection(_textConn('gm-123', 'gemini'));
 
-      expect(service.state.text.apiKeys.openrouter).toBe('new');
+      expect(service.getApiKey('openrouter')).toBe('sk-or-abc');
+      expect(service.getApiKey('openai')).toBe('sk-oa-xyz');
+      expect(service.getApiKey('gemini')).toBe('gm-123');
     });
 
-    test('setApiKeys with undefined provider should keep it undefined', async () => {
+    test('updateConnection replaces the API key', async () => {
       const service = await createService();
-      expect(service.state.text.apiKeys.anthropic).toBeUndefined();
+      const id = service.addConnection(_textConn('old'));
+      service.updateConnection(id, { apiKey: 'new' });
+
+      expect(service.getApiKey('openrouter')).toBe('new');
+    });
+
+    test('getApiKey returns undefined for unknown provider', async () => {
+      const service = await createService();
+      expect(service.getApiKey('anthropic')).toBeUndefined();
     });
   });
 
   describe('AC-2: save encrypts API keys', () => {
+    const _testParams = {
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+      repetitionPenalty: 1.1,
+      presencePenalty: 0,
+      maxTokens: 1024,
+      contextSize: 4096,
+    };
+
     test('save should call encrypt with vault payload', async () => {
       const service = await createService();
-      service.setTextApiKey('openrouter', 'sk-secret');
+      service.addConnection({
+        name: 'OpenRouter',
+        provider: 'openrouter',
+        apiKey: 'sk-secret',
+        baseUrl: '',
+        model: 'openrouter/auto',
+        generationParams: _testParams,
+        isDefault: true,
+      });
 
       await service.save();
 
@@ -209,7 +248,15 @@ describe('ConfigService — C-079', () => {
 
     test('save should NOT include API keys in plain localStorage', async () => {
       const service = await createService();
-      service.setTextApiKey('openrouter', 'sk-secret');
+      service.addConnection({
+        name: 'OpenRouter',
+        provider: 'openrouter',
+        apiKey: 'sk-secret',
+        baseUrl: '',
+        model: 'openrouter/auto',
+        generationParams: _testParams,
+        isDefault: true,
+      });
 
       await service.save();
 
@@ -219,7 +266,8 @@ describe('ConfigService — C-079', () => {
         throw new Error('Expected plain config to be defined');
       }
       const parsed = JSON.parse(plain);
-      expect(parsed.text?.apiKeys).toBeUndefined();
+      // Connections (API keys) are only in the encrypted vault.
+      expect(parsed.connections).toBeUndefined();
     });
   });
 
@@ -230,14 +278,47 @@ describe('ConfigService — C-079', () => {
       expect(decryptCalls).toBe(1);
     });
 
-    test('load should restore API keys from vault', async () => {
-      // Pre-populate vault
-      vaultStore.set('__vault', JSON.stringify({ apiKeys: { openrouter: 'sk-restored' } }));
+    test('load should restore connections from vault', async () => {
+      // Pre-populate vault with stored connections (source: 'stored' survives
+      // the load-time pruning filter). The default connection (conn-1) is NOT
+      // the first match, so the assertion proves default selection rather than
+      // first-match fallback.
+      vaultStore.set(
+        '__vault',
+        JSON.stringify({
+          connections: [
+            {
+              id: 'conn-2',
+              name: 'OpenRouter (legacy)',
+              provider: 'openrouter',
+              apiKey: 'sk-fallback',
+              baseUrl: '',
+              model: 'openrouter/auto',
+              generationParams: {},
+              isDefault: false,
+              source: 'stored',
+            },
+            {
+              id: 'conn-1',
+              name: 'OpenRouter',
+              provider: 'openrouter',
+              apiKey: 'sk-restored',
+              baseUrl: '',
+              model: 'openrouter/auto',
+              generationParams: {},
+              isDefault: true,
+              source: 'stored',
+            },
+          ],
+          defaultConnectionId: 'conn-1',
+        }),
+      );
 
       const service = await createService();
       await service.load();
 
-      expect(service.state.text.apiKeys.openrouter).toBe('sk-restored');
+      // The default connection (conn-1) wins over the first match (conn-2).
+      expect(service.getApiKey('openrouter')).toBe('sk-restored');
     });
 
     test('load should restore plain config from localStorage', async () => {
@@ -285,7 +366,7 @@ describe('ConfigService — C-079', () => {
       await service.load();
 
       expect(service.isLoaded).toBe(true);
-      expect(Object.keys(service.state.text.apiKeys)).toHaveLength(0);
+      expect(service.state.connections).toHaveLength(0);
     });
 
     test('load should handle malformed plain config gracefully', async () => {
@@ -302,13 +383,21 @@ describe('ConfigService — C-079', () => {
   describe('AC-2: reset', () => {
     test('reset should clear all state', async () => {
       const service = await createService();
-      service.setTextApiKey('openrouter', 'sk-secret');
+      service.addConnection({
+        name: 'OpenRouter',
+        provider: 'openrouter',
+        apiKey: 'sk-secret',
+        baseUrl: '',
+        model: 'openrouter/auto',
+        generationParams: {},
+        isDefault: true,
+      });
       service.setPreferredModel('claude-3');
 
       await service.reset();
 
       expect(service.state.preferredModel).toBe('');
-      expect(Object.keys(service.state.text.apiKeys)).toHaveLength(0);
+      expect(service.state.connections).toHaveLength(0);
     });
 
     test('reset should call clearVault', async () => {
@@ -485,7 +574,6 @@ describe('ConfigService × AiGateway — C-322 connection visibility', () => {
     const { configService } = await _getSingletons();
     configService.state.connections = [];
     configService.state.defaultConnectionId = null;
-    configService.state.text.apiKeys = {};
   };
 
   beforeEach(async () => {
@@ -528,14 +616,14 @@ describe('ConfigService × AiGateway — C-322 connection visibility', () => {
     expect(result.mode).toBe('byok');
   });
 
-  test('a cloud connection using a shared provider API key (text.apiKeys) is configured', async () => {
+  test('a cloud connection with its own API key is configured', async () => {
     const { configService, aiGatewayService } = await _getSingletons();
 
-    configService.setTextApiKey('openrouter', 'sk-or-shared');
+    // C-230: API keys live on the connection itself (no shared text.apiKeys).
     configService.addConnection({
-      name: 'OpenRouter (shared key)',
+      name: 'OpenRouter (own key)',
       provider: 'openrouter',
-      apiKey: '',
+      apiKey: 'sk-or-shared',
       baseUrl: '',
       model: 'openrouter/auto',
       generationParams: _params,

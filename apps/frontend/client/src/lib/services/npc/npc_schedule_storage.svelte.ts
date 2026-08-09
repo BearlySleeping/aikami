@@ -4,12 +4,12 @@
 // Replaces Firestore with the local SQLite database via LocalDatabaseInterface.
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { NpcSchedule } from '@aikami/types';
 
 // ---------------------------------------------------------------------------

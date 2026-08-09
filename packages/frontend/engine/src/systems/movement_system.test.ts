@@ -2,17 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
-import { Position, registerPositionObservers } from '../components/position.ts';
-import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
+import { Position, registerPositionObservers } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
+import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import type { CollisionGrid } from './collision_system.ts';
-import {
-  insertIntoSpatialGrid,
-  resetCollisionGrid,
-  setCollisionGrid,
-} from './collision_system.ts';
+import { insertIntoSpatialGrid, resetCollisionGrid, setCollisionGrid } from './collision_system.ts';
 import { updateMovement } from './movement_system.ts';
 
 // ---------------------------------------------------------------------------

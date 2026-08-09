@@ -289,14 +289,23 @@ export class GameOverlayService
   extends BaseFrontendClass<GameOverlayServiceOptions>
   implements GameOverlayServiceInterface
 {
-  /** Overlay stack — the top entry is the active overlay. Empty stack = no overlay. */
-  overlayStack = $state<OverlayStackEntry[]>([]);
+  /** Internal overlay stack — the top entry is the active overlay. Empty stack = no overlay. */
+  private _overlayStack = $state<OverlayStackEntry[]>([]);
+
+  /**
+   * Runtime-readonly view of the overlay stack (defensive copy so external
+   * callers cannot mutate internal state; the interface type is readonly).
+   */
+  get overlayStack(): readonly OverlayStackEntry[] {
+    return [...this._overlayStack];
+  }
+
   dialogueNpc = $state<DialogueNpcData | undefined>(undefined);
 
   /** Derived — top of the stack, or NONE if empty. */
   get activeOverlay(): GameOverlayType {
-    return this.overlayStack.length > 0
-      ? this.overlayStack[this.overlayStack.length - 1].type
+    return this._overlayStack.length > 0
+      ? this._overlayStack[this._overlayStack.length - 1].type
       : 'NONE';
   }
 
@@ -310,7 +319,7 @@ export class GameOverlayService
   }
 
   get stackDepth(): number {
-    return this.overlayStack.length;
+    return this._overlayStack.length;
   }
   isSaving = $state<boolean>(false);
   saveMessage = $state<string | undefined>(undefined);
@@ -417,7 +426,7 @@ export class GameOverlayService
     // Capture focus before opening overlay
     const previousFocus = document.activeElement as HTMLElement | undefined;
 
-    this.overlayStack.push({ type, previousFocus });
+    this._overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
 
     // Hide interaction prompt whenever an overlay opens — avoids the
@@ -436,13 +445,13 @@ export class GameOverlayService
 
   /** @inheritdoc */
   popOverlay(): void {
-    if (this.overlayStack.length === 0) {
+    if (this._overlayStack.length === 0) {
       this.debug('overlay:pop:empty');
       return;
     }
 
-    const entry = this.overlayStack[this.overlayStack.length - 1];
-    this.overlayStack.pop();
+    const entry = this._overlayStack[this._overlayStack.length - 1];
+    this._overlayStack.pop();
     this.debug('overlay:pop', { type: entry.type, stackDepth: this.stackDepth });
 
     // Restore focus to the element that was focused before this overlay opened
@@ -465,8 +474,8 @@ export class GameOverlayService
   replaceOverlay(type: GameOverlayType): void {
     let previousFocusToRetain: HTMLElement | undefined;
 
-    if (this.overlayStack.length > 0) {
-      const removed = this.overlayStack.pop();
+    if (this._overlayStack.length > 0) {
+      const removed = this._overlayStack.pop();
       previousFocusToRetain = removed?.previousFocus;
     }
 
@@ -496,7 +505,7 @@ export class GameOverlayService
         return;
       }
 
-      this.overlayStack.push({ type, previousFocus: previousFocusToRetain });
+      this._overlayStack.push({ type, previousFocus: previousFocusToRetain });
       this.debug('overlay:replace', { type, stackDepth: this.stackDepth });
     } else {
       // Normal flow when stack was empty or no focus to retain
@@ -506,13 +515,13 @@ export class GameOverlayService
 
   /** @inheritdoc */
   clearStack(): void {
-    if (this.overlayStack.length === 0) {
+    if (this._overlayStack.length === 0) {
       return;
     }
     this.debug('overlay:clearStack', { previousDepth: this.stackDepth });
     // Restore focus to the element from the bottom-most entry
-    const bottomEntry = this.overlayStack[0];
-    this.overlayStack = [];
+    const bottomEntry = this._overlayStack[0];
+    this._overlayStack = [];
     this._restoreFocus(bottomEntry.previousFocus);
 
     // Restore interaction prompt when stack becomes empty

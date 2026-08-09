@@ -112,7 +112,8 @@ describe('MusicPlayerService — visibility', () => {
   });
 
   test('initialize restores visible state from storage', () => {
-    const MusicPlayerVisibleKey = 'aikami-music-player-visible';
+    // Key renamed to aikami:music-player:visible in commit 9ab4cae5.
+    const MusicPlayerVisibleKey = 'aikami:music-player:visible';
     localStorage.setItem(MusicPlayerVisibleKey, '1');
     musicPlayerService.initialize();
     expect(musicPlayerService.visible).toBe(true);

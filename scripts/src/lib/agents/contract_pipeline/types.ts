@@ -14,6 +14,24 @@ export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ??
 /** Maximum autofix cycles before YOLO degrades to manual review. */
 export const MAX_AUTOFIX_CYCLES = 2;
 
+/**
+ * Stages after which a run is done and can no longer be resumed.
+ *
+ * SINGLE source of truth — previously duplicated (and subtly diverged) in
+ * orchestrator.ts (findPreviousRuns, main-loop exit) and manifest_store.ts
+ * (lock-breaking). `blocked` is terminal: a deliberately-blocked or
+ * infrastructure-failed run must NOT be auto-resumed by findPreviousRuns,
+ * or it silently replays the same crash forever.
+ */
+export const TERMINAL_STAGES: readonly ContractPipelineStage[] = [
+  'pr_created',
+  'merged',
+  'blocked',
+];
+
+export const isTerminalStage = (stage: ContractPipelineStage): boolean =>
+  TERMINAL_STAGES.includes(stage);
+
 /** Pipeline stages for one contract run. */
 export type ContractPipelineStage =
   | 'prepare'

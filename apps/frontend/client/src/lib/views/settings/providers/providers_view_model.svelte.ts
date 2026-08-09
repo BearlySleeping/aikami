@@ -10,13 +10,14 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { configService } from '$lib/services/config/config_service.svelte.ts';
+import { LocalServiceDetector } from '$lib/services/config/local_service_detector.svelte';
 import {
   type AdvancedOverrides,
   buildVerifyHeaders,
   buildVerifyUrl,
   type CheckpointInfo,
   type ConfigState,
-  configService,
   DEFAULT_VOICE_ARCHETYPES,
   EMBEDDING_MODELS,
   EMOTION_METHODS,
@@ -26,7 +27,6 @@ import {
   type ImageConfig,
   imageGenerationService,
   KOKORO_VOICES,
-  LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
   MEMORY_TYPES,

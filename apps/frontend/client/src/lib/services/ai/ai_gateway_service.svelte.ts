@@ -35,9 +35,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
+import { configService } from '$lib/services/config/config_service.svelte.ts';
 import {
   aiSettingsService,
-  configService,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   ttsService,

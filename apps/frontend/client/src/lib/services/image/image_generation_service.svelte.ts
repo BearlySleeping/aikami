@@ -123,7 +123,12 @@ export class ImageGenerationService
     }
     // Check if there's actually a configured image connection with a usable provider.
     // A persisted checkpoint alone does not mean the service is reachable.
-    const connections = configService.state.connections ?? [];
+    let connections: Array<{ capability?: string; apiKey?: string; provider?: string }> = [];
+    try {
+      connections = configService.state.connections ?? [];
+    } catch {
+      // configService state may be unavailable (tests/SSR) — treat as no connections.
+    }
     const hasImageConn = connections.some(
       (c) => (c.capability ?? 'text') === 'image' && (c.apiKey || c.provider === 'comfyui'),
     );
@@ -137,7 +142,12 @@ export class ImageGenerationService
 
   /** Reads the persisted checkpoint from ConfigService if available. */
   private _readPersistedCheckpoint(): string {
-    return configService.state.image.checkpoint || '';
+    try {
+      return configService.state.image.checkpoint || '';
+    } catch {
+      // configService state may be unavailable (tests/SSR) — no persisted checkpoint.
+      return '';
+    }
   }
 
   isDemoMode(): boolean {
@@ -178,7 +188,7 @@ export class ImageGenerationService
 
       if (!this.selectedCheckpoint && this.checkpoints.length > 0) {
         // Restore persisted checkpoint if it matches an available one
-        const persisted = configService.state.image.checkpoint;
+        const persisted = this._readPersistedCheckpoint();
         if (persisted && this.checkpoints.some((c) => c.id === persisted)) {
           this.selectedCheckpoint = persisted;
         } else {

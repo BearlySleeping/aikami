@@ -842,8 +842,11 @@ const _fakeLocalDatabase = {
       return;
     }
 
-    // DELETE - remove all matching rows, not just the first one
-    const deleteMatch = sql.match(/FROM\s+(\w+)\s+WHERE\s+(\w+)\s*=\s*\?/);
+    // DELETE - remove all matching rows, not just the first one.
+    // Anchored to statements that actually start with DELETE so SELECT
+    // queries routed through execute() (e.g. inside transaction()) are
+    // never mistaken for deletes.
+    const deleteMatch = sql.match(/^\s*DELETE\s+FROM\s+(\w+)\s+WHERE\s+(\w+)\s*=\s*\?/);
     if (deleteMatch) {
       const tableName = deleteMatch[1]!.toLowerCase();
       const whereCol = deleteMatch[2]!.toLowerCase();

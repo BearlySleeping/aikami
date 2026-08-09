@@ -87,7 +87,47 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
   };
 
+  /** Minimal valid content-pack manifest served for loadContentPack(). */
+  const MockManifest = {
+    id: 'emberwatch',
+    name: 'Emberwatch',
+    version: '1.0.0',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    startingMapId: 'startingVillage',
+    maps: {
+      startingVillage: {
+        file: 'maps/starting_village.json',
+        name: 'Starting Village',
+      },
+    },
+    npcs: {},
+    items: {},
+    dialogues: {},
+  };
+
+  const _originalFetch = globalThis.fetch;
+
   beforeEach(async () => {
+    // Bun rejects relative URLs (ERR_INVALID_URL); serve the content-pack
+    // manifest that GameCompositionRoot.initialize() fetches via loadContentPack.
+    globalThis.fetch = mock((input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/content-packs/emberwatch/manifest.json')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(MockManifest),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+
     // Mock all dynamic imports that GameCompositionRoot.initialize() performs
     const stubService = () =>
       Object.assign(_createServiceStub(), {
@@ -149,6 +189,7 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     if (root.isInitialized) {
       await root.dispose();
     }
+    globalThis.fetch = _originalFetch;
   });
 
   // ── Idempotency ──

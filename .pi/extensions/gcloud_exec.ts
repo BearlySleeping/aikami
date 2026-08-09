@@ -104,7 +104,7 @@ function tokenizeCommand(input: string): string[] {
   let quote: '"' | "'" | null = null;
   let i = 0;
   while (i < input.length) {
-    const ch = input[i]!;
+    const ch = input.charAt(i);
     if (quote) {
       if (ch === '\\' && quote === '"' && i + 1 < input.length) {
         current += input[i + 1];

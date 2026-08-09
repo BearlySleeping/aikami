@@ -28,10 +28,10 @@ describe('WasmStorageAdapter IndexedDB snapshot fallback', () => {
 
     const sqlite3Module = await import('@sqlite.org/sqlite-wasm');
     const sqlite3 = (await sqlite3Module.default()) as Record<string, unknown>;
-    const oo1 = sqlite3['oo1'] as Record<string, unknown>;
-    const capi = sqlite3['capi'] as Record<string, unknown>;
-    const wasm = sqlite3['wasm'] as Record<string, unknown>;
-    const Db = oo1['DB'] as {
+    const oo1 = sqlite3.oo1 as Record<string, unknown>;
+    const capi = sqlite3.capi as Record<string, unknown>;
+    const wasm = sqlite3.wasm as Record<string, unknown>;
+    const Db = oo1.DB as {
       new (
         filename?: string,
         flags?: string,
@@ -43,8 +43,8 @@ describe('WasmStorageAdapter IndexedDB snapshot fallback', () => {
         isOpen(): boolean;
       };
     };
-    const exportFn = capi['sqlite3_js_db_export'] as (pDb: number) => Uint8Array;
-    const deserialize = capi['sqlite3_deserialize'] as (
+    const exportFn = capi.sqlite3_js_db_export as (pDb: number) => Uint8Array;
+    const deserialize = capi.sqlite3_deserialize as (
       pDb: number,
       schema: string,
       data: number,
@@ -52,7 +52,7 @@ describe('WasmStorageAdapter IndexedDB snapshot fallback', () => {
       bufferSize: number,
       flags: number,
     ) => number;
-    const allocFromTypedArray = wasm['allocFromTypedArray'] as (b: Uint8Array) => number;
+    const allocFromTypedArray = wasm.allocFromTypedArray as (b: Uint8Array) => number;
 
     // ── First session: write data, snapshot, close ──
     const db1 = new Db(':memory:', 'c');
