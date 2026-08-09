@@ -19,14 +19,10 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import {
-  createPixiApp,
-  type PixiAppInstance,
-  type PixiAppOptions,
-} from './pixi_app.ts';
-import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
-import { computeDepthOrder, type DepthSortable } from './rendering/depth_sort.ts';
+import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
+import { computeDepthOrder, type DepthSortable } from './rendering/depth_sort.ts';
+import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
@@ -401,6 +397,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * the stable tie-break for the y-depth sort (C-375 AC-2).
    */
   private _entitySpawnCounter = 0;
+
+  /**
+   * Last applied entity render order (eids, back-to-front) from the
+   * y-depth sort. Cached so an unchanged order skips the display-list
+   * removeChild/addChild churn (CodeRabbit review, C-375).
+   */
+  private _entityRenderOrder: number[] | undefined;
 
   /**
    * Per-entity revision counter for appearance loads.
@@ -1195,8 +1198,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }): Promise<void> {
     const { eid, frame, container } = options;
     try {
-      const { Sprite: PixiSprite } = await import('pixi.js');
-
       const resolution = this._propFrameResolver?.(frame);
       if (!resolution) {
         this.error('prop-frame-texture-missing', {
@@ -1213,7 +1214,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         child.destroy();
       }
 
-      const propSprite = new PixiSprite(resolution.texture);
+      const propSprite = new Sprite(resolution.texture);
       propSprite.width = 32;
       propSprite.height = 32;
       // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
@@ -2100,7 +2101,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         for (const spawnPoint of spawnPoints) {
           if (spawnPoint.type === 'prop') {
             const propId = spawnPoint.properties.propId;
-            const walkable = typeof propId === 'string' ? options.propWalkability[propId] : undefined;
+            const walkable =
+              typeof propId === 'string' ? options.propWalkability[propId] : undefined;
             if (typeof walkable === 'boolean') {
               spawnPoint.properties.isWalkable = walkable;
             }
@@ -2499,20 +2501,34 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const world = this._worldContainer;
       const items: DepthSortable[] = [];
       for (const [eid, entry] of this._renderEntries) {
-        items.push({ eid, y: entry.displayObject.y, order: entry.spawnOrder ?? eid });
+        items.push({ eid, y: entry.displayObject.y, order: entry.spawnOrder });
       }
       const ordered = computeDepthOrder(items);
-      for (const eid of ordered) {
-        const entry = this._renderEntries.get(eid);
-        if (entry && entry.displayObject.parent === world) {
-          world.removeChild(entry.displayObject);
+
+      // Skip the removeChild/addChild churn when the render order is
+      // unchanged from the previous frame — re-parenting every frame dirties
+      // the display list and forces a full bounds walk even when nothing
+      // moved (CodeRabbit review, C-375).
+      const previous = this._entityRenderOrder;
+      const orderChanged =
+        !previous ||
+        previous.length !== ordered.length ||
+        previous.some((eid, i) => eid !== ordered[i]);
+      if (orderChanged) {
+        const reordered: Container[] = [];
+        for (const eid of ordered) {
+          const entry = this._renderEntries.get(eid);
+          // Guard both removal and re-addition with parent === world so this
+          // cleanup never reparents an entity that lives elsewhere.
+          if (entry && entry.displayObject.parent === world) {
+            world.removeChild(entry.displayObject);
+            reordered.push(entry.displayObject);
+          }
         }
-      }
-      for (const eid of ordered) {
-        const entry = this._renderEntries.get(eid);
-        if (entry) {
-          world.addChild(entry.displayObject);
+        for (const displayObject of reordered) {
+          world.addChild(displayObject);
         }
+        this._entityRenderOrder = ordered;
       }
     }
 

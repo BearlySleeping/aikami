@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/systems/render_system.ts
 import type { World } from 'bitecs';
 import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bitecs';
-import { Buffer, BufferUsage, type Container, Graphics, Rectangle, type Texture } from 'pixi.js';
+import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
 import { logger } from '$logger';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
@@ -16,6 +16,7 @@ import {
   LpcAnimationState,
   velocityToDirection,
 } from '../rendering/animation_controller.ts';
+import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts';
 import type { SpriteComposer } from '../rendering/sprite_composer.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 
@@ -216,10 +217,7 @@ const _loadVisualTextureAsync = (options: {
    * the fragile global `Texture.from(frame)` cache. When absent, a frame
    * carrying prop logs an explicit error and keeps its placeholder.
    */
-  propFrameResolver?: (frame: string) => {
-    texture: Texture;
-    source: 'hit' | 'fallback';
-  } | null;
+  propFrameResolver?: PropTextureResolver;
 }): void => {
   const { eid, world, stage, visualData } = options;
   const { assetIndex, frame } = visualData;

@@ -8,18 +8,19 @@
 // crates, counters, tables, beds, rugs...).
 //
 // Deterministic (seeded RNG) — every cell is fully opaque pixel art.
-// Emits `atlas.webp` (via vips) + `atlas.json` (frame rects matching the
+// Emits `atlas.webp` (via cwebp) + `atlas.json` (frame rects matching the
 // grid layout). The map tileset blocks (imagewidth/imageheight/columns/
 // tilecount) MUST match this layout — see the maps rebuilt in C-375 AC-5.
 //
 // Run: bun run scripts:generate-emberwatch-atlas  (or bun moon run scripts:...)
 //     or directly: bun scripts/src/lib/ops/generate_emberwatch_atlas.ts
 
-import { deflateSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -314,7 +315,7 @@ const paintWoodFloor = (col: number, row: number): void => {
     const shade = plank % 2 === 0 ? 0 : -14;
     hline(col, row, 0, TILE - 1, y, 155 + shade, 106 + shade, 63 + shade);
     // vertical seam staggered per plank row
-    const seam = ((plank * 7) % TILE);
+    const seam = (plank * 7) % TILE;
     if (y % 4 === 3) {
       setPx(col * TILE + seam, row * TILE + y, 110, 68, 38);
       setPx(col * TILE + ((seam + 16) % TILE), row * TILE + y, 110, 68, 38);
@@ -1069,7 +1070,12 @@ const encodePng = (width: number, height: number, rgba: Uint8Array): Uint8Array 
     raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * (width * 4 + 1) + 1);
   }
   const idat = deflateSync(raw, { level: 9 });
-  const png = new Uint8Array(signature.length + chunk('IHDR', ihdr).length + chunk('IDAT', idat).length + chunk('IEND', new Uint8Array(0)).length);
+  const png = new Uint8Array(
+    signature.length +
+      chunk('IHDR', ihdr).length +
+      chunk('IDAT', idat).length +
+      chunk('IEND', new Uint8Array(0)).length,
+  );
   let offset = 0;
   png.set(signature, offset);
   offset += signature.length;
@@ -1097,14 +1103,32 @@ const main = (): void => {
   drawAll();
 
   const png = encodePng(W, H, buf);
-  const pngPath = join(outDir, 'atlas.png');
+
+  // The intermediate PNG is written to a temp dir OUTSIDE the public
+  // tileset dir — only the final atlas.webp belongs in static/. The temp
+  // dir is removed after cwebp processing (CodeRabbit review, C-375).
+  const tmpDir = mkdtempSync(join(tmpdir(), 'aikami-atlas-'));
+  const pngPath = join(tmpDir, 'atlas.png');
   const webpPath = join(outDir, 'atlas.webp');
   mkdirSync(outDir, { recursive: true });
   writeFileSync(pngPath, png);
 
   // Convert PNG → WebP via cwebp (available in the Nix devShell).
   // (vips `copy` with the [Q=90] suffix misbehaves under Bun's execFileSync.)
-  execFileSync('cwebp', ['-q', '90', pngPath, '-o', webpPath], { stdio: 'inherit' });
+  try {
+    execFileSync('cwebp', ['-q', '90', pngPath, '-o', webpPath], { stdio: 'inherit' });
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    const hint =
+      code === 'ENOENT'
+        ? 'cwebp is required to encode the atlas. Install it (available in the Nix devShell) and re-run.'
+        : 'cwebp failed to encode the atlas.';
+    throw new Error(
+      `${hint} Output target: ${webpPath} — ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 
   // Emit atlas.json with frame rects matching the grid layout.
   const frames: Record<string, unknown> = {};
@@ -1129,7 +1153,6 @@ const main = (): void => {
     },
   };
   writeFileSync(join(outDir, 'atlas.json'), `${JSON.stringify(atlasJson, null, 2)}\n`);
-  writeFileSync(pngPath, png);
 
   console.log(`Generated atlas: ${webpPath} (${W}x${H}, ${Object.keys(FRAMES).length} frames)`);
 };

@@ -805,11 +805,15 @@ class GameBootService
     // from the pack manifest (atlas + fallbackTile). It must be ready
     // before the first ENTITY_CREATED swaps prop placeholders.
     const { buildPropFrameResolver } = await import('./prop_frame_resolver');
-    this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
-    // Check generation after async build
+    const propFrameHandle = await buildPropFrameResolver(pack.manifest);
+    // Check generation immediately after the await and BEFORE mutating
+    // _propFrameResolverHandle — a stale boot must never clobber the
+    // resolver of the current boot.
     if (generation !== this._bootGeneration) {
+      propFrameHandle.clearCache();
       return;
     }
+    this._propFrameResolverHandle = propFrameHandle;
 
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
@@ -966,6 +970,9 @@ class GameBootService
           defeatedEnemies: [...worldStateService.defeatedEnemies],
           collectedPickups: [...worldStateService.collectedPickups],
           interactableStates: { ...worldStateService.interactableStates },
+          // The saved map may belong to a different pack than the engine's
+          // boot default — loadMap resolves its manifest by this packId.
+          packId: map.packId,
         });
         // Check generation after map load
         if (generation !== this._bootGeneration) {

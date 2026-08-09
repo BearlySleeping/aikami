@@ -108,6 +108,11 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
+    /**
+     * Content pack owning the map. Defaults to the engine's contentPackId;
+     * a v3 save restore may target a different pack than the boot default.
+     */
+    packId?: string;
   }): Promise<void>;
 
   /** Restores the game world from a saved ECS snapshot payload. */
@@ -341,15 +346,30 @@ class GameEngineService
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
+    packId?: string;
   }): Promise<void> {
     if (this._gameWorld) {
       // C-375 AC-3: resolve the pack manifest (cached) and pass prop
-      // walkability so the worker can honor `isWalkable` props.
-      const { loadContentPack } = await import('@aikami/frontend/engine');
-      const pack = await loadContentPack({ packId: this.contentPackId });
+      // walkability so the worker can honor `isWalkable` props. The pack is
+      // resolved from the map-specific packId (a v3 save restore can target
+      // a different pack than the engine's boot default); load failures
+      // degrade to undefined propWalkability while the map load continues.
+      const packId = options.packId ?? this.contentPackId;
+      let propWalkability: Record<string, boolean> | undefined;
+      try {
+        const { loadContentPack } = await import('@aikami/frontend/engine');
+        const pack = await loadContentPack({ packId });
+        propWalkability = this._buildPropWalkability(pack.manifest);
+      } catch (error) {
+        this.error('loadMap:prop-walkability-failed', {
+          packId,
+          error: error instanceof Error ? error.message : String(error),
+          hint: 'isWalkable props will not be honored for this map load (placeholder visuals).',
+        });
+      }
       await this._gameWorld.loadMap({
         ...options,
-        propWalkability: this._buildPropWalkability(pack.manifest),
+        propWalkability,
       });
       // Derive the map id from the URL (e.g. .../emberwatch_village.json).
       const file = options.mapUrl.split('/').pop() ?? '';

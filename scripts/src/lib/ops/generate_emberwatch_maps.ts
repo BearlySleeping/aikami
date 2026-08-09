@@ -105,7 +105,14 @@ const setTile = (m: MapData, col: number, row: number, gid: number): void => {
   m.ground[idx(m, col, row)] = gid;
 };
 
-const fillRect = (m: MapData, c0: number, r0: number, c1: number, r1: number, gid: number): void => {
+const fillRect = (
+  m: MapData,
+  c0: number,
+  r0: number,
+  c1: number,
+  r1: number,
+  gid: number,
+): void => {
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       setTile(m, c, r, gid);
@@ -128,7 +135,13 @@ const blockRect = (m: MapData, c0: number, r0: number, c1: number, r1: number): 
   }
 };
 
-/** Scatters a tile across the interior with a deterministic mask. */
+/**
+ * Scatters `gid` across cells currently holding `baseGid`, using a
+ * deterministic mask. `baseGid` is explicit so variant tiles apply to the
+ * actual interior floor (e.g. WOOD_VAR on WOOD_FLOOR, FLAGSTONE on
+ * STONE_FLOOR) instead of hard-coding G.GRASS, which silently no-ops on
+ * indoor maps (CodeRabbit review, C-375).
+ */
 const scatter = (
   m: MapData,
   rng: () => number,
@@ -136,12 +149,13 @@ const scatter = (
   r0: number,
   c1: number,
   r1: number,
+  baseGid: number,
   gid: number,
   probability: number,
 ): void => {
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
-      if (m.ground[idx(m, c, r)] === G.GRASS && rng() < probability) {
+      if (m.ground[idx(m, c, r)] === baseGid && rng() < probability) {
         setTile(m, c, r, gid);
       }
     }
@@ -210,21 +224,21 @@ const buildVillage = (): MapData => {
     setTile(m, W - 2, r, G.WALL_TOP);
     block(m, 1, r);
     block(m, W - 2, r);
-    // Rim row just above the bottom border (except the gate gap)
-    if (r === H - 2) {
-      for (let c = 2; c < W - 2; c++) {
-        if (c === 9 || c === 10) {
-          continue;
-        }
-        setTile(m, c, r, G.WALL_TOP);
-        block(m, c, r);
-      }
+  }
+  // Rim row just above the bottom border (row H-2), except the gate gap at
+  // cols 9-10 — visible wall-top rim with matching collision. Runs AFTER the
+  // r loop (the loop's bound excludes H-2, so the rim used to never emit).
+  for (let c = 2; c < W - 2; c++) {
+    if (c === 9 || c === 10) {
+      continue;
     }
+    setTile(m, c, H - 2, G.WALL_TOP);
+    block(m, c, H - 2);
   }
 
   // Scatter grass patches across the interior.
-  scatter(m, rng, 2, 2, 17, 17, G.GRASS_DARK, 0.14);
-  scatter(m, rng, 2, 2, 17, 17, G.DIRT, 0.05);
+  scatter(m, rng, 2, 2, 17, 17, G.GRASS, G.GRASS_DARK, 0.14);
+  scatter(m, rng, 2, 2, 17, 17, G.GRASS, G.DIRT, 0.05);
 
   // Paths: horizontal row 10 (left → right transitions) + vertical cols 9-10
   // (gate → plaza). Dirt edges flank the paths.
@@ -360,8 +374,13 @@ const buildInn = (): MapData => {
   }
 
   // Wood floor with variant patches + rugs (decor layer on the floor).
-  fillRect(m, 2, 2, 13, 9, G.WOOD_FLOOR);
-  scatter(m, rng, 2, 2, 13, 9, G.WOOD_VAR, 0.18);
+  // Floor extends through row 10 so the interior is fully floored up to
+  // the bottom wall rim — including the rim columns at row 10 (indices
+  // 161-174 in the emitted JSON) (CodeRabbit review, C-375).
+  fillRect(m, 2, 2, 13, 10, G.WOOD_FLOOR);
+  setTile(m, 1, 10, G.WOOD_FLOOR);
+  setTile(m, 14, 10, G.WOOD_FLOOR);
+  scatter(m, rng, 2, 2, 13, 9, G.WOOD_FLOOR, G.WOOD_VAR, 0.18);
   // Floor rugs near furniture.
   setTile(m, 7, 6, G.RUG_ROUND);
   setTile(m, 3, 8, G.RUG);
@@ -410,8 +429,13 @@ const buildShop = (): MapData => {
   }
 
   // Stone floor with flagstone patches.
-  fillRect(m, 2, 2, 13, 9, G.STONE_FLOOR);
-  scatter(m, rng, 2, 2, 13, 9, G.FLAGSTONE, 0.22);
+  // Floor extends through row 10 so the interior is fully floored up to
+  // the bottom wall rim — including the rim columns at row 10 (indices
+  // 161-174 in the emitted JSON) (CodeRabbit review, C-375).
+  fillRect(m, 2, 2, 13, 10, G.STONE_FLOOR);
+  setTile(m, 1, 10, G.STONE_FLOOR);
+  setTile(m, 14, 10, G.STONE_FLOOR);
+  scatter(m, rng, 2, 2, 13, 9, G.STONE_FLOOR, G.FLAGSTONE, 0.22);
   // Counter-area platform (row 9 = y 288-320).
   fillRect(m, 2, 9, 13, 9, G.STONE_VAR);
 
@@ -452,7 +476,10 @@ const loadObjectLayers = (
 ): Array<{ name: string; type: string; visible: boolean; objects: SpawnObject[] }> => {
   const src = JSON.parse(
     readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), `../../../../apps/frontend/client/static/content-packs/emberwatch/maps/${mapName}.json`),
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        `../../../../apps/frontend/client/static/content-packs/emberwatch/maps/${mapName}.json`,
+      ),
       'utf-8',
     ),
   ) as { layers: Array<Record<string, unknown>> };
@@ -490,6 +517,10 @@ const fixPropFrames = (layers: Array<{ name: string; objects: SpawnObject[] }>):
         const frameProp = obj.properties.find((p) => p.name === 'frame');
         if (frameProp) {
           frameProp.value = override;
+        } else {
+          // No frame property on the source prop — add one so the override
+          // is applied instead of being silently dropped (CodeRabbit, C-375).
+          obj.properties.push({ name: 'frame', type: 'string', value: override });
         }
       }
     }

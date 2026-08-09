@@ -24,6 +24,11 @@ export type PropFrameResolverPackManifest = {
 /**
  * Builds + preloads the prop frame resolver for a content pack.
  *
+ * The fallback frame key is derived from `manifest.fallbackTile` — never a
+ * hardcoded default that may reference an undeclared atlas frame. When the
+ * pack declares none, a warning is emitted and lookups degrade to `null`
+ * (placeholder visual) via the resolver's established degraded path.
+ *
  * Packs without atlas metadata get a no-op resolver (props keep their
  * placeholder) with a logged warning — never a crash, never a white
  * square from the old `Texture.from(frame)` global-cache path.
@@ -44,11 +49,18 @@ export const buildPropFrameResolver = async (
     };
   }
 
+  const fallbackTile = manifest.fallbackTile;
+  if (!fallbackTile) {
+    logger.warn('buildPropFrameResolver:no-fallback-tile', {
+      textureUrl: atlas.textureUrl,
+      hint: 'Pack declares no fallbackTile — missing prop frames degrade to the placeholder instead of a fallback tile.',
+    });
+  }
+
   const handle = createPropFrameResolver({
     textureUrl: atlas.textureUrl,
     spritesheetUrl: atlas.spritesheetUrl,
-    fallbackTile: manifest.fallbackTile ?? 'grass.png',
-    tileSize: atlas.tileSize ?? 32,
+    fallbackTile,
   });
 
   // Non-fatal: if the atlas fails to load (404 / decode error), the

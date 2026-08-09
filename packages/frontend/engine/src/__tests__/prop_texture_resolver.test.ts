@@ -112,6 +112,45 @@ describe('createPropFrameResolver — no sheet / no fallback', () => {
     expect(handle.resolver('well.png')).toBeNull();
   });
 
+  test('preload rejects when the loader fails and the resolver degrades to null', async () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => {
+        throw new Error('404');
+      },
+    });
+
+    await expect(handle.preload()).rejects.toThrow('404');
+    // Failed load is NOT preloaded — isPreloaded() means "completed
+    // successfully", and the failure stays retryable.
+    expect(handle.isPreloaded()).toBe(false);
+    // No sheet → every lookup degrades to null.
+    expect(handle.resolver('well.png')).toBeNull();
+  });
+
+  test('a failed preload can be retried after the loader recovers', async () => {
+    let fail = true;
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => {
+        if (fail) {
+          fail = false;
+          throw new Error('transient');
+        }
+        return makeSheet({ 'grass.png': GRASS });
+      },
+    });
+
+    await expect(handle.preload()).rejects.toThrow('transient');
+    await expect(handle.preload()).resolves.toBeUndefined();
+    expect(handle.isPreloaded()).toBe(true);
+    expect(handle.resolver('well.png')?.source).toBe('fallback');
+  });
+
   test('returns null when neither the frame nor the fallbackTile exists', async () => {
     const handle = createPropFrameResolver({
       textureUrl: '/atlas.webp',
@@ -162,6 +201,24 @@ describe('createPropFrameResolver — memoization & lifecycle', () => {
     expect(handle.isPreloaded()).toBe(true);
   });
 
+  test('concurrent preload calls share a single load', async () => {
+    let loadCount = 0;
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => {
+        loadCount++;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return makeSheet({ 'grass.png': GRASS });
+      },
+    });
+
+    await Promise.all([handle.preload(), handle.preload()]);
+    expect(loadCount).toBe(1);
+    expect(handle.isPreloaded()).toBe(true);
+  });
+
   test('clearCache drops memoized resolutions', async () => {
     const handle = createPropFrameResolver({
       textureUrl: '/atlas.webp',
@@ -171,10 +228,14 @@ describe('createPropFrameResolver — memoization & lifecycle', () => {
     });
 
     await handle.preload();
-    expect(handle.resolver('well.png')).not.toBeNull();
+    const initial = handle.resolver('well.png');
+    expect(initial).not.toBeNull();
     handle.clearCache();
-    // After clear, the same frame resolves again (fresh resolution object)
+    // Object identity is the proof: after clearCache the same frame resolves
+    // to a FRESH resolution object (memoized one was dropped).
     const fresh = handle.resolver('well.png');
+    expect(fresh).not.toBeNull();
+    expect(fresh).not.toBe(initial);
     expect(fresh?.source).toBe('hit');
   });
 });

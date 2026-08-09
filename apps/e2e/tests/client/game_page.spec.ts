@@ -163,6 +163,15 @@ test.describe('Emberwatch production path (C-375)', () => {
         failedPropRequests.push(url);
       }
     });
+    // Also fail on HTTP responses >= 400 from the legacy LPC props path
+    // (a 404 that "succeeds" at the network layer still means the prop
+    // art is missing — CodeRabbit review, C-375).
+    page.on('response', (res) => {
+      const url = res.url();
+      if (url.includes('/game-data/lpc/props/') && res.status() >= 400) {
+        failedPropRequests.push(`${url} (status ${res.status()})`);
+      }
+    });
 
     await waitForEngine(page);
     // Give prop texture swaps a moment to complete after boot.
@@ -172,7 +181,9 @@ test.describe('Emberwatch production path (C-375)', () => {
     expect(failedPropRequests).toEqual([]);
   });
 
-  test('AC-2: engine boots with the C-180 debug hook (player position exposed)', async ({ page }) => {
+  test('AC-2: engine boots with the C-180 debug hook (player position exposed)', async ({
+    page,
+  }) => {
     await waitForEngine(page);
     const pos = await readPos(page);
     // Emberwatch village gate spawn: (320, 576).
@@ -186,6 +197,10 @@ test.describe('Emberwatch production path (C-375)', () => {
     expect(start.y).toBeGreaterThan(500); // near the village gate
 
     // Hold Up along the path toward Elder Thalia (village plaza, y≈192).
+    // A continuous keydown (browser auto-repeat) is far more reliable than
+    // rapid down/up bursts, which headless Chromium can drop when the game
+    // thread is busy (CodeRabbit review, C-375).
+    await page.keyboard.down('KeyW');
     for (let i = 0; i < 60; i++) {
       const p = await readPos(page);
       // Her grid cell is row 6 (y 192-223); the player's 32px box must stop
@@ -193,14 +208,16 @@ test.describe('Emberwatch production path (C-375)', () => {
       if (p.y <= 232) {
         break;
       }
-      await page.keyboard.down('KeyW');
       await page.waitForTimeout(100);
-      await page.keyboard.up('KeyW');
     }
+    await page.keyboard.up('KeyW');
 
     const final = await readPos(page);
     // The player must NOT overlap Elder Thalia's cell (row 6 = y 192-223).
     expect(final.y).toBeGreaterThanOrEqual(224);
+    // …and must reach the ADJACENT cell (row 7 = y 224-255) rather than
+    // stopping farther south (row 8+, y > 255) — CodeRabbit review, C-375.
+    expect(final.y).toBeLessThanOrEqual(232);
     // And it must have moved north from the gate.
     expect(final.y).toBeLessThan(start.y);
   });

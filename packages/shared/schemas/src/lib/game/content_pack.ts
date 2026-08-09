@@ -640,6 +640,23 @@ export const ManifestEncounterMapSchema = Type.Record(
 // ContentPackManifest — top-level content pack manifest
 // ---------------------------------------------------------------------------
 
+/**
+ * Collision shape for a prop/entity — discriminated union so the required
+ * dimensions are explicit per variant (rect needs width/height, circle needs
+ * radius). Consumers never handle undefined dimensions at runtime.
+ */
+const PropCollisionSchema = Type.Union([
+  Type.Object({
+    type: Type.Literal('rect'),
+    width: Type.Number(),
+    height: Type.Number(),
+  }),
+  Type.Object({
+    type: Type.Literal('circle'),
+    radius: Type.Number(),
+  }),
+]);
+
 export const ContentPackManifestSchema = Type.Object({
   /** Pack identifier — matches Campaign.contentPackId */
   id: Type.String({ minLength: 1, description: 'Content pack identifier' }),
@@ -709,20 +726,11 @@ export const ContentPackManifestSchema = Type.Object({
       Type.Object({
         name: Type.String({ description: 'Human-readable prop name' }),
         frame: Type.String({ description: 'Spritesheet frame key (e.g. "well.png")' }),
-        anchor: Type.Optional(
-          Type.Object({ x: Type.Number(), y: Type.Number() }),
-        ),
+        anchor: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
         isWalkable: Type.Optional(
           Type.Boolean({ description: 'False (or omitted) = solid prop that blocks movement' }),
         ),
-        collision: Type.Optional(
-          Type.Object({
-            type: Type.Union([Type.Literal('rect'), Type.Literal('circle')]),
-            width: Type.Optional(Type.Number()),
-            height: Type.Optional(Type.Number()),
-            radius: Type.Optional(Type.Number()),
-          }),
-        ),
+        collision: Type.Optional(PropCollisionSchema),
       }),
       { description: 'Prop definitions keyed by prop ID' },
     ),
@@ -736,17 +744,8 @@ export const ContentPackManifestSchema = Type.Object({
       Type.Object({
         name: Type.String({ description: 'Human-readable entity name' }),
         frame: Type.String({ description: 'Spritesheet frame key or image filename' }),
-        anchor: Type.Optional(
-          Type.Object({ x: Type.Number(), y: Type.Number() }),
-        ),
-        collision: Type.Optional(
-          Type.Object({
-            type: Type.Union([Type.Literal('rect'), Type.Literal('circle')]),
-            width: Type.Optional(Type.Number()),
-            height: Type.Optional(Type.Number()),
-            radius: Type.Optional(Type.Number()),
-          }),
-        ),
+        anchor: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
+        collision: Type.Optional(PropCollisionSchema),
       }),
       { description: 'Entity definitions keyed by entity key' },
     ),

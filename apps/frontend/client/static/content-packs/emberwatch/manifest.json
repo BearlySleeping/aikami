@@ -229,6 +229,36 @@
       "isWalkable": true,
       "isWall": false
     },
+    "37": {
+      "name": "grass_edge_n",
+      "frame": "grass_edge_n.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "38": {
+      "name": "grass_edge_s",
+      "frame": "grass_edge_s.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "39": {
+      "name": "grass_edge_w",
+      "frame": "grass_edge_w.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "40": {
+      "name": "grass_edge_e",
+      "frame": "grass_edge_e.png",
+      "isWalkable": true,
+      "isWall": false
+    },
+    "41": {
+      "name": "water_edge",
+      "frame": "water_edge.png",
+      "isWalkable": false,
+      "isWall": false
+    },
     "42": {
       "name": "bridge",
       "frame": "bridge.png",

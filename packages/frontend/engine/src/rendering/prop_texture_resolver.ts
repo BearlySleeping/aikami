@@ -49,8 +49,12 @@ export type CreatePropFrameResolverOptions = {
   textureUrl: string;
   /** URL to the spritesheet JSON (e.g. "/game-data/sprites/tilesets/atlas.json"). */
   spritesheetUrl?: string;
-  /** Frame key rendered when a prop frame is missing (e.g. "grass.png"). */
-  fallbackTile: string;
+  /**
+   * Frame key rendered when a prop frame is missing (e.g. "grass.png").
+   * Optional — when absent, missing frames degrade to `null` (placeholder)
+   * with an explicit error naming the undeclared frame.
+   */
+  fallbackTile?: string;
   /**
    * Optional loader override for tests.
    *
@@ -95,18 +99,20 @@ export const createPropFrameResolver = (
   options: CreatePropFrameResolverOptions,
 ): PropFrameResolverHandle => {
   const { textureUrl, spritesheetUrl, fallbackTile } = options;
-  const sheetLoader = options.sheetLoader ?? (async () => {
-    const loadUrl = spritesheetUrl || textureUrl;
-    const loaded: unknown = await Assets.load(loadUrl);
-    if (loaded && typeof loaded === 'object' && 'textures' in loaded) {
-      return loaded as unknown as PropSpritesheet;
-    }
-    logger.error('prop-frame-resolver:load-unexpected', {
-      loadUrl,
-      hint: 'Expected Assets.load() to return a parsed Spritesheet (spritesheet JSON).',
+  const sheetLoader =
+    options.sheetLoader ??
+    (async () => {
+      const loadUrl = spritesheetUrl || textureUrl;
+      const loaded: unknown = await Assets.load(loadUrl);
+      if (loaded && typeof loaded === 'object' && 'textures' in loaded) {
+        return loaded as unknown as PropSpritesheet;
+      }
+      logger.error('prop-frame-resolver:load-unexpected', {
+        loadUrl,
+        hint: 'Expected Assets.load() to return a parsed Spritesheet (spritesheet JSON).',
+      });
+      return null;
     });
-    return null;
-  });
 
   let _sheet: PropSpritesheet | null | undefined;
   let _preloaded = false;
@@ -134,8 +140,14 @@ export const createPropFrameResolver = (
         const message = error instanceof Error ? error.message : String(error);
         logger.error('prop-frame-resolver:preload-failed', { textureUrl, error: message });
         _sheet = null;
-        _preloaded = true; // Mark as attempted so we don't retry every frame
+        // Do NOT mark _preloaded on failure — a transient network error must
+        // remain retryable. isPreloaded() reports false, matching its
+        // documented meaning ("completed successfully").
         throw error;
+      } finally {
+        // Clear the in-flight promise so a failed load can be retried while
+        // a successful load stays idempotent through _preloaded.
+        _preloadPromise = undefined;
       }
     })();
     return _preloadPromise;
@@ -164,7 +176,7 @@ export const createPropFrameResolver = (
     }
 
     // Frame missing → fallbackTile (never Texture.WHITE, never an LPC head).
-    const fallback = _sheet.textures[fallbackTile];
+    const fallback = fallbackTile ? _sheet.textures[fallbackTile] : undefined;
     if (fallback) {
       logger.warn('prop-frame-texture-missing', {
         frame,
@@ -180,8 +192,10 @@ export const createPropFrameResolver = (
     logger.error('prop-frame-texture-missing', {
       frame,
       textureUrl,
-      fallbackTile,
-      hint: `Neither the frame "${frame}" nor the fallbackTile "${fallbackTile}" exists in atlas.json.`,
+      fallbackTile: fallbackTile ?? null,
+      hint: fallbackTile
+        ? `Neither the frame "${frame}" nor the fallbackTile "${fallbackTile}" exists in atlas.json.`
+        : `Frame "${frame}" is missing and the pack declares no fallbackTile.`,
     });
     return null;
   };
