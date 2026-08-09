@@ -46,6 +46,8 @@ describe('setupBridgeListeners (AC-5)', () => {
       onInventoryCountChange: mock(() => {}),
       getDefeatedEnemies: mock(() => []),
       getCollectedPickups: mock(() => []),
+      // C-342 map-load persistence: ZONE_TRIGGERED passes interactable states.
+      getInteractableStates: mock(() => ({})),
       startCombat: mock(() => {}),
       endDialogue: mock(() => {}),
     };
@@ -243,6 +245,8 @@ describe('setupBridgeListeners (AC-5)', () => {
     expect(opts.mapUrl).toBe('/content-packs/emberwatch/maps/inn.json');
     expect(opts.targetX).toBe(32);
     expect(opts.targetY).toBe(192);
+    // C-342: persisted interactable states are forwarded (mock returns {}).
+    expect(opts.interactableStates).toEqual({});
   });
 
   test('ZONE_TRIGGERED falls back to the raw targetMap when content pack resolution fails', async () => {
@@ -286,6 +290,8 @@ describe('setupBridgeListeners (AC-5)', () => {
     expect(opts.mapUrl).toBe('inn');
     expect(opts.targetX).toBe(32);
     expect(opts.targetY).toBe(192);
+    // C-342: persisted interactable states are still forwarded on fallback.
+    expect(opts.interactableStates).toEqual({});
   });
 
   // ── Combat Events ──

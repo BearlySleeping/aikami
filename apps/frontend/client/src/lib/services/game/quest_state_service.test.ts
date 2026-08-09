@@ -146,9 +146,7 @@ const createMockContentPackLoader = (): ContentPackLoaderInterface => {
           file: 'maps/emberwatch_village.json',
           name: 'Emberwatch Village',
         },
-        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         village: { file: 'maps/village.json', name: 'Emberwatch Village' },
-        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         inn: { file: 'maps/inn.json', name: 'The Guttering Candle Inn' },
         // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         merchant_shop: { file: 'maps/merchant_shop.json', name: "Mara's Provisions" },
@@ -164,9 +162,7 @@ const createMockContentPackLoader = (): ContentPackLoaderInterface => {
         ruined_ward_shrine: { file: 'maps/ruined_ward_shrine.json' },
         // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         emberwatch_village: { file: 'maps/emberwatch_village.json' },
-        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         village: { file: 'maps/village.json' },
-        // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         inn: { file: 'maps/inn.json' },
         // biome-ignore lint/style/useNamingConvention: content pack map IDs use snake_case
         merchant_shop: { file: 'maps/merchant_shop.json' },
@@ -339,17 +335,26 @@ describe('QuestStateService', () => {
       // 1. Enter the inn.
       const t1 = service.getNextObjectiveTrigger('ward_wand');
       expect(t1?.type).toBe('MAP_ENTERED');
-      service.evaluateTriggers(t1!);
+      if (!t1) {
+        throw new Error('expected a MAP_ENTERED trigger');
+      }
+      service.evaluateTriggers(t1);
 
       // 2. Obtain the wand.
       const t2 = service.getNextObjectiveTrigger('ward_wand');
       expect(t2).toEqual({ type: 'ITEM_PICKED_UP', itemId: 'wardWand' });
-      service.evaluateTriggers(t2!);
+      if (!t2) {
+        throw new Error('expected an ITEM_PICKED_UP trigger');
+      }
+      service.evaluateTriggers(t2);
 
       // 3. Return the wand.
       const t3 = service.getNextObjectiveTrigger('ward_wand');
       expect(t3).toEqual({ type: 'NPC_INTERACTED', npcId: 'village_elder' });
-      service.evaluateTriggers(t3!);
+      if (!t3) {
+        throw new Error('expected an NPC_INTERACTED trigger');
+      }
+      service.evaluateTriggers(t3);
 
       const quest = service.quests.find((q) => q.id === 'ward_wand');
       expect(quest?.status).toBe('completed');

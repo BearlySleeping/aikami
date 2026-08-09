@@ -25,6 +25,18 @@ it contains critical runtime state (mode, autofix cycle count, etc.).
 
 ---
 
+## 🔴 NEVER run workspace cleanup
+
+NEVER run `bun run workspace:cleanup`, `bun workspace:cleanup`, `herdr worktree remove`,
+or any similar cleanup command — and do not ask the user to run them either.
+
+This tab IS the pipeline workspace (`aikami-contract-C-XXX`). Cleanup would kill your
+own session and the user's view of this summary. The orchestrator preserves the
+workspace when the run finishes and posts a completion notification into this tab;
+the user closes this tab and runs cleanup manually when they are done reading.
+
+---
+
 ## ✅ READY MODE (profile=ready)
 
 If the system prompt says `✅ READY MODE`, the pipeline passed verification

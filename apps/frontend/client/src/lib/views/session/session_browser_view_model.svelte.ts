@@ -12,7 +12,7 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { sessionService } from '$services';
+import { sessionService } from '$services/game/session_service.svelte';
 import type { GameSession, SessionCheckpoint } from '$types';
 
 export type SessionBrowserViewModelInterface = BaseViewModelInterface & {

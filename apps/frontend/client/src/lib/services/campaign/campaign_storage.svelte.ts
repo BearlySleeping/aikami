@@ -4,12 +4,12 @@
 // Replaces IndexedDB with the local SQLite database via LocalDatabaseInterface.
 // Contract: C-321 Migrate Local Persistence to Turso
 
-import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { Campaign } from '@aikami/types';
 
 // ---------------------------------------------------------------------------

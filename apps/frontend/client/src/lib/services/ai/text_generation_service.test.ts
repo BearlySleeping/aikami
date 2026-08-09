@@ -2,100 +2,84 @@
 //
 // Unit tests for TextGenerationService (C-080).
 //
+// Since C-320 the service delegates provider routing, HTTP transport and
+// structured extraction to the AI Provider Gateway (aiGatewayService). These
+// tests verify the client service's own contract: argument forwarding,
+// chunk streaming, cancellation handling, routing exposure, and stream
+// accounting. Gateway-level behaviors (SSE parsing, schema compilation,
+// markdown sanitization, provider detection) are covered by the
+// @aikami/frontend/ai-gateway test suite.
+//
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/ai/text_generation_service.test.ts
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
 
 // ---------------------------------------------------------------------------
-// Mock state
+// Mock: aiGatewayService (the C-320 delegation target)
 // ---------------------------------------------------------------------------
 
-let mockFetchCalls: Array<{
-  url: string;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-  signal: AbortSignal;
-}> = [];
-let sseChunks: string[] = [];
-let mockConfigState: Record<string, unknown> = {
-  preferredModel: '',
-  models: [],
-  apiKeys: {},
+let gatewayGenerateCalls: Array<Record<string, unknown>> = [];
+let gatewayChunks: string[] = [];
+let gatewayStructured: unknown;
+let gatewayError: unknown;
+let blockUntilAbort = false;
+
+const mockAiGatewayService = {
+  generateText: mock(async (options: Record<string, unknown>) => {
+    gatewayGenerateCalls.push(options);
+    const { onChunk, onResolve, signal, model } = options as {
+      onChunk?: (text: string) => void;
+      onResolve?: (resolution: unknown) => void;
+      signal?: AbortSignal;
+      model?: string;
+    };
+
+    if (gatewayError) {
+      throw gatewayError;
+    }
+
+    onResolve?.({
+      provider: 'openrouter',
+      model: model ?? 'test-model',
+      endpoint: 'https://api.openrouter.ai',
+    });
+
+    if (onChunk) {
+      for (const chunk of gatewayChunks) {
+        onChunk(chunk);
+      }
+    }
+
+    // Optional hang used by cancelAll tests: resolve only when aborted.
+    if (blockUntilAbort && signal) {
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    }
+
+    if (signal?.aborted) {
+      const error = new Error('Aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+
+    return { text: gatewayChunks.join(''), structured: gatewayStructured };
+  }),
+  cancelAll: mock(() => {}),
 };
 
-// ---------------------------------------------------------------------------
-// Mock: crypto_vault (config_service depends on this)
-// ---------------------------------------------------------------------------
-
-const CRYPTO_VAULT_PATH = '../../utils/crypto_vault.ts';
-
-mock.module(CRYPTO_VAULT_PATH, () => ({
-  encrypt: () => Promise.resolve(),
-  decrypt: () => Promise.resolve(null),
-  clearVault: () => Promise.resolve(),
+mock.module('$services', () => ({
+  aiGatewayService: mockAiGatewayService,
   __esModule: true,
 }));
-
-const CONFIG_SVC_PATH = '../config/config_service.svelte.ts';
-
-// ---------------------------------------------------------------------------
-// Mock: global fetch
-// ---------------------------------------------------------------------------
-
-const originalFetch = globalThis.fetch;
-
-const setupMockFetch = (): void => {
-  mockFetchCalls = [];
-  sseChunks = [];
-
-  globalThis.fetch = mock((input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    let body: Record<string, unknown> = {};
-    const headers: Record<string, string> = {};
-
-    if (init?.headers) {
-      for (const [k, v] of Object.entries(init.headers)) {
-        headers[k] = v;
-      }
-    }
-
-    if (init?.body && typeof init.body === 'string') {
-      try {
-        body = JSON.parse(init.body);
-      } catch {
-        // ignore
-      }
-    }
-
-    mockFetchCalls.push({
-      url,
-      body,
-      headers,
-      signal: init?.signal as AbortSignal,
-    });
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of sseChunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
-
-    const response = new Response(stream, {
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-    });
-
-    return Promise.resolve(response);
-  });
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,95 +90,64 @@ const loadService = async () => {
   return mod.textGenerationService as import('./text_generation_service.svelte.ts').TextGenerationServiceInterface;
 };
 
-const setConfigState = async (state: Record<string, unknown>) => {
-  const cfg = await import(CONFIG_SVC_PATH);
-  // Merge an image-state default so sibling test files sharing the
-  // configService singleton (image_generation_service) keep working.
-  (cfg.configService as Record<string, unknown>).state = {
-    image: { checkpoint: '' },
-    ...state,
-  };
+const resetGatewayMocks = (): void => {
+  gatewayGenerateCalls = [];
+  gatewayChunks = [];
+  gatewayStructured = undefined;
+  gatewayError = undefined;
+  blockUntilAbort = false;
 };
 
-/** Builds an OpenRouter SSE chunk: `data: {"choices":[{"delta":{"content":"token"}}]}\n\n` */
-const buildSSEChunk = (text: string): string =>
-  `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
-
-/** OpenRouter SSE done signal. */
-const SSE_DONE = 'data: [DONE]\n\n';
-
 // ---------------------------------------------------------------------------
-// Tests: AC-1 — Dynamic Provider & Model Resolution
+// Tests: AC-1 — Delegation & Routing
 // ---------------------------------------------------------------------------
 
-describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
-  beforeEach(async () => {
-    setupMockFetch();
-    mockConfigState = {
-      text: { apiKeys: {}, provider: 'openrouter' },
-      preferredModel: 'test-model',
-      models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
+describe('TextGenerationService — AC-1: Gateway delegation', () => {
+  beforeEach(() => {
+    resetGatewayMocks();
+    gatewayChunks = ['Hello'];
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  test('should throw when no text provider is configured', async () => {
-    // Clear config so getActiveTextProvider() throws
-    await setConfigState({
-      text: { apiKeys: {}, provider: 'openrouter' },
-      preferredModel: '',
-      models: [],
-    });
-
+  test('streamChat forwards messages and streams chunks from the gateway', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('Hello'), SSE_DONE];
-
-    await expect(
-      service.streamChat({
-        messages: [{ role: 'user', content: 'Hi' }],
-        onChunk: () => {},
-      }),
-    ).rejects.toThrow('No text generation provider configured');
-  });
-
-  test('should use preferred model from configService', async () => {
-    mockConfigState = {
-      text: { apiKeys: { openai: 'sk-test-key' }, provider: 'openai' },
-      preferredModel: 'gpt-4o',
-      models: [{ model: 'gpt-4o', provider: 'openai', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
-
-    const service = await loadService();
-    sseChunks = [buildSSEChunk('World'), SSE_DONE];
+    gatewayChunks = ['Hel', 'lo ', 'World'];
 
     let output = '';
     await service.streamChat({
-      messages: [{ role: 'user', content: 'Hi' }],
+      messages: [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello' },
+      ],
       onChunk: (text: string) => {
         output += text;
       },
     });
 
-    expect(output).toBe('World');
-    expect(mockFetchCalls[0].body.model).toBe('gpt-4o');
-    expect(mockFetchCalls[0].headers.Authorization).toBe('Bearer sk-test-key');
+    expect(output).toBe('Hello World');
+    expect(gatewayGenerateCalls).toHaveLength(1);
+    const call = gatewayGenerateCalls[0];
+    expect(call.messages).toEqual([
+      { role: 'user', content: 'Hi' },
+      { role: 'assistant', content: 'Hello' },
+    ]);
+    expect(typeof call.onChunk).toBe('function');
+    expect(call.signal).toBeInstanceOf(AbortSignal);
   });
 
-  test('should expose routing via __text_service_resolved_routing', async () => {
-    mockConfigState = {
-      text: { apiKeys: { anthropic: 'ant-key' }, provider: 'anthropic' },
-      preferredModel: 'claude-3',
-      models: [{ model: 'claude-3', provider: 'anthropic', endpoint: 'https://api.anthropic.com' }],
-    };
-    await setConfigState(mockConfigState);
-
+  test('streamChat passes explicit model override to the gateway', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('Hi'), SSE_DONE];
+
+    await service.streamChat({
+      messages: [{ role: 'user', content: 'Hi' }],
+      onChunk: () => {},
+      model: 'deepseek-chat',
+    });
+
+    expect(gatewayGenerateCalls[0].model).toBe('deepseek-chat');
+  });
+
+  test('streamChat exposes resolved routing via __text_service_resolved_routing', async () => {
+    const service = await loadService();
 
     await service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
@@ -206,95 +159,50 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
       | undefined;
 
     expect(routing).toBeDefined();
-    expect(routing?.provider).toBe('anthropic');
-    expect(routing?.model).toBe('claude-3');
+    expect(routing?.provider).toBe('openrouter');
+    expect(routing?.model).toBe('test-model');
   });
 
-  test('should respect explicit model override', async () => {
-    mockConfigState = {
-      text: { apiKeys: { openai: 'oai-key', deepseek: 'ds-key' }, provider: 'openai' },
-      preferredModel: 'gpt-4o',
-      models: [
-        { model: 'gpt-4o', provider: 'openai', endpoint: '' },
-        { model: 'deepseek-chat', provider: 'deepseek', endpoint: '' },
-      ],
-    };
-    await setConfigState(mockConfigState);
-
+  test('streamChat rethrows non-cancellation gateway errors', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('Override'), SSE_DONE];
+    gatewayError = new Error('provider_unreachable');
+
+    await expect(
+      service.streamChat({
+        messages: [{ role: 'user', content: 'Hi' }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow('provider_unreachable');
+  });
+
+  test('streamChat returns early when the signal is already aborted', async () => {
+    const service = await loadService();
+    const controller = new AbortController();
+    controller.abort();
 
     await service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
       onChunk: () => {},
-      model: 'deepseek-chat',
+      signal: controller.signal,
     });
 
-    expect(mockFetchCalls[0].body.model).toBe('deepseek-chat');
-    expect(mockFetchCalls[0].headers.Authorization).toBe('Bearer ds-key');
-  });
-
-  test('should fallback to first model config when no preferred model', async () => {
-    mockConfigState = {
-      text: { apiKeys: { openrouter: 'or-key' }, provider: 'openrouter' },
-      preferredModel: '',
-      models: [{ model: 'llama-3-70b', provider: 'openrouter', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
-
-    const service = await loadService();
-    sseChunks = [buildSSEChunk('Fallback'), SSE_DONE];
-
-    await service.streamChat({
-      messages: [{ role: 'user', content: 'Hi' }],
-      onChunk: () => {},
-    });
-
-    expect(mockFetchCalls[0].body.model).toBe('llama-3-70b');
-  });
-
-  test('should include OpenRouter attribution headers', async () => {
-    const service = await loadService();
-    sseChunks = [buildSSEChunk('Hi'), SSE_DONE];
-
-    await service.streamChat({
-      messages: [{ role: 'user', content: 'Hi' }],
-      onChunk: () => {},
-    });
-
-    expect(mockFetchCalls[0].headers['HTTP-Referer']).toBe('https://aikami.app');
-    expect(mockFetchCalls[0].headers['X-Title']).toBe('Aikami');
+    // No gateway call should have been made.
+    expect(gatewayGenerateCalls).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests: AC-2 — Unified Token Streaming Chat
+// Tests: AC-2 — Token Streaming & Cancellation
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — AC-2: Token Streaming', () => {
-  beforeEach(async () => {
-    setupMockFetch();
-    mockConfigState = {
-      text: { apiKeys: {}, provider: 'openrouter' },
-      preferredModel: 'test-model',
-      models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+  beforeEach(() => {
+    resetGatewayMocks();
   });
 
   test('should accumulate fragmented tokens', async () => {
     const service = await loadService();
-    sseChunks = [
-      buildSSEChunk('Hel'),
-      buildSSEChunk('lo '),
-      buildSSEChunk('Wor'),
-      buildSSEChunk('ld!'),
-      SSE_DONE,
-    ];
+    gatewayChunks = ['Hel', 'lo ', 'Wor', 'ld!'];
 
     let output = '';
     await service.streamChat({
@@ -307,33 +215,10 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
     expect(output).toBe('Hello World!');
   });
 
-  test('should pass abort signal to fetch and handle abort gracefully', async () => {
+  test('should swallow abort cancellation mid-stream', async () => {
     const service = await loadService();
     const controller = new AbortController();
-    sseChunks = [];
-
-    controller.abort();
-
-    await service.streamChat({
-      messages: [{ role: 'user', content: 'Hi' }],
-      onChunk: () => {},
-      signal: controller.signal,
-    });
-
-    // Should return without throwing
-  });
-
-  test('should cancel mid-stream via abort signal', async () => {
-    const service = await loadService();
-    const controller = new AbortController();
-
-    sseChunks = [
-      buildSSEChunk('A'),
-      buildSSEChunk('B'),
-      buildSSEChunk('C'),
-      buildSSEChunk('D'),
-      SSE_DONE,
-    ];
+    gatewayChunks = ['A', 'B', 'C', 'D'];
 
     let output = '';
     const onChunk = (text: string): void => {
@@ -354,7 +239,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
 
   test('should track active stream count', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('X'), SSE_DONE];
+    gatewayChunks = ['X'];
 
     await service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
@@ -364,9 +249,9 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
     expect((globalThis as Record<string, unknown>).__text_service_active_stream_count).toBe(0);
   });
 
-  test('should handle multi-turn conversation', async () => {
+  test('should forward multi-turn conversation messages', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('Reply'), SSE_DONE];
+    gatewayChunks = ['Reply'];
 
     let output = '';
     await service.streamChat({
@@ -381,12 +266,12 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
     });
 
     expect(output).toBe('Reply');
-    expect(mockFetchCalls[0].body.messages).toHaveLength(3);
+    expect(gatewayGenerateCalls[0].messages).toHaveLength(3);
   });
 
-  test('should send messages array in OpenAI-compatible format', async () => {
+  test('should forward system + user messages unchanged', async () => {
     const service = await loadService();
-    sseChunks = [buildSSEChunk('OK'), SSE_DONE];
+    gatewayChunks = ['OK'];
 
     await service.streamChat({
       messages: [
@@ -396,7 +281,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
       onChunk: () => {},
     });
 
-    const sentMessages = mockFetchCalls[0].body.messages as Array<{
+    const sentMessages = gatewayGenerateCalls[0].messages as Array<{
       role: string;
       content: string;
     }>;
@@ -407,29 +292,17 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: AC-3 — TypeBox Structural Extraction
+// Tests: AC-3 — Structural Extraction Delegation
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — AC-3: Structural Extraction', () => {
-  beforeEach(async () => {
-    setupMockFetch();
-    mockConfigState = {
-      text: { apiKeys: {}, provider: 'openrouter' },
-      preferredModel: 'test-model',
-      models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
+  beforeEach(() => {
+    resetGatewayMocks();
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  test('should extract structured object with native response_format', async () => {
+  test('should return structured output from the gateway', async () => {
     const service = await loadService();
-
-    const jsonResponse = JSON.stringify({ name: 'Aragorn', race: 'Human', level: 5 });
-    sseChunks = [buildSSEChunk(jsonResponse), SSE_DONE];
+    gatewayStructured = { name: 'Aragorn', race: 'Human', level: 5 };
 
     const result = await service.extractStructure({
       schema: {
@@ -445,106 +318,35 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
     });
 
     expect(result).toEqual({ name: 'Aragorn', race: 'Human', level: 5 });
-    // response_format is only sent for providers that support structured output;
-    // the test config uses openrouter which does not advertise this capability.
-    expect(mockFetchCalls[0].body.messages).toBeDefined();
+    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(gatewayGenerateCalls[0].schemaName).toBe('TestCharacter');
+    expect(gatewayGenerateCalls[0].schema).toBeDefined();
   });
 
-  test('should strip markdown fences from response', async () => {
+  test('should build system + user messages for extraction prompts', async () => {
     const service = await loadService();
-
-    sseChunks = [
-      buildSSEChunk('```json\n'),
-      buildSSEChunk(JSON.stringify({ name: 'Gandalf', power: 9000 })),
-      buildSSEChunk('\n```'),
-      SSE_DONE,
-    ];
-
-    const result = await service.extractStructure({
-      schema: {
-        type: 'object',
-        properties: { name: { type: 'string' }, power: { type: 'number' } },
-      },
-      schemaName: 'TestWizard',
-      prompt: 'Extract a wizard',
-    });
-
-    expect(result).toEqual({ name: 'Gandalf', power: 9000 });
-  });
-
-  test('should handle response with explanatory text before JSON', async () => {
-    const service = await loadService();
-
-    sseChunks = [
-      buildSSEChunk('Here is the extracted data: '),
-      buildSSEChunk(JSON.stringify({ item: 'sword', value: 100 })),
-      SSE_DONE,
-    ];
-
-    const result = await service.extractStructure({
-      schema: {
-        type: 'object',
-        properties: { item: { type: 'string' }, value: { type: 'number' } },
-      },
-      schemaName: 'TestItem',
-      prompt: 'Extract an item',
-    });
-
-    expect(result).toEqual({ item: 'sword', value: 100 });
-  });
-
-  test('should enforce additionalProperties: false on compiled schema', async () => {
-    const service = await loadService();
-
-    sseChunks = [buildSSEChunk(JSON.stringify({ name: 'Test' })), SSE_DONE];
+    gatewayStructured = { ok: true };
 
     await service.extractStructure({
-      schema: {
-        type: 'object',
-        properties: { name: { type: 'string' } },
-        required: ['name'],
-      },
-      schemaName: 'StrictTest',
-      prompt: 'test',
+      schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+      schemaName: 'Test',
+      prompt: 'Extract',
+      systemPrompt: 'You are an extraction engine',
     });
 
-    const cacheSize = (globalThis as Record<string, unknown>)
-      .__text_service_compiled_schema_cache_size as number | undefined;
-    expect(cacheSize).toBeGreaterThanOrEqual(1);
+    const messages = gatewayGenerateCalls[0].messages as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(messages).toEqual([
+      { role: 'system', content: 'You are an extraction engine' },
+      { role: 'user', content: 'Extract' },
+    ]);
   });
 
-  test('should cache compiled schemas', async () => {
-    const service = await loadService();
-
-    const schema = {
-      type: 'object',
-      properties: { name: { type: 'string' } },
-      required: ['name'],
-    };
-
-    sseChunks = [buildSSEChunk(JSON.stringify({ name: 'First' })), SSE_DONE];
-    await service.extractStructure({
-      schema,
-      schemaName: 'CachedSchema',
-      prompt: 'first',
-    });
-
-    sseChunks = [buildSSEChunk(JSON.stringify({ name: 'Second' })), SSE_DONE];
-    await service.extractStructure({
-      schema,
-      schemaName: 'CachedSchema',
-      prompt: 'second',
-    });
-
-    const cacheSize = (globalThis as Record<string, unknown>)
-      .__text_service_compiled_schema_cache_size as number | undefined;
-    expect(cacheSize).toBeGreaterThanOrEqual(1);
-  });
-
-  test('should handle abort during extraction', async () => {
+  test('should reject when the signal is already aborted', async () => {
     const service = await loadService();
     const controller = new AbortController();
-
     controller.abort();
 
     const promise = service.extractStructure({
@@ -555,6 +357,8 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
     });
 
     await expect(promise).rejects.toThrow();
+    // No gateway call should have been made.
+    expect(gatewayGenerateCalls).toHaveLength(0);
   });
 });
 
@@ -563,30 +367,21 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — cancelAll', () => {
-  beforeEach(async () => {
-    setupMockFetch();
-    mockConfigState = {
-      text: { apiKeys: {}, provider: 'openrouter' },
-      preferredModel: 'test-model',
-      models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-    };
-    await setConfigState(mockConfigState);
+  beforeEach(() => {
+    resetGatewayMocks();
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  test('should cancel all active streams', async () => {
+  test('should cancel all active streams and reset the stream count', async () => {
     const service = await loadService();
-
-    sseChunks = [buildSSEChunk('partial')];
+    blockUntilAbort = true;
+    gatewayChunks = ['partial'];
 
     const streamPromise = service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
       onChunk: () => {},
     });
 
+    // Let the stream start and block on the abort signal.
     await new Promise((r) => setTimeout(r, 10));
 
     service.cancelAll();
@@ -596,10 +391,10 @@ describe('TextGenerationService — cancelAll', () => {
     expect((globalThis as Record<string, unknown>).__text_service_active_stream_count).toBe(0);
   });
 
-  test('should reset stream count on cancelAll', async () => {
+  test('should cancel multiple active streams', async () => {
     const service = await loadService();
-
-    sseChunks = [buildSSEChunk('data')];
+    blockUntilAbort = true;
+    gatewayChunks = ['data'];
 
     const p1 = service.streamChat({
       messages: [{ role: 'user', content: 'A' }],

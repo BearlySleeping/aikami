@@ -12,13 +12,17 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { World } from 'bitecs';
 import { createWorld } from 'bitecs';
-import { CollisionData, CollisionLayer, registerCollisionDataObservers } from '../components/collision_data.ts';
+import type { SpawnPoint } from '../assets/map_loader.ts';
+import {
+  CollisionData,
+  CollisionLayer,
+  registerCollisionDataObservers,
+} from '../components/collision_data.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { registerPositionObservers } from '../components/position.ts';
 import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
 import { registerVisualObservers } from '../components/visual.ts';
-import type { SpawnPoint } from '../assets/map_loader.ts';
 import { spawnEntities } from '../systems/entity_spawner.ts';
 
 // ---------------------------------------------------------------------------

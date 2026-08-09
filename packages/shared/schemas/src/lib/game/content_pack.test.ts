@@ -587,21 +587,21 @@ describe('ContentPackManifestSchema — atlas tiles/props/entities (C-375)', () 
         },
       },
       props: {
-        village_well: {
+        villageWell: {
           name: 'Old Stone Well',
           frame: 'well.png',
           anchor: { x: 0.5, y: 1.0 },
           isWalkable: false,
           collision: { type: 'rect', width: 22, height: 14 },
         },
-        village_gate: {
+        villageGate: {
           name: 'Emberwatch Village Gate',
           frame: 'village_gate.png',
           isWalkable: true,
         },
       },
       entities: {
-        player_spawn: {
+        playerSpawn: {
           name: 'Hero Spawn',
           frame: 'char_hero_idle.png',
           anchor: { x: 0.5, y: 1.0 },
@@ -613,10 +613,10 @@ describe('ContentPackManifestSchema — atlas tiles/props/entities (C-375)', () 
     expect(result.fallbackTile).toBe('grass.png');
     expect(result.tiles?.['2']?.isWall).toBe(true);
     expect(result.tiles?.['3']?.movementCost).toBe(0.8);
-    expect(result.props?.village_well?.collision?.width).toBe(22);
-    expect(result.props?.village_well?.isWalkable).toBe(false);
-    expect(result.props?.village_gate?.isWalkable).toBe(true);
-    expect(result.entities?.player_spawn?.frame).toBe('char_hero_idle.png');
+    expect(result.props?.villageWell?.collision?.width).toBe(22);
+    expect(result.props?.villageWell?.isWalkable).toBe(false);
+    expect(result.props?.villageGate?.isWalkable).toBe(true);
+    expect(result.entities?.playerSpawn?.frame).toBe('char_hero_idle.png');
   });
 
   test('should reject a tile def missing frame', () => {

@@ -29,7 +29,7 @@ let extractionResult: object | undefined;
 let extractionError: Error | undefined;
 
 // C-152: enterWorld tracking
-let resetCalls = 0;
+let _resetCalls = 0;
 let enterWorldRouteCalls: Array<{ route: string }> = [];
 
 // storageService tracking
@@ -183,7 +183,7 @@ const _setupServiceOverrides = (): void => {
     GameSaveService: class {},
     gameStateService: {
       reset: mock(() => {
-        resetCalls++;
+        _resetCalls++;
       }),
     },
     GameStateService: class {},
@@ -191,24 +191,24 @@ const _setupServiceOverrides = (): void => {
     // 'resets each domain service before routing to /game').
     playerStateService: Object.assign(_createServiceStub(), {
       reset: mock(() => {
-        resetCalls++;
+        _resetCalls++;
       }),
     }),
     inventoryService: Object.assign(_createServiceStub(), {
       reset: mock(() => {
-        resetCalls++;
+        _resetCalls++;
       }),
       addItem: mock(() => {}),
     }),
     equipmentService: Object.assign(_createServiceStub(), {
       reset: mock(() => {
-        resetCalls++;
+        _resetCalls++;
       }),
       equipItem: mock(() => {}),
     }),
     worldStateService: Object.assign(_createServiceStub(), {
       reset: mock(() => {
-        resetCalls++;
+        _resetCalls++;
       }),
     }),
     ImageGenerationService: class {},
@@ -273,7 +273,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     extractionCalls = [];
     extractionResult = undefined;
     extractionError = undefined;
-    resetCalls = 0;
+    _resetCalls = 0;
     enterWorldRouteCalls = [];
     uploadAvatarCalls = [];
     uploadAvatarResult = undefined;

@@ -5,12 +5,12 @@
 //
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { getLocalDatabase } from '@aikami/frontend/storage';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { PlayerJournalEntry } from '$types';
 import { registerSerializable, type SerializableService } from './serializable_service';
 

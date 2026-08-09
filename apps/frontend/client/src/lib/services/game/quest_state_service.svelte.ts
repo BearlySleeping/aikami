@@ -358,7 +358,7 @@ class QuestStateService
 
     for (let i = 0; i < definition.objectives.length; i++) {
       const entry = progress.objectives.find((o) => o.objectiveIndex === i);
-      if (!entry || entry.status !== 'active') {
+      if (entry?.status !== 'active') {
         continue;
       }
       if (entry.current >= (definition.objectives[i].maxCount ?? 1)) {

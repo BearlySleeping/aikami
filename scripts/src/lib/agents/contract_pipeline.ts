@@ -668,11 +668,20 @@ const launchBackground = async (options: {
   const descriptor = openSync(launcherLogPath, 'a');
   // Forward ALL user args (including --root/--dirty) so the background child
   // runs with the same configuration. setupRootBranch is idempotent — the
-  // child detects it is already on the branch and proceeds. Only the
-  // launcher-only flags are stripped.
-  const forwarded = process.argv
-    .slice(2)
-    .filter((value) => value !== '--background' && value !== '--no-attach');
+  // child detects it is already on the branch and proceeds. Stripped from the
+  // forward: launcher-only flags (--background/--no-attach) and the raw
+  // `--source <value>` pair — the resolved source mode is re-added below via
+  // sourceArgs, so forwarding the original would emit a duplicate `--source`
+  // (harmless today because valueAfter() takes the first match, but fragile).
+  const forwarded = process.argv.slice(2).filter((value, index, arr) => {
+    if (value === '--background' || value === '--no-attach') {
+      return false;
+    }
+    if (value === '--source' || arr[index - 1] === '--source') {
+      return false;
+    }
+    return true;
+  });
   // 🔴 Forward the resolved direct-draft target so the child uses the EXACT
   // same contract ID instead of re-deriving a placeholder (which could pick
   // a stale file and start the pipeline at the wrong stage).
@@ -705,15 +714,36 @@ const launchBackground = async (options: {
   child.unref();
   closeSync(descriptor);
 
-  const deadline = Date.now() + 30_000;
-  while (!existsSync(readyPath) && Date.now() < deadline) {
+  // The child can legitimately need well beyond 30s to become ready:
+  // initialize() runs bootstrapWorktree, which does a full git checkout +
+  // `bun install --frozen-lockfile` — a cold bun cache takes minutes. A
+  // fixed 30s deadline burned the launcher while the detached child kept
+  // running (and kept holding the contract lock), manufacturing a phantom
+  // "already running" deadlock on the next attempt. Distinguish the two
+  // cases: child exited → fail fast with the log tail; child alive → keep
+  // waiting (180s cap) with progress output.
+  const deadline = Date.now() + 180_000;
+  let lastProgress = 0;
+  while (!existsSync(readyPath)) {
+    if (child.exitCode !== null) {
+      const diagnostic = existsSync(launcherLogPath)
+        ? readFileSync(launcherLogPath, 'utf-8').slice(-4_000)
+        : 'No launcher log was produced.';
+      throw new Error(
+        `Pipeline exited before becoming ready (code ${child.exitCode}).\n${diagnostic}`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      const diagnostic = existsSync(launcherLogPath)
+        ? readFileSync(launcherLogPath, 'utf-8').slice(-4_000)
+        : 'No launcher log was produced.';
+      throw new Error(`Pipeline did not become ready within 180s.\n${diagnostic}`);
+    }
     await sleep(250);
-  }
-  if (!existsSync(readyPath)) {
-    const diagnostic = existsSync(launcherLogPath)
-      ? readFileSync(launcherLogPath, 'utf-8').slice(-4_000)
-      : 'No launcher log was produced.';
-    throw new Error(`Pipeline did not become ready.\n${diagnostic}`);
+    if (Date.now() - lastProgress > 10_000) {
+      lastProgress = Date.now();
+      console.log('⏳ Waiting for pipeline to become ready…');
+    }
   }
 
   const ready = JSON.parse(readFileSync(readyPath, 'utf-8')) as {

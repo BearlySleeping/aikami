@@ -345,16 +345,17 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
     label: 'Contract: Reconcile Workspace',
     description:
       'Publish an isolated Git Worktree to a remote branch. ' +
-      'Commits all changes, pushes to the remote, and cleans up the worktree. ' +
-      'After this tool succeeds, call gh_create_pr to create the GitHub PR. ' +
-      'Only call after all tests pass.',
+      'Commits all changes, pushes to the remote, and leaves the worktree in ' +
+      'place. After this tool succeeds, call gh_create_pr to create the GitHub PR. ' +
+      'Only call after all tests pass. The worktree persists until the user runs ' +
+      '`bun workspace:cleanup` — never remove it yourself (you may be running inside it).',
     promptSnippet:
       'Use contract_workspace_reconcile to push workspace changes, then call gh_create_pr for the PR.',
     promptGuidelines: [
       'Call after the pipeline task is completely done (all stages passed).',
       'Pushes the workspace branch to origin.',
       'This tool does NOT create the PR — after it succeeds, call gh_create_pr with the returned headBranch.',
-      'Cleans up the worktree directory automatically on success.',
+      'The worktree is NOT cleaned up automatically — it persists until the user runs `bun workspace:cleanup` (e.g. after PR merge).',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
