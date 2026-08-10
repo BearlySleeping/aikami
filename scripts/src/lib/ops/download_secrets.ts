@@ -13,7 +13,16 @@
  *   - Firebase-specific keys (if applicable)
  *   - Backend / remaining keys
  *
+ * `--mode emulator` is special-cased: `demo-aikami-emulator` isn't a real GCP
+ * project, so there's nothing to fetch and no gcloud auth is required at all.
+ * Required-but-blank .env.example keys (e.g. PUBLIC_FIREBASE_API_KEY, which
+ * must stay blank in .env.example so it's never mistaken for a real
+ * staging/production value) get safe fake values from EMULATOR_ENV_OVERRIDES
+ * instead — enough for any contributor to build/run locally with zero GCP
+ * access. An existing .env.emulator's values always win on re-run.
+ *
  * Usage:
+ *   bun run download-secrets --mode emulator            # no GCP access needed
  *   bun run download-secrets --mode production
  *   bun run download-secrets --mode production client site
  *   bun run download-secrets --mode staging --strict   # fail if any secret can't be fetched
@@ -51,7 +60,39 @@ if (!GCP_PROJECT) {
   process.exit(1);
 }
 
+const isEmulator = mode === 'emulator';
+
 const positionalArgs = opts._;
+
+/**
+ * Fake values for keys that are required at runtime (see
+ * packages/frontend/configs/src/lib/environment.ts) but must stay blank in
+ * .env.example — the Firebase Auth/Firestore emulators don't validate them
+ * against a real project, so any non-empty value works.
+ */
+const EMULATOR_ENV_OVERRIDES: Readonly<Record<string, Record<string, string>>> = {
+  client: {
+    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
+    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
+    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
+    PUBLIC_DISABLE_APP_CHECK: 'true',
+  },
+  hub: {
+    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
+    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
+    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
+    PUBLIC_DISABLE_APP_CHECK: '1',
+  },
+  site: {
+    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
+    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
+    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
+    PUBLIC_DISABLE_APP_CHECK: 'true',
+  },
+  firebase: {
+    FIREBASE_SERVICE_ACCOUNT: '{}',
+  },
+};
 
 function getTargetApps(): string[] {
   if (positionalArgs.length === 0) {
@@ -260,6 +301,7 @@ function generateEnvContent(
   secrets: Map<string, string>,
   keyToGcm: Map<string, string>,
   defaults: Map<string, string>,
+  emulatorOverrides: Record<string, string>,
 ): string {
   const lines: string[] = [];
   const sections = organizeKeys(allKeys);
@@ -276,6 +318,8 @@ function generateEnvContent(
         lines.push(`${key}=${existing[key]}`);
       } else if (defaults.has(key)) {
         lines.push(`${key}=${defaults.get(key)}`);
+      } else if (key in emulatorOverrides) {
+        lines.push(`${key}=${emulatorOverrides[key]}`);
       } else {
         lines.push(`${key}=`);
       }
@@ -289,8 +333,12 @@ function generateEnvContent(
 
 const appNames = getTargetApps();
 
-console.log(`\n🔐 Downloading secrets from GSM → .env.${mode} files`);
-console.log(`   Project: ${GCP_PROJECT}`);
+if (isEmulator) {
+  console.log(`\n🧪 Generating local emulator env → .env.${mode} files (no GCP access needed)`);
+} else {
+  console.log(`\n🔐 Downloading secrets from GSM → .env.${mode} files`);
+  console.log(`   Project: ${GCP_PROJECT}`);
+}
 console.log(`   Apps:    ${appNames.join(', ')}\n`);
 
 // Collect all key → gcmName mappings across all target apps
@@ -342,7 +390,9 @@ for (const appName of appNames) {
   });
 }
 
-// Batch-fetch all unique GSM secrets
+// Batch-fetch all unique GSM secrets (skipped entirely in emulator mode —
+// demo-aikami-emulator isn't a real GCP project, so there's nothing to fetch
+// and no gcloud auth is required).
 
 const allGcmNames = new Set<string>();
 for (const m of appMappings) {
@@ -351,12 +401,18 @@ for (const m of appMappings) {
   }
 }
 
-await checkGcloudAvailable();
+let secrets = new Map<string, string>();
 
-console.log(`   Fetching ${allGcmNames.size} unique secrets from GSM...`);
-const secrets = await batchFetch(allGcmNames);
+if (isEmulator) {
+  console.log(`   Skipping GSM (emulator mode) — using .env.example + fake local defaults\n`);
+} else {
+  await checkGcloudAvailable();
 
-const missing = allGcmNames.size - secrets.size;
+  console.log(`   Fetching ${allGcmNames.size} unique secrets from GSM...`);
+  secrets = await batchFetch(allGcmNames);
+}
+
+const missing = isEmulator ? 0 : allGcmNames.size - secrets.size;
 if (missing > 0) {
   const missingNames = [...allGcmNames].filter((n) => !secrets.has(n));
   console.warn(`   ⚠️  ${missing} secret(s) not found in GSM (${GCP_PROJECT}):`);
@@ -385,17 +441,32 @@ let totalUpdated = 0;
 
 for (const m of appMappings) {
   const existing = readExistingEnv(m.envFilePath);
-  const content = generateEnvContent(m.allKeys, existing, secrets, m.keyToGcm, m.defaults);
+  const emulatorOverrides = isEmulator ? (EMULATOR_ENV_OVERRIDES[m.appName] ?? {}) : {};
+  const content = generateEnvContent(
+    m.allKeys,
+    existing,
+    secrets,
+    m.keyToGcm,
+    m.defaults,
+    emulatorOverrides,
+  );
 
   await Bun.write(m.envFilePath, content);
 
-  const secretKeysForApp = [...m.keyToGcm.keys()].length;
-  const updated = [...m.keyToGcm.values()].filter((n) => secrets.has(n)).length;
-
-  console.log(
-    `  ✅ ${m.appPath}/${resolveEnvFile(mode)} — ${updated}/${secretKeysForApp} secrets from GSM`,
-  );
-  totalUpdated += updated;
+  if (isEmulator) {
+    console.log(`  ✅ ${m.appPath}/${resolveEnvFile(mode)}`);
+  } else {
+    const secretKeysForApp = [...m.keyToGcm.keys()].length;
+    const updated = [...m.keyToGcm.values()].filter((n) => secrets.has(n)).length;
+    console.log(
+      `  ✅ ${m.appPath}/${resolveEnvFile(mode)} — ${updated}/${secretKeysForApp} secrets from GSM`,
+    );
+    totalUpdated += updated;
+  }
 }
 
-console.log(`\n✅ Done — ${totalUpdated} secret(s) written across ${appMappings.length} app(s).`);
+if (isEmulator) {
+  console.log(`\n✅ Done — generated .env.emulator for ${appMappings.length} app(s).`);
+} else {
+  console.log(`\n✅ Done — ${totalUpdated} secret(s) written across ${appMappings.length} app(s).`);
+}

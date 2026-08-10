@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 // scripts/src/lib/local_setup/index.ts
 /**
  * Aikami Local Machine Setup — CLI guide
@@ -12,6 +13,7 @@
  * What it checks, by category:
  *   essentials — bun, git                       (required for any dev work)
  *   dx         — pi, herdr                      (optional agent tools)
+ *   cloud      — gcloud, gh                     (optional cloud CLIs)
  *   emulator   — jdk, chromium                  (needed for bun run dev:all)
  *   tauri      — rust, webkit2gtk, gtk3, ...    (needed for bun tauri build)
  *
@@ -26,17 +28,30 @@
  *   bun run setup --json                 # machine-readable summary
  */
 
+import { existsSync } from 'node:fs';
 import { c, fmt, parseCliArgs, run } from '../cli_utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Platform = NodeJS.Platform;
-type Category = 'essentials' | 'dx' | 'emulator' | 'tauri';
+type Category = 'essentials' | 'dx' | 'cloud' | 'emulator' | 'tauri';
 
 type ToolCheck = {
   /** Display name, e.g. 'Bun'. */
   name: string;
   /** Executable(s) to probe on PATH, in order. */
   bins: string[];
+  /** Absolute paths to probe as a fallback when bins aren't on PATH
+   *  (e.g. Chrome on Windows installs as chrome.exe, not on PATH). */
+  paths?: string[];
+  /** When a `paths` candidate exists, treat that as sufficient and never
+   *  execute it. Use for GUI apps (e.g. Chrome) that may pop a window
+   *  instead of printing to stdout when run with `--version`. CLI tools
+   *  found via `paths` (e.g. vswhere.exe) are safe to run and don't need
+   *  this. */
+  existenceOnly?: boolean;
+  /** When set, extract the displayed version via this pattern instead of
+   *  showing the first raw line (browsers print log noise to stderr). */
+  versionPattern?: RegExp;
   /** Human-readable reason this tool is needed. */
   why: string;
   category: Category;
@@ -62,6 +77,10 @@ type CheckResult = {
 const CATEGORY_META: Record<Category, { title: string; desc: string }> = {
   essentials: { title: 'Essentials', desc: 'Required for any development work' },
   dx: { title: 'Agent Tools (optional)', desc: 'pi, herdr — not provided by the flake' },
+  cloud: {
+    title: 'Cloud CLIs (optional)',
+    desc: 'gcloud + gh — manual GCP ops, GitHub PR/issue workflows',
+  },
   emulator: {
     title: 'Firebase Emulator (optional)',
     desc: 'Required for `bun run dev:all` (local Firebase)',
@@ -181,6 +200,52 @@ const TOOLS: ToolCheck[] = [
     },
     hint: 'Also provided automatically inside the flake devShell (flake.nix).',
   },
+  {
+    name: 'gcloud',
+    bins: ['gcloud'],
+    why: 'Google Cloud CLI — manual GCP ops (firestore, run, secrets, logs). Optional.',
+    category: 'cloud',
+    install: {
+      linux: {
+        label: 'Install gcloud (apt, Google repo)',
+        commands: [
+          'sudo apt-get install -y apt-transport-https ca-certificates gnupg',
+          'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg',
+          'echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list',
+          'sudo apt-get update && sudo apt-get install -y google-cloud-cli',
+        ],
+      },
+      darwin: {
+        label: 'Install gcloud (brew cask)',
+        commands: ['brew install --cask google-cloud-sdk'],
+      },
+      win32: {
+        label: 'Install gcloud (winget)',
+        commands: ['winget install --id Google.CloudSDK'],
+      },
+    },
+    hint: 'Also provided inside the flake devShell (flake.nix). Run `gcloud init` after install.',
+  },
+  {
+    name: 'gh',
+    bins: ['gh'],
+    why: 'GitHub CLI — PRs, issues, releases, CI checks (pi tools call it directly). Optional.',
+    category: 'cloud',
+    install: {
+      linux: {
+        label: 'Install gh (apt, GitHub repo)',
+        commands: [
+          'sudo mkdir -p -m 755 /etc/apt/keyrings',
+          'curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null',
+          'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null',
+          'sudo apt-get update && sudo apt-get install -y gh',
+        ],
+      },
+      darwin: { label: 'Install gh (brew)', commands: ['brew install gh'] },
+      win32: { label: 'Install gh (winget)', commands: ['winget install --id GitHub.cli'] },
+    },
+    hint: 'Also provided inside the flake devShell (flake.nix). Run `gh auth login` after install.',
+  },
 
   // ── Emulator (optional) ────────────────────────────────────────────
   {
@@ -193,12 +258,12 @@ const TOOLS: ToolCheck[] = [
       // Parse Java major version from both legacy (1.8.0_292) and current (17.0.2, 21) formats
       const legacyMatch = out.match(/version "1\.(\d+)/);
       if (legacyMatch) {
-        const major = parseInt(legacyMatch[1], 10);
+        const major = Number.parseInt(legacyMatch[1], 10);
         return major >= 17;
       }
       const currentMatch = out.match(/version "(\d+)/);
       if (currentMatch) {
-        const major = parseInt(currentMatch[1], 10);
+        const major = Number.parseInt(currentMatch[1], 10);
         return major >= 17;
       }
       // Unparseable output - reject
@@ -220,6 +285,23 @@ const TOOLS: ToolCheck[] = [
   {
     name: 'Chromium',
     bins: ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'],
+    // Chrome on Windows registers as chrome.exe and isn't on PATH — probe the
+    // standard install locations directly so an existing Chrome (or Edge, also
+    // Chromium-based) satisfies the check. Only relevant on win32.
+    versionPattern: /Google Chrome \d+(\.\d+)+/,
+    // Existence-only: running chrome.exe/msedge.exe --version can pop an
+    // actual browser window instead of printing to stdout, so we just check
+    // the file is there rather than executing it.
+    existenceOnly: true,
+    paths:
+      process.platform === 'win32'
+        ? [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            `${process.env.LOCALAPPDATA ?? ''}\\Google\\Chrome\\Application\\chrome.exe`,
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+          ]
+        : [],
     why: 'Used by Playwright E2E tests and the dev browser.',
     category: 'emulator',
     install: {
@@ -227,7 +309,7 @@ const TOOLS: ToolCheck[] = [
       darwin: { label: 'Install Chromium (brew)', commands: ['brew install --cask chromium'] },
       win32: { label: 'Install Chrome (winget)', commands: ['winget install --id Google.Chrome'] },
     },
-    hint: 'The flake devShell ships a chromium wrapper with PixiJS DevTools.',
+    hint: 'On Windows, an installed Chrome (or Edge) at a standard location satisfies this check — Chromium itself is not distributed as an exe on PATH. The flake devShell ships a chromium wrapper with PixiJS DevTools.',
   },
 
   // ── Tauri (optional) ───────────────────────────────────────────────
@@ -251,6 +333,39 @@ const TOOLS: ToolCheck[] = [
         commands: ['winget install --id Rustlang.Rustup', 'rustup default stable-msvc'],
       },
     },
+    hint: 'On Windows, the MSVC toolchain also needs the "MSVC Build Tools" check below (link.exe).',
+  },
+  {
+    name: 'MSVC Build Tools',
+    bins: [],
+    // vswhere.exe ships with every VS2017+ installer and always lives here.
+    paths: [
+      `${process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'}\\Microsoft Visual Studio\\Installer\\vswhere.exe`,
+    ],
+    versionArgs: [
+      '-products',
+      '*',
+      '-requires',
+      'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+      '-property',
+      'installationPath',
+    ],
+    verify: (out) => {
+      const t = out.trim();
+      return t.length > 0 && t !== '(found at known install path)' && t !== '(no version output)';
+    },
+    why: 'Provides link.exe — required to link Rust binaries against the MSVC toolchain (bun tauri build).',
+    category: 'tauri',
+    platforms: ['win32'],
+    install: {
+      win32: {
+        label: 'Install Visual Studio Build Tools (C++ workload, winget)',
+        commands: [
+          'winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"',
+        ],
+      },
+    },
+    hint: 'Rust MSVC needs link.exe, which only comes from the "Desktop development with C++" workload — Visual Studio Build Tools alone (no workload) is not enough. Restart your shell after install.',
   },
   {
     name: 'Tauri system libs',
@@ -282,14 +397,11 @@ const TOOLS: ToolCheck[] = [
 
 async function probe(tool: ToolCheck): Promise<{ path?: string; out: string }> {
   let lastFailure: { path: string; out: string } | undefined;
-  for (const bin of tool.bins) {
-    const found = Bun.which(bin);
-    if (!found) {
-      continue;
-    }
+
+  const tryRun = async (found: string): Promise<{ path: string; out: string } | undefined> => {
     const args = tool.versionArgs ?? ['--version'];
     try {
-      const { out, err, code } = await run([bin, ...args]);
+      const { out, err, code } = await run([found, ...args]);
       // Some tools (java) report version on stderr — merge both.
       const combined = `${out}\n${err}`.trim();
       if (code === 0 && combined.length > 0) {
@@ -304,12 +416,45 @@ async function probe(tool: ToolCheck): Promise<{ path?: string; out: string }> {
       // Command threw: save failure and continue to next candidate
       lastFailure = { path: found, out: '(version probe failed)' };
     }
+    return undefined;
+  };
+
+  // Names on PATH are always safe to run with --version.
+  for (const bin of tool.bins) {
+    const found = Bun.which(bin);
+    if (!found) {
+      continue;
+    }
+    const result = await tryRun(found);
+    if (result) {
+      return result;
+    }
   }
+
+  // Absolute `paths` fallbacks (e.g. chrome.exe on Windows). GUI apps may pop
+  // a window instead of printing to stdout when run with `--version`, so
+  // `existenceOnly` tools are never executed — finding the file is enough.
+  for (const p of tool.paths ?? []) {
+    if (!existsSync(p)) {
+      continue;
+    }
+    if (tool.existenceOnly) {
+      return { path: p, out: '(found at known install path)' };
+    }
+    const result = await tryRun(p);
+    if (result) {
+      return result;
+    }
+  }
+
   // All candidates failed or none found
   return lastFailure ?? { out: '' };
 }
 
-function formatVersion(raw: string): string {
+function formatVersion(raw: string, tool?: ToolCheck): string {
+  if (tool?.versionPattern) {
+    return raw.match(tool.versionPattern)?.[0] ?? 'detected';
+  }
   const first = raw.split('\n')[0]?.trim() ?? '';
   return first.replace(/^bun\s+/i, '');
 }
@@ -384,7 +529,7 @@ const results = await Promise.all(
     return {
       tool,
       present: ok,
-      version: formatVersion(out),
+      version: formatVersion(out, tool),
       detail: ok ? undefined : out.trim().split('\n')[0],
     };
   }),

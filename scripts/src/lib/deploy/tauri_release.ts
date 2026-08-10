@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
 import { checkDeployCache, setTauriCache } from './cache';
-import type { AppConfig } from './deployment_config';
+import { type AppConfig, liveModes } from './deployment_config';
+import { notifyDiscordRelease } from './discord_notify';
 import { buildPlatformFragment, writeFragmentFile } from './updater_manifest';
 import { isVerbose, run } from './utils';
 
@@ -221,11 +222,26 @@ export async function buildTauriArtifacts(
   // which rejects tauri's own flags ("unexpected argument '--bundles'").
   const targetFlag = tauriTarget ? ` --target ${tauriTarget}` : '';
 
+  const configOverride: {
+    build?: { beforeBuildCommand: string };
+    bundle?: { createUpdaterArtifacts: boolean };
+  } = {};
+  if (opts.disableBeforeBuildCommand) {
+    configOverride.build = { beforeBuildCommand: '' };
+  }
+  // Updater artifact signing only for real releases (staging/production) —
+  // tauri.conf.json's static default stays `false` so a plain `bun tauri
+  // build` (emulator/local, no TAURI_SIGNING_PRIVATE_KEY configured) keeps
+  // working for any contributor without desktop-release secrets.
+  if ((liveModes as readonly string[]).includes(mode)) {
+    configOverride.bundle = { createUpdaterArtifacts: true };
+  }
+
   let configOverridePath: string | undefined;
   let configFlag = '';
-  if (opts.disableBeforeBuildCommand) {
-    configOverridePath = join(tmpdir(), `tauri-ci-override-${process.pid}.json`);
-    writeFileSync(configOverridePath, JSON.stringify({ build: { beforeBuildCommand: '' } }));
+  if (Object.keys(configOverride).length > 0) {
+    configOverridePath = join(tmpdir(), `tauri-build-override-${process.pid}.json`);
+    writeFileSync(configOverridePath, JSON.stringify(configOverride));
     configFlag = ` --config ${configOverridePath}`;
   }
 
@@ -370,6 +386,15 @@ export async function deployTauriRelease(
       platformDir,
       buildPlatformFragment({ platform: platformDir, artifactPaths: artifacts, releaseTag }),
     );
+    // CI's desktop matrix has its own dedicated notify-discord job (it waits
+    // for every platform leg first). A local deploy has no matrix to wait
+    // for, so announce right here. Never let a Discord hiccup fail a deploy
+    // that already succeeded — the release itself is what matters.
+    try {
+      await notifyDiscordRelease(releaseTag, mode);
+    } catch (err) {
+      warn(`Discord announcement failed (release itself is unaffected): ${(err as Error).message}`);
+    }
   } else if (process.env.CI === 'true') {
     log(
       `  ${c.dim}No RELEASE_TAG set (workflow_dispatch run) — skipping Release upload.${c.reset}`,

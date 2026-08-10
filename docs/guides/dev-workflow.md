@@ -9,6 +9,7 @@ git clone <repo>
 cd aikami
 bun run setup        # local machine setup: checks bun, git, jdk, chromium, tauri deps
 bun install          # install dependencies
+bun run setup:env    # generate .env.emulator files (no GCP access needed)
 ```
 
 The `bun run setup` script is a CLI guide that checks your local machine
@@ -16,8 +17,25 @@ The `bun run setup` script is a CLI guide that checks your local machine
 like jdk/chromium, and Tauri build deps) and prints install commands for
 anything missing.
 
+`bun run setup:env` (`download_secrets.ts --mode emulator`) writes each
+app's `.env.emulator` from `.env.example` plus safe fake values for the
+handful of keys required at runtime (Firebase API key, etc.) — the
+`demo-aikami-emulator` project isn't real, so no GCP/gcloud access is
+needed. Contributors without staging/production access still get a
+working local build this way; `bun run download-secrets --mode staging`
+(or `production`) is the separate, GCP-authenticated path for those who
+have it. Re-running `setup:env` never clobbers values you've since
+customized in `.env.emulator` — only fills in what's still missing.
+
 > 🔴 `bun run setup` sets up YOUR machine. The GCP cloud project wizard is
 > a separate command: `bun run project:setup` (see docs/intro/setup.md).
+
+> ⚠️ Not using the Nix flake (e.g. Windows/direnv-less setups)? The first
+> `bun moon run ...` will otherwise have moon download its own separate
+> "latest" Bun via proto, alongside the Bun you already installed. Set
+> `MOON_TOOLCHAIN_FORCE_GLOBALS=true` in your shell profile to make moon
+> use your installed Bun instead — flake.nix sets this automatically, and
+> CI does the same (`.github/workflows/pr-checks.yml`).
 
 ## Daily Commands
 

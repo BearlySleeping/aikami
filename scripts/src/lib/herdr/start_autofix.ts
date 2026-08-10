@@ -21,8 +21,9 @@
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { exec, spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { AikamiMode } from './session.ts';
 import {
@@ -147,6 +148,75 @@ function parseTestMode(values: string[]): TestMode {
 
 const ok = (m: string) => console.log(`  ✓ ${m}`);
 
+// ── Baseline snapshot ─────────────────────────────────────
+//
+// Before the agent runs, snapshot the FULL working tree state (tracked diff
+// vs HEAD + untracked files) to ~/.herdr/autofix-snapshots/<timestamp>/.
+// If the agent ever destroys pre-existing work (e.g. reverting line-ending
+// churn with `git checkout --`), a human can restore it with:
+//   bun run autofix:restore <timestamp>
+
+const SNAPSHOT_ROOT = join(homedir(), '.herdr', 'autofix-snapshots');
+
+const createBaselineSnapshot = async (): Promise<string | null> => {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const dir = join(SNAPSHOT_ROOT, ts);
+  try {
+    mkdirSync(dir, { recursive: true });
+
+    // 1. Tracked changes vs HEAD (staged + unstaged), binary-safe.
+    const { stdout: patch } = await execAsync('git diff --binary HEAD');
+    writeFileSync(join(dir, 'tracked.patch'), patch);
+
+    // 2. Untracked files — keep the list AND a copy of each file.
+    const { stdout: untracked } = await execAsync('git ls-files --others --exclude-standard');
+    const files = untracked.split('\n').filter(Boolean);
+    writeFileSync(join(dir, 'untracked.txt'), files.join('\n'));
+    const untrackedDir = join(dir, 'untracked');
+    for (const f of files) {
+      const src = join(process.cwd(), f);
+      const dest = join(untrackedDir, f);
+      if (existsSync(src)) {
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(src, dest);
+      }
+    }
+
+    // 3. HEAD sha the patch applies to.
+    const { stdout: head } = await execAsync('git rev-parse HEAD');
+    writeFileSync(join(dir, 'HEAD.txt'), head.trim());
+
+    writeFileSync(
+      join(dir, 'RESTORE.md'),
+      [
+        `# Autofix baseline snapshot — ${ts}`,
+        '',
+        `HEAD: ${head.trim()}`,
+        '',
+        'This snapshot captures the working tree BEFORE the autofix agent ran.',
+        '',
+        '## Restore',
+        '```bash',
+        `bun run autofix:restore ${ts}`,
+        '```',
+        '',
+        '## Contents',
+        '- tracked.patch  — `git diff --binary HEAD` (all tracked modifications)',
+        '- untracked.txt  — list of untracked files',
+        '- untracked/     — copies of those untracked files',
+        '- HEAD.txt       — the HEAD commit the patch applies to',
+        '',
+      ].join('\n'),
+    );
+
+    console.log(`  📸 Baseline snapshot: ${dir}`);
+    return dir;
+  } catch (err) {
+    console.warn(`  ⚠️  Failed to create baseline snapshot: ${(err as Error).message}`);
+    return null;
+  }
+};
+
 // ── Git Scope ─────────────────────────────────────────────
 
 const getGitScopedFiles = async (): Promise<string[]> => {
@@ -242,7 +312,7 @@ const ensureFirebaseEmulators = (): Promise<void> =>
 
 // ── Build system prompt ────────────────────────────────────
 
-const buildSystemPrompt = async (): Promise<string> => {
+const buildSystemPrompt = async (baselineDir: string | null): Promise<string> => {
   const gitFiles = isGitScoped ? await getGitScopedFiles() : [];
   const scopeInstruction = isGitScoped
     ? [
@@ -264,6 +334,9 @@ const buildSystemPrompt = async (): Promise<string> => {
       'You are an automated commit agent. Your sole purpose is to review pending changes, stage them, write a descriptive commit message, and push.',
       '',
       scopeInstruction,
+      baselineDir
+        ? `\nA baseline snapshot of the pre-run working tree is saved at:\n\`${baselineDir}\`\nIf you are unsure whether a change was intentional, compare against tracked.patch before staging.`
+        : '',
       '## STEP 1: Review & Stage',
       '1. Run `git status`.',
       '2. Run `git diff` (unstaged) and `git diff --cached` (staged) to understand the scope.',
@@ -349,6 +422,9 @@ const buildSystemPrompt = async (): Promise<string> => {
     '# WORKFLOW',
     stepsText.join('\n'),
     '# STRICT RULES',
+    '- **🔴 DESTRUCTIVE GIT IS FORBIDDEN**: NEVER run `git checkout --`, `git checkout .`, `git restore`, `git clean`, `git reset --hard`, or `git stash drop`. These destroy uncommitted work. The ONLY git mutations allowed are `git add`, `git commit`, and `git push origin HEAD` (commit step only).',
+    "- **🔴 WINDOWS CRLF CHURN — IGNORE IT**: On Windows (`core.autocrlf=true`), `bun run fix` (biome --write) rewrites files as LF while git expects CRLF, so `git status` will list MANY 'modified' files with ZERO content change. NEVER 'clean up' or revert them. To see real changes use `git diff --numstat HEAD` — entries like `0\t0` are pure line-ending churn and must be left untouched.",
+    '- **🔴 PROTECT PRE-EXISTING WORK**: The working tree may contain uncommitted changes from before your run. If you ever lose or accidentally revert work, STOP and restore from the baseline snapshot (`bun run autofix:restore <timestamp>`) instead of improvising.',
     '- **Load Conventions First**: Before writing ANY code, load the `aikami-conventions` skill. Read `.context/CONTEXT.md` and `.context/index.md` before making structural changes (file moves, new packages, boundary changes).',
     '- **No Hallucinations**: Read error messages carefully. Fix only what is broken.',
     '- **Step-by-Step**: Re-run the verification command (`bun run fix`, `typecheck`, etc.) after EVERY file edit to confirm your fix worked.',
@@ -356,6 +432,9 @@ const buildSystemPrompt = async (): Promise<string> => {
     '- **No Human Intervention**: Do NOT ask questions. If you are entirely blocked, explain why and stop.',
     '- **Forbidden Paths**: Do NOT modify .pi/, node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/.',
     '- **🔴 BRANCH SAFETY — NEVER `git push` alone**: Always use `git push origin HEAD`. Plain `git push` may target the wrong branch if the local branch tracks a different remote branch (e.g. `origin/main` instead of the current feature branch). `git push origin HEAD` ALWAYS pushes to the current branch. If you see an upstream mismatch error, do NOT fall back to `git push origin HEAD:main` — push to the CURRENT branch.',
+    baselineDir
+      ? `- **Baseline snapshot**: The pre-run working tree is saved at \`${baselineDir}\`. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run \`bun run autofix:restore <timestamp>\`.`
+      : '',
     '- **NO `as`, `any`, or `unknown`**: Never use type assertions or `any`/`unknown`.',
     '',
     '## LINTER & ERROR RESOLUTION — FIX, NEVER SUPPRESS',
@@ -410,7 +489,7 @@ const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
 
 // ── Build task text ────────────────────────────────────────
 
-const buildTaskText = async (): Promise<string> => {
+const buildTaskText = async (baselineDir: string | null): Promise<string> => {
   const gitFiles = isGitScoped ? await getGitScopedFiles() : [];
   const scopeLabel = isGitScoped ? 'GIT-SCOPED' : 'FULL PROJECT';
 
@@ -422,6 +501,7 @@ const buildTaskText = async (): Promise<string> => {
       '1. `git status` + `git diff`',
       '2. `git add -A && git commit --no-verify -m "..." && git push origin HEAD`',
       '',
+      baselineDir ? `> 📸 Pre-run baseline snapshot: \`${baselineDir}\`` : '',
       '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
       '',
       '> ⚠️ Pre-commit hook is skipped. Ensure all checks passed.',
@@ -433,6 +513,9 @@ const buildTaskText = async (): Promise<string> => {
     isGitScoped
       ? `Only modify these git-scoped files: ${gitFiles.length ? gitFiles.join(', ') : 'None (empty diff)'}`
       : 'Fix/typecheck/test the entire project.',
+    baselineDir
+      ? `\n📸 A baseline snapshot of the pre-run working tree is saved at \`${baselineDir}\`. Never run destructive git commands (git checkout -- / git restore / git clean / git reset --hard). Ignore CRLF line-ending churn in git status on Windows.`
+      : '',
     'Execute the following steps sequentially:',
     '',
   ];
@@ -468,6 +551,7 @@ const buildTaskText = async (): Promise<string> => {
   lines.push(
     '',
     '> 🔴 Never modify biome.json/tsconfig/moon.yml/lint_rules.json. Never use biome-ignore or @ts-expect-error for naming/style violations — rename the code instead.',
+    '> 🔴 NEVER run destructive git commands (git checkout -- / git restore / git clean / git reset --hard). The working tree contains pre-existing work — protect it. CRLF churn in git status on Windows is expected; ignore it.',
     '> Read your system prompt for detailed rules. Do not ask for permission, just begin Step 1.',
   );
 
@@ -515,11 +599,29 @@ if (doTest) {
 
 const repoRoot = process.cwd();
 
+// 📸 Snapshot the pre-run working tree so the agent can never permanently
+// destroy pre-existing work. Restore with `bun run autofix:restore <ts>`.
+const baselineDir = await createBaselineSnapshot();
+
+// Ensure `.pi` deps are installed — `.pi` is a standalone bun project (own
+// package.json + bun.lock) NOT covered by the root `bun install`. Without
+// this, `pi:typecheck` fails on missing modules and the agent wastes the run.
+const piNodeModules = join(repoRoot, '.pi', 'node_modules');
+if (!existsSync(piNodeModules)) {
+  console.log('  ⚠️  .pi/node_modules missing — installing .pi deps…');
+  try {
+    await execAsync('bun install', { cwd: join(repoRoot, '.pi') });
+    ok('.pi deps installed');
+  } catch (err) {
+    console.warn(`  ⚠️  .pi install failed: ${(err as Error).message}`);
+  }
+}
+
 // Write the system prompt file
 const promptDir = join(repoRoot, '.pi', 'autofix');
 mkdirSync(promptDir, { recursive: true });
 const promptPath = join(promptDir, 'system_prompt.md');
-writeFileSync(promptPath, await buildSystemPrompt());
+writeFileSync(promptPath, await buildSystemPrompt(baselineDir));
 
 let wsId: string | null = null;
 const existingWsId = await findWorkspace(PI_WORKSPACE);
@@ -566,7 +668,7 @@ if (existingWsId) {
     await new Promise((r) => setTimeout(r, 3000));
     await herdr(['pane', 'send-keys', paneId, 'Escape']);
     await new Promise((r) => setTimeout(r, 1000));
-    await herdr(['pane', 'run', paneId, await buildTaskText()]);
+    await herdr(['pane', 'run', paneId, await buildTaskText(baselineDir)]);
     ok('task prompt sent');
   } else {
     console.error('❌ Failed to create autofix tab');
@@ -609,7 +711,7 @@ if (existingWsId) {
   await new Promise((r) => setTimeout(r, 3000));
   await herdr(['pane', 'send-keys', rootPaneId, 'Escape']);
   await new Promise((r) => setTimeout(r, 1000));
-  await herdr(['pane', 'run', rootPaneId, await buildTaskText()]);
+  await herdr(['pane', 'run', rootPaneId, await buildTaskText(baselineDir)]);
   ok('task prompt sent');
 }
 

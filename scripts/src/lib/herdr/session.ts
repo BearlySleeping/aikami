@@ -16,6 +16,13 @@
 //     text            → bun run dev
 //     preview-client  → bun run scripts/src/lib/ops/preview_client.ts
 //     preview-hub     → bun run scripts/src/lib/ops/preview_hub.ts
+//     tauri           → bun run scripts/src/lib/ops/run_tauri.ts (launches an
+//                        already-built desktop binary — build first with
+//                        `bun moon run client:tauri-build`. Has no HTTP port,
+//                        so there's nothing to poll for readiness; the pane
+//                        itself IS the log — read it with `bun herdr:list` /
+//                        `herdr pane read` / `herdr_session read tauri`
+//                        instead of watching a terminal live.)
 //
 // Three consumers share the exact same herdr server:
 //   1. pi extension (herdr-orchestrator.ts)
@@ -52,7 +59,8 @@ export type DevService =
   | 'preview-client'
   | 'site'
   | 'preview-site'
-  | 'preview-hub';
+  | 'preview-hub'
+  | 'tauri';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
@@ -157,6 +165,15 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run scripts/src/lib/ops/preview_hub.ts',
     cwd: (root) => root,
   },
+  tauri: {
+    name: 'tauri',
+    // Launch-only (no build step) — run_tauri.ts picks release over debug
+    // and errors clearly if neither exists yet. Build first with
+    // `bun moon run client:tauri-build`.
+    command: () => 'bun run scripts/src/lib/ops/run_tauri.ts',
+    cwd: (root) => root,
+    // No HTTP port — the desktop window has nothing to poll.
+  },
 };
 
 export const ALL_SERVICES: DevService[] = [
@@ -170,13 +187,14 @@ export const ALL_SERVICES: DevService[] = [
   'site',
   'preview-site',
   'preview-hub',
+  'tauri',
 ];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   if (![...ALL_SERVICES, 'all'].includes(input)) {
     throw new Error(
-      `Unknown service: "${input}". Valid: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, all`,
+      `Unknown service: "${input}". Valid: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all`,
     );
   }
   return input as DevService | 'all';
@@ -600,8 +618,43 @@ export const killPort = (port: number): Promise<void> =>
 
 // ── Direnv wrapper ─────────────────────────────────────────
 
-export const wrapCommand = (command: string): string =>
-  `direnv exec . bash -c '${command}; echo; echo "=== Stopped. Press Enter to close ==="; read'`;
+/** Cached after first check — neither changes mid-run. */
+let _hasDirenv: boolean | undefined;
+const hasDirenv = (): boolean => {
+  if (_hasDirenv === undefined) {
+    _hasDirenv = Boolean(Bun.which('direnv'));
+  }
+  return _hasDirenv;
+};
+
+/**
+ * Resolved once via Bun.which (our process's PATH), not left as a bare
+ * `bash` for the pane's shell to look up. On Windows, herdr panes default to
+ * Nushell, whose PATH doesn't include Git's `usr\bin` — a bare `bash` there
+ * fails with "Command `bash` not found" even though it's installed and on
+ * *our* PATH. Falls back to the bare name if not found at all (unlikely —
+ * `bun run setup` requires git, which ships bash on every platform it runs
+ * on), so the error is still legible instead of silently vanishing.
+ */
+const bashPath = (): string => Bun.which('bash') ?? 'bash';
+
+/**
+ * Wraps a command for a herdr pane. `direnv exec .` loads the flake devShell
+ * env (bun/jdk/chromium/etc. from flake.nix) before running — but on a
+ * machine without direnv (e.g. Windows without WSL+Nix, per `bun run setup`'s
+ * recommended-path check), that prefix isn't just a no-op, it's a hard
+ * "command not found" that kills the pane before the real command ever runs.
+ * Skip it there; the caller is responsible for their own PATH/env in that case
+ * (e.g. MOON_TOOLCHAIN_FORCE_GLOBALS, manually installed tools).
+ */
+export const wrapCommand = (command: string): string => {
+  // Single-quoted so a Windows path like `C:\Program Files\Git\...\bash.exe`
+  // survives Nushell's own tokenizing (its default pane shell on Windows) —
+  // unquoted, the space in "Program Files" would split it into two args.
+  const bash = `'${bashPath()}'`;
+  const prefix = hasDirenv() ? `direnv exec . ${bash} -c` : `${bash} -c`;
+  return `${prefix} '${command}; echo; echo "=== Stopped. Press Enter to close ==="; read'`;
+};
 
 /** Shell process names that indicate an idle pane with no active command. */
 const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);

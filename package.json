@@ -40,6 +40,7 @@
     "guru": "bun run scripts/src/lib/agents/guru/run.ts",
     "worker": "bun run scripts/src/lib/agents/worker/run.ts",
     "autofix": "bun run scripts/src/lib/herdr/start_autofix.ts",
+    "autofix:restore": "bun run scripts/src/lib/ops/autofix_restore.ts",
     "herdr:dev": "bun run herdr:start all && bun run herdr:pi && bun run herdr:join",
     "herdr:join": "bun run scripts/src/lib/herdr/join.ts",
     "herdr:stop": "bun run scripts/src/lib/herdr/stop.ts",
@@ -69,6 +70,7 @@
     "switch": "bun run scripts/src/lib/ops/switch_mode.ts",
     "deploy": "bun run scripts/src/lib/deploy/index.ts",
     "download-secrets": "bun run scripts/src/lib/ops/download_secrets.ts",
+    "setup:env": "bun run download-secrets --mode emulator",
     "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts"
   },

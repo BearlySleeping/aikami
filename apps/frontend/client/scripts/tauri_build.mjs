@@ -9,15 +9,17 @@
  * directly — the same behavior on every OS.
  *
  *   TAURI_BUILD_MODE=staging bun run build:tauri   → vite build --mode staging
- *   bun run build:tauri                            → vite build --mode production (default)
+ *   bun run build:tauri                            → vite build --mode emulator (default)
  *
- * `vite build` without --mode already defaults to "production", so the
- * default here matches the previous hardcoded behavior exactly.
+ * The deploy pipeline always sets TAURI_BUILD_MODE explicitly (staging or
+ * production), so this fallback only matters for ad-hoc local builds
+ * (`bun tauri build` / `bun moon run client:tauri-build`) — those need
+ * neither GCP access nor real secrets, so emulator is the safe default.
  */
 
 import { spawnSync } from 'node:child_process';
 
-const mode = process.env.TAURI_BUILD_MODE || 'production';
+const mode = process.env.TAURI_BUILD_MODE || 'emulator';
 
 const result = spawnSync('bunx', ['vite', 'build', '--mode', mode], {
   stdio: 'inherit',

@@ -157,21 +157,10 @@ test.describe('Site pages — download section', () => {
       const viewLinks = container.locator('a', { hasText: 'View releases' });
       expect(await viewLinks.count()).toBe(3);
 
-      // Linux card offers the three package formats
-      const formatChips = linuxCard.locator('.linux-format-chip');
-      expect(await formatChips.count()).toBe(3);
-
-      // Clicking a format chip swaps the direct download URL and marks the
-      // chip as selected — exercises applyFormat(), not just chip rendering.
-      const debChip = linuxCard.locator('.linux-format-chip[data-format="deb"]');
-      await debChip.click();
+      // Linux only ships AppImage (see download.astro's top comment for why)
+      // — no format chips, single static download link.
       const linuxLink = linuxCard.locator('.download-link');
-      await expect(linuxLink).toHaveAttribute('href', /aikami\.deb$/);
-      await expect(debChip).toHaveAttribute('aria-pressed', 'true');
-
-      // The previously-default AppImage chip is deselected
-      const appimageChip = linuxCard.locator('.linux-format-chip[data-format="appimage"]');
-      await expect(appimageChip).toHaveAttribute('aria-pressed', 'false');
+      await expect(linuxLink).toHaveAttribute('href', /aikami\.AppImage$/);
     });
   }
 });

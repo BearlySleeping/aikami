@@ -69,6 +69,7 @@ git clone https://github.com/BearlySleeping/aikami
 cd aikami
 
 bun run setup       # local machine setup (checks bun, jdk, chromium, ...)
+bun run setup:env   # generate .env.emulator files (no GCP access needed)
 bun run dev         # client dev server
 bun run dev:all     # client + Firebase emulators (herdr workspace)
 ```
@@ -85,6 +86,16 @@ bun tauri build
 ```
 
 Native, Rust-powered, sub-5MB bundle. Works with local Ollama/vLLM or your own cloud keys.
+
+Linux ships as an AppImage (runs on any distro, no install needed). If it won't launch, install `libfuse2` — some newer distros (Ubuntu 22.04+, Fedora 36+, Debian 12) don't include it by default:
+
+```bash
+# Debian/Ubuntu
+sudo apt install libfuse2
+
+# Fedora
+sudo dnf install fuse-libs
+```
 
 ### Option 4 — Web, bring your own key
 

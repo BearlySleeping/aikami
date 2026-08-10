@@ -108,6 +108,13 @@
         NIX_DIRENV = "${pkgs.nix-direnv}";
 
         shellHook = ''
+                    # Moon's own toolchain manager (proto) would otherwise download
+                    # its own separate "latest" Bun for task execution, diverging
+                    # from the Bun this flake pins. Force moon to use the global
+                    # (Nix-provided) Bun instead — same switch CI uses
+                    # (.github/workflows/pr-checks.yml).
+                    export MOON_TOOLCHAIN_FORCE_GLOBALS=true
+
                     export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
                     export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
                     echo "🎭 Playwright browsers from Nix: $PLAYWRIGHT_BROWSERS_PATH"
