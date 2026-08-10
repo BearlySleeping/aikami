@@ -1,41 +1,20 @@
 // scripts/src/lib/agents/contract_pipeline/postconditions.ts
 //
-// Validate role-specific filesystem boundaries after a worker attempt.
+// Post-stage filesystem validation.
 //
-// Boundary model (enforced even when the per-role `--tools` whitelist is
-// disabled, see herdr_adapter.toolsForRole / worker.activeTools):
-//   - writer  (write_contract): may only modify the contract file itself.
-//   - critic  (critique):       read-only — feedback is recorded via
-//                               contract_stage_complete (run state), never
-//                               by editing repo files.
-//   - implement / verify:       work broadly in the worktree; no boundary.
+// 🔴 RELAXED 2026-08-10: the per-role filesystem boundary was removed.
+// Previously: writer could only modify the contract file; critic was
+// read-only; violations failed the stage. This over-constrained the agents —
+// e.g. the writer writing a scratch analysis file under .pi/contract-runs/
+// was treated as a boundary violation. Role behavior is now prompt-governed
+// (contract-create / contract-critique prompts state what each role may and
+// may not do). If a role misbehaves, fix the prompt — don't re-add hard
+// boundaries.
 //
-// Known regenerated paths (moon tasks, paraglide, vite, lockfiles) are
-// exempt so legitimate tooling side-effects don't produce false positives.
-import { relative, resolve } from 'node:path';
+// The function is kept as a pass-through so the orchestrator's before/after
+// git-state plumbing and the diffHash/fingerprint flow stay intact.
 import { changedBetweenSnapshots } from './git_state.ts';
 import type { ContractWorkerRole, GitStateSnapshot } from './types.ts';
-
-/** Regenerated/transient paths that tooling may touch without a violation. */
-const EXEMPT_PATH_PATTERNS: RegExp[] = [
-  /^bun\.lock$/,
-  /^package-lock\.json$/,
-  /^pnpm-lock\.yaml$/,
-  /^yarn\.lock$/,
-  /^package\.json$/,
-  /^src\/paraglide\//,
-  /^node_modules\/\.vite\//,
-  /^\.svelte-kit\//,
-  /^\.moon\/cache\//,
-  /^packages\/frontend\/dataconnect\/src\/lib\/generated\//,
-];
-
-const isExempt = (path: string): boolean =>
-  EXEMPT_PATH_PATTERNS.some((pattern) => pattern.test(path));
-
-/** Resolve a snapshot-relative path to an absolute path in the run's cwd. */
-const absPath = (options: { repoRoot: string; workspacePath?: string; path: string }): string =>
-  resolve(options.workspacePath ?? options.repoRoot, options.path);
 
 /** Validate role-specific filesystem boundaries after a worker attempt. */
 export const validatePostconditions = (options: {
@@ -49,35 +28,7 @@ export const validatePostconditions = (options: {
 }): { passed: boolean; unauthorizedPaths: string[]; changedPaths: string[] } => {
   const changed = changedBetweenSnapshots({ before: options.before, after: options.after });
 
-  // Implement/verify legitimately touch implementation code — no boundary.
-  if (options.role !== 'writer' && options.role !== 'critic') {
-    return { passed: true, unauthorizedPaths: [], changedPaths: changed };
-  }
-
-  const contractAbs = absPath({
-    repoRoot: options.repoRoot,
-    workspacePath: options.workspacePath,
-    path: relative(options.repoRoot, options.contractPath),
-  });
-
-  const unauthorized = changed.filter((path) => {
-    if (isExempt(path)) {
-      return false;
-    }
-    if (options.role === 'writer') {
-      // Writer may only touch the contract file.
-      return (
-        absPath({ repoRoot: options.repoRoot, workspacePath: options.workspacePath, path }) !==
-        contractAbs
-      );
-    }
-    // Critic is read-only — any repo mutation is a violation.
-    return true;
-  });
-
-  return {
-    passed: unauthorized.length === 0,
-    unauthorizedPaths: unauthorized,
-    changedPaths: changed,
-  };
+  // No role boundary: all roles may mutate any path. The diff is still
+  // reported for diagnostics (manifest diffHash / audit trail).
+  return { passed: true, unauthorizedPaths: [], changedPaths: changed };
 };

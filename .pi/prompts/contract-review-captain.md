@@ -35,6 +35,11 @@ own session and the user's view of this summary. The orchestrator preserves the
 workspace when the run finishes and posts a completion notification into this tab;
 the user closes this tab and runs cleanup manually when they are done reading.
 
+## 🔴 NEVER deploy
+
+NEVER call `firebase_deploy_functions` or `direnv_switch_mode` — deploys and
+environment switches are orchestrated by the pipeline, never by agents.
+
 ---
 
 ## ✅ READY MODE (profile=ready)

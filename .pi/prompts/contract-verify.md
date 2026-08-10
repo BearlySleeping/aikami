@@ -180,4 +180,5 @@ PASS / CHANGES_REQUESTED — {summary}
 - **Write actionable instructions** — file paths, line numbers, what to change.
 - **Never mark `completed`** — only `verified` or `verification_failed`.
 - 🔴 **Use Pi tools for tests** — `moon_run_task`, `validate()`.
+- 🔴 **Never deploy** — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits. Deploys and environment switches are orchestrated by the pipeline, never by agents.
 - 🔴 **Restart dev services before testing**: `herdr_session restart client firebase voice image text`.
