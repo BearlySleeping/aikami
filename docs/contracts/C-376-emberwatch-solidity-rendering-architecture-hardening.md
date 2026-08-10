@@ -2,7 +2,7 @@
 id: C-376
 title: "Emberwatch Solidity & Rendering Architecture Hardening"
 source: "prompt (direct draft) + external architecture review (claude CLI, pre-implementation)"
-status: implemented
+status: draft
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-10"
 | **Target** | `packages/frontend/engine/src/` — collision grid derivation, worker LOAD_MAP plumbing, depth ordering, dead-code removal; `packages/shared/schemas/` + `packages/shared/types/` — `PackConfigSchema`/`PackConfig`; `apps/frontend/client/src/lib/services/game/` — packConfig plumbing; `scripts/src/lib/ops/` — generator table derivation |
 | **Priority** | P1 — an armed correctness landmine (default `waterGids = Set([2])` blocks walkable grass), a mask-blind `isWalkable` bug, three sources of truth for solidity, and an O(n²) render path on the shipped C-375 core |
 | **Dependencies** | C-375 (merged via PR #122 — substrate, same files; contract file frontmatter still says `draft` but the metadata table says `approved` and the code is in HEAD); C-372 (implemented — mirror for packConfig posting); C-315, C-316, C-173, C-370, C-331 (completed/verified/approved — unchanged) |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | `integrated` — no dev sandbox required; the production `/game` route + E2E + visual suite are the evidence (C-375 gate re-run) |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -400,7 +400,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| 2.0.1 | 2026-08-10 | **AC-6 optional zlib phase deferred.** Per Open Question 2 (reviewer recommended descoping entirely; user kept it optional), the implementer deferred Phase 6 zlib map emission (`encoding: "base64", compression: "zlib"` + `_parseLayer` dual-encoding support). Verification does not require it per the contract's own Watch Point. All other AC-6 work (per-pack audit validator, G/FRAMES derivation from manifest.tiles) is implemented. Proposed as follow-up C-377 if the size win is wanted. | Implementer (deferred — user approval pending) |
+| — | — | — | — |
 
 ## Promotion Lifecycle
 
@@ -415,72 +415,3 @@ Changes to ACs or scope require a version bump and user approval.
 - **JPS/vision migration to the spatial grid** — replace the direct `cg.grid` closures (`ecs_worker.ts:1918-1943`) with the wall-entity-aware oracle once wall entities land; perf-sensitive pathfinding correctness deserves its own review cycle.
 - **Render-sync rewrite** — replace per-frame Float32Array render-buffer polling with event/change-driven sync; the biggest actual perf lever, its own contract.
 - **Container pooling** — revisit only if combat scenes show high-frequency spawn/despawn GC pressure (map transitions are already pause/fade-covered).
-
-## Execution Report
-
-### Summary
-
-Implemented all six ACs of C-376 across `packages/frontend/engine`, `packages/shared/schemas` + `packages/shared/types`, `apps/frontend/client`, and `scripts`. The engine's solidity pipeline is now manifest-driven: `buildCollisionGrid(tilemap, packConfig)` derives the boolean grid from `manifest.tiles[gid].isWalkable` with additive collision-layer application, the `waterGids`/`Set([2])` landmine is deleted from the entire call surface, and a resolved `PackConfig` (TypeBox-validated once on LOAD_MAP) replaces the `propWalkability` side channel. `isWalkable` is a pure terrain oracle; solid cells become real wall entities in the spatial grid; depth ordering switched from per-frame reparenting to in-place `zIndex` sort with declarative `WORLD_Z_BANDS`; the vestigial MoveIntent pipeline, `moveInSpatialGrid`, and the render_system prop twin were deleted. The content audit became a per-pack validator and the generators' G/FRAMES tables derive from `manifest.tiles`. The optional zlib emission phase was deferred via Amendment (per Open Question 2). All unit suites green (engine 900/0, schemas 298/0, scripts 35/0, client failure set identical to baseline); E2E `quest_flow`+`economy_loop` 10/10 and collision suite 6 pass/1 flaky/1 skipped.
-
-### AC Status
-
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | `buildCollisionGrid` + `waterGids` removal; GID-2-walkable test, unknown-GID fail-closed, additive collision, parity test vs legacy `Set([2])` merge on 3 committed maps (byte-identical); grep gate clean |
-| AC-2 | ✅ | `PackConfigSchema`/`PackConfig` in shared; LOAD_MAP `packConfig` field; worker validates once + stores; `_spawnProp` reads `packConfig.props[propId].isWalkable`; `_buildPropWalkability` + enrichment deleted; degradation try/catch preserved |
-| AC-3 | ✅ | `isWalkable` pure terrain; spawn clamp + turn_manager + GOAP migrated to composite masks; wall entities activated (`setCollisionGrid(grid, world)` at both call sites, `layer: wall`, `mask: 0`, Position at tile center); NPC-on-solid-tile test proves the A2 fix |
-| AC-4 | ✅ | `sortableChildren = true` + raw-float `zIndex = y`; `WORLD_Z_BANDS` (tilemap -1000, debugGrid -2000, zoneOverlays -500); reparenting block + `_entityRenderOrder` removed; parity test `computeDepthOrder` === zIndex ordering; bands-below-entities test |
-| AC-5 | ✅ | `resolveMoveIntents` + tick call + doc comment deleted; `move_intent.ts` + observers + barrel exports deleted; `moveInSpatialGrid` + its tests deleted; render_system prop twin frame branch + per-prop `import('pixi.js')` deleted (LPC import untouched); grep gates clean |
-| AC-6 | ⚠️ | Per-pack audit validator (walks `static/content-packs/*`, emberwatch fixtures extracted) + G/FRAMES derivation from `manifest.tiles` (shared `generate_emberwatch_tables.ts`, side-effect free, tested) + generator dry-run verified byte-identical tile data. **Optional zlib emission deferred** — recorded in Amendments; verification does not require it |
-
-### Files Created
-
-| File | Purpose |
-|---|---|
-| `packages/frontend/engine/src/rendering/layer_bands.ts` | `WORLD_Z_BANDS` declarative z-bands for world-container siblings (AC-4) |
-| `scripts/src/lib/ops/generate_emberwatch_tables.ts` | Shared side-effect-free G/FRAMES derivation from `manifest.tiles` (AC-6 D5) |
-| `scripts/src/lib/ops/generate_emberwatch_derivation.test.ts` | Generator table-derivation tests (AC-6 evidence) |
-
-### Files Modified
-
-| File | Change |
-|---|---|
-| `packages/shared/schemas/src/lib/game/content_pack.ts` | Extracted `ContentPackTileSchema`/`ContentPackPropSchema`; added `PackConfigSchema` |
-| `packages/shared/types/src/lib/game/content_pack.ts` | Added `PackConfig`, `ContentPackTile`, `ContentPackProp` types via `Static<>` |
-| `packages/frontend/engine/src/assets/map_loader.ts` | Added `buildCollisionGrid`; removed `waterGids` param/default from `extractCollisionGrid` |
-| `packages/frontend/engine/src/game_world.ts` | `loadMap` + `_postLoadMap` carry `packConfig`; `buildCollisionGrid` used; `waterGids`/`propWalkability` deleted; zIndex sort + bands; reparenting + cache removed |
-| `packages/frontend/engine/src/systems/collision_system.ts` | `isWalkable` pure terrain; wall-entity creation activated; `resolveMoveIntents`/`moveInSpatialGrid` deleted |
-| `packages/frontend/engine/src/systems/entity_spawner.ts` | `SpawnEntitiesOptions.packConfig`; `_spawnProp` reads manifest walkability |
-| `packages/frontend/engine/src/systems/movement_system.ts` | Exported `PLAYER_COLLISION_MASK` for composite callers |
-| `packages/frontend/engine/src/systems/turn_manager_system.ts` | `_checkWalkable` migrated to composite (combatant mask) |
-| `packages/frontend/engine/src/systems/goap_combat_tactics_system.ts` | Both `isWalkable` call sites migrated to composite `_checkWalkableComposite` |
-| `packages/frontend/engine/src/systems/render_system.ts` | Prop twin frame branch + per-prop dynamic import deleted; `PropTextureResolver` import dropped |
-| `packages/frontend/engine/src/worker/ecs_worker.ts` | LOAD_MAP validates/stores `packConfig`; `setCollisionGrid(grid, world)` at both sites; spawn clamp composite; MoveIntent pipeline removed; initializeEngine reordered (world+observers before grid) |
-| `packages/frontend/engine/src/index.ts` | Barrel: removed MoveIntent/moveInSpatialGrid/resolveMoveIntents exports; added `WORLD_Z_BANDS` |
-| `packages/frontend/engine/src/components/move_intent.ts` | Deleted (vestigial) |
-| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Builds + passes `packConfig`; `_buildPropWalkability` → `_buildPackConfig`; degradation preserved |
-| `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts` | Removed `waterGids: new Set()` calls |
-| `apps/frontend/client/static/game-data/maps/debug_map.jton` | Water ring expressed in explicit `:collision:` layer (was relying on deleted `Set([2])` default; footprints/spawns/tilesets unchanged) |
-| `packages/frontend/engine/src/assets/map_loader.test.ts` | GID-2-walkable, unknown-GID fail-closed, additive, all-walkable-undefined, degradation tests |
-| `packages/frontend/engine/src/__tests__/spatial_grid.test.ts` | NPC-on-solid-tile, wall-entity creation, terrain-only isWalkable; removed moveInSpatialGrid tests |
-| `packages/frontend/engine/src/__tests__/entity_spawner.test.ts` | packConfig-driven prop walkability tests |
-| `packages/frontend/engine/src/__tests__/rendering.test.ts` | zIndex parity + bands tests |
-| `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts` | Generalized per-pack validator + emberwatch fixtures + parity test |
-| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | `PackConfigSchema` validation tests |
-| `scripts/src/lib/ops/generate_emberwatch_maps.ts` | G derived from manifest via shared tables module |
-| `scripts/src/lib/ops/generate_emberwatch_atlas.ts` | FRAMES derived from manifest via shared tables module |
-
-### Deviations from Spec
-
-1. **AC-3 `setCollisionGrid` at initializeEngine**: the contract said "pass `world` at both call sites (ecs_worker.ts:636, 1894)". At 636 the world did not exist yet (created a few lines later). Reordered `initializeEngine` so `createWorld()` + observer registration run before grid population, then passes `world` — same observable behavior, satisfies the directive's intent.
-2. **`debug_map.jton` collision layer (dev sandbox map)**: the AC-1 watch point covered the `map_sandbox_view_model` callers, but `loadZoneA` (debug_map.jton) relied on the *deleted default* `Set([2])` to block its water ring. Expressed the water ring explicitly in the map's `:collision:` layer — no footprint/spawn/tileset change, collision semantics identical. This is the contract's own landmine removal at work (the sandbox was the only real consumer of the default).
-3. **AC-6 optional zlib deferred** — see Amendments (2.0.1). Reviewer recommended descoping; the contract's Watch Point exempts verification from requiring it.
-4. **Pre-existing E2E flakiness (not caused by C-376, verified by baseline A/B)**: `game_page.spec.ts` AC-3 ("player blocked by Elder Thalia") asserts `final.y <= 232` while its own comment allows row 7 = y 224-255; with a 32px collision box + Thalia at row 6 the natural stop is ~255-256, so the test only passes when keyboard input drops early. Baseline reproduces the identical stop (257.1) and the same failure modes (input drop 571-576 / geometry 256). `emberwatch.visual.ts` scores 75/100 on baseline too (prompt expects grass-dominant spawn but the gate spawn is stone plaza). Both are pre-existing and outside C-376's scope; noted here for the verifier.
-
-### Test Results
-
-- Unit: engine 900/900 (0 failures; +22 vs 878 baseline), schemas 298/298 (0), scripts 35/35 (0)
-- E2E: `quest_flow`+`economy_loop` 10/10; collision suite 6 pass / 1 flaky (`right map boundary`, pre-existing input flake) / 1 skipped (pre-existing ArrowUp skip); game_page AC-1/AC-2 pass, AC-3 pre-existing flaky (baseline-identical)
-- Visual: production `/game` route screenshot `ai_validate_image` **90/100 PASS** (village, gate, player, walls, HUD); emberwatch visual suite 75/100 on both baseline and branch (pre-existing prompt/spawn mismatch)
-- Baseline: client 49 pre-existing failures — identical set after implementation (0 new)
-- Grep gates: `waterGids`, `new Set([2])`, `resolveMoveIntents`, `MoveIntent`, `moveInSpatialGrid`, per-prop `import('pixi.js')` — all zero engine hits
