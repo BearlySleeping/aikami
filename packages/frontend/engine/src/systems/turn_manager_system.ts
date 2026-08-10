@@ -30,9 +30,10 @@ import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
-import { isWalkable } from './collision_system.ts';
+import { isCellBlocked, isWalkable } from './collision_system.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
 import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
+import { COMBATANT_COLLISION_MASK } from './movement_system.ts';
 import { grantXp } from './progression_system.ts';
 
 /** Cached query terms for active combat participants. */
@@ -1946,7 +1947,14 @@ const _estimateGridDist = (world: World, fromEid: number, toEid: number): number
 };
 
 const _checkWalkable = (x: number, y: number): boolean => {
-  return isWalkable(x, y);
+  // C-376 AC-3: composite walkability — spatial-grid entity blocking (walls,
+  // solid props, NPCs, the player, enemies) OR terrain solidity. The mover
+  // here is a combatant (enemy/NPC); it uses the shared combatant mask so an
+  // occupied solid tile never reads as walkable (CodeRabbit review, C-376).
+  const tileSize = 32;
+  const gx = Math.floor(x / tileSize);
+  const gy = Math.floor(y / tileSize);
+  return !isCellBlocked(gx, gy, COMBATANT_COLLISION_MASK) && isWalkable(x, y);
 };
 
 const _getEntityName = (_world: World, eid: number): string => {

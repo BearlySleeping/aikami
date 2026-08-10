@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/__tests__/rendering.test.ts
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { addComponent, addEntity, createWorld, removeComponent, set } from 'bitecs';
-import { Texture } from 'pixi.js';
+import { Container, Texture } from 'pixi.js';
 import {
   Appearance,
   getAppearanceLayers,
@@ -2258,6 +2258,7 @@ describe('C-039 Animation Controller — animateEntitySystem (bitECS Integration
 // ---------------------------------------------------------------------------
 
 import { computeDepthOrder } from '../rendering/depth_sort.ts';
+import { computeEntityZIndex, MIN_ENTITY_Y, WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 
 describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
   it('renders larger world Y on top (back-to-front order by Y)', () => {
@@ -2308,5 +2309,71 @@ describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
     computeDepthOrder(input);
     expect(input[0]).toEqual({ eid: 1, y: 300, order: 0 });
     expect(input[1]).toEqual({ eid: 2, y: 100, order: 1 });
+  });
+});
+
+describe('C-376 AC-4 — zIndex render path (PixiJS sortableChildren)', () => {
+  it('assigns the raw float y as zIndex (exactly 192.5, never rounded)', () => {
+    // The world container sorts children by zIndex with a stable sort; the
+    // render path sets zIndex = computeEntityZIndex(y). A fractional y must
+    // stay exact — rounding 192.5 → 193 would reorder entities at 192.5 vs
+    // 193.
+    const container = new Container();
+    container.sortableChildren = true;
+    const frac = new Container();
+    frac.zIndex = computeEntityZIndex(192.5);
+    container.addChild(frac);
+    container.sortChildren();
+    expect(frac.zIndex).toBe(192.5);
+    expect(Number.isInteger(frac.zIndex)).toBe(false);
+  });
+
+  it('sorts children by zIndex with stable insertion order for equal y', () => {
+    // Actual render-path machinery: sortableChildren + sortChildren (the
+    // in-place sort game_world relies on). No inline comparator — the
+    // expected order comes from the display list itself.
+    const container = new Container();
+    container.sortableChildren = true;
+    const mk = (z: number): Container => {
+      const child = new Container();
+      child.zIndex = computeEntityZIndex(z);
+      container.addChild(child);
+      return child;
+    };
+
+    const first = mk(384); // insertion order: first, second, third, fourth
+    const second = mk(192.5);
+    const third = mk(256);
+    const fourth = mk(192.5);
+
+    container.sortChildren();
+
+    // Stable sort by zIndex asc — ties keep insertion order (second before
+    // fourth), fractional y keeps exact ordering.
+    expect(container.children).toEqual([second, fourth, third, first]);
+    expect(container.getChildIndex(second)).toBeLessThan(container.getChildIndex(fourth));
+  });
+
+  it('clamps entity zIndex to MIN_ENTITY_Y (band invariant for negative y)', () => {
+    // Raw world coordinates can be negative (e.g. player at -100,-100); the
+    // clamp guarantees entities never sort below the zone-overlay band.
+    expect(computeEntityZIndex(0)).toBe(0);
+    expect(computeEntityZIndex(-100)).toBe(-100);
+    expect(computeEntityZIndex(-600)).toBe(MIN_ENTITY_Y);
+  });
+
+  it('WORLD_Z_BANDS sit below MIN_ENTITY_Y (and every supported entity y)', () => {
+    // Every band is below the documented minimum entity y, so tilemap /
+    // debug / zone overlays never interleave with entities even in the
+    // negative coordinate range.
+    for (const band of Object.values(WORLD_Z_BANDS)) {
+      expect(band, `band ${band} below MIN_ENTITY_Y ${MIN_ENTITY_Y}`).toBeLessThan(MIN_ENTITY_Y);
+    }
+    const entityYs = [MIN_ENTITY_Y, 0, 32, 64, 128, 256, 512, 1024];
+    for (const band of Object.values(WORLD_Z_BANDS)) {
+      for (const y of entityYs) {
+        expect(band, `band ${band} below entity y ${y}`).toBeLessThan(computeEntityZIndex(y));
+      }
+    }
   });
 });

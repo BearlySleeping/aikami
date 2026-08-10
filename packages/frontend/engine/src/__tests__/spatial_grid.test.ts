@@ -8,9 +8,15 @@
 // returning safe default values (blocked / false) at all map edges.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
-import { GridPosition } from '../components/grid_position.ts';
-import { SpatialLink } from '../components/spatial_link.ts';
+import { createWorld, query } from 'bitecs';
+import {
+  CollisionData,
+  CollisionLayer,
+  registerCollisionDataObservers,
+} from '../components/collision_data.ts';
+import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
+import { registerPositionObservers } from '../components/position.ts';
+import { registerSpatialLinkObservers, SpatialLink } from '../components/spatial_link.ts';
 import {
   type CollisionGrid,
   getMapPixelBounds,
@@ -19,7 +25,6 @@ import {
   isCellBlocked,
   isWalkable,
   isWithinMapBounds,
-  moveInSpatialGrid,
   removeFromSpatialGrid,
   resetCollisionGrid,
   setCollisionGrid,
@@ -209,18 +214,32 @@ describe('isCellBlocked — NPC / prop layer blocking (C-375 AC-3)', () => {
     expect(isCellBlocked(6, 6, playerMask)).toBe(true);
   });
 
-  test('isWalkable returns false for a solid prop (wall-layer) cell', () => {
+  test('isWalkable returns true for a wall-layer prop cell (terrain-only, C-376 AC-3)', () => {
     setCollisionGrid(_makeBorderGrid());
-    // Interior cell (5,5) is walkable until a wall-layer prop occupies it.
+    // Interior cell (5,5) is walkable terrain. A wall-layer prop occupies it
+    // — isWalkable stays true (pure terrain oracle); the composite
+    // `isCellBlocked || !isWalkable` blocks the mover via the spatial grid.
     expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(true);
     place(8004, 5, 5, CollisionLayer.wall);
-    expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(false);
+    expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(true);
+    // Composite: spatial-grid entity blocking OR terrain solidity.
+    const playerMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+    expect(isCellBlocked(5, 5, playerMask)).toBe(true);
   });
 
-  test('isWalkable remains true for an NPC-layer cell (walkable, non-wall)', () => {
+  test('an NPC standing on a solid tile does NOT make it walkable', () => {
     setCollisionGrid(_makeBorderGrid());
-    place(8005, 5, 5, CollisionLayer.npc);
-    // NPCs do not turn the tile into a wall — the movement system blocks
+    // Border cell (0,0) is solid terrain. An NPC occupies it — isWalkable
+    // must STILL be false (C-376 A2 regression: the old entity branch
+    // returned true because the NPC layer is not wall).
+    place(8005, 0, 0, CollisionLayer.npc);
+    expect(isWalkable(0, 0)).toBe(false);
+  });
+
+  test('isWalkable remains true for an NPC-layer cell on walkable terrain', () => {
+    setCollisionGrid(_makeBorderGrid());
+    place(8006, 5, 5, CollisionLayer.npc);
+    // NPCs do not turn the tile into terrain — the movement system blocks
     // them via the bitmask path (isCellBlocked), not via isWalkable.
     expect(isWalkable(5 * TILE_SIZE + 16, 5 * TILE_SIZE + 16)).toBe(true);
   });
@@ -321,47 +340,6 @@ describe('removeFromSpatialGrid — OOB handling', () => {
   });
 });
 
-describe('moveInSpatialGrid — OOB handling', () => {
-  beforeEach(() => {
-    initializeSpatialGrid(MAP_W, MAP_H);
-  });
-
-  afterEach(() => {
-    resetCollisionGrid();
-  });
-
-  test('does not throw moving from valid to OOB x', () => {
-    _makeEntity(1, 5, 5);
-    insertIntoSpatialGrid(1);
-    expect(() => moveInSpatialGrid(1, -1, 5)).not.toThrow();
-  });
-
-  test('does not throw moving from valid to OOB y', () => {
-    _makeEntity(1, 5, 5);
-    insertIntoSpatialGrid(1);
-    expect(() => moveInSpatialGrid(1, 5, MAP_H)).not.toThrow();
-  });
-
-  test('entity position updates even when destination is OOB', () => {
-    _makeEntity(1, 5, 5);
-    insertIntoSpatialGrid(1);
-    moveInSpatialGrid(1, -1, 5);
-    // GridPosition is updated (moveInSpatialGrid sets new coords before insert)
-    expect(GridPosition.x[1]).toBe(-1);
-    expect(GridPosition.y[1]).toBe(5);
-    // OOB entity is not in the spatial grid (insertIntoSpatialGrid returns early for OOB)
-    expect(isCellBlocked(-1, 5, CollisionLayer.wall)).toBe(true); // OOB = blocked
-  });
-
-  test('entity is removed from old cell on move', () => {
-    _makeEntity(1, 5, 5);
-    insertIntoSpatialGrid(1);
-    moveInSpatialGrid(1, 6, 5);
-    expect(isCellBlocked(5, 5, CollisionLayer.wall)).toBe(false);
-    expect(isCellBlocked(6, 5, CollisionLayer.wall)).toBe(true);
-  });
-});
-
 describe('initializeSpatialGrid — dimensions', () => {
   afterEach(() => {
     resetCollisionGrid();
@@ -400,6 +378,92 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     expect(isWalkable(160, 160)).toBe(true);
     // OOB pixel
     expect(isWalkable(-32, 160)).toBe(false);
+  });
+
+  test('creates wall entities for solid cells when a world is provided (C-376 AC-3)', () => {
+    const world = createWorld();
+    // Observers are required for set() to write the SoA arrays (the worker
+    // registers them before grid population; the test mirrors that order).
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+
+    setCollisionGrid(_makeBorderGrid(), world);
+
+    // Border cell (0,0) is solid → a wall entity occupies it in the spatial
+    // grid, so isCellBlocked reports it blocked for the player mask.
+    const playerMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+    expect(isCellBlocked(0, 0, playerMask)).toBe(true);
+    // Interior (5,5) is walkable terrain → no wall entity.
+    expect(isCellBlocked(5, 5, playerMask)).toBe(false);
+
+    // Inspect the created wall entity directly: layer is wall, GridPosition
+    // matches a known solid cell (CodeRabbit review, C-376). World-scoped
+    // query — module-level SoA arrays retain entries from earlier tests.
+    const wallEids = query(world, [GridPosition, CollisionData]).filter(
+      (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
+    );
+    expect(wallEids.length).toBeGreaterThan(0);
+    const borderCell = wallEids.find(
+      (eid) => GridPosition.x[eid] === 0 && GridPosition.y[eid] === 0,
+    );
+    expect(borderCell, 'wall entity exists at border cell (0,0)').toBeDefined();
+  });
+
+  test('setCollisionGrid is self-cleaning — repeated calls do not leak wall entities (C-376 AC-3)', () => {
+    // setCollisionGrid tracks and removes wall entities from a previous call
+    // before re-populating, so repeated LOAD_MAP calls (or a mid-session
+    // grid update) cannot grow the entity count toward MAX_ENTITIES
+    // (CodeRabbit review, C-376 round 2). No manual clearing needed.
+    const world = createWorld();
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+
+    const countWalls = (): number =>
+      query(world, [GridPosition, CollisionData]).filter(
+        (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
+      ).length;
+
+    setCollisionGrid(_makeBorderGrid(), world);
+    const wallCountAfterFirst = countWalls();
+    expect(wallCountAfterFirst).toBeGreaterThan(0);
+
+    setCollisionGrid(_makeBorderGrid(), world);
+    const wallCountAfterSecond = countWalls();
+
+    expect(wallCountAfterSecond).toBe(wallCountAfterFirst);
+    expect(wallCountAfterSecond).toBeGreaterThan(0);
+  });
+
+  test('setCollisionGrid throws when solid cells exceed the MAX_ENTITIES budget', () => {
+    const world = createWorld();
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+
+    // A 101×101 all-solid grid = 10201 cells > MAX_ENTITIES (10000).
+    const oversized: CollisionGrid = {
+      width: 101,
+      height: 101,
+      tileSize: 32,
+      grid: new Array<boolean>(101 * 101).fill(true),
+    };
+
+    expect(() => setCollisionGrid(oversized, world)).toThrow(/MAX_ENTITIES/);
+  });
+
+  test('skips wall entity creation when no world is provided (tests)', () => {
+    setCollisionGrid(_makeBorderGrid());
+    // No world → no wall entities; the boolean grid still blocks via
+    // isWalkable (terrain oracle) and isCellBlocked (grid empty → false).
+    expect(isWalkable(0, 0)).toBe(false);
+    expect(
+      isCellBlocked(0, 0, CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy),
+    ).toBe(false);
   });
 });
 
