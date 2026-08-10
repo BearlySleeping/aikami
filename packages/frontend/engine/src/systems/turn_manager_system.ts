@@ -11,6 +11,7 @@ import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import type { ActiveStatusEffect, DamageTypeKey } from '@aikami/types';
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics, combatRoleFromIndex } from '../components/combat_tactics.ts';
@@ -30,7 +31,7 @@ import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
-import { isWalkable } from './collision_system.ts';
+import { isCellBlocked, isWalkable } from './collision_system.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
 import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
 import { grantXp } from './progression_system.ts';
@@ -1946,7 +1947,15 @@ const _estimateGridDist = (world: World, fromEid: number, toEid: number): number
 };
 
 const _checkWalkable = (x: number, y: number): boolean => {
-  return isWalkable(x, y);
+  // C-376 AC-3: composite walkability — spatial-grid entity blocking (walls,
+  // solid props, NPCs, the player) OR terrain solidity. The mover here is a
+  // combatant (enemy/NPC); its mask mirrors the NPC mover set (walls, NPCs,
+  // player) so an occupied solid tile never reads as walkable.
+  const tileSize = 32;
+  const gx = Math.floor(x / tileSize);
+  const gy = Math.floor(y / tileSize);
+  const combatantMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
+  return !isCellBlocked(gx, gy, combatantMask) && isWalkable(x, y);
 };
 
 const _getEntityName = (_world: World, eid: number): string => {

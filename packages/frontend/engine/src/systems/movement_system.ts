@@ -32,8 +32,13 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
 /**
  * Default collision mask for the player entity — collides with walls,
  * NPCs, and enemies (not items).
+ *
+ * Exported for the canonical walkability composite
+ * `isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)`
+ * reused by the spawn clamp and re-audited callers (C-376 AC-3).
  */
-const PLAYER_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+export const PLAYER_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
 
 /**
  * Half-width of the entity collision box in world pixels.

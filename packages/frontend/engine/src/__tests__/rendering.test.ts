@@ -2258,6 +2258,7 @@ describe('C-039 Animation Controller — animateEntitySystem (bitECS Integration
 // ---------------------------------------------------------------------------
 
 import { computeDepthOrder } from '../rendering/depth_sort.ts';
+import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 
 describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
   it('renders larger world Y on top (back-to-front order by Y)', () => {
@@ -2308,5 +2309,56 @@ describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
     computeDepthOrder(input);
     expect(input[0]).toEqual({ eid: 1, y: 300, order: 0 });
     expect(input[1]).toEqual({ eid: 2, y: 100, order: 1 });
+  });
+});
+
+describe('C-376 AC-4 — zIndex parity with computeDepthOrder', () => {
+  it('computeDepthOrder output equals the zIndex-based ordering for the same entities', () => {
+    // Entities carry `zIndex = displayObject.y` (raw float) and the world
+    // container sorts children with a stable sort — ties resolve by
+    // insertion order, which is the spawn order. The zIndex ordering for a
+    // list sorted by [y asc, insertionIndex asc] must match computeDepthOrder
+    // (which sorts by [y asc, order asc]).
+    const items = [
+      { eid: 101, y: 384.0, order: 0 },
+      { eid: 102, y: 192.5, order: 1 },
+      { eid: 103, y: 256.0, order: 2 },
+      { eid: 104, y: 256.0, order: 3 },
+      { eid: 105, y: 320.0, order: 4 },
+      { eid: 106, y: 192.5, order: 5 },
+    ];
+
+    const expected = computeDepthOrder(items);
+
+    // Simulate the zIndex sort: stable sort by (y asc), insertion index as
+    // the implicit tie-break (containers are added once, never reparented).
+    const zIndexOrder = items
+      .map((item, insertionIndex) => ({ eid: item.eid, y: item.y, insertionIndex }))
+      .sort((a, b) => a.y - b.y || a.insertionIndex - b.insertionIndex)
+      .map((item) => item.eid);
+
+    expect(zIndexOrder).toEqual(expected);
+  });
+
+  it('keeps raw float y (never rounds) — fractional ties still stable', () => {
+    // Rounding 192.5 → 193 would reorder entity 106 above 103/104; the raw
+    // float keeps the exact y and the insertion-order tie-break.
+    const items = [
+      { eid: 102, y: 192.5, order: 1 },
+      { eid: 106, y: 192.5, order: 5 },
+    ];
+    const expected = computeDepthOrder(items);
+    expect(expected).toEqual([102, 106]);
+  });
+
+  it('WORLD_Z_BANDS sit below the entity y-range', () => {
+    // Entity zIndex = y >= 0 in world space; every band is negative so
+    // tilemap/debug/overlays always render below entities.
+    const entityYs = [0, 32, 64, 128, 256, 512, 1024];
+    for (const band of Object.values(WORLD_Z_BANDS)) {
+      for (const y of entityYs) {
+        expect(band, `band ${band} below entity y ${y}`).toBeLessThan(y);
+      }
+    }
   });
 });

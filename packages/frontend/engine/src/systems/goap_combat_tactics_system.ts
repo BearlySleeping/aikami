@@ -2,13 +2,14 @@
 
 import type { World } from 'bitecs';
 import { getComponent } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics } from '../components/combat_tactics.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { WorldStateBit } from '../math/goap/world_state_bits.ts';
-import { isWalkable } from '../systems/collision_system.ts';
+import { isCellBlocked, isWalkable } from '../systems/collision_system.ts';
 
 // ---------------------------------------------------------------------------
 // GoapCombatTacticsSystem — zero-allocation tactical combat AI
@@ -123,10 +124,8 @@ export const scoreTarget = (
   // If the midpoint cell is blocked, the path is obstructed → penalty.
   const midGx = Math.floor((attackerGx + targetGx) / 2);
   const midGy = Math.floor((attackerGy + targetGy) / 2);
-  const midX = midGx * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2;
-  const midY = midGy * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2;
 
-  if (!isWalkable(midX, midY)) {
+  if (!_checkWalkableComposite(midGx, midGy)) {
     distance = Math.floor(distance * OBSTRUCTED_PATH_PENALTY);
   }
 
@@ -238,6 +237,29 @@ export const resolveTacticalAction = (
 };
 
 /**
+ * Composite walkability oracle for tactical scoring (C-376 AC-3).
+ *
+ * Grid-coordinate check combining spatial-grid entity blocking (with the
+ * enemy mover mask — walls, NPCs, player) and the pure-terrain boolean grid.
+ * Mirrors the movement system's canonical composite so solid-prop-occupied
+ * and wall-entity cells read as blocked for path scoring.
+ *
+ * @param gx - Grid X coordinate.
+ * @param gy - Grid Y coordinate.
+ * @returns `true` when a combatant could occupy the cell.
+ */
+const _checkWalkableComposite = (gx: number, gy: number): boolean => {
+  const enemyMoverMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
+  if (isCellBlocked(gx, gy, enemyMoverMask)) {
+    return false;
+  }
+  return isWalkable(
+    gx * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2,
+    gy * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2,
+  );
+};
+
+/**
  * Computes an estimated grid distance between two entities.
  *
  * Uses taxicab distance after converting pixel positions to cell coordinates.
@@ -268,12 +290,7 @@ const _computeGridDistance = (world: World, fromEid: number, toEid: number): num
   // Obstruction check: midpoint
   const midGx = Math.floor((fx + tx) / 2);
   const midGy = Math.floor((fy + ty) / 2);
-  if (
-    !isWalkable(
-      midGx * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2,
-      midGy * DEFAULT_TILE_SIZE + DEFAULT_TILE_SIZE / 2,
-    )
-  ) {
+  if (!_checkWalkableComposite(midGx, midGy)) {
     dist = Math.floor(dist * OBSTRUCTED_PATH_PENALTY);
   }
 

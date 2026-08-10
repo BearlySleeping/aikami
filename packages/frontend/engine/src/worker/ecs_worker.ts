@@ -1,5 +1,8 @@
 // packages/frontend/engine/src/worker/ecs_worker.ts
 /// <reference lib="webworker" />
+
+import { PackConfigSchema } from '@aikami/schemas';
+import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import {
   addComponent,
@@ -10,6 +13,7 @@ import {
   removeEntity,
   set,
 } from 'bitecs';
+import { Value } from 'typebox/value';
 import { logger } from '$logger';
 import { djb2Hash, type SpawnPointEntity, type TransitionZone } from '../assets/map_loader.ts';
 import {
@@ -38,7 +42,6 @@ import {
 } from '../components/interactable_state.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
-import { registerMoveIntentObservers } from '../components/move_intent.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
@@ -82,7 +85,6 @@ import {
   isCellBlocked,
   isWalkable,
   removeFromSpatialGrid,
-  resolveMoveIntents,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
 import {
@@ -111,7 +113,7 @@ import {
   hydrateZone,
   startMacroSimulation,
 } from '../systems/macro_simulation_system.ts';
-import { updateMovement } from '../systems/movement_system.ts';
+import { PLAYER_COLLISION_MASK, updateMovement } from '../systems/movement_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
@@ -217,6 +219,17 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 /** The bitECS world — created once per INITIALIZE_ENGINE. */
 let world: World | undefined;
+
+/**
+ * The resolved content-pack config for the current map (C-376 AC-2).
+ *
+ * Validated once on LOAD_MAP, then read by the spawner (`_spawnProp`) for
+ * prop walkability/collision. Replaced on every LOAD_MAP — repeated loads
+ * replace the previous config; there is no cross-map leak. `undefined`
+ * (manifest resolution failed or malformed payload) degrades gracefully:
+ * all props stay solid.
+ */
+let _packConfig: PackConfig | undefined;
 
 /** The player entity ID, set during initialization. */
 let playerEntityId = 0;
@@ -631,42 +644,13 @@ const initializeEngine = (
   playerData?: PlayerCreateOptions,
   collisionGrid?: CollisionGrid,
 ): void => {
-  // 1. Set the collision grid before any entities or systems start
-  if (collisionGrid) {
-    setCollisionGrid(collisionGrid);
-
-    // C-196: Initialize JPS pathfinder for time-sliced navigation
-    const jpsIsWalkable = (gx: number, gy: number): boolean => {
-      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
-        return false;
-      }
-      return !collisionGrid.grid[gy * collisionGrid.width + gx];
-    };
-    initJpsPathfinder(collisionGrid.width, collisionGrid.height, jpsIsWalkable);
-
-    // C-196: Initialize spatial vision grid for perception sweeps
-    const visionWallCheck = (gx: number, gy: number): boolean => {
-      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
-        return true;
-      }
-      return collisionGrid.grid[gy * collisionGrid.width + gx];
-    };
-    setVisionGrid(visionWallCheck, collisionGrid.width, collisionGrid.height);
-  }
-
-  // 2. Create the bitECS world
+  // 1. Create the bitECS world FIRST — wall-entity creation from the
+  //    collision grid (C-376 AC-3) needs a live world + registered
+  //    observers, so the grid is populated after observer registration.
   world = createWorld();
 
-  // 3. Initialize camera bounds from provided canvas dims + collision grid
-  setScreenSize({ width: canvasWidth, height: canvasHeight });
-  if (collisionGrid) {
-    setMapBounds({
-      width: collisionGrid.width * collisionGrid.tileSize,
-      height: collisionGrid.height * collisionGrid.tileSize,
-    });
-  }
-
-  // 4. Register component observers
+  // 2. Register component observers (before grid population so wall
+  //    entities written via set() land in the SoA arrays).
   registerPositionObservers(world);
   registerVelocityObservers(world);
   registerVisualObservers(world);
@@ -687,10 +671,42 @@ const initializeEngine = (
   registerSpawnPointObservers(world);
   registerCollisionDataObservers(world);
   registerGridPositionObservers(world);
-  registerMoveIntentObservers(world);
   registerSpatialLinkObservers(world);
   registerMapLocationObservers(world);
   registerZoneStatusObservers(world);
+
+  // 3. Set the collision grid before any entities or systems start.
+  //    C-376 AC-3: pass the world so solid cells become real wall entities.
+  if (collisionGrid) {
+    setCollisionGrid(collisionGrid, world);
+
+    // C-196: Initialize JPS pathfinder for time-sliced navigation
+    const jpsIsWalkable = (gx: number, gy: number): boolean => {
+      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
+        return false;
+      }
+      return !collisionGrid.grid[gy * collisionGrid.width + gx];
+    };
+    initJpsPathfinder(collisionGrid.width, collisionGrid.height, jpsIsWalkable);
+
+    // C-196: Initialize spatial vision grid for perception sweeps
+    const visionWallCheck = (gx: number, gy: number): boolean => {
+      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
+        return true;
+      }
+      return collisionGrid.grid[gy * collisionGrid.width + gx];
+    };
+    setVisionGrid(visionWallCheck, collisionGrid.width, collisionGrid.height);
+  }
+
+  // 4. Initialize camera bounds from provided canvas dims + collision grid
+  setScreenSize({ width: canvasWidth, height: canvasHeight });
+  if (collisionGrid) {
+    setMapBounds({
+      width: collisionGrid.width * collisionGrid.tileSize,
+      height: collisionGrid.height * collisionGrid.tileSize,
+    });
+  }
 
   // 4b. Create the EngineState singleton entity (C-172)
   createEngineStateEntity(world);
@@ -993,11 +1009,9 @@ const tickLoop = (): void => {
     //
     // Axis-independent continuous movement with bitmask collision via
     // the dense spatial grid (isCellBlocked) and boolean grid
-    // fallback (isWalkable). MoveIntents are resolved against spatial
-    // grid occupancy after velocities settle.
+    // fallback (isWalkable).
     // ────────────────────────────────────────────────────────────────────────
     updateMovement(world, deltaMs);
-    resolveMoveIntents(world);
 
     // ────────────────────────────────────────────────────────────────────────
     // Post-resolution systems (do not mutate core state)
@@ -1796,6 +1810,7 @@ self.onmessage = (event: MessageEvent): void => {
             spawnPoints,
             transitionZones,
             collisionGrid,
+            packConfig,
             mapPixelWidth,
             mapPixelHeight,
             targetX,
@@ -1809,6 +1824,27 @@ self.onmessage = (event: MessageEvent): void => {
             disableClamping,
             mapId,
           } = message;
+
+          // ── C-376 AC-2: validate + store the pack config once per map load.
+          // Malformed payloads warn and degrade to undefined (props solid),
+          // never crash the worker.
+          if (packConfig !== undefined) {
+            if (Value.Check(PackConfigSchema, packConfig)) {
+              _packConfig = packConfig as PackConfig;
+              logger.debug(
+                'LOAD_MAP',
+                `stored packConfig (${Object.keys(_packConfig.tiles).length} tiles, ${Object.keys(_packConfig.props).length} props)`,
+              );
+            } else {
+              logger.warn(
+                'LOAD_MAP',
+                'packConfig failed TypeBox validation — treating as undefined',
+              );
+              _packConfig = undefined;
+            }
+          } else {
+            _packConfig = undefined;
+          }
 
           // ── C-172: Resolve spawn coordinates ──
           // Resolution chain (each step a fallback):
@@ -1872,6 +1908,7 @@ self.onmessage = (event: MessageEvent): void => {
           const results = spawnEntities({
             world,
             spawnPoints,
+            packConfig: _packConfig,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
             collectedPickups: collectedPickups as string[] | undefined,
             interactableStates: interactableStates as InteractableStateMap | undefined,
@@ -1890,8 +1927,10 @@ self.onmessage = (event: MessageEvent): void => {
             });
           }
 
-          // 6. Set the new collision grid
-          setCollisionGrid(collisionGrid as CollisionGrid);
+          // 6. Set the new collision grid.
+          //    C-376 AC-3: pass world so solid cells become real wall
+          //    entities registered in the spatial grid.
+          setCollisionGrid(collisionGrid as CollisionGrid, world);
 
           // 6d. C-375 AC-3: register spawned NPC/prop entities in the
           //     spatial grid. MUST run AFTER setCollisionGrid — the grid was
@@ -1945,9 +1984,17 @@ self.onmessage = (event: MessageEvent): void => {
           // 6a. C-180: Clamp player spawn position to a walkable tile.
           //     Query params like ?position_x=0&position_y=0 may land on
           //     water or outside the map — adjust to interior grass.
+          //     C-376 AC-3: use the canonical composite (spatial-grid entity
+          //     blocking OR terrain solidity) so a wall/NPC-occupied tile is
+          //     never a valid clamp target.
           if (playerEntityId > 0) {
             const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
-            if (pos && !isWalkable(pos.x, pos.y)) {
+            const isSpawnBlocked = (px: number, py: number): boolean => {
+              const tx = Math.floor(px / 32);
+              const ty = Math.floor(py / 32);
+              return isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py);
+            };
+            if (pos && isSpawnBlocked(pos.x, pos.y)) {
               // Scan outward from the target toward the map center to find
               // the nearest walkable tile. Fall back to center if none found.
               const centerX = (mapPixelWidth as number) / 2;
@@ -1965,7 +2012,7 @@ self.onmessage = (event: MessageEvent): void => {
                     }
                     const tx = pos.x + dx * tileSize;
                     const ty = pos.y + dy * tileSize;
-                    if (isWalkable(tx, ty)) {
+                    if (!isSpawnBlocked(tx, ty)) {
                       clampedX = tx;
                       clampedY = ty;
                       found = true;

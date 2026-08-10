@@ -1,0 +1,124 @@
+// scripts/src/lib/ops/generate_emberwatch_tables.ts
+//
+// Shared GID-table derivation for the Emberwatch generators (C-376 AC-6 D5).
+//
+// The manifest is the single source of truth for the GID↔frame mapping.
+// Both generators import from here instead of hand-declaring their own
+// tables, so a manifest edit is the ONLY change needed to retile/regenerate.
+//
+// Side-effect free — safe to import from tests.
+
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** Atlas grid columns — the 512×256 atlas is 16×8 32px cells. */
+const ATLAS_COLS = 16;
+
+const MANIFEST_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../apps/frontend/client/static/content-packs/emberwatch/manifest.json',
+);
+
+/** Reads manifest.json and returns tileId (gid string) → { name, frame }. */
+export const readManifestTiles = (): Record<string, { name: string; frame: string }> => {
+  const raw = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as {
+    tiles?: Record<string, { name?: string; frame?: string }>;
+  };
+  const tiles = raw.tiles ?? {};
+  const result: Record<string, { name: string; frame: string }> = {};
+  for (const [gid, def] of Object.entries(tiles)) {
+    result[gid] = { name: def.name ?? gid, frame: def.frame ?? '' };
+  }
+  return result;
+};
+
+/** Semantic key → manifest tile name (alias table kept minimal). */
+const TILE_NAME_ALIASES: Record<string, string> = {
+  GRASS: 'grass',
+  GRASS_VARIANT: 'grass_variant',
+  GRASS_DARK: 'grass_dark',
+  DIRT: 'dirt',
+  PATH: 'path_tough',
+  STONE_FLOOR: 'stone_floor',
+  WOOD_FLOOR: 'wood_floor',
+  BRICK: 'brick',
+  BRICK_VARIANT: 'brick_wall',
+  WOOD_WALL: 'wood_wall',
+  STONE_WALL: 'stone_wall',
+  WALL_TOP: 'wall_top',
+  ROOF: 'roof',
+  WATER: 'water',
+  FENCE: 'fence',
+  WOOD_FENCE: 'wood_fence',
+  WELL: 'well',
+  NOTICE: 'notice_board',
+  GATE: 'village_gate',
+  CHEST: 'chest',
+  RED_CHEST: 'red_chest',
+  BARREL: 'barrel',
+  CRATE: 'crate',
+  COUNTER: 'counter',
+  TABLE: 'table',
+  BED: 'bed',
+  RUG: 'rug',
+  BOOKSHELF: 'bookshelf',
+  FIREPLACE: 'fireplace',
+  CANDLE: 'candle',
+  PLANT: 'plant',
+  ANVIL: 'anvil',
+  PATH_VAR: 'path_tough_variant',
+  STONE_VAR: 'stone_floor_variant',
+  WOOD_VAR: 'wood_floor_variant',
+  SAND: 'sand',
+  BRIDGE: 'bridge',
+  STEPS: 'steps',
+  COLUMN: 'column',
+  WINDOW: 'window',
+  DOOR: 'wood_door',
+  FLAGSTONE: 'flagstone',
+  RUG_ROUND: 'rug_round',
+} as const;
+
+/**
+ * Builds the map-generator G lookup from manifest.tiles.
+ *
+ * Throws when a semantic alias has no matching manifest tile — a manifest
+ * rename must update the alias table, never silently fall back.
+ */
+export const buildG = (): Record<string, number> => {
+  const tiles = readManifestTiles();
+  const nameToGid = new Map<string, number>();
+  for (const [gid, def] of Object.entries(tiles)) {
+    nameToGid.set(def.name, Number(gid));
+  }
+
+  const g: Record<string, number> = {};
+  for (const [key, name] of Object.entries(TILE_NAME_ALIASES)) {
+    const gid = nameToGid.get(name);
+    if (gid === undefined) {
+      throw new Error(
+        `generate_emberwatch: manifest.tiles has no tile named "${name}" (for ${key})`,
+      );
+    }
+    g[key] = gid;
+  }
+  return g;
+};
+
+/**
+ * Builds the atlas-generator FRAMES table (frame → [col, row]) from
+ * manifest.tiles. GID = row*COLS + col + 1 in the atlas grid.
+ */
+export const buildFrames = (): Record<string, [number, number]> => {
+  const tiles = readManifestTiles();
+  const frames: Record<string, [number, number]> = {};
+  for (const [gid, def] of Object.entries(tiles)) {
+    if (!def.frame) {
+      continue;
+    }
+    const numericGid = Number(gid);
+    frames[def.frame] = [(numericGid - 1) % ATLAS_COLS, Math.floor((numericGid - 1) / ATLAS_COLS)];
+  }
+  return frames;
+};

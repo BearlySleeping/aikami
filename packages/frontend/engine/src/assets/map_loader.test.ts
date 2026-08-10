@@ -1,8 +1,10 @@
 // packages/frontend/engine/src/assets/map_loader.test.ts
 
 import { afterEach, describe, expect, it, mock } from 'bun:test';
+import type { PackConfig } from '@aikami/types';
 import type { TilemapData } from './map_loader.ts';
 import {
+  buildCollisionGrid,
   clearMapCache,
   extractCollisionGrid,
   extractSpawnPoints,
@@ -897,8 +899,7 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 4,
           height: 3,
-          // GID 1 = grass (walkable). Avoids the default water-GID (2) merge
-          // so this test exercises the explicit collision layer only.
+          // GID 1 = grass (walkable). Exercises the explicit collision layer.
           data: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
           visible: true,
         },
@@ -951,39 +952,6 @@ describe('extractCollisionGrid', () => {
     expect(grid[11]).toBe(true);
   });
 
-  it('merges water tiles (GID 2) from a ground layer as blocked, keeping grass (GID 1) walkable', () => {
-    // C-178 debug tileset (firstgid=1): GID 1 = grass (walkable),
-    // GID 2 = water (blocked). The default waterGids merge must block
-    // water while leaving grass walkable — regression guard for the
-    // inverted-collision spawn-in-water bug.
-    const tilemap: TilemapData = {
-      width: 3,
-      height: 1,
-      tilewidth: 32,
-      tileheight: 32,
-      tilesets: [],
-      layers: [
-        {
-          name: 'ground',
-          width: 3,
-          height: 1,
-          data: [1, 2, 1], // grass, water, grass
-          visible: true,
-        },
-      ],
-    };
-
-    const grid = extractCollisionGrid(tilemap);
-
-    expect(grid).toBeDefined();
-    if (!grid) {
-      throw new Error('grid should be defined');
-    }
-    expect(grid[0]).toBe(false); // grass — walkable
-    expect(grid[1]).toBe(true); // water — blocked
-    expect(grid[2]).toBe(false); // grass — walkable
-  });
-
   it('returns undefined when no collision layer exists', () => {
     const tilemap: TilemapData = {
       width: 2,
@@ -996,8 +964,7 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 2,
           height: 2,
-          // GID 1 = grass (walkable). Must not trigger the water-GID (2) merge,
-          // otherwise a map with no collision layer would still report blocked.
+          // No collision layer → no blocked cells.
           data: [1, 1, 1, 1],
           visible: true,
         },
@@ -1064,5 +1031,237 @@ describe('extractCollisionGrid', () => {
     }
     expect(grid[0]).toBe(true);
     expect(grid[1]).toBe(false);
+  });
+});
+
+describe('buildCollisionGrid (C-376 AC-1)', () => {
+  /** Minimal pack config declaring GID 1/2 walkable and GID 8 solid. */
+  const makePackConfig = (): PackConfig => ({
+    tiles: {
+      '1': { name: 'grass', frame: 'grass.png', isWalkable: true },
+      '2': { name: 'grass_variant', frame: 'grass_variant.png', isWalkable: true },
+      '8': { name: 'brick', frame: 'brick.png', isWalkable: false },
+    },
+    props: {},
+  });
+
+  it('keeps GID 2 (grass_variant, isWalkable: true) fully walkable', () => {
+    // C-376 A1 regression: the old default water-GID merge made
+    // every grass_variant tile an invisible wall. The manifest says GID 2 is
+    // walkable — it must stay open. A solid brick anchors the map so the
+    // grid is materialized; every non-brick cell must remain walkable.
+    const tilemap: TilemapData = {
+      width: 5,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 5,
+          height: 1,
+          data: [1, 2, 8, 2, 1], // scattered grass_variant + one brick
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false);
+    expect(grid[1]).toBe(false); // GID 2 walkable
+    expect(grid[2]).toBe(true); // brick solid
+    expect(grid[3]).toBe(false); // GID 2 walkable
+    expect(grid[4]).toBe(false);
+  });
+
+  it('derives solid cells from manifest isWalkable (GID 8 → solid)', () => {
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [1, 8, 2],
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false); // grass walkable
+    expect(grid[1]).toBe(true); // brick solid
+    expect(grid[2]).toBe(false); // grass_variant walkable
+  });
+
+  it('keeps GID 0 (empty) walkable', () => {
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [0, 8, 0], // brick anchor keeps the grid materialized
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false); // empty = walkable
+    expect(grid[1]).toBe(true); // brick
+    expect(grid[2]).toBe(false);
+  });
+
+  it('warns + fail-closed for unknown GIDs', () => {
+    // GID 99 is not declared in the manifest — runtime safety net treats it
+    // as solid (authoring error caught earlier by the AC-6 validator).
+    const tilemap: TilemapData = {
+      width: 2,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 2,
+          height: 1,
+          data: [1, 99],
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false);
+    expect(grid[1]).toBe(true); // unknown → solid
+  });
+
+  it('applies the collision layer additively (never re-opens manifest-solid cells)', () => {
+    const tilemap: TilemapData = {
+      width: 4,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 4,
+          height: 1,
+          data: [1, 8, 2, 1], // brick at index 1 is manifest-solid
+          visible: true,
+        },
+        {
+          name: 'collision',
+          width: 4,
+          height: 1,
+          data: [0, 0, 1, 1], // marks grass_variant + grass extra solid
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false); // grass, no collision marker
+    expect(grid[1]).toBe(true); // manifest-solid (brick)
+    expect(grid[2]).toBe(true); // collision layer added solidity
+    expect(grid[3]).toBe(true); // collision layer added solidity
+  });
+
+  it('falls back to the explicit collision layer when packConfig is undefined', () => {
+    // Graceful degradation: manifest resolution failed → packConfig undefined;
+    // non-collision GIDs are walkable, collision layer still blocks.
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [1, 8, 2],
+          visible: true,
+        },
+        {
+          name: 'collision',
+          width: 3,
+          height: 1,
+          data: [0, 1, 0],
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, undefined);
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false);
+    expect(grid[1]).toBe(true); // collision layer only
+    expect(grid[2]).toBe(false);
+  });
+
+  it('returns undefined when no cell is blocked (all-walkable map)', () => {
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [0, 1, 2], // all walkable
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig());
+    expect(grid).toBeUndefined();
   });
 });

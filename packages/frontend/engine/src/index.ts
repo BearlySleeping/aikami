@@ -127,8 +127,6 @@ export {
   registerWalletObservers,
   Wallet,
 } from './components/inventory.ts';
-export type { MoveIntentData } from './components/move_intent.ts';
-export { MoveIntent, registerMoveIntentObservers } from './components/move_intent.ts';
 export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
@@ -321,6 +319,8 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './rendering/animation_controller.ts';
+// Layer bands (C-376 AC-4)
+export { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,
@@ -378,10 +378,8 @@ export {
   isCellBlocked,
   isWalkable,
   isWithinMapBounds,
-  moveInSpatialGrid,
   removeFromSpatialGrid,
   resetCollisionGrid,
-  resolveMoveIntents,
   setCollisionGrid,
 } from './systems/collision_system.ts';
 export { spawnEncounterEnemy, updateEncounterSystem } from './systems/encounter_system.ts';

@@ -13,7 +13,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { PersonaData } from '@aikami/types';
+import type { PackConfig, PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
 import { audioContextManager, equipmentService, personaService } from '$services';
@@ -349,27 +349,30 @@ class GameEngineService
     packId?: string;
   }): Promise<void> {
     if (this._gameWorld) {
-      // C-375 AC-3: resolve the pack manifest (cached) and pass prop
-      // walkability so the worker can honor `isWalkable` props. The pack is
-      // resolved from the map-specific packId (a v3 save restore can target
-      // a different pack than the engine's boot default); load failures
-      // degrade to undefined propWalkability while the map load continues.
+      // C-376 AC-2: resolve the pack manifest (cached) and pass a validated
+      // packConfig (tiles + props) so the worker can honor `isWalkable` props
+      // and derive terrain solidity. The pack is resolved from the
+      // map-specific packId (a v3 save restore can target a different pack
+      // than the engine's boot default); load failures degrade to
+      // `packConfig: undefined` while the map load continues — all props stay
+      // solid, matching the pre-C-375 behavior (reviewer-explicit: a manifest
+      // fetch hiccup must never become a LOAD_MAP failure).
       const packId = options.packId ?? this.contentPackId;
-      let propWalkability: Record<string, boolean> | undefined;
+      let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
         const pack = await loadContentPack({ packId });
-        propWalkability = this._buildPropWalkability(pack.manifest);
+        packConfig = this._buildPackConfig(pack.manifest);
       } catch (error) {
-        this.error('loadMap:prop-walkability-failed', {
+        this.error('loadMap:pack-config-failed', {
           packId,
           error: error instanceof Error ? error.message : String(error),
-          hint: 'isWalkable props will not be honored for this map load (placeholder visuals).',
+          hint: 'Manifest resolution failed — map loads with all props solid and collision-layer fallback.',
         });
       }
       await this._gameWorld.loadMap({
         ...options,
-        propWalkability,
+        packConfig,
       });
       // Derive the map id from the URL (e.g. .../emberwatch_village.json).
       const file = options.mapUrl.split('/').pop() ?? '';
@@ -447,20 +450,31 @@ class GameEngineService
   }
 
   /**
-   * Builds a propId → isWalkable map from the pack manifest (C-375 AC-3).
+   * Builds the runtime pack config (tiles + props) from the manifest (C-376 AC-2).
    *
-   * The manifest lives on the main thread; the worker never sees it. The
-   * map is passed through GameWorld.loadMap and enriched onto prop spawn
-   * points before the worker spawns them.
+   * The manifest lives on the main thread; only this validated projection
+   * crosses the worker boundary once per map load. Replaces the C-375
+   * `propWalkability` side channel — future manifest-driven properties
+   * (collision rects, movement cost, interaction radius) ride the same field.
    */
-  private _buildPropWalkability(manifest: {
-    props?: Record<string, { isWalkable?: boolean }>;
-  }): Record<string, boolean> {
-    const walkability: Record<string, boolean> = {};
-    for (const [propId, def] of Object.entries(manifest.props ?? {})) {
-      walkability[propId] = def.isWalkable ?? false;
-    }
-    return walkability;
+  private _buildPackConfig(manifest: {
+    tiles?: Record<string, { name: string; frame: string; isWalkable: boolean }>;
+    props?: Record<string, { name: string; frame: string; isWalkable?: boolean }>;
+  }): PackConfig {
+    return {
+      tiles: Object.fromEntries(
+        Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
+          gid,
+          { name: def.name, frame: def.frame, isWalkable: def.isWalkable },
+        ]),
+      ),
+      props: Object.fromEntries(
+        Object.entries(manifest.props ?? {}).map(([propId, def]) => [
+          propId,
+          { name: def.name, frame: def.frame, isWalkable: def.isWalkable },
+        ]),
+      ),
+    };
   }
 
   // ── Private: bridge event registration ──
@@ -653,9 +667,10 @@ class GameEngineService
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX ?? 160,
         targetY: startingMap.defaultY ?? 192,
-        // C-375 AC-3: pass manifest prop walkability so the worker's
-        // spawner can skip blocking for walkable props (e.g. village_gate).
-        propWalkability: this._buildPropWalkability(pack.manifest),
+        // C-376 AC-2: pass the resolved pack config (tiles + props) so the
+        // worker's spawner can skip blocking for walkable props (e.g.
+        // village_gate) and derive terrain solidity from the manifest.
+        packConfig: this._buildPackConfig(pack.manifest),
       });
       // Track the starting map id for scene/vibe context.
       this.currentMapId = pack.manifest.startingMapId;

@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { ContentPackManifestSchema } from './content_pack.ts';
+import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
 
 /** Minimal valid manifest fixture. */
 const validManifest = {
@@ -627,5 +627,51 @@ describe('ContentPackManifestSchema — atlas tiles/props/entities (C-375)', () 
       },
     };
     expect(() => Value.Parse(ContentPackManifestSchema, manifest)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PackConfigSchema (C-376 AC-2)
+// ---------------------------------------------------------------------------
+
+describe('PackConfigSchema (C-376 AC-2)', () => {
+  test('validates tiles + props derived from the manifest shapes', () => {
+    const config = {
+      tiles: {
+        '1': { name: 'grass', frame: 'grass.png', isWalkable: true },
+        '8': { name: 'brick', frame: 'brick.png', isWalkable: false, isWall: true },
+        '5': { name: 'path', frame: 'path_tough.png', isWalkable: true, movementCost: 0.8 },
+      },
+      props: {
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_gate: { name: 'Gate', frame: 'village_gate.png', isWalkable: true },
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_well: {
+          name: 'Well',
+          frame: 'well.png',
+          isWalkable: false,
+          collision: { type: 'rect', width: 22, height: 14 },
+        },
+      },
+    };
+    expect(Value.Check(PackConfigSchema, config)).toBe(true);
+    const parsed = Value.Parse(PackConfigSchema, config);
+    expect(parsed.tiles['8'].isWalkable).toBe(false);
+    expect(parsed.props.village_well.collision?.type).toBe('rect');
+  });
+
+  test('rejects unknown shapes (tile missing isWalkable)', () => {
+    const config = {
+      tiles: {
+        '1': { name: 'grass', frame: 'grass.png' }, // missing isWalkable
+      },
+      props: {},
+    };
+    expect(Value.Check(PackConfigSchema, config)).toBe(false);
+  });
+
+  test('rejects non-object props/tiles payloads', () => {
+    expect(Value.Check(PackConfigSchema, { tiles: [], props: {} })).toBe(false);
+    expect(Value.Check(PackConfigSchema, undefined)).toBe(false);
   });
 });

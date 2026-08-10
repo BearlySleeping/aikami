@@ -1,8 +1,10 @@
 // packages/frontend/engine/src/systems/collision_system.ts
 
 import type { World } from 'bitecs';
+import { addComponent, addEntity, set } from 'bitecs';
 import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
+import { Position } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 
@@ -11,10 +13,12 @@ import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 //
 // Contract C-173: Replaces boolean isWalkable() with a dense spatial grid
 // (Uint32Array) backed by an intrusive doubly-linked list (SpatialLink)
-// for entities sharing the same grid cell. MoveIntent is resolved via
-// bitwise AND (&) collision mask checks against occupying entities.
+// for entities sharing the same grid cell. Movement resolves via bitwise
+// AND (&) collision mask checks against occupying entities.
 //
-// Pipeline: Input/AI → MoveIntent → CollisionSystem.resolve → GridPosition
+// C-376 AC-3: isWalkable is now a pure terrain oracle (entity branch
+// removed); entity awareness lives in isCellBlocked + the caller's
+// composite mask check. Solid terrain cells become real wall entities.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -156,8 +160,12 @@ export const isWithinMapBounds = (pixelX: number, pixelY: number): boolean => {
 /**
  * Checks whether a pixel coordinate is walkable.
  *
- * First checks the spatial grid (C-173 bitmask collision), falls back
- * to the boolean collision grid if no spatial grid is active.
+ * C-376 AC-3: pure terrain lookup — `true` when the boolean grid cell is
+ * open, `false` when solid. Entity occupancy (NPCs, props, enemies, walls)
+ * is NOT consulted here; callers that need entity awareness use the
+ * composite `isCellBlocked(tx, ty, <mask>) || !isWalkable(px, py)` so a
+ * wall/NPC standing on a walkable tile still blocks the mover via the
+ * spatial grid bitmask.
  *
  * @param pixelX - X position in pixels.
  * @param pixelY - Y position in pixels.
@@ -185,25 +193,8 @@ export const isWalkable = (pixelX: number, pixelY: number): boolean => {
 
   const index = tileY * _activeGrid.width + tileX;
 
-  // C-173: Check spatial grid first for entity-based collisions
-  if (_spatialGrid && tileX < _gridWidth && tileY < _gridHeight) {
-    const flatIndex = tileY * _gridWidth + tileX;
-    const headEid = _spatialGrid[flatIndex];
-    if (headEid !== 0) {
-      // Walk the linked list — check if any entity at this cell is a wall
-      let current = headEid;
-      while (current !== 0) {
-        const layer = CollisionData.layer[current];
-        if ((layer & CollisionLayer.wall) !== 0) {
-          return false; // Wall entity blocks movement
-        }
-        current = SpatialLink.next[current] ?? 0;
-      }
-      return true; // Entities in cell are not walls — walkable
-    }
-  }
-
-  // Legacy fallback: boolean grid
+  // Terrain only — entity occupancy is handled by isCellBlocked + the
+  // caller's composite mask check (C-376 AC-3).
   return !_activeGrid.grid[index];
 };
 
@@ -339,53 +330,6 @@ export const removeFromSpatialGrid = (eid: number): void => {
   SpatialLink.prev[eid] = 0;
 };
 
-/**
- * Updates an entity's position in the spatial grid after movement.
- *
- * Equivalent to `removeFromSpatialGrid(eid)` followed by updating
- * GridPosition and `insertIntoSpatialGrid(eid)`.
- *
- * @param eid - The entity ID to move.
- * @param newX - New grid X coordinate.
- * @param newY - New grid Y coordinate.
- */
-export const moveInSpatialGrid = (eid: number, newX: number, newY: number): void => {
-  removeFromSpatialGrid(eid);
-
-  GridPosition.x[eid] = newX;
-  GridPosition.y[eid] = newY;
-
-  insertIntoSpatialGrid(eid);
-};
-
-// ---------------------------------------------------------------------------
-// Move Intent Resolution (C-173)
-// ---------------------------------------------------------------------------
-
-/**
- * Resolves all pending MoveIntents against the spatial grid.
- *
- * For each entity with both GridPosition and MoveIntent:
- * 1. Computes the destination grid cell.
- * 2. Checks the spatial grid at the destination.
- * 3. Walks the linked list of entities in that cell.
- * 4. Performs bitwise AND (`mask & layer`) — non-zero = collision.
- * 5. If collision: zeros MoveIntent (movement blocked).
- * 6. If no collision: applies MoveIntent to GridPosition and updates
- *    the spatial grid.
- *
- * @param world - The bitECS world.
- */
-export const resolveMoveIntents = (_world: World): void => {
-  if (!_world || !_spatialGrid) {
-    return;
-  }
-
-  // TODO: Query entities with GridPosition + MoveIntent
-  // For now, this is scaffolded — actual query terms will be wired
-  // when the movement_system is refactored.
-};
-
 // ---------------------------------------------------------------------------
 // Bitmask collision check
 // ---------------------------------------------------------------------------
@@ -446,17 +390,28 @@ export const isCellBlocked = (destX: number, destY: number, moverMask: number): 
 // ---------------------------------------------------------------------------
 
 /**
- * Populates the spatial grid with wall entities for solid tiles
- * from the boolean collision grid.
+ * Creates real wall entities for solid tiles from the boolean collision grid.
  *
- * Wall entities receive `CollisionData { layer: CollisionLayer.wall, mask: 0 }`
- * and GridPosition at the tile coordinate. They live permanently in the
- * spatial grid — never removed during transitions.
+ * Each solid cell becomes a bitECS entity with:
+ * - `CollisionData { layer: CollisionLayer.wall, mask: 0 }` — the layer is
+ *   what every mover's mask intersects (player/NPC/prop/enemy masks all
+ *   include `CollisionLayer.wall`), so walls block everything; the wall's
+ *   own mask is unused (walls never move/check).
+ * - `GridPosition` at the tile coordinate + `SpatialLink` linked-list slots.
+ * - `Position` at the tile center (pixel space) for future render/serialization.
+ *
+ * Then `insertIntoSpatialGrid` registers it. Wall entities are runtime-only
+ * — re-created per LOAD_MAP, never serialized (the ECS serializer only
+ * persists Position/Appearance/CombatStats/Visual for the player scope, and
+ * map loads clear non-player entities before re-spawning).
+ *
+ * This completes C-173's unfinished plan ("scaffolded for future wall entity
+ * creation") and enables doors/bridges/destructibles as runtime layer toggles.
  *
  * @param world - The bitECS world.
  * @param grid - The collision grid.
  */
-const _populateWallsFromCollisionGrid = (_world: World, grid: CollisionGrid): void => {
+const _populateWallsFromCollisionGrid = (world: World, grid: CollisionGrid): void => {
   if (!_spatialGrid) {
     return;
   }
@@ -464,17 +419,25 @@ const _populateWallsFromCollisionGrid = (_world: World, grid: CollisionGrid): vo
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
       if (grid.grid[y * grid.width + x]) {
-        const flatIndex = y * _gridWidth + x;
+        const eid = addEntity(world);
 
-        // Set the wall marker directly in the grid (no bitECS entity needed
-        // for static walls — the spatial grid value itself acts as occupancy).
-        // We use a sentinel EID of 1 to mark walls (reserved for the player
-        // but walls don't need actual entities — CollisionData.layer is
-        // checked via the linked list).
-        //
-        // For proper bitmask collision, walls need real entities with
-        // CollisionData. This is scaffolded for future wall entity creation.
-        _spatialGrid[flatIndex] = 0; // No wall entity — use grid check
+        addComponent(world, eid, Position);
+        addComponent(
+          world,
+          eid,
+          set(Position, {
+            x: x * grid.tileSize + grid.tileSize / 2,
+            y: y * grid.tileSize + grid.tileSize / 2,
+          }),
+        );
+        addComponent(world, eid, GridPosition);
+        addComponent(world, eid, set(GridPosition, { x, y }));
+        addComponent(world, eid, SpatialLink);
+        addComponent(world, eid, set(SpatialLink, { next: 0, prev: 0 }));
+        addComponent(world, eid, CollisionData);
+        addComponent(world, eid, set(CollisionData, { layer: CollisionLayer.wall, mask: 0 }));
+
+        insertIntoSpatialGrid(eid);
       }
     }
   }

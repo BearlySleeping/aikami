@@ -316,7 +316,6 @@ class MapSandboxViewModel
         targetX: x,
         targetY: y,
         disableClamping,
-        waterGids: new Set(),
       });
       this.currentMap = '/game-data/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
@@ -351,7 +350,6 @@ class MapSandboxViewModel
         targetX: x,
         targetY: y,
         disableClamping,
-        waterGids: new Set(),
       });
       this.currentMap = '/game-data/maps/sandbox_textured.jton';
       this.debug('map-sandbox:loadZoneC:complete');

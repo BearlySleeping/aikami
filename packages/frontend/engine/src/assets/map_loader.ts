@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/assets/map_loader.ts
 
+import type { PackConfig } from '@aikami/types';
 import { logger } from '$logger';
 import { jtonToTilemapData, parseJtonMap } from './jton_parser.ts';
 
@@ -643,36 +644,28 @@ export const extractSpawnPointEntities = (tilemap: TilemapData): SpawnPointEntit
 };
 
 /**
- * Extracts the collision layer from a parsed tilemap, merging water
- * tiles from the ground layer into the collision grid.
+ * Extracts the collision layer from a parsed tilemap.
  *
  * The collision layer is identified by name (default: "collision").
  * Non-zero tile IDs in this layer are treated as solid obstacles.
  *
- * Additionally, any tile layer whose GID matches {@link waterGids}
- * has those tiles marked as solid — even if they are not in the
- * explicit collision layer. This prevents characters from walking
- * across water cells painted in decorative ground layers.
+ * C-376: the water-GID merge was removed — manifest walkability is now the
+ * source of truth for terrain solidity (see {@link buildCollisionGrid});
+ * this legacy function only reads the explicit collision layer. It remains
+ * for maps without a content pack (e.g. dev sandbox maps) and as the parity
+ * reference for {@link buildCollisionGrid}.
  *
  * @param tilemap - The parsed tilemap data.
- * @param options - Optional overrides for layer name and water GIDs.
+ * @param options - Optional layer name override.
  * @param options.layerName - Collision layer name (default: "collision").
- * @param options.waterGids - Set of GIDs that represent water tiles
- *   (default: `new Set([1])` — the first tile in the debug tileset).
  * @returns A flat boolean array (true = solid) in row-major order,
- *   or `undefined` if no collision layer is found AND no water tiles exist.
+ *   or `undefined` if no collision layer is found.
  */
 export const extractCollisionGrid = (
   tilemap: TilemapData,
-  options?: { layerName?: string; waterGids?: Set<number> },
+  options?: { layerName?: string },
 ): boolean[] | undefined => {
   const layerName = options?.layerName ?? 'collision';
-  // Water GIDs default to the debug tileset's water tile (C-178: firstgid=1,
-  // so index 0 = grass → GID 1, index 1 = water → GID 2). Merging water GIDs
-  // into the collision grid prevents wading through oceans while keeping the
-  // grass interior (GID 1) walkable. Set to an empty Set to disable when a
-  // map uses these GIDs as walkable floor.
-  const waterGids = options?.waterGids ?? new Set([2]);
 
   const totalCells = tilemap.width * tilemap.height;
 
@@ -680,7 +673,7 @@ export const extractCollisionGrid = (
   const grid = new Array<boolean>(totalCells).fill(false) as boolean[];
   let hasAnyBlocked = false;
 
-  // 1. Explicit collision layer
+  // Explicit collision layer
   const collisionLayer = tilemap.layers.find((l) => l.name === layerName);
   if (collisionLayer) {
     for (let i = 0; i < totalCells; i++) {
@@ -691,16 +684,99 @@ export const extractCollisionGrid = (
     }
   }
 
-  // 2. Merge water tiles from tile layers (cross-reference against tile IDs)
-  //    Contract C-198 AC-3: prevent wading through oceans
+  // Return undefined only if no collision layer contributed any blocked cells.
+  // Differentiate from a collision layer of all zeros (empty but present).
+  if (!hasAnyBlocked && !collisionLayer) {
+    return undefined;
+  }
+
+  return grid;
+};
+
+/**
+ * Builds the collision grid from the content-pack manifest — the manifest
+ * is the single source of truth for terrain solidity (C-376 AC-1).
+ *
+ * Walks every tile layer (excluding the collision layer itself), looks up
+ * each GID in `packConfig.tiles[String(gid)]`, and marks the cell solid when
+ * `isWalkable` is false. Semantics:
+ *
+ * - GID 0 (empty) is always walkable — never treated as "unknown".
+ * - Unknown GID (not declared in the manifest) → `warn` + solid (fail-closed).
+ *   The per-pack audit validator (AC-6) makes unknown GIDs an authoring error,
+ *   so this runtime safety net is rarely hit.
+ * - The map `collision` layer applies ADDITIVELY — it can only mark extra
+ *   cells solid, never re-open a manifest-solid cell.
+ *
+ * @param tilemap - The parsed tilemap data.
+ * @param packConfig - The resolved pack config (tiles + props). When
+ *   undefined (manifest resolution failed), falls back to the explicit
+ *   collision layer only — all non-collision GIDs are walkable (the
+ *   graceful-degradation path, C-376 AC-2 watch point).
+ * @param options - Optional layer name override.
+ * @param options.layerName - Collision layer name (default: "collision").
+ * @returns A flat boolean array (true = solid) in row-major order,
+ *   or `undefined` if no cell is blocked.
+ */
+export const buildCollisionGrid = (
+  tilemap: TilemapData,
+  packConfig: PackConfig | undefined,
+  options?: { layerName?: string },
+): boolean[] | undefined => {
+  const layerName = options?.layerName ?? 'collision';
+
+  // Graceful degradation: when no pack config is available (manifest
+  // resolution failed), mirror the legacy explicit-collision-layer
+  // extraction — non-collision GIDs stay walkable, the collision layer
+  // still blocks. This matches the pre-C-376 map behavior for packless
+  // maps and the AC-2 degraded path.
+  if (!packConfig) {
+    return extractCollisionGrid(tilemap, { layerName });
+  }
+
+  const tiles = packConfig.tiles;
+  const totalCells = tilemap.width * tilemap.height;
+
+  // Start with an empty grid (all false = walkable)
+  const grid = new Array<boolean>(totalCells).fill(false) as boolean[];
+  let hasAnyBlocked = false;
+
+  // 1. Manifest-driven solidity from tile layers (ground/decor).
+  //    GID 0 = empty = walkable; unknown GID = warn + solid (fail-closed).
   for (const layer of tilemap.layers) {
-    // Skip the collision layer itself and objectgroup layers (which have no data)
+    // Skip the collision layer itself and objectgroup layers (no data).
     if (layer.name === layerName || !Array.isArray(layer.data)) {
       continue;
     }
     for (let i = 0; i < totalCells; i++) {
       const gid = layer.data[i] ?? 0;
-      if (waterGids.has(gid)) {
+      if (gid === 0) {
+        continue; // empty cell — walkable by definition
+      }
+      const tileDef = tiles[String(gid)];
+      if (!tileDef) {
+        logger.warn('buildCollisionGrid:unknown-gid', {
+          gid,
+          layer: layer.name,
+          hint: 'Declare this GID in manifest.tiles — treating as solid (fail-closed).',
+        });
+        grid[i] = true;
+        hasAnyBlocked = true;
+        continue;
+      }
+      if (!tileDef.isWalkable) {
+        grid[i] = true;
+        hasAnyBlocked = true;
+      }
+    }
+  }
+
+  // 2. Explicit collision layer — additive only. Never re-opens a
+  //    manifest-solid cell.
+  const collisionLayer = tilemap.layers.find((l) => l.name === layerName);
+  if (collisionLayer) {
+    for (let i = 0; i < totalCells; i++) {
+      if (collisionLayer.data[i] !== 0) {
         grid[i] = true;
         hasAnyBlocked = true;
       }
@@ -708,7 +784,6 @@ export const extractCollisionGrid = (
   }
 
   // Return undefined only if no layer contributed any blocked cells.
-  // Differentiate from a collision layer of all zeros (empty but present).
   if (!hasAnyBlocked && !collisionLayer) {
     return undefined;
   }
