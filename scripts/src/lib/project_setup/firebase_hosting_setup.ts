@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/firebase_hosting_setup.ts
+// scripts/src/lib/project_setup/firebase_hosting_setup.ts
 //
 // Create Firebase Hosting sites for all firebase-hosting apps.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/firebase_hosting_setup.ts --mode=staging
-//   bun run scripts/src/lib/setup/firebase_hosting_setup.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/firebase_hosting_setup.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/firebase_hosting_setup.ts --mode=production --dry-run
 
 import { fmt, parseCliArgs, run } from '../cli_utils';
 import { APP_CONFIG, MODE_PROJECT_MAP, resolveHostingSiteId } from '../deploy/deployment_config';

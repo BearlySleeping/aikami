@@ -68,7 +68,7 @@ Open **http://localhost:5173** and you're playing. No internet required after th
 git clone https://github.com/BearlySleeping/aikami
 cd aikami
 
-bun run setup       # first-time onboarding
+bun run setup       # local machine setup (checks bun, jdk, chromium, ...)
 bun run dev         # client dev server
 bun run dev:all     # client + Firebase emulators (herdr workspace)
 ```

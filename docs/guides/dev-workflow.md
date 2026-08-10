@@ -7,10 +7,17 @@ Day-to-day development guide for the Aikami monorepo.
 ```bash
 git clone <repo>
 cd aikami
-bun run setup
+bun run setup        # local machine setup: checks bun, git, jdk, chromium, tauri deps
+bun install          # install dependencies
 ```
 
-The setup script checks prerequisites, installs deps, creates `.env`, and verifies everything works.
+The `bun run setup` script is a CLI guide that checks your local machine
+(essentials like bun/git, optional DX like direnv/pi/herdr, emulator deps
+like jdk/chromium, and Tauri build deps) and prints install commands for
+anything missing.
+
+> 🔴 `bun run setup` sets up YOUR machine. The GCP cloud project wizard is
+> a separate command: `bun run project:setup` (see docs/intro/setup.md).
 
 ## Daily Commands
 
@@ -114,7 +121,8 @@ $views        → apps/frontend/client/src/lib/views/
 
 ```bash
 bun run scripts                     # Interactive script picker
-bun run scripts -- setup            # Run setup directly
+bun run scripts -- setup            # Local machine setup guide
+bun run scripts -- project:setup    # GCP project setup wizard (maintainers)
 bun run scripts -- generate_llms    # Regenerate .context/llms.txt
 bun run scripts -- validate_all     # Full CI validation
 ```

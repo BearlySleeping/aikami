@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/gcp_apis.ts
+// scripts/src/lib/project_setup/gcp_apis.ts
 //
 // Enable required GCP APIs for the Aikami project.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/gcp_apis.ts --mode=staging
-//   bun run scripts/src/lib/setup/gcp_apis.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=production --dry-run
 
 import { c, fmt, parseCliArgs, run } from '../cli_utils';
 import { MODE_PROJECT_MAP } from '../deploy/deployment_config';

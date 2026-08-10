@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/secrets_manager.ts
+// scripts/src/lib/project_setup/secrets_manager.ts
 //
 // Create GCP Secret Manager secrets from .env.example discovery.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/secrets_manager.ts --mode=staging
-//   bun run scripts/src/lib/setup/secrets_manager.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=production --dry-run
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
