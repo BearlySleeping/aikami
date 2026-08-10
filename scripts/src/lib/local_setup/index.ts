@@ -189,7 +189,21 @@ const TOOLS: ToolCheck[] = [
     why: 'Required by the Firebase Emulator Suite (firebase emulators:start).',
     category: 'emulator',
     versionArgs: ['-version'],
-    verify: (out) => /version "\d+/.test(out) && !/^openjdk version "1\.8/.test(out),
+    verify: (out) => {
+      // Parse Java major version from both legacy (1.8.0_292) and current (17.0.2, 21) formats
+      const legacyMatch = out.match(/version "1\.(\d+)/);
+      if (legacyMatch) {
+        const major = parseInt(legacyMatch[1], 10);
+        return major >= 17;
+      }
+      const currentMatch = out.match(/version "(\d+)/);
+      if (currentMatch) {
+        const major = parseInt(currentMatch[1], 10);
+        return major >= 17;
+      }
+      // Unparseable output - reject
+      return false;
+    },
     install: {
       linux: {
         label: 'Install OpenJDK 21 (apt)',
@@ -267,6 +281,7 @@ const TOOLS: ToolCheck[] = [
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 async function probe(tool: ToolCheck): Promise<{ path?: string; out: string }> {
+  let lastFailure: { path: string; out: string } | undefined;
   for (const bin of tool.bins) {
     const found = Bun.which(bin);
     if (!found) {
@@ -283,12 +298,15 @@ async function probe(tool: ToolCheck): Promise<{ path?: string; out: string }> {
       if (code === 0) {
         return { path: found, out: '(no version output)' };
       }
-      return { path: found, out: combined || '(version probe failed)' };
+      // Non-zero exit: save failure and continue to next candidate
+      lastFailure = { path: found, out: combined || '(version probe failed)' };
     } catch {
-      return { path: found, out: '(version probe failed)' };
+      // Command threw: save failure and continue to next candidate
+      lastFailure = { path: found, out: '(version probe failed)' };
     }
   }
-  return { out: '' };
+  // All candidates failed or none found
+  return lastFailure ?? { out: '' };
 }
 
 function formatVersion(raw: string): string {
@@ -424,8 +442,16 @@ const missingCount = [...missingByCategory.values()].flat().length;
 
 if (missingCount === 0) {
   console.log(fmt.head('═══ All checks passed ═══'));
-  console.log(`${c.green}${c.bold}Your machine is ready!${c.reset}`);
-  console.log(fmt.note('Next: bun install && bun moon sync, then bun run dev'));
+  // Check if essentials were actually evaluated
+  const essentialsChecked = results.some((r) => r.tool.category === 'essentials');
+  if (essentialsChecked) {
+    console.log(`${c.green}${c.bold}Your machine is ready!${c.reset}`);
+    console.log(fmt.note('Next: bun install && bun moon sync, then bun run dev'));
+  } else {
+    console.log(`${c.green}${c.bold}The selected checks passed!${c.reset}`);
+    console.log(fmt.note('Note: essential checks were not evaluated (filtered by --only).'));
+    console.log(fmt.note('Run without --only to verify your machine is fully ready.'));
+  }
   process.exit(0);
 }
 
