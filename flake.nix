@@ -24,7 +24,7 @@
         inherit system;
         overlays = [overlay];
       };
-      herdr-pkg = herdr.packages.${system}.default or herdr.packages.${system}.herdr;
+      herdr-pkg = herdr.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
       # ----------------------------------------------------------------------
       # Chromium wrapper with PixiJS DevTools extension injection.
@@ -101,7 +101,7 @@
           libayatana-appindicator
           google-cloud-sdk
           xdg-utils
-];
+        ];
 
         # nix-direnv location — used by .envrc on subsequent loads to
         # source direnvrc without re-evaluating nixpkgs
