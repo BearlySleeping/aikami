@@ -41,33 +41,14 @@ const contractHash = (contractPath: string): string =>
 /**
  * Tool whitelist per role (legacy worker spawn path).
  *
- * 🔴 DISABLED FOR NOW: same policy as herdr_adapter's {@link toolsForRole} —
- * the per-role `--tools` whitelist is removed so every pipeline role gets the
- * full toolset, including user-installed custom extensions (pi-claude-bridge
- * AskClaude, web browsing/search, vision tools, GitHub CLI, context-mode,
- * etc.). Kept commented out to re-enable sandboxing later if needed.
- *
- * With `undefined`, the `--tools` flag is omitted in {@link main} and `pi`
- * loads every registered tool.
+ * 🔴 REMOVED 2026-08-10: per-role tool sandboxing was overengineering — role
+ * behavior is prompt-governed. Every role gets the full toolset (including
+ * user-installed custom extensions: pi-claude-bridge AskClaude, web
+ * browsing/search, vision tools, GitHub CLI, context-mode, etc.). With
+ * `undefined`, the `--tools` flag is omitted in {@link main} and `pi` loads
+ * every registered tool.
  */
 const activeTools = (_role: string): string[] | undefined => {
-  // ── Old per-role whitelist (disabled 2026-08-08) ──
-  // if (role === 'writer') {
-  //   return [
-  //     'read',
-  //     'grep',
-  //     'find',
-  //     'ls',
-  //     'edit',
-  //     'write',
-  //     'contract_scan_backlog',
-  //     'contract_generate',
-  //     'contract_stage_complete',
-  //   ];
-  // }
-  // if (role === 'critic') {
-  //   return ['read', 'grep', 'find', 'ls', 'contract_scan_backlog', 'contract_stage_complete'];
-  // }
   return undefined;
 };
 

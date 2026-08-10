@@ -18,10 +18,14 @@ import { getGitHeadCommit, runGit } from '../../scripts/src/lib/agents/git_workt
 import { publishWorktree } from '../../scripts/src/lib/herdr/worktree';
 import { runSyncOrThrow } from './lib/process_runner.ts';
 
-const MUTATING_GIT_RE =
-  /\bgit\s+(?:add|commit|push|merge|rebase|reset|checkout|switch|clean|stash|tag)\b/i;
-const MUTATING_SHELL_RE = /(?:^|[;&|]\s*)(?:rm|mv|cp|mkdir|touch|tee)\b|>{1,2}|\bsed\s+-i\b/i;
-const DEPLOY_TOOLS = new Set(['firebase_deploy_functions', 'direnv_switch_mode']);
+// 🔴 RELAXED 2026-08-10: hard per-role mutation guards removed.
+// Role boundaries are prompt-governed — each role prompt already states what
+// the role may and may not do (writer: "Never implement source code",
+// "Index.md is read-only"; critic: "Only edit the contract file";
+// implement/verify: no commit/push without instruction). Hard blocks only
+// produced false failures, e.g. the writer being denied writing a scratch
+// analysis file under .pi/contract-runs/. If a role misbehaves, fix the
+// prompt — don't re-add sandboxing.
 
 const environment = (name: string): string => {
   const value = process.env[name];
@@ -64,40 +68,7 @@ const atomicWrite = (options: { path: string; value: unknown }): void => {
   renameSync(temporaryPath, options.path);
 };
 
-const isFileMutationAllowed = (options: {
-  role: string;
-  inputPath: string;
-  contractPath: string;
-}): boolean => {
-  if (options.role === 'implementer' || options.role === 'verifier' || options.role === 'review') {
-    return true;
-  }
-  // Writer and critic can edit the contract file (docs/contracts/ only).
-  if (options.role === 'writer' || options.role === 'critic') {
-    const resolvedInput = resolve(options.inputPath);
-    const resolvedContract = resolve(options.contractPath);
-
-    if (resolvedInput === resolvedContract) {
-      return true;
-    }
-
-    const contractFileName = basename(options.contractPath);
-    const inputFileName = basename(options.inputPath);
-    const contractId = contractFileName.match(/^(C-\d+|MIG-\d+)/)?.[0];
-
-    if (contractId) {
-      // Allow the placeholder (C-315.md) or the slugged name (C-315-*.md)
-      if (inputFileName === `${contractId}.md` || inputFileName.startsWith(`${contractId}-`)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-  return false;
-};
-
-/** Register deterministic contract pipeline completion, review, workspace isolation, and role guards. */
+/** Register deterministic contract pipeline completion, review, and workspace isolation tools. */
 export default function contractPipelineExtension(pi: ExtensionAPI): void {
   // ── Workspace lifecycle state ───────────────────────────────
   // The orchestrator provisions the Git Worktree and passes its path
@@ -106,16 +77,13 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
   let _wsPath: string | null = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH ?? null;
 
   pi.on('tool_call', async (event) => {
+    // Role guards were removed (2026-08-10) — boundaries are prompt-governed.
+    // The only remaining hook is an informational warning: when an
+    // implementer/verifier runs inside a Git Worktree, edits to root repo
+    // paths are invisible to the workspace and will not reach the PR.
     const role = process.env.CONTRACT_PIPELINE_ROLE;
     if (!role) {
       return undefined;
-    }
-
-    if (DEPLOY_TOOLS.has(event.toolName)) {
-      return {
-        block: true,
-        reason: `Deployment tool ${event.toolName} is disabled in contract runs.`,
-      };
     }
 
     const workspaceRoot = _wsPath;
@@ -124,14 +92,6 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       (event.toolName === 'write' || event.toolName === 'edit') &&
       typeof input.path === 'string'
     ) {
-      const contractPath = environment('CONTRACT_PIPELINE_CONTRACT_PATH');
-      if (!isFileMutationAllowed({ role, inputPath: input.path, contractPath })) {
-        return {
-          block: true,
-          reason: `Role ${role} may not mutate ${input.path}.`,
-        };
-      }
-      // Warn if agent accesses root repo paths while workspace is active.
       if (
         workspaceRoot &&
         !resolve(input.path).startsWith(resolve(workspaceRoot)) &&
@@ -145,18 +105,6 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           );
         }
       }
-    }
-
-    if (event.toolName === 'bash' && typeof input.command === 'string') {
-      if (role !== 'review' && MUTATING_GIT_RE.test(input.command)) {
-        return { block: true, reason: 'Git mutations are disabled inside contract workers.' };
-      }
-      if (role === 'writer' && MUTATING_SHELL_RE.test(input.command)) {
-        return { block: true, reason: `Mutating shell commands are disabled for ${role}.` };
-      }
-      // Critic may mutate docs/contracts/ files only (the guard above on
-      // write/edit prevents source code mutations, but bash could still
-      // mutate files via shell commands).
     }
 
     return undefined;

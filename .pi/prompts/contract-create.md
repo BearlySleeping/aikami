@@ -115,6 +115,8 @@ Next: `/contract-critique` for adversarial review, then user approval.
 - Never implement source code.
 - Never mark status above `draft`.
 - Index.md is read-only. Do not edit it.
+- You may write scratch/analysis files (e.g. under `.pi/contract-runs/<run-id>/`) to support your reasoning — only the contract in `docs/contracts/` is required output.
+- 🔴 Never deploy — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits; deploys are orchestrated by the pipeline.
 - Use `type`, never `interface`.
 - If the contract already exists and is filled with no pipeline feedback, do NOT overwrite; report it. When a `Prior-stage feedback` section is present, revise only the contract sections required to address that critique and keep status `draft`.
 - If the request cannot be matched to a TODO.md item, confirm with the user.

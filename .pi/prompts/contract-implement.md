@@ -218,6 +218,7 @@ Decide from the contract's Target/Overview:
 - `moon_run_task` for per-project operations
 - 🔴 NEVER run raw shell `bun moon run` or `bun test` — use the Pi tools `moon_run_task` and `validate()` which have built-in timeouts. Raw shell commands will hang forever on large test suites.
 - 🔴 NEVER run long-lived servers in the main thread — use `herdr_session` / `firebase_emulator`
+- 🔴 NEVER deploy — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits. Deploys and environment switches are orchestrated by the pipeline, never by agents.
 - 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
 - 🔴 **Retry: when the verifier bounces changes back**, your task message includes the findings under "🔴 Verifier requested changes". Read them, fix each issue, run the affected tests, then call `contract_stage_complete`. Do NOT re-call without making code changes.

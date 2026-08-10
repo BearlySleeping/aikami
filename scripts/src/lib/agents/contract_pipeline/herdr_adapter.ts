@@ -142,45 +142,17 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
 /**
  * Tool whitelist per role.
  *
- * 🔴 DISABLED FOR NOW: the per-role `--tools` whitelist is removed so every
- * pipeline role gets the full toolset — including user-installed custom
- * extensions such as pi-claude-bridge (AskClaude), web-browsing / web-search
- * tools, ai_describe_image / ai_validate_image vision tools, GitHub CLI tools,
- * context-mode (ctx_execute / ctx_search), browser_inspect / browser_screenshot,
- * etc. The old whitelist is kept below, commented out, to re-enable tight
- * sandboxing later if needed (e.g. restricting writer/critic to read-only
- * analysis + contract-file edits).
+ * 🔴 REMOVED 2026-08-10: per-role tool sandboxing was overengineering — role
+ * behavior is prompt-governed. Every pipeline role gets the full toolset,
+ * including user-installed custom extensions (pi-claude-bridge AskClaude,
+ * web browsing/search, vision tools, GitHub CLI, context-mode, browser
+ * inspection, etc.).
  *
  * With `undefined`, {@link _buildWorkerCommand} omits the `--tools` flag
  * entirely, so `pi` loads every registered tool (project + user-level
  * extensions).
  */
 const toolsForRole = (_role: ContractWorkerRole): string[] | undefined => {
-  // ── Old per-role whitelist (disabled 2026-08-08) ──
-  // if (role === 'writer') {
-  //   return [
-  //     'read',
-  //     'grep',
-  //     'find',
-  //     'ls',
-  //     'edit',
-  //     'write',
-  //     'contract_scan_backlog',
-  //     'contract_generate',
-  //     'contract_stage_complete',
-  //   ];
-  // }
-  // if (role === 'critic') {
-  //   return [
-  //     'read',
-  //     'grep',
-  //     'find',
-  //     'ls',
-  //     'edit',
-  //     'contract_scan_backlog',
-  //     'contract_stage_complete',
-  //   ];
-  // }
   return undefined;
 };
 
