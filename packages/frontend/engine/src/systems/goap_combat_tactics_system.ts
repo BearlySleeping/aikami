@@ -2,7 +2,6 @@
 
 import type { World } from 'bitecs';
 import { getComponent } from 'bitecs';
-import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics } from '../components/combat_tactics.ts';
@@ -10,6 +9,7 @@ import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { WorldStateBit } from '../math/goap/world_state_bits.ts';
 import { isCellBlocked, isWalkable } from '../systems/collision_system.ts';
+import { COMBATANT_COLLISION_MASK } from '../systems/movement_system.ts';
 
 // ---------------------------------------------------------------------------
 // GoapCombatTacticsSystem — zero-allocation tactical combat AI
@@ -240,17 +240,17 @@ export const resolveTacticalAction = (
  * Composite walkability oracle for tactical scoring (C-376 AC-3).
  *
  * Grid-coordinate check combining spatial-grid entity blocking (with the
- * enemy mover mask — walls, NPCs, player) and the pure-terrain boolean grid.
- * Mirrors the movement system's canonical composite so solid-prop-occupied
- * and wall-entity cells read as blocked for path scoring.
+ * shared combatant mover mask — walls, NPCs, player, enemies) and the
+ * pure-terrain boolean grid. Mirrors the movement system's canonical
+ * composite so solid-prop-occupied and wall-entity cells read as blocked
+ * for path scoring.
  *
  * @param gx - Grid X coordinate.
  * @param gy - Grid Y coordinate.
  * @returns `true` when a combatant could occupy the cell.
  */
 const _checkWalkableComposite = (gx: number, gy: number): boolean => {
-  const enemyMoverMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
-  if (isCellBlocked(gx, gy, enemyMoverMask)) {
+  if (isCellBlocked(gx, gy, COMBATANT_COLLISION_MASK)) {
     return false;
   }
   return isWalkable(

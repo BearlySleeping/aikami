@@ -1205,6 +1205,88 @@ describe('buildCollisionGrid (C-376 AC-1)', () => {
     expect(grid[3]).toBe(true); // collision layer added solidity
   });
 
+  it('marks decor-layer cells solid by default, opt-out keeps them visual-only', () => {
+    // Multiple non-collision tile layers: ground is walkable, a decor layer
+    // paints non-walkable GID 8. By default the decor cells become solid
+    // (C-376 contract: every non-collision tile layer contributes). With
+    // solidityLayers the decor layer is visual-only and never blocks
+    // (CodeRabbit review, C-376).
+    const tilemap: TilemapData = {
+      width: 4,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 4,
+          height: 1,
+          data: [1, 1, 1, 1], // all walkable grass
+          visible: true,
+        },
+        {
+          name: 'decor',
+          width: 4,
+          height: 1,
+          data: [0, 8, 0, 8], // non-walkable brick decor accents
+          visible: true,
+        },
+      ],
+    };
+
+    const defaultGrid = buildCollisionGrid(tilemap, makePackConfig());
+    expect(defaultGrid).toBeDefined();
+    expect(defaultGrid?.[0]).toBe(false);
+    expect(defaultGrid?.[1]).toBe(true); // decor GID 8 solid by default
+    expect(defaultGrid?.[2]).toBe(false);
+    expect(defaultGrid?.[3]).toBe(true);
+
+    const visualOnlyGrid = buildCollisionGrid(tilemap, makePackConfig(), {
+      solidityLayers: ['ground'],
+    });
+    expect(visualOnlyGrid).toBeUndefined(); // nothing blocks → undefined
+  });
+
+  it('handles a named collision layer with packConfig', () => {
+    // layerName override: the explicit collision layer is called
+    // "collision_walls" — it still applies additively on top of manifest
+    // solidity (CodeRabbit review, C-376).
+    const tilemap: TilemapData = {
+      width: 4,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 4,
+          height: 1,
+          data: [1, 8, 2, 1], // brick at index 1 manifest-solid
+          visible: true,
+        },
+        {
+          name: 'collision_walls',
+          width: 4,
+          height: 1,
+          data: [0, 0, 1, 1], // additive markers
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makePackConfig(), {
+      layerName: 'collision_walls',
+    });
+
+    expect(grid).toBeDefined();
+    expect(grid?.[0]).toBe(false);
+    expect(grid?.[1]).toBe(true); // manifest-solid (brick)
+    expect(grid?.[2]).toBe(true); // named collision layer added solidity
+    expect(grid?.[3]).toBe(true); // named collision layer added solidity
+  });
+
   it('falls back to the explicit collision layer when packConfig is undefined', () => {
     // Graceful degradation: manifest resolution failed → packConfig undefined;
     // non-collision GIDs are walkable, collision layer still blocks.

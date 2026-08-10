@@ -11,7 +11,12 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildFrames, buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
+import {
+  ATLAS_COLS,
+  buildFrames,
+  buildG,
+  readManifestTiles,
+} from './generate_emberwatch_tables.ts';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const MANIFEST_PATH = join(
@@ -58,16 +63,18 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
         continue;
       }
       const numericGid = Number(gid);
-      const expectedCol = (numericGid - 1) % 16;
-      const expectedRow = Math.floor((numericGid - 1) / 16);
+      const expectedCol = (numericGid - 1) % ATLAS_COLS;
+      const expectedRow = Math.floor((numericGid - 1) / ATLAS_COLS);
       expect(
         frames[def.frame],
         `frame ${def.frame} (GID ${numericGid}) must be derived in FRAMES`,
       ).toEqual([expectedCol, expectedRow]);
     }
 
-    // No extra frames beyond the manifest (single source of truth).
-    expect(Object.keys(frames).length).toBe(Object.keys(tiles).length);
+    // Only manifest tiles with a declared frame produce a FRAMES entry —
+    // buildFrames skips tiles without one (CodeRabbit review, C-376).
+    const framesDeclared = Object.values(tiles).filter((def) => !!def.frame).length;
+    expect(Object.keys(frames).length).toBe(framesDeclared);
   });
 
   test('readManifestTiles matches the committed manifest file', () => {

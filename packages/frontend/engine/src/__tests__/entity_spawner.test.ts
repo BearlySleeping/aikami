@@ -195,4 +195,68 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     const eid = results[0].eid;
     expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
   });
+
+  test('prop with packConfig that lacks the propId defaults to solid (false-default path)', () => {
+    // C-376 AC-2 false-default path: packConfig exists but has no entry for
+    // the spawned propId — the prop must stay solid, never silently walkable.
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'mystery_crate',
+          type: 'prop',
+          x: 96,
+          y: 96, // tile (3,3)
+          properties: { propId: 'not_in_pack', frame: 'red_chest.png' },
+        }),
+      ],
+      packConfig: makePackConfig(), // declares village_gate + village_well only
+    });
+
+    expect(results).toHaveLength(1);
+    const eid = results[0].eid;
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
+    expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+    expect(CollisionData.mask[eid]).toBe(
+      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
+    );
+  });
+
+  test('manifest prop entry omitting isWalkable defaults to solid (false-default path)', () => {
+    // C-376 AC-2 false-default path: the manifest prop entry exists but omits
+    // isWalkable (schema-optional) — the prop must stay solid.
+    const packConfigNoWalkability: PackConfig = {
+      tiles: {},
+      props: {
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_gate: { name: 'Gate', frame: 'village_gate.png', isWalkable: true },
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        silent_crate: { name: 'Crate', frame: 'red_chest.png' }, // no isWalkable
+      },
+    };
+
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'crate',
+          type: 'prop',
+          x: 96,
+          y: 96, // tile (3,3)
+          properties: { propId: 'silent_crate', frame: 'red_chest.png' },
+        }),
+      ],
+      packConfig: packConfigNoWalkability,
+    });
+
+    expect(results).toHaveLength(1);
+    const eid = results[0].eid;
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
+    expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+    expect(CollisionData.mask[eid]).toBe(
+      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
+    );
+  });
 });

@@ -21,17 +21,22 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { buildFrames } from './generate_emberwatch_tables.ts';
+import {
+  ATLAS_HEIGHT,
+  ATLAS_TILE_SIZE,
+  ATLAS_WIDTH,
+  buildFrames,
+} from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants — atlas geometry is derived from the shared tables module so the
+// atlas generator, the frame registry, and the map tileset blocks cannot
+// drift independently (CodeRabbit review, C-376).
 // ---------------------------------------------------------------------------
 
-const TILE = 32;
-const COLS = 16;
-const ROWS = 8;
-const W = COLS * TILE; // 512
-const H = ROWS * TILE; // 256
+const TILE = ATLAS_TILE_SIZE;
+const W = ATLAS_WIDTH; // 512
+const H = ATLAS_HEIGHT; // 256
 
 /**
  * Frame registry: frameKey → [col, row]. DERIVED from manifest.tiles

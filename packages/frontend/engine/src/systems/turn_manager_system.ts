@@ -11,7 +11,6 @@ import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import type { ActiveStatusEffect, DamageTypeKey } from '@aikami/types';
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
-import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics, combatRoleFromIndex } from '../components/combat_tactics.ts';
@@ -34,6 +33,7 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { isCellBlocked, isWalkable } from './collision_system.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
 import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
+import { COMBATANT_COLLISION_MASK } from './movement_system.ts';
 import { grantXp } from './progression_system.ts';
 
 /** Cached query terms for active combat participants. */
@@ -1948,14 +1948,13 @@ const _estimateGridDist = (world: World, fromEid: number, toEid: number): number
 
 const _checkWalkable = (x: number, y: number): boolean => {
   // C-376 AC-3: composite walkability — spatial-grid entity blocking (walls,
-  // solid props, NPCs, the player) OR terrain solidity. The mover here is a
-  // combatant (enemy/NPC); its mask mirrors the NPC mover set (walls, NPCs,
-  // player) so an occupied solid tile never reads as walkable.
+  // solid props, NPCs, the player, enemies) OR terrain solidity. The mover
+  // here is a combatant (enemy/NPC); it uses the shared combatant mask so an
+  // occupied solid tile never reads as walkable (CodeRabbit review, C-376).
   const tileSize = 32;
   const gx = Math.floor(x / tileSize);
   const gy = Math.floor(y / tileSize);
-  const combatantMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
-  return !isCellBlocked(gx, gy, combatantMask) && isWalkable(x, y);
+  return !isCellBlocked(gx, gy, COMBATANT_COLLISION_MASK) && isWalkable(x, y);
 };
 
 const _getEntityName = (_world: World, eid: number): string => {

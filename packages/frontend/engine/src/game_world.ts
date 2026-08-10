@@ -24,7 +24,7 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
-import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
+import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
@@ -2475,8 +2475,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.y = y;
 
       // C-376 AC-4: y-depth via in-place zIndex. Raw float — the stable
-      // sort + never-reparented containers give the tie-break free.
-      entry.displayObject.zIndex = y;
+      // sort + never-reparented containers give the tie-break free. The
+      // lower bound is clamped to MIN_ENTITY_Y so the documented band
+      // invariant (bands below MIN_ENTITY_Y) holds even for negative
+      // spawn coordinates (CodeRabbit review, C-376).
+      entry.displayObject.zIndex = computeEntityZIndex(y);
 
       // Drive per-entity animation controller from positional deltas.
       // The controller computes dx/dy across frames to derive facing

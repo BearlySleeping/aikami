@@ -15,7 +15,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildG } from './generate_emberwatch_tables.ts';
+import {
+  ATLAS_COLS,
+  ATLAS_HEIGHT,
+  ATLAS_TILE_COUNT,
+  ATLAS_TILE_SIZE,
+  ATLAS_WIDTH,
+  buildG,
+} from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
 // Tile GIDs — DERIVED from manifest.tiles (C-376 AC-6 D5)
@@ -422,12 +429,14 @@ const TILESET_BLOCK = {
   firstgid: 1,
   name: 'atlas',
   image: '/game-data/sprites/tilesets/atlas.webp',
-  imagewidth: 512,
-  imageheight: 256,
-  tilewidth: 32,
-  tileheight: 32,
-  columns: 16,
-  tilecount: 128,
+  // Atlas geometry is derived from the shared tables module so the tileset
+  // block cannot drift from the atlas generator (CodeRabbit review, C-376).
+  imagewidth: ATLAS_WIDTH,
+  imageheight: ATLAS_HEIGHT,
+  tilewidth: ATLAS_TILE_SIZE,
+  tileheight: ATLAS_TILE_SIZE,
+  columns: ATLAS_COLS,
+  tilecount: ATLAS_TILE_COUNT,
   spacing: 0,
   margin: 0,
 };

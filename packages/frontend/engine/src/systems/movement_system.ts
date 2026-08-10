@@ -41,6 +41,21 @@ export const PLAYER_COLLISION_MASK =
   CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
 
 /**
+ * Default collision mask for combatants (NPCs/enemies) used by the
+ * tactical walkability composites (turn_manager `_checkWalkable` and
+ * goap_combat_tactics `_checkWalkableComposite`).
+ *
+ * Blocks walls, other NPCs, the player, and other enemies — a combatant
+ * must never treat a cell occupied by another combatant as walkable.
+ * `CollisionLayer.enemy` is included for symmetry with
+ * {@link PLAYER_COLLISION_MASK}; no entity currently carries
+ * `layer: enemy` in the spatial grid, so this is a no-op today but keeps
+ * the mask correct if enemies gain collision (CodeRabbit review, C-376).
+ */
+export const COMBATANT_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy;
+
+/**
  * Half-width of the entity collision box in world pixels.
  *
  * Entities occupy a 32×32 world-unit collision box with a bottom-centre

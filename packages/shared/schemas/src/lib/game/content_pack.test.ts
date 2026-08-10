@@ -674,4 +674,16 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
     expect(Value.Check(PackConfigSchema, { tiles: [], props: {} })).toBe(false);
     expect(Value.Check(PackConfigSchema, undefined)).toBe(false);
   });
+
+  test('rejects a config missing the required tiles key', () => {
+    // tiles is a required PackConfigSchema key — a config without it must
+    // fail validation (CodeRabbit review, C-376).
+    expect(Value.Check(PackConfigSchema, { props: {} })).toBe(false);
+  });
+
+  test('rejects a config missing the required props key', () => {
+    // props is a required PackConfigSchema key — a config without it must
+    // fail validation (CodeRabbit review, C-376).
+    expect(Value.Check(PackConfigSchema, { tiles: {} })).toBe(false);
+  });
 });

@@ -13,7 +13,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { PackConfig, PersonaData } from '@aikami/types';
+import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
 import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
 import { audioContextManager, equipmentService, personaService } from '$services';
@@ -457,10 +457,7 @@ class GameEngineService
    * `propWalkability` side channel — future manifest-driven properties
    * (collision rects, movement cost, interaction radius) ride the same field.
    */
-  private _buildPackConfig(manifest: {
-    tiles?: Record<string, { name: string; frame: string; isWalkable: boolean }>;
-    props?: Record<string, { name: string; frame: string; isWalkable?: boolean }>;
-  }): PackConfig {
+  private _buildPackConfig(manifest: Pick<ContentPackManifest, 'tiles' | 'props'>): PackConfig {
     return {
       tiles: Object.fromEntries(
         Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [

@@ -4,7 +4,6 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
-import { Position } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 
@@ -398,7 +397,12 @@ export const isCellBlocked = (destX: number, destY: number, moverMask: number): 
  *   include `CollisionLayer.wall`), so walls block everything; the wall's
  *   own mask is unused (walls never move/check).
  * - `GridPosition` at the tile coordinate + `SpatialLink` linked-list slots.
- * - `Position` at the tile center (pixel space) for future render/serialization.
+ *
+ * Walls deliberately do NOT carry `Position`: they are static, never
+ * rendered (no Visual), and never serialized — omitting Position keeps
+ * `serializeEntityStates` from scanning every wall on each tick
+ * (CodeRabbit review, C-376). `GridPosition` is the wall's canonical
+ * coordinate; `insertIntoSpatialGrid` reads only GridPosition.
  *
  * Then `insertIntoSpatialGrid` registers it. Wall entities are runtime-only
  * — re-created per LOAD_MAP, never serialized (the ECS serializer only
@@ -421,20 +425,12 @@ const _populateWallsFromCollisionGrid = (world: World, grid: CollisionGrid): voi
       if (grid.grid[y * grid.width + x]) {
         const eid = addEntity(world);
 
-        addComponent(world, eid, Position);
-        addComponent(
-          world,
-          eid,
-          set(Position, {
-            x: x * grid.tileSize + grid.tileSize / 2,
-            y: y * grid.tileSize + grid.tileSize / 2,
-          }),
-        );
-        addComponent(world, eid, GridPosition);
+        // set(...) attaches the component and fires its onSet observer in
+        // one call — the preceding bare addComponent calls were redundant
+        // (CodeRabbit review, C-376). No Position: walls are static,
+        // non-rendered, non-serialized (see the doc comment above).
         addComponent(world, eid, set(GridPosition, { x, y }));
-        addComponent(world, eid, SpatialLink);
         addComponent(world, eid, set(SpatialLink, { next: 0, prev: 0 }));
-        addComponent(world, eid, CollisionData);
         addComponent(world, eid, set(CollisionData, { layer: CollisionLayer.wall, mask: 0 }));
 
         insertIntoSpatialGrid(eid);

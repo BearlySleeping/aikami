@@ -15,7 +15,7 @@
 // part of the generic validator.
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PackConfig } from '@aikami/types';
 import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
@@ -128,7 +128,6 @@ const EMBERWATCH_MAP_FILES = {
 
 /** Discovers every pack directory under static/content-packs/*. */
 const listPackDirs = (): string[] => {
-  const { readdirSync } = require('node:fs') as typeof import('node:fs');
   const entries = readdirSync(CONTENT_PACKS_ROOT, { withFileTypes: true });
   return entries
     .filter((e) => e.isDirectory() && e.name !== 'index.json')
@@ -141,7 +140,12 @@ const listPackDirs = (): string[] => {
 
 describe('Per-pack content audit (C-376 AC-6)', () => {
   const packDirs = listPackDirs();
-  expect(packDirs.length).toBeGreaterThan(0);
+
+  test('discovers at least one content pack', () => {
+    // Asserted inside a test (not the describe body) so an empty pack
+    // directory reports a named failing test instead of aborting collection.
+    expect(packDirs.length).toBeGreaterThan(0);
+  });
 
   for (const packDir of packDirs) {
     const manifest = readJson<ManifestJson>(join(packDir, 'manifest.json'));
@@ -156,7 +160,6 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
           continue;
         }
         const full = join(packDir, mapPath);
-        const { existsSync } = require('node:fs') as typeof import('node:fs');
         expect(existsSync(full), `${packId} map file ${mapPath}`).toBe(true);
       }
     });
@@ -208,7 +211,13 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
         });
 
         test(`[${packId}/${mapPath}] no tile GID exceeds the declared frame grid`, () => {
-          const maxGid = Object.keys(manifest.tiles ?? {}).length;
+          // Highest numeric key from manifest.tiles — not the tile count, so
+          // a manifest with non-sequential GIDs still bounds map data
+          // correctly (CodeRabbit review, C-376).
+          const declaredGids = Object.keys(manifest.tiles ?? {})
+            .map(Number)
+            .filter((gid) => Number.isInteger(gid));
+          const maxGid = declaredGids.length > 0 ? Math.max(...declaredGids) : 0;
           for (const layer of map.layers) {
             if (layer.type !== 'tilelayer') {
               continue;
@@ -254,12 +263,11 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
             ).toBeDefined();
             if (tileDef?.isWalkable ?? true) {
               expect(collision[i], `${mapPath} cell ${i} walkable GID ${gid} must be open`).toBe(0);
-            } else {
-              expect(
-                collision[i],
-                `${mapPath} cell ${i} blocking GID ${gid} must be blocked`,
-              ).not.toBe(0);
             }
+            // Manifest-declared non-walkable tiles may omit duplicated
+            // collision cells — buildCollisionGrid derives their solidity
+            // from the manifest at load (C-376 AC-1). Only the walkable-
+            // GID-must-be-open direction is asserted here.
           }
         });
       }
@@ -372,7 +380,7 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
   });
 });
 
-describe('C-376 AC-1 parity — buildCollisionGrid matches legacy extraction on committed maps', () => {
+describe('C-376 AC-1 parity — buildCollisionGrid matches manifest solidity on committed maps', () => {
   const packDir = join(CONTENT_PACKS_ROOT, EMBERWATCH_FIXTURES.packId);
   const manifest = readJson<{
     tiles?: Record<
@@ -409,27 +417,17 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches legacy extraction on 
   };
 
   /**
-   * Legacy collision extraction — reproduces the pre-C-376 algorithm
-   * (explicit collision layer + default water-GID merge over a Set([2])).
-   * The parity gate compares buildCollisionGrid to THIS output so it is a
-   * genuine zero-behavior check against the old shipped code, not a tautology.
+   * Explicit expected grid derived from the configured solidity manifest +
+   * the explicit collision layer — the C-376 contract itself, independent of
+   * the pre-C-376 water-merge internals (CodeRabbit review, C-376):
+   *   - every manifest-declared non-walkable tile GID marks its cells solid
+   *   - the collision layer adds solid cells on top (never re-opens)
    */
-  const legacyExtractCollisionGrid = (tilemap: TilemapData): boolean[] | undefined => {
-    const legacyMergeGids = new Set<number>();
-    legacyMergeGids.add(2); // old default: water tile in the C-178 debug tileset
+  const expectedGridFromManifest = (tilemap: TilemapData): boolean[] | undefined => {
+    const tiles = packConfig.tiles;
     const totalCells = tilemap.width * tilemap.height;
     const grid = new Array<boolean>(totalCells).fill(false) as boolean[];
     let hasAnyBlocked = false;
-
-    const collisionLayer = tilemap.layers.find((l) => l.name === 'collision');
-    if (collisionLayer) {
-      for (let i = 0; i < totalCells; i++) {
-        if (collisionLayer.data[i] !== 0) {
-          grid[i] = true;
-          hasAnyBlocked = true;
-        }
-      }
-    }
 
     for (const layer of tilemap.layers) {
       if (layer.name === 'collision' || !Array.isArray(layer.data)) {
@@ -437,7 +435,20 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches legacy extraction on 
       }
       for (let i = 0; i < totalCells; i++) {
         const gid = layer.data[i] ?? 0;
-        if (legacyMergeGids.has(gid)) {
+        if (gid === 0) {
+          continue;
+        }
+        if (!tiles[String(gid)]?.isWalkable) {
+          grid[i] = true;
+          hasAnyBlocked = true;
+        }
+      }
+    }
+
+    const collisionLayer = tilemap.layers.find((l) => l.name === 'collision');
+    if (collisionLayer) {
+      for (let i = 0; i < totalCells; i++) {
+        if (collisionLayer.data[i] !== 0) {
           grid[i] = true;
           hasAnyBlocked = true;
         }
@@ -450,7 +461,7 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches legacy extraction on 
     return grid;
   };
 
-  test('buildCollisionGrid output is byte-identical to the legacy grid on village/inn/merchant_shop', () => {
+  test('buildCollisionGrid output matches the manifest-derived expectation on village/inn/merchant_shop', () => {
     const maps: Array<[string, string]> = [
       ['village', EMBERWATCH_MAP_FILES.village],
       ['inn', EMBERWATCH_MAP_FILES.inn],
@@ -459,18 +470,48 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches legacy extraction on 
 
     for (const [name, file] of maps) {
       const tilemap = readJson<TilemapData>(join(packDir, file));
-      const legacy = legacyExtractCollisionGrid(tilemap);
+      const expected = expectedGridFromManifest(tilemap);
       const derived = buildCollisionGrid(tilemap, packConfig);
 
       expect(derived, `${name}: derived grid defined`).toBeDefined();
-      expect(legacy, `${name}: legacy grid defined`).toBeDefined();
-      if (!derived || !legacy) {
+      expect(expected, `${name}: expected grid defined`).toBeDefined();
+      if (!derived || !expected) {
         continue;
       }
-      expect(derived.length).toBe(legacy.length);
-      for (let i = 0; i < legacy.length; i++) {
-        expect(derived[i], `${name} cell ${i}`).toBe(legacy[i]);
+      expect(derived.length).toBe(expected.length);
+      for (let i = 0; i < expected.length; i++) {
+        expect(derived[i], `${name} cell ${i}`).toBe(expected[i]);
       }
     }
+  });
+
+  test('GID 2 (grass_variant) cells without a collision marker stay walkable (fixture)', () => {
+    // C-376 A1 fixture against the REAL emberwatch manifest: a ground layer
+    // with GID 2 scattered among grass + brick, no collision layer. The
+    // manifest declares GID 2 walkable — buildCollisionGrid must leave those
+    // cells open while brick stays solid.
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [1, 2, 8], // grass, grass_variant, brick
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, packConfig);
+
+    expect(grid).toBeDefined();
+    expect(grid?.[0]).toBe(false); // grass walkable
+    expect(grid?.[1]).toBe(false); // GID 2 grass_variant walkable
+    expect(grid?.[2]).toBe(true); // brick manifest-solid
   });
 });

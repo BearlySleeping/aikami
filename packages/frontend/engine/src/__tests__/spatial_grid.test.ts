@@ -8,7 +8,7 @@
 // returning safe default values (blocked / false) at all map edges.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { createWorld } from 'bitecs';
+import { createWorld, query, removeEntity } from 'bitecs';
 import {
   CollisionData,
   CollisionLayer,
@@ -397,6 +397,56 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     expect(isCellBlocked(0, 0, playerMask)).toBe(true);
     // Interior (5,5) is walkable terrain → no wall entity.
     expect(isCellBlocked(5, 5, playerMask)).toBe(false);
+
+    // Inspect the created wall entity directly: layer is wall, GridPosition
+    // matches a known solid cell (CodeRabbit review, C-376).
+    const wallEids = Object.keys(GridPosition.x)
+      .map(Number)
+      .filter((eid) => eid > 0 && CollisionData.layer[eid] === CollisionLayer.wall);
+    expect(wallEids.length).toBeGreaterThan(0);
+    const borderCell = wallEids.find(
+      (eid) => GridPosition.x[eid] === 0 && GridPosition.y[eid] === 0,
+    );
+    expect(borderCell, 'wall entity exists at border cell (0,0)').toBeDefined();
+  });
+
+  test('setCollisionGrid after entity clearing does not accumulate wall entities (C-376 AC-3)', () => {
+    // The worker contract (ecs_worker LOAD_MAP): non-player entities are
+    // cleared BEFORE setCollisionGrid re-populates walls, so wall entities
+    // never accumulate across transitions. Emulate that clearing here and
+    // assert the wall population stays bounded (CodeRabbit review, C-376).
+    const world = createWorld();
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+
+    // Count wall entities via a world-scoped bitECS query (module-level SoA
+    // arrays retain entries from earlier tests in this file).
+    const countWalls = (): number =>
+      query(world, [GridPosition, CollisionData]).filter(
+        (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
+      ).length;
+
+    setCollisionGrid(_makeBorderGrid(), world);
+    const wallCountAfterFirst = countWalls();
+    expect(wallCountAfterFirst).toBeGreaterThan(0);
+
+    // Worker step 1: clear non-player entities before re-population.
+    const wallEids = query(world, [GridPosition, CollisionData]).filter(
+      (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
+    );
+    for (const eid of wallEids) {
+      removeFromSpatialGrid(eid);
+      removeEntity(world, eid);
+    }
+
+    // Worker step 6: re-populate walls from the same grid.
+    setCollisionGrid(_makeBorderGrid(), world);
+    const wallCountAfterSecond = countWalls();
+
+    expect(wallCountAfterSecond).toBe(wallCountAfterFirst);
+    expect(wallCountAfterSecond).toBeGreaterThan(0);
   });
 
   test('skips wall entity creation when no world is provided (tests)', () => {

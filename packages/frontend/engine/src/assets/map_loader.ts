@@ -712,18 +712,26 @@ export const extractCollisionGrid = (
  * @param packConfig - The resolved pack config (tiles + props). When
  *   undefined (manifest resolution failed), falls back to the explicit
  *   collision layer only — all non-collision GIDs are walkable (the
- *   graceful-degradation path, C-376 AC-2 watch point).
- * @param options - Optional layer name override.
+ *   graceful-degradation path, C-376 AC-2 watch point). Sandbox maps
+ *   without a pack express GID-2/water solidity in their explicit
+ *   collision layers (the debug_map.jton water ring), so no hardcoded
+ *   GID set needs to be reintroduced here.
+ * @param options - Optional behavior overrides.
  * @param options.layerName - Collision layer name (default: "collision").
+ * @param options.solidityLayers - When provided, ONLY these tile layers
+ *   contribute manifest solidity; every other non-collision tile layer is
+ *   treated as visual-only (CodeRabbit review, C-376). Omitted → all
+ *   non-collision tile layers contribute (C-376 contract default).
  * @returns A flat boolean array (true = solid) in row-major order,
  *   or `undefined` if no cell is blocked.
  */
 export const buildCollisionGrid = (
   tilemap: TilemapData,
   packConfig: PackConfig | undefined,
-  options?: { layerName?: string },
+  options?: { layerName?: string; solidityLayers?: string[] },
 ): boolean[] | undefined => {
   const layerName = options?.layerName ?? 'collision';
+  const solidityLayers = options?.solidityLayers;
 
   // Graceful degradation: when no pack config is available (manifest
   // resolution failed), mirror the legacy explicit-collision-layer
@@ -743,9 +751,14 @@ export const buildCollisionGrid = (
 
   // 1. Manifest-driven solidity from tile layers (ground/decor).
   //    GID 0 = empty = walkable; unknown GID = warn + solid (fail-closed).
+  //    When solidityLayers is provided, only those layers contribute — all
+  //    other non-collision layers are visual-only and never block.
   for (const layer of tilemap.layers) {
     // Skip the collision layer itself and objectgroup layers (no data).
     if (layer.name === layerName || !Array.isArray(layer.data)) {
+      continue;
+    }
+    if (solidityLayers && !solidityLayers.includes(layer.name)) {
       continue;
     }
     for (let i = 0; i < totalCells; i++) {
