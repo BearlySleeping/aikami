@@ -320,7 +320,12 @@ export {
   velocityToDirection,
 } from './rendering/animation_controller.ts';
 // Layer bands (C-376 AC-4)
-export { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
+export type { WorldZBand } from './rendering/layer_bands.ts';
+export {
+  computeEntityZIndex,
+  MIN_ENTITY_Y,
+  WORLD_Z_BANDS,
+} from './rendering/layer_bands.ts';
 export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,

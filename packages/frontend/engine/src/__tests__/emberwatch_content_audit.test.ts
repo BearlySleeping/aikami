@@ -43,6 +43,7 @@ type MapJson = {
     firstgid: number;
     imagewidth: number;
     imageheight: number;
+    tilewidth?: number;
     columns: number;
     tilecount: number;
   }>;
@@ -173,8 +174,28 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
       const atlasPath = atlasUrl.startsWith('/')
         ? join(import.meta.dir, `../../../../../apps/frontend/client/static${atlasUrl}`)
         : atlasUrl;
-      const atlas = readJson<AtlasJson>(atlasPath);
-      const frames = new Set(Object.keys(atlas.frames));
+
+      // Guard atlas loading: a missing/unreadable atlas file must surface as
+      // a named test failure, not abort collection for the whole pack
+      // (CodeRabbit review, C-376 round 2).
+      let atlas: AtlasJson | undefined;
+      try {
+        atlas = readJson<AtlasJson>(atlasPath);
+      } catch {
+        // Left undefined — the named test below reports the failure.
+      }
+      const frames = new Set(Object.keys(atlas?.frames ?? {}));
+
+      test(`[${packId}] atlas.json is readable at ${atlasUrl}`, () => {
+        expect(atlas, `atlas ${atlasPath} must exist and parse`).toBeDefined();
+      });
+
+      // A missing atlas was reported by the named test above — skip the
+      // remaining atlas-dependent checks for this pack so other discovered
+      // packs still produce named results (CodeRabbit review, C-376 r2).
+      if (!atlas) {
+        continue;
+      }
 
       test(`[${packId}] every manifest tiles[x].frame exists in the atlas`, () => {
         for (const [tileId, def] of Object.entries(manifest.tiles ?? {})) {
@@ -207,7 +228,11 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
           expect(block.firstgid).toBe(1);
           expect(block.imagewidth).toBe(atlas.meta.size.w);
           expect(block.imageheight).toBe(atlas.meta.size.h);
-          expect(block.columns).toBe(16);
+          // Derive the expected column count from the atlas width and the
+          // map's declared tile width instead of hardcoding 16, so a tileset
+          // geometry change is caught here (CodeRabbit review, C-376 r2).
+          const tileWidth = block.tilewidth ?? 32;
+          expect(block.columns).toBe(Math.floor(atlas.meta.size.w / tileWidth));
         });
 
         test(`[${packId}/${mapPath}] no tile GID exceeds the declared frame grid`, () => {
@@ -247,9 +272,19 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
         test(`[${packId}/${mapPath}] collision layer matches manifest walkability`, () => {
           const tilesById = manifest.tiles ?? {};
           const ground = map.layers.find((l) => l.name === 'ground')?.data ?? [];
-          const collision = map.layers.find((l) => l.name === 'collision')?.data ?? [];
+          const collisionLayer = map.layers.find((l) => l.name === 'collision');
+          const collision = collisionLayer?.data ?? [];
           expect(ground.length).toBe(map.width * map.height);
-          expect(collision.length).toBe(map.width * map.height);
+
+          // Collision-layer assertions apply only when the map declares one
+          // — maps may omit duplicated collision cells because
+          // buildCollisionGrid derives non-walkable solidity from the
+          // manifest at load (C-376 AC-1) (CodeRabbit review, C-376 r2).
+          if (collisionLayer) {
+            expect(collision.length, `${mapPath} collision layer dims`).toBe(
+              map.width * map.height,
+            );
+          }
 
           for (let i = 0; i < ground.length; i++) {
             const gid = ground[i];
@@ -261,13 +296,11 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
               tileDef,
               `${mapPath} cell ${i} GID ${gid} must be declared in manifest.tiles`,
             ).toBeDefined();
-            if (tileDef?.isWalkable ?? true) {
+            // Walkable GIDs must never be blocked by the collision layer
+            // (when one exists).
+            if ((tileDef?.isWalkable ?? true) && collisionLayer) {
               expect(collision[i], `${mapPath} cell ${i} walkable GID ${gid} must be open`).toBe(0);
             }
-            // Manifest-declared non-walkable tiles may omit duplicated
-            // collision cells — buildCollisionGrid derives their solidity
-            // from the manifest at load (C-376 AC-1). Only the walkable-
-            // GID-must-be-open direction is asserted here.
           }
         });
       }
@@ -446,7 +479,7 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches manifest solidity on 
     }
 
     const collisionLayer = tilemap.layers.find((l) => l.name === 'collision');
-    if (collisionLayer) {
+    if (collisionLayer && Array.isArray(collisionLayer.data)) {
       for (let i = 0; i < totalCells; i++) {
         if (collisionLayer.data[i] !== 0) {
           grid[i] = true;

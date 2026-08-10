@@ -686,4 +686,37 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
     // fail validation (CodeRabbit review, C-376).
     expect(Value.Check(PackConfigSchema, { tiles: {} })).toBe(false);
   });
+
+  test('prop isWalkable undefined is omitted by the projection contract', () => {
+    // The client projection omits optional fields that are absent — it never
+    // emits `isWalkable: undefined`. structuredClone preserves an explicit
+    // undefined as an own property (proven below), so the emitted shape is
+    // not deterministic when the key is written unconditionally. The
+    // projection contract keeps the worker payload free of undefined values
+    // regardless of TypeBox's tolerance for them (CodeRabbit review, C-376
+    // round 2).
+    const withUndefined = {
+      tiles: {},
+      props: {
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_gate: { name: 'Gate', frame: 'village_gate.png', isWalkable: undefined },
+      },
+    };
+    const cloned = structuredClone(withUndefined);
+    expect('isWalkable' in cloned.props.village_gate).toBe(true);
+    // Current TypeBox accepts explicit undefined for Optional — but the
+    // projection still omits it for a deterministic, undefined-free payload.
+    expect(Value.Check(PackConfigSchema, cloned)).toBe(true);
+
+    const omitted = {
+      tiles: {},
+      props: {
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_gate: { name: 'Gate', frame: 'village_gate.png' },
+      },
+    };
+    const omittedClone = structuredClone(omitted);
+    expect('isWalkable' in omittedClone.props.village_gate).toBe(false);
+    expect(Value.Check(PackConfigSchema, omittedClone)).toBe(true);
+  });
 });

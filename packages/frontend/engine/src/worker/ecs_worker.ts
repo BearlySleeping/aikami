@@ -1929,8 +1929,14 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 6. Set the new collision grid.
           //    C-376 AC-3: pass world so solid cells become real wall
-          //    entities registered in the spatial grid.
-          setCollisionGrid(collisionGrid as CollisionGrid, world);
+          //    entities registered in the spatial grid. Guarded like the
+          //    initializeEngine site — never pass an undefined grid
+          //    (CodeRabbit review, C-376 round 2).
+          if (collisionGrid) {
+            setCollisionGrid(collisionGrid, world);
+          } else {
+            logger.warn('LOAD_MAP', 'collisionGrid missing on map load — spatial grid stays empty');
+          }
 
           // 6d. C-375 AC-3: register spawned NPC/prop entities in the
           //     spatial grid. MUST run AFTER setCollisionGrid — the grid was

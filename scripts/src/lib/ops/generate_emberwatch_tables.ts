@@ -62,8 +62,20 @@ export const resetManifestTilesCache = (): void => {
   _cachedManifestTiles = undefined;
 };
 
+/**
+ * Seeds the memoized manifest read (test-only — validation-guard tests).
+ *
+ * Pass the tiles to seed, or `undefined` to restore real-manifest reads.
+ * Tests must restore the cache with `resetManifestTilesCache()` afterwards.
+ */
+export const setManifestTilesForTest = (
+  tiles: Record<string, { name: string; frame: string }> | undefined,
+): void => {
+  _cachedManifestTiles = tiles;
+};
+
 /** Semantic key → manifest tile name (alias table kept minimal). */
-const TILE_NAME_ALIASES: Record<string, string> = {
+const TILE_NAME_ALIASES = {
   GRASS: 'grass',
   GRASS_VARIANT: 'grass_variant',
   GRASS_DARK: 'grass_dark',

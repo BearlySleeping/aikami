@@ -8,7 +8,7 @@
 // returning safe default values (blocked / false) at all map edges.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { createWorld, query, removeEntity } from 'bitecs';
+import { createWorld, query } from 'bitecs';
 import {
   CollisionData,
   CollisionLayer,
@@ -399,10 +399,11 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     expect(isCellBlocked(5, 5, playerMask)).toBe(false);
 
     // Inspect the created wall entity directly: layer is wall, GridPosition
-    // matches a known solid cell (CodeRabbit review, C-376).
-    const wallEids = Object.keys(GridPosition.x)
-      .map(Number)
-      .filter((eid) => eid > 0 && CollisionData.layer[eid] === CollisionLayer.wall);
+    // matches a known solid cell (CodeRabbit review, C-376). World-scoped
+    // query — module-level SoA arrays retain entries from earlier tests.
+    const wallEids = query(world, [GridPosition, CollisionData]).filter(
+      (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
+    );
     expect(wallEids.length).toBeGreaterThan(0);
     const borderCell = wallEids.find(
       (eid) => GridPosition.x[eid] === 0 && GridPosition.y[eid] === 0,
@@ -410,19 +411,17 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     expect(borderCell, 'wall entity exists at border cell (0,0)').toBeDefined();
   });
 
-  test('setCollisionGrid after entity clearing does not accumulate wall entities (C-376 AC-3)', () => {
-    // The worker contract (ecs_worker LOAD_MAP): non-player entities are
-    // cleared BEFORE setCollisionGrid re-populates walls, so wall entities
-    // never accumulate across transitions. Emulate that clearing here and
-    // assert the wall population stays bounded (CodeRabbit review, C-376).
+  test('setCollisionGrid is self-cleaning — repeated calls do not leak wall entities (C-376 AC-3)', () => {
+    // setCollisionGrid tracks and removes wall entities from a previous call
+    // before re-populating, so repeated LOAD_MAP calls (or a mid-session
+    // grid update) cannot grow the entity count toward MAX_ENTITIES
+    // (CodeRabbit review, C-376 round 2). No manual clearing needed.
     const world = createWorld();
     registerPositionObservers(world);
     registerGridPositionObservers(world);
     registerSpatialLinkObservers(world);
     registerCollisionDataObservers(world);
 
-    // Count wall entities via a world-scoped bitECS query (module-level SoA
-    // arrays retain entries from earlier tests in this file).
     const countWalls = (): number =>
       query(world, [GridPosition, CollisionData]).filter(
         (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
@@ -432,21 +431,29 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     const wallCountAfterFirst = countWalls();
     expect(wallCountAfterFirst).toBeGreaterThan(0);
 
-    // Worker step 1: clear non-player entities before re-population.
-    const wallEids = query(world, [GridPosition, CollisionData]).filter(
-      (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
-    );
-    for (const eid of wallEids) {
-      removeFromSpatialGrid(eid);
-      removeEntity(world, eid);
-    }
-
-    // Worker step 6: re-populate walls from the same grid.
     setCollisionGrid(_makeBorderGrid(), world);
     const wallCountAfterSecond = countWalls();
 
     expect(wallCountAfterSecond).toBe(wallCountAfterFirst);
     expect(wallCountAfterSecond).toBeGreaterThan(0);
+  });
+
+  test('setCollisionGrid throws when solid cells exceed the MAX_ENTITIES budget', () => {
+    const world = createWorld();
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+
+    // A 101×101 all-solid grid = 10201 cells > MAX_ENTITIES (10000).
+    const oversized: CollisionGrid = {
+      width: 101,
+      height: 101,
+      tileSize: 32,
+      grid: new Array<boolean>(101 * 101).fill(true),
+    };
+
+    expect(() => setCollisionGrid(oversized, world)).toThrow(/MAX_ENTITIES/);
   });
 
   test('skips wall entity creation when no world is provided (tests)', () => {

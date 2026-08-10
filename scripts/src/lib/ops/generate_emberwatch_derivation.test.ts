@@ -16,6 +16,8 @@ import {
   buildFrames,
   buildG,
   readManifestTiles,
+  resetManifestTilesCache,
+  setManifestTilesForTest,
 } from './generate_emberwatch_tables.ts';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
@@ -84,6 +86,69 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
     for (const [gid, def] of Object.entries(fromDisk)) {
       expect(fromShared[gid]?.name, `gid ${gid} name`).toBe(def.name ?? gid);
       expect(fromShared[gid]?.frame, `gid ${gid} frame`).toBe(def.frame ?? '');
+    }
+  });
+
+  // ── Validation guards (CodeRabbit review, C-376 round 2) ──
+
+  test('buildG throws on duplicate manifest tile names', () => {
+    try {
+      setManifestTilesForTest({
+        '1': { name: 'grass', frame: 'grass.png' },
+        '2': { name: 'grass', frame: 'grass_variant.png' }, // duplicate name
+      });
+      expect(() => buildG()).toThrow(/duplicate manifest tile name "grass"/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('buildG throws when a semantic alias has no matching manifest tile', () => {
+    try {
+      setManifestTilesForTest({
+        '1': { name: 'grass', frame: 'grass.png' },
+      });
+      // The alias table references many names (path_tough, village_gate, ...)
+      // that the seeded manifest lacks.
+      expect(() => buildG()).toThrow(/manifest.tiles has no tile named/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('buildFrames throws on duplicate manifest frames', () => {
+    try {
+      setManifestTilesForTest({
+        '1': { name: 'grass', frame: 'grass.png' },
+        '2': { name: 'grass_variant', frame: 'grass.png' }, // duplicate frame
+      });
+      expect(() => buildFrames()).toThrow(/duplicate manifest frame "grass.png"/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('buildFrames throws when a GID is outside the atlas grid', () => {
+    try {
+      setManifestTilesForTest({
+        '129': { name: 'out_of_bounds', frame: 'oob.png' }, // > ATLAS_COLS*ATLAS_ROWS
+      });
+      expect(() => buildFrames()).toThrow(/outside the atlas grid/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('buildFrames skips tiles without a declared frame', () => {
+    try {
+      setManifestTilesForTest({
+        '1': { name: 'grass', frame: 'grass.png' },
+        '2': { name: 'no_frame', frame: '' },
+      });
+      const frames = buildFrames();
+      expect(Object.keys(frames)).toEqual(['grass.png']);
+    } finally {
+      resetManifestTilesCache();
     }
   });
 });

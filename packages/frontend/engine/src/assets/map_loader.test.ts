@@ -1,7 +1,8 @@
 // packages/frontend/engine/src/assets/map_loader.test.ts
 
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { PackConfig } from '@aikami/types';
+import { logger } from '$logger';
 import type { TilemapData } from './map_loader.ts';
 import {
   buildCollisionGrid,
@@ -1138,11 +1139,13 @@ describe('buildCollisionGrid (C-376 AC-1)', () => {
     expect(grid[2]).toBe(false);
   });
 
-  it('warns + fail-closed for unknown GIDs', () => {
+  it('warns + fail-closed for unknown GIDs — one warning per layer, not per cell', () => {
     // GID 99 is not declared in the manifest — runtime safety net treats it
-    // as solid (authoring error caught earlier by the AC-6 validator).
+    // as solid (authoring error caught earlier by the AC-6 validator). The
+    // warning is emitted once per layer for the collected unknown GIDs, not
+    // once per cell (CodeRabbit review, C-376 round 2).
     const tilemap: TilemapData = {
-      width: 2,
+      width: 6,
       height: 1,
       tilewidth: 32,
       tileheight: 32,
@@ -1150,22 +1153,35 @@ describe('buildCollisionGrid (C-376 AC-1)', () => {
       layers: [
         {
           name: 'ground',
-          width: 2,
+          width: 6,
           height: 1,
-          data: [1, 99],
+          data: [1, 99, 2, 99, 99, 1], // GID 99 scattered across 3 cells
           visible: true,
         },
       ],
     };
 
-    const grid = buildCollisionGrid(tilemap, makePackConfig());
+    const warnSpy = spyOn(logger, 'warn');
+    try {
+      const grid = buildCollisionGrid(tilemap, makePackConfig());
 
-    expect(grid).toBeDefined();
-    if (!grid) {
-      throw new Error('grid should be defined');
+      expect(grid).toBeDefined();
+      expect(grid?.[0]).toBe(false);
+      expect(grid?.[1]).toBe(true); // unknown → solid
+      expect(grid?.[2]).toBe(false);
+      expect(grid?.[3]).toBe(true);
+      expect(grid?.[4]).toBe(true);
+      expect(grid?.[5]).toBe(false);
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const call = warnSpy.mock.calls.find((args) => args[0] === 'buildCollisionGrid:unknown-gid');
+      expect(call).toBeDefined();
+      const payload = call?.[1] as { gids?: number[]; layer?: string };
+      expect(payload.gids).toEqual([99]);
+      expect(payload.layer).toBe('ground');
+    } finally {
+      warnSpy.mockRestore();
     }
-    expect(grid[0]).toBe(false);
-    expect(grid[1]).toBe(true); // unknown → solid
   });
 
   it('applies the collision layer additively (never re-opens manifest-solid cells)', () => {

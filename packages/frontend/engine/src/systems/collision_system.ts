@@ -1,10 +1,11 @@
 // packages/frontend/engine/src/systems/collision_system.ts
 
 import type { World } from 'bitecs';
-import { addComponent, addEntity, set } from 'bitecs';
+import { addComponent, addEntity, removeEntity, set } from 'bitecs';
 import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
+import { MAX_ENTITIES } from '../config/memory_config.ts';
 import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,15 @@ let _gridWidth = 0;
 /** Height of the spatial grid in tiles. */
 let _gridHeight = 0;
 
+/**
+ * Wall entity EIDs created by {@link setCollisionGrid}.
+ *
+ * Used for self-cleaning: the next call removes these before re-populating so
+ * repeated grid updates never leak wall entities toward MAX_ENTITIES
+ * (CodeRabbit review, C-376 round 2).
+ */
+let _wallEids: number[] = [];
+
 // ---------------------------------------------------------------------------
 // Public: Legacy API
 // ---------------------------------------------------------------------------
@@ -86,6 +96,12 @@ let _gridHeight = 0;
  *
  * Also initializes the spatial grid to match the collision grid dimensions
  * and populates it with wall entities for solid tiles.
+ *
+ * Self-cleaning: wall entities created by a previous call are removed before
+ * re-populating, so repeated LOAD_MAP calls (or a mid-session grid update
+ * from the sandbox view model) cannot grow the entity count toward
+ * MAX_ENTITIES. Callers that clear non-player entities first (ecs_worker)
+ * are unaffected — the tracking set is empty by then.
  *
  * @param grid - The collision grid parsed from the map's collision layer.
  * @param world - The bitECS world for wall entity registration.
@@ -99,6 +115,17 @@ export const setCollisionGrid = (grid: CollisionGrid, world?: World): void => {
     // treat any coordinate outside [0, mapPixel) as strictly blocked.
     _mapPixelWidth = grid.width * grid.tileSize;
     _mapPixelHeight = grid.height * grid.tileSize;
+
+    // Remove wall entities created by a previous grid before re-populating,
+    // so repeated calls cannot exhaust the entity budget (CodeRabbit
+    // review, C-376 round 2).
+    if (world && _wallEids.length > 0) {
+      for (const eid of _wallEids) {
+        removeFromSpatialGrid(eid);
+        removeEntity(world, eid);
+      }
+    }
+    _wallEids = [];
 
     initializeSpatialGrid(grid.width, grid.height);
 
@@ -119,6 +146,7 @@ export const resetCollisionGrid = (): void => {
   _gridHeight = 0;
   _mapPixelWidth = 0;
   _mapPixelHeight = 0;
+  _wallEids = [];
   clearBresenhamGrid();
 };
 
@@ -420,10 +448,28 @@ const _populateWallsFromCollisionGrid = (world: World, grid: CollisionGrid): voi
     return;
   }
 
+  // Budget guard: count solid cells before allocating so an oversized map
+  // fails loudly instead of exhausting the entity pool mid-population
+  // (CodeRabbit review, C-376 round 2).
+  let solidCount = 0;
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (grid.grid[y * grid.width + x]) {
+        solidCount++;
+      }
+    }
+  }
+  if (solidCount > MAX_ENTITIES) {
+    throw new Error(
+      `setCollisionGrid: ${solidCount} solid cells exceed the MAX_ENTITIES budget (${MAX_ENTITIES}) — refusing to create wall entities`,
+    );
+  }
+
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
       if (grid.grid[y * grid.width + x]) {
         const eid = addEntity(world);
+        _wallEids.push(eid);
 
         // set(...) attaches the component and fires its onSet observer in
         // one call — the preceding bare addComponent calls were redundant

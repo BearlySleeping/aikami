@@ -753,6 +753,8 @@ export const buildCollisionGrid = (
   //    GID 0 = empty = walkable; unknown GID = warn + solid (fail-closed).
   //    When solidityLayers is provided, only those layers contribute — all
   //    other non-collision layers are visual-only and never block.
+  //    Unknown GIDs are collected per layer and warned ONCE after the loop
+  //    (not once per cell) — CodeRabbit review, C-376 round 2.
   for (const layer of tilemap.layers) {
     // Skip the collision layer itself and objectgroup layers (no data).
     if (layer.name === layerName || !Array.isArray(layer.data)) {
@@ -761,6 +763,7 @@ export const buildCollisionGrid = (
     if (solidityLayers && !solidityLayers.includes(layer.name)) {
       continue;
     }
+    const unknownGids = new Set<number>();
     for (let i = 0; i < totalCells; i++) {
       const gid = layer.data[i] ?? 0;
       if (gid === 0) {
@@ -768,11 +771,7 @@ export const buildCollisionGrid = (
       }
       const tileDef = tiles[String(gid)];
       if (!tileDef) {
-        logger.warn('buildCollisionGrid:unknown-gid', {
-          gid,
-          layer: layer.name,
-          hint: 'Declare this GID in manifest.tiles — treating as solid (fail-closed).',
-        });
+        unknownGids.add(gid);
         grid[i] = true;
         hasAnyBlocked = true;
         continue;
@@ -781,6 +780,13 @@ export const buildCollisionGrid = (
         grid[i] = true;
         hasAnyBlocked = true;
       }
+    }
+    if (unknownGids.size > 0) {
+      logger.warn('buildCollisionGrid:unknown-gid', {
+        gids: [...unknownGids].sort((a, b) => a - b),
+        layer: layer.name,
+        hint: 'Declare these GIDs in manifest.tiles — treating as solid (fail-closed).',
+      });
     }
   }
 

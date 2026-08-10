@@ -462,14 +462,37 @@ class GameEngineService
       tiles: Object.fromEntries(
         Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
           gid,
-          { name: def.name, frame: def.frame, isWalkable: def.isWalkable },
+          {
+            name: def.name,
+            frame: def.frame,
+            isWalkable: def.isWalkable,
+            // Optional schema fields are carried only when present — never
+            // emitted as explicit undefined, which would fail the worker's
+            // TypeBox validation after structured clone (CodeRabbit review,
+            // C-376 round 2).
+            ...(def.isWall === undefined ? {} : { isWall: def.isWall }),
+            ...(def.movementCost === undefined ? {} : { movementCost: def.movementCost }),
+          },
         ]),
       ),
       props: Object.fromEntries(
-        Object.entries(manifest.props ?? {}).map(([propId, def]) => [
-          propId,
-          { name: def.name, frame: def.frame, isWalkable: def.isWalkable },
-        ]),
+        Object.entries(manifest.props ?? {}).map(([propId, def]) => {
+          const projected: {
+            name: string;
+            frame: string;
+            isWalkable?: boolean;
+            collision?:
+              | { type: 'rect'; width: number; height: number }
+              | { type: 'circle'; radius: number };
+          } = { name: def.name, frame: def.frame };
+          if (def.isWalkable !== undefined) {
+            projected.isWalkable = def.isWalkable;
+          }
+          if (def.collision) {
+            projected.collision = def.collision;
+          }
+          return [propId, projected];
+        }),
       ),
     };
   }
