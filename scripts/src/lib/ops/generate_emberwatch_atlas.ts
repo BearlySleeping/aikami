@@ -21,71 +21,29 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import {
+  ATLAS_HEIGHT,
+  ATLAS_TILE_SIZE,
+  ATLAS_WIDTH,
+  buildFrames,
+} from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Constants — atlas geometry is derived from the shared tables module so the
+// atlas generator, the frame registry, and the map tileset blocks cannot
+// drift independently (CodeRabbit review, C-376).
 // ---------------------------------------------------------------------------
 
-const TILE = 32;
-const COLS = 16;
-const ROWS = 8;
-const W = COLS * TILE; // 512
-const H = ROWS * TILE; // 256
+const TILE = ATLAS_TILE_SIZE;
+const W = ATLAS_WIDTH; // 512
+const H = ATLAS_HEIGHT; // 256
 
-/** Frame registry: frameKey → [col, row]. GID for a tile = row*COLS + col + 1. */
-const FRAMES: Record<string, [number, number]> = {
-  // Row 0 — ground / walls
-  'grass.png': [0, 0], // GID 1 — base grass + fallbackTile
-  'grass_variant.png': [1, 0], // GID 2 — grass with flowers
-  'grass_dark.png': [2, 0], // GID 3 — darker grass patch
-  'dirt.png': [3, 0], // GID 4 — dirt path
-  'path_tough.png': [4, 0], // GID 5 — cobblestone path (manifest tile 3)
-  'stone_floor.png': [5, 0], // GID 6 — stone floor
-  'wood_floor.png': [6, 0], // GID 7 — wood plank floor
-  'brick.png': [7, 0], // GID 8 — brick wall face (manifest tile 2)
-  'brick_wall.png': [8, 0], // GID 9 — brick wall variant (manifest tile 4)
-  'wood_wall.png': [9, 0], // GID 10 — wood wall
-  'stone_wall.png': [10, 0], // GID 11 — stone wall
-  'wall_top.png': [11, 0], // GID 12 — wall top with grass rim
-  'roof.png': [12, 0], // GID 13 — shingle roof
-  'water.png': [13, 0], // GID 14 — water
-  'fence.png': [14, 0], // GID 15 — wooden fence
-  'wood_fence.png': [15, 0], // GID 16 — fence post
-  // Row 1 — props / furniture
-  'well.png': [0, 1], // GID 17
-  'notice_board.png': [1, 1], // GID 18
-  'village_gate.png': [2, 1], // GID 19
-  'chest.png': [3, 1], // GID 20 (manifest tile 5)
-  'red_chest.png': [4, 1], // GID 21 (manifest tile 6)
-  'barrel.png': [5, 1], // GID 22
-  'crate.png': [6, 1], // GID 23
-  'counter.png': [7, 1], // GID 24
-  'table.png': [8, 1], // GID 25
-  'bed.png': [9, 1], // GID 26
-  'rug.png': [10, 1], // GID 27
-  'bookshelf.png': [11, 1], // GID 28
-  'fireplace.png': [12, 1], // GID 29
-  'candle.png': [13, 1], // GID 30
-  'plant.png': [14, 1], // GID 31
-  'anvil.png': [15, 1], // GID 32
-  // Row 2 — floor / decor variants
-  'path_tough_variant.png': [0, 2], // GID 33
-  'stone_floor_variant.png': [1, 2], // GID 34
-  'wood_floor_variant.png': [2, 2], // GID 35
-  'sand.png': [3, 2], // GID 36
-  'grass_edge_n.png': [4, 2], // GID 37
-  'grass_edge_s.png': [5, 2], // GID 38
-  'grass_edge_w.png': [6, 2], // GID 39
-  'grass_edge_e.png': [7, 2], // GID 40
-  'water_edge.png': [8, 2], // GID 41
-  'bridge.png': [9, 2], // GID 42
-  'steps.png': [10, 2], // GID 43
-  'column.png': [11, 2], // GID 44
-  'window.png': [12, 2], // GID 45
-  'wood_door.png': [13, 2], // GID 46
-  'flagstone.png': [14, 2], // GID 47
-  'rug_round.png': [15, 2], // GID 48
-};
+/**
+ * Frame registry: frameKey → [col, row]. DERIVED from manifest.tiles
+ * (C-376 AC-6 D5) — the manifest is the single source of truth for the
+ * GID↔frame mapping. GID = row*COLS + col + 1.
+ */
+const FRAMES: Record<string, [number, number]> = buildFrames();
 
 // ---------------------------------------------------------------------------
 // Canvas

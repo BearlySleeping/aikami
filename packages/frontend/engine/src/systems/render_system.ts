@@ -16,7 +16,6 @@ import {
   LpcAnimationState,
   velocityToDirection,
 } from '../rendering/animation_controller.ts';
-import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts';
 import type { SpriteComposer } from '../rendering/sprite_composer.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 
@@ -200,6 +199,11 @@ const _createVisualPlaceholder = (tint: number): Graphics => {
  * For PLACEHOLDER alias (0) or empty paths, the async load is skipped —
  * the placeholder Graphics rectangle is the final visual.
  *
+ * C-376 AC-5: the prop frame branch was deleted — production props render
+ * through GameWorld._loadPropFrameTexture (main thread, deterministic
+ * resolver); this worker-side path only handles AssetAlias-based visuals.
+ * The per-prop `void import('pixi.js')` is gone with it.
+ *
  * @param options - Async load options.
  * @param options.eid - The entity ID.
  * @param options.world - The bitECS world.
@@ -211,63 +215,12 @@ const _loadVisualTextureAsync = (options: {
   world: World;
   stage: Container;
   visualData: VisualData;
-  /**
-   * Deterministic prop frame resolver (C-375 AC-1). When present, props
-   * with a named `frame` resolve through the parsed spritesheet instead of
-   * the fragile global `Texture.from(frame)` cache. When absent, a frame
-   * carrying prop logs an explicit error and keeps its placeholder.
-   */
-  propFrameResolver?: PropTextureResolver;
 }): void => {
   const { eid, world, stage, visualData } = options;
-  const { assetIndex, frame } = visualData;
+  const { assetIndex } = visualData;
 
   // Placeholder alias (0) — skip async load
   if (assetIndex === AssetAlias.PLACEHOLDER || assetIndex === 0) {
-    return;
-  }
-
-  // Named atlas frame (props): resolve deterministically through the
-  // injected resolver — never `Texture.from(frame)` (C-375 AC-1).
-  if (frame) {
-    const resolver = options.propFrameResolver;
-    if (!resolver) {
-      logger.error(
-        '[render_system] Prop frame set but no propFrameResolver wired — prop keeps placeholder.',
-        {
-          eid,
-          frame,
-          hint: 'Wire createPropFrameResolver() at boot (C-375 AC-1).',
-        },
-      );
-      return;
-    }
-    const resolution = resolver(frame);
-    if (!resolution) {
-      logger.error('[render_system] Prop frame could not be resolved (no fallback available).', {
-        eid,
-        frame,
-      });
-      return;
-    }
-    if (resolution.source === 'fallback') {
-      logger.warn('[render_system] Prop frame missing — rendering fallbackTile.', {
-        eid,
-        frame,
-      });
-    }
-    void import('pixi.js')
-      .then(({ Sprite: PixiSprite }) => ({ sprite: PixiSprite, texture: resolution.texture }))
-      .then((resolved) => {
-        _swapInSprite({ eid, world, stage, resolved });
-      })
-      .catch((error) => {
-        logger.error('[render_system] Failed to create prop sprite from resolved frame', {
-          eid,
-          frame,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
     return;
   }
 

@@ -15,56 +15,25 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ATLAS_COLS,
+  ATLAS_HEIGHT,
+  ATLAS_TILE_COUNT,
+  ATLAS_TILE_SIZE,
+  ATLAS_WIDTH,
+  buildG,
+} from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
-// Tile GIDs (row*16 + col + 1 in the new atlas grid)
+// Tile GIDs — DERIVED from manifest.tiles (C-376 AC-6 D5)
+//
+// The manifest is the single source of truth for the GID↔frame mapping.
+// Semantic keys (GRASS, PATH, ...) map to manifest tile names; the numeric
+// GID is looked up from the manifest so a manifest edit is the ONLY change
+// needed to retile the generator.
 // ---------------------------------------------------------------------------
 
-const G = {
-  GRASS: 1,
-  GRASS_VARIANT: 2,
-  GRASS_DARK: 3,
-  DIRT: 4,
-  PATH: 5,
-  STONE_FLOOR: 6,
-  WOOD_FLOOR: 7,
-  BRICK: 8,
-  BRICK_VARIANT: 9,
-  WOOD_WALL: 10,
-  STONE_WALL: 11,
-  WALL_TOP: 12,
-  ROOF: 13,
-  WATER: 14,
-  FENCE: 15,
-  WOOD_FENCE: 16,
-  WELL: 17,
-  NOTICE: 18,
-  GATE: 19,
-  CHEST: 20,
-  RED_CHEST: 21,
-  BARREL: 22,
-  CRATE: 23,
-  COUNTER: 24,
-  TABLE: 25,
-  BED: 26,
-  RUG: 27,
-  BOOKSHELF: 28,
-  FIREPLACE: 29,
-  CANDLE: 30,
-  PLANT: 31,
-  ANVIL: 32,
-  PATH_VAR: 33,
-  STONE_VAR: 34,
-  WOOD_VAR: 35,
-  SAND: 36,
-  BRIDGE: 42,
-  STEPS: 43,
-  COLUMN: 44,
-  WINDOW: 45,
-  DOOR: 46,
-  FLAGSTONE: 47,
-  RUG_ROUND: 48,
-} as const;
+const G = buildG();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -460,12 +429,14 @@ const TILESET_BLOCK = {
   firstgid: 1,
   name: 'atlas',
   image: '/game-data/sprites/tilesets/atlas.webp',
-  imagewidth: 512,
-  imageheight: 256,
-  tilewidth: 32,
-  tileheight: 32,
-  columns: 16,
-  tilecount: 128,
+  // Atlas geometry is derived from the shared tables module so the tileset
+  // block cannot drift from the atlas generator (CodeRabbit review, C-376).
+  imagewidth: ATLAS_WIDTH,
+  imageheight: ATLAS_HEIGHT,
+  tilewidth: ATLAS_TILE_SIZE,
+  tileheight: ATLAS_TILE_SIZE,
+  columns: ATLAS_COLS,
+  tilecount: ATLAS_TILE_COUNT,
   spacing: 0,
   margin: 0,
 };

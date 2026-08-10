@@ -657,6 +657,62 @@ const PropCollisionSchema = Type.Union([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// ContentPackTile / ContentPackProp — named sub-schemas (C-376)
+//
+// Extracted from the inline object schemas inside ContentPackManifestSchema so
+// the runtime pack config (PackConfigSchema) can reference the same shapes
+// without redeclaring them. The manifest schema is the single source of truth.
+// ---------------------------------------------------------------------------
+
+/** Tile definition — resolved by the tilemap renderer via tile ID (C-375 AC-4). */
+export const ContentPackTileSchema = Type.Object({
+  name: Type.String({ description: 'Human-readable tile name' }),
+  frame: Type.String({ description: 'Spritesheet frame key (e.g. "grass.png")' }),
+  isWalkable: Type.Boolean({ description: 'Whether entities can walk on this tile' }),
+  isWall: Type.Optional(Type.Boolean({ description: 'Whether this tile is a solid wall' })),
+  movementCost: Type.Optional(
+    Type.Number({ description: 'Optional movement speed multiplier (e.g. 0.8)' }),
+  ),
+});
+
+export type ContentPackTile = Static<typeof ContentPackTileSchema>;
+
+/** Prop definition — the entity spawner reads walkability/collision from this (C-375 AC-3). */
+export const ContentPackPropSchema = Type.Object({
+  name: Type.String({ description: 'Human-readable prop name' }),
+  frame: Type.String({ description: 'Spritesheet frame key (e.g. "well.png")' }),
+  anchor: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
+  isWalkable: Type.Optional(
+    Type.Boolean({ description: 'False (or omitted) = solid prop that blocks movement' }),
+  ),
+  collision: Type.Optional(PropCollisionSchema),
+});
+
+export type ContentPackProp = Static<typeof ContentPackPropSchema>;
+
+/**
+ * PackConfig — the runtime projection of a manifest's tile/prop definitions
+ * that crosses the worker boundary (C-376 AC-2).
+ *
+ * Built once per map load on the main thread from the validated manifest and
+ * posted to the worker with LOAD_MAP. The worker validates it once and the
+ * spawners read `props[propId].isWalkable` / `.collision` from it — the
+ * manifest never crosses the boundary wholesale.
+ */
+export const PackConfigSchema = Type.Object({
+  /** Tile definitions keyed by 1-based tile ID (string keys). */
+  tiles: Type.Record(Type.String(), ContentPackTileSchema, {
+    description: 'Tile definitions keyed by 1-based tile ID',
+  }),
+  /** Prop definitions keyed by prop ID. */
+  props: Type.Record(Type.String(), ContentPackPropSchema, {
+    description: 'Prop definitions keyed by prop ID',
+  }),
+});
+
+export type PackConfig = Static<typeof PackConfigSchema>;
+
 export const ContentPackManifestSchema = Type.Object({
   /** Pack identifier — matches Campaign.contentPackId */
   id: Type.String({ minLength: 1, description: 'Content pack identifier' }),
@@ -702,38 +758,18 @@ export const ContentPackManifestSchema = Type.Object({
    * tilemap renderer resolves GIDs through this map (C-375 AC-4).
    */
   tiles: Type.Optional(
-    Type.Record(
-      Type.String(),
-      Type.Object({
-        name: Type.String({ description: 'Human-readable tile name' }),
-        frame: Type.String({ description: 'Spritesheet frame key (e.g. "grass.png")' }),
-        isWalkable: Type.Boolean({ description: 'Whether entities can walk on this tile' }),
-        isWall: Type.Optional(Type.Boolean({ description: 'Whether this tile is a solid wall' })),
-        movementCost: Type.Optional(
-          Type.Number({ description: 'Optional movement speed multiplier (e.g. 0.8)' }),
-        ),
-      }),
-      { description: 'Tile definitions keyed by 1-based tile ID' },
-    ),
+    Type.Record(Type.String(), ContentPackTileSchema, {
+      description: 'Tile definitions keyed by 1-based tile ID',
+    }),
   ),
   /**
    * Optional: prop definitions keyed by prop ID. The entity spawner uses
    * `isWalkable` to decide whether a spawned prop blocks movement (C-375 AC-3).
    */
   props: Type.Optional(
-    Type.Record(
-      Type.String(),
-      Type.Object({
-        name: Type.String({ description: 'Human-readable prop name' }),
-        frame: Type.String({ description: 'Spritesheet frame key (e.g. "well.png")' }),
-        anchor: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
-        isWalkable: Type.Optional(
-          Type.Boolean({ description: 'False (or omitted) = solid prop that blocks movement' }),
-        ),
-        collision: Type.Optional(PropCollisionSchema),
-      }),
-      { description: 'Prop definitions keyed by prop ID' },
-    ),
+    Type.Record(Type.String(), ContentPackPropSchema, {
+      description: 'Prop definitions keyed by prop ID',
+    }),
   ),
   /**
    * Optional: entity definitions (e.g. player spawn) keyed by entity key.

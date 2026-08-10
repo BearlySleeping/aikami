@@ -10,6 +10,7 @@
 //   - Grid coords are derived from pixel coords ÷ tileSize (32).
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import { createWorld } from 'bitecs';
 import type { SpawnPoint } from '../assets/map_loader.ts';
@@ -36,6 +37,17 @@ const makeSpawnPoint = (overrides: Partial<SpawnPoint> = {}): SpawnPoint => ({
   y: 160, // tile (5,5)
   properties: {},
   ...overrides,
+});
+
+/** Pack config declaring village_gate walkable, everything else solid. */
+const makePackConfig = (): PackConfig => ({
+  tiles: {},
+  props: {
+    // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+    village_gate: { name: 'Gate', frame: 'village_gate.png', isWalkable: true },
+    // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+    village_well: { name: 'Well', frame: 'well.png', isWalkable: false },
+  },
 });
 
 const makeWorld = (): World => {
@@ -118,7 +130,9 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     );
   });
 
-  test('walkable prop (isWalkable: true) gets NO collision components', () => {
+  test('walkable prop (packConfig isWalkable: true) gets NO collision components', () => {
+    // C-376 AC-2: walkability comes from the resolved pack config, not the
+    // spawn-point properties side channel.
     const results = spawnEntities({
       world,
       spawnPoints: [
@@ -127,9 +141,10 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
           type: 'prop',
           x: 320,
           y: 576, // tile (10,18)
-          properties: { propId: 'village_gate', frame: 'village_gate.png', isWalkable: true },
+          properties: { propId: 'village_gate', frame: 'village_gate.png' },
         }),
       ],
+      packConfig: makePackConfig(),
     });
 
     expect(results).toHaveLength(1);
@@ -138,7 +153,32 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     expect(CollisionData.layer[eid]).toBeUndefined();
   });
 
-  test('prop without isWalkable defaults to solid (blocking)', () => {
+  test('solid prop from packConfig (isWalkable: false) blocks', () => {
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'well',
+          type: 'prop',
+          x: 160,
+          y: 384, // tile (5,12)
+          properties: { propId: 'village_well', frame: 'well.png' },
+        }),
+      ],
+      packConfig: makePackConfig(),
+    });
+
+    expect(results).toHaveLength(1);
+    const eid = results[0].eid;
+    expect(GridPosition.x[eid]).toBe(5);
+    expect(GridPosition.y[eid]).toBe(12);
+    expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+    expect(CollisionData.mask[eid]).toBe(
+      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
+    );
+  });
+
+  test('prop without packConfig defaults to solid (graceful degradation)', () => {
     const results = spawnEntities({
       world,
       spawnPoints: [
@@ -154,5 +194,69 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
 
     const eid = results[0].eid;
     expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+  });
+
+  test('prop with packConfig that lacks the propId defaults to solid (false-default path)', () => {
+    // C-376 AC-2 false-default path: packConfig exists but has no entry for
+    // the spawned propId — the prop must stay solid, never silently walkable.
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'mystery_crate',
+          type: 'prop',
+          x: 96,
+          y: 96, // tile (3,3)
+          properties: { propId: 'not_in_pack', frame: 'red_chest.png' },
+        }),
+      ],
+      packConfig: makePackConfig(), // declares village_gate + village_well only
+    });
+
+    expect(results).toHaveLength(1);
+    const eid = results[0].eid;
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
+    expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+    expect(CollisionData.mask[eid]).toBe(
+      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
+    );
+  });
+
+  test('manifest prop entry omitting isWalkable defaults to solid (false-default path)', () => {
+    // C-376 AC-2 false-default path: the manifest prop entry exists but omits
+    // isWalkable (schema-optional) — the prop must stay solid.
+    const packConfigNoWalkability: PackConfig = {
+      tiles: {},
+      props: {
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        village_gate: { name: 'Gate', frame: 'village_gate.png', isWalkable: true },
+        // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+        silent_crate: { name: 'Crate', frame: 'red_chest.png' }, // no isWalkable
+      },
+    };
+
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'crate',
+          type: 'prop',
+          x: 96,
+          y: 96, // tile (3,3)
+          properties: { propId: 'silent_crate', frame: 'red_chest.png' },
+        }),
+      ],
+      packConfig: packConfigNoWalkability,
+    });
+
+    expect(results).toHaveLength(1);
+    const eid = results[0].eid;
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
+    expect(CollisionData.layer[eid]).toBe(CollisionLayer.wall);
+    expect(CollisionData.mask[eid]).toBe(
+      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
+    );
   });
 });

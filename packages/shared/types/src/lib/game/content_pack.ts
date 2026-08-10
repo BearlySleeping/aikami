@@ -16,6 +16,7 @@ import type {
   ContentPackManifestSchema,
   ContentPackMapEntrySchema,
   ContentPackNpcEntrySchema,
+  ContentPackPropSchema,
   ContentPackPuzzleSchema,
   ContentPackQuestEndingSchema,
   ContentPackQuestEntrySchema,
@@ -24,9 +25,11 @@ import type {
   ContentPackQuestRewardTypeSchema,
   ContentPackSkillCheckSchema,
   ContentPackSkillStatSchema,
+  ContentPackTileSchema,
   ItemTypeSchema,
   OnboardingHintStepSchema,
   OnboardingSectionSchema,
+  PackConfigSchema,
   QuestObjectiveFailureConditionSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
@@ -93,3 +96,15 @@ export type ContentPackInteractableEntry = Static<typeof ContentPackInteractable
 
 /** A puzzle DAG definition (C-342). */
 export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
+
+/** A single tile definition in a content pack manifest (C-376). */
+export type ContentPackTile = Static<typeof ContentPackTileSchema>;
+
+/** A single prop definition in a content pack manifest (C-376). */
+export type ContentPackProp = Static<typeof ContentPackPropSchema>;
+
+/**
+ * PackConfig — the runtime projection of a manifest's tile/prop definitions
+ * that crosses the worker boundary (C-376 AC-2). Derived from the schema.
+ */
+export type PackConfig = Static<typeof PackConfigSchema>;

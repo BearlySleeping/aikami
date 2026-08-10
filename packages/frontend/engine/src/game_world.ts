@@ -1,7 +1,10 @@
 // packages/frontend/engine/src/game_world.ts
+
+import type { PackConfig } from '@aikami/types';
 import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import {
+  buildCollisionGrid,
   extractCollisionGrid,
   extractSpawnPointEntities,
   extractSpawnPoints,
@@ -21,7 +24,7 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
-import { computeDepthOrder, type DepthSortable } from './rendering/depth_sort.ts';
+import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
@@ -399,13 +402,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _entitySpawnCounter = 0;
 
   /**
-   * Last applied entity render order (eids, back-to-front) from the
-   * y-depth sort. Cached so an unchanged order skips the display-list
-   * removeChild/addChild churn (CodeRabbit review, C-375).
-   */
-  private _entityRenderOrder: number[] | undefined;
-
-  /**
    * Per-entity revision counter for appearance loads.
    * Prevents stale async loads from overwriting newer equipment changes.
    */
@@ -463,6 +459,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // ---- 1a. Build the world container with camera transform ----------
     this._worldContainer = new Container();
+
+    // C-376 AC-4: in-place zIndex depth sort. Entity containers get
+    // `zIndex = displayObject.y` (raw float — never rounded) and the world
+    // container sorts children with a stable sort, so equal-Y entities
+    // resolve ties by insertion order (= spawn order, containers are added
+    // once and never reparented). Sibling layers (tilemap, debug grid, zone
+    // overlays) use WORLD_Z_BANDS below the entity y-range.
+    this._worldContainer.sortableChildren = true;
 
     // Scale everything so pixel-art sprites are visible (4× zoom)
     this._worldContainer.scale.set(4);
@@ -2035,16 +2039,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetSpawnHash?: number;
     defaultSpawnHash?: number;
     disableClamping?: boolean;
-    /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
-    waterGids?: Set<number>;
     /**
-     * Manifest-derived prop walkability map (propId → isWalkable), from the
-     * content pack manifest (`props[propId].isWalkable`, C-375 AC-3). The
-     * worker's `_spawnProp` reads `properties.isWalkable` to decide whether
-     * the prop blocks movement — the manifest lives on the main thread, so
-     * the client passes it in per loadMap.
+     * Resolved content-pack tile/prop definitions (C-376 AC-2). Posted to
+     * the worker once per map load so the spawner can read prop walkability
+     * from the manifest instead of the legacy propWalkability side channel.
+     * `undefined` (manifest resolution failed) degrades gracefully — all
+     * props stay solid and the collision grid falls back to the explicit
+     * collision layer.
      */
-    propWalkability?: Record<string, boolean>;
+    packConfig?: PackConfig;
   }): Promise<void> {
     const {
       mapUrl,
@@ -2056,7 +2059,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       targetSpawnHash,
       defaultSpawnHash,
       disableClamping,
-      waterGids,
+      packConfig,
     } = options;
     this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
 
@@ -2091,24 +2094,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const tilemap = isJton
         ? await loadJtonMap({ url: mapUrl })
         : await loadTilemap({ url: mapUrl });
-      const collisionGridData = extractCollisionGrid(tilemap, { waterGids });
+      // C-376 AC-1: derive the boolean grid from manifest walkability when a
+      // pack config is available; fall back to the explicit collision layer
+      // for packless maps (dev sandbox) or when manifest resolution failed.
+      const collisionGridData = packConfig
+        ? buildCollisionGrid(tilemap, packConfig)
+        : extractCollisionGrid(tilemap);
       const spawnPoints = extractSpawnPoints(tilemap);
-      // C-375 AC-3: enrich prop spawn points with the manifest's
-      // isWalkable flag BEFORE the sanitize/postMessage step so the worker's
-      // _spawnProp can honor `isWalkable: true` (e.g. the village gate) and
-      // skip blocking. The manifest itself never crosses the worker boundary.
-      if (options.propWalkability) {
-        for (const spawnPoint of spawnPoints) {
-          if (spawnPoint.type === 'prop') {
-            const propId = spawnPoint.properties.propId;
-            const walkable =
-              typeof propId === 'string' ? options.propWalkability[propId] : undefined;
-            if (typeof walkable === 'boolean') {
-              spawnPoint.properties.isWalkable = walkable;
-            }
-          }
-        }
-      }
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
 
@@ -2126,8 +2118,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const result = await renderTilemap({
           tilemap,
         });
-        // Place at z-index 0 — behind all entity sprites
-        this._worldContainer.addChildAt(result.container, 0);
+        // C-376 AC-4: explicit band below the entity y-range — the world
+        // container now sorts children by zIndex, so insertion index no
+        // longer guarantees layering.
+        result.container.zIndex = WORLD_Z_BANDS.tilemap;
+        // Place behind all entity sprites (z-band handles ordering)
+        this._worldContainer.addChild(result.container);
         this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
 
         // Store animation resources (C-177)
@@ -2159,6 +2155,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               grid: collisionGridData,
             }
           : undefined,
+        packConfig,
         mapPixelWidth,
         mapPixelHeight,
         targetX,
@@ -2208,6 +2205,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     spawnPoints: import('./assets/map_loader.ts').SpawnPoint[];
     transitionZones: import('./assets/map_loader.ts').TransitionZone[];
     collisionGrid: CollisionGrid | undefined;
+    /** Resolved content-pack tile/prop definitions (C-376 AC-2). */
+    packConfig?: PackConfig;
     mapPixelWidth: number;
     mapPixelHeight: number;
     targetX: number;
@@ -2297,6 +2296,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         spawnPoints: safeSpawnPoints,
         transitionZones: options.transitionZones,
         collisionGrid: safeCollisionGrid,
+        packConfig: options.packConfig,
         mapPixelWidth: options.mapPixelWidth,
         mapPixelHeight: options.mapPixelHeight,
         targetX: options.targetX,
@@ -2337,6 +2337,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     const grid = new Graphics();
     grid.label = 'debug-grid';
+    // C-376 AC-4: explicit band below the entity y-range.
+    grid.zIndex = WORLD_Z_BANDS.debugGrid;
     const strokeColor = 0x33334a;
     const tileSize = opts?.tileSize ?? 32;
     const gridW = opts?.width ?? 10;
@@ -2353,7 +2355,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       grid.moveTo(0, y).lineTo(pixelW, y).stroke({ width: 1, color: strokeColor });
     }
 
-    this._worldContainer.addChildAt(grid, 0); // behind all entities
+    this._worldContainer.addChild(grid); // behind all entities (z-band)
   }
 
   /**
@@ -2404,6 +2406,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       graphics.label = `zone-overlay-${zone.id}`;
       graphics.eventMode = 'none';
+      // C-376 AC-4: explicit band below the entity y-range.
+      graphics.zIndex = WORLD_Z_BANDS.zoneOverlays;
 
       this._worldContainer.addChild(graphics);
     }
@@ -2470,6 +2474,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.x = x;
       entry.displayObject.y = y;
 
+      // C-376 AC-4: y-depth via in-place zIndex. Raw float — the stable
+      // sort + never-reparented containers give the tie-break free. The
+      // lower bound is clamped to MIN_ENTITY_Y so the documented band
+      // invariant (bands below MIN_ENTITY_Y) holds even for negative
+      // spawn coordinates (CodeRabbit review, C-376).
+      entry.displayObject.zIndex = computeEntityZIndex(y);
+
       // Drive per-entity animation controller from positional deltas.
       // The controller computes dx/dy across frames to derive facing
       // direction and walk/idle transitions.
@@ -2490,47 +2501,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       visibleCount++;
     }
 
-    // ── C-375 AC-2: y-depth entity sort ──
-    // Top-down occlusion: an entity with a larger world-space Y (feet,
-    // lower on screen) renders ON TOP of an entity with a smaller Y.
-    // Only entity containers are re-sorted — tilemap chunks (added at
-    // index 0), the debug grid and zone overlays stay below entities.
-    // The camera transform is applied to _worldContainer itself, so
-    // re-ordering children does not affect it.
-    if (this._worldContainer && this._renderEntries.size > 1) {
-      const world = this._worldContainer;
-      const items: DepthSortable[] = [];
-      for (const [eid, entry] of this._renderEntries) {
-        items.push({ eid, y: entry.displayObject.y, order: entry.spawnOrder });
-      }
-      const ordered = computeDepthOrder(items);
-
-      // Skip the removeChild/addChild churn when the render order is
-      // unchanged from the previous frame — re-parenting every frame dirties
-      // the display list and forces a full bounds walk even when nothing
-      // moved (CodeRabbit review, C-375).
-      const previous = this._entityRenderOrder;
-      const orderChanged =
-        !previous ||
-        previous.length !== ordered.length ||
-        previous.some((eid, i) => eid !== ordered[i]);
-      if (orderChanged) {
-        const reordered: Container[] = [];
-        for (const eid of ordered) {
-          const entry = this._renderEntries.get(eid);
-          // Guard both removal and re-addition with parent === world so this
-          // cleanup never reparents an entity that lives elsewhere.
-          if (entry && entry.displayObject.parent === world) {
-            world.removeChild(entry.displayObject);
-            reordered.push(entry.displayObject);
-          }
-        }
-        for (const displayObject of reordered) {
-          world.addChild(displayObject);
-        }
-        this._entityRenderOrder = ordered;
-      }
-    }
+    // ── C-376 AC-4: y-depth entity sort via in-place zIndex ──
+    // Entity containers carry `zIndex = displayObject.y` and the world
+    // container has `sortableChildren = true`, so PixiJS sorts the display
+    // list in place with a stable sort every frame — no removeChild/addChild
+    // churn, no O(n²) reparenting, no `_entityRenderOrder` cache. The camera
+    // transform is applied to _worldContainer itself, so z-sorting children
+    // does not affect it.
 
     // Camera transform: center the world container at the camera position
     // computed by the CameraSystem in the worker (lerp + clamping).

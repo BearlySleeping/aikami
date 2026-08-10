@@ -5,6 +5,7 @@
 //
 // Contract C-136 Task 3, C-138 Task 1
 
+import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { logger } from '$logger';
@@ -51,6 +52,13 @@ export type SpawnEntitiesOptions = {
   world: World;
   /** Spawn points extracted from Tiled object layers. */
   spawnPoints: SpawnPoint[];
+  /**
+   * Resolved content-pack prop definitions (C-376 AC-2). `_spawnProp` reads
+   * `packConfig.props[propId].isWalkable` from this instead of the legacy
+   * spawn-point enrichment side channel. `undefined` degrades gracefully —
+   * every prop stays solid (pre-C-375 behavior).
+   */
+  packConfig?: PackConfig;
   /**
    * Spawn point IDs of enemies that have already been defeated.
    * Enemies matching these IDs are skipped during spawn.
@@ -194,7 +202,8 @@ const _getNpcAppearanceLayers = (spawnPoint: SpawnPoint): readonly number[] => {
  * @returns Array of results with entity IDs and metadata.
  */
 export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
-  const { world, spawnPoints, defeatedEnemies, collectedPickups, interactableStates } = options;
+  const { world, spawnPoints, packConfig, defeatedEnemies, collectedPickups, interactableStates } =
+    options;
   const results: SpawnResult[] = [];
   const defeatedSet = new Set(defeatedEnemies ?? []);
   const collectedSet = new Set(collectedPickups ?? []);
@@ -233,7 +242,7 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
       const eid = _spawnNpc(world, spawnPoint);
       results.push({ type: 'npc', eid, spawnPoint });
     } else if (spawnPoint.type === 'prop') {
-      const eid = _spawnProp(world, spawnPoint);
+      const eid = _spawnProp(world, spawnPoint, packConfig);
       results.push({ type: 'prop', eid, spawnPoint });
     } else if (spawnPoint.type === 'item') {
       const eid = _spawnItem(world, spawnPoint);
@@ -610,7 +619,7 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
  * spritesheet). When the frame is missing, the entity keeps a generic
  * alias and an error is logged so missing art is never silent.
  */
-const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
+const _spawnProp = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig): number => {
   const eid = addEntity(world);
 
   const propId = _getStringProperty(spawnPoint.properties, 'propId', spawnPoint.id);
@@ -619,12 +628,14 @@ const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  // C-375 AC-3: solid props block movement (tile-granular MVP). Walkable
-  // props (manifest `isWalkable: true`, e.g. the village gate) get NO
-  // collision components and are never inserted into the spatial grid.
-  // `isWalkable` is enriched onto the spawn point by game_world.loadMap
-  // from the content-pack manifest before the worker sees it.
-  const isWalkable = _getBoolProperty(spawnPoint.properties, 'isWalkable', false);
+  // C-375 AC-3 + C-376 AC-2: solid props block movement (tile-granular MVP).
+  // Walkable props (manifest `isWalkable: true`, e.g. the village gate) get
+  // NO collision components and are never inserted into the spatial grid.
+  // Walkability now comes from the resolved pack config that crossed the
+  // worker boundary once per map load — never from the legacy spawn-point
+  // enrichment side channel. When packConfig is absent (manifest resolution
+  // failed), every prop stays solid (graceful degradation, AC-2).
+  const isWalkable = packConfig?.props?.[propId]?.isWalkable ?? false;
   if (!isWalkable) {
     _addSpatialCollision(
       world,

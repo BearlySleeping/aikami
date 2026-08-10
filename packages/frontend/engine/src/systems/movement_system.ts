@@ -32,8 +32,28 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
 /**
  * Default collision mask for the player entity — collides with walls,
  * NPCs, and enemies (not items).
+ *
+ * Exported for the canonical walkability composite
+ * `isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)`
+ * reused by the spawn clamp and re-audited callers (C-376 AC-3).
  */
-const PLAYER_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+export const PLAYER_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+
+/**
+ * Default collision mask for combatants (NPCs/enemies) used by the
+ * tactical walkability composites (turn_manager `_checkWalkable` and
+ * goap_combat_tactics `_checkWalkableComposite`).
+ *
+ * Blocks walls, other NPCs, the player, and other enemies — a combatant
+ * must never treat a cell occupied by another combatant as walkable.
+ * `CollisionLayer.enemy` is included for symmetry with
+ * {@link PLAYER_COLLISION_MASK}; no entity currently carries
+ * `layer: enemy` in the spatial grid, so this is a no-op today but keeps
+ * the mask correct if enemies gain collision (CodeRabbit review, C-376).
+ */
+export const COMBATANT_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy;
 
 /**
  * Half-width of the entity collision box in world pixels.
