@@ -25,6 +25,7 @@
  *   bun run download-secrets --mode emulator            # no GCP access needed
  *   bun run download-secrets --mode production
  *   bun run download-secrets --mode production client site
+ *   bun run download-secrets --mode production --keys GEMINI_API_KEY,MODE   # only those keys
  *   bun run download-secrets --mode staging --strict   # fail if any secret can't be fetched
  */
 
@@ -47,6 +48,7 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 const opts = parseCliArgs(Bun.argv.slice(2), {
   mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
   strict: { type: 'boolean', description: 'Exit non-zero if any secret cannot be fetched' },
+  keys: { type: 'string', description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE' },
 });
 const mode = (opts.mode as string) || process.env.AIKAMI_MODE || process.env.MODE || '';
 if (!mode) {
@@ -64,6 +66,14 @@ const isEmulator = mode === 'emulator';
 
 const positionalArgs = opts._;
 
+/** Optional filter: only process these .env keys (empty = all). */
+const keysFilter = new Set(
+  (opts.keys as string | undefined)
+    ?.split(',')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0) ?? [],
+);
+
 /**
  * Fake values for keys that are required at runtime (see
  * packages/frontend/configs/src/lib/environment.ts) but must stay blank in
@@ -76,18 +86,21 @@ const EMULATOR_ENV_OVERRIDES: Readonly<Record<string, Record<string, string>>> =
     PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
     PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: 'true',
+    PUBLIC_MODE: 'emulator',
   },
   hub: {
     PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
     PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
     PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: '1',
+    PUBLIC_MODE: 'emulator',
   },
   site: {
     PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
     PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
     PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: 'true',
+    PUBLIC_MODE: 'emulator',
   },
   firebase: {
     FIREBASE_SERVICE_ACCOUNT: '{}',
@@ -153,11 +166,8 @@ function readEnvDefaults(appPath: string): Map<string, string> {
   return defaults;
 }
 
-/** Keys that should come from GSM (excludes PUBLIC_ for most, excludes FIREBASE_SERVICE_ACCOUNT). */
+/** Keys that should come from GSM (excludes PUBLIC_ for most). */
 function isSecretKey(key: string): boolean {
-  if (key === 'FIREBASE_SERVICE_ACCOUNT') {
-    return false;
-  }
   return !key.startsWith('PUBLIC_');
 }
 
@@ -343,6 +353,9 @@ if (isEmulator) {
   console.log(`\n🔐 Downloading secrets from GSM → .env.${mode} files`);
   console.log(`   Project: ${GCP_PROJECT}`);
 }
+if (keysFilter.size > 0) {
+  console.log(`   Keys:    ${[...keysFilter].join(', ')} (filtered)`);
+}
 console.log(`   Apps:    ${appNames.join(', ')}\n`);
 
 // Collect all key → gcmName mappings across all target apps
@@ -379,9 +392,13 @@ for (const appName of appNames) {
 
   const keyToGcm = new Map<string, string>();
   for (const key of allKeys) {
-    if (isSecretKey(key)) {
-      keyToGcm.set(key, resolveSecretName(key, config));
+    if (!isSecretKey(key)) {
+      continue;
     }
+    if (keysFilter.size > 0 && !keysFilter.has(key)) {
+      continue;
+    }
+    keyToGcm.set(key, resolveSecretName(key, config));
   }
 
   appMappings.push({
@@ -392,6 +409,22 @@ for (const appName of appNames) {
     keyToGcm,
     defaults: readEnvDefaults(appPath),
   });
+}
+
+// Warn about requested keys that no target app exposes as a fetchable secret
+if (keysFilter.size > 0) {
+  const foundKeys = new Set<string>();
+  for (const m of appMappings) {
+    for (const key of m.keyToGcm.keys()) {
+      foundKeys.add(key);
+    }
+  }
+  const unmatched = [...keysFilter].filter((k) => !foundKeys.has(k));
+  if (unmatched.length > 0) {
+    console.warn(
+      `   ⚠️  Key(s) not fetchable from GSM (not a secret key in any target app's .env.example): ${unmatched.join(', ')}`,
+    );
+  }
 }
 
 // Batch-fetch all unique GSM secrets (skipped entirely in emulator mode —
