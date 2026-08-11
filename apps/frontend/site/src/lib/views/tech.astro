@@ -1,0 +1,24 @@
+---
+// apps/frontend/site/src/lib/views/tech.astro
+import CrossPlatformSection from '$sections/cross_platform.astro';
+import YourRealmSection from '$sections/your_realm.astro';
+---
+
+<section class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 pt-16 pb-12 md:pt-24 md:pb-16">
+    <span class="eyebrow text-rune">Under the hood</span>
+    <h1 class="mt-5 font-serif text-4xl md:text-5xl leading-tight max-w-2xl">
+      How Aikami is built — and how to run it yourself.
+    </h1>
+    <p class="mt-5 max-w-2xl text-muted-foreground leading-relaxed">
+      Architecture, self-hosting options, and the open-source stack behind the engine. Looking for
+      the pitch instead? <a href="/" class="text-rune hover:underline">Back to the front page</a>.
+    </p>
+  </div>
+</section>
+
+<!-- Cross-platform architecture: Web Client + Tauri Desktop, real-time sync -->
+<CrossPlatformSection />
+
+<!-- Self-hosting: GitHub stats, deployment tabs, tech stack -->
+<YourRealmSection />

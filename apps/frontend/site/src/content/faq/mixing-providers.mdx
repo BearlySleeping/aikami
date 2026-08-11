@@ -1,0 +1,13 @@
+---
+question: "Can I use different providers for text, images, and voice?"
+category: "ai-providers"
+order: 2
+---
+
+Yes — that's the intended setup for a lot of people. Because everything goes through one
+provider gateway, the three pipelines are configured independently in Settings.
+
+A common arrangement is a cloud model for text (where quality matters most for the Game
+Master), a local ComfyUI instance for images (where you'd otherwise be paying per
+generation), and local Kokoro for voice. You can also assign TTS and image providers per
+NPC if you want different characters to sound different.

@@ -1,0 +1,107 @@
+---
+// apps/frontend/site/src/pages/faq/index.astro
+import { getCollection, render } from 'astro:content';
+import Layout from '$layouts/layout.astro';
+
+/**
+ * FAQ index — entries grouped by category, sorted by `order` within a group.
+ * Rendered as native <details>/<summary> accordions: zero JS, keyboard
+ * accessible, and searchable by the browser's find-in-page when expanded.
+ */
+
+const entries = await getCollection('faq');
+
+/** Display labels + ordering for the known categories; unknown ones fall to the end. */
+const CATEGORY_LABELS: Record<string, string> = {
+  general: 'General',
+  gameplay: 'Playing the game',
+  'ai-providers': 'AI providers & models',
+  'self-hosting': 'Self-hosting & requirements',
+  privacy: 'Privacy & your data',
+  status: 'Project status',
+};
+
+const CATEGORY_ORDER = ['general', 'gameplay', 'ai-providers', 'self-hosting', 'privacy', 'status'];
+
+// Render each entry's MDX body once, up front — <details> content is static.
+// The component is stored lowercase (`body`) to satisfy the naming-convention
+// lint rule, then aliased to a capitalized binding at the call site.
+const rendered = await Promise.all(
+  entries.map(async (entry) => ({ entry, body: (await render(entry)).Content })),
+);
+
+const groups = CATEGORY_ORDER.map((category) => ({
+  category,
+  label: CATEGORY_LABELS[category] ?? category,
+  items: rendered
+    .filter((r) => r.entry.data.category === category)
+    .sort((a, b) => a.entry.data.order - b.entry.data.order),
+})).filter((group) => group.items.length > 0);
+
+const uncategorized = rendered
+  .filter((r) => !CATEGORY_ORDER.includes(r.entry.data.category))
+  .sort((a, b) => a.entry.data.order - b.entry.data.order);
+
+const allGroups =
+  uncategorized.length > 0
+    ? [...groups, { category: 'other', label: 'Other', items: uncategorized }]
+    : groups;
+---
+
+<Layout
+  title="FAQ — Aikami"
+  description="Common questions about Aikami: what it costs, which AI models it supports, whether you need a GPU, where your data lives, and how self-hosting works."
+>
+  <section class="border-b border-border/70">
+    <div class="mx-auto max-w-6xl px-6 pt-16 pb-12 md:pt-24 md:pb-16">
+      <span class="eyebrow text-rune">Questions &amp; answers</span>
+      <h1 class="mt-5 font-serif text-4xl md:text-5xl leading-tight max-w-2xl">
+        Frequently asked questions.
+      </h1>
+      <p class="mt-5 max-w-2xl text-muted-foreground leading-relaxed">
+        What Aikami costs, what hardware it needs, which models it runs on, and where your data
+        lives. Something missing? Ask in
+        <a
+          href="https://github.com/BearlySleeping/aikami/discussions"
+          class="text-rune hover:underline"
+        >
+          GitHub Discussions
+        </a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="py-16 md:py-20">
+    <div class="mx-auto max-w-3xl px-6 flex flex-col gap-12">
+      {allGroups.map((group) => (
+        <div>
+          <h2 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-5">
+            {group.label}
+          </h2>
+          <div class="flex flex-col gap-3">
+            {group.items.map(({ entry, body: Content }) => (
+              <details class="glass-panel group px-5 py-4">
+                <summary
+                  class="flex cursor-pointer items-center justify-between gap-4 font-serif text-lg leading-snug marker:content-none [&::-webkit-details-marker]:hidden"
+                >
+                  {entry.data.question}
+                  <span
+                    class="shrink-0 text-muted-foreground transition-transform group-open:rotate-45"
+                    aria-hidden="true"
+                  >
+                    +
+                  </span>
+                </summary>
+                <div
+                  class="mt-3 text-sm text-muted-foreground leading-relaxed [&>p]:mt-3 [&>p:first-child]:mt-0 [&>ul]:mt-3 [&>ul]:pl-5 [&>ul]:list-disc [&>ul>li]:mt-1 [&_a]:text-rune [&_a]:no-underline [&_a:hover]:underline [&_strong]:text-foreground [&_strong]:font-medium [&_code]:font-mono [&_code]:text-xs [&_code]:bg-card [&_code]:border [&_code]:border-border [&_code]:rounded-sm [&_code]:px-1.5 [&_code]:py-0.5"
+                >
+                  <Content />
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+</Layout>

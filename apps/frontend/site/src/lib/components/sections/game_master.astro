@@ -2,9 +2,12 @@
 // apps/frontend/site/src/lib/components/sections/game_master.astro
 /**
  * "A Game Master that runs the rules" — D&D 5e mechanics explained plainly,
- * with the on-page NPC generator demo as the centerpiece. The mock-data
- * disclaimer lives in small print under the demo, not in the intro.
+ * with a browser of pre-generated sample NPCs as the centerpiece. These are
+ * static examples on purpose: live inference per visitor would cost money,
+ * and a "Generate" button that only ever returns canned data misrepresents
+ * what the page is doing.
  */
+import { webClientUrl } from '$data/site_content';
 ---
 
 <section id="game-master" class="border-b border-border/70">
@@ -59,27 +62,28 @@
       </div>
     </div>
 
-    <!-- NPC Generator Demo -->
-    <div class="mt-16" id="npc-generator">
+    <!-- Sample NPC browser — real generated output, shipped as static examples.
+         Deliberately NOT a live generator: running real inference per visitor
+         would cost money and the fake "Generate" button it replaced implied
+         something the page wasn't actually doing. -->
+    <div class="mt-16" id="npc-examples">
       <div class="max-w-2xl mb-8">
-        <span class="eyebrow text-rune">See it in action</span>
+        <span class="eyebrow text-rune">What the engine produces</span>
         <h3 class="mt-4 font-serif text-3xl md:text-4xl leading-tight">
-          Create any NPC on the fly.
+          Every NPC arrives fully built.
         </h3>
         <p class="mt-4 text-muted-foreground leading-relaxed">
-          Pick an archetype below and watch a full character come together — portrait, ability
-          scores, lorebook backstory, and opening dialogue, in seconds.
+          These are real examples of what Aikami's NPC pipeline outputs — ability scores, skills, a
+          lorebook entry, and opening dialogue, all generated together from a single archetype. Pick
+          one to inspect the character sheet the Game Master actually rolls against.
         </p>
       </div>
 
-      <!-- Input Sandbox -->
+      <!-- Example picker -->
       <div class="rune-border p-6 bg-card/50 backdrop-blur">
-        <label
-          for="npc-prompt"
-          class="block font-mono text-[10px] uppercase tracking-widest text-rune mb-3"
-        >
-          NPC Archetype
-        </label>
+        <span class="block font-mono text-[10px] uppercase tracking-widest text-rune mb-3">
+          Example NPCs
+        </span>
 
         <!-- Preset chips -->
         <fieldset class="flex flex-wrap gap-2 mb-4 border-0 p-0" aria-label="NPC archetype presets">
@@ -120,25 +124,11 @@
           </button>
         </fieldset>
 
-        <!-- Custom input -->
-        <div class="flex gap-2">
-          <input
-            id="npc-prompt"
-            type="text"
-            placeholder="Or type your own: 'Goblin Alchemist with a heart of gold'..."
-            class="flex-1 rounded-sm border border-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 font-mono outline-none focus:border-rune transition-colors"
-            autocomplete="off"
-            aria-label="Custom NPC prompt"
-          >
-          <button
-            id="npc-generate"
-            type="button"
-            class="rounded-sm bg-rune px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
-            aria-label="Generate NPC"
-          >
-            Generate
-          </button>
-        </div>
+        <p class="text-[11px] text-muted-foreground/70 leading-relaxed">
+          In the game, you don't pick from a list — the engine generates these from your world's
+          context as you play.
+          <a href={webClientUrl} class="text-rune hover:underline">Try it for real &rarr;</a>
+        </p>
       </div>
 
       <!-- Live Preview Box -->
@@ -146,7 +136,7 @@
         id="npc-preview"
         class="mt-8 rune-border bg-card/50 backdrop-blur min-h-[320px] overflow-hidden"
       >
-        <div id="npc-preview-content" class="p-8">
+        <div id="npc-preview-content" class="p-8" aria-live="polite">
           <!-- Rendered by script -->
           <div class="flex flex-col items-center justify-center min-h-[280px] text-center">
             <div
@@ -166,16 +156,16 @@
               </svg>
             </div>
             <p class="text-muted-foreground/60 text-sm font-mono">
-              Select an archetype above or type a custom prompt to generate an NPC.
+              Select an example above to view its character sheet.
             </p>
           </div>
         </div>
       </div>
 
-      <!-- Small-print footnote: mock data (kept out of headline-adjacent copy) -->
+      <!-- Small-print footnote: these are saved examples, not live output -->
       <p class="mt-3 text-[10px] leading-relaxed text-muted-foreground/50">
-        This preview simulates what the AI pipeline produces with bundled example data — in the
-        actual engine, every field is generated live by local AI models running on your hardware.
+        Saved examples, served as static data — this page runs no AI. In the engine, every field
+        here is generated at play time by whichever model you've configured, local or BYOK.
       </p>
     </div>
   </div>
@@ -273,34 +263,6 @@ const npcDatabase: Record<string, NpcPreview> = {
   },
 };
 
-const DEFAULT_NPC: NpcPreview = {
-  name: 'Whisper',
-  archetype: 'Mysterious Stranger',
-  appearance:
-    'A hooded figure whose face is never quite in focus. Their voice seems to come from everywhere at once.',
-  stats: { str: 10, dex: 14, con: 12, int: 14, wis: 14, cha: 16, hp: 16 },
-  skills: ['Stealth +5', 'Deception +6', 'Arcana +4', 'Perception +4'],
-  lorebook:
-    "Nobody knows where Whisper came from. They appear at crossroads, in tavern corners, at the edge of battlefields — always watching, always knowing more than they should. Some say they're a god in disguise. Others say they're just very well-informed.",
-  dialogue: '"I know what you seek. The question is: are you ready to find it?"',
-  affinities: ['Unknown', 'Information', 'Enigmatic'],
-};
-
-const getNpc = (prompt: string): NpcPreview => {
-  const lower = prompt.toLowerCase().trim();
-  // Try exact match
-  for (const [key, npc] of Object.entries(npcDatabase)) {
-    if (lower.includes(key) || key.includes(lower)) {
-      return npc;
-    }
-  }
-  // Use the prompt to seed a deterministic default variant
-  const seeded = { ...DEFAULT_NPC };
-  seeded.name = prompt.length < 20 ? prompt : `${prompt.slice(0, 18)}…`;
-  seeded.archetype = prompt;
-  return seeded;
-};
-
 // Stats abbreviations
 const STAT_LABELS: Record<string, string> = {
   str: 'STR',
@@ -343,6 +305,13 @@ const renderNpcPreview = (npc: NpcPreview) => {
   if (!preview) {
     return;
   }
+
+  // Provide screen reader announcement
+  const srStatus = document.createElement('div');
+  srStatus.className = 'sr-only';
+  srStatus.textContent = `Loaded character sheet for ${npc.name}, ${npc.archetype}`;
+  preview.appendChild(srStatus);
+  setTimeout(() => srStatus.remove(), 1000);
 
   preview.innerHTML = `
     <div class="grid md:grid-cols-2 gap-8">
@@ -440,39 +409,15 @@ const renderNpcPreview = (npc: NpcPreview) => {
   });
 };
 
-// Attach handlers
-const generateBtn = document.getElementById('npc-generate');
-const promptInput = document.getElementById('npc-prompt') as HTMLInputElement;
-
-const handleGenerate = (prompt: string) => {
-  if (!prompt.trim()) {
-    return;
-  }
-  const npc = getNpc(prompt);
-  renderNpcPreview(npc);
-};
-
-generateBtn?.addEventListener('click', () => {
-  const prompt = promptInput?.value ?? '';
-  handleGenerate(prompt);
-});
-
-promptInput?.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') {
-    handleGenerate(promptInput.value);
-  }
-});
-
-// Chip clicks
-const chips = document.querySelectorAll('.npc-chip');
+// Chip clicks — each chip maps to one saved example, shown immediately.
+const chips = document.querySelectorAll<HTMLElement>('.npc-chip');
 for (const chip of chips) {
   chip.addEventListener('click', () => {
-    const prompt = (chip as HTMLElement).dataset.prompt ?? '';
-    if (promptInput) {
-      promptInput.value = prompt;
-      promptInput.focus();
+    const key = (chip.dataset.prompt ?? '').toLowerCase().trim();
+    const npc = npcDatabase[key];
+    if (npc) {
+      renderNpcPreview(npc);
     }
-    // Don't auto-generate — let the user review/edit before clicking Generate
   });
 }
 </script>

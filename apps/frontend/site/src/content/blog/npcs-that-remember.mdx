@@ -1,0 +1,54 @@
+---
+title: "NPCs that remember: how memory and factions actually work"
+description: "A closer look at short-term and long-term memory, session summarization, and the faction system behind Aikami's 'the world remembers what you did' pitch."
+date: 2026-07-28
+tags: ["ai", "game-master", "memory"]
+seoKeyword: "AI NPC memory system"
+slug: "npcs-that-remember"
+---
+
+"NPCs that remember" is the single line we lead the whole project with, so it's worth
+being precise about what that actually means under the hood — because "remember" is doing
+a lot of work in that sentence, and it's not just a longer context window.
+
+## Two tiers, not one
+
+Every NPC carries two distinct kinds of memory:
+
+- **Short-term memory** — the conversation happening right now, the fight in progress, the
+  deal that hasn't closed yet. This is fast, local to the current scene, and doesn't need
+  to survive a session boundary.
+- **Long-term memory** — what the world actually knows about you once a session ends: your
+  deeds, your debts, your reputation. This is what persists, and it's what makes stealing
+  from a merchant in session one mean something in session five.
+
+The bridge between the two is session summarization: rather than replaying an entire
+chat log into every future prompt (expensive, and it degrades fast as history grows),
+completed sessions get compressed into durable facts that feed back into the world state
+and into how NPCs are addressed and referenced going forward.
+
+## Factions aren't a lookup table
+
+Reputation in Aikami isn't a single number tracked against your character. Factions are
+generated per playthrough — each with its own beliefs, alliances, and grudges — and
+they're aware of each other. Help one group and, depending on who they talk to and who
+they're rivals with, their enemies can find out too. That's a narrative director's job as
+much as a data structure's: deciding not just *what* happened, but who plausibly hears
+about it and how they react.
+
+## Choices that actually branch
+
+None of this matters if the story underneath is fixed. Dialogue and quests in Aikami
+aren't pre-written trees — the AI Game Master builds them as you play, using the
+character sheets, the memory state, and the faction standings as constraints. Two players
+who start in the same tavern, talking to the same NPC, can walk away with completely
+different relationships to that world, because the inputs to the next scene are genuinely
+different by the time they get there.
+
+## Where this is headed
+
+Memory and factions are "Now/Next" on our [roadmap](/#adventurers-guild) — the core loop
+works today, and cross-chat memory, AI-generated lorebooks, and richer relationship
+graphs are the next layer we're building on top of it. If you want to see where that's
+headed in more detail, the [feature specs](https://github.com/BearlySleeping/aikami) are
+public, same as everything else.

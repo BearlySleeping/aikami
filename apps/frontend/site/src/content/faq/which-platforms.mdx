@@ -1,0 +1,14 @@
+---
+question: "Which platforms are supported?"
+category: "self-hosting"
+order: 3
+---
+
+The desktop app ships for **Windows** (`.exe` installer), **macOS** (universal `.dmg`),
+and **Linux** (AppImage). It's built with Tauri v2, so it's Rust-powered and small.
+
+The web client is a Progressive Web App and runs in any modern browser, desktop or mobile.
+
+One Linux note: the AppImage needs glibc 2.35+ and libfuse2 to mount. Installation varies
+by distribution: Ubuntu 22.04–23.10 use `sudo apt install libfuse2`, Ubuntu 24.04+ use
+`sudo apt install libfuse2t64`, and Fedora 36+ use `sudo dnf install fuse-libs`.

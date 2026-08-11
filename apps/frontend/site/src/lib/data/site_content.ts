@@ -37,9 +37,10 @@ export const siteContent = {
   site,
   nav: [
     { label: 'Play', href: webClientUrl },
-    { label: 'Demo', href: '/#demo' },
     { label: 'Content Packs', href: '/#content-packs' },
-    { label: 'Self-Host', href: '/#your-realm' },
+    { label: 'Tech', href: '/tech' },
+    { label: 'Blog', href: '/blog' },
+    { label: 'FAQ', href: '/faq' },
     { label: 'Community', href: '/#adventurers-guild' },
   ],
   footer: {

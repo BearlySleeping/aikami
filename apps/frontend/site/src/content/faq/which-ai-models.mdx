@@ -1,0 +1,18 @@
+---
+question: "Which AI models and providers are supported?"
+category: "ai-providers"
+order: 1
+---
+
+All text, image, and voice generation flows through a single abstraction
+(`AiProviderGateway`), so you can mix and match:
+
+- **Text** — Anthropic (Claude), OpenAI, Google Gemini, or any OpenAI-compatible endpoint.
+  Locally: Ollama or vLLM.
+- **Images** — ComfyUI locally by default; DALL·E, Stability AI, NovelAI, and fal.ai via
+  BYOK.
+- **Voice** — Kokoro locally by default; ElevenLabs, OpenAI TTS, VOICEVOX, and Fish Speech
+  via BYOK.
+
+A text engine is always required — that's the core of the game. Image and voice are
+optional; the LPC sprite system covers the visual baseline with no AI dependency at all.
