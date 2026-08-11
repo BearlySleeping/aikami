@@ -7,7 +7,19 @@ import 'pixi.js/unsafe-eval';
 import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
 import { logger } from '$logger';
+import { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
+import { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 import { initLpcShaders } from './rendering/sprite_composer.ts';
+
+// C-377 AC-1: install the global nearest-neighbour default at MODULE LOAD.
+// This runs the moment the engine barrel is first imported — which in the
+// client boot sequence happens during `preloading_content`, BEFORE the
+// atlas spritesheet is loaded. Installing here (not only inside
+// createPixiApp) closes the ordering hazard: every texture created for the
+// life of the application inherits nearest filtering, including the prop
+// spritesheet textures that are loaded before the renderer exists.
+// Idempotent — createPixiApp also calls it as a belt-and-suspenders.
+installNearestTextureDefault();
 
 // ---------------------------------------------------------------------------
 // PixiJS v8 Application wrapper
@@ -35,7 +47,8 @@ export type PixiAppOptions = {
   height?: number;
   /** Background color as a hex number. Defaults to `0x1a1a2e`. */
   backgroundColor?: number;
-  /** Whether to use antialiasing. Defaults to `true`. */
+  /** Whether to use antialiasing. Defaults to `false` — pixel art samples
+   *  nearest-neighbour, so MSAA is pointless (C-377 AC-2). */
   antialias?: boolean;
   /** Background alpha (0 = fully transparent, 1 = fully opaque). Defaults to `1`. */
   backgroundAlpha?: number;
@@ -112,48 +125,28 @@ type DebugCounters = {
  *   Application and live debug metrics.
  */
 const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> => {
-  const {
-    canvas,
-    width = DEFAULT_WIDTH,
-    height = DEFAULT_HEIGHT,
-    backgroundColor = DEFAULT_BACKGROUND,
-    antialias = true,
-    backgroundAlpha = 1,
-  } = options;
+  // C-377 AC-1: global nearest-neighbour default. Set once at renderer
+  // creation, before any Assets.load — every texture created for the life
+  // of the application inherits nearest filtering, so a future loader
+  // cannot regress pixel-art crispness by forgetting a per-site line.
+  installNearestTextureDefault();
 
   const app = new Application();
 
-  const { rendererPreference = 'webgl' } = options;
+  const initOptions = resolvePixiInitOptions(options, { isE2E: isE2ETestMode() });
 
   try {
-    await app.init({
-      canvas,
-      width,
-      height,
-      backgroundColor,
-      antialias,
-      backgroundAlpha,
-      resizeTo: options.resizeTo,
-      preference: rendererPreference,
-      preserveDrawingBuffer: true,
-    });
+    await app.init(initOptions);
   } catch (error) {
-    const pref = rendererPreference;
+    const pref = options.rendererPreference ?? 'webgl';
     if (pref === 'webgpu') {
       logger.warn('createPixiApp:webgpu-failed', {
         error: String(error),
         fallback: 'webgl',
       });
       await app.init({
-        canvas,
-        width,
-        height,
-        backgroundColor,
-        antialias,
-        backgroundAlpha,
-        resizeTo: options.resizeTo,
+        ...initOptions,
         preference: 'webgl',
-        preserveDrawingBuffer: true,
       });
     } else {
       throw error;

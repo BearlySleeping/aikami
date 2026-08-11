@@ -14,6 +14,9 @@ const EmberwatchSchema = Type.Object({
   villageLooksCoherent: Type.Boolean({
     description: 'Whether the scene reads as a coherent pixel-art village',
   }),
+  tilesAreCrisp: Type.Boolean({
+    description: 'Whether tile edges are hard-edged pixel art with no blur',
+  }),
   wallsVisible: Type.Boolean({ description: 'Whether stone walls / wall rims are visible' }),
   propsVisible: Type.Boolean({
     description: 'Whether prop sprites (well, notice board, gate) are visible as distinct art',
@@ -38,10 +41,13 @@ const VILLAGE_PROMPT = [
   '',
   'EVALUATE:',
   '- Is the ground clearly a colorful pixel-art village (grass + paths + walls), not a blank or dark grid?',
+  '- Are tile boundaries SHARP — hard-edged pixel art with NO blurring, softening, or bilinear interpolation between adjacent tiles?',
   '- Are the stone walls, wall-top rim, and the gate prop visible?',
   '- Is the player character rendered with natural colors (not a solid green/magenta square)?',
   '- Are there ZERO character-head sprites used as props?',
   '- Are there ZERO solid white squares?',
+  '',
+  'CRISP TILES (score 90+ requirement): tile edges must be hard and pixelated — if tiles look smooth, soft, or smeared, mark tilesAreCrisp false and score below 90.',
   '',
   'Score breakdown:',
   '- 90-100: Coherent colorful village — grass, paths, walls, gate prop, player all visible.',

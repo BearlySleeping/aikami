@@ -398,5 +398,46 @@ describe('camera_system', () => {
       expect(camera.x).toBeGreaterThan(0);
       expect(camera.x).toBeLessThan(1000);
     });
+
+    // C-377 AC-7: camera follow is framerate-independent.
+    // 1000ms simulated as 30× 33ms ticks vs 143× 7ms ticks must land at
+    // (nearly) the same position — the lerp factor is delta-scaled, not
+    // per-frame.
+    it('reaches the same fraction of remaining distance regardless of frame rate', () => {
+      setScreenSize({ width: 1920, height: 1080 });
+
+      const run = (deltaMs: number): number => {
+        resetCameraTracking();
+        setScreenSize({ width: 1920, height: 1080 });
+        const w = createWorld();
+        registerPositionObservers(w);
+        registerCameraFocusObservers(w);
+        const eid = _createTarget(w, { x: 0, y: 0 });
+        updateCameraSystem(w, deltaMs); // snap to 0,0
+        addComponent(w, eid, set(Position, { x: 1000, y: 500 }));
+        let elapsed = 0;
+        while (elapsed < 1000) {
+          updateCameraSystem(w, deltaMs);
+          elapsed += deltaMs;
+        }
+        const pos = getCameraPosition();
+        Position.x.length = 0;
+        Position.y.length = 0;
+        return pos.x;
+      };
+
+      const at33ms = run(33);
+      const at7ms = run(7);
+
+      // Both rates cover ~1000ms of wall-clock time; the positions must
+      // agree within a small epsilon (~3px of drift from discrete stepping
+      // at different tick sizes). Pre-delta-scaling, 33ms ticks would move
+      // ~4.7× further than 7ms ticks per unit time — the difference would
+      // be hundreds of pixels, not single digits.
+      expect(Math.abs(at33ms - at7ms)).toBeLessThan(5);
+      // Sanity: both actually moved toward the target (not snapped/zero).
+      expect(at33ms).toBeGreaterThan(900);
+      expect(at7ms).toBeGreaterThan(900);
+    });
   });
 });

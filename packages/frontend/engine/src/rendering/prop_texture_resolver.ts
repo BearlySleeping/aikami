@@ -170,6 +170,11 @@ export const createPropFrameResolver = (
 
     const hit = _sheet.textures[frame];
     if (hit) {
+      // C-377 AC-1: nearest filtering on the prop resolver path. The global
+      // default covers textures created after renderer init, but this
+      // guarantees crisp pixel-art even when the atlas texture was cached
+      // before the default was installed.
+      hit.source.scaleMode = 'nearest';
       const resolution: PropTextureResolution = { texture: hit, frame, source: 'hit' };
       _cache.set(frame, resolution);
       return resolution;
@@ -178,6 +183,7 @@ export const createPropFrameResolver = (
     // Frame missing → fallbackTile (never Texture.WHITE, never an LPC head).
     const fallback = fallbackTile ? _sheet.textures[fallbackTile] : undefined;
     if (fallback) {
+      fallback.source.scaleMode = 'nearest';
       logger.warn('prop-frame-texture-missing', {
         frame,
         textureUrl,

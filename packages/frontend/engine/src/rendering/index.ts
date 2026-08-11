@@ -16,7 +16,9 @@ export {
   TextureManager,
 } from './texture_manager.ts';
 export type {
+  TilemapChunk,
   TilemapChunkRendererOptions,
   TilemapChunkRenderResult,
 } from './tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './tilemap_chunk_renderer.ts';
+export { installNearestTextureDefault } from './texture_defaults.ts';
