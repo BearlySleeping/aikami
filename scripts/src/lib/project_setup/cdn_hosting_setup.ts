@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/cdn_hosting_setup.ts
+// scripts/src/lib/project_setup/cdn_hosting_setup.ts
 //
 // Create Firebase Hosting CDN sites for Tauri release downloads.
 // Sets up fixed URLs like cdn.bearlysleeping.com/aikami/stable/linux
 // that redirect to GCS channel artifacts.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/cdn_hosting_setup.ts --mode=staging
-//   bun run scripts/src/lib/setup/cdn_hosting_setup.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/cdn_hosting_setup.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/cdn_hosting_setup.ts --mode=production --dry-run
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

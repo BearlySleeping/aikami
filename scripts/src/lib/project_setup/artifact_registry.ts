@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/artifact_registry.ts
+// scripts/src/lib/project_setup/artifact_registry.ts
 //
 // Create Artifact Registry Docker repository for Aikami.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/artifact_registry.ts --mode=staging
-//   bun run scripts/src/lib/setup/artifact_registry.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=production --dry-run
 
 import { fmt, parseCliArgs, run } from '../cli_utils';
 import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from '../deploy/deployment_config';

@@ -8,7 +8,7 @@ This package provides CLI scripts shared across the Aikami monorepo:
 
 - **Ops** — Dev server orchestration, environment setup, cleanup
 - **Deploy** — Deployment pipelines and configuration
-- **Setup** — Developer workspace initialization
+- **Setup** — Local machine setup (direnv, bun, jdk, chromium, tauri deps) + GCP project setup
 - **Testing** — Blackbox test runner harness
 - **Context** — LLM context generation and knowledge base updates
 
@@ -65,9 +65,28 @@ bun run scripts -- generate_llms
 
 Deployment configuration for Firebase, Cloud Run, and hosting.
 
-### Setup (`src/lib/setup/`)
+### Setup (`src/lib/local_setup/`)
 
-Developer workspace initialization and environment setup.
+Local machine setup — interactive CLI guide that checks for essential tools
+(bun, git), optional DX (direnv, nix, pi, herdr), emulator dependencies
+(jdk, chromium), and Tauri build dependencies (Rust, webkit2gtk, …).
+Prints copy-paste install commands for the detected platform.
+
+```bash
+bun run setup
+```
+
+### Project Setup (`src/lib/project_setup/`)
+
+🔴 GCP cloud infrastructure setup — NOT local machine setup. Orchestrates
+GCP APIs, IAM roles, Secret Manager, Firebase Hosting sites, Artifact
+Registry, and CDN hosting for the Aikami cloud project.
+
+```bash
+bun run project:setup                      # Full interactive wizard
+bun run project:setup --mode=staging       # Target specific mode
+bun run project:setup:iam                  # IAM roles only
+```
 
 ### Testing (`src/lib/test_blackbox/`)
 

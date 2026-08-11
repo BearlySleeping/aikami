@@ -51,7 +51,22 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 type PlatformDef = { runsOn: string; platform: string; bundles: string };
 
 const PLATFORM_DEFAULTS: PlatformDef[] = [
-  { runsOn: 'ubuntu-latest', platform: 'linux', bundles: 'appimage,deb,rpm' },
+  // Linux ships AppImage only, deliberately, not deb+rpm:
+  //   - Tauri's updater plugin only self-updates NSIS/MSI (Windows), AppImage
+  //     (Linux), and .app (macOS) bundles. .deb/.rpm have no auto-update path
+  //     — those users would be stuck manually reinstalling on every release
+  //     unless we stood up a real apt/dnf repo, which we don't.
+  //   - AppImage needs no package-manager integration, so it runs on any
+  //     distro (Ubuntu, Fedora, Arch, ...) without dependency resolution.
+  //   - Pinned to ubuntu-22.04 (not ubuntu-latest) on purpose: an AppImage
+  //     only runs on systems with a glibc version >= the build machine's.
+  //     Building on the newest runner (24.04, glibc 2.39) would silently
+  //     drop support for still-common older distros (e.g. Ubuntu 20.04,
+  //     Debian 11, RHEL 8/9). 22.04's glibc 2.35 is a much safer floor.
+  //   - Note: AppImage still needs libfuse2 on the host to mount itself,
+  //     which Ubuntu 22.04+/Fedora 36+/Debian 12 no longer install by
+  //     default — documented in README.md's desktop install section.
+  { runsOn: 'ubuntu-22.04', platform: 'linux', bundles: 'appimage' },
   // Windows ships the NSIS installer (.exe) — the updater signs it like the
   // AppImage/MSI. MSI is intentionally not built.
   { runsOn: 'windows-latest', platform: 'windows', bundles: 'nsis' },

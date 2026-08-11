@@ -87,6 +87,11 @@ tasks:
       - '@group(sources)'
       - '@group(srcTauri)'
       - '@group(configs)'
+  tauri-run:
+    command: 'bun run tauri:run'
+    preset: 'server'
+    options:
+      cache: false
   deploy:
     command: 'bun run scripts/deploy.ts'
     inputs:

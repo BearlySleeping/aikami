@@ -86,7 +86,7 @@ on:
         type: string
         default: ""
       bundles:
-        description: "Comma-separated bundle targets (appimage,deb,rpm,msi,dmg). Empty = platform defaults"
+        description: "Comma-separated bundle targets (appimage,nsis,app,dmg) — deb/rpm/msi aren't in PLATFORM_DEFAULTS (see ci_planning.ts). Empty = platform defaults"
         required: false
         type: string
         default: ""
@@ -447,12 +447,17 @@ jobs:
           CI: "true"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
-          # Updater signing key. Scoped to the desktop build step ONLY — the
-          # SvelteKit web build (build-web job) never sees it, and the
-          # client's vite envPrefix is ['PUBLIC_'] so TAURI_* could not reach
-          # the frontend bundle anyway (GHSA-2rcp-jvr4-r259 safe).
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Updater signing key: NOT passed here. It lives in GCM as
+          # TAURI_SIGNING_PRIVATE_KEY / _PASSWORD (unprefixed, scripts/.env.example)
+          # and reaches this step's process.env automatically — the "Restore env
+          # files from Redis" step above writes scripts/.env.{mode} to disk, and
+          # ci_run.ts's initScriptsEnv(mode) call loads it before spawning
+          # `tauri build`. The client's vite envPrefix is ['PUBLIC_'], so these
+          # could never reach the frontend bundle either way (GHSA-2rcp-jvr4-r259
+          # safe). src-tauri/tauri.conf.json's static createUpdaterArtifacts
+          # stays `false` (so a plain local `bun tauri build` needs no signing
+          # key) — tauri_release.ts's buildTauriArtifacts() overrides it to
+          # `true` at build time for staging/production only (see liveModes).
 
       # Updater fragment for this leg (release runs only) — the
       # update-manifest job merges all fragments into latest.json.
@@ -522,6 +527,44 @@ jobs:
           bun scripts/src/lib/deploy/updater_manifest.ts --merge \
             --fragments-dir="updater-fragments-merged" \
             --release-tag="${{ github.event.release.tag_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Discord release announcement (release runs only) ────────────────
+  # CI-only path: the desktop matrix has multiple legs, so this waits for all
+  # of them via [plan-matrix, deploy-desktop] before announcing once. A local
+  # `bun run deploy ... client-tauri` has no matrix to wait for, so that path
+  # calls discord_notify.ts's notifyDiscordRelease() directly from
+  # tauri_release.ts's deployTauriRelease instead of going through this job.
+  #
+  # Deliberately depends on deploy-desktop, NOT update-manifest — update-
+  # manifest can now exit non-zero on a partial manifest (see
+  # updater_manifest.ts) while still having published real download links,
+  # and that shouldn't block the announcement. discord_notify.ts itself
+  # no-ops when DISCORD_WEBHOOK_URL isn't configured for the mode.
+  notify-discord:
+    name: Announce Release (Discord)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [plan-matrix, deploy-desktop]
+    if: github.event_name == 'release' && needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+
+      - name: Restore env files from Redis
+        shell: bash
+        run: bun scripts/src/lib/ops/env_share.ts --mode=production --get
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+
+      - name: Post release announcement to Discord
+        shell: bash
+        run: bun scripts/src/lib/deploy/discord_notify.ts --tag="${{ github.event.release.tag_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

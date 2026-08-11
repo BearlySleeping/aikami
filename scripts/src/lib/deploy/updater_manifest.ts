@@ -342,16 +342,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Validate all required platform keys are present before uploading — a
-  // partial manifest silently drops updater support for entire platforms
-  // (e.g. darwin-x86_64 when macOS was built arm64-only).
+  // A missing platform key just means that platform's users see no update
+  // this release (same as always, until a future release rebuilds it) — it
+  // does NOT justify withholding the manifest from platforms that DID build
+  // successfully. One flaky Windows/macOS runner shouldn't block Linux users
+  // (or vice versa) from getting notified. Still uploads below; the process
+  // exits non-zero at the end so the job shows red and gets investigated —
+  // loud for the maintainer, invisible to unaffected users.
   const requiredPlatforms = ['linux-x86_64', 'windows-x86_64', 'darwin-x86_64', 'darwin-aarch64'];
   const missingPlatforms = requiredPlatforms.filter((key) => !platforms[key]);
   if (missingPlatforms.length > 0) {
-    error(
-      `Missing required platform fragments: ${missingPlatforms.join(', ')} — refusing to upload a partial manifest.`,
+    warn(
+      `Missing platform fragment(s): ${missingPlatforms.join(', ')} — publishing a PARTIAL manifest anyway. Those platforms won't see this update until a future release rebuilds them.`,
     );
-    process.exit(1);
   }
 
   const tauriDir = opts['tauri-dir'] ?? 'apps/frontend/client/src-tauri';
@@ -372,6 +375,13 @@ async function main(): Promise<void> {
 
   await uploadManifest(releaseTag, manifestPath);
   ok(`Uploaded latest.json to release ${releaseTag} (--clobber)`);
+
+  if (missingPlatforms.length > 0) {
+    error(
+      `Manifest published, but missing ${missingPlatforms.length} platform(s): ${missingPlatforms.join(', ')} — re-run the missing leg(s) and re-publish.`,
+    );
+    process.exit(1);
+  }
 }
 
 // Only run the CLI when invoked directly — this module is also imported by
