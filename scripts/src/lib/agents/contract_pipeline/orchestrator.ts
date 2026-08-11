@@ -663,6 +663,11 @@ export const runContractPipeline = async (options: {
    *  start at implementation (or later, per the contract's status). Used
    *  when the contract already exists and is passed by path or bare C-XXX. */
   skipAuthoring?: boolean;
+  /** When true, a `skipAuthoring` run starts at `critique` instead of
+   *  `implement`, so a hand-authored contract gets a critic pass before any
+   *  code is written. No effect without `skipAuthoring` (the normal writer
+   *  flow already runs critique after `write_contract`). */
+  critique?: boolean;
   /** When true, use the standard aikami-{mode} herdr workspace and
    *  skip git worktree provisioning. All stages run from the repo root. */
   rootMode?: boolean;
@@ -700,8 +705,28 @@ export const runContractPipeline = async (options: {
     // decision from the manifest so a draft path-sourced run resumed by run ID
     // without a target remains at implement instead of being reset to write_contract.
     const skipAuthoring = options.skipAuthoring ?? manifest.skipAuthoring;
+    // `--critique` keeps the critic pass for a hand-authored contract: the
+    // writer is still skipped, but the run enters at `critique` instead of
+    // jumping straight to `implement`. The lastCompleted scan below advances
+    // past it once critique has passed, so this only affects a fresh entry.
+    // When the user supplies an explicit override (true or false), persist it
+    // to support older manifests that may not have this field.
+    const critique = options.critique ?? manifest.critique;
+    // Persist any CLI overrides to the manifest for older manifests or changed options
+    let manifestChanged = false;
+    if (options.skipAuthoring !== undefined && options.skipAuthoring !== manifest.skipAuthoring) {
+      manifest.skipAuthoring = options.skipAuthoring;
+      manifestChanged = true;
+    }
+    if (options.critique !== undefined && options.critique !== manifest.critique) {
+      manifest.critique = options.critique;
+      manifestChanged = true;
+    }
+    if (manifestChanged) {
+      writeManifest({ manifest, cwd: options.repoRoot });
+    }
     if (skipAuthoring && contractStage === 'write_contract') {
-      contractStage = 'implement';
+      contractStage = critique ? 'critique' : 'implement';
     }
     const stageOrder: ContractPipelineStage[] = [
       'write_contract',
@@ -745,7 +770,11 @@ export const runContractPipeline = async (options: {
     // Path-sourced contracts (existing contract by path or bare C-XXX) skip
     // the authoring stages — draft contracts start at implementation.
     const startStage =
-      options.skipAuthoring && baseStart === 'write_contract' ? 'implement' : baseStart;
+      options.skipAuthoring && baseStart === 'write_contract'
+        ? options.critique
+          ? 'critique'
+          : 'implement'
+        : baseStart;
     manifest = createManifest({
       contractId: contract.id,
       contractPath: contract.path,
@@ -753,6 +782,7 @@ export const runContractPipeline = async (options: {
       baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
       startStage,
       skipAuthoring: options.skipAuthoring,
+      critique: options.critique,
       rootMode: options.rootMode,
     });
     writeManifest({ manifest, cwd: options.repoRoot });

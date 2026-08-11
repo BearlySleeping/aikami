@@ -71,12 +71,24 @@ For every section of the template, find evidence in the repository:
 
 ## Phase 3: Size Check
 
-Apply the split rule before writing:
+Apply the split rule before writing. The test is **independent
+mergeability**, not size:
 
-1. Count ACs. If > 5, split.
-2. Count affected projects. If > 2, consider splitting.
-3. Are there multiple independently releasable systems? Split.
+1. Are there two outcomes that can each be independently verified AND merged,
+   neither needing the other to be useful? Split.
+2. Would partial completion leave the repo in a worse state than before
+   starting (half-migrated schema, two competing code paths left live)? Split.
+3. Do the parts share no data model and no invariant? Split.
 4. Deferred phases → separate contracts.
+
+**Do NOT split on AC count.** A cohesive change may legitimately have 10+ ACs.
+Splitting on AC count penalises careful specification and multiplies pipeline
+runs for a single feature. Instead, make sure every AC is independently
+verifiable — that is what keeps a large contract reviewable.
+
+**Do NOT split on affected project count.** In this monorepo a real feature
+routinely touches `engine` + `client` + `schemas`; a vertical slice through
+them is one contract.
 
 If splitting is needed, propose the split to the user before writing. Each split contract gets its own file.
 

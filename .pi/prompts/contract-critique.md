@@ -39,7 +39,7 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 9. **Are all ACs observable?** For each AC: can you write a test that definitively proves it's met? If the AC says "the system handles errors gracefully" — that's not observable. What specific error? What specific behavior?
 10. **Can all tests pass while the feature remains unusable?** This is the "green build, broken product" check. If ACs only test isolated units but never the production path, flag it.
 11. **Is the Evidence Matrix complete?** Every AC must have a test artifact and (for user-facing features) a production path. Missing = flag.
-12. **Does the contract have more than 5 ACs?** If yes, it probably needs splitting.
+12. **Is every AC independently verifiable?** Each AC must be provable on its own, without first completing another AC in the same contract. AC *count* is not a problem — a cohesive contract may have 10+. Non-independent ACs are.
 
 ### Quality & Edge Cases
 13. **Is offline/degraded behavior defined?** If the feature involves AI, network, or external services: what happens when they're unavailable?
@@ -47,10 +47,13 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 15. **Are there implicit assumptions?** "The user is logged in," "the engine is initialized," "the campaign exists." If these aren't in the Given clause of ACs, they're assumptions — and assumptions cause bugs.
 
 ### Scope & Size
-16. **Is this contract too large?** Apply the split rule:
-    - Multiple independently releasable systems → split
-    - More than 5 ACs → split
-    - More than 2 affected projects → consider splitting
+16. **Is this contract too large?** Apply the split rule — the test is
+    independent mergeability, not size:
+    - Two outcomes that can each be independently verified AND merged → split
+    - Partial completion would leave the repo worse off than before → split
+    - The parts share no data model and no invariant → split
+    - AC count and affected-project count are NOT split signals (see
+      `SHARED_SECTIONS.md#contract-size--split-rule`)
 17. **Are Out of Scope boundaries clear enough to prevent scope creep?** Vague boundaries = "we'll figure it out during implementation" = scope creep.
 
 ### Migration
@@ -83,8 +86,8 @@ Only block for truly unresolvable STRUCTURAL problems:
 These are NOT blocking:
 
 - Dependencies that are `draft` or `in_progress` → warn, document the stubbing plan
-- More than 5 ACs → suggest splitting but don't block unless ACs are contradictory
-- More than 2 affected projects → flag but don't block (the contract may be a vertical slice)
+- High AC count → never a finding on its own. Only flag ACs that are contradictory, or that cannot be verified without first completing another AC.
+- More than 2 affected projects → never a finding on its own (a vertical slice through `engine` + `client` + `schemas` is normal here)
 - Missing migration AC → add one yourself if you can determine the requirements
 
 ### 🚀 YOLO MODE
