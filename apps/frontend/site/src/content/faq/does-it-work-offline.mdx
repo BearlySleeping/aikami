@@ -1,0 +1,14 @@
+---
+question: "Does Aikami work offline?"
+category: "gameplay"
+order: 1
+---
+
+Yes, if you're running local AI. Campaigns, saves, and chat history live in a local Turso
+(libSQL) database, and the game boots and plays with no network connection. Run the full
+Docker stack — Ollama for text, ComfyUI for images, Kokoro for voice — and nothing needs
+to leave your machine after the initial pull.
+
+If you're using BYOK with a cloud provider instead, you obviously need a connection to
+reach that provider. Your **saves** are still local either way; cloud sync via Firebase is
+optional and never a boot dependency.

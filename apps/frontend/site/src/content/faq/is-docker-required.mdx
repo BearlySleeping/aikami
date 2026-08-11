@@ -1,0 +1,17 @@
+---
+question: "Is Docker required?"
+category: "self-hosting"
+order: 2
+---
+
+No — Docker is the easiest path to a fully local setup, not a requirement. There are four
+ways to run Aikami:
+
+- **Web, BYOK** — no install at all. Open the hosted client, drop in an API key, play.
+- **Desktop app** — a native Tauri v2 build for Windows, macOS, and Linux. Works with a
+  local Ollama/vLLM instance or your own cloud keys.
+- **Docker** — `docker compose up aikami` for the whole local stack (client + Ollama +
+  ComfyUI + Kokoro), or `aikami-client` for just the client.
+- **From source** — Bun + Moon, if you're contributing or want to modify it.
+
+Full commands are on the [tech page](/tech#your-realm).

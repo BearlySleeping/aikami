@@ -1,0 +1,13 @@
+---
+question: "Where do my saves and chat history live?"
+category: "privacy"
+order: 1
+---
+
+On your machine. Campaigns, saves, and chat history are stored in a local Turso (libSQL)
+database — that's the source of truth, not a server-side copy.
+
+Firebase (auth and optional cloud sync/backup) is layered on top and is never a boot
+dependency. Your world plays and saves fine without ever signing in. If you *do* sign in,
+sync is there so you can continue on another device — but it's opt-in, not the default
+storage location.

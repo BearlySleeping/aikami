@@ -2,7 +2,8 @@
 // apps/frontend/site/src/lib/components/sections/cross_platform.astro
 /**
  * Cross-Platform Architecture — Web Client + Tauri Desktop.
- * Demonstrates real-time sync across platforms and auto-generated LPC character visuals.
+ * Demonstrates real-time sync across platforms. Character-rendering details
+ * (LPC sprites, equipment) live in the homepage's Living World section, not here.
  */
 ---
 
@@ -17,8 +18,7 @@
         One world, every platform. The same world state streams in real time across the Web Client
         and the Tauri v2 desktop app — play in your browser, pick up on your desktop, same NPCs,
         same story. Saves live on your own machine first, with optional cloud sync for multi-device
-        play. And every character is rendered from dynamically assembled LPC (Liberated Pixel Cup)
-        sprite layers, so each NPC looks as unique as their story.
+        play.
       </p>
     </div>
 
@@ -46,13 +46,13 @@
           <p class="font-mono text-[10px] uppercase tracking-widest text-rune mb-2">Web Client</p>
           <p class="font-serif text-xl text-foreground mb-1">Svelte 5 + PixiJS v8</p>
           <p class="text-xs text-muted-foreground leading-relaxed">
-            Play instantly in any modern browser. Full 2D rendering with WebGL, WebSocket sync, and
-            offline PWA support. Auto-generated LPC character sprites rendered in real-time.
+            Play instantly in any modern browser — no install. A GPU-accelerated 2D render loop with
+            offline PWA support, and LPC character sprites assembled at runtime.
           </p>
           <div class="mt-4 flex justify-center gap-2">
             <span
               class="rounded-full bg-rune/10 border border-rune/20 px-2 py-0.5 text-[9px] font-mono text-rune"
-              >WebGL 2</span
+              >WebGPU</span
             >
             <span
               class="rounded-full bg-rune/10 border border-rune/20 px-2 py-0.5 text-[9px] font-mono text-rune"
@@ -102,41 +102,7 @@
       </div>
     </div>
 
-    <!-- LPC Character Generation Callout -->
-    <div class="mt-10 rune-border p-8 bg-background/50 max-w-2xl mx-auto">
-      <div class="text-center">
-        <span class="font-mono text-[10px] uppercase tracking-widest text-rune mb-3 block">
-          Procedural Character Rendering
-        </span>
-        <p class="text-sm text-muted-foreground leading-relaxed mb-4">
-          Aikami dynamically generates every NPC's visual appearance using the LPC (Liberated Pixel
-          Cup) sprite system. Each character is assembled from modular layers — head, body, hair,
-          torso, legs, and feet — chosen to match the NPC's generated archetype, faction, and
-          backstory. Expression packs auto-update based on conversation context (happy, sad, angry,
-          surprised) and situational scene images are generated on demand by the AI pipeline.
-          Background music shifts with mood. NPCs speak with unique AI-generated voices. ComfyUI and
-          Kokoro TTS run locally by default, but you can swap in any supported provider —
-          ElevenLabs, Stability AI, DALL·E, and more. No static sprite sheets. Every character is
-          unique.
-        </p>
-        <div class="flex flex-wrap justify-center gap-2">
-          <span
-            class="rounded-full bg-rune/10 border border-rune/20 px-2.5 py-1 text-[10px] font-mono text-rune"
-            >LPC Sprites</span
-          >
-          <span
-            class="rounded-full bg-ember/10 border border-ember/20 px-2.5 py-1 text-[10px] font-mono text-ember"
-            >Procedural Assembly</span
-          >
-          <span
-            class="rounded-full bg-indigo-400/10 border border-indigo-400/20 px-2.5 py-1 text-[10px] font-mono text-indigo-400"
-            >Modular Layers</span
-          >
-        </div>
-      </div>
-    </div>
-
-    <!-- Real-time sync diagram -->
+    <!-- Local-first data flow: writes land locally, then optionally sync -->
     <div class="mt-10 rune-border p-8 bg-background/50">
       <div class="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8">
         <div class="glass-panel px-5 py-3 text-center">
@@ -149,30 +115,23 @@
         <span class="text-rune text-xl md:hidden" aria-hidden="true">↓</span>
         <div class="glass-panel px-5 py-3 text-center border-rune">
           <span class="font-mono text-[10px] uppercase tracking-widest text-rune"
-            >Firebase Realtime</span
+            >Local Turso DB</span
           >
-          <p class="text-sm text-foreground mt-1">State sync layer</p>
+          <p class="text-sm text-foreground mt-1">Source of truth — works offline</p>
         </div>
-        <span class="text-rune text-xl hidden md:block" aria-hidden="true">→</span>
-        <span class="text-rune text-xl md:hidden" aria-hidden="true">↓</span>
-        <div class="flex flex-wrap gap-4 justify-center">
-          <div class="glass-panel px-5 py-3 text-center">
-            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-              >Web Client</span
-            >
-            <p class="text-sm text-rune mt-1">Svelte 5</p>
-          </div>
-          <div class="glass-panel px-5 py-3 text-center">
-            <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-              >Desktop</span
-            >
-            <p class="text-sm text-ember mt-1">Tauri v2</p>
-          </div>
+        <span class="text-muted-foreground/50 text-xl hidden md:block" aria-hidden="true">⇢</span>
+        <span class="text-muted-foreground/50 text-xl md:hidden" aria-hidden="true">⇣</span>
+        <div class="glass-panel px-5 py-3 text-center border-dashed">
+          <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            >Firebase Sync</span
+          >
+          <p class="text-sm text-muted-foreground mt-1">Optional — only if you sign in</p>
         </div>
       </div>
       <p class="text-center text-xs text-muted-foreground/60 mt-6">
-        All clients share a single world state. Play on web, continue on desktop — same world, same
-        NPCs.
+        Every write lands in your local database first. Cloud sync is an opt-in layer on top, so the
+        game plays and saves with no account and no connection — sign in only if you want the same
+        world on another device.
       </p>
     </div>
 

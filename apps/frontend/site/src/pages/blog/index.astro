@@ -1,0 +1,67 @@
+---
+// apps/frontend/site/src/pages/blog/index.astro
+import { getCollection } from 'astro:content';
+import Layout from '$layouts/layout.astro';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<Layout
+  title="Blog — Aikami"
+  description="Dev notes and deep dives from the Aikami team: how the memory system works, why the engine is self-hosted and BYOK, and what's shipping next."
+>
+  <section class="border-b border-border/70">
+    <div class="mx-auto max-w-6xl px-6 pt-16 pb-12 md:pt-24 md:pb-16">
+      <span class="eyebrow text-rune">From the team</span>
+      <h1 class="mt-5 font-serif text-4xl md:text-5xl leading-tight max-w-2xl">The Aikami blog.</h1>
+      <p class="mt-5 max-w-2xl text-muted-foreground leading-relaxed">
+        Dev notes, design decisions, and deep dives on how the engine actually works — written by
+        the people building it.
+      </p>
+    </div>
+  </section>
+
+  <section class="py-16 md:py-20">
+    <div class="mx-auto max-w-6xl px-6">
+      {posts.length === 0 ? (
+        <p class="text-muted-foreground">No posts yet — check back soon.</p>
+      ) : (
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {posts.map((post) => (
+            <a
+              href={`/blog/${post.data.slug}`}
+              class="glass-panel p-6 flex flex-col no-underline group hover:border-rune/40 transition-colors"
+            >
+              <span class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                {dateFormatter.format(post.data.date)}
+              </span>
+              <h2 class="mt-3 font-serif text-2xl leading-tight group-hover:text-rune transition-colors">
+                {post.data.title}
+              </h2>
+              <p class="mt-3 text-sm text-muted-foreground leading-relaxed flex-1">
+                {post.data.description}
+              </p>
+              <div class="mt-5 flex flex-wrap gap-1.5">
+                {post.data.tags.map((tag) => (
+                  <span
+                    class="rounded-full bg-rune/5 border border-rune/20 px-2.5 py-0.5 text-[10px] font-mono text-rune/90"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+</Layout>

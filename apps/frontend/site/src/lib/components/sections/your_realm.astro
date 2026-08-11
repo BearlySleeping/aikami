@@ -319,16 +319,25 @@ bun tauri build
       >
         Built on Modern Open-Source Foundation
       </h3>
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
           <p class="font-mono text-[10px] uppercase tracking-wider text-rune mb-2">Frontend</p>
           <p class="font-serif text-xl">Svelte 5</p>
-          <p class="text-[10px] text-muted-foreground mt-1">+ PixiJS v8</p>
+          <p class="text-[10px] text-muted-foreground mt-1">SvelteKit 2 + Runes</p>
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
-          <p class="font-mono text-[10px] uppercase tracking-wider text-ember mb-2">Backend</p>
-          <p class="font-serif text-xl">Firestack</p>
-          <p class="text-[10px] text-muted-foreground mt-1">+ Data Connect</p>
+          <p class="font-mono text-[10px] uppercase tracking-wider text-emerald-400 mb-2">
+            Game Engine
+          </p>
+          <p class="font-serif text-xl">PixiJS v8</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ bitECS</p>
+        </div>
+        <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-cyan-400 mb-2">
+            Local Storage
+          </p>
+          <p class="font-serif text-xl">Turso</p>
+          <p class="text-[10px] text-muted-foreground mt-1">libSQL — source of truth</p>
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
           <p class="font-mono text-[10px] uppercase tracking-wider text-rune mb-2">AI Runtime</p>
@@ -336,7 +345,7 @@ bun tauri build
           <p class="text-[10px] text-muted-foreground mt-1">+ vLLM + BYOK</p>
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
-          <p class="font-mono text-[10px] uppercase tracking-wider text-cyan-400 mb-2">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-pink-400 mb-2">
             Voice &amp; Image
           </p>
           <p class="font-serif text-xl">Kokoro</p>
@@ -348,6 +357,14 @@ bun tauri build
           <p class="text-[10px] text-muted-foreground mt-1">Rust-powered</p>
         </div>
       </div>
+
+      <p
+        class="mt-6 text-center text-xs text-muted-foreground/70 leading-relaxed max-w-2xl mx-auto"
+      >
+        Firebase sits on top for auth and optional cloud sync — never a boot dependency. The game
+        reads and writes its local Turso database first, so it plays and saves with no account and
+        no connection.
+      </p>
     </div>
   </div>
 </section>

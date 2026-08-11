@@ -1,0 +1,50 @@
+---
+title: "Why self-hosted and BYOK, not a subscription"
+description: "The product philosophy behind AiProviderGateway: local-first by design, no vendor lock-in, and why a managed tier will always be optional."
+date: 2026-08-04
+tags: ["philosophy", "self-hosting", "ai-providers"]
+seoKeyword: "self-hosted AI RPG"
+slug: "self-hosted-byok-philosophy"
+---
+
+A lot of "AI-native" games ship as a thin client in front of somebody's API, gated
+behind a monthly fee, with your saves living on a server you don't control. We built
+Aikami the other way around, and it was a deliberate choice, not a missing feature.
+
+## One abstraction, three ways to run it
+
+All text, image, and voice generation in Aikami flows through a single abstraction —
+`AiProviderGateway` — so the product code never has to know or care which mode is
+active. That abstraction currently supports:
+
+- **Offline / local** — Ollama for text, ComfyUI for images, Kokoro for voice, all
+  running as Docker microservices on your own hardware. No network required after the
+  first pull.
+- **BYOK** — bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI,
+  or any OpenAI-compatible endpoint. Your key, your rate limits, your bill, sent directly
+  to the provider.
+- **Service** *(coming soon)* — fully managed, pay-as-you-go hosting on our own
+  infrastructure, for people who'd rather not run Docker at all.
+
+A text engine is required to actually play — that's the core of the game. Image and
+voice are optional flourishes on top of it, and the LPC sprite system covers the visual
+baseline with zero AI dependency either way, so a completely offline, completely free
+setup is never a degraded experience — it's a fully supported one.
+
+## Local-first, not local-only
+
+Firebase — auth, and optional cloud sync/backup — sits *on top of* the local stack and
+is never a boot dependency. Your campaigns, saves, and chat history live in a local Turso
+(libSQL) database by default. Your world plays and saves fine without ever signing in;
+signing in just gets you continuity across devices if you want it.
+
+## Why this is a philosophy, not a phase
+
+Aikami is [MIT licensed](https://github.com/BearlySleeping/aikami/blob/main/LICENSE) —
+free and open source, forever. The managed "Service" tier that's coming is meant to
+remove setup friction for people who want it, not to become the only way to play. If we
+ever ship something where self-hosting stops being a first-class option, that's a bug,
+not a business model.
+
+Run it on a homelab box, run it on a laptop with an API key, or wait for the managed
+tier — all three are meant to feel like the same game.

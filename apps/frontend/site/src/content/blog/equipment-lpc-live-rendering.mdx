@@ -1,0 +1,47 @@
+---
+title: "Gear that redraws your character"
+description: "How Aikami's 5-slot paperdoll turns equip/unequip into a live LPC sprite rebuild — no menu screen, no reload."
+date: 2026-07-14
+tags: ["engine", "rendering", "lpc"]
+seoKeyword: "LPC sprite equipment rendering"
+slug: "equipment-lpc-live-rendering"
+---
+
+Most RPGs treat your inventory and your character model as two separate systems that
+occasionally agree to sync up — you equip a sword in a menu, and *eventually* a sprite
+somewhere reflects it, usually after a scene transition. Aikami doesn't do that. Equip
+something, and the change happens on the character standing in front of you, immediately.
+
+## The paperdoll
+
+Every character has a 5-slot paperdoll: head, left hand, body, right hand, feet. Equipping
+or unequipping an item isn't a data-only operation — it also recomputes the aggregate
+attack and defense bonuses across everything currently worn, and it dispatches an
+appearance update into the render pipeline.
+
+## Why it's not a reload
+
+The naive way to do this would be to regenerate the whole character sprite from scratch
+on every equip and swap the texture out — functional, but visibly janky, and wasteful
+when only one layer actually changed. Instead, each equipped item resolves to an LPC
+(Liberated Pixel Cup) asset recipe — the layer, the offset, the palette — and that recipe
+gets merged on top of the character's base render. Only the affected layer changes; the
+rest of the sprite stack is untouched. That's what makes it feel instant instead of like
+a screen flash.
+
+The equip event carries an appearance nudge (`UPDATE_PLAYER_APPEARANCE`) to the render
+thread rather than a full character re-fetch, which keeps the engine boundary intact —
+the 60fps PixiJS render loop never has to wait on inventory logic, and inventory logic
+never has to know how sprites are drawn.
+
+## Why this matters for a procedural cast
+
+Aikami doesn't ship a fixed roster of pre-drawn character portraits. NPCs and their gear
+are generated per playthrough, which means the *only* way to have "this bandit is wearing
+the leather armor he looted from you three sessions ago" reliably show up on screen is if
+equipment and rendering are the same system, not two systems that happen to agree most of
+the time. The paperdoll is what makes that true.
+
+It's a small piece of engineering, but it's the kind of detail that either makes a
+procedurally-generated world feel alive or makes it feel like a spreadsheet with sprites
+attached. We'd rather it be the former.

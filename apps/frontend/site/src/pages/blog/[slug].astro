@@ -1,0 +1,62 @@
+---
+// apps/frontend/site/src/pages/blog/[slug].astro
+import { getCollection, render } from 'astro:content';
+import Layout from '$layouts/layout.astro';
+
+export const getStaticPaths = async () => {
+  const posts = await getCollection('blog');
+  return posts.map((post) => ({
+    params: { slug: post.data.slug },
+    props: { post },
+  }));
+};
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<Layout title={`${post.data.title} — Aikami Blog`} description={post.data.description}>
+  <article class="border-b border-border/70">
+    <div class="mx-auto max-w-3xl px-6 pt-16 pb-12 md:pt-24">
+      <a
+        href="/blog"
+        class="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-muted-foreground hover:text-rune transition-colors no-underline"
+      >
+        &larr; All posts
+      </a>
+
+      <div
+        class="mt-6 flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+      >
+        <span>{dateFormatter.format(post.data.date)}</span>
+        <span aria-hidden="true">&middot;</span>
+        <span>{post.data.author}</span>
+      </div>
+
+      <h1 class="mt-4 font-serif text-4xl md:text-5xl leading-tight">{post.data.title}</h1>
+      <p class="mt-4 text-lg text-muted-foreground leading-relaxed">{post.data.description}</p>
+
+      <div class="mt-6 flex flex-wrap gap-1.5">
+        {post.data.tags.map((tag) => (
+          <span class="rounded-full bg-rune/5 border border-rune/20 px-2.5 py-0.5 text-[10px] font-mono text-rune/90">
+            {tag}
+          </span>
+        ))}
+      </div>
+    </div>
+  </article>
+
+  <div class="mx-auto max-w-3xl px-6 py-16 md:py-20">
+    <div
+      class="text-foreground leading-relaxed [&>h2]:font-serif [&>h2]:text-3xl [&>h2]:mt-12 [&>h2]:mb-4 [&>h2]:leading-tight [&>h3]:font-serif [&>h3]:text-2xl [&>h3]:mt-8 [&>h3]:mb-3 [&>p]:mt-4 [&>p]:text-muted-foreground [&>ul]:mt-4 [&>ul]:pl-5 [&>ul]:list-disc [&>ul]:text-muted-foreground [&>ul>li]:mt-1.5 [&>ol]:mt-4 [&>ol]:pl-5 [&>ol]:list-decimal [&>ol]:text-muted-foreground [&>ol>li]:mt-1.5 [&_a]:text-rune [&_a]:no-underline [&_a:hover]:underline [&_strong]:text-foreground [&_strong]:font-medium [&>blockquote]:mt-4 [&>blockquote]:border-l-2 [&>blockquote]:border-rune/40 [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:text-muted-foreground [&_code]:font-mono [&_code]:text-sm [&_code]:bg-card [&_code]:border [&_code]:border-border [&_code]:rounded-sm [&_code]:px-1.5 [&_code]:py-0.5"
+    >
+      <Content />
+    </div>
+  </div>
+</Layout>
