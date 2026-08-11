@@ -12,14 +12,27 @@ const packagesDirectory = resolve(projectDirectory, '../../../packages');
  * @param {string} path Relative path
  * @returns {string} Absolute path
  */
-const toPackagesPath = (path) => join(packagesDirectory, path);
+/**
+ * Convert a path to use forward slashes.
+ *
+ * SvelteKit's tsconfig generator strips a trailing `/*` from alias values by
+ * checking `value.endsWith('/*')` (literal forward slash). `node:path`'s
+ * `join()` emits backslashes on Windows, so that check silently fails there
+ * and SvelteKit appends its own `/*`, producing a broken `**\/*\/*` pattern.
+ * Keeping alias values posix-style avoids that on every platform.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+const toPosixPath = (path) => path.split('\\').join('/');
+const toPackagesPath = (path) => toPosixPath(join(packagesDirectory, path));
 /**
  * Get the absolute path from the src folder in the project directory
  *
  * @param {string} path Relative path
  * @returns {string} Absolute path
  */
-const toSrcPath = (path) => join(projectDirectory, 'src', path);
+const toSrcPath = (path) => toPosixPath(join(projectDirectory, 'src', path));
 
 const config = {
   preprocess: [vitePreprocess()],

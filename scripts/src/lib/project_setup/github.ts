@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/github.ts
+// scripts/src/lib/project_setup/github.ts
 //
 // Configure GitHub repository environment secrets for CI deployments.
 // GCP_SA_KEY is per-environment (staging vs production use different
@@ -8,9 +8,9 @@
 // environment (creating the environment if needed).
 //
 // Usage:
-//   bun run scripts/src/lib/setup/github.ts --mode=staging
-//   bun run scripts/src/lib/setup/github.ts --mode=production   (default)
-//   bun run scripts/src/lib/setup/github.ts --mode=staging --dry-run
+//   bun run scripts/src/lib/project_setup/github.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/github.ts --mode=production   (default)
+//   bun run scripts/src/lib/project_setup/github.ts --mode=staging --dry-run
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

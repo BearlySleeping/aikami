@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/iam.ts
+// scripts/src/lib/project_setup/iam.ts
 //
 // Grant IAM roles to the Aikami deploy + runtime service accounts.
 //
@@ -22,10 +22,10 @@
 // scoped to the runtime SA resource rather than the whole project.
 //
 // Usage:
-//   bun run scripts/src/lib/setup/iam.ts --mode=staging
-//   bun run scripts/src/lib/setup/iam.ts --mode=production --dry-run
-//   bun run scripts/src/lib/setup/iam.ts --mode=production --sa-id=custom-deploy-sa
-//   bun run scripts/src/lib/setup/iam.ts --mode=production --runtime-sa-id=custom-runtime-sa
+//   bun run scripts/src/lib/project_setup/iam.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/iam.ts --mode=production --dry-run
+//   bun run scripts/src/lib/project_setup/iam.ts --mode=production --sa-id=custom-deploy-sa
+//   bun run scripts/src/lib/project_setup/iam.ts --mode=production --runtime-sa-id=custom-runtime-sa
 //
 // Caller must have `roles/resourcemanager.projectIamAdmin` (or project
 // owner) on the target project — run `gcloud auth login` first.

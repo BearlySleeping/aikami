@@ -1,6 +1,13 @@
 # Setup Guide
 
-Developer onboarding for the Aikami monorepo.
+Two very different kinds of "setup" exist in this repo — don't confuse them:
+
+| Command | What it sets up | Who runs it |
+| --- | --- | --- |
+| `bun run setup` | **Local machine** — checks/installs bun, git, direnv, jdk, chromium, Tauri deps | Everyone (developers) |
+| `bun run project:setup` | **GCP cloud project** — APIs, IAM, secrets, Firebase Hosting, Artifact Registry | Maintainers (once per cloud project) |
+
+This page is about **local machine setup**. For cloud infrastructure setup, see [Project Setup (GCP)](#project-setup-gcp) at the bottom or run `bun run project:setup`.
 
 ## Quick Start
 
@@ -9,24 +16,51 @@ Developer onboarding for the Aikami monorepo.
 git clone <repo-url> aikami
 cd aikami
 
-# Run the setup script
+# Run the local setup script — a CLI guide that checks your machine
 bun run setup
 ```
 
-The setup script will:
-1. Check prerequisites (Bun, Node.js, git, Firebase CLI)
-2. Install dependencies (`bun install` + `bun moon sync`)
-3. Configure your `.env` file with Firebase project settings
-4. Verify the setup (typecheck + lint)
+The local setup script will:
+1. Check essentials (Bun, git)
+2. Surface the recommended path: direnv + Nix flake (provides everything)
+3. Check agent tools (pi, herdr)
+4. Check emulator dependencies (JDK, Chromium) — needed for `bun run dev:all`
+5. Check Tauri build dependencies (Rust, webkit2gtk, …) — needed for `bun tauri build`
+6. Print copy-paste install commands for anything that's missing
+
+## Recommended path (direnv + Nix)
+
+The repo ships a `flake.nix` + `.envrc` that provides a deterministic dev
+shell (bun, jdk, chromium, playwright browsers, tauri deps, gcloud, herdr).
+With direnv + nix installed, entering the repo loads everything
+automatically — no per-tool installation needed:
+
+```bash
+# One-time (the setup script prints the exact commands):
+curl -L https://nixos.org/nix/install | sh
+nix profile install nixpkgs#direnv nixpkgs#nix-direnv
+
+# Then, inside the repo:
+direnv allow
+```
+
+Not using direnv? That's fine — `bun run setup` falls back to per-tool
+checks and prints the install commands for your platform (apt / brew /
+winget). direnv is not something you install on its own; it's the umbrella
+that makes the other checks unnecessary.
 
 ## Prerequisites
 
 | Tool | Min Version | Install |
-|------|-------------|---------|
+| --- | --- | --- |
 | Bun | 1.x | `curl -fsSL https://bun.sh/install \| bash` |
-| Node.js | 22.x | Comes with Bun |
 | git | any | https://git-scm.com |
-| Firebase CLI | any (optional) | `npm install -g firebase-tools` |
+| JDK (emulator) | 17+ | `apt-get install openjdk-21-jdk` / `brew install openjdk` |
+| Chromium (emulator) | any | `apt-get install chromium` / `brew install --cask chromium` |
+| Rust (Tauri, Linux) | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+
+Everything below is optional: nix, direnv (the recommended path), pi, herdr,
+gcloud.
 
 ## Manual Setup
 
@@ -70,3 +104,17 @@ CI=true bun run setup
 - **Moon sync fails**: Delete `.moon/cache` and re-run `bun run moon sync`
 - **Firebase emulator issues**: Run `firebase emulators:start` manually
 - **Port conflicts**: Check if another instance of the dev server is running
+
+## Project Setup (GCP)
+
+Cloud infrastructure setup is a separate, maintainer-only flow. It enables
+GCP APIs, grants IAM roles, creates secrets, Firebase Hosting sites, and the
+Artifact Registry Docker repository:
+
+```bash
+bun run project:setup                      # Full interactive wizard
+bun run project:setup --mode=staging       # Target a specific mode
+bun run project:setup --mode=staging --dry-run  # Check only, no changes
+```
+
+Source: `scripts/src/lib/project_setup/`

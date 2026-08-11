@@ -1,23 +1,26 @@
 #!/usr/bin/env bun
-// scripts/src/lib/setup/index.ts
+// scripts/src/lib/project_setup/index.ts
 /**
  * Aikami Project Setup Wizard
  *
- * One-time project setup — orchestrates GCP APIs, Firebase, Firestore,
+ * One-time GCP project setup — orchestrates GCP APIs, Firebase, Firestore,
  * Storage, Artifact Registry, IAM, Secrets, and Firebase Hosting sites.
  *
+ * 🔴 This is PROJECT (cloud infrastructure) setup, NOT local machine setup.
+ * For local developer environment setup, run: bun run setup
+ *
  * Usage:
- *   bun run setup                            # Full interactive setup
- *   bun run setup --mode=staging             # Target specific mode
- *   bun run setup --mode=staging --dry-run   # Check only, no changes
+ *   bun run project:setup                    # Full interactive setup
+ *   bun run project:setup --mode=staging     # Target specific mode
+ *   bun run project:setup --mode=staging --dry-run   # Check only, no changes
  *
  * Individual steps:
- *   bun run scripts/src/lib/setup/gcp_apis.ts --mode=staging
- *   bun run scripts/src/lib/setup/firebase_setup.ts --mode=staging
- *   bun run scripts/src/lib/setup/firebase_hosting_setup.ts --mode=staging
- *   bun run scripts/src/lib/setup/artifact_registry.ts --mode=staging
- *   bun run scripts/src/lib/setup/secrets_manager.ts --mode=staging
- *   bun run scripts/src/lib/setup/github.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/firebase_setup.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/firebase_hosting_setup.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/github.ts --mode=staging
  */
 
 import { c, fmt, parseCliArgs } from '../cli_utils';

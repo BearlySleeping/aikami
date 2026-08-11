@@ -34,8 +34,12 @@ const SCRIPT_MAP: Record<string, string> = {
   validate: 'ops/validate_all.ts',
   logs: 'ops/logs.ts',
 
-  // Setup scripts
-  setup: 'setup/index.ts',
+  // Local machine setup (bun, git, direnv, jdk, chromium, tauri deps)
+  setup: 'local_setup/index.ts',
+
+  // GCP project setup (APIs, IAM, secrets, hosting, registry)
+  project_setup: 'project_setup/index.ts',
+  'project:setup': 'project_setup/index.ts',
 
   // Test scripts
   test_blackbox: 'test_blackbox/run.ts',

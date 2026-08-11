@@ -4,11 +4,18 @@
  * Download Section — Tauri desktop release downloads from GitHub Releases.
  *
  * Direct, API-free download links: Tauri publishes deterministic asset names
- * (`aikami.AppImage`, `aikami.deb`, `aikami.rpm`, `aikami.dmg`, `aikami.exe`)
- * under `/releases/latest/download/`, so no GitHub API call is needed — the
- * buttons always resolve, even when the API is rate-limited. Linux detects
- * the best package format (deb / rpm / AppImage); every card keeps a
- * "View releases" link underneath.
+ * (`aikami.AppImage`, `aikami.dmg`, `aikami.exe`) under
+ * `/releases/latest/download/`, so no GitHub API call is needed — the
+ * buttons always resolve, even when the API is rate-limited. Every card
+ * keeps a "View releases" link underneath.
+ *
+ * Linux ships AppImage only (no .deb/.rpm): it's the one Linux format the
+ * Tauri updater can self-update, and it needs no package-manager dependency
+ * resolution — see ci_planning.ts's PLATFORM_DEFAULTS for the full rationale
+ * (and why the CI build is pinned to ubuntu-22.04 for a glibc floor).
+ * Compatibility note: the AppImage requires glibc >= 2.35 (the build machine's
+ * glibc) and libfuse2 on the host to mount; newer distros ship libfuse3 and
+ * need the libfuse2 package installed (see README's desktop section).
  *
  * Staging never publishes official releases — staging workflow runs only
  * produce ephemeral workflow artifacts — so this section only ever links to
@@ -23,7 +30,7 @@ const REPO = PUBLIC_GITHUB_REPO || 'BearlySleeping/aikami';
 type PlatformDef = {
   id: string;
   label: string;
-  /** Default asset extension for the platform (Linux swaps per format). */
+  /** Asset extension for the platform's GitHub Release download. */
   ext: string;
   icon: string;
   /** Button label shown when no format-specific label is needed. */
@@ -39,7 +46,7 @@ const PLATFORMS: PlatformDef[] = [
     ext: '.AppImage',
     icon: 'linux',
     buttonLabel: 'Download for Linux',
-    status: 'AppImage · .deb · .rpm',
+    status: 'AppImage — glibc 2.35+ & libfuse2',
   },
   {
     id: 'macos',
@@ -57,13 +64,6 @@ const PLATFORMS: PlatformDef[] = [
     buttonLabel: 'Download for Windows',
     status: 'Installer (.exe)',
   },
-] as const;
-
-/** Linux package formats offered, in display order. */
-const LINUX_FORMATS = [
-  { id: 'appimage', ext: '.AppImage', label: 'AppImage' },
-  { id: 'deb', ext: '.deb', label: '.deb' },
-  { id: 'rpm', ext: '.rpm', label: '.rpm' },
 ] as const;
 
 const releasesHref = `https://github.com/${REPO}/releases`;
@@ -85,13 +85,12 @@ const downloadUrl = (ext: string): string =>
     </div>
 
     <!-- Platform Cards -->
-    <div id="download-root" class="mt-10" data-repo={REPO}>
+    <div id="download-root" class="mt-10">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto" id="download-cards">
         {PLATFORMS.map((p) => (
           <div
             class="download-card rune-border p-6 bg-background/50 text-center transition-opacity"
             data-platform={p.id}
-            data-ext={p.ext}
           >
             <div class="flex items-center justify-center mb-4">
               {p.id === 'linux' ? (
@@ -127,22 +126,6 @@ const downloadUrl = (ext: string): string =>
             >
               <span class="download-label">{p.buttonLabel}</span>
             </a>
-
-            {p.id === 'linux' && (
-              <div class="mt-3 flex justify-center gap-1.5">
-                {LINUX_FORMATS.map((f) => (
-                  <button
-                    type="button"
-                    class="linux-format-chip rounded-full border border-rune/40 bg-rune/5 px-3 py-1 text-[11px] font-mono text-rune hover:bg-rune/15 transition-colors"
-                    data-format={f.id}
-                    data-ext={f.ext}
-                    aria-pressed="false"
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            )}
 
             <p class="download-status mt-3 text-xs text-muted-foreground">{p.status}</p>
 
@@ -193,26 +176,6 @@ function detectOS(): string {
   return 'linux';
 }
 
-/**
- * Best Linux package format for the user's distro, from UA hints.
- * Debian/Ubuntu → .deb, Fedora/RHEL/SUSE → .rpm, anything else → AppImage.
- */
-function detectLinuxFormat(): 'appimage' | 'deb' | 'rpm' {
-  const ua = navigator.userAgent.toLowerCase();
-  if (/\b(ubuntu|debian|mint|elementary)\b/.test(ua)) {
-    return 'deb';
-  }
-  if (/\b(fedora|red ?hat|centos|rhel|rocky|alma|opensuse|suse)\b/.test(ua)) {
-    return 'rpm';
-  }
-  return 'appimage';
-}
-
-const ACTIVE_CHIP =
-  'linux-format-chip rounded-full border border-rune bg-rune/20 px-3 py-1 text-[11px] font-mono text-rune font-medium';
-const INACTIVE_CHIP =
-  'linux-format-chip rounded-full border border-rune/40 bg-rune/5 px-3 py-1 text-[11px] font-mono text-rune hover:bg-rune/15 transition-colors';
-
 function init(): void {
   const userOS = detectOS();
   const isSupportedDesktop = userOS !== 'unknown';
@@ -232,53 +195,6 @@ function init(): void {
       const link = card.querySelector<HTMLAnchorElement>('.download-link');
       link?.classList.add('ring-1', 'ring-rune/40');
     }
-  }
-
-  // Linux: pre-select the detected package format
-  const linuxCard = cards.find((c) => c.dataset.platform === 'linux');
-  if (linuxCard) {
-    const link = linuxCard.querySelector<HTMLAnchorElement>('.download-link');
-    const status = linuxCard.querySelector<HTMLElement>('.download-status');
-    const chips = Array.from(linuxCard.querySelectorAll<HTMLButtonElement>('.linux-format-chip'));
-    const detected = detectLinuxFormat();
-
-    const applyFormat = (format: { id: string; ext: string; label: string }): void => {
-      if (!link || !status) {
-        return;
-      }
-      link.href = `https://github.com/${linuxCard.dataset.repo || 'BearlySleeping/aikami'}/releases/latest/download/aikami${format.ext}`;
-      link.setAttribute('aria-label', `Download Aikami desktop client for Linux (${format.label})`);
-      status.textContent =
-        format.id === 'appimage'
-          ? 'AppImage — works on any distro'
-          : `${format.label} — detected for your distro`;
-      for (const chip of chips) {
-        const active = chip.dataset.format === format.id;
-        chip.className = active ? ACTIVE_CHIP : INACTIVE_CHIP;
-        chip.setAttribute('aria-pressed', String(active));
-      }
-    };
-
-    // Repo is available via the root element's data-repo (set in frontmatter)
-    const root = document.getElementById('download-root');
-    if (root) {
-      linuxCard.dataset.repo = root.dataset.repo || 'BearlySleeping/aikami';
-    }
-
-    for (const chip of chips) {
-      chip.addEventListener('click', () => {
-        applyFormat({
-          id: chip.dataset.format ?? 'appimage',
-          ext: chip.dataset.ext ?? '.AppImage',
-          label: chip.textContent ?? 'AppImage',
-        });
-      });
-    }
-    applyFormat({
-      id: detected,
-      ext: detected === 'appimage' ? '.AppImage' : `.${detected}`,
-      label: detected === 'appimage' ? 'AppImage' : `.${detected}`,
-    });
   }
 }
 

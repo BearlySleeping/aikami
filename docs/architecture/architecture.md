@@ -208,7 +208,8 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 ## Development Flow
 
 ```bash
-bun run setup            # First-time onboarding
+bun run setup            # Local machine setup guide
+bun run project:setup    # GCP project setup wizard (maintainers)
 bun run dev              # Client dev server
 bun run dev:all          # Firebase + Client (herdr workspace)
 bun run typecheck        # Typecheck all projects
