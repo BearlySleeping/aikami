@@ -4,10 +4,11 @@ category: "privacy"
 order: 1
 ---
 
-On your machine. Campaigns, saves, and chat history are stored in a local Turso (libSQL)
-database — that's the source of truth, not a server-side copy.
+Primarily on your machine. Game data is stored locally by platform (Turso/libSQL for
+desktop, IndexedDB for web), with the local database as the source of truth for gameplay.
 
-Firebase (auth and optional cloud sync/backup) is layered on top and is never a boot
-dependency. Your world plays and saves fine without ever signing in. If you *do* sign in,
-sync is there so you can continue on another device — but it's opt-in, not the default
-storage location.
+Firebase is layered on top for auth and optional cloud sync/backup — if you sign in and
+opt into sync, save copies go to Firebase Storage and some data (like NPC chat messages)
+may be stored in Firestore for cross-device delivery. Your world plays and saves fine
+without ever signing in; Firebase is not a boot dependency for gameplay availability,
+though Firebase App and App Check initialize eagerly.

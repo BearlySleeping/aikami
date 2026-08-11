@@ -17,9 +17,10 @@ All text, image, and voice generation in Aikami flows through a single abstracti
 `AiProviderGateway` — so the product code never has to know or care which mode is
 active. That abstraction currently supports:
 
-- **Offline / local** — Ollama for text, ComfyUI for images, Kokoro for voice, all
-  running as Docker microservices on your own hardware. No network required after the
-  first pull.
+- **Offline / local** — Ollama for text, ComfyUI for images, Kokoro for voice. The
+  Docker-based local stack runs these as microservices on your own hardware, with no
+  network required after the first pull. Non-Docker setups (desktop app with local
+  providers, from-source builds) are also supported.
 - **BYOK** — bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI,
   or any OpenAI-compatible endpoint. Your key, your rate limits, your bill, sent directly
   to the provider.

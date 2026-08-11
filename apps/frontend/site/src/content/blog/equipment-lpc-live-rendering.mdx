@@ -29,10 +29,9 @@ gets merged on top of the character's base render. Only the affected layer chang
 rest of the sprite stack is untouched. That's what makes it feel instant instead of like
 a screen flash.
 
-The equip event carries an appearance nudge (`UPDATE_PLAYER_APPEARANCE`) to the render
-thread rather than a full character re-fetch, which keeps the engine boundary intact —
-the 60fps PixiJS render loop never has to wait on inventory logic, and inventory logic
-never has to know how sprites are drawn.
+The equip event carries an appearance update (`UPDATE_PLAYER_APPEARANCE`) to the render
+pipeline, which keeps the ECS worker boundary intact — inventory logic stays separate
+from the rendering system.
 
 ## Why this matters for a procedural cast
 

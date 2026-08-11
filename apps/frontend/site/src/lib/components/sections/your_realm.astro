@@ -361,9 +361,11 @@ bun tauri build
       <p
         class="mt-6 text-center text-xs text-muted-foreground/70 leading-relaxed max-w-2xl mx-auto"
       >
-        Firebase sits on top for auth and optional cloud sync — never a boot dependency. The game
-        reads and writes its local Turso database first, so it plays and saves with no account and
-        no connection.
+        Firebase sits on top for auth and optional cloud sync. The game reads and writes local
+        storage first (Turso for desktop, IndexedDB for web), so it plays and saves with no account
+        and no connection. When signed in with sync enabled, save copies go to Firebase Storage and
+        some data may use Firestore for cross-device delivery. Firebase is not a boot dependency for
+        gameplay availability.
       </p>
     </div>
   </div>

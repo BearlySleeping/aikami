@@ -4,14 +4,17 @@ category: "privacy"
 order: 2
 ---
 
-No. When you use BYOK, your key is stored client-side and requests go directly from your
-client to the provider you configured — Anthropic, OpenAI, Gemini, or whatever endpoint
-you pointed it at. We are not a proxy in that path and we never see the key or the
-traffic.
+It depends on which mode you're using. When you use **BYOK for text generation**, your key
+is stored in the client-side vault and text requests go directly from your client to the
+provider you configured (Anthropic, OpenAI, Gemini, etc.). Aikami is not a proxy in that
+path and never sees the key or the prompt.
 
-The same goes for your prompts and the AI's responses: with a local setup nothing leaves
-your machine at all, and with BYOK the conversation is between you and your provider under
-their terms.
+With **local/offline mode**, nothing leaves your machine at all — Ollama, ComfyUI, and
+Kokoro run on your own hardware.
+
+The **Service mode** (when available) routes requests through Aikami's infrastructure to
+provide managed AI without requiring your own hardware or API keys. In that case, Aikami
+telemetry receives routing metadata, though not your full conversation history.
 
 If you'd rather verify than take our word for it, the client is
 [open source](https://github.com/BearlySleeping/aikami) — the provider gateway is all

@@ -109,8 +109,9 @@ export const setupFirebaseHosting = async (
         `${domainMappings.join('\n')}\n\n` +
         'Open each site → "Add custom domain", then add the TXT/A records\n' +
         'Firebase prompts for. SSL certificates are provisioned automatically\n' +
-        'once verification passes. Until then the site stays on its\n' +
-        `default ${projectId}-*.web.app URL, which is still fully deployable.`,
+        'once verification passes. Until then each site stays on its default\n' +
+        '*.web.app or *.firebaseapp.com URL (derived from the site ID), which\n' +
+        'is still fully deployable.',
     });
   }
 

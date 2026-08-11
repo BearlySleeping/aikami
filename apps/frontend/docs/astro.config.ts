@@ -12,10 +12,11 @@ const port = Number(process.env.PORT || PORTS.emulator.client + 10 || 5284);
  * Canonical URL per mode, required by Starlight's built-in sitemap
  * integration (it warns and skips the sitemap when `site` is unset).
  *
- * The docs app is still `enabled: false` in the deploy config
- * (scripts/src/lib/deploy/deployment_config.ts), so these production/staging
- * hosts are the intended domains, not yet provisioned ones — they follow the
- * same subdomain pattern as the hub (hub.bearlysleeping.com).
+ * The docs app is enabled through DEPLOYABLE_APPS in deployment_config.ts
+ * (scripts/src/lib/deploy/deployment_config.ts). Production/staging hosts
+ * follow the same subdomain pattern as the hub (hub.bearlysleeping.com).
+ * Staging uses the custom site ID aikami-stg-docs because aikami-staging-docs
+ * is reserved by an unrelated Firebase project.
  */
 const SITE_URL_MAP: Record<string, string> = {
   production: 'https://docs.bearlysleeping.com',

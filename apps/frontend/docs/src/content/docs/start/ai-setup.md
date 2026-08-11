@@ -14,7 +14,7 @@ saves.
 
 | Mode | What it means |
 | --- | --- |
-| **Offline / local** | Ollama (text), ComfyUI (image), Kokoro (voice), running as Docker services on your own hardware |
+| **Offline / local** | Ollama (text), ComfyUI (image), Kokoro (voice) on your own hardware — Docker is the full-stack default, but alternatives like vLLM and non-Docker desktop setups are supported |
 | **BYOK** | Your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint |
 | **Service** *(coming soon)* | Fully managed pay-as-you-go hosting — no GPU, no Docker, no setup |
 
