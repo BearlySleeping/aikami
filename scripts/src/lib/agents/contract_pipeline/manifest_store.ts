@@ -250,6 +250,7 @@ export const createManifest = (options: {
   baselineFingerprint: string;
   startStage: ContractPipelineStage;
   skipAuthoring?: boolean;
+  critique?: boolean;
   rootMode?: boolean;
 }): RunManifest => {
   const timestamp = new Date().toISOString();
@@ -268,6 +269,7 @@ export const createManifest = (options: {
     usage: {},
     autofixCycles: 0,
     skipAuthoring: options.skipAuthoring,
+    critique: options.critique,
     rootMode: options.rootMode,
   };
 };
