@@ -11,6 +11,7 @@
 // Usage:
 //   bun run upload-secrets --mode=staging
 //   bun run upload-secrets --mode=staging client site
+//   bun run upload-secrets --mode=staging --keys GEMINI_API_KEY   # only those keys
 //   bun run upload-secrets --mode=staging all
 //   bun run upload-secrets --mode=staging --dry-run
 
@@ -32,6 +33,7 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 const opts = parseCliArgs(Bun.argv.slice(2), {
   mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
   'dry-run': { type: 'boolean' },
+  keys: { type: 'string', description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE' },
 });
 const mode = (opts.mode as string) || process.env.AIKAMI_MODE || process.env.MODE || '';
 if (!mode) {
@@ -48,6 +50,14 @@ if (!GCP_PROJECT) {
 }
 
 const positionalArgs = opts._;
+
+/** Optional filter: only process these .env keys (empty = all). */
+const keysFilter = new Set(
+  (opts.keys as string | undefined)
+    ?.split(',')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0) ?? [],
+);
 
 function getTargetProjects(): string[] {
   const allProjectNames = Object.keys(PROJECT_ENV_CONFIG);
@@ -161,6 +171,9 @@ if (projectNames.length === 0) {
 
 console.log(`☁️  GCP Project: ${GCP_PROJECT}`);
 console.log(`🍦 Mode: ${mode}`);
+if (keysFilter.size > 0) {
+  console.log(`🔑 Keys: ${[...keysFilter].join(', ')} (filtered)`);
+}
 console.log(`📁 Projects: ${projectNames.join(', ')}`);
 if (shouldUpdate) {
   console.log('🔄 Update mode: secrets with changed values will be updated');
@@ -186,6 +199,9 @@ if (projectNames.length > 1) {
     }
     for (const [key, value] of Object.entries(secrets)) {
       if (value === '') {
+        continue;
+      }
+      if (keysFilter.size > 0 && !keysFilter.has(key)) {
         continue;
       }
       if (APP_SPECIFIC_KEYS_FOR_PREFIX.has(key)) {
@@ -229,6 +245,21 @@ let totalUnchanged = 0;
 let totalSkipped = 0;
 let totalFailed = 0;
 
+// Track which local .env keys actually made it into the deduped set (for --keys validation)
+const collectedLocalKeys = new Set<string>();
+
+// Collect every (resolved secret name → value) across all target projects, then
+// dedupe by the GSM secret name — same optimization as the download script,
+// which merges all apps into one Set before batch-fetching. Shared secrets
+// (MODE, REDIS_URL, PUBLIC_MODE, …) appear in several apps' .env files but only
+// need one gcloud round-trip; the cross-app mismatch check above guarantees the
+// values are consistent, and client/client-tauri share the same env file.
+// Result: 1× secretExists + 1× getSecretValue per unique secret instead of per
+// occurrence (N apps sharing a secret previously cost 2N gcloud calls).
+type SecretEntry = { secretName: string; value: string; sources: string[] };
+
+const deduped = new Map<string, SecretEntry>();
+
 for (const projectName of projectNames) {
   const config = PROJECT_ENV_CONFIG[projectName];
   if (!config) {
@@ -250,7 +281,7 @@ for (const projectName of projectNames) {
   }
 
   const entries = Object.entries(secrets);
-  console.log(`   Found ${entries.length} secrets\n`);
+  console.log(`   Found ${entries.length} secrets`);
 
   for (const [key, value] of entries) {
     if (value === '') {
@@ -259,39 +290,96 @@ for (const projectName of projectNames) {
       continue;
     }
 
-    const secretName = resolveSecretName(key, config);
-
-    try {
-      const exists = await secretExists(secretName);
-      if (!exists) {
-        await createSecret(secretName, value);
-        console.log(`✅ Created "${secretName}"`);
-        totalCreated++;
-        continue;
-      }
-
-      const currentValue = await getSecretValue(secretName);
-      if (currentValue === value) {
-        console.log(`⏭️  Skipping "${secretName}" (already up to date)`);
-        totalUnchanged++;
-        continue;
-      }
-
-      if (shouldUpdate) {
-        await updateSecret(secretName, value);
-        console.log(`🔄 Updated "${secretName}" (value changed)`);
-        totalUpdated++;
-      } else {
-        console.log(`⏭️  Skipping "${secretName}" (value differs, run without --dry-run)`);
-        totalSkipped++;
-      }
-    } catch (err) {
-      console.error(
-        `❌ Error processing "${secretName}":`,
-        err instanceof Error ? err.message : err,
-      );
-      totalFailed++;
+    if (keysFilter.size > 0 && !keysFilter.has(key)) {
+      continue; // not in the requested --keys filter — left untouched
     }
+
+    if (key === 'FIREBASE_SERVICE_ACCOUNT') {
+      // GSM is the source of truth for this secret: download-secrets propagates
+      // it into the firebase/hub .env files, but upload must never push local
+      // values back — hub's .env.example placeholder '{}' (or a stale fallback)
+      // would otherwise overwrite the real SA in GSM.
+      console.log(`⏭️  Skipping "${key}" (GSM is the source of truth — download-only)`);
+      totalSkipped++;
+      continue;
+    }
+
+    const secretName = resolveSecretName(key, config);
+    collectedLocalKeys.add(key);
+    const existing = deduped.get(secretName);
+    if (existing) {
+      if (existing.value !== value) {
+        // Same GSM secret fed by two apps with different values. Normally
+        // caught by the cross-app mismatch check (non-prefixed keys), but a
+        // prefixed-key collision (two apps sharing a prefix) would land here.
+        const detail = [
+          ...existing.sources.map(
+            (app) =>
+              `  ${app}: ${existing.value.slice(0, 80)}${existing.value.length > 80 ? '…' : ''}`,
+          ),
+          `  ${projectName}: ${value.slice(0, 80)}${value.length > 80 ? '…' : ''}`,
+        ].join('\n');
+        console.error(`\n🚫 Conflicting values for shared secret "${secretName}":\n${detail}\n`);
+        process.exit(1);
+      }
+      existing.sources.push(projectName);
+      continue; // already collected — deduped, no extra gcloud calls
+    }
+    deduped.set(secretName, { secretName, value, sources: [projectName] });
+  }
+}
+
+console.log(
+  `\n   ${deduped.size} unique secret(s) across ${projectNames.length} project(s)` +
+    ` — one gcloud round-trip each (previously: one per occurrence).\n`,
+);
+
+// Warn about requested keys that no processed .env file actually contained
+if (keysFilter.size > 0) {
+  const unmatched = [...keysFilter].filter((k) => !collectedLocalKeys.has(k));
+  if (unmatched.length > 0) {
+    console.warn(
+      `   ⚠️  Key(s) not found in any processed .env.${mode} file: ${unmatched.join(', ')}`,
+    );
+  }
+}
+
+for (const { secretName, value } of deduped.values()) {
+  try {
+    const exists = await secretExists(secretName);
+    if (!exists) {
+      if (!shouldUpdate) {
+        console.log(`⏭️  Would create "${secretName}" (dry-run)`);
+        totalSkipped++;
+        continue;
+      }
+      await createSecret(secretName, value);
+      console.log(`✅ Created "${secretName}"`);
+      totalCreated++;
+      continue;
+    }
+
+    const currentValue = await getSecretValue(secretName);
+    if (currentValue === value) {
+      console.log(`⏭️  Skipping "${secretName}" (already up to date)`);
+      totalUnchanged++;
+      continue;
+    }
+
+    if (shouldUpdate) {
+      await updateSecret(secretName, value);
+      console.log(`🔄 Updated "${secretName}" (value changed)`);
+      totalUpdated++;
+    } else {
+      console.log(`⏭️  Skipping "${secretName}" (value differs, run without --dry-run)`);
+      totalSkipped++;
+    }
+  } catch (err) {
+    console.error(
+      `❌ Error processing "${secretName}":`,
+      err instanceof Error ? err.message : err,
+    );
+    totalFailed++;
   }
 }
 

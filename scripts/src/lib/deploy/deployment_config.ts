@@ -156,6 +156,7 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     serviceType: 'firebase-functions',
     path: 'apps/backend/firebase',
     shortName: 'firebase',
+    prefix: 'FIREBASE',
   },
   image: {
     serviceType: 'docker-release',

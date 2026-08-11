@@ -35,7 +35,6 @@ export type BackendEnv = {
   readonly LOG_LEVEL?: string;
   readonly LOG_PERSIST_LEVEL?: string;
   readonly FIRESTACK_FUNCTION_NAME?: string;
-  readonly GA4_PROPERTY_ID?: string;
   readonly VM_CONTROLLER_URL?: string;
   readonly VM_CONTROLLER_API_KEY?: string;
   readonly EMAIL_SERVICE_URL?: string;
@@ -129,7 +128,6 @@ const BACKEND_ENV_KEYS: (keyof BackendEnv)[] = [
   'LOG_LEVEL',
   'LOG_PERSIST_LEVEL',
   'FIRESTACK_FUNCTION_NAME',
-  'GA4_PROPERTY_ID',
   'VM_CONTROLLER_URL',
   'VM_CONTROLLER_API_KEY',
   'EMAIL_SERVICE_URL',
