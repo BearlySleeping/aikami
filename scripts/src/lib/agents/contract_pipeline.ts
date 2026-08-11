@@ -50,6 +50,9 @@ type CliArguments = {
   /** Internal — forwarded by the launcher to the background child so the
    *  writer stage stays interactive (user describes the feature in the TUI). */
   interactiveWriter: boolean;
+  /** Run the critique stage before implementation on a path-sourced (already
+   *  authored) contract, which otherwise skips both authoring stages. */
+  critique: boolean;
 };
 
 const parseArguments = (): CliArguments => {
@@ -113,6 +116,7 @@ const parseArguments = (): CliArguments => {
     root: args.includes('--root') || args.includes('-r'),
     dirty: args.includes('--dirty'),
     interactiveWriter: args.includes('--interactive-writer'),
+    critique: args.includes('--critique'),
     help: args.includes('--help') || args.includes('-h'),
   };
 };
@@ -149,6 +153,7 @@ Examples:
   bun run contract --source issue 54        # Freeze from Issue #54
   bun run contract --source issue https://github.com/BearlySleeping/aikami/issues/54
   bun run contract C-370 --root             # Run an existing contract on a root branch
+  bun run contract C-377 --critique         # Critique a hand-authored contract, then implement
   bun run contract docs/contracts/C-370-fix-lpc-paperdoll-....md
   bun run contract --source todo C-370      # Legacy: parse docs/TODO.md
   bun run contract --resume <run-id>
@@ -158,6 +163,9 @@ Options:
   --source <mode>      prompt (default), issue, todo, or a contract path/ID.
   --root, -r           Start work on branch contract/C-XXX in the root repo.
   --dirty              Allow branch switch with uncommitted changes (only with --root).
+  --critique           Run the critic over an already-authored contract before
+                       implementation. Only meaningful with a contract target
+                       (which otherwise skips both authoring stages).
   --resume <run-id>    Resume an incomplete run.
   --fresh              Start a brand-new run (skip auto-resume).
   --dry-run            Resolve and create the manifest without starting Herdr/Pi.
@@ -935,6 +943,7 @@ const main = async (): Promise<void> => {
     yolo: cli.yolo,
     interactiveWriter,
     skipAuthoring,
+    critique: cli.critique,
     rootMode: cli.root,
     onReady: cli.launcherToken
       ? (readyManifest) => {

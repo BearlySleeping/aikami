@@ -184,7 +184,7 @@ export async function deployCloudRunSveltekit(
   // revocation-checked verification needs.
   let serviceAccount = '';
   if (existsSync(modeEnvPath)) {
-    const saJson = parseEnvKeys(modeEnvPath)['FIREBASE_SERVICE_ACCOUNT'];
+    const saJson = parseEnvKeys(modeEnvPath).FIREBASE_SERVICE_ACCOUNT;
     if (saJson) {
       try {
         // Parse as unknown and validate before use: only a non-empty

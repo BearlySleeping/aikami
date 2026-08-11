@@ -48,9 +48,26 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Vi
 
 ## Contract Size & Split Rule
 
-A contract should be split if it contains:
-- Multiple independently releasable systems
-- More than 5 acceptance criteria
-- More than 2 affected projects
+Split on **independent mergeability**, not on size. A contract should be split
+if any of these hold:
+
+- It contains two outcomes that can each be independently **verified and
+  merged** — neither needs the other to be useful.
+- Partial completion would leave the repo in a **worse state** than before
+  starting (half-migrated schema, two competing code paths left live).
+- It spans two systems that share **no data model and no invariant**.
+
+**AC count is not a split signal.** A cohesive change may legitimately have
+10+ acceptance criteria — that reflects how carefully the work was specified,
+not how much work it is. Splitting on AC count penalises good specification
+and multiplies pipeline runs for a single feature.
+
+**Affected project count is not a split signal either.** In this monorepo any
+real engine feature touches `engine` + `client` + `schemas` by construction; a
+vertical slice through them is one contract, not three.
+
+Each AC MUST be independently verifiable. That is the constraint that
+actually matters — it is what lets a large contract be reviewed incrementally
+instead of all at once.
 
 Split deferred phases into separate contracts rather than declaring the parent complete.
