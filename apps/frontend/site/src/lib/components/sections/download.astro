@@ -10,10 +10,12 @@
  * keeps a "View releases" link underneath.
  *
  * Linux ships AppImage only (no .deb/.rpm): it's the one Linux format the
- * Tauri updater can self-update, and it runs on any distro without needing
- * package-manager dependency resolution — see ci_planning.ts's
- * PLATFORM_DEFAULTS for the full rationale (and why the CI build is pinned
- * to an older Ubuntu runner for glibc compatibility).
+ * Tauri updater can self-update, and it needs no package-manager dependency
+ * resolution — see ci_planning.ts's PLATFORM_DEFAULTS for the full rationale
+ * (and why the CI build is pinned to ubuntu-22.04 for a glibc floor).
+ * Compatibility note: the AppImage requires glibc >= 2.35 (the build machine's
+ * glibc) and libfuse2 on the host to mount; newer distros ship libfuse3 and
+ * need the libfuse2 package installed (see README's desktop section).
  *
  * Staging never publishes official releases — staging workflow runs only
  * produce ephemeral workflow artifacts — so this section only ever links to
@@ -44,7 +46,7 @@ const PLATFORMS: PlatformDef[] = [
     ext: '.AppImage',
     icon: 'linux',
     buttonLabel: 'Download for Linux',
-    status: 'AppImage — runs on any distro',
+    status: 'AppImage — glibc 2.35+ & libfuse2',
   },
   {
     id: 'macos',

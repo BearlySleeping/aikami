@@ -387,13 +387,18 @@ export async function deployTauriRelease(
       buildPlatformFragment({ platform: platformDir, artifactPaths: artifacts, releaseTag }),
     );
     // CI's desktop matrix has its own dedicated notify-discord job (it waits
-    // for every platform leg first). A local deploy has no matrix to wait
-    // for, so announce right here. Never let a Discord hiccup fail a deploy
-    // that already succeeded — the release itself is what matters.
-    try {
-      await notifyDiscordRelease(releaseTag, mode);
-    } catch (err) {
-      warn(`Discord announcement failed (release itself is unaffected): ${(err as Error).message}`);
+    // for every platform leg first), so this in-process announce is LOCAL-only
+    // — with RELEASE_TAG set in CI, every matrix leg would otherwise post a
+    // duplicate announcement. Never let a Discord hiccup fail a deploy that
+    // already succeeded — the release itself is what matters.
+    if (process.env.CI !== 'true') {
+      try {
+        await notifyDiscordRelease(releaseTag, mode);
+      } catch (err) {
+        warn(
+          `Discord announcement failed (release itself is unaffected): ${(err as Error).message}`,
+        );
+      }
     }
   } else if (process.env.CI === 'true') {
     log(

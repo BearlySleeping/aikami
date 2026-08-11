@@ -315,11 +315,15 @@ function generateEnvContent(
       if (gcmName && secrets.has(gcmName)) {
         lines.push(`${key}=${secrets.get(gcmName)}`);
       } else if (key in existing) {
+        // Keep existing .env.emulator values — highest priority after secrets.
         lines.push(`${key}=${existing[key]}`);
+      } else if (key in emulatorOverrides) {
+        // Emulator fakes before .env.example defaults: e.g. an intentionally
+        // blank PUBLIC_FIREBASE_API_KEY default must not shadow the fake
+        // emulator value, or the emulator env ends up with empty keys.
+        lines.push(`${key}=${emulatorOverrides[key]}`);
       } else if (defaults.has(key)) {
         lines.push(`${key}=${defaults.get(key)}`);
-      } else if (key in emulatorOverrides) {
-        lines.push(`${key}=${emulatorOverrides[key]}`);
       } else {
         lines.push(`${key}=`);
       }

@@ -1,0 +1,31 @@
+# Normalize line endings: LF is canonical for the whole repo on every
+# platform. biome (bun run fix) writes LF, and with core.autocrlf=true git
+# would otherwise show hundreds of phantom "modified" files after every fix
+# run on Windows (CRLF worktree vs LF index). With eol=lf, git checks out LF
+# everywhere and the churn disappears.
+* text=auto eol=lf
+
+# Binary assets must never be text-normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.ogg binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.appimage binary
+*.dmg binary
+*.exe binary
+*.msi binary
+*.deb binary
+*.rpm binary

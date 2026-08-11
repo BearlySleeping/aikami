@@ -164,9 +164,16 @@ const createBaselineSnapshot = async (): Promise<string | null> => {
   try {
     mkdirSync(dir, { recursive: true });
 
-    // 1. Tracked changes vs HEAD (staged + unstaged), binary-safe.
-    const { stdout: patch } = await execAsync('git diff --binary HEAD');
-    writeFileSync(join(dir, 'tracked.patch'), patch);
+    // 1. Tracked changes, split staged vs unstaged so a restore can put
+    //    staged changes back on the index (not just the working tree).
+    //    `git diff --binary HEAD` (combined) is kept for backward compat with
+    //    snapshots/restores that only know tracked.patch.
+    const { stdout: stagedPatch } = await execAsync('git diff --cached --binary');
+    const { stdout: unstagedPatch } = await execAsync('git diff --binary');
+    const { stdout: combinedPatch } = await execAsync('git diff --binary HEAD');
+    writeFileSync(join(dir, 'staged.patch'), stagedPatch);
+    writeFileSync(join(dir, 'unstaged.patch'), unstagedPatch);
+    writeFileSync(join(dir, 'tracked.patch'), combinedPatch);
 
     // 2. Untracked files — keep the list AND a copy of each file.
     const { stdout: untracked } = await execAsync('git ls-files --others --exclude-standard');
@@ -201,10 +208,12 @@ const createBaselineSnapshot = async (): Promise<string | null> => {
         '```',
         '',
         '## Contents',
-        '- tracked.patch  — `git diff --binary HEAD` (all tracked modifications)',
-        '- untracked.txt  — list of untracked files',
-        '- untracked/     — copies of those untracked files',
-        '- HEAD.txt       — the HEAD commit the patch applies to',
+        '- tracked.patch    — `git diff --binary HEAD` (combined, backward-compat)',
+        '- staged.patch     — `git diff --cached --binary` (changes on the index)',
+        '- unstaged.patch   — `git diff --binary` (worktree-only changes)',
+        '- untracked.txt    — list of untracked files',
+        '- untracked/       — copies of those untracked files',
+        '- HEAD.txt         — the HEAD commit the patches apply to',
         '',
       ].join('\n'),
     );
@@ -354,6 +363,9 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
       '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
       '',
       '# STRICT RULES',
+      '- **🔴 DESTRUCTIVE GIT IS FORBIDDEN**: NEVER run `git checkout --`, `git checkout .`, `git restore`, `git clean`, `git reset --hard`, or `git stash drop`. These destroy uncommitted work. The ONLY git mutations allowed are `git add`, `git commit`, and `git push origin HEAD` (commit step only).',
+      "- **🔴 WINDOWS CRLF CHURN — IGNORE IT**: On Windows (`core.autocrlf=true`), `bun run fix` (biome --write) rewrites files as LF while git expects CRLF, so `git status` will list MANY 'modified' files with ZERO content change. NEVER 'clean up' or revert them. To see real changes use `git diff --numstat HEAD` — entries like `0\t0` are pure line-ending churn and must be left untouched.",
+      '- **🔴 PROTECT PRE-EXISTING WORK**: The working tree may contain uncommitted changes from before your run. If you ever lose or accidentally revert work, STOP and restore from the baseline snapshot (`bun run autofix:restore <timestamp>`) instead of improvising.',
       '- Do NOT ask questions or wait for human approval.',
       '- Do NOT modify .pi/, node_modules/, or generated files.',
       '- **NO `as`, `any`, or `unknown`**: Never use type assertions or `any`/`unknown`.',
@@ -502,6 +514,7 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
       '2. `git add -A && git commit --no-verify -m "..." && git push origin HEAD`',
       '',
       baselineDir ? `> 📸 Pre-run baseline snapshot: \`${baselineDir}\`` : '',
+      "🔴 **NEVER run destructive git commands** (git checkout -- / git restore / git clean / git reset --hard). The working tree contains pre-existing work — protect it. On Windows, CRLF line-ending churn in `git status` after `bun run fix` is expected — ignore it, never 'clean' the tree.",
       '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
       '',
       '> ⚠️ Pre-commit hook is skipped. Ensure all checks passed.',

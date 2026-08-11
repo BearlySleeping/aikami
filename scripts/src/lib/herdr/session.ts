@@ -1372,11 +1372,35 @@ export const waitForReady = async (
   await Promise.all(
     targets.map(async (svc) => {
       const port = svc.readyPort?.(mode);
+      const deadline = Date.now() + timeoutMs;
+
+      // Services with no HTTP port (tauri, preview-*) can't be probed via
+      // isPortReady — verify the pane itself is still running instead of
+      // marking them ready unconditionally. When the wrapped command exits
+      // (e.g. run_tauri.ts quits because no binary exists), the pane is left
+      // with only shells and assessServicePane reports 'crashed'.
       if (port === undefined) {
-        console.log(`  ✓ ${svc.name} (no port check)`);
+        const tabId = await findTab(wsId, svc.name);
+        const panes = await getWorkspacePanes(wsId);
+        const pane = tabId ? panes.find((p) => p.tab_id === tabId) : undefined;
+        if (!pane) {
+          console.error(`  ✗ ${svc.name} pane not found`);
+          failed.push(svc.name);
+          return;
+        }
+        while (Date.now() < deadline) {
+          const state = await assessServicePane(pane.pane_id);
+          if (state !== 'crashed') {
+            console.log(`  ✓ ${svc.name} running (no port check)`);
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        console.error(`  ✗ ${svc.name} exited (no port check)`);
+        failed.push(svc.name);
         return;
       }
-      const deadline = Date.now() + timeoutMs;
+
       while (Date.now() < deadline) {
         if (await isPortReady(port)) {
           console.log(`  ✓ ${svc.name} ready on :${port}`);

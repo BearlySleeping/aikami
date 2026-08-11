@@ -627,12 +627,26 @@ for (const category of Object.keys(CATEGORY_META) as Category[]) {
 
 // ── Exit code for --check ────────────────────────────────────────────────
 const missingEssential = [...(missingByCategory.get('essentials') ?? [])].length > 0;
+// Track whether essentials were actually evaluated — --only may have excluded
+// the category, in which case we must not claim they are installed.
+const essentialsEvaluated = applicable.some((t) => t.category === 'essentials');
 if (opts.check) {
-  if (missingEssential) {
+  if (!essentialsEvaluated) {
+    // Filtered run: essentials were skipped by --only. Report honestly rather
+    // than claiming the machine is ready.
+    console.log(
+      fmt.warn(
+        '\nEssential checks were skipped (filtered by --only) — machine readiness is not verified.',
+      ),
+    );
+  } else if (missingEssential) {
     console.log(fmt.err('\nEssentials missing — fix and re-run.'));
     process.exit(1);
+  } else {
+    console.log(
+      fmt.note('\nEssentials are installed; optional tools are missing (ok for --check).'),
+    );
   }
-  console.log(fmt.note('\nEssentials are installed; optional tools are missing (ok for --check).'));
 }
 
 console.log(fmt.note('\nTip: with direnv + nix, `direnv allow` provides bun, jdk, chromium,'));

@@ -22,17 +22,35 @@
 //   env: DISCORD_WEBHOOK_URL (via scripts/.env.{mode}, loaded through
 //        scripts_env.ts's initScriptsEnv — works identically in CI and local)
 
-import { c, error, log, ok, parseCliArgs, run, warn } from '../cli_utils';
+import { c, error, log, ok, parseCliArgs, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
 
 type ReleaseInfo = { name: string; body: string; url: string };
 
+/** Max wall-clock for the `gh release view` probe — never block a release on it. */
+const GH_PROBE_TIMEOUT_MS = 15_000;
+/** Max wall-clock for the Discord webhook POST. */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
 async function fetchRelease(tag: string): Promise<ReleaseInfo> {
-  const res = await run(['gh', 'release', 'view', tag, '--json', 'name,body,url']);
-  if (res.code !== 0) {
-    throw new Error(`gh release view ${tag} failed: ${res.err || res.out}`);
+  // Run `gh release view` with a hard timeout so a stalled gh process (or a
+  // hung git credential prompt) can't block the release flow indefinitely.
+  const proc = Bun.spawn(['gh', 'release', 'view', tag, '--json', 'name,body,url'], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const timer = setTimeout(() => proc.kill(), GH_PROBE_TIMEOUT_MS);
+  try {
+    const out = await new Response(proc.stdout).text();
+    const err = await new Response(proc.stderr).text();
+    const code = await proc.exited;
+    if (code !== 0) {
+      throw new Error(`gh release view ${tag} failed: ${err.trim() || out.trim()}`);
+    }
+    return JSON.parse(out) as ReleaseInfo;
+  } finally {
+    clearTimeout(timer);
   }
-  return JSON.parse(res.out) as ReleaseInfo;
 }
 
 /** Discord embed description max is 4096 chars — keep it well under that. */
@@ -67,6 +85,7 @@ async function postToDiscord(options: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ embeds: [embed] }),
+    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Discord webhook POST failed: ${res.status} ${res.statusText}`);
@@ -91,9 +110,16 @@ export async function notifyDiscordRelease(tag: string, mode = 'production'): Pr
   const downloadBase = `https://github.com/${repo}/releases/latest/download`;
 
   log(`\n${c.bold}📣 Announcing ${tag} to Discord${c.reset}`);
-  const release = await fetchRelease(tag);
-  await postToDiscord({ webhookUrl, tag, release, downloadBase });
-  ok(`Posted release announcement for ${tag} to Discord.`);
+  try {
+    const release = await fetchRelease(tag);
+    await postToDiscord({ webhookUrl, tag, release, downloadBase });
+    ok(`Posted release announcement for ${tag} to Discord.`);
+  } catch (err) {
+    // Discord announcement is best-effort: a timeout (gh probe or webhook
+    // POST) or any other failure must never fail a local deploy or leave it
+    // pending. Warn and continue.
+    warn(`Discord announcement skipped: ${(err as Error).message}`);
+  }
 }
 
 async function main(): Promise<void> {
