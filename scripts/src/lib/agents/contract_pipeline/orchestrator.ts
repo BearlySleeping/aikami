@@ -709,7 +709,22 @@ export const runContractPipeline = async (options: {
     // writer is still skipped, but the run enters at `critique` instead of
     // jumping straight to `implement`. The lastCompleted scan below advances
     // past it once critique has passed, so this only affects a fresh entry.
+    // When the user supplies an explicit override (true or false), persist it
+    // to support older manifests that may not have this field.
     const critique = options.critique ?? manifest.critique;
+    // Persist any CLI overrides to the manifest for older manifests or changed options
+    let manifestChanged = false;
+    if (options.skipAuthoring !== undefined && options.skipAuthoring !== manifest.skipAuthoring) {
+      manifest.skipAuthoring = options.skipAuthoring;
+      manifestChanged = true;
+    }
+    if (options.critique !== undefined && options.critique !== manifest.critique) {
+      manifest.critique = options.critique;
+      manifestChanged = true;
+    }
+    if (manifestChanged) {
+      writeManifest({ manifest, cwd: options.repoRoot });
+    }
     if (skipAuthoring && contractStage === 'write_contract') {
       contractStage = critique ? 'critique' : 'implement';
     }

@@ -51,8 +51,13 @@ type CliArguments = {
    *  writer stage stays interactive (user describes the feature in the TUI). */
   interactiveWriter: boolean;
   /** Run the critique stage before implementation on a path-sourced (already
-   *  authored) contract, which otherwise skips both authoring stages. */
-  critique: boolean;
+   *  authored) contract, which otherwise skips both authoring stages. Undefined
+   *  when not specified — during resume, the manifest value is used. */
+  critique?: boolean;
+  /** Skip the contract-authoring stages (writer + critique) when starting from
+   *  an existing contract. Undefined when not specified — during resume, the
+   *  manifest value is used. */
+  skipAuthoring?: boolean;
 };
 
 const parseArguments = (): CliArguments => {
@@ -116,7 +121,7 @@ const parseArguments = (): CliArguments => {
     root: args.includes('--root') || args.includes('-r'),
     dirty: args.includes('--dirty'),
     interactiveWriter: args.includes('--interactive-writer'),
-    critique: args.includes('--critique'),
+    critique: args.includes('--critique') ? true : undefined,
     help: args.includes('--help') || args.includes('-h'),
   };
 };
@@ -871,7 +876,6 @@ const main = async (): Promise<void> => {
   // the resolved target + --interactive-writer from the launcher and never
   // re-runs prepareDirectSource (that would pick the wrong placeholder).
   let interactiveWriter = false;
-  let skipAuthoring = false;
   if (cli.source === 'prompt' && !cli.resumeRunId) {
     if (!cli.target) {
       cli.target = prepareDirectSource(process.cwd());
@@ -882,7 +886,7 @@ const main = async (): Promise<void> => {
     // authoring stages (writer + critique) and start at implementation
     // (or later, per the contract's status). The contract must already
     // exist on disk — path mode does not fall back to the backlog.
-    skipAuthoring = true;
+    cli.skipAuthoring = true;
     if (!cli.target) {
       console.error(
         '❌ --source path requires a contract path or ID (e.g. docs/contracts/C-370.md).',
@@ -942,7 +946,7 @@ const main = async (): Promise<void> => {
     ready: cli.ready,
     yolo: cli.yolo,
     interactiveWriter,
-    skipAuthoring,
+    skipAuthoring: cli.skipAuthoring,
     critique: cli.critique,
     rootMode: cli.root,
     onReady: cli.launcherToken
