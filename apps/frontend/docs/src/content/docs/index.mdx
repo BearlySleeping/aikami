@@ -1,40 +1,70 @@
 ---
-title: Welcome to Starlight
-description: Get started building your docs site with Starlight.
-template: splash # Remove or comment out this line to display the site sidebar on this page.
+title: Aikami Documentation
+description: Guides and reference for Aikami — the open-source, self-hosted AI RPG engine where every NPC thinks, remembers, and adapts.
+template: splash
 hero:
-  tagline: Congrats on setting up a new Starlight project!
-  image:
-    file: ../../assets/houston.webp
+  tagline: The self-hosted AI RPG engine where every NPC thinks, remembers, and adapts. Open-source, offline-first, bring-your-own-key.
   actions:
-    - text: Example Guide
-      link: /guides/example/
+    - text: Install Aikami
+      link: /start/installation/
       icon: right-arrow
-    - text: Read the Starlight docs
-      link: https://starlight.astro.build
+    - text: Play in your browser
+      link: https://aikami.bearlysleeping.com
       icon: external
       variant: minimal
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-## Next steps
+:::caution[Early work in progress]
+Aikami is early and moving fast. Expect rough edges, missing pieces, and breaking
+changes between releases — and expect these docs to lag behind the code
+occasionally. [Report anything broken](https://github.com/BearlySleeping/aikami/issues).
+:::
 
-<CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-		Edit `src/content/docs/index.mdx` to see this page change.
-	</Card>
-	<Card title="Change page layout" icon="document">
-		Delete `template: splash` in `src/content/docs/index.mdx` to display a
-		sidebar on this page.
-	</Card>
-	<Card title="Add new content" icon="add-document">
-		Add Markdown or MDX files to `src/content/docs` to create new pages.
-	</Card>
-	<Card title="Configure your site" icon="setting">
-		Edit your `sidebar` and other config in `astro.config.mjs`.
-	</Card>
-	<Card title="Read the docs" icon="open-book">
-		Learn more in [the Starlight Docs](https://starlight.astro.build/).
-	</Card>
+## Start here
+
+<CardGrid>
+  <Card title="Installation" icon="rocket">
+    Four ways to run Aikami — hosted web client, desktop app, Docker, or from
+    source. [Get set up](/start/installation/).
+  </Card>
+  <Card title="Choosing your AI setup" icon="setting">
+    Local models, bring-your-own-key, or a mix of both — and what each one costs
+    you. [Pick a setup](/start/ai-setup/).
+  </Card>
+</CardGrid>
+
+## How the game works
+
+<CardGrid>
+  <Card title="Chat modes" icon="comment">
+    How the Game Master addresses you, impersonation drafting, and party chat
+    voices. [Read more](/guides/chat-modes/).
+  </Card>
+  <Card title="Image generation" icon="star">
+    Style profiles, prompt compilation, contextual triggers, and the gallery.
+    [Read more](/guides/image-generation/).
+  </Card>
+  <Card title="Autonomous NPCs" icon="random">
+    Schedule-based NPCs that message you unprompted when you go idle.
+    [Read more](/features/autonomous-npcs/).
+  </Card>
+  <Card title="Music DJ" icon="seti:audio">
+    Scene-aware background music that crossfades as the story shifts.
+    [Read more](/features/music-dj/).
+  </Card>
+</CardGrid>
+
+## Elsewhere
+
+<CardGrid>
+  <Card title="Source code" icon="github">
+    Aikami is MIT licensed and developed in the open.
+    [Browse the repo](https://github.com/BearlySleeping/aikami).
+  </Card>
+  <Card title="Discord" icon="discord">
+    The fastest way to reach the team, ask questions, or float an idea.
+    [Join us](https://discord.gg/XuuhWvSxHH).
+  </Card>
 </CardGrid>

@@ -12,14 +12,14 @@ const port = Number(process.env.PORT || PORTS.emulator.client + 10 || 5284);
  * Canonical URL per mode, required by Starlight's built-in sitemap
  * integration (it warns and skips the sitemap when `site` is unset).
  *
- * The docs site is not part of the release pipeline and has no provisioned
- * domain yet, so all modes use the local URL — publishing canonical URLs for
- * unavailable hosts would be worse than none. Replace these once a domain
- * exists.
+ * The docs app is still `enabled: false` in the deploy config
+ * (scripts/src/lib/deploy/deployment_config.ts), so these production/staging
+ * hosts are the intended domains, not yet provisioned ones — they follow the
+ * same subdomain pattern as the hub (hub.bearlysleeping.com).
  */
 const SITE_URL_MAP: Record<string, string> = {
-  production: `http://localhost:${port}`,
-  staging: `http://localhost:${port}`,
+  production: 'https://docs.bearlysleeping.com',
+  staging: 'https://docs.stg.bearlysleeping.com',
   emulator: `http://localhost:${port}`,
 };
 
@@ -31,8 +31,13 @@ const SITE_URL_MAP: Record<string, string> = {
  */
 function resolveMode(): string {
   const argv = process.argv;
+  // Support both `--mode <value>` (used by the deploy pipeline) and
+  // `--mode=<value>` (common when running the build by hand).
   const modeFlagIndex = argv.indexOf('--mode');
-  const cliMode = modeFlagIndex !== -1 ? argv[modeFlagIndex + 1] : undefined;
+  const cliMode =
+    modeFlagIndex !== -1
+      ? argv[modeFlagIndex + 1]
+      : argv.find((arg) => arg.startsWith('--mode='))?.slice('--mode='.length);
   const resolved = cliMode || process.env.AIKAMI_MODE || process.env.MODE || 'emulator';
   if (!(resolved in SITE_URL_MAP)) {
     throw new Error(
@@ -55,25 +60,47 @@ export default defineConfig({
 
   integrations: [
     starlight({
-      title: 'My Docs',
+      title: 'Aikami Docs',
+      description:
+        'Guides and reference for Aikami — the open-source, self-hosted AI RPG engine. Setup, AI providers, content packs, and how each system works.',
+      logo: {
+        src: './src/assets/logo.svg',
+        alt: 'Aikami',
+        replacesTitle: false,
+      },
+      favicon: '/favicon.svg',
       social: [
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/withastro/starlight',
+          href: 'https://github.com/BearlySleeping/aikami',
+        },
+        {
+          icon: 'discord',
+          label: 'Discord',
+          href: 'https://discord.gg/XuuhWvSxHH',
         },
       ],
+      editLink: {
+        baseUrl: 'https://github.com/BearlySleeping/aikami/edit/main/apps/frontend/docs/',
+      },
+      customCss: ['./src/styles/docs.css'],
       sidebar: [
         {
-          label: 'Guides',
+          label: 'Start here',
           items: [
-            // Each item here is one entry in the navigation menu.
-            { label: 'Example Guide', slug: 'guides/example' },
+            { label: 'What is Aikami?', slug: 'index' },
+            { label: 'Installation', slug: 'start/installation' },
+            { label: 'Choosing your AI setup', slug: 'start/ai-setup' },
           ],
         },
         {
-          label: 'Reference',
-          items: [{ autogenerate: { directory: 'reference' } }],
+          label: 'Guides',
+          items: [{ autogenerate: { directory: 'guides' } }],
+        },
+        {
+          label: 'Features',
+          items: [{ autogenerate: { directory: 'features' } }],
         },
       ],
     }),
