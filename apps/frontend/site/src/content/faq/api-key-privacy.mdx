@@ -1,0 +1,21 @@
+---
+question: "Is my API key ever sent to Aikami's servers?"
+category: "privacy"
+order: 2
+---
+
+It depends on which mode you're using. When you use **BYOK for text generation**, your key
+is stored in the client-side vault and text requests go directly from your client to the
+provider you configured (Anthropic, OpenAI, Gemini, etc.). Aikami is not a proxy in that
+path and never sees the key or the prompt.
+
+With **local/offline mode**, nothing leaves your machine at all — Ollama, ComfyUI, and
+Kokoro run on your own hardware.
+
+The **Service mode** (when available) routes requests through Aikami's infrastructure to
+provide managed AI without requiring your own hardware or API keys. In that case, Aikami
+telemetry receives routing metadata, though not your full conversation history.
+
+If you'd rather verify than take our word for it, the client is
+[open source](https://github.com/BearlySleeping/aikami) — the provider gateway is all
+right there.

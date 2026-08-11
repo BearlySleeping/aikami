@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Aikami">
+  <title>Aikami</title>
+  <path
+    d="M16 2.5 27.5 8v9.5c0 6.6-4.7 11.2-11.5 14C9.2 28.7 4.5 24.1 4.5 17.5V8L16 2.5Z"
+    stroke="#8b5cf6"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+  <path d="M16 10v11M11.5 15.5 16 10l4.5 5.5" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

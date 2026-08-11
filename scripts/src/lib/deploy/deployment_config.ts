@@ -64,6 +64,26 @@ export type AppConfig = {
    *  Used when the deploy app (e.g. 'client-tauri') isn't a standalone moon project
    *  but reuses another project's build (e.g. 'client'). */
   buildProject?: string;
+  /**
+   * Custom domains served by this app's Firebase Hosting site, per live mode.
+   *
+   * Informational only — Firebase custom domains cannot be provisioned via the
+   * CLI (they need DNS verification records), so `firebase_hosting_setup.ts`
+   * prints these as manual console steps rather than applying them. Keep in
+   * sync with each app's canonical `site` URL in its astro.config / svelte
+   * config.
+   */
+  customDomains?: Partial<Record<LiveMode, string>>;
+  /**
+   * Per-mode Firebase Hosting site ID overrides.
+   *
+   * Site IDs are globally unique across *all* Firebase projects, not just
+   * ours, so the default `{projectId}-{shortName}` name is not always
+   * available — `aikami-staging-docs` is reserved by an unrelated project.
+   * Set an override only for the modes that need one; every other mode keeps
+   * the derived default.
+   */
+  hostingSiteIds?: Partial<Record<LiveMode, string>>;
 };
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
@@ -72,6 +92,10 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     path: 'apps/frontend/client',
     shortName: 'client',
     prefix: 'CLIENT',
+    // Staging domain intentionally omitted — not recorded anywhere in the repo.
+    customDomains: {
+      production: 'aikami.bearlysleeping.com',
+    },
   },
   /** Tauri desktop release — reuses the client moon project for web build, then runs cargo tauri build. */
   'client-tauri': {
@@ -86,6 +110,10 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     path: 'apps/frontend/site',
     shortName: '',
     prefix: 'SITE',
+    customDomains: {
+      production: 'bearlysleeping.com',
+      staging: 'stg.bearlysleeping.com',
+    },
   },
   /** SvelteKit SSR dashboard — deployed to Cloud Run (aikami-hub), fronted by Firebase Hosting sites per mode. */
   hub: {
@@ -95,13 +123,34 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     prefix: 'HUB',
     cloudRunServiceId: 'aikami-hub',
     region: 'europe-west4',
+    customDomains: {
+      production: 'hub.bearlysleeping.com',
+      staging: 'hub.stg.bearlysleeping.com',
+    },
   },
+  /** Starlight documentation site — static build deployed to its own Hosting site. */
   docs: {
     serviceType: 'firebase-hosting',
     path: 'apps/frontend/docs',
     shortName: 'docs',
     prefix: 'DOCS',
-    enabled: false,
+    /**
+     * Deviates from the `aikami-{mode}-{app}` convention used by every other
+     * site: `aikami-staging-docs` is reserved by an unrelated Firebase project
+     * and can never be claimed here (site IDs are globally unique). Production
+     * keeps the conventional `aikami-production-docs`.
+     *
+     * To realign both modes later, create `aikami-{mode}-<suffix>` in both
+     * projects, change `shortName`, and drop this override — nothing else in
+     * the deploy pipeline hardcodes a site ID.
+     */
+    hostingSiteIds: {
+      staging: 'aikami-stg-docs',
+    },
+    customDomains: {
+      production: 'docs.bearlysleeping.com',
+      staging: 'docs.stg.bearlysleeping.com',
+    },
   },
   firebase: {
     serviceType: 'firebase-functions',
@@ -233,13 +282,31 @@ export function resolveSecretName(key: string, config: SecretNameConfig): string
 }
 
 /**
+ * Reverse-resolves a live mode from a project ID. Returns undefined for the
+ * emulator (which has no Hosting sites) or an unknown project.
+ */
+export function resolveModeFromProjectId(projectId: string): LiveMode | undefined {
+  return liveModes.find((mode) => MODE_PROJECT_MAP[mode] === projectId);
+}
+
+/**
  * Resolves the Firebase Hosting site ID for an app.
- * Format: {projectId}-{shortName} (globally unique across all Firebase projects).
+ *
+ * Defaults to `{projectId}-{shortName}`, or `{projectId}` for the app that
+ * owns the project's default site (site). Because Hosting site IDs are
+ * globally unique across every Firebase project, the derived name is
+ * sometimes unavailable — `hostingSiteIds` supplies a per-mode override in
+ * that case (see the docs app).
  */
 export function resolveHostingSiteId(appId: AppId, projectId: string): string | undefined {
   const config = APP_CONFIG[appId];
   if (!config) {
     return undefined;
+  }
+  const mode = resolveModeFromProjectId(projectId);
+  const override = mode ? config.hostingSiteIds?.[mode] : undefined;
+  if (override) {
+    return override;
   }
   if (!config.shortName) {
     return projectId;

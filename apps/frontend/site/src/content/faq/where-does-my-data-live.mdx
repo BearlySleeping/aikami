@@ -1,0 +1,14 @@
+---
+question: "Where do my saves and chat history live?"
+category: "privacy"
+order: 1
+---
+
+Primarily on your machine. Game data is stored locally by platform (Turso/libSQL for
+desktop, IndexedDB for web), with the local database as the source of truth for gameplay.
+
+Firebase is layered on top for auth and optional cloud sync/backup — if you sign in and
+opt into sync, save copies go to Firebase Storage and some data (like NPC chat messages)
+may be stored in Firestore for cross-device delivery. Your world plays and saves fine
+without ever signing in; Firebase is not a boot dependency for gameplay availability,
+though Firebase App and App Check initialize eagerly.
