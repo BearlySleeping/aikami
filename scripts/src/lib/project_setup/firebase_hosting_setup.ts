@@ -8,7 +8,12 @@
 //   bun run scripts/src/lib/project_setup/firebase_hosting_setup.ts --mode=production --dry-run
 
 import { fmt, parseCliArgs, run } from '../cli_utils';
-import { APP_CONFIG, MODE_PROJECT_MAP, resolveHostingSiteId } from '../deploy/deployment_config';
+import {
+  APP_CONFIG,
+  MODE_PROJECT_MAP,
+  resolveHostingSiteId,
+  resolveModeFromProjectId,
+} from '../deploy/deployment_config';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 type ManualStep = { title: string; url?: string; commands?: string[]; detail?: string };
@@ -43,6 +48,9 @@ export const setupFirebaseHosting = async (
 ): Promise<{ checks: Check[]; manualSteps: ManualStep[] }> => {
   const checks: Check[] = [];
   const manualSteps: ManualStep[] = [];
+  const liveMode = resolveModeFromProjectId(projectId);
+  /** siteId → custom domain, collected for the manual domain-linking step. */
+  const domainMappings: string[] = [];
 
   console.log(fmt.section('Firebase Hosting Sites'));
 
@@ -61,6 +69,11 @@ export const setupFirebaseHosting = async (
     if (!siteId) {
       console.log(fmt.note(`Skipping ${appName} — no site ID`));
       continue;
+    }
+
+    const customDomain = liveMode ? appConfig.customDomains?.[liveMode] : undefined;
+    if (customDomain) {
+      domainMappings.push(`${customDomain.padEnd(32)} → ${siteId}`);
     }
 
     const exists = await checkHostingSite(projectId, siteId);
@@ -85,6 +98,22 @@ export const setupFirebaseHosting = async (
     }
   }
 
+  // Custom domains can't be provisioned from the CLI — Firebase requires DNS
+  // verification records added through the console — so surface them as an
+  // explicit manual step instead of silently leaving sites on *.web.app.
+  if (domainMappings.length > 0) {
+    manualSteps.push({
+      title: `Link custom domains (${liveMode})`,
+      url: `https://console.firebase.google.com/project/${projectId}/hosting/sites`,
+      detail:
+        `${domainMappings.join('\n')}\n\n` +
+        'Open each site → "Add custom domain", then add the TXT/A records\n' +
+        'Firebase prompts for. SSL certificates are provisioned automatically\n' +
+        'once verification passes. Until then the site stays on its\n' +
+        `default ${projectId}-*.web.app URL, which is still fully deployable.`,
+    });
+  }
+
   return { checks, manualSteps };
 };
 
@@ -106,5 +135,24 @@ if (import.meta.main) {
     console.log(fmt.warn('Dry-run mode.\n'));
   }
 
-  await setupFirebaseHosting(projectId, dryRun);
+  const { manualSteps } = await setupFirebaseHosting(projectId, dryRun);
+
+  // Mirror project_setup/index.ts's rendering so running this script directly
+  // still surfaces the steps that can't be automated.
+  if (manualSteps.length > 0) {
+    console.log(fmt.head(`═══ Manual Steps (${manualSteps.length}) ═══`));
+    for (const [index, step] of manualSteps.entries()) {
+      console.log(fmt.step(index + 1, step.title));
+      if (step.url) {
+        console.log(fmt.url(step.url));
+      }
+      for (const command of step.commands ?? []) {
+        console.log(fmt.cmd(command));
+      }
+      if (step.detail) {
+        console.log(fmt.note(step.detail));
+      }
+      console.log();
+    }
+  }
 }
