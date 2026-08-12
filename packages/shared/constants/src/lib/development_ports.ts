@@ -18,8 +18,6 @@
 //   9098        Aikami     Firebase emulator (auth)
 //   9199        Nordclaw   Firebase emulator (storage)
 //   9198        Aikami     Firebase emulator (storage)
-//   9399        Nordclaw   Firebase emulator (dataconnect)
-//   9398        Aikami     Firebase emulator (dataconnect)
 //
 //   Within each project range, even ports = emulator mode, odd = staging,
 //   offset +4 = production.
@@ -35,7 +33,6 @@ const FB_EMULATOR_PORTS = {
   hosting: 5002,
   pubsub: 8086,
   storage: 9198,
-  dataconnect: 9398,
   emulatorHub: 4401,
 } as const;
 

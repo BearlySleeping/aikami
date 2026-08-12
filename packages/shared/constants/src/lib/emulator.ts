@@ -32,16 +32,3 @@ export function getEmulatorFirestoreUrl(): string {
 export function getEmulatorFirestoreRunQueryUrl(): string {
   return `http://${EMULATOR_HOSTS.firestore}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents:runQuery`;
 }
-
-// ── Data Connect (PostgreSQL) helpers ────────────────────────
-
-/** PostgreSQL connection string for the Data Connect emulator. */
-export const EMULATOR_DATACONNECT_URL =
-  'postgresql://postgres@localhost:5432/dataconnect_emulator?sslmode=disable' as const;
-
-/**
- * Query audit logs from the Data Connect emulator's PostgreSQL.
- */
-export function getAuditLogsQueryUrl(requestId: string, auditWorkerPort = 3001): string {
-  return `http://localhost:${auditWorkerPort}/audit-logs?requestId=${encodeURIComponent(requestId)}`;
-}

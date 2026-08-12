@@ -78,9 +78,6 @@ const config = {
       '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
       '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
-      '@aikami/frontend/dataconnect': toPackagesPath('frontend/dataconnect/src'),
-      '@aikami/frontend/dataconnect/*': toPackagesPath('frontend/dataconnect/src/lib/*'),
-
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
       '@aikami/frontend/ai-gateway': toPackagesPath('frontend/ai-gateway/src'),
