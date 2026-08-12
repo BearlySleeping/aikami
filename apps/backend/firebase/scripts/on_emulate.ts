@@ -22,7 +22,7 @@ import { logger } from '$logger';
 
 const ASSETS_DIR = join(__dirname, '../assets');
 
-async function uploadNpcImages(npcDir: string): Promise<Record<string, string>> {
+async function uploadNpcImages(npcDir: string, npcId: string, creatorUid: string = 'emulator-admin'): Promise<Record<string, string>> {
   const expressions: Record<string, string> = {};
 
   try {
@@ -31,7 +31,7 @@ async function uploadNpcImages(npcDir: string): Promise<Record<string, string>> 
       if (file.endsWith('.webp') || file.endsWith('.png') || file.endsWith('.jpg')) {
         const expression = file.replace('.webp', '').replace('.png', '').replace('.jpg', '');
         const filePath = join(npcDir, file);
-        const destination = `npc/${npcDir.split('/').pop()}/${file}`;
+        const destination = `npcs/${creatorUid}/${npcId}/${file}`;
         const contentType = file.endsWith('.png') ? 'image/png' : 'image/webp';
 
         try {
@@ -101,7 +101,9 @@ const createNpcs = async () => {
         continue;
       }
 
-      const expressions = await uploadNpcImages(join(npcImagesDir, npcDir));
+      // Use npcDir as the id for consistent path structure in Storage
+      const npcId = npcDir.toLowerCase();
+      const expressions = await uploadNpcImages(join(npcImagesDir, npcDir), npcId, 'emulator-admin');
 
       const npcWithExpressions: NpcCreateData = {
         ...npcData,
