@@ -2,7 +2,7 @@
 id: C-385
 title: "Remove Firebase Data Connect and rehome its three consumers"
 source: "external data-layer review (docs/research/database-architecture-recommendation.md §2)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-12"
 | **Target** | `apps/backend/firebase/dataconnect/` (deleted), `packages/frontend/dataconnect/` (deleted), `packages/shared/schemas/src/lib/generated-dataconnect/` (deleted), plus the three consumers and all config referencing them |
 | **Priority** | P1 — Data Connect is excluded from every non-emulator mode, so its one product feature is silently broken in production. It is the largest single source of schema duplication and it blocks C-386. |
 | **Dependencies** | C-383 (ships first — do not delete the connector before its auth directives are corrected, so the two changes are independently revertable). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -345,3 +345,77 @@ If the implementer discovers a caller of `getAuditLogsQueryUrl` or a missing tra
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Removed Firebase Data Connect end-to-end (schema, connector, generated SDK, generated row schemas, codegen scripts, config, ports, server-side service wrapper, and the engine SQL-connect sync) and rehomed its three consumers: save-slot metadata now lives in the local SQLite `saves` table (AC-2), combat music resolves moods from a static JSON catalog validated by a new shared TypeBox schema (AC-3), and the hub's personas feature is deleted with all navigation redirects to `/dashboard` (AC-4). The AC-1 grep is clean across `apps/`/`packages/`/`scripts/`, `bun install` regenerated the lockfile, `:typecheck` (32 tasks) and `:lint` pass, and both the client and hub boot and serve in emulator mode with visual verification (hub dashboard 90/100, hub 404 page 100/100, save/load persistence 95/100, game boot 100/100).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Zero matches for `data-connect\|dataconnect\|dataConnect\|DataConnect` across apps/packages/scripts (only gitignored build artifacts, regenerated clean); `bun install` + `:typecheck` + `:lint` pass. |
+| AC-2 | ✅ | `gameStateSyncService` reads/writes slot metadata in the local `saves` table (blob path unchanged); new `frontend-services:test` task + 5 unit tests; dev save/load verified save → reload → list → load via Playwright (95/100). |
+| AC-3 | ✅ | Static catalog at `static/game-data/audio_tracks.json` (8 moods) + `AudioTrackCatalogSchema` in `packages/shared/schemas`; resolver is an in-memory map after first load with a documented fallback (`bgm-combat-epic`); 6 unit tests; `/game` boots with zero console errors; catalog + track files serve 200. |
+| AC-4 | ✅ | Hub personas route/services/views/verify scripts deleted; routes.ts, nav drawer, app bar, login, root + (unauthenticated) layout redirect to `/dashboard`; `/personas` returns HTTP 404; signed-in `/dashboard` renders with no persona count card and no Personas nav item (visual 90/100); hub builds and tests pass (new route-table regression test). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/media/audio_track_catalog.ts` | TypeBox schemas for the static audio catalog (`AudioTrackEntrySchema`, `AudioTrackCatalogSchema`). |
+| `apps/frontend/client/static/game-data/audio_tracks.json` | Static catalog covering the 8 legacy moods, referencing bundled webm files. |
+| `apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts` | Catalog loader/resolver (cached in-memory map, fallback track, URL resolution). |
+| `apps/frontend/client/src/lib/views/combat/__tests__/audio_track_catalog.test.ts` | AC-3 resolver tests (schema validation, mood coverage, fallback, URL shape). |
+| `apps/frontend/client/src/lib/views/combat/__tests__/combat_view_model.test.ts` | AC-3 VM integration tests (catalog → `transitionToBgm`, no network round trip). |
+| `packages/frontend/services/src/lib/services/__tests__/game_state_sync.test.ts` | AC-2 unit tests for the local-saves rehome (save/list/load/delete, invalid payload). |
+| `apps/frontend/hub/src/lib/constants/routes.test.ts` | AC-4 regression guard — route table has no `/personas`; keeps `hub:test` green. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Added `audio_track_catalog` export; removed `generated-dataconnect` re-export. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | `_transitionBgmByMood` now resolves from the static catalog; removed `@aikami/frontend/dataconnect` import. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts` | Rewrote Data Connect comments/log strings to the static catalog. |
+| `apps/frontend/client/src/lib/views/dev/save_load/save_load_view_model.svelte.ts` | Comment updates (Storage + local saves table). |
+| `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` | Replaced the "Querying Data Connect" status string. |
+| `apps/frontend/client/svelte.config.js` | Removed `@aikami/frontend/dataconnect` aliases. |
+| `packages/frontend/services/src/lib/services/game_state_sync.svelte.ts` | Rehomed slot metadata to the local `saves` table (AC-2). |
+| `packages/frontend/services/moon.yml` / `package.json` / `tsconfig.json` | Dropped `frontend-dataconnect`; added `frontend-storage`; added `test` task + `bun test` script. |
+| `packages/frontend/engine/src/index.ts` | Removed `FirebaseSqlConnectSync` / `SqlConnectDelta` / `SqlConnectDeltaType` exports. |
+| `packages/frontend/engine/moon.yml` / `package.json` / `tsconfig.json` | Removed `frontend-dataconnect` dependency/mappings. |
+| `packages/frontend/configs/src/lib/data_connect.ts` | Deleted. |
+| `packages/backend/firestore/src/index.ts` | Removed the deleted service's re-export. |
+| `packages/backend/firestore/tests/user_firestore_repository.test.ts` | Removed `FirebaseDataConnectService` import + integration describe block. |
+| `packages/shared/constants/src/lib/development_ports.ts` | Removed `dataconnect: 9398` + comment lines. |
+| `packages/shared/constants/src/lib/emulator.ts` | Removed `EMULATOR_DATACONNECT_URL` + `getAuditLogsQueryUrl`. |
+| `apps/backend/firebase/firestack.config.ts` | Removed `dataconnectDirectory`; `defineConfig(() => ({...}))`. |
+| `apps/backend/firebase/moon.yml` | Removed `generate` + `generate-dataconnect-schemas` tasks. |
+| `apps/backend/firebase/package.json` | Removed `generate`, `generate:local`, `generate:dataconnect-schemas` scripts. |
+| `apps/backend/firebase/scripts/on_emulate.ts` | Deleted `uploadAudioAssets`, `seedAudioTracks`, their call site, and the unused `existsSync` import. |
+| `apps/frontend/hub/moon.yml` | Removed `frontend-dataconnect` from `dependsOn`. |
+| `apps/frontend/hub/package.json` | Removed `pg` devDependency. |
+| `apps/frontend/hub/svelte.config.js` | Removed `@aikami/frontend/dataconnect` aliases. |
+| `apps/frontend/hub/src/lib/client/services/index.ts` | Removed `dataconnect/persona_data` export. |
+| `apps/frontend/hub/src/lib/constants/routes.ts` | Removed `personas` route. |
+| `apps/frontend/hub/src/lib/types/data.ts` | Removed `PersonasPageData`. |
+| `apps/frontend/hub/src/lib/views/dashboard/*` | Removed persona-count feature + CTA card. |
+| `apps/frontend/hub/src/lib/views/login/login_view_model.svelte.ts` | Routes to `dashboard` after login. |
+| `apps/frontend/hub/src/lib/views/app/bar/app_bar_view_model.svelte.ts` | Removed `'personas'` case. |
+| `apps/frontend/hub/src/lib/views/app/drawer/navigation/navigation_drawer_view_model.svelte.ts` | Removed the Personas nav entry. |
+| `apps/frontend/hub/src/routes/+page.server.ts` + `(unauthenticated)/+layout.server.ts` | Redirect signed-in/superAdmin users to `/dashboard`. |
+| `apps/e2e/src/config.ts` | Removed `dataconnect: 9398`. |
+| `.moon/workspace.yml` | Removed the `frontend-dataconnect` project mapping (moon sync failed without it). |
+| `biome.json` | Removed stale ignore glob + `@aikami/frontend-dataconnect` import-style rule. |
+| `bun.lock` | Regenerated — no `@aikami/frontend-dataconnect`, no hub `pg`. |
+
+### Deviations from Spec
+- **Necessary dependency additions beyond the listed scope** (all required by the rehoming, no behavior change): `frontend-services` gained `frontend-storage` in `moon.yml`/`package.json` so `game_state_sync` can reach the local `saves` table; `.moon/workspace.yml` and `biome.json` were edited because `bun install`'s postinstall (`moon sync`) failed and the lint config referenced the deleted package — both were unlisted but mandatory for AC-1 to hold.
+- **New test file `apps/frontend/hub/src/lib/constants/routes.test.ts`**: after deleting the persona feature, `hub:test` had zero test files and `bun test` exits 1. Added a small regression test asserting `/personas` is not registered (AC-4 guard) — not a shim, keeps the AC-4 test hook green.
+- **`client:test-unit` delta**: 49 pre-existing failures at baseline → 50 after the change. The extra failure (`GameBootService — cancellation during boot returns cancelled result`) reproduces identically on the pristine base commit (verified in the untouched main checkout) — it is a 5ms-window timing test that is environment-sensitive, not a regression from this contract.
+- No other scope changes; all three ACs landed together as required.
+
+### Test Results
+- Unit: 1741 pass / 55 fail total across suites (firebase 11/0, hub 3/0, frontend-storage 48/0, frontend-services 5/0, client 1619 pass / 50 fail — 49 pre-existing + 1 pre-existing env-flaky GameBootService; +6 new AC-3 tests pass).
+- E2E: N/A for this contract's ACs (hub has no e2e specs; hub E2E evidence covered by hub:build + hub:test + live boot verification).
+- Visual: hub dashboard 90/100 (PASS), hub `/personas` 404 page 100/100 (PASS), save/load persistence 95/100 (PASS), `/game` boot 100/100 (PASS).
+- Baseline: 49 pre-existing client failures, 1 new observed failure that reproduces on pristine code (env-flaky, documented above).
