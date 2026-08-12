@@ -2,7 +2,7 @@
 id: C-384
 title: "Local SQLite Migration Framework (PRAGMA user_version)"
 source: "external data-layer review (docs/research/database-architecture-recommendation.md §5)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-12"
 | **Target** | `packages/frontend/storage/src/lib/` — new `migrations.ts`, modified `storage_adapter.ts` and `local_database_factory.ts`, plus tests |
 | **Priority** | P0 — the local database is the source of truth for all player data and currently has no mechanism to evolve its schema. The next column added to a shipped table silently breaks every existing install. |
 | **Dependencies** | None. Ships independently of every other contract in the sequence. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -303,3 +303,81 @@ Must be resolved before status becomes `approved`:
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Implemented the local SQLite migration framework keyed on `PRAGMA user_version`.
+Created `packages/frontend/storage/src/lib/migrations.ts` with the `Migration`
+type, the production `AIKAMI_MIGRATIONS` list (migration v1 = former
+`AIKAMI_SCHEMA_DDL` verbatim, with `AIKAMI_SCHEMA_DDL` deleted), load-time
+list validation, and `applyMigrations()` which reads the pragma and applies
+each pending migration in one transaction that also bumps `user_version`.
+Made `TursoStorageAdapter.transaction()` genuinely atomic
+(BEGIN/COMMIT/ROLLBACK + rethrow) — a correctness prerequisite for AC-4.
+Wired the runner into `local_database_factory.ts` in place of `_applySchema()`
+with the AC-5 failure path (reject, close handle, clear singleton, retry).
+Updated all three code importers and two doc-comment references of
+`AIKAMI_SCHEMA_DDL`, fixed the misleading comment at
+`storage_adapter.test.ts:328`, and exported the module from `src/index.ts`.
+Verified the migration runs on the production path: game boot completes with
+`user_version = 1` on a fresh browser database.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Fresh database migrates to latest version; full table+index set asserted explicitly against `sqlite_master` (both adapters). |
+| AC-2 | ✅ | Legacy v0 database converges with rows intact; schema deep-equality (`type, name, sql` from `sqlite_master`) between legacy and fresh paths. |
+| AC-3 | ✅ | v2 fixture `ALTER TABLE characters ADD COLUMN test_column TEXT` reaches a v1 database; rows preserved with NULL; fixture passed via optional `migrations` param only — production list has exactly one v1 entry. |
+| AC-4 | ✅ | Exactly-once verified with a non-idempotent probe fixture (3 extra runs → exactly 1 row); atomicity verified with an invalid-statement fixture on both WASM and Turso (version unchanged, first statement rolled back); version bump confirmed inside the transaction. |
+| AC-5 | ✅ | `getLocalDatabase()` rejects on migration failure via mocked `applyMigrations`, does not cache a broken handle, and a subsequent call retries successfully. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/storage/src/lib/migrations.ts` | `Migration` type, `AIKAMI_MIGRATIONS` (v1 = former DDL), `assertValidMigrations`, `applyMigrations()` runner. |
+| `packages/frontend/storage/src/lib/__tests__/migrations.test.ts` | AC-1..AC-4 tests run against both WASM and Turso adapters (18 tests). |
+| `packages/frontend/storage/src/lib/__tests__/local_database_factory.test.ts` | AC-5 factory failure/retry tests. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/storage/src/lib/storage_adapter.ts` | Deleted `AIKAMI_SCHEMA_DDL`; kept `LOCAL_DB_FILE`. |
+| `packages/frontend/storage/src/lib/local_database_factory.ts` | Replaced `_applySchema()` with `applyMigrations()`; AC-5 failure path clears singleton, closes handle, rethrows. |
+| `packages/frontend/storage/src/lib/turso_storage_adapter.ts` | `transaction()` now wraps batch in BEGIN/COMMIT/ROLLBACK and rethrows (atomic). |
+| `packages/frontend/storage/src/index.ts` | Exported `./lib/migrations.ts`. |
+| `packages/frontend/storage/src/lib/__tests__/storage_adapter.test.ts` | Import schema from migration v1; corrected misleading C-373 comment. |
+| `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | Import schema from migration v1. |
+| `packages/frontend/storage/src/lib/assets.ts` | Doc comment updated (tables now "created by schema migration v1"). |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Doc comment updated ("runs C-384 schema migrations"). |
+| `docs/contracts/C-384-local-sqlite-migration-framework.md` | Status → implemented; this report appended. |
+
+### Deviations from Spec
+
+None. Scope held exactly to the contract: no new tables/columns/indexes were
+added to migration v1 (it is the former `AIKAMI_SCHEMA_DDL` verbatim), no
+Drizzle adoption, no adapter changes beyond the `transaction()` atomicity
+fix, and no repository/service/client behavior changes.
+
+One environment note: the Pi `moon_run_task` / `validate` / `herdr_session`
+wrapper tools fail in this worktree with "Bun is not defined" (systemic
+wrapper issue). All moon tasks were executed through the moon CLI
+(`node node_modules/.bin/moon run …`) with explicit timeouts, and the client
+dev server was restarted via `bun run scripts/src/lib/herdr/restart.ts client`
+(failure output captured before the workaround). The Turso adapter was never
+previously exercised under bun (storage tests used only the WASM adapter); its
+parameterized `stmt.bind()` path is incompatible with the bun-loaded native
+binding (`stmt.bindAt is not a function`), so migration test seeding uses
+literal SQL — migration statements themselves are always parameterless by
+design, and this pre-existing limitation is outside this contract's scope.
+
+### Test Results
+
+- Unit (frontend-storage): 48/48 PASS (0 failures) — 20 new tests (18 migrations + 2 factory) + 28 baseline.
+- Client unit (client:test-unit): 1613 pass / 50 fail — the 50 failures are pre-existing (identical on the base commit without these changes; suites: PersonaCreateViewModel, ProvidersViewModel, ImageViewModel, GameBootService-related isolation). 0 new failures.
+- Baseline: 28 pre-existing (all passing in storage), 0 new failures.
+- Production path: `/game` boots to completion (`GameBootService boot:complete`, asset registry seeded); browser `PRAGMA user_version` returns 1 after a fresh DB open (page title instrumented to `UV=1`), proving `applyMigrations` ran the v0→v1 migration in the real app.
