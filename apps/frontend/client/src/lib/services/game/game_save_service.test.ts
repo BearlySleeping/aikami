@@ -34,6 +34,9 @@ const MOCK_SNAPSHOT_PAYLOAD = JSON.stringify({
   components: {},
 });
 
+/** Valid map-routing block for v3 saves (C-378: required). */
+const MAP_FIXTURE = { packId: 'emberwatch', mapId: 'village', playerX: 160, playerY: 192 };
+
 const createMockBridge = (): EngineBridge => ({
   send: mock(() => {}),
   on: mock(() => (): void => {}),
@@ -122,7 +125,7 @@ describe('GameSaveService (C-334)', () => {
   test('saveGame should default slotId to auto-save', async () => {
     const service = await getService(bridge);
 
-    await service.saveGame();
+    await service.saveGame({ map: MAP_FIXTURE });
 
     expect(mockSnapshotCalls).toBe(1);
     const saves = service.availableSaves;
@@ -133,7 +136,7 @@ describe('GameSaveService (C-334)', () => {
   test('saveGame should default mapName to World', async () => {
     const service = await getService(bridge);
 
-    await service.saveGame({ slotId: 'test' });
+    await service.saveGame({ slotId: 'test', map: MAP_FIXTURE });
 
     expect(service.availableSaves[0].mapName).toBe('World');
   });
@@ -145,8 +148,33 @@ describe('GameSaveService (C-334)', () => {
     const rawService = service as unknown as { isSaving: boolean };
     rawService.isSaving = true;
 
-    await service.saveGame({ slotId: 'test' });
+    await service.saveGame({ slotId: 'test', map: MAP_FIXTURE });
     expect(mockSnapshotCalls).toBe(0);
+  });
+
+  // ── C-378: never write a save without map routing ──────────────────
+
+  test('saveGame without a map block is skipped and leaves prior saves intact', async () => {
+    const service = await getService(bridge);
+
+    // A valid save exists first.
+    await service.saveGame({ slotId: 'auto-save', map: MAP_FIXTURE });
+    expect(service.availableSaves.length).toBe(1);
+
+    const callsBefore = mockSnapshotCalls;
+
+    // A map-less save (the old world-scope fallback path) must NOT write.
+    // Cast: `map` is type-required, but the runtime guard defends against
+    // JS callers / `as any` escapes (C-378).
+    await service.saveGame({
+      slotId: 'auto-save',
+      map: undefined as unknown as typeof MAP_FIXTURE,
+    });
+
+    expect(mockSnapshotCalls).toBe(callsBefore); // no snapshot requested
+    const saves = service.availableSaves;
+    expect(saves.length).toBe(1); // prior save untouched
+    expect(saves[0].id).toBe('auto-save');
   });
 
   // ── AC-3: loadGame restores from save ──────────────────────────────
@@ -266,7 +294,7 @@ describe('GameSaveService (C-334)', () => {
   test('deleteSave should remove from database and refresh saves', async () => {
     const service = await getService(bridge);
 
-    await service.saveGame({ slotId: 'to-delete' });
+    await service.saveGame({ slotId: 'to-delete', map: MAP_FIXTURE });
     expect(service.availableSaves.length).toBe(1);
 
     await service.deleteSave('to-delete');
@@ -278,7 +306,7 @@ describe('GameSaveService (C-334)', () => {
 
   test('getSavePayload should return raw payload from database', async () => {
     const service = await getService(bridge);
-    await service.saveGame({ slotId: 'test', campaignId: 'c1', mapName: 'Map' });
+    await service.saveGame({ slotId: 'test', campaignId: 'c1', mapName: 'Map', map: MAP_FIXTURE });
 
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
@@ -323,7 +351,9 @@ describe('GameSaveService (C-334)', () => {
     expect(typeof rawPayload).toBe('string');
 
     // saveGame should throw without bridge
-    await expect(service.saveGame({ slotId: 'test' })).rejects.toThrow('engine bridge is required');
+    await expect(service.saveGame({ slotId: 'test', map: MAP_FIXTURE })).rejects.toThrow(
+      'engine bridge is required',
+    );
   });
 
   // ── fetchAvailableSaves with campaign filter (C-334) ───────────────
@@ -331,8 +361,18 @@ describe('GameSaveService (C-334)', () => {
   test('fetchAvailableSaves should filter by campaignId', async () => {
     const service = await getService(bridge);
 
-    await service.saveGame({ slotId: 'manual-1', campaignId: 'camp-a', mapName: 'A' });
-    await service.saveGame({ slotId: 'manual-2', campaignId: 'camp-b', mapName: 'B' });
+    await service.saveGame({
+      slotId: 'manual-1',
+      campaignId: 'camp-a',
+      mapName: 'A',
+      map: MAP_FIXTURE,
+    });
+    await service.saveGame({
+      slotId: 'manual-2',
+      campaignId: 'camp-b',
+      mapName: 'B',
+      map: MAP_FIXTURE,
+    });
 
     // Fetch all
     await service.fetchAvailableSaves();
@@ -385,6 +425,26 @@ describe('GameSaveService (C-334)', () => {
       playerX: 256,
       playerY: 344,
     });
+  });
+
+  test('parseSavePayloadEnvelope surfaces a v3 envelope WITHOUT map (C-378 corrupt-save shape)', async () => {
+    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+
+    // The corrupt-save shape: v3 version + checksum but NO map block (the
+    // old world-scope fallback wrote exactly this). The boot must NOT
+    // legacy-restore it — it routes to a fresh spawn instead (C-378).
+    const raw = JSON.stringify({
+      version: 3,
+      checksum: 'abc123',
+      ecsSnapshot: '{"entities":[2,1,3]}',
+      serviceSnapshots: [{ serviceKey: 'test', data: {} }],
+      savedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = parseSavePayloadEnvelope(raw);
+    expect(result.version).toBe(3);
+    expect(result.ecsSnapshot).toBe('{"entities":[2,1,3]}');
+    expect(result.map).toBeUndefined();
   });
 
   test('parseSavePayloadEnvelope should handle v2 payload', async () => {

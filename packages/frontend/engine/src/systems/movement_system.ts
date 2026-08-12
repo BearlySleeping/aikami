@@ -76,6 +76,9 @@ const ENTITY_HALF_WIDTH = 16;
  */
 const ENTITY_HEIGHT_ABOVE = 32;
 
+/** Tile size in world pixels — matches the map `tilewidth`/`tileheight`. */
+const TILE_SIZE = 32;
+
 // ── C-332: NaN/Infinity position recovery ──────────────────────────
 
 /**
@@ -280,6 +283,115 @@ const updateMovement = (world: World, deltaMs: number): void => {
 };
 
 export { updateMovement };
+
+// ---------------------------------------------------------------------------
+// Spawn / restore clamping (C-378)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when a player at the given feet position would be blocked.
+ *
+ * Samples the SAME 32×32 collision box the movement system uses (not just
+ * the feet tile): `x ± 16` horizontally, `y - 32 .. y` vertically. A spawn
+ * whose feet tile is free can still deadlock the player — e.g. the
+ * merchant-shop entrance at (256,344) sits one tile below the solid crate
+ * at (256,288), so the box overlaps the crate cell on EVERY movement axis
+ * and the player is frozen the moment they spawn (C-378). The spawn and
+ * restore clamps must therefore validate the full box, exactly like
+ * {@link updateMovement} does.
+ *
+ * @param pixelX - Candidate feet X in world pixels.
+ * @param pixelY - Candidate feet Y in world pixels.
+ * @returns `true` when any tile under the collision box is blocked.
+ */
+export const isPlayerSpawnBlocked = (pixelX: number, pixelY: number): boolean => {
+  const boxLeft = pixelX - ENTITY_HALF_WIDTH;
+  const boxRight = pixelX + ENTITY_HALF_WIDTH - 1;
+  const boxTop = pixelY - ENTITY_HEIGHT_ABOVE + 1;
+  const boxBottom = pixelY;
+  const tx1 = Math.floor(boxLeft / TILE_SIZE);
+  const tx2 = Math.floor(boxRight / TILE_SIZE);
+  const ty1 = Math.floor(boxTop / TILE_SIZE);
+  const ty2 = Math.floor(boxBottom / TILE_SIZE);
+  for (let ty = ty1; ty <= ty2; ty++) {
+    for (let tx = tx1; tx <= tx2; tx++) {
+      // Representative pixel: centre of the tile (same as the movement
+      // sampler). Any pixel within a blocked tile is blocked.
+      const px = tx * TILE_SIZE + TILE_SIZE / 2;
+      const py = ty * TILE_SIZE + TILE_SIZE / 2;
+      if (isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * Clamps a spawn or restore point to the nearest walkable position.
+ *
+ * Shared by the worker's LOAD_MAP and RESTORE_PLAYER paths (C-378): a
+ * saved position can land inside a solid prop or wall — e.g. a stale save
+ * created before a prop was authored, or a map whose collision changed
+ * since the save. Because the player's collision box samples the whole
+ * tile under the feet, restoring onto a solid cell deadlocks EVERY
+ * movement axis: each candidate move still spans the blocked cell, so all
+ * axis checks reject it and the player is frozen in place. Clamping at
+ * restore time (not just at map spawn) prevents that freeze.
+ *
+ * Scans outward in square rings (ring radius in tiles, up to 20) from the
+ * blocked point and returns the first unblocked position — the same scan
+ * LOAD_MAP has always used for portal spawns. Falls back to the map
+ * centre when no walkable tile is found.
+ *
+ * @param x - Candidate X position in world pixels.
+ * @param y - Candidate Y position in world pixels.
+ * @param isBlocked - Oracle: `true` when a pixel position is blocked
+ *   (spatial-grid entity occupancy OR terrain solidity — the same
+ *   composite the movement sampler uses).
+ * @param bounds - Optional map pixel bounds used for the centre fallback.
+ * @returns The clamped position (unchanged when the input was walkable).
+ */
+export const clampSpawnToWalkable = (
+  x: number,
+  y: number,
+  isBlocked: (pixelX: number, pixelY: number) => boolean,
+  bounds?: { width: number; height: number },
+): { x: number; y: number } => {
+  if (!isBlocked(x, y)) {
+    return { x, y };
+  }
+
+  const tileSize = 32;
+  const centerX = (bounds?.width ?? 0) / 2;
+  const centerY = (bounds?.height ?? 0) / 2;
+  let clampedX = x;
+  let clampedY = y;
+  let found = false;
+
+  for (let radius = 0; radius < 20 && !found; radius++) {
+    for (let dy = -radius; dy <= radius && !found; dy++) {
+      for (let dx = -radius; dx <= radius && !found; dx++) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
+          continue;
+        }
+        const tx = x + dx * tileSize;
+        const ty = y + dy * tileSize;
+        if (!isBlocked(tx, ty)) {
+          clampedX = tx;
+          clampedY = ty;
+          found = true;
+        }
+      }
+    }
+  }
+
+  if (!found) {
+    clampedX = centerX;
+    clampedY = centerY;
+  }
+  return { x: clampedX, y: clampedY };
+};
 
 /**
  * Clears all per-world movement tracking state.

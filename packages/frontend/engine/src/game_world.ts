@@ -1107,23 +1107,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // No swap needed; main thread reads the same bytes the worker writes.
     } else {
       // N-buffer fallback — the worker transferred ownership of the buffer.
-      // Swap the render view and recycle the old buffer.
+      // Swap the render view and recycle the old buffer. A SYNC-only message
+      // (e.g. the post-LOAD_MAP APPEARANCE_CHANGED batch from the worker)
+      // carries NO buffer — skip the swap but still process its events
+      // below, otherwise the player stays a tinted placeholder square on
+      // every portal transition (C-378).
       const newBuffer = message.buffer as ArrayBuffer | undefined;
-      if (!newBuffer) {
-        return;
-      }
+      if (newBuffer) {
+        // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
+        // FIFO shift from a ring buffer that has no relation to what the
+        // worker actually owns. After INITIALIZE_ENGINE with transferables,
+        // _bufferPool is empty — and even before the fix, the original
+        // buffers were clones disconnected from the worker's pool. ──
+        const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
+        if (outgoing && outgoing.byteLength > 0 && this._worker) {
+          this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+        }
 
-      // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
-      // FIFO shift from a ring buffer that has no relation to what the
-      // worker actually owns. After INITIALIZE_ENGINE with transferables,
-      // _bufferPool is empty — and even before the fix, the original
-      // buffers were clones disconnected from the worker's pool. ──
-      const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
-      if (outgoing && outgoing.byteLength > 0 && this._worker) {
-        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+        this._activeRenderView = new Float32Array(newBuffer);
       }
-
-      this._activeRenderView = new Float32Array(newBuffer);
     }
 
     // ── C-332: Extract tickCount for semantic heartbeat ──
