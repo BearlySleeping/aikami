@@ -496,44 +496,6 @@ const syncMainOnMerge = (repoRoot: string): void => {
   }
 };
 
-const buildTerminalNotification = (options: {
-  stage: ContractPipelineStage;
-  contractId: string;
-  prUrl?: string;
-  branch?: string;
-}): string => {
-  const pr = options.prUrl ? ` PR: ${options.prUrl}` : '';
-  const branch = options.branch ? ` Branch: \`${options.branch}\`.` : '';
-  const header =
-    options.stage === 'merged'
-      ? '✅ Pipeline complete — PR merged.'
-      : options.stage === 'pr_created'
-        ? '✅ Pipeline complete — PR ready for review.'
-        : '🚫 Pipeline blocked — see the summary above.';
-  return [
-    `## ${header}`,
-    `Contract ${options.contractId} finished at \`${options.stage}\`.${pr}${branch}`,
-    '',
-    'The orchestrator has finished — no further pipeline work will run. Read the',
-    'summary above and close this tab whenever you are ready.',
-    '',
-    '### Cleanup',
-    'Run `/cleanup` here to tear down the *other* finished workspaces. It is safe:',
-    '`workspace:cleanup` refuses to remove the worktree it is running inside, so',
-    'this tab survives — it will simply be reported as skipped.',
-    '',
-    'This tab IS the pipeline workspace, so it can only be removed after you close',
-    'it. From the repo root afterwards:',
-    '```',
-    `bun run workspace:cleanup${options.stage === 'merged' ? ' --pr-merged' : ''}`,
-    '```',
-    '🔴 Never pass `--include-self` from this tab, and never run `herdr worktree',
-    'remove` on this workspace by hand — either would kill your own session.',
-    '',
-    'Reply with a single line acknowledging completion (no commands).',
-  ].join('\n');
-};
-
 /**
  * Remove the run's worktree + branch on terminal exits where auto-clean
  * applies (merged, or blocked/pr_created with no live review pane).
@@ -575,8 +537,11 @@ const cleanupRunWorktree = async (options: {
  *
  * 🔴 Default: KEEP the pipeline workspace alive so the user can read the
  * summary and, for `blocked`, actually act on it (inspect the worktree,
- * fix things, `--resume`). The orchestrator posts a completion notification
- * into a live pane; the user closes the tab manually and cleans up with
+ * fix things, `--resume`). The pane is left exactly as the agent last left
+ * it — no completion message is injected (that would cost a full agent
+ * turn just to produce a throwaway "ok" reply; the user already sees the
+ * outcome from the agent's own last message, e.g. `contract_review_decision`'s
+ * result). The user closes the tab manually and cleans up with
  * `bun run workspace:cleanup`. Auto-clean only when nobody can plausibly
  * still be looking at this workspace:
  *   - CONTRACT_PIPELINE_AUTO_CLEANUP=1         → always clean (escape hatch)
@@ -613,9 +578,7 @@ const finalizeWorkspace = async (options: {
 
   if (keepAlive) {
     const wsPath = options.adapter.getWorkspacePath();
-    const notifyPaneId =
-      manifest.reviewPaneId && reviewPaneAlive ? manifest.reviewPaneId : manifest.pipelinePaneId;
-    const tabDescription = notifyPaneId === manifest.reviewPaneId ? 'review tab' : 'pipeline tab';
+    const tabDescription = reviewPaneAlive ? 'review tab' : 'pipeline tab';
     console.log(`\n🧘 Workspace preserved — the ${tabDescription} stays open for you.`);
     console.log(`   Read the final summary in the ${tabDescription}, then close it when done.`);
     if (wsPath) {
@@ -628,26 +591,10 @@ const finalizeWorkspace = async (options: {
         `   When done, switch back to main: git checkout main && git pull --ff-only origin main\n`,
       );
     }
-    if (notifyPaneId) {
-      try {
-        await options.adapter.sendReviewMessage({
-          paneId: notifyPaneId,
-          message: buildTerminalNotification({
-            stage,
-            contractId: manifest.contractId,
-            prUrl: manifest.prUrl,
-            branch: manifest.reconciliation?.headBranch ?? manifest.worktreeBranch,
-          }),
-        });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`⚠️  Could not notify ${tabDescription}: ${msg.slice(0, 200)}`);
-      }
-    }
     pipelineLog({
       runId: manifest.runId,
       cwd: options.repoRoot,
-      message: `Pipeline terminal at ${stage}. Workspace preserved; ${tabDescription} notified. Manual cleanup required.`,
+      message: `Pipeline terminal at ${stage}. Workspace preserved. Manual cleanup required.`,
     });
     return;
   }
