@@ -25,12 +25,12 @@ import { beforeAll, describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Assets, DOMAdapter, Texture, TextureSource } from 'pixi.js';
+import { loadTilemap } from '../assets/map_loader.ts';
 // Same function pixi_app.ts calls at renderer creation — installing the
 // global nearest-neighbour TextureStyle default before any texture is
 // created. Isolated in a config-free module so engine tests (which have no
 // PUBLIC_* env) can exercise the identical production default.
 import { installNearestTextureDefault } from '../rendering/texture_defaults.ts';
-import { loadTilemap } from '../assets/map_loader.ts';
 import {
   buildTilemapChunks,
   frustumCullChunks,
@@ -64,13 +64,11 @@ beforeAll(() => {
     createCanvas: () =>
       ({ width: 0, height: 0, getContext: () => _fakeGlContext() }) as unknown as HTMLCanvasElement,
     createImage: () => ({}) as unknown as HTMLImageElement,
-    getCanvasRenderingContext2D: () =>
-      ({} as unknown as typeof CanvasRenderingContext2D),
-    getWebGLRenderingContext: () =>
-      ({} as unknown as typeof WebGLRenderingContext),
-    getNavigator: () => ({} as unknown as Navigator),
+    getCanvasRenderingContext2D: () => ({}) as unknown as typeof CanvasRenderingContext2D,
+    getWebGLRenderingContext: () => ({}) as unknown as typeof WebGLRenderingContext,
+    getNavigator: () => ({}) as unknown as Navigator,
     getBaseUrl: () => 'http://localhost/',
-    getFontFaceSet: () => ({} as unknown as FontFaceSet),
+    getFontFaceSet: () => ({}) as unknown as FontFaceSet,
     fetch: (url: RequestInfo | URL, init?: RequestInit) => fetch(url, init),
     parseXML: (xml: string) => new DOMParser().parseFromString(xml, 'text/xml'),
   });
@@ -129,7 +127,10 @@ const _loadVillageTilemap = async (): Promise<Awaited<ReturnType<typeof loadTile
   return loadTilemap({
     url: 'emberwatch/village.json',
     fetch: (async (): Promise<Response> =>
-      new Response(raw, { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch,
+      new Response(raw, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch,
   });
 };
 
@@ -162,7 +163,13 @@ const _createSyntheticTilemap = (): Awaited<ReturnType<typeof loadTilemap>> => {
     ],
     layers: [
       { name: 'ground', width, height, data: [...data], visible: true },
-      { name: 'collision', width, height, data: new Array<number>(width * height).fill(0), visible: false },
+      {
+        name: 'collision',
+        width,
+        height,
+        data: new Array<number>(width * height).fill(0),
+        visible: false,
+      },
     ],
   };
 };
@@ -267,7 +274,13 @@ describe('C-377 AC-5 — renderTilemap returns the bound uniform group', () => {
     const tilemap = _createSyntheticTilemap();
     tilemap.layers = [
       tilemap.layers[0],
-      { name: 'path', width: 96, height: 96, data: new Array<number>(96 * 96).fill(2), visible: true },
+      {
+        name: 'path',
+        width: 96,
+        height: 96,
+        data: new Array<number>(96 * 96).fill(2),
+        visible: true,
+      },
       tilemap.layers[1],
     ];
 
@@ -293,10 +306,12 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
 
     const firstChunk = result.chunks[0];
     const shader = firstChunk.mesh.shader;
-    expect(shader).toBeDefined();
     // AC-6: the tilemap renders through the GLSL program only.
-    expect(shader!.glProgram).toBeDefined();
-    expect(shader!.gpuProgram).toBeUndefined();
+    if (!shader) {
+      throw new Error('expected chunk shader to be defined');
+    }
+    expect(shader.glProgram).toBeDefined();
+    expect(shader.gpuProgram).toBeUndefined();
   });
 
   it('parses the committed map, builds chunks, and validates geometry', async () => {
@@ -324,8 +339,10 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
     // Vertex positions match `col * tilewidth` / `row * tileheight` and all
     // stay within the map's pixel bounds.
     const posBuffer = geometry.getBuffer('aPosition');
-    expect(posBuffer).toBeDefined();
-    const positions = posBuffer!.data as Float32Array;
+    if (!posBuffer) {
+      throw new Error('expected aPosition buffer');
+    }
+    const positions = posBuffer.data as Float32Array;
     const mapPixelW = tilemap.width * tilemap.tilewidth;
     const mapPixelH = tilemap.height * tilemap.tileheight;
     expect(positions.length % 2).toBe(0);
@@ -342,8 +359,10 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
 
     // Per-tile UV rectangles within [0,1].
     const uvBuffer = geometry.getBuffer('aUV');
-    expect(uvBuffer).toBeDefined();
-    const uvs = uvBuffer!.data as Float32Array;
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
     expect(uvs.length % 2).toBe(0);
     for (let i = 0; i < uvs.length; i += 2) {
       expect(uvs[i]).toBeGreaterThanOrEqual(0);

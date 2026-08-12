@@ -345,6 +345,7 @@ export {
   packRecipeToUboBuffer,
   SpriteComposer,
 } from './rendering/sprite_composer.ts';
+export { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type {
@@ -353,7 +354,6 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
-export { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 export type { WeatherOverlayOptions } from './rendering/weather_overlay.ts';
 export { WeatherOverlay } from './rendering/weather_overlay.ts';
 // Streaming orchestrator (C-193)

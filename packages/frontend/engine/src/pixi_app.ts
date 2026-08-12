@@ -8,8 +8,8 @@ import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
 import { logger } from '$logger';
 import { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
-import { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 import { initLpcShaders } from './rendering/sprite_composer.ts';
+import { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 
 // C-377 AC-1: install the global nearest-neighbour default at MODULE LOAD.
 // This runs the moment the engine barrel is first imported — which in the
