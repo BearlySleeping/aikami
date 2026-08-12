@@ -2254,63 +2254,10 @@ describe('C-039 Animation Controller — animateEntitySystem (bitECS Integration
 });
 
 // ---------------------------------------------------------------------------
-// C-375 AC-2 — Y-depth sort key unit tests
+// C-376 AC-4 — zIndex render path (PixiJS sortableChildren)
 // ---------------------------------------------------------------------------
 
-import { computeDepthOrder } from '../rendering/depth_sort.ts';
 import { computeEntityZIndex, MIN_ENTITY_Y, WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
-
-describe('computeDepthOrder — C-375 AC-2 y-depth sort', () => {
-  it('renders larger world Y on top (back-to-front order by Y)', () => {
-    // Player north of a well: well (y=384) must be drawn AFTER the player (y=192).
-    const order = computeDepthOrder([
-      { eid: 1, y: 192, order: 0 }, // player (north)
-      { eid: 2, y: 384, order: 1 }, // well (south)
-    ]);
-    expect(order).toEqual([1, 2]);
-  });
-
-  it('is stable for equal Y — tie-breaks by spawn order', () => {
-    const order = computeDepthOrder([
-      { eid: 10, y: 256, order: 5 },
-      { eid: 11, y: 256, order: 2 },
-      { eid: 12, y: 256, order: 9 },
-    ]);
-    expect(order).toEqual([11, 10, 12]);
-  });
-
-  it('does not reorder when input is already back-to-front', () => {
-    const order = computeDepthOrder([
-      { eid: 3, y: 100, order: 1 },
-      { eid: 4, y: 200, order: 2 },
-      { eid: 5, y: 300, order: 3 },
-    ]);
-    expect(order).toEqual([3, 4, 5]);
-  });
-
-  it('handles mixed order and negative coordinates', () => {
-    const order = computeDepthOrder([
-      { eid: 7, y: -50, order: 1 },
-      { eid: 6, y: 500, order: 2 },
-      { eid: 8, y: 0, order: 3 },
-    ]);
-    expect(order).toEqual([7, 8, 6]);
-  });
-
-  it('returns an empty array for no entities', () => {
-    expect(computeDepthOrder([])).toEqual([]);
-  });
-
-  it('does not mutate the input array', () => {
-    const input = [
-      { eid: 1, y: 300, order: 0 },
-      { eid: 2, y: 100, order: 1 },
-    ];
-    computeDepthOrder(input);
-    expect(input[0]).toEqual({ eid: 1, y: 300, order: 0 });
-    expect(input[1]).toEqual({ eid: 2, y: 100, order: 1 });
-  });
-});
 
 describe('C-376 AC-4 — zIndex render path (PixiJS sortableChildren)', () => {
   it('assigns the raw float y as zIndex (exactly 192.5, never rounded)', () => {
@@ -2375,5 +2322,88 @@ describe('C-376 AC-4 — zIndex render path (PixiJS sortableChildren)', () => {
         expect(band, `band ${band} below entity y ${y}`).toBeLessThan(computeEntityZIndex(y));
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-377 AC-2 — HiDPI canvas init options
+// ---------------------------------------------------------------------------
+
+import { resolvePixiInitOptions } from '../pixi_init_options.ts';
+import { snapToDevicePixels } from '../rendering/pixel_snap.ts';
+
+describe('C-377 AC-2 — PixiJS app init options (HiDPI)', () => {
+  const canvas = {} as HTMLCanvasElement;
+
+  it('allocates the backing canvas at devicePixelRatio with autoDensity', () => {
+    const opts = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 2 });
+    expect(opts.resolution).toBe(2);
+    expect(opts.autoDensity).toBe(true);
+    expect(opts.antialias).toBe(false);
+    expect(opts.preference).toBe('webgl');
+  });
+
+  it('clamps resolution to 2 on high-DPR displays', () => {
+    const opts = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 3 });
+    expect(opts.resolution).toBe(2);
+  });
+
+  it('floors resolution to 1 when devicePixelRatio is explicitly 0', () => {
+    // `??` does not catch an injected 0 — Math.max(1, ...) prevents a
+    // degenerate resolution of 0 (C-377 AC-2).
+    const opts = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 0 });
+    expect(opts.resolution).toBe(1);
+  });
+
+  it('preserveDrawingBuffer is false without the e2e flag and true with it', () => {
+    const prod = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 1 });
+    expect(prod.preserveDrawingBuffer).toBe(false);
+
+    const e2e = resolvePixiInitOptions({ canvas }, { isE2E: true, devicePixelRatio: 1 });
+    expect(e2e.preserveDrawingBuffer).toBe(true);
+  });
+
+  it('antialias defaults to false for pixel art (MSAA pointless)', () => {
+    const opts = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 1 });
+    expect(opts.antialias).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-377 AC-3 — device-pixel snap on the world container transform
+// ---------------------------------------------------------------------------
+
+describe('C-377 AC-3 — world container lands on whole device pixels', () => {
+  it('worldContainer.x * resolution is an integer at DPR 1', () => {
+    // Fractional camera position × scale produces a fractional CSS x.
+    const rawX = 800 / 2 - 123.456 * 4; // = -93.824
+    const snapped = snapToDevicePixels(rawX, 1);
+    expect(snapped * 1).toBe(Math.round(snapped * 1));
+    expect(Number.isInteger(snapped)).toBe(true);
+  });
+
+  it('worldContainer.x * resolution is an integer at DPR 2 (rounding to whole CSS pixels is NOT enough)', () => {
+    const rawX = 800 / 2 - 123.456 * 4; // = -93.824
+    const snapped = snapToDevicePixels(rawX, 2);
+    // A whole-CSS-pixel round would give -94 → -188 device px (integer),
+    // but a half-device landing (-93.5) must also snap to whole device px.
+    expect(snapped * 2).toBe(Math.round(snapped * 2));
+    expect(Number.isInteger(snapped * 2)).toBe(true);
+  });
+
+  it('preserves the continuous camera position (snap applies to the render transform only)', () => {
+    // The helper is the render-transform rounding; the camera itself stays
+    // continuous because game_world reads the raw lerped position and only
+    // the final container x/y are rounded.
+    const rawX = 800 / 2 - 123.456 * 4;
+    const snapped = snapToDevicePixels(rawX, 2);
+    // The snap moves at most half a device pixel (in CSS units).
+    expect(Math.abs(snapped - rawX)).toBeLessThanOrEqual(0.25);
+  });
+
+  it('handles non-integer zoom (dialogue) by snapping anyway', () => {
+    const rawX = 800 / 2 - 123.456 * (4 * 1.5); // zoom 1.5 → scale 6
+    const snapped = snapToDevicePixels(rawX, 2);
+    expect(Number.isInteger(snapped * 2)).toBe(true);
   });
 });

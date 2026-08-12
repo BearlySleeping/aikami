@@ -1,11 +1,8 @@
 // packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts
 
 import {
-  Buffer,
-  BufferUsage,
   Container,
   GlProgram,
-  GpuProgram,
   Mesh,
   MeshGeometry,
   Shader,
@@ -15,97 +12,22 @@ import {
 import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
-// TilemapChunkRenderer — WebGPU-optimized chunked tilemap Mesh pipeline
+// TilemapChunkRenderer — chunked tilemap Mesh pipeline
 //
-// Contract C-171: Replaces RenderTexture baking with a spatial chunking
-// architecture. The map is divided into uniform 32×32 tile chunks; each
-// chunk is a single PixiJS `Mesh` backed by `Float32Array` position/UV
-// buffers and a `Uint32Array` index buffer. CPU-side frustum culling
-// adds/removes chunks from the scene graph based on the camera AABB.
+// The map is divided into uniform 32×32 tile chunks; each chunk is a
+// single PixiJS `Mesh` backed by `Float32Array` position/UV buffers and
+// a `Uint32Array` index buffer. CPU-side frustum culling toggles
+// `mesh.visible` based on the camera AABB — chunks are NEVER reparented,
+// so the scene graph stays stable across camera pans.
 //
 // GC Mitigation: `autoGarbageCollect = false` on every `MeshGeometry`
 // and its position/UV buffers (PixiJS v8 unbinding bug guard).
 //
-// Shader: Custom WGSL via GpuProgram.from() — single-texture vertex/fragment
-// shader declared inline. Uses @group(2) for texture/sampler (PixiJS v8
-// Mesh resource convention). Future: upgrade to texture_2d_array<f32>.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Custom WGSL shader for tilemap chunk rendering
-//
-// Vertex shader: receives position (@location 0) and UV (@location 1),
-// applies the global transform matrix (group 0, injected by PixiJS),
-// and passes UV through to the fragment shader.
-//
-// Fragment shader: samples the tileset texture (group 2, binding 0)
-// using the nearest-neighbour sampler (group 2, binding 1) for crisp
-// pixel-art tile rendering.
-// ---------------------------------------------------------------------------
-
-/** WGSL source for the tilemap chunk vertex + fragment shader. */
-const TILEMAP_CHUNK_WGSL = /* wgsl */ `
-  struct VertexInput {
-    @location(0) aPosition: vec2<f32>,
-    @location(1) aUV: vec2<f32>,
-  };
-
-  struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) vUV: vec2<f32>,
-  };
-
-  @vertex
-  fn mainVertex(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    output.position = vec4<f32>(input.aPosition, 0.0, 1.0);
-    output.vUV = input.aUV;
-    return output;
-  }
-
-  @group(2) @binding(0) var uTexture: texture_2d<f32>;
-  @group(2) @binding(1) var uSampler: sampler;
-
-  @fragment
-  fn mainFragment(@location(0) vUV: vec2<f32>) -> @location(0) vec4<f32> {
-    return textureSample(uTexture, uSampler, vUV);
-  }
-`;
-
-/** Cached GpuProgram instance — created once and reused by all chunks. */
-let _cachedGpuProgram: GpuProgram | undefined;
-
-/**
- * Returns a shared GpuProgram for all tilemap chunks.
- *
- * Created lazily on first call and cached. All chunks share the same
- * shader (identical WGSL source) — only geometry and texture differ.
- */
-const _getSharedGpuProgram = (): GpuProgram => {
-  if (!_cachedGpuProgram) {
-    _cachedGpuProgram = GpuProgram.from({
-      name: 'tilemap-chunk',
-      vertex: {
-        source: TILEMAP_CHUNK_WGSL,
-        entryPoint: 'mainVertex',
-      },
-      fragment: {
-        source: TILEMAP_CHUNK_WGSL,
-        entryPoint: 'mainFragment',
-      },
-    });
-  }
-  return _cachedGpuProgram;
-};
-
-// ---------------------------------------------------------------------------
-// GLSL fallback shader for WebGL2 (C-179)
-//
-// When WebGPU is unavailable, PixiJS falls back to WebGL2. The WGSL
-// shader above has no glProgram — causing a "Mesh shader has no
-// glProgram" warning per frame and blank rendering. This GLSL fallback
-// renders the tileset as a static 2D texture (no texture-array or
-// animation support — acceptable degradation).
+// Shader: GLSL only (WebGL2). The WGSL/WebGPU path was removed in C-377 —
+// it never executed (nothing selects WebGPU), and a correct WGSL port
+// needs the @group(0) global uniform layout that differs between PixiJS
+// minor versions. `rendererPreference` stays in the options type, but the
+// renderer is WebGL2.
 // ---------------------------------------------------------------------------
 
 const TILEMAP_CHUNK_GLSL_VERTEX = /* glsl */ `#version 300 es
@@ -141,11 +63,11 @@ const TILEMAP_CHUNK_GLSL_FRAGMENT = /* glsl */ `#version 300 es
 
   void main(void) {
     fragColor = texture(uTexture, vUV);
-    // aTextureLayer is supplied by the geometry (C-177) for the WGSL
-    // texture-array path. The GLSL fallback is static — textureLayers are
-    // always 0 — so this branch is unreachable at runtime, but referencing
-    // vLayer keeps the attribute active in the compiled program and silences
-    // PixiJS's "attribute not present in the shader" warning.
+    // aTextureLayer is supplied by the geometry (C-177) for the (removed)
+    // WGSL texture-array path. The GLSL fallback is static — textureLayers
+    // are always 0 — but referencing vLayer keeps the attribute active in
+    // the compiled program and silences PixiJS's "attribute not present in
+    // the shader" warning.
     if (vLayer != 0.0) {
       fragColor = vec4(0.0);
     }
@@ -159,15 +81,14 @@ let _cachedGlProgram: GlProgram | undefined;
  * Returns a shared GlProgram for all tilemap chunks.
  *
  * Created lazily on first call and cached. All chunks share the same
- * GLSL source — only geometry and texture differ. This is the WebGL2
- * fallback for the WGSL shader above.
+ * GLSL source — only geometry and texture differ.
  */
 const _getSharedGlProgram = (): GlProgram => {
   if (!_cachedGlProgram) {
     _cachedGlProgram = GlProgram.from({
       vertex: TILEMAP_CHUNK_GLSL_VERTEX,
       fragment: TILEMAP_CHUNK_GLSL_FRAGMENT,
-      name: 'tilemap-gl-fallback',
+      name: 'tilemap-chunk',
     });
   }
   return _cachedGlProgram;
@@ -198,21 +119,21 @@ const UV_COMPONENTS = 2;
 /**
  * A uniform 32×32 tile chunk backed by a PixiJS Mesh.
  *
- * The chunk owns its MeshGeometry and Mesh. When `isActive` is false,
- * the Mesh is removed from the scene graph (frustum culled). When true,
- * it is re-added.
+ * The chunk owns its MeshGeometry and Mesh. Frustum culling toggles
+ * `mesh.visible` — the Mesh is never removed from / re-added to the
+ * scene graph, keeping `container.children` stable across camera pans.
  */
-type TilemapChunk = {
+export type TilemapChunk = {
   /** Chunk grid X (column index in chunk-space). */
   gridX: number;
   /** Chunk grid Y (row index in chunk-space). */
   gridY: number;
-  /** The PixiJS Mesh for this chunk (custom WGSL shader, not TextureShader). */
+  /** The tile layer this chunk was built from. */
+  layerName: string;
+  /** The PixiJS Mesh for this chunk (GLSL shader, not TextureShader). */
   mesh: Mesh<MeshGeometry, Shader>;
   /** The MeshGeometry holding the position/UV/index buffers. */
   geometry: MeshGeometry;
-  /** Whether the chunk is currently in the scene graph. */
-  isActive: boolean;
   /** World-space pixel bounds (for frustum culling). */
   bounds: { x: number; y: number; width: number; height: number };
 };
@@ -225,20 +146,30 @@ export type TilemapChunkRendererOptions = {
   tilemap: TilemapData;
   /** The loaded tileset texture (2D image). */
   tilesetTexture: Texture;
+  /**
+   * Optional shared uniform group. When provided, all chunks bind this
+   * group — used by {@link renderTilemap} so every layer of a map shares
+   * ONE group (C-377 AC-5). When omitted, a fresh group is created and
+   * returned (direct callers).
+   */
+  globalUniforms?: UniformGroup;
 };
 
 /**
  * Result of building the chunked tilemap mesh pipeline.
+ *
+ * Carries the owned chunk records so the culler can iterate them without
+ * walking the scene graph (C-377 AC-4).
  */
 export type TilemapChunkRenderResult = {
   /** A Container holding all chunk Meshes. Add to the world container. */
   container: Container;
   /** Number of chunks created. */
   chunkCount: number;
-  /** Global uniform group for animation time. */
+  /** Chunk records owned by the renderer — the culler's iteration source. */
+  chunks: readonly TilemapChunk[];
+  /** Global uniform group the chunk meshes are bound to. */
   globalUniforms: UniformGroup;
-  /** Storage buffer for animation tables. */
-  animStorageBuffer: Buffer;
 };
 
 // ---------------------------------------------------------------------------
@@ -253,10 +184,8 @@ export type TilemapChunkRenderResult = {
  * Uint32Array index buffers. Applies autoGarbageCollect = false on
  * all geometry and buffer objects (PixiJS v8 GC mitigation).
  *
- * Uses a custom WGSL shader via GpuProgram.from() — single shared
- * GpuProgram instance cached across all chunks. Each chunk Mesh
- * gets its own Shader with the chunk's tileset texture bound as
- * a resource.
+ * All chunks of a layer share ONE Shader (identical GLSL source, texture
+ * and uniform group) — per-chunk Shader allocation was removed in C-377.
  *
  * The returned Container holds all chunk Meshes. Frustum culling is
  * performed externally via {@link frustumCullChunks}.
@@ -282,22 +211,28 @@ export const buildTilemapChunks = (
   // Build tileset frame lookup (GID → UV rectangle)
   const tilesetEntries = _buildTilesetEntries(tilemap.tilesets);
 
-  // Global Uniforms for time
-  const globalUniforms = new UniformGroup({
-    uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
-    uTime: { value: 0, type: 'f32' },
+  // Global Uniforms for time. renderTilemap passes ONE shared group so all
+  // layers of a map bind the same group (C-377 AC-5); direct callers get a
+  // fresh group returned here.
+  const globalUniforms =
+    options.globalUniforms ??
+    new UniformGroup({
+      uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
+      uTime: { value: 0, type: 'f32' },
+    });
+
+  // ONE shared Shader for this renderer call (per layer when called from
+  // renderTilemap, which builds one layer at a time).
+  const shader = new Shader({
+    glProgram: _getSharedGlProgram(),
+    resources: {
+      globals: globalUniforms,
+      uTexture: tilesetTexture.source,
+      uSampler: tilesetTexture.source.style,
+    },
   });
 
-  // Storage buffer for animation tables (MAX_TILE_TYPES=256, 4 floats per entry = 4096 bytes)
-  const animStorageBuffer = new Buffer({
-    data: new Float32Array(256 * 4),
-    usage: BufferUsage.STORAGE | BufferUsage.COPY_DST,
-  });
-
-  // Shared GpuProgram — created once, used by all chunks
-  const gpuProgram = _getSharedGpuProgram();
-
-  let chunkCount = 0;
+  const chunks: TilemapChunk[] = [];
 
   // Process visible non-collision layers
   for (const layer of tilemap.layers) {
@@ -317,23 +252,20 @@ export const buildTilemapChunks = (
           chunkGridY: cy,
           tilemap,
           tilesetEntries,
-          tilesetTexture,
           tilePixelW,
           tilePixelH,
-          gpuProgram,
-          globalUniforms,
-          animStorageBuffer,
+          shader,
         });
 
         if (chunk) {
           container.addChild(chunk.mesh);
-          chunkCount += 1;
+          chunks.push(chunk);
         }
       }
     }
   }
 
-  return { container, chunkCount, globalUniforms, animStorageBuffer };
+  return { container, chunkCount: chunks.length, chunks, globalUniforms };
 };
 
 // ---------------------------------------------------------------------------
@@ -341,40 +273,40 @@ export const buildTilemapChunks = (
 // ---------------------------------------------------------------------------
 
 /**
- * Applies CPU-side frustum culling to all chunk children of a container.
+ * Applies CPU-side frustum culling to an owned chunk array.
  *
  * Chunks whose world-space bounds fall outside the camera AABB (plus
- * overdraw margin) are removed from the scene graph. Chunks that enter
- * the viewport are re-added. This ensures zero-cost GPU culling — only
- * visible chunks consume draw calls.
+ * overdraw margin) are hidden via `mesh.visible = false`. Chunks that
+ * enter the viewport are shown again. The scene graph is NEVER mutated —
+ * `container.children` stays constant for the life of the map, so a
+ * chunk that leaves the viewport is always discoverable when the camera
+ * returns (C-377 AC-4 — the pre-contract culler removed children and
+ * permanently lost them).
  *
- * @param container - The Container holding all chunk Meshes.
+ * @param chunks - The owned chunk records (from {@link TilemapChunkRenderResult.chunks}).
  * @param cameraX - Camera X position (world-space, top-left of viewport).
  * @param cameraY - Camera Y position (world-space, top-left of viewport).
  * @param viewportWidth - Width of the viewport in world-space pixels.
  * @param viewportHeight - Height of the viewport in world-space pixels.
+ * @returns Counts of visible vs total chunks for render diagnostics.
  */
 export const frustumCullChunks = (
-  container: Container,
+  chunks: readonly TilemapChunk[],
   cameraX: number,
   cameraY: number,
   viewportWidth: number,
   viewportHeight: number,
-): void => {
-  // Viewport AABB with overdraw margin
+): { visible: number; total: number } => {
+  // Viewport AABB with overdraw margin (world pixels)
   const vpLeft = cameraX - OVERDRAW_MARGIN;
   const vpRight = cameraX + viewportWidth + OVERDRAW_MARGIN;
   const vpTop = cameraY - OVERDRAW_MARGIN;
   const vpBottom = cameraY + viewportHeight + OVERDRAW_MARGIN;
 
-  for (const child of container.children) {
-    const mesh = child as Mesh;
-    const chunkMeta = (mesh as Mesh & { _chunkMeta?: TilemapChunk })._chunkMeta;
-    if (!chunkMeta) {
-      continue;
-    }
+  let visible = 0;
 
-    const { bounds } = chunkMeta;
+  for (const chunk of chunks) {
+    const { bounds } = chunk;
 
     // AABB intersection test
     const overlaps =
@@ -383,20 +315,13 @@ export const frustumCullChunks = (
       bounds.y < vpBottom &&
       bounds.y + bounds.height > vpTop;
 
-    if (overlaps && !chunkMeta.isActive) {
-      // Re-add — chunk entered viewport
-      if (!mesh.parent) {
-        container.addChild(mesh);
-      }
-      chunkMeta.isActive = true;
-    } else if (!overlaps && chunkMeta.isActive) {
-      // Remove — chunk left viewport
-      if (mesh.parent) {
-        mesh.parent.removeChild(mesh);
-      }
-      chunkMeta.isActive = false;
+    chunk.mesh.visible = overlaps;
+    if (overlaps) {
+      visible += 1;
     }
   }
+
+  return { visible, total: chunks.length };
 };
 
 // ---------------------------------------------------------------------------
@@ -424,8 +349,8 @@ const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry
       const px = margin + col * (tilewidth + spacing);
       const py = margin + row * (tileheight + spacing);
       // Half-pixel inset prevents texture bleeding at tile boundaries.
-      // Without this, UVs land exactly on texel edges where nearest-neighbor
-      // behavior is implementation-defined across WebGPU backends.
+      // Kept as-is (C-377 documents the coupling): the correct fix is 1px
+      // edge extrusion in the atlas packer, owned by C-378.
       return {
         u0: (px + 0.5) / imagewidth,
         v0: (py + 0.5) / imageheight,
@@ -481,18 +406,12 @@ type BuildChunkOptions = {
   tilemap: TilemapData;
   /** Resolved tileset entries with UV lookup. */
   tilesetEntries: TilesetEntry[];
-  /** The loaded tileset texture. */
-  tilesetTexture: Texture;
   /** Tile pixel width. */
   tilePixelW: number;
   /** Tile pixel height. */
   tilePixelH: number;
-  /** Shared GpuProgram for all chunks. */
-  gpuProgram: GpuProgram;
-  /** Global uniform group for time. */
-  globalUniforms: UniformGroup;
-  /** Storage buffer for animation tables. */
-  animStorageBuffer: Buffer;
+  /** Shared Shader for all chunks of this layer. */
+  shader: Shader;
 };
 
 /**
@@ -502,26 +421,14 @@ type BuildChunkOptions = {
  * buffers and Uint32Array index buffer. Sets autoGarbageCollect = false
  * on the geometry and all buffer objects (C-171 AC-3 GC mitigation).
  *
- * Each chunk gets its own Shader bound to the chunk's tileset texture
- * via resources (`uTexture`, `uSampler`). All chunks share the same
- * GpuProgram (cached WGSL source).
+ * All chunks share the layer's Shader (C-377) — geometry is the only
+ * per-chunk allocation.
  *
  * @returns The chunk metadata, or undefined if the chunk has no visible tiles.
  */
 const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
-  const {
-    layer,
-    chunkGridX,
-    chunkGridY,
-    tilemap,
-    tilesetEntries,
-    tilesetTexture,
-    tilePixelW,
-    tilePixelH,
-    gpuProgram,
-    globalUniforms,
-    animStorageBuffer,
-  } = options;
+  const { layer, chunkGridX, chunkGridY, tilemap, tilesetEntries, tilePixelW, tilePixelH, shader } =
+    options;
 
   // Compute tile range for this chunk
   const tileStartX = chunkGridX * CHUNK_SIZE;
@@ -661,30 +568,8 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     geometry.indexBuffer.autoGarbageCollect = false;
   }
 
-  // Create a Shader per chunk — binds globalUniforms, animation table, texture.
-  // Passes both gpuProgram (WGSL for WebGPU) and glProgram (GLSL for WebGL2
-  // fallback) so the shader works on both backends without console spam.
-  //
-  // C-375 AC-4: the GLSL fallback declares `uniform sampler2D uTexture`, so
-  // the source must ALSO be bound under `uTexture` (not just `uTextures` for
-  // WGSL) — otherwise WebGL2 renders blank/dark tiles (missing sampler).
-  const shader = new Shader({
-    gpuProgram,
-    glProgram: _getSharedGlProgram(),
-    resources: {
-      globals: globalUniforms,
-      animTable: animStorageBuffer,
-      uTextures: tilesetTexture.source,
-      uTexture: tilesetTexture.source,
-      uSampler: tilesetTexture.source.style,
-    },
-  });
-
-  // Create the Mesh with custom WGSL shader.
-  // Note: we do NOT set mesh.texture — our custom Shader binds the
-  // texture via resources (uTexture, uSampler), not via the
-  // TextureShader.texture property. Setting mesh.texture would try
-  // to write to shader.texture which does not exist on plain Shader.
+  // The Mesh uses the layer's shared Shader (C-377 AC-6: glProgram only —
+  // the WGSL/WebGPU path is deleted).
   const mesh = new Mesh({
     geometry,
     shader,
@@ -701,17 +586,14 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     height: (tileEndY - tileStartY) * tilePixelH,
   };
 
-  const chunk: TilemapChunk = {
+  return {
     gridX: chunkGridX,
     gridY: chunkGridY,
+    layerName: layer.name,
     mesh,
     geometry,
-    isActive: true,
     bounds,
   };
-
-  // Attach chunk metadata to the mesh for frustum culling lookups
-  (mesh as Mesh & { _chunkMeta?: TilemapChunk })._chunkMeta = chunk;
-
-  return chunk;
 };
+
+export { CHUNK_SIZE, OVERDRAW_MARGIN };

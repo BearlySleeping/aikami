@@ -311,6 +311,8 @@ export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
 // module path directly (e.g. engine tests).
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
+export type { PixiInitOptions } from './pixi_init_options.ts';
+export { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
 export {
   AnimationController,
   getLpcFrameIndex,
@@ -343,9 +345,11 @@ export {
   packRecipeToUboBuffer,
   SpriteComposer,
 } from './rendering/sprite_composer.ts';
+export { installNearestTextureDefault } from './rendering/texture_defaults.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type {
+  TilemapChunk,
   TilemapChunkRendererOptions,
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
