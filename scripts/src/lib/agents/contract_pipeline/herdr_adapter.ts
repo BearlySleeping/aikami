@@ -121,6 +121,22 @@ const withEnvArgs = (base: string[], env: string[]): string[] => {
   return args;
 };
 
+/**
+ * 🔴 Force the same PATH the orchestrator itself resolved with into every
+ * worker/review pane. Without this, a freshly created herdr tab depends on
+ * whatever PATH the herdr daemon (or that pane's own shell-init/direnv hook
+ * timing) happens to produce — which is NOT guaranteed to match the
+ * direnv/nix-loaded shell `bun run contract` was launched from. Diverging
+ * PATH here is the root cause behind "Bun is not defined" / "herdr MCP
+ * tooling cannot resolve bun" errors surfacing inside worker and review
+ * panes even when `bun` is on the operator's own PATH: the pane silently
+ * inherited a different, bun-less PATH and pi's extension host fell back to
+ * plain Node instead of shelling out to `bun` (per `.pi/settings.json`'s
+ * `npmCommand: ["bun"]`). The orchestrator's own process is always launched
+ * via `bun run ...`, so its PATH is trustworthy — propagate it verbatim.
+ */
+const inheritedPathEnv = (): string[] => (process.env.PATH ? [`PATH=${process.env.PATH}`] : []);
+
 /** Path of the per-run GH_TOKEN file (mode 0600 — never passed as a CLI arg). */
 const ghTokenFilePath = (options: { repoRoot: string; runId: string }): string =>
   join(options.repoRoot, '.pi/contract-runs', options.runId, 'gh-token');
@@ -173,6 +189,7 @@ export type ContractHerdrAdapterInterface = {
     contractPath: string;
     reviewDecisionPath: string;
     yolo?: boolean;
+    useWorktreeCwd?: boolean;
   }): Promise<string>;
   sendReviewMessage(options: { paneId: string; message: string }): Promise<void>;
 };
@@ -631,6 +648,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_CONTRACT_PATH=${request.contractPath}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${request.resultPath}`,
       'HERDR_DISABLE_SOUND=1',
+      ...inheritedPathEnv(),
     ];
     if (this._workspacePath) {
       env.push(`CONTRACT_PIPELINE_WORKSPACE_PATH=${this._workspacePath}`);
@@ -866,6 +884,16 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     contractPath: string;
     reviewDecisionPath: string;
     yolo?: boolean;
+    /** Run the review pane from the worktree checkout instead of the repo
+     *  root. Needed whenever the captain must inspect or touch the actual
+     *  implementation (YOLO, post-verify-failure, fallback-recovery) —
+     *  everything it would push/test lives on the worktree's branch, not
+     *  root. Plain READY-mode reviews stay at the repo root: their job is
+     *  GH-admin (gh_create_pr / gh pr ready), and running `gh` from inside a
+     *  linked worktree is a known source of "worktree" errors (see
+     *  yolo-overrides.md's merge-fallback note) — not worth the risk when
+     *  there's no code to inspect yet. */
+    useWorktreeCwd?: boolean;
   }): Promise<string> {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
@@ -880,6 +908,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'CONTRACT_PIPELINE_ROLE=review',
       `CONTRACT_PIPELINE_CONTRACT_PATH=${options.contractPath}`,
       `CONTRACT_PIPELINE_REVIEW_PATH=${options.reviewDecisionPath}`,
+      ...inheritedPathEnv(),
     ];
     if (this._workspacePath) {
       reviewEnv.push(`CONTRACT_PIPELINE_WORKSPACE_PATH=${this._workspacePath}`);
@@ -903,7 +932,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         '--workspace',
         this._workspaceId,
         '--cwd',
-        options.yolo && this._workspacePath ? this._workspacePath : this._repoRoot,
+        (options.useWorktreeCwd ?? options.yolo) && this._workspacePath
+          ? this._workspacePath
+          : this._repoRoot,
         '--label',
         'review',
         '--no-focus',

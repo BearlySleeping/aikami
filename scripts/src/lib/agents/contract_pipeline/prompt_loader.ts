@@ -173,11 +173,13 @@ const YOLO_HEADER = [
 
 /** Load one profile's markdown file, with a short header for yolo (its file
  *  is shared with other pi commands and doesn't self-identify as a review
- *  profile). Returns '' if the file is missing so callers can fall back. */
+ *  profile). Falls back to MANUAL_REVIEW_FALLBACK if the file is missing —
+ *  a missing profile file must never leave the captain with NO tool-
+ *  permission guidance at all. */
 const loadProfileFile = (options: { repoRoot: string; profile: ReviewProfile }): string => {
   const path = resolve(options.repoRoot, PROFILE_PROMPT_FILES[options.profile]);
   if (!existsSync(path)) {
-    return '';
+    return MANUAL_REVIEW_FALLBACK;
   }
   const body = readFileSync(path, 'utf-8');
   return options.profile === 'yolo' ? [YOLO_HEADER, '', body].join('\n') : `\n${body}`;
@@ -230,10 +232,14 @@ const buildPrInfo = (options: {
 /**
  * Load the review captain prompt with exactly one mutually exclusive profile inject.
  *
- * Profiles:
- * - `yolo`: CodeRabbit-only automation, no code editing, no git, no tests.
+ * Profiles (each backed by its own file in PROFILE_PROMPT_FILES):
+ * - `yolo`: CodeRabbit-only automation, no manual code editing, no tests.
  * - `ready`: Human-in-the-loop, draft=false, standard review workflow.
- * - `fallback_recovery`: Verifier loop exhausted — diagnostics only, no implementation.
+ * - `post_verify_failure`: Verify passed but branch push / PR creation failed
+ *   afterward — infra troubleshooting, not a code problem.
+ * - `fallback_recovery`: Verifier ↔ implementer loop exhausted — diagnose
+ *   (optionally via AskClaude) and hand off to the implementer via `change`;
+ *   edit code directly only for small fixes.
  */
 export const loadReviewPrompt = (options: {
   repoRoot: string;
@@ -258,9 +264,12 @@ export const loadReviewPrompt = (options: {
   );
 
   const isYolo = options.profile === 'yolo';
-  const isReady = options.profile === 'ready';
-  const isFallback = options.profile === 'fallback_recovery';
-  const draftFlag = isYolo || isReady ? 'false' : 'true';
+  // Only 'ready' produces a non-draft PR straight away; 'post_verify_failure'
+  // and 'fallback_recovery' don't have a PR yet at all (draftFlag is moot —
+  // their own prompt files tell the captain to create one with draft:false
+  // once it's actually fixed the block), and the bare-file-missing fallback
+  // below stays conservative with a draft PR.
+  const draftFlag = isYolo || options.profile === 'ready' ? 'false' : 'true';
 
   const prInfo = buildPrInfo({
     prUrl: options.prUrl,
@@ -269,47 +278,7 @@ export const loadReviewPrompt = (options: {
     draftFlag,
   });
 
-  const profileInject: string = (() => {
-    if (isYolo) {
-      // Load yolo-overrides.md for full YOLO instructions
-      const yoloOverridePath = resolve(options.repoRoot, '.pi/prompts/yolo-overrides.md');
-      let yoloOverrides = '';
-      if (existsSync(yoloOverridePath)) {
-        yoloOverrides = [
-          '',
-          '---',
-          '## 📄 YOLO Overrides (from .pi/prompts/yolo-overrides.md)',
-          readFileSync(yoloOverridePath, 'utf-8'),
-        ].join('\n');
-      }
-      return [YOLO_INJECT, yoloOverrides].filter(Boolean).join('\n');
-    }
-    if (isReady) {
-      return READY_INJECT;
-    }
-    if (isFallback) {
-      return FALLBACK_RECOVERY_INJECT;
-    }
-    // Default: no profile inject — bare prompt (manual review with draft=true).
-    return [
-      '',
-      '## 📋 Manual Review Mode',
-      '',
-      'Create a draft PR (`gh_create_pr` with `draft: true`) and wait for the user.',
-      'The user will direct you to check CodeRabbit, apply fixes, or merge.',
-      '',
-      '### Decision mapping',
-      '| User says | Decision |',
-      '|---|---|',
-      '| "looks good", "approve" | `approve` |',
-      '| "merge it", "merge" | `merge` |',
-      '| "needs changes", "fix" | `change` |',
-      '| "close it", "reject" | `reject` |',
-      '',
-      '🔴 Never call `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` — the orchestrator',
-      'handles these with proper cleanup.',
-    ].join('\n');
-  })();
+  const profileInject = loadProfileFile({ repoRoot: options.repoRoot, profile: options.profile });
 
   const autofixCycle = options.autofixCycle ?? 1;
   const maxCycles = options.maxAutofixCycles ?? 2;

@@ -99,11 +99,29 @@ const verifierFeedback = (options: {
   const prevVerify = [...options.manifest.attempts]
     .reverse()
     .find((c) => c.role === 'verifier' && c.result);
-  if (!prevVerify?.result) {
+  // 🔴 If this implement attempt was triggered by the fallback-recovery
+  // review captain bouncing the run back with `change`, its diagnosis
+  // (often the product of consulting AskClaude/Opus for a second opinion)
+  // is the most current, most specific signal available — more specific
+  // than the stale verifier findings that already exhausted the loop once.
+  // Without this, `contract_review_decision`'s `summary` was written to the
+  // manifest and then never read again — the captain's diagnosis was
+  // discarded and the implementer re-ran blind on the same old findings.
+  const reviewFeedback =
+    options.manifest.reviewDecision?.decision === 'change'
+      ? options.manifest.reviewDecision.summary
+      : undefined;
+  if (!prevVerify?.result && !reviewFeedback) {
     return undefined;
   }
-  const parts = [prevVerify.result.summary];
-  parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
+  const parts: string[] = [];
+  if (reviewFeedback) {
+    parts.push('## Review Captain diagnosis (fallback recovery)', reviewFeedback, '');
+  }
+  if (prevVerify?.result) {
+    parts.push(prevVerify.result.summary);
+    parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
+  }
   if (prevImpl?.result) {
     parts.push(
       '',
@@ -888,6 +906,18 @@ export const runContractPipeline = async (options: {
         const before = captureGitState(cwdForGit);
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
+        // 🔴 Consume the review captain's `change` decision exactly once, as
+        // feedback for THIS implement attempt. `manifest.reviewDecision` is
+        // never cleared by `transition()` — left alone, the NEXT time the
+        // pipeline reaches `review` (after this implement→verify round
+        // trip), `decision = manifest.reviewDecision ?? await
+        // waitForReviewDecision(...)` would immediately replay this SAME
+        // stale decision instead of waiting for a fresh one from the
+        // captain, silently bouncing back to implement forever without ever
+        // pausing for a real review.
+        if (stage === 'implement' && manifest.reviewDecision?.decision === 'change') {
+          manifest.reviewDecision = undefined;
+        }
 
         const interactiveStage =
           !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
@@ -1253,6 +1283,10 @@ export const runContractPipeline = async (options: {
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
             yolo: isYolo,
+            // Blocked reviews (post-verify-failure, fallback-recovery) need
+            // to inspect/push/fix the actual implementation branch — that
+            // only exists in the worktree, not the repo root.
+            useWorktreeCwd: isYolo || isBlockedReview,
           });
           // 🔔 Review spawned — chime regardless of pipeline outcome (clean
           // pass or blocked review). Delayed + fire-and-forget so the pane
