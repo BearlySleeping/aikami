@@ -30,8 +30,14 @@ let {
 {/if}
 
 {#if viewModel.isSigningIn}
-  <button type="button" class="{buttonClass}" disabled>
-    <span class="loading loading-spinner"></span>
+  <button
+    type="button"
+    class="{buttonClass}"
+    disabled
+    aria-busy="true"
+    aria-label={viewModel.isLoggedIn ? 'Signing out' : 'Signing in'}
+  >
+    <span class="loading loading-spinner" aria-hidden="true"></span>
     {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
   </button>
 {:else if viewModel.isLoggedIn}

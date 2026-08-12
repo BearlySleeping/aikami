@@ -21,7 +21,7 @@ type ManualStep = { title: string; url?: string; commands?: string[]; detail?: s
 const checkHostingSite = async (projectId: string, siteId: string): Promise<boolean> => {
   const { code } = await run([
     'bunx',
-    'firebase-tools@latest',
+    'firebase-tools@15.26.0',
     'hosting:sites:get',
     siteId,
     `--project=${projectId}`,
@@ -32,7 +32,7 @@ const checkHostingSite = async (projectId: string, siteId: string): Promise<bool
 const createHostingSite = async (projectId: string, siteId: string): Promise<boolean> => {
   const { code } = await run([
     'bunx',
-    'firebase-tools@latest',
+    'firebase-tools@15.26.0',
     'hosting:sites:create',
     siteId,
     `--project=${projectId}`,
@@ -47,7 +47,7 @@ export const setupFirebaseHosting = async (
   const checks: Check[] = [];
   const manualSteps: ManualStep[] = [];
   const liveMode = resolveModeFromProjectId(projectId);
-  /** siteId → custom domain, collected for the manual domain-linking step. */
+  /** siteId â†’ custom domain, collected for the manual domain-linking step. */
   const domainMappings: string[] = [];
 
   console.log(fmt.section('Firebase Hosting Sites'));
@@ -55,7 +55,7 @@ export const setupFirebaseHosting = async (
   for (const [appName, appConfig] of Object.entries(APP_CONFIG)) {
     // firebase-hosting apps deploy directly to Hosting; cloud-run-sveltekit
     // apps (e.g. hub) are fronted by a per-mode Hosting site that rewrites
-    // to their Cloud Run service — both need the site to exist.
+    // to their Cloud Run service â€” both need the site to exist.
     if (
       appConfig.serviceType !== 'firebase-hosting' &&
       appConfig.serviceType !== 'cloud-run-sveltekit'
@@ -65,13 +65,13 @@ export const setupFirebaseHosting = async (
 
     const siteId = resolveHostingSiteId(appName as never, projectId);
     if (!siteId) {
-      console.log(fmt.note(`Skipping ${appName} — no site ID`));
+      console.log(fmt.note(`Skipping ${appName} â€” no site ID`));
       continue;
     }
 
     const customDomain = liveMode ? appConfig.customDomains?.[liveMode] : undefined;
     if (customDomain) {
-      domainMappings.push(`${customDomain.padEnd(32)} → ${siteId}`);
+      domainMappings.push(`${customDomain.padEnd(32)} â†’ ${siteId}`);
     }
 
     const exists = await checkHostingSite(projectId, siteId);
@@ -96,8 +96,8 @@ export const setupFirebaseHosting = async (
     }
   }
 
-  // Custom domains can't be provisioned from the CLI — Firebase requires DNS
-  // verification records added through the console — so surface them as an
+  // Custom domains can't be provisioned from the CLI â€” Firebase requires DNS
+  // verification records added through the console â€” so surface them as an
   // explicit manual step instead of silently leaving sites on *.web.app.
   if (domainMappings.length > 0) {
     manualSteps.push({
@@ -105,7 +105,7 @@ export const setupFirebaseHosting = async (
       url: `https://console.firebase.google.com/project/${projectId}/hosting/sites`,
       detail:
         `${domainMappings.join('\n')}\n\n` +
-        'Open each site → "Add custom domain", then add the TXT/A records\n' +
+        'Open each site â†’ "Add custom domain", then add the TXT/A records\n' +
         'Firebase prompts for. SSL certificates are provisioned automatically\n' +
         'once verification passes. Until then each site stays on its default\n' +
         '*.web.app or *.firebaseapp.com URL (derived from the site ID), which\n' +
@@ -129,7 +129,7 @@ if (import.meta.main) {
     process.exit(1);
   }
 
-  console.log(fmt.head(`Firebase Hosting Setup — ${mode} (${projectId})`));
+  console.log(fmt.head(`Firebase Hosting Setup â€” ${mode} (${projectId})`));
   if (dryRun) {
     console.log(fmt.warn('Dry-run mode.\n'));
   }
@@ -139,7 +139,7 @@ if (import.meta.main) {
   // Mirror project_setup/index.ts's rendering so running this script directly
   // still surfaces the steps that can't be automated.
   if (manualSteps.length > 0) {
-    console.log(fmt.head(`═══ Manual Steps (${manualSteps.length}) ═══`));
+    console.log(fmt.head(`â•â•â• Manual Steps (${manualSteps.length}) â•â•â•`));
     for (const [index, step] of manualSteps.entries()) {
       console.log(fmt.step(index + 1, step.title));
       if (step.url) {

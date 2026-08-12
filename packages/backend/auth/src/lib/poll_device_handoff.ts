@@ -34,28 +34,48 @@ export const pollDeviceHandoff = async (options: {
     });
   }
 
-  const ref = getFirestore().collection('device_handoffs').doc(code);
-  const snapshot = await ref.get();
+  const db = getFirestore();
+  const ref = db.collection('device_handoffs').doc(code);
 
-  if (!snapshot.exists) {
+  try {
+    // Read + delete atomically in one transaction so the deep-link/poll race
+    // is single-use by construction: only one transaction can delete the doc
+    // and return the token; the loser observes not-exists and returns null.
+    const customFirebaseSignInToken = await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(ref);
+      if (!snapshot.exists) {
+        return null;
+      }
+
+      // Always delete on read — an expired doc is just as single-use as a
+      // fresh one. Deletion happens inside the transaction.
+      await tx.delete(ref);
+
+      const data = snapshot.data();
+      const createdAt = data?.createdAt ? new Date(data.createdAt as string).getTime() : 0;
+      if (!createdAt || Date.now() - createdAt > HANDOFF_TTL_MS) {
+        logger.debug('pollDeviceHandoff:expired', { code });
+        return null;
+      }
+
+      const token = data?.customToken as string | undefined;
+      if (!token) {
+        return null;
+      }
+
+      return token;
+    });
+
+    if (!customFirebaseSignInToken) {
+      return { customFirebaseSignInToken: null };
+    }
+
+    logger.info('pollDeviceHandoff:resolved', { code });
+    return { customFirebaseSignInToken };
+  } catch (error) {
+    // Transaction aborted (e.g. a racing deep-link poll deleted the doc) —
+    // treat as not-found so the poller simply keeps polling.
+    logger.debug('pollDeviceHandoff:transaction-failed', { code, error });
     return { customFirebaseSignInToken: null };
   }
-
-  // Always delete on read — an expired doc is just as single-use as a fresh one.
-  await ref.delete();
-
-  const data = snapshot.data();
-  const createdAt = data?.createdAt ? new Date(data.createdAt as string).getTime() : 0;
-  if (!createdAt || Date.now() - createdAt > HANDOFF_TTL_MS) {
-    logger.debug('pollDeviceHandoff:expired', { code });
-    return { customFirebaseSignInToken: null };
-  }
-
-  const customFirebaseSignInToken = data?.customToken as string | undefined;
-  if (!customFirebaseSignInToken) {
-    return { customFirebaseSignInToken: null };
-  }
-
-  logger.info('pollDeviceHandoff:resolved', { code });
-  return { customFirebaseSignInToken };
 };

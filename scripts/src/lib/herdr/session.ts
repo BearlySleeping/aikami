@@ -41,9 +41,9 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { hasDirenv } from '../env/direnv_detect';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { PORTS } from '../../../../packages/shared/constants/src/index';
+import { hasDirenv } from '../env/direnv_detect';
 
 // ── Types ──────────────────────────────────────────────────
 

@@ -465,8 +465,17 @@ if (missing > 0) {
   // PUBLIC_ build-config keys are optional — blank is a valid value (log
   // levels, recaptcha key, analytics ids). Never fatal, even with --strict,
   // so CI (release.yml runs --strict) isn't blocked by an unset optional.
-  const missingPublic = missingNames.filter((n) => n.includes('PUBLIC_'));
-  const missingSecret = missingNames.filter((n) => !n.includes('PUBLIC_'));
+  // Classify by the ORIGINAL local env key (GSM names may not carry the
+  // PUBLIC_ prefix), so only local keys starting with PUBLIC_ are treated
+  // as public; everything else is a secret.
+  const gcmToKey = new Map<string, string>();
+  for (const m of appMappings) {
+    for (const [localKey, gcmName] of m.keyToGcm) {
+      gcmToKey.set(gcmName, localKey);
+    }
+  }
+  const missingPublic = missingNames.filter((n) => gcmToKey.get(n)?.startsWith('PUBLIC_'));
+  const missingSecret = missingNames.filter((n) => !gcmToKey.get(n)?.startsWith('PUBLIC_'));
   if (missingPublic.length > 0) {
     console.warn(
       `   ⚠️  ${missingPublic.length} public build-config key(s) not in GSM (stays blank/default):`,

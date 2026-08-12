@@ -232,31 +232,15 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this.isSynthesizing = true;
 
     try {
-      const speechUrl = '/api/voice/v1/audio/speech';
-
-      const response = await fetch(speechUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice: voiceId ?? this.selectedVoice,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          response_format: 'wav',
-        }),
+      const buffer = await this._requestSpeech({
+        text,
+        voice: voiceId ?? this.selectedVoice,
         signal,
       });
-
-      if (!response.ok) {
-        this.error('speak:fetch-failed', {
-          status: response.status,
-          statusText: response.statusText,
-        });
+      if (signal.aborted) {
         return;
       }
-
-      const buffer = await response.arrayBuffer();
-      if (signal.aborted) {
+      if (!buffer) {
         return;
       }
 
@@ -516,10 +500,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private async _synthesizeViaServer(options: { text: string; voice: string }): Promise<void> {
     const { text, voice } = options;
 
-    // Abort any existing synthesis before starting a new one
-    if (this._abortController) {
-      this._abortController.abort();
-    }
+    // Stop existing playback and reset scheduling state (sourceNodes,
+    // nextStartTime, wordBoundaries) before starting new synthesis, and
+    // abort any in-flight speech request.
+    this.stop();
+
     const abortController = new AbortController();
     this._abortController = abortController;
     const { signal } = abortController;
@@ -527,29 +512,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this.isSynthesizing = true;
 
     try {
-      const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          response_format: 'wav',
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        this.error('synthesize:server-fetch-failed', {
-          status: response.status,
-          statusText: response.statusText,
-        });
+      const buffer = await this._requestSpeech({ text, voice, signal });
+      if (signal.aborted) {
         return;
       }
-
-      const buffer = await response.arrayBuffer();
-      if (signal.aborted) {
+      if (!buffer) {
         return;
       }
 
@@ -582,8 +549,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       source.start();
 
       this.isPlaying = true;
+      // Track the source so stop()/dispose() can terminate this playback,
+      // and drop it on ended so a stale onended cannot clear isPlaying while
+      // a newer source is active.
+      this.sourceNodes.push(source);
       source.onended = () => {
-        this.isPlaying = false;
+        const idx = this.sourceNodes.indexOf(source);
+        if (idx !== -1) {
+          this.sourceNodes.splice(idx, 1);
+        }
+        if (this.sourceNodes.length === 0) {
+          this.isPlaying = false;
+        }
       };
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
@@ -596,6 +573,44 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this._abortController = undefined;
       }
     }
+  }
+
+  /**
+   * Shared speech request: POSTs text to the discovered Kokoro REST server
+   * (`_kokoroServerUrl` + `/v1/audio/speech`) and returns the raw WAV bytes.
+   * Used by both {@link speak} and the server synthesis path.
+   *
+   * @returns The WAV ArrayBuffer, or undefined when the request failed.
+   */
+  private async _requestSpeech(options: {
+    text: string;
+    voice: string;
+    signal: AbortSignal;
+  }): Promise<ArrayBuffer | undefined> {
+    const { text, voice, signal } = options;
+
+    const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text,
+        voice,
+        // biome-ignore lint/style/useNamingConvention: API contract field name
+        response_format: 'wav',
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      this.error('tts:speech-request-failed', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return undefined;
+    }
+
+    return await response.arrayBuffer();
   }
 
   /** @inheritdoc */

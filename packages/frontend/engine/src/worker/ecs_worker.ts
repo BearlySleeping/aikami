@@ -1087,13 +1087,23 @@ const tickLoop = (): void => {
       });
     }
 
+    // Validate the writable buffer BEFORE draining events — if none is
+    // available, skip this frame while keeping APPEARANCE_CHANGED,
+    // CAMERA_ZOOM_UPDATE, zone and dialog events queued for the next tick
+    // (they were previously drained before this check and lost on skipped
+    // frames).
+    const buffer = bufferPool[activeBufferIndex];
+    if (!buffer || buffer.byteLength === 0) {
+      return; // No writable buffer available — skip this frame
+    }
+
     // Serialize entity positions into the active buffer
     serializeEntityStates(world, activeWriteView);
 
     // ── Increment monotonic tick counter for liveness detection ──
     tickCount++;
 
-    // Collect events to send
+    // Collect events to send (buffer confirmed writable above)
     const events = pendingEvents;
     pendingEvents = [];
 
@@ -1101,10 +1111,6 @@ const tickLoop = (): void => {
     // IMPORTANT: after transfer the worker's reference to `buffer` is
     // detached.  The next buffer in the pool may also be detached if the
     // main thread hasn't recycled it yet — guard with byteLength > 0.
-    const buffer = bufferPool[activeBufferIndex];
-    if (!buffer || buffer.byteLength === 0) {
-      return; // No writable buffer available — skip this frame
-    }
 
     // Advance to the next writable buffer in the pool, skipping
     // any null entries (transferred but not yet recycled).
@@ -1368,8 +1374,11 @@ self.onmessage = (event: MessageEvent): void => {
         resetCameraTracking();
 
         // N-buffer pool — the worker writes into one buffer, transfers it,
-        // and receives it back via RECYCLE_BUFFER.
-        for (let i = 0; i < buffers.length; i++) {
+        // and receives it back via RECYCLE_BUFFER. Reset the pool before
+        // adding, and cap at FALLBACK_BUFFER_COUNT (the tick loop and the
+        // RECYCLE_BUFFER handler are both modulo-bound to that size).
+        bufferPool.length = 0;
+        for (let i = 0; i < Math.min(buffers.length, FALLBACK_BUFFER_COUNT); i++) {
           bufferPool.push(buffers[i] as ArrayBuffer);
         }
         activeWriteView = new Float32Array(bufferPool[0]);

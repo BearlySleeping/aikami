@@ -54,13 +54,18 @@ function findSdkBinDir(appDir: string): string | undefined {
 const isWindows = process.platform === 'win32';
 
 if (!isWindows) {
-  console.log('[ensure-firebase-bin] Skipping — non-Windows platform (bun creates extensionless .bin shims here).');
+  console.log(
+    '[ensure-firebase-bin] Skipping — non-Windows platform (bun creates extensionless .bin shims here).',
+  );
   process.exit(0);
 }
 
 const binDir = findSdkBinDir(FIREBASE_APP_DIR);
 if (!binDir) {
-  console.error('[ensure-firebase-bin] Could not resolve firebase-functions from', FIREBASE_APP_DIR);
+  console.error(
+    '[ensure-firebase-bin] Could not resolve firebase-functions from',
+    FIREBASE_APP_DIR,
+  );
   process.exit(1);
 }
 
@@ -74,7 +79,10 @@ if (existsSync(target)) {
 
 if (!existsSync(launcher)) {
   console.error(`[ensure-firebase-bin] Neither shim nor launcher found in ${binDir}`);
-  console.error('  contents:', existsSync(binDir) ? readdirSync(binDir).join(', ') : '(no .bin dir)');
+  console.error(
+    '  contents:',
+    existsSync(binDir) ? readdirSync(binDir).join(', ') : '(no .bin dir)',
+  );
   process.exit(1);
 }
 

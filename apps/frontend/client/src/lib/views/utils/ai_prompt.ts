@@ -147,7 +147,6 @@ export function buildSpatialContextPrompt(activeContexts: SpatialContextEntry[])
 
   const contexts = activeContexts.map((ctx) => ({
     nearby: ctx.npcName,
-    // eslint-disable-next-line perfectionist/sort-objects -- intentionally in order of significance
     context: ctx.dialog,
   }));
 

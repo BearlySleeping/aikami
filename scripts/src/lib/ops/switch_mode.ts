@@ -180,7 +180,7 @@ async function main(): Promise<void> {
       // .env.local is read by scripts (resolveAikamiEnv) and by .envrc on
       // machines that do use direnv — new shells pick it up automatically.
       console.log('  ℹ️  direnv not installed — mode written to .env.local.');
-      console.log('      New shells read AIKAMI_MODE from .env.local automatically;');
+      console.log('      Aikami scripts read AIKAMI_MODE from .env.local;');
       console.log('      export AIKAMI_MODE=<mode> in your current shell to apply now.');
     }
     console.log('');

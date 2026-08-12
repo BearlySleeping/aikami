@@ -14,6 +14,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { authService } from '$services';
+import { isTauri } from '$lib/views/utils/is_tauri';
 
 export type LoginViewModelInterface = BaseViewModelInterface & {
   /** Whether a sign-in or sign-out is in progress. */
@@ -61,12 +62,7 @@ class LoginViewModel
 
   /** @inheritdoc */
   get signInLabel(): string {
-    return this.isTauri ? 'Sign In' : 'Sign In with Google';
-  }
-
-  /** Same check used by start_view_model.svelte.ts / menu_view_model.svelte.ts's `isTauri` getters. */
-  private get isTauri(): boolean {
-    return typeof window !== 'undefined' && '__TAURI__' in window;
+    return isTauri() ? 'Sign In' : 'Sign In with Google';
   }
 
   /** @inheritdoc */

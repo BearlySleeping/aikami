@@ -40,8 +40,8 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
-import { findWorkspace, herdrJson } from './session.ts';
 import { hasDirenv } from '../env/direnv_detect';
+import { findWorkspace, herdrJson } from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
 

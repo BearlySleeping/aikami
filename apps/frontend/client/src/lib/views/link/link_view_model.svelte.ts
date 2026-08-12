@@ -4,39 +4,56 @@
 // desktop app's system browser (see auth_service.svelte.ts's
 // _linkDeviceSignIn). Runs as a normal browser tab on a real, Firebase-
 // authorized domain, so Google sign-in works here even though it can't
-// inside the Tauri webview. Once signed in, hands a custom token back to
-// the desktop app via completeDeviceHandoff (existing endpoint) — see
-// auth_service.svelte.ts's _awaitDeviceHandoffToken for the receiving side.
+// inside the Tauri webview. Once the user explicitly confirms, hands a
+// custom token back to the desktop app via completeDeviceHandoff (existing
+// endpoint) — see auth_service.svelte.ts's _awaitDeviceHandoffToken for the
+// receiving side.
 //
 // Sign-in itself is handled by the shared LoginView (views/auth/login) —
-// this VM only owns the link-specific handoff. It reacts to authService
-// state rather than button clicks: the trigger for completing the handoff
-// is "auth became ready + logged in", not "button was clicked". That holds
-// for every path — popup sign-in resolving in-page, a session restored on
-// load, or (defensively) a redirect round-trip. The `code` query param is
-// mirrored to sessionStorage so it survives a full-page reload even if the
-// return URL is normalized.
+// this VM only owns the link-specific handoff. When auth is ready and the
+// user is signed in, the VM transitions to an explicit 'confirm' state; the
+// handoff completes only when the user presses "Link this device"
+// (confirmLink), never automatically. The `code` query param is mirrored to
+// sessionStorage (with a timestamp) so it survives a full-page reload, and
+// stale codes older than the desktop timeout window are rejected.
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { untrack } from 'svelte';
 import { page } from '$app/state';
 import { authService } from '$services';
 
 /** sessionStorage key mirroring the `code` query param across the redirect round-trip. */
 const CODE_STORAGE_KEY = 'aikami-device-link-code';
 
-export type LinkStatus = 'missing-code' | 'signed-out' | 'linking' | 'linked' | 'error';
+/**
+ * Max age for a persisted link code — matches DEVICE_LINK_TIMEOUT_MS in
+ * auth_service.svelte.ts (the desktop app gives up waiting after this long).
+ */
+const CODE_TTL_MS = 5 * 60 * 1000;
+
+export type LinkStatus =
+  | 'missing-code'
+  | 'signed-out'
+  | 'confirm'
+  | 'linking'
+  | 'linked'
+  | 'error';
 
 export type LinkViewModelInterface = BaseViewModelInterface & {
   readonly status: LinkStatus;
   readonly playerDisplayName: string | undefined;
 
+  /** The active device-link code (for display/debug). */
+  readonly code: string | undefined;
+
   /** `aikami://auth-callback?code=…` — manual fallback link for the linked state. */
   readonly handoffUrl: string | undefined;
+
+  /** Explicit user action — completes the handoff ("Link this device"). */
+  confirmLink(): void;
 };
 
 export type LinkViewModelOptions = BaseViewModelOptions;
@@ -46,15 +63,23 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
 
   private _code: string | undefined;
 
-  /** Guards the reactive handoff trigger so it only fires once per session. */
+  /** Guards the handoff so it only runs once per session (or per retry). */
   private _linkStarted = false;
 
   get playerDisplayName(): string | undefined {
     return authService.currentUser?.displayName || authService.currentUser?.email || undefined;
   }
 
+  get code(): string | undefined {
+    return this._code;
+  }
+
   get handoffUrl(): string | undefined {
-    return this._code ? `aikami://auth-callback?code=${this._code}` : undefined;
+    // URL-encode so codes containing &, #, ? survive the deep-link round trip
+    // and urlMatchesCode (which decodes via URLSearchParams) can match them.
+    return this._code
+      ? `aikami://auth-callback?code=${encodeURIComponent(this._code)}`
+      : undefined;
   }
 
   override async initialize(): Promise<void> {
@@ -66,14 +91,11 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
 
     const urlCode = page.url.searchParams.get('code') ?? undefined;
 
-    // Mirror the code to sessionStorage so it survives a full-page reload
-    // (Firebase's return URL is not guaranteed to keep the query).
+    // Mirror the code (with timestamp) to sessionStorage so it survives a
+    // full-page reload (Firebase's return URL is not guaranteed to keep the
+    // query), and validate its age when restored from storage.
     if (urlCode) {
-      try {
-        sessionStorage.setItem(CODE_STORAGE_KEY, urlCode);
-      } catch (error) {
-        this.debug('initialize:sessionStorage-write-failed', { error: String(error) });
-      }
+      this._writeStoredCode(urlCode);
     }
     this._code = urlCode ?? this._readStoredCode();
 
@@ -83,11 +105,10 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
       return;
     }
 
-    // Reactive handoff trigger — covers every sign-in path:
-    //   • user lands already signed in,
-    //   • popup sign-in resolving in-place (this effect — not the click —
-    //     is what completes the handoff),
-    //   • a session restored on a reload after sign-in (defensive).
+    // When auth is ready and the user is signed in, transition to an explicit
+    // confirmation state — never auto-complete the handoff. The user must
+    // press "Link this device" (confirmLink), so no page on this origin can
+    // hand the token to a device without consent.
     this.registerEffectRoot(() => {
       $effect(() => {
         const ready = authService.isAuthReady;
@@ -95,22 +116,50 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
         if (!ready || !loggedIn || this._linkStarted) {
           return;
         }
-        this._linkStarted = true;
-        untrack(() => {
-          void this._completeLink();
-        });
+        this.status = 'confirm';
       });
     });
 
     await super.initialize();
   }
 
+  /** Explicit user confirmation — completes the device link. */
+  confirmLink(): void {
+    if (this._linkStarted) {
+      return;
+    }
+    this._linkStarted = true;
+    void this._completeLink();
+  }
+
   private _readStoredCode(): string | undefined {
     try {
-      return sessionStorage.getItem(CODE_STORAGE_KEY) ?? undefined;
+      const raw = sessionStorage.getItem(CODE_STORAGE_KEY);
+      if (!raw) {
+        return undefined;
+      }
+      const stored = JSON.parse(raw) as { code?: string; ts?: number } | null;
+      if (!stored?.code) {
+        return undefined;
+      }
+      // Reject stale codes — older than the desktop app's timeout window.
+      if (!stored.ts || Date.now() - stored.ts > CODE_TTL_MS) {
+        this.debug('initialize:stale-code-discarded');
+        sessionStorage.removeItem(CODE_STORAGE_KEY);
+        return undefined;
+      }
+      return stored.code;
     } catch (error) {
       this.debug('initialize:sessionStorage-read-failed', { error: String(error) });
       return undefined;
+    }
+  }
+
+  private _writeStoredCode(code: string): void {
+    try {
+      sessionStorage.setItem(CODE_STORAGE_KEY, JSON.stringify({ code, ts: Date.now() }));
+    } catch (error) {
+      this.debug('initialize:sessionStorage-write-failed', { error: String(error) });
     }
   }
 
@@ -136,6 +185,14 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
     } catch (error) {
       this.status = 'error';
       this.errorMessage = error instanceof Error ? error.message : 'Failed to link device';
+      // Allow retrying without a reload: drop the persisted code and reset
+      // the guard so "Link this device" works again.
+      try {
+        sessionStorage.removeItem(CODE_STORAGE_KEY);
+      } catch (clearError) {
+        this.debug('_completeLink:sessionStorage-clear-failed', { error: String(clearError) });
+      }
+      this._linkStarted = false;
       this.debug('_completeLink:error', { error: String(error) });
     }
   }
@@ -148,7 +205,7 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
    */
   private _tryDeepLinkRedirect(code: string): void {
     try {
-      window.location.href = `aikami://auth-callback?code=${code}`;
+      window.location.href = `aikami://auth-callback?code=${encodeURIComponent(code)}`;
     } catch (error) {
       this.debug('_tryDeepLinkRedirect:error', { error: String(error) });
     }

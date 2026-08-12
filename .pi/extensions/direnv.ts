@@ -130,21 +130,26 @@ function buildStatusReport(): string {
 async function switchMode(mode: string): Promise<string> {
   writeEnvLocal('AIKAMI_MODE', mode);
 
+  let reloadFailed = false;
   if (hasDirenv()) {
-    // Reload direnv via bash — this re-evaluates .envrc
+    // Reload direnv via bash — this re-evaluates .envrc. runSync returns a
+    // result (it does not throw on non-zero exit), so treat any non-zero
+    // code as a failed reload rather than reporting success.
     try {
-      runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 30_000 });
-      return `✅ Switched to ${mode} mode.`;
+      const reload = runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 30_000 });
+      reloadFailed = reload.code !== 0;
     } catch {
       // Reload failed (slow Nix eval, non-interactive context) — fall
       // through to the in-process env update below so this session still
       // sees the new mode.
+      reloadFailed = true;
     }
   }
 
-  // Non-direnv machine (or reload failed): update in-process env from the
-  // authoritative mode→project map so this pi session sees the new mode
-  // immediately. New shells read AIKAMI_MODE from .env.local anyway.
+  // Always update in-process env from the authoritative mode→project map —
+  // direnv reload only affects new shells, so this pi session needs the
+  // env applied regardless of whether the reload succeeded. New shells read
+  // AIKAMI_MODE from .env.local anyway.
   const env = resolveAikamiEnv(getRoot());
   process.env.AIKAMI_MODE = env.mode;
   process.env.AIKAMI_ENV = env.mode;
@@ -152,7 +157,9 @@ async function switchMode(mode: string): Promise<string> {
   process.env.AIKAMI_IS_EMULATOR = env.isEmulator ? '1' : '0';
 
   const applyNote = hasDirenv()
-    ? "Run `direnv reload` if env vars aren't refreshed."
+    ? reloadFailed
+      ? 'direnv reload failed — run `direnv reload` to refresh env vars; env updated in this session.'
+      : "Run `direnv reload` if env vars aren't refreshed."
     : 'direnv not installed — new shells read .env.local automatically; env updated in this session.';
   return `✅ Switched to ${mode} mode. ${applyNote}`;
 }
@@ -281,7 +288,9 @@ export default function (pi: ExtensionAPI) {
         details: {
           mode: getEnv('AIKAMI_MODE') || env.mode,
           projectId: getEnv('AIKAMI_PROJECT_ID') || env.projectId,
-          isEmulator: isEmulator() || env.isEmulator,
+          // Derive from the resolved mode value so staging → false and
+          // emulator → true consistently with `mode`/`projectId`.
+          isEmulator: (getEnv('AIKAMI_MODE') || env.mode) === 'emulator',
           nixReady: getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined,
         },
       };

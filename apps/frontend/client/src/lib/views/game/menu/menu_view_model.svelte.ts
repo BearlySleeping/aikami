@@ -6,6 +6,7 @@ import {
 } from '@aikami/frontend/services';
 import { campaignService, gameSaveService, routerService } from '$services';
 import type { SaveSlotInfo } from '$types';
+import { isTauri } from '$lib/views/utils/is_tauri';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
   /** Called when the player clicks "Start" to begin the game. */
@@ -58,7 +59,7 @@ class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuV
 
   /** @inheritdoc */
   get isTauri(): boolean {
-    return typeof window !== 'undefined' && '__TAURI__' in window;
+    return isTauri();
   }
 
   /** @inheritdoc */

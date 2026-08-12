@@ -2,13 +2,17 @@
 //
 // AES-GCM encryption wrapper using the Web Crypto API.
 // API keys and secrets are encrypted at rest in localStorage under `aikami_vault`.
-// If no custom master password is set, falls back to a deterministic local
-// machine fingerprint derived from navigator and screen properties.
+// If no custom master PIN is set, encryption is keyed by a random per-origin
+// secret (not derivable from browser attributes). Vaults encrypted with the
+// legacy machine-fingerprint key are migrated to that secret on first read.
 
 import { logger } from '$logger';
 
 /** localStorage key for the encrypted vault payload. */
 const VAULT_KEY = 'aikami_vault';
+
+/** localStorage key for the random per-origin vault secret. */
+const VAULT_SECRET_KEY = 'aikami_vault_secret';
 
 /** AES-GCM algorithm identifier for key generation and encryption. */
 const ALGORITHM = { name: 'AES-GCM', length: 256 } as const;
@@ -27,10 +31,27 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 
 /**
- * Builds a deterministic machine fingerprint when the user has not set a
- * custom master password. Derived from stable browser properties.
+ * Random per-origin vault secret, generated once and persisted. Replaces the
+ * old machine-fingerprint key: a fingerprint is predictable from public
+ * browser attributes; this secret is not derivable without reading storage.
+ * Persisted so the vault stays readable across reloads on the same origin.
  *
- * @returns A deterministic string fingerprint for the current browser/machine.
+ * @returns The per-origin vault secret string.
+ */
+const getVaultSecret = (): string => {
+  let secret = localStorage.getItem(VAULT_SECRET_KEY);
+  if (!secret) {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(VAULT_SECRET_KEY, secret);
+  }
+  return secret;
+};
+
+/**
+ * Legacy deterministic machine fingerprint — kept ONLY to migrate vaults
+ * encrypted before the random secret existed. Not used for new writes.
  */
 const getMachineFingerprint = (): string => {
   const parts = [
@@ -65,17 +86,46 @@ const deriveKey = async (pin: string, salt: BufferSource): Promise<CryptoKey> =>
 };
 
 /**
+ * Attempts to decrypt the packed vault payload with the given PIN.
+ *
+ * @param pin - The PIN/passphrase to try.
+ * @param raw - The packed base64 vault payload from localStorage.
+ * @returns The decrypted plaintext, or undefined on any failure.
+ */
+const decryptWith = async (pin: string, raw: string): Promise<string | undefined> => {
+  try {
+    const packed = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
+
+    const salt = packed.slice(0, SALT_LENGTH);
+    const iv = packed.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+    const ciphertext = packed.slice(SALT_LENGTH + IV_LENGTH);
+
+    const key = await deriveKey(pin, salt);
+    const decoder = new TextDecoder();
+    const plaintext = await crypto.subtle.decrypt({ ...ALGORITHM, iv }, key, ciphertext);
+
+    return decoder.decode(plaintext);
+  } catch {
+    // Wrong PIN or corrupted vault — return undefined.
+    return undefined;
+  }
+};
+
+/**
  * Encrypts a plaintext string with AES-GCM using the given PIN.
  * Stores the resulting cipher (salt + IV + ciphertext, all base64-encoded)
  * in localStorage under `aikami_vault`.
  *
+ * When no PIN is supplied, keys off the per-origin random secret (never the
+ * machine fingerprint).
+ *
  * @param options.text - The plaintext to encrypt.
- * @param options.pin - Optional custom PIN. Defaults to the machine fingerprint.
+ * @param options.pin - Optional custom PIN. Defaults to the per-origin secret.
  */
 export const encrypt = async (options: { text: string; pin?: string }): Promise<void> => {
   logger.debug('encrypt', { textLength: options.text.length });
 
-  const pin = options.pin || getMachineFingerprint();
+  const pin = options.pin || getVaultSecret();
   const saltBuffer = new ArrayBuffer(SALT_LENGTH);
   crypto.getRandomValues(new Uint8Array(saltBuffer));
   const ivBuffer = new ArrayBuffer(IV_LENGTH);
@@ -107,7 +157,12 @@ export const encrypt = async (options: { text: string; pin?: string }): Promise<
 /**
  * Decrypts the vault cipher from localStorage.
  *
- * @param options.pin - Optional custom PIN. Defaults to the machine fingerprint.
+ * Tries the supplied PIN (or the per-origin secret) first. If that fails and
+ * no PIN was supplied, attempts a one-time migration of a legacy
+ * machine-fingerprint vault: decrypt with the fingerprint, re-encrypt with
+ * the current secret, and return the plaintext.
+ *
+ * @param options.pin - Optional custom PIN. Defaults to the per-origin secret.
  * @returns The decrypted plaintext, or `undefined` if no vault exists or
  *          decryption fails (wrong PIN, tampered data).
  */
@@ -119,23 +174,23 @@ export const decrypt = async (options: { pin?: string }): Promise<string | undef
     return undefined;
   }
 
-  try {
-    const pin = options.pin || getMachineFingerprint();
-    const packed = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0));
-
-    const salt = packed.slice(0, SALT_LENGTH);
-    const iv = packed.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
-    const ciphertext = packed.slice(SALT_LENGTH + IV_LENGTH);
-
-    const key = await deriveKey(pin, salt);
-    const decoder = new TextDecoder();
-    const plaintext = await crypto.subtle.decrypt({ ...ALGORITHM, iv }, key, ciphertext);
-
-    return decoder.decode(plaintext);
-  } catch {
-    // Wrong PIN or corrupted vault — silently return undefined.
-    return undefined;
+  const pin = options.pin || getVaultSecret();
+  const plaintext = await decryptWith(pin, raw);
+  if (plaintext !== undefined) {
+    return plaintext;
   }
+
+  // Legacy migration — vault written before the random secret existed.
+  if (!options.pin) {
+    const legacy = await decryptWith(getMachineFingerprint(), raw);
+    if (legacy !== undefined) {
+      logger.debug('decrypt:migrated-legacy-fingerprint-vault');
+      await encrypt({ text: legacy });
+      return legacy;
+    }
+  }
+
+  return undefined;
 };
 
 /**

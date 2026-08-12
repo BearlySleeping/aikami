@@ -35,9 +35,7 @@ import type {
 } from '@aikami/types';
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import { analyticService } from '../analytics/analytics_service.svelte.ts';
-
-/** Same check used by start_view_model.svelte.ts / menu_view_model.svelte.ts's `isTauri` getters. */
-const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI__' in window;
+import { isTauri } from '$lib/views/utils/is_tauri';
 
 /**
  * Where the desktop app sends users to sign in — a normal page load of the
@@ -311,7 +309,7 @@ export class AuthService
         case 'github':
           return 'github.com';
         default:
-          throw new Error('inavlid provider', provider);
+          throw new Error(`Invalid provider: ${provider}`);
       }
     };
 
@@ -383,15 +381,34 @@ export class AuthService
    * poll/deep-link race in {@link _awaitDeviceHandoffToken} resolves first.
    */
   private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
+    const code = crypto.randomUUID();
+    const handoffUrl = `${DEVICE_LINK_URL}?code=${code}`;
+
     try {
-      const code = crypto.randomUUID();
       // NOTE: the plugin's JS API is `openUrl` (URLs) / `openPath` (files) —
       // there is no `open` export, and destructuring it silently yields
       // `undefined`, which throws "t is not a function" in the minified
       // release build (the error the user saw on Sign In).
       const { openUrl } = await import('@tauri-apps/plugin-opener');
-      await openUrl(`${DEVICE_LINK_URL}?code=${code}`);
+      await openUrl(handoffUrl);
+    } catch (error) {
+      // The browser couldn't be opened — don't enter the five-minute token
+      // wait; surface the URL so the user can complete sign-in manually.
+      this.error('linkDeviceSignIn:openUrl-failed', error);
+      const message = `Could not open the sign-in page. Open ${handoffUrl} manually and complete sign-in there.`;
+      this.showSnackbar({ text: `Sign-in failed: ${message}`, type: 'error' });
+      return {
+        status: 'failed',
+        payload: {
+          code: 'browser-open-failed',
+          message,
+          email: '',
+          accountExists: false,
+        } as unknown as SocialSignInError,
+      };
+    }
 
+    try {
       const token = await this._awaitDeviceHandoffToken(code);
       if (!token) {
         throw new Error('Sign-in timed out — please try again.');
@@ -457,32 +474,82 @@ export class AuthService
           return;
         }
         settled = true;
-        clearInterval(pollTimer);
+        clearTimeout(pollTimer);
         clearTimeout(timeoutTimer);
         for (const unlisten of unlisteners) {
-          unlisten();
+          try {
+            unlisten();
+          } catch (error) {
+            // Listener teardown must never block resolving the token.
+            this.debug('_awaitDeviceHandoffToken:unlisten-failed', { error: String(error) });
+          }
         }
+        unlisteners.length = 0;
         resolve(token);
+      };
+
+      /**
+       * Stores a listener teardown for finish(), or — if the wait already
+       * settled (e.g. the poll finished while the deep-link listener was
+       * still registering) — invokes it immediately so it can't leak.
+       */
+      const registerUnlisten = (unlisten: () => void): void => {
+        if (settled) {
+          try {
+            unlisten();
+          } catch (error) {
+            this.debug('_awaitDeviceHandoffToken:unlisten-failed', { error: String(error) });
+          }
+          return;
+        }
+        unlisteners.push(unlisten);
       };
 
       const onMatchedUrl = (): void => {
         void exchange()
-          .then(finish)
+          .then((token) => {
+            // Only finish on a real token — a null result means a racing poll
+            // already consumed the handoff, so keep the polling/retry flow
+            // alive instead of failing the wait.
+            if (token) {
+              finish(token);
+            }
+          })
           .catch((error) => {
             this.debug('_awaitDeviceHandoffToken:deep-link-error', { error: String(error) });
           });
       };
 
-      const pollTimer = setInterval(async () => {
-        try {
-          const token = await exchange();
-          if (token) {
-            finish(token);
-          }
-        } catch (error) {
-          this.debug('_awaitDeviceHandoffToken:poll-error', { error: String(error) });
+      // Self-scheduling poll: each exchange runs only after the previous one
+      // settles, with increasing backoff after the initial attempts.
+      const pollBackoffMs = [
+        DEVICE_LINK_POLL_INTERVAL_MS,
+        DEVICE_LINK_POLL_INTERVAL_MS,
+        3000,
+        5000,
+      ];
+      let pollTimer: ReturnType<typeof setTimeout> | undefined;
+      let pollAttempt = 0;
+      const scheduleNextPoll = (): void => {
+        if (settled) {
+          return;
         }
-      }, DEVICE_LINK_POLL_INTERVAL_MS);
+        const delay = pollBackoffMs[Math.min(pollAttempt, pollBackoffMs.length - 1)];
+        pollAttempt += 1;
+        pollTimer = setTimeout(async () => {
+          try {
+            const token = await exchange();
+            if (token) {
+              finish(token);
+              return;
+            }
+          } catch (error) {
+            this.debug('_awaitDeviceHandoffToken:poll-error', { error: String(error) });
+          }
+          scheduleNextPoll();
+        }, delay);
+      };
+      scheduleNextPoll();
 
       const timeoutTimer = setTimeout(() => finish(null), DEVICE_LINK_TIMEOUT_MS);
 
@@ -496,7 +563,7 @@ export class AuthService
               onMatchedUrl();
             }
           });
-          unlisteners.push(unlisten);
+          registerUnlisten(unlisten);
         } catch (error) {
           this.debug('_awaitDeviceHandoffToken:deep-link-listener-failed', {
             error: String(error),
@@ -517,7 +584,7 @@ export class AuthService
               onMatchedUrl();
             }
           });
-          unlisteners.push(unlisten);
+          registerUnlisten(unlisten);
         } catch (error) {
           this.debug('_awaitDeviceHandoffToken:single-instance-listener-failed', {
             error: String(error),

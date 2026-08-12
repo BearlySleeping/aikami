@@ -49,7 +49,7 @@ try {
   config.hosting.site = targetSite;
   await Bun.write(deployConfigPath, JSON.stringify(config, null, 4));
 
-  await $`bunx firebase-tools@latest deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
+  await $`bunx firebase-tools@15.26.0 deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
     process.cwd(),
   );
 } catch (error) {

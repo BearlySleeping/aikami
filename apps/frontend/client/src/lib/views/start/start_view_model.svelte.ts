@@ -26,6 +26,7 @@ import {
   worldStateService,
 } from '$services';
 import type { SaveSlotInfo } from '$types';
+import { isTauri } from '$lib/views/utils/is_tauri';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -233,7 +234,7 @@ class StartViewModel
 
   /** @inheritdoc */
   get isTauri(): boolean {
-    return typeof window !== 'undefined' && '__TAURI__' in window;
+    return isTauri();
   }
 
   /** @inheritdoc */

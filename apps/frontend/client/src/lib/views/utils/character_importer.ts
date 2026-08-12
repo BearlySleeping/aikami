@@ -52,7 +52,11 @@ export async function parsePngCard(file: File): Promise<unknown> {
 
     let decoded: string;
     try {
-      decoded = atob(text);
+      // atob returns a latin1 byte string — decode as UTF-8 so non-ASCII
+      // character data (names, dialogue) survives into JSON.parse.
+      const binary = atob(text);
+      const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+      decoded = new TextDecoder('utf-8').decode(bytes);
     } catch {
       throw toAppError({
         errorType: 'invalid-argument',

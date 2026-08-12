@@ -674,6 +674,8 @@ if (opts.check) {
   }
 }
 
-console.log(fmt.note('\nTip: with direnv + nix, `direnv allow` provides bun, node, jdk, chromium,'));
+console.log(
+  fmt.note('\nTip: with direnv + nix, `direnv allow` provides bun, node, jdk, chromium,'),
+);
 console.log(fmt.note('playwright browsers, tauri deps, gcloud, and herdr from flake.nix —'));
 console.log(fmt.note('so most of the checks above become unnecessary.'));
