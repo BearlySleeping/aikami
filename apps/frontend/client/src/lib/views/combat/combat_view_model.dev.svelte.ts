@@ -786,12 +786,19 @@ export class CombatDevViewModel extends CombatViewModel {
       if (intent.sceneMood && intent.sceneMood.trim().length > 0) {
         this.debug('_executeRealAiAction: sceneMood detected', {
           sceneMood: intent.sceneMood,
+          useRealMusic: this._useRealMusic,
         });
-        void (
-          this as unknown as {
-            _transitionBgmFallback: (mood: string) => Promise<void>;
-          }
-        )._transitionBgmFallback(intent.sceneMood.trim());
+        if (this._useRealMusic) {
+          void (
+            this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }
+          )._transitionBgmByMood(intent.sceneMood.trim());
+        } else {
+          void (
+            this as unknown as {
+              _transitionBgmFallback: (mood: string) => Promise<void>;
+            }
+          )._transitionBgmFallback(intent.sceneMood.trim());
+        }
       }
 
       // Apply combat mechanics based on LLM classification

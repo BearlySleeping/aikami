@@ -83,7 +83,7 @@ describe('CombatViewModel — C-385 AC-3 static catalog BGM', () => {
     );
   });
 
-  test('_transitionBgmByMood does not require a network round trip (single audio call)', async () => {
+  test('_transitionBgmByMood invokes transitionToBgm for each mood request', async () => {
     await transitionBgmByMood(viewModel, 'epic');
     await transitionBgmByMood(viewModel, 'epic');
 

@@ -128,24 +128,42 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
     // 1. Upload ECS snapshot blob to Firebase Cloud Storage (unchanged)
     await firebaseStorageService.uploadString(storageRef, payload);
 
-    // 2. Upsert the slot metadata row in the local saves table
+    // 2. Upsert the slot metadata row in the local saves table. If the
+    //    local write fails after the blob upload, compensate by deleting
+    //    the orphaned blob so the slot never appears saved-but-unloadable.
     const localPayload: SaveSlotLocalPayload = {
       playedTimeSeconds: metadata?.playedTimeSeconds,
       storageRef,
     };
-    const db = await getLocalDatabase();
-    await db.execute({
-      sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [
-        `sync_slot_${slot}`,
-        `slot_${slot}`,
-        null,
-        Date.now(),
-        metadata?.lastLocationName ?? '',
-        JSON.stringify(localPayload),
-      ],
-    });
+    try {
+      const db = await getLocalDatabase();
+      await db.execute({
+        sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          `sync_slot_${slot}`,
+          `slot_${slot}`,
+          null,
+          Date.now(),
+          metadata?.lastLocationName ?? '',
+          JSON.stringify(localPayload),
+        ],
+      });
+    } catch (error) {
+      this.warn('saveGame: metadata persistence failed — cleaning up uploaded blob', {
+        storageRef,
+        error: String(error),
+      });
+      try {
+        await firebaseStorageService.deleteObject(storageRef);
+      } catch (cleanupError) {
+        this.warn('saveGame: compensating blob cleanup failed', {
+          storageRef,
+          error: String(cleanupError),
+        });
+      }
+      throw error;
+    }
 
     this.log(`saveGame: saved slot ${slot} for user ${uid} to ${storageRef}`);
     return storageRef;
@@ -170,6 +188,12 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
 
   /**
    * Lists all save slots from the local `saves` table.
+   *
+   * Only rows written by this service (id = `sync_slot_${slot}`) are
+   * returned — campaign/game-save rows that share the `slot_%` shape are
+   * excluded so unrelated rows never surface with an empty storageRef.
+   * Entries are sorted by slot number numerically because SQLite `ORDER BY`
+   * on the TEXT columns is lexicographic (1, 10, 2).
    */
   async listSlots(options: { uid: string }): Promise<SaveSlotEntry[]> {
     // uid is intentionally unused — the local database is single-tenant.
@@ -177,28 +201,39 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
 
     const db = await getLocalDatabase();
     const result = await db.query({
-      sql: 'SELECT slot_id, timestamp, map_name, payload FROM saves WHERE slot_id LIKE ? ORDER BY slot_id ASC',
-      args: ['slot_%'],
+      sql: 'SELECT id, timestamp, map_name, payload FROM saves WHERE id LIKE ? ORDER BY slot_id ASC',
+      args: ['sync_slot_%'],
     });
 
     const slots: SaveSlotEntry[] = [];
     for (const row of result.rows) {
-      const slotId = row.slot_id as string;
-      const slotNumber = Number.parseInt(slotId.replace('slot_', ''), 10);
+      const syncId = row.id as string;
+      const match = /^sync_slot_(\d+)$/.exec(syncId);
+      if (!match?.[1]) {
+        continue;
+      }
+      const slotNumber = Number.parseInt(match[1], 10);
       if (Number.isNaN(slotNumber)) {
         continue;
       }
 
       const localPayload = this._parseLocalPayload(row.payload);
+      if (!localPayload || localPayload.storageRef.length === 0) {
+        continue;
+      }
+
       const timestamp = row.timestamp as number;
       slots.push({
         slotNumber,
         lastLocationName: (row.map_name as string) || null,
-        playedTimeSeconds: localPayload?.playedTimeSeconds ?? null,
-        storageRef: localPayload?.storageRef ?? '',
+        playedTimeSeconds: localPayload.playedTimeSeconds ?? null,
+        storageRef: localPayload.storageRef,
         updatedAt: Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null,
       });
     }
+
+    // Numeric sort — SQLite ORDER BY on a TEXT column is lexicographic.
+    slots.sort((a, b) => a.slotNumber - b.slotNumber);
 
     this.debug('listSlots', { count: slots.length });
     return slots;
@@ -206,18 +241,23 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
 
   /**
    * Deletes a save slot from Storage and its local metadata row.
+   *
+   * Local metadata is removed FIRST so a failed Storage delete can never
+   * leave a row referencing a missing blob. If the Storage delete fails the
+   * blob remains (orphaned, but no dangling metadata points at it); the
+   * error propagates and the delete can be retried.
    */
   async deleteSlot(options: { uid: string; slot: number }): Promise<void> {
     const { uid, slot } = options;
     const storageRef = `saves/${uid}/slot_${slot}.json`;
-
-    await firebaseStorageService.deleteObject(storageRef);
 
     const db = await getLocalDatabase();
     await db.execute({
       sql: 'DELETE FROM saves WHERE id = ?',
       args: [`sync_slot_${slot}`],
     });
+
+    await firebaseStorageService.deleteObject(storageRef);
 
     this.log(`deleteSlot: deleted slot ${slot} for user ${uid}`);
   }
@@ -235,10 +275,24 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
     }
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed === 'object' && parsed !== null && 'storageRef' in parsed) {
-        return parsed as SaveSlotLocalPayload;
+      if (typeof parsed !== 'object' || parsed === null) {
+        return undefined;
       }
-      return undefined;
+      const candidate = parsed as Record<string, unknown>;
+      if (typeof candidate.storageRef !== 'string') {
+        return undefined;
+      }
+      if (
+        candidate.playedTimeSeconds !== undefined &&
+        typeof candidate.playedTimeSeconds !== 'number'
+      ) {
+        return undefined;
+      }
+      const envelope: SaveSlotLocalPayload = { storageRef: candidate.storageRef };
+      if (candidate.playedTimeSeconds !== undefined) {
+        envelope.playedTimeSeconds = candidate.playedTimeSeconds;
+      }
+      return envelope;
     } catch {
       return undefined;
     }

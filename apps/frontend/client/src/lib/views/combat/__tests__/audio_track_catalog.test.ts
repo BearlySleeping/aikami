@@ -23,6 +23,19 @@ import {
 /** Path to the shipped catalog relative to this test file. */
 const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json', import.meta.url);
 
+/**
+ * Mock fetch serving the shipped catalog. Shared across tests so call
+ * counts accumulate — the resolver must fetch exactly once per session.
+ */
+const fetchMock = mock(() => {
+  const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
+  const response = new Response(JSON.stringify(catalog), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+  return Promise.resolve(response);
+});
+
 /** Every mood previously seeded into Data Connect by `on_emulate.ts`. */
 const EXPECTED_MOODS = [
   'epic',
@@ -39,12 +52,7 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
-    const response = new Response(JSON.stringify(catalog), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
-    globalThis.fetch = mock(() => Promise.resolve(response));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterEach(() => {
@@ -78,5 +86,14 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     const url = resolveAudioTrackUrl(first);
     expect(url.startsWith('/game-data/')).toBe(true);
     expect(url.endsWith('.webm')).toBe(true);
+  });
+
+  test('repeated mood lookups reuse the cached catalog — a single network fetch', async () => {
+    await getTracksByMood('epic');
+    await getTracksByMood('tense');
+
+    // The catalog is fetched once and cached; subsequent lookups are
+    // synchronous Map reads (AC-3: no per-combat network request).
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
