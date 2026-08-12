@@ -48,7 +48,10 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 const opts = parseCliArgs(Bun.argv.slice(2), {
   mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
   strict: { type: 'boolean', description: 'Exit non-zero if any secret cannot be fetched' },
-  keys: { type: 'string', description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE' },
+  keys: {
+    type: 'string',
+    description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE',
+  },
 });
 const mode = (opts.mode as string) || process.env.AIKAMI_MODE || process.env.MODE || '';
 if (!mode) {

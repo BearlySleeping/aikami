@@ -59,6 +59,10 @@ const DEPLOY_ROLES: Array<{ role: string; why: string }> = [
     role: 'roles/storage.objectAdmin',
     why: 'Firebase Hosting/Functions staging buckets + asset uploads',
   },
+  {
+    role: 'roles/secretmanager.admin',
+    why: 'create/update/read secrets in GSM (bun run upload-secrets, download-secrets)',
+  },
 ];
 
 /**
