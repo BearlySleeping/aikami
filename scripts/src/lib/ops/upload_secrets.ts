@@ -33,7 +33,10 @@ const ROOT_DIR = resolve(_scriptDir, '../../../..');
 const opts = parseCliArgs(Bun.argv.slice(2), {
   mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
   'dry-run': { type: 'boolean' },
-  keys: { type: 'string', description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE' },
+  keys: {
+    type: 'string',
+    description: 'Only process these env keys (comma-separated), e.g. --keys GEMINI_API_KEY,MODE',
+  },
 });
 const mode = (opts.mode as string) || process.env.AIKAMI_MODE || process.env.MODE || '';
 if (!mode) {
@@ -295,13 +298,19 @@ for (const projectName of projectNames) {
     }
 
     if (key === 'FIREBASE_SERVICE_ACCOUNT') {
-      // GSM is the source of truth for this secret: download-secrets propagates
-      // it into the firebase/hub .env files, but upload must never push local
-      // values back — hub's .env.example placeholder '{}' (or a stale fallback)
-      // would otherwise overwrite the real SA in GSM.
-      console.log(`⏭️  Skipping "${key}" (GSM is the source of truth — download-only)`);
-      totalSkipped++;
-      continue;
+      // Upload the real SA key to GSM (used by firebase + hub), but guard
+      // against stale placeholders: a raw '{}' or missing client_email means
+      // the local .env.{mode} was never populated by download-secrets —
+      // pushing that would overwrite the real SA in GSM with garbage.
+      const looksLikeSa =
+        value.includes('"type": "service_account"') ||
+        value.includes('client_email') ||
+        value.includes('private_key');
+      if (!looksLikeSa) {
+        console.log(`⏭️  Skipping "${key}" (value is not a service-account JSON — placeholder?)`);
+        totalSkipped++;
+        continue;
+      }
     }
 
     const secretName = resolveSecretName(key, config);
@@ -375,10 +384,7 @@ for (const { secretName, value } of deduped.values()) {
       totalSkipped++;
     }
   } catch (err) {
-    console.error(
-      `❌ Error processing "${secretName}":`,
-      err instanceof Error ? err.message : err,
-    );
+    console.error(`❌ Error processing "${secretName}":`, err instanceof Error ? err.message : err);
     totalFailed++;
   }
 }
