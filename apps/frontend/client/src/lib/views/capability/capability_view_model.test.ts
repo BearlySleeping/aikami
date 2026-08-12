@@ -35,7 +35,7 @@ mock.module('$views/settings/connection/connection_manager_view_model.svelte', (
   })),
 }));
 
-mock.module('$lib/utils/crypto_vault', () => ({
+mock.module('$lib/views/utils/crypto_vault', () => ({
   encrypt: mock(async () => {}),
   decrypt: mock(async () => undefined),
   clearVault: mock(() => {}),

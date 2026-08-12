@@ -13,6 +13,11 @@ import type { AuthMessageData, AuthMessageResponse } from './auth.ts';
  */
 export type CallableFunctions = {
   auth: [AuthMessageData, AuthMessageResponse];
+  /**
+   * Standalone (not routed through `auth`) because it must be callable with
+   * no signed-in user — see packages/backend/auth/src/lib/poll_device_handoff.ts.
+   */
+  poll_device_handoff: [{ code: string }, { customFirebaseSignInToken: string | null }];
 };
 
 export type CallableFunction = keyof CallableFunctions;

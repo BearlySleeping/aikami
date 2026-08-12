@@ -11,7 +11,7 @@ Playwright is a Node.js library that provides a high-level API for controlling a
 To run the Playwright tests, you first need to install the Playwright browsers:
 
 ```bash
-npx playwright install
+bunx playwright install
 ```
 
 ## Running the Tests
@@ -19,7 +19,7 @@ npx playwright install
 To run the Playwright tests, use the following command:
 
 ```bash
-npx playwright test
+bunx playwright test
 ```
 
 This command will run all the Playwright tests in the project.

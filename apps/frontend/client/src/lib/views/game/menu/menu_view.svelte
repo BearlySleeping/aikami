@@ -1,6 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LoginView from '$lib/views/auth/login/login_view.svelte';
 import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
 
 type Props = {
@@ -55,29 +56,11 @@ const { viewModel }: Props = $props();
         </button>
       {/if}
 
-      <!-- Sign in with Google (optional, shown when not logged in) -->
-      {#if !viewModel.isLoggedIn}
-        <div class="mt-4 border-t border-base-300 pt-4">
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm w-full"
-            disabled={viewModel.isSigningIn}
-            onclick={() => viewModel.loginWithGoogle()}
-          >
-            {#if viewModel.isSigningIn}
-              <span class="loading loading-spinner loading-xs"></span>
-            {/if}
-            Sign in with Google
-          </button>
-          <p class="mt-2 text-center text-xs text-base-content/40">
-            Optional — enables cloud saves
-          </p>
-        </div>
-      {:else}
-        <p class="mt-4 text-center text-sm text-base-content/50">
-          Signed in as {viewModel.playerDisplayName}
-        </p>
-      {/if}
+      <!-- Sign in with Google (optional — shared auth control) -->
+      <div class="mt-4 border-t border-base-300 pt-4">
+        <LoginView buttonClass="btn btn-ghost btn-sm w-full" />
+        <p class="mt-2 text-center text-xs text-base-content/40">Optional — enables cloud saves</p>
+      </div>
     </div>
   </div>
 </BaseViewModelContainer>

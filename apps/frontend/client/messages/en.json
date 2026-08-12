@@ -238,5 +238,16 @@
   "welcomeSubtitle": "Create your first character to begin your adventure",
   "skipForNow": "Skip for now",
   "createYourFirstCharacter": "Create Your First Character",
-  "onboardingComplete": "Your adventure begins!"
+  "onboardingComplete": "Your adventure begins!",
+  "linkPageAutoOpened": "This page is opened automatically by the Aikami desktop app — there's nothing to do here directly.",
+  "linkSignedIn": "You're signed in.",
+  "linkSignedInAs": "You're signed in as {name}.",
+  "linkCloseTab": "You can close this tab and return to the desktop app.",
+  "linkOpenDesktopApp": "Didn't return automatically? Open the desktop app.",
+  "linkLinking": "Linking your account…",
+  "linkSignInPrompt": "Sign in to link your desktop app.",
+  "linkConfirmPrompt": "Link this device to your Aikami account?",
+  "linkConfirmButton": "Link this device",
+  "linkRetryButton": "Try again",
+  "linkFailed": "Failed to link device"
 }
