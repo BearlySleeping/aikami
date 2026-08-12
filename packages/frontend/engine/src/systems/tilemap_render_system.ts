@@ -1,7 +1,9 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
 import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
-import type { TilemapData } from '../assets/map_loader.ts';
+import type { TerrainLayerEmission } from '../assets/autotile.ts';
+import type { TilemapBand, TilemapData } from '../assets/map_loader.ts';
+import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import {
   buildTilemapChunks,
   frustumCullChunks,
@@ -19,10 +21,21 @@ import {
 // `mesh.visible` on the owned chunk records — no scene-graph mutation,
 // so chunks return when the camera comes back (C-377 AC-4).
 //
+// C-378 AC-1: layers are grouped by their declared band (ground / decor /
+// overhead) into SEPARATE containers, each with its own zIndex. Ground and
+// decor render below every entity; overhead renders above the maximum
+// possible entity zIndex. `chunks` spans all band containers — the culler
+// iterates them without walking the scene graph.
+//
 // All MeshGeometry and Buffer objects are created with `autoGarbageCollect = false`
 // to prevent the PixiJS v8 silent unbinding bug when chunks are temporarily
 // culled from the screen.
 // ---------------------------------------------------------------------------
+
+/**
+ * C-378: a UV rectangle in [0,1] atlas space.
+ */
+export type FrameUvRect = { u0: number; v0: number; u1: number; v1: number };
 
 /**
  * Options for rendering a tilemap into a PixiJS scene.
@@ -38,13 +51,43 @@ export type TilemapRenderOptions = {
    * When omitted, all visible non-collision layers are rendered.
    */
   layerFilter?: (layerName: string) => boolean;
+  /**
+   * C-378: terrain layers emitted by the autotiler. When provided, these
+   * frame-name layers render as the ground band (base fill + overlays in
+   * precedence order).
+   */
+  terrainLayers?: readonly TerrainLayerEmission[];
+  /**
+   * C-378: frame NAME → UV rect resolver built from the pack's atlas
+   * spritesheet. Required to render {@link terrainLayers}.
+   */
+  frameUvResolver?: (frame: string) => FrameUvRect | undefined;
+};
+
+/**
+ * One band container from {@link TilemapRenderResult}.
+ */
+export type TilemapBandContainer = {
+  /** Band this container renders. */
+  band: TilemapBand;
+  /** The container holding this band's chunk meshes. */
+  container: Container;
+  /** The zIndex to assign on the world container (C-378 AC-1). */
+  zIndex: number;
+  /** Chunks in this band (subset of the merged `chunks`). */
+  chunks: readonly TilemapChunk[];
 };
 
 /**
  * Result of rendering a tilemap into the scene.
  */
 export type TilemapRenderResult = {
-  /** The Container holding all chunk Meshes. Add to the world container. */
+  /**
+   * The Container holding all chunk Meshes across all bands. Add to the
+   * world container. Prefer the per-band {@link bandContainers} for zIndex
+   * correctness (C-378 AC-1) — this merged container exists for callers
+   * that render a single z-band (legacy tests / sandbox).
+   */
   container: Container;
   /** Number of layers rendered. */
   layerCount: number;
@@ -54,6 +97,11 @@ export type TilemapRenderResult = {
   chunks: readonly TilemapChunk[];
   /** Uniform group the chunk meshes are actually bound to. */
   globalUniforms: UniformGroup;
+  /**
+   * C-378 AC-1: per-band containers with their declared zIndex. The
+   * production caller adds each container to the world with its `zIndex`.
+   */
+  bandContainers: readonly TilemapBandContainer[];
 };
 
 /**
@@ -79,7 +127,7 @@ export type TilemapRenderResult = {
 export const renderTilemap = async (
   options: TilemapRenderOptions,
 ): Promise<TilemapRenderResult> => {
-  const { tilemap, layerFilter } = options;
+  const { tilemap, layerFilter, terrainLayers, frameUvResolver } = options;
 
   const container = new Container();
   container.label = 'tilemap-chunks';
@@ -112,9 +160,86 @@ export const renderTilemap = async (
   const globalUniforms = new UniformGroup({
     uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
     uTime: { value: 0, type: 'f32' },
+    uTint: { value: new Float32Array([1, 1, 1, 1]), type: 'vec4<f32>' },
   });
 
-  // Render layers bottom-to-top (preserve Tiled draw order)
+  // Band grouping: each rendered layer lands in exactly one band container
+  // (C-378 AC-1). Ground/decor render below entities; overhead above them.
+  const bands: TilemapBandContainer[] = [];
+  const bandContainersByKey = new Map<string, TilemapBandContainer>();
+  const bandZ = (band: TilemapBand): number => {
+    switch (band) {
+      case 'decor':
+        return WORLD_Z_BANDS.tilemapDecor;
+      case 'overhead':
+        return WORLD_Z_BANDS.tilemapOverhead;
+      default:
+        // 'ground' (and any future band with no declared zIndex)
+        return WORLD_Z_BANDS.tilemapGround;
+    }
+  };
+  const bandContainerFor = (band: TilemapBand): TilemapBandContainer => {
+    const existing = bandContainersByKey.get(band);
+    if (existing) {
+      return existing;
+    }
+    const bandContainer = new Container();
+    bandContainer.label = `tilemap-band-${band}`;
+    const entry: TilemapBandContainer = {
+      band,
+      container: bandContainer,
+      zIndex: bandZ(band),
+      chunks: [],
+    };
+    bands.push(entry);
+    bandContainersByKey.set(band, entry);
+    return entry;
+  };
+
+  // Render terrain layers (C-378) first — they are the ground band underlay
+  // (base fill + overlays in precedence order).
+  if (terrainLayers && terrainLayers.length > 0) {
+    const primaryTileset = tilemap.tilesets[0];
+    const texture = primaryTileset ? textureMap.get(primaryTileset.image) : undefined;
+    if (texture) {
+      const bandEntry = bandContainerFor('ground');
+      for (const terrainLayer of terrainLayers) {
+        const layerTilemap: TilemapData = {
+          ...tilemap,
+          layers: [
+            {
+              name: terrainLayer.name,
+              width: tilemap.width,
+              height: tilemap.height,
+              data: [],
+              frames: terrainLayer.frames,
+              visible: true,
+              band: 'ground',
+            },
+          ],
+        };
+        const result = buildTilemapChunks({
+          tilemap: layerTilemap,
+          tilesetTexture: texture,
+          globalUniforms,
+          frameUvResolver,
+        });
+        while (result.container.children.length > 0) {
+          bandEntry.container.addChild(result.container.children[0]);
+        }
+        layerCount += 1;
+        bandEntry.chunks = [...bandEntry.chunks, ...result.chunks];
+        allChunks.push(...result.chunks);
+      }
+    }
+  }
+
+  // Render baked layers bottom-to-top (preserve Tiled draw order).
+  // C-378: when the autotiler supplied terrain layers, the baked ground
+  // band is REPLACED (terrain layers render in its place) — skip
+  // ground-band baked layers to avoid double-rendering the base fill.
+  // Decor/overhead baked layers still render on top.
+  const hasTerrainGround = (terrainLayers?.length ?? 0) > 0;
   for (const layer of tilemap.layers) {
     if (!layer.visible) {
       continue;
@@ -123,6 +248,9 @@ export const renderTilemap = async (
       continue;
     }
     if (layerFilter && !layerFilter(layer.name)) {
+      continue;
+    }
+    if (hasTerrainGround && (layer.band ?? 'ground') === 'ground') {
       continue;
     }
 
@@ -155,13 +283,22 @@ export const renderTilemap = async (
       globalUniforms,
     });
 
-    // Merge chunk children into the main container
+    // Merge chunk children into the layer's band container
+    const bandEntry = bandContainerFor(layer.band ?? 'ground');
     while (result.container.children.length > 0) {
-      container.addChild(result.container.children[0]);
+      bandEntry.container.addChild(result.container.children[0]);
     }
 
     layerCount += 1;
+    bandEntry.chunks = [...bandEntry.chunks, ...result.chunks];
     allChunks.push(...result.chunks);
+  }
+
+  // The merged container keeps all bands as children for callers that use
+  // a single z-band (legacy tests / sandbox). The per-band containers are
+  // the production path (C-378 AC-1).
+  for (const band of bands) {
+    container.addChild(band.container);
   }
 
   // The uniform group the chunks are actually bound to (C-377 AC-5). When
@@ -176,6 +313,7 @@ export const renderTilemap = async (
       chunkCount: allChunks.length,
       chunks: allChunks,
       globalUniforms,
+      bandContainers: bands,
     };
   }
 
@@ -188,7 +326,9 @@ export const renderTilemap = async (
     globalUniforms: new UniformGroup({
       uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
       uTime: { value: 0, type: 'f32' },
+      uTint: { value: new Float32Array([1, 1, 1, 1]), type: 'vec4<f32>' },
     }),
+    bandContainers: bands,
   };
 };
 

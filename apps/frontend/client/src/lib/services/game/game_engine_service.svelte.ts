@@ -457,7 +457,9 @@ class GameEngineService
    * `propWalkability` side channel — future manifest-driven properties
    * (collision rects, movement cost, interaction radius) ride the same field.
    */
-  private _buildPackConfig(manifest: Pick<ContentPackManifest, 'tiles' | 'props'>): PackConfig {
+  private _buildPackConfig(
+    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains'>,
+  ): PackConfig {
     return {
       tiles: Object.fromEntries(
         Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
@@ -494,6 +496,10 @@ class GameEngineService
           return [propId, projected];
         }),
       ),
+      // C-378: terrains cross the worker boundary so the autotiler can run
+      // inside the world (map load). Carried only when the pack declares
+      // them — a terrain-less pack stays legacy (AC-8).
+      ...(manifest.terrains === undefined ? {} : { terrains: manifest.terrains }),
     };
   }
 
@@ -507,6 +513,19 @@ class GameEngineService
 
     bridge.on('GAME_READY', () => {
       this.isGameReady = true;
+      // C-378 AC-9 visual hook: `?gameHour=<0-23>` pre-configures the
+      // environment hour once the world is ready (the SET_ENVIRONMENT_CONFIG
+      // command handler is registered at world creation). Purely additive —
+      // absent the param, the game boots at its default hour.
+      if (typeof window !== 'undefined') {
+        const hour = Number(new URLSearchParams(window.location.search).get('gameHour'));
+        if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+          bridge.send({
+            type: 'SET_ENVIRONMENT_CONFIG',
+            startHour: hour,
+          } as unknown as GameCommand);
+        }
+      }
     });
 
     bridge.on('GAME_ERROR', (event) => {

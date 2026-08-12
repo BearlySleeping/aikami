@@ -1363,3 +1363,272 @@ describe('buildCollisionGrid (C-376 AC-1)', () => {
     expect(grid).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-378 — terrain channel parsing, terrain-derived collision (AC-2/AC-4),
+// legacy fallback (AC-8)
+// ---------------------------------------------------------------------------
+
+describe('loadTilemap: aikami terrain + elevation channels (C-378)', () => {
+  it('parses the aikami.terrain channel into TilemapData.terrain', async () => {
+    const raw = createTestMap({
+      aikami: {
+        formatVersion: 1,
+        terrain: ['grass', 'grass', 'dirt', 'water'],
+        elevation: [0, 0, 0, 0],
+      },
+    });
+    // createTestMap builds 10×8 = 80 cells — stretch the channels.
+    const terrain = new Array<string>(80).fill('grass');
+    terrain[2] = 'dirt';
+    terrain[3] = 'water';
+    raw.aikami = { formatVersion: 1, terrain, elevation: new Array(80).fill(0) };
+
+    const fetchMock = mockFetch(raw);
+    const tilemap = await loadTilemap({ url: 'test://aikami-map.json', fetch: fetchMock });
+
+    expect(tilemap.terrain).toBeDefined();
+    expect(tilemap.terrain?.[2]).toBe('dirt');
+    expect(tilemap.terrain?.[3]).toBe('water');
+    expect(tilemap.elevation).toBeDefined();
+    expect(tilemap.elevation?.[0]).toBe(0);
+  });
+
+  it('leaves terrain undefined when no aikami block is present (legacy path)', async () => {
+    const raw = createTestMap();
+    const fetchMock = mockFetch(raw);
+    const tilemap = await loadTilemap({ url: 'test://legacy-map.json', fetch: fetchMock });
+
+    expect(tilemap.terrain).toBeUndefined();
+    expect(tilemap.elevation).toBeUndefined();
+  });
+
+  it('rejects an aikami.terrain channel with mismatched dimensions', async () => {
+    const raw = createTestMap({
+      aikami: { formatVersion: 1, terrain: ['grass', 'dirt'], elevation: [] },
+    });
+    const fetchMock = mockFetch(raw);
+
+    expect(loadTilemap({ url: 'test://bad-aikami.json', fetch: fetchMock })).rejects.toThrow(
+      /aikami\.terrain length/,
+    );
+  });
+
+  it('parses the layer band property (defaults to ground)', async () => {
+    const raw = createTestMap();
+    const layers = raw.layers as Record<string, unknown>[];
+    layers[0].properties = [{ name: 'band', type: 'string', value: 'decor' }];
+    const fetchMock = mockFetch(raw);
+    const tilemap = await loadTilemap({ url: 'test://band-map.json', fetch: fetchMock });
+
+    expect(tilemap.layers[0].band).toBe('decor');
+  });
+});
+
+describe('buildCollisionGrid: terrain-channel path (C-378 AC-2)', () => {
+  /** Pack config with grass/dirt walkable and water solid. */
+  const makeTerrainPackConfig = (): PackConfig => ({
+    tiles: {
+      '1': { name: 'grass', frame: 'grass.png', isWalkable: true },
+      '4': { name: 'dirt', frame: 'dirt_0.png', isWalkable: true },
+      '14': { name: 'water', frame: 'water_0.png', isWalkable: false },
+    },
+    props: {},
+    terrains: [
+      { name: 'grass', precedence: 0, wang: 'fill', frameBase: 'grass.png', isWalkable: true },
+      { name: 'dirt', precedence: 1, wang: 'corner16', frameBase: 'dirt_0.png', isWalkable: true },
+      {
+        name: 'water',
+        precedence: 2,
+        wang: 'corner16',
+        frameBase: 'water_0.png',
+        isWalkable: false,
+      },
+    ],
+  });
+
+  it('derives solidity from terrain ids, never from the tile drawn (AC-2 load-bearing invariant)', () => {
+    // A grass cell adjacent to water renders a water-edge overlay frame in
+    // its ground layer (GID 14 — water's frame). The terrain channel says
+    // grass. Collision must follow the terrain: grass walkable, water solid.
+    const tilemap: TilemapData = {
+      width: 2,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      terrain: ['grass', 'water'],
+      layers: [
+        {
+          name: 'ground',
+          width: 2,
+          height: 1,
+          data: [14, 14], // both cells DRAW water frames — collision must ignore this
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig());
+
+    expect(grid).toBeDefined();
+    expect(grid?.[0]).toBe(false); // grass cell walkable despite water frame
+    expect(grid?.[1]).toBe(true); // water cell solid
+  });
+
+  it('collision output is identical whether the autotiler ran or not', () => {
+    // The byte-identity invariant: the autotiler only changes RENDERED
+    // frames, never the terrain channel. Building collision from the raw
+    // tilemap (with terrain channel) vs a tilemap whose ground layer was
+    // replaced by autotiled frames must produce identical grids.
+    const raw: TilemapData = {
+      width: 3,
+      height: 3,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      terrain: ['grass', 'grass', 'grass', 'grass', 'dirt', 'grass', 'grass', 'grass', 'water'],
+      layers: [
+        { name: 'ground', width: 3, height: 3, data: new Array(9).fill(1), visible: true },
+        { name: 'collision', width: 3, height: 3, data: new Array(9).fill(0), visible: true },
+      ],
+    };
+
+    const withoutAutotile = buildCollisionGrid(raw, makeTerrainPackConfig());
+    // After autotiling, the ground layer GIDs become whatever frames the
+    // autotiler resolved — collision must be identical because it reads the
+    // terrain channel only.
+    const autotiled: TilemapData = {
+      ...raw,
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 3,
+          data: [14, 14, 14, 14, 4, 14, 14, 14, 14],
+          visible: true,
+        },
+        { name: 'collision', width: 3, height: 3, data: new Array(9).fill(0), visible: true },
+      ],
+    };
+    const withAutotile = buildCollisionGrid(autotiled, makeTerrainPackConfig());
+
+    expect(withAutotile).toEqual(withoutAutotile);
+    expect(withAutotile?.[4]).toBe(false); // dirt walkable
+    expect(withAutotile?.[8]).toBe(true); // water solid
+  });
+
+  it('unknown terrain ids fall back to base terrain walkability + warn once', () => {
+    const warnSpy = spyOn(logger, 'warn');
+    try {
+      const tilemap: TilemapData = {
+        width: 2,
+        height: 1,
+        tilewidth: 32,
+        tileheight: 32,
+        tilesets: [],
+        terrain: ['grass', 'mystery'],
+        layers: [{ name: 'ground', width: 2, height: 1, data: [1, 1], visible: true }],
+      };
+
+      const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig());
+
+      expect(grid).toBeUndefined(); // both fall back to walkable grass
+      const call = warnSpy.mock.calls.find(
+        (args) => args[0] === 'buildCollisionGrid:unknown-terrain',
+      );
+      expect(call).toBeDefined();
+      const payload = call?.[1] as { terrains?: string[] };
+      expect(payload.terrains).toEqual(['mystery']);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('an empty string cell resolves to the base terrain', () => {
+    const tilemap: TilemapData = {
+      width: 2,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      terrain: ['', 'water'],
+      layers: [{ name: 'ground', width: 2, height: 1, data: [1, 14], visible: true }],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig());
+    expect(grid?.[0]).toBe(false); // '' → base grass walkable
+    expect(grid?.[1]).toBe(true); // water solid
+  });
+});
+
+describe('buildCollisionGrid: solidityLayers honoured with decor/overhead (C-378 AC-4)', () => {
+  const makeTerrainPackConfig = (): PackConfig => ({
+    tiles: {
+      '1': { name: 'grass', frame: 'grass.png', isWalkable: true },
+      '13': { name: 'roof', frame: 'roof.png', isWalkable: false },
+    },
+    props: {},
+    terrains: [
+      { name: 'grass', precedence: 0, wang: 'fill', frameBase: 'grass.png', isWalkable: true },
+    ],
+  });
+
+  it('overhead roof tiles never block — only terrain + explicit collision layer contribute', () => {
+    // Map with a terrain channel (all grass) + an overhead layer that is
+    // ENTIRELY roof tiles (isWalkable: false). Zero cells may be blocked by
+    // the overhead layer: terrain says walkable, collision layer is empty.
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      terrain: ['grass', 'grass', 'grass'],
+      layers: [
+        { name: 'ground', width: 3, height: 1, data: [1, 1, 1], visible: true },
+        {
+          name: 'overhead',
+          width: 3,
+          height: 1,
+          data: [13, 13, 13], // roof everywhere — must NOT block
+          band: 'overhead',
+          visible: true,
+        },
+        { name: 'collision', width: 3, height: 1, data: [0, 0, 0], visible: true },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig());
+    // The explicit collision layer exists (all zeros) → grid is materialized
+    // with every cell walkable — no cell is blocked by the overhead layer.
+    expect(grid).toBeDefined();
+    expect(grid?.every((v) => v === false)).toBe(true);
+  });
+});
+
+describe('buildCollisionGrid: legacy baked-GID path still works (C-378 AC-8)', () => {
+  it('a map with no terrain channel derives solidity from manifest tiles (legacy)', () => {
+    const packConfig: PackConfig = {
+      tiles: {
+        '1': { name: 'grass', frame: 'grass.png', isWalkable: true },
+        '8': { name: 'brick', frame: 'brick.png', isWalkable: false },
+      },
+      props: {},
+      // no terrains block → legacy path
+    };
+
+    const tilemap: TilemapData = {
+      width: 2,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [{ name: 'ground', width: 2, height: 1, data: [1, 8], visible: true }],
+    };
+
+    const grid = buildCollisionGrid(tilemap, packConfig);
+    expect(grid?.[0]).toBe(false);
+    expect(grid?.[1]).toBe(true);
+  });
+});

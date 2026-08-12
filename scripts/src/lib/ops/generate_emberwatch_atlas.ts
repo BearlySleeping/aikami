@@ -22,28 +22,83 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import {
+  ATLAS_CELL,
   ATLAS_HEIGHT,
+  ATLAS_PADDING,
   ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
   buildFrames,
+  cornerFrameName,
+  readManifestTerrains,
 } from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
 // Constants — atlas geometry is derived from the shared tables module so the
 // atlas generator, the frame registry, and the map tileset blocks cannot
 // drift independently (CodeRabbit review, C-376).
+//
+// C-378 AC-5: frames are packed with 1px edge extrusion. The painters draw
+// the 32×32 CONTENT at the old content pitch (W=512, H=256) into a scratch
+// buffer; a post-pass extrudes each frame into the final 544×272 atlas with
+// a 1px border duplicated from the frame's edge pixels. The border makes
+// adjacent-atlas sampling safe — the chunk renderer's half-texel inset is
+// deleted (AC-5).
 // ---------------------------------------------------------------------------
 
-const TILE = ATLAS_TILE_SIZE;
-const W = ATLAS_WIDTH; // 512
-const H = ATLAS_HEIGHT; // 256
+const TILE = ATLAS_TILE_SIZE; // 32 — frame content size
+const CELL = ATLAS_CELL; // 34 — cell pitch in the final atlas
+const PAD = ATLAS_PADDING; // 1 — extrusion border width
+const CW = ATLAS_WIDTH; // 544 — final atlas width
+const CH = ATLAS_HEIGHT; // 272 — final atlas height
+
+// Content scratch buffer dimensions (painters write here at 32px pitch).
+const W = 512;
+const H = 256;
 
 /**
  * Frame registry: frameKey → [col, row]. DERIVED from manifest.tiles
  * (C-376 AC-6 D5) — the manifest is the single source of truth for the
  * GID↔frame mapping. GID = row*COLS + col + 1.
+ *
+ * C-378: corner-16 terrain frames are derived from the manifest's
+ * `terrains` block and placed in the next free rows after the baked tiles
+ * (16 contiguous cells per terrain, mask order). The content scratch
+ * buffer keeps the 16×8 grid; the final atlas is extruded to 34px pitch.
  */
 const FRAMES: Record<string, [number, number]> = buildFrames();
+
+/**
+ * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
+ * and registers the derived mask frame names.
+ */
+const registerTerrainFrames = (): void => {
+  const terrains = readManifestTerrains();
+  let nextCell = Object.keys(FRAMES).length; // first free cell after baked frames
+  for (const terrain of terrains) {
+    if (terrain.wang !== 'corner16') {
+      continue;
+    }
+    for (let mask = 0; mask < 16; mask++) {
+      const name = cornerFrameName(terrain.frameBase, mask);
+      if (FRAMES[name]) {
+        throw new Error(
+          `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
+        );
+      }
+      const col = nextCell % 16;
+      const row = Math.floor(nextCell / 16);
+      if (row >= 8) {
+        throw new Error(
+          `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
+        );
+      }
+      FRAMES[name] = [col, row];
+      nextCell += 1;
+    }
+  }
+};
+
+registerTerrainFrames();
 
 // ---------------------------------------------------------------------------
 // Canvas
@@ -813,7 +868,129 @@ const paintSand = (col: number, row: number): void => {
 // Paint all frames
 // ---------------------------------------------------------------------------
 
+// ---- Corner-16 terrain frames (C-378) ------------------------------------
+//
+// Each corner frame composites the terrain (dirt/water) onto the base
+// (grass) using the corner-16 geometry:
+//   - the four corner wedges are the triangles cut by the tile diagonals
+//     through the edge midpoints — a corner whose mask bit is set owns its
+//     wedge;
+//   - the center diamond (pixels in no wedge) is ALWAYS terrain — the
+//     cell's own terrain owns its core regardless of the corners.
+// Mask bit order is the documented contract: bit0=NW, bit1=NE, bit2=SE,
+// bit3=SW (clockwise from north-west). This produces the diagonal blended
+// edges the autotiler relies on (mask 3 = top half, mask 12 = bottom half,
+// mask 5 = diagonal pair, …).
+
+/** Corner bit → wedge test (tile-local x,y in 0..TILE-1, center at 16). */
+const CORNER_WEDGE_TESTS: Array<{
+  bit: number;
+  test: (x: number, y: number) => boolean;
+}> = [
+  { bit: 0b0001, test: (x, y) => x + y < 16 }, // NW: top-left triangle
+  { bit: 0b0010, test: (x, y) => x - y > 16 }, // NE: top-right triangle
+  { bit: 0b0100, test: (x, y) => x + y > 48 }, // SE: bottom-right triangle
+  { bit: 0b1000, test: (x, y) => y - x > 16 }, // SW: bottom-left triangle
+];
+
+/** True when the pixel is in the center diamond (always terrain). */
+const inCenterDiamond = (x: number, y: number): boolean => {
+  return !CORNER_WEDGE_TESTS.some(({ test }) => test(x, y));
+};
+
+/** True when the pixel is owned by a set-corner wedge (or the diamond). */
+const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {
+  if (inCenterDiamond(x, y)) {
+    return true;
+  }
+  return CORNER_WEDGE_TESTS.some(({ bit, test }) => (mask & bit) !== 0 && test(x, y));
+};
+
+/**
+ * Paints a corner-16 frame: base fill everywhere, terrain stamped into the
+ * owned wedges + center diamond.
+ *
+ * The terrain/base painters write the full cell; we snapshot both into
+ * scratch buffers then composite pixel-by-pixel (deterministic — the
+ * painters' rng is driven by cell coordinates only).
+ */
+const paintCornerFrame = (
+  col: number,
+  row: number,
+  mask: number,
+  paintBase: (col: number, row: number) => void,
+  paintTerrain: (col: number, row: number) => void,
+): void => {
+  const cx = col * TILE;
+  const cy = row * TILE;
+
+  // Snapshot the base fill (grass) into a scratch array.
+  const basePixels = new Uint8Array(TILE * TILE * 3);
+  paintBase(col, row);
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = ((cy + y) * W + (cx + x)) * 4;
+      const o = (y * TILE + x) * 3;
+      basePixels[o] = buf[i];
+      basePixels[o + 1] = buf[i + 1];
+      basePixels[o + 2] = buf[i + 2];
+    }
+  }
+
+  // Snapshot the terrain fill (dirt/water) into a scratch array.
+  const terrainPixels = new Uint8Array(TILE * TILE * 3);
+  paintTerrain(col, row);
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = ((cy + y) * W + (cx + x)) * 4;
+      const o = (y * TILE + x) * 3;
+      terrainPixels[o] = buf[i];
+      terrainPixels[o + 1] = buf[i + 1];
+      terrainPixels[o + 2] = buf[i + 2];
+    }
+  }
+
+  // Composite: owned wedges + diamond → terrain; everything else → base.
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = ((cy + y) * W + (cx + x)) * 4;
+      const o = (y * TILE + x) * 3;
+      if (terrainOwnsPixel(mask, x, y)) {
+        buf[i] = terrainPixels[o];
+        buf[i + 1] = terrainPixels[o + 1];
+        buf[i + 2] = terrainPixels[o + 2];
+      } else {
+        buf[i] = basePixels[o];
+        buf[i + 1] = basePixels[o + 1];
+        buf[i + 2] = basePixels[o + 2];
+      }
+    }
+  }
+};
+
+const paintDirtCorner = (col: number, row: number, mask: number): void => {
+  paintCornerFrame(col, row, mask, paintGrass, paintDirt);
+};
+
+const paintWaterCorner = (col: number, row: number, mask: number): void => {
+  paintCornerFrame(col, row, mask, paintGrass, paintWater);
+};
+
 const paintFrame = (key: string, col: number, row: number): void => {
+  // C-378 corner-16 terrain frames: `dirt_<mask>.png` / `water_<mask>.png`.
+  const cornerMatch = /^(dirt|water)_(\d{1,2})\.png$/.exec(key);
+  if (cornerMatch) {
+    const terrain = cornerMatch[1];
+    const mask = Number(cornerMatch[2]);
+    if (mask >= 0 && mask < 16) {
+      if (terrain === 'dirt') {
+        paintDirtCorner(col, row, mask);
+      } else {
+        paintWaterCorner(col, row, mask);
+      }
+      return;
+    }
+  }
   switch (key) {
     case 'grass.png':
       paintGrass(col, row);
@@ -1060,7 +1237,35 @@ const outDir = join(
 const main = (): void => {
   drawAll();
 
-  const png = encodePng(W, H, buf);
+  // ── C-378 AC-5: 1px edge extrusion ──
+  // The content scratch is 512×256 at 32px pitch. The final atlas is
+  // CW×CH (544×272) at 34px pitch: every frame gets a 1px border that
+  // duplicates its own edge pixels, so adjacent-atlas sampling never bleeds
+  // and the chunk renderer can use exact UV rects (no half-texel inset).
+  // Deterministic for identical inputs (pure copy pass).
+  const extruded = new Uint8Array(CW * CH * 4);
+  for (let y = 0; y < CH; y++) {
+    for (let x = 0; x < CW; x++) {
+      const cellX = Math.floor(x / CELL);
+      const cellY = Math.floor(y / CELL);
+      const localX = x - cellX * CELL; // 0..33
+      const localY = y - cellY * CELL;
+      // Map the final pixel back to the content cell (clamp to the frame's
+      // edge for the 1px border).
+      const srcLocalX = Math.min(TILE - 1, Math.max(0, localX - PAD));
+      const srcLocalY = Math.min(TILE - 1, Math.max(0, localY - PAD));
+      const srcX = cellX * TILE + srcLocalX;
+      const srcY = cellY * TILE + srcLocalY;
+      const si = (srcY * W + srcX) * 4;
+      const di = (y * CW + x) * 4;
+      extruded[di] = buf[si];
+      extruded[di + 1] = buf[si + 1];
+      extruded[di + 2] = buf[si + 2];
+      extruded[di + 3] = 255;
+    }
+  }
+
+  const png = encodePng(CW, CH, extruded);
 
   // The intermediate PNG is written to a temp dir OUTSIDE the public
   // tileset dir — only the final atlas.webp belongs in static/. The temp
@@ -1088,11 +1293,13 @@ const main = (): void => {
     rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  // Emit atlas.json with frame rects matching the grid layout.
+  // Emit atlas.json with frame rects matching the extruded layout: content
+  // lives at (col*CELL + PAD, row*CELL + PAD) sized TILE×TILE. The 1px
+  // border belongs to the frame's own edge (extrusion), so UVs are exact.
   const frames: Record<string, unknown> = {};
   for (const [key, [col, row]] of Object.entries(FRAMES)) {
     frames[key] = {
-      frame: { x: col * TILE, y: row * TILE, w: TILE, h: TILE },
+      frame: { x: col * CELL + PAD, y: row * CELL + PAD, w: TILE, h: TILE },
       rotated: false,
       trimmed: false,
       spriteSourceSize: { x: 0, y: 0, w: TILE, h: TILE },
@@ -1106,13 +1313,15 @@ const main = (): void => {
       version: '1.0',
       image: 'atlas.webp',
       format: 'RGBA8888',
-      size: { w: W, h: H },
+      size: { w: CW, h: CH },
       scale: '1',
     },
   };
   writeFileSync(join(outDir, 'atlas.json'), `${JSON.stringify(atlasJson, null, 2)}\n`);
 
-  console.log(`Generated atlas: ${webpPath} (${W}x${H}, ${Object.keys(FRAMES).length} frames)`);
+  console.log(
+    `Generated atlas: ${webpPath} (${CW}x${CH}, ${Object.keys(FRAMES).length} frames, extruded ${PAD}px)`,
+  );
 };
 
 main();

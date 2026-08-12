@@ -15,6 +15,8 @@ import {
   ATLAS_COLS,
   buildFrames,
   buildG,
+  cornerFrameName,
+  readManifestTerrains,
   readManifestTiles,
   resetManifestTilesCache,
   setManifestTilesForTest,
@@ -150,5 +152,56 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
     } finally {
       resetManifestTilesCache();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-378 AC-5 — extruded atlas determinism + corner-16 terrain frames
+// ---------------------------------------------------------------------------
+
+describe('C-378 — corner-16 terrain frame derivation', () => {
+  test('readManifestTerrains reads the committed terrains block', () => {
+    const terrains = readManifestTerrains();
+    expect(terrains.length).toBeGreaterThanOrEqual(3);
+    const names = terrains.map((t) => t.name);
+    expect(names).toContain('grass');
+    expect(names).toContain('dirt');
+    expect(names).toContain('water');
+  });
+
+  test('cornerFrameName derives masks 0..15 from frameBase', () => {
+    expect(cornerFrameName('dirt_0.png', 0)).toBe('dirt_0.png');
+    expect(cornerFrameName('dirt_0.png', 1)).toBe('dirt_1.png');
+    expect(cornerFrameName('dirt_0.png', 15)).toBe('dirt_15.png');
+    expect(cornerFrameName('water_0.png', 7)).toBe('water_7.png');
+  });
+});
+
+describe('C-378 AC-5 — atlas packer determinism', () => {
+  test('corner-16 frame rects sit inside the extruded cell (1px margin)', () => {
+    const atlas = JSON.parse(
+      readFileSync(
+        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
+        'utf-8',
+      ),
+    ) as { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> };
+    // dirt_0.png is registered by the terrain pass after the 48 baked frames
+    // (GID 49 → row 3, col 0) → content at (0*34+1, 3*34+1).
+    const dirt0 = atlas.frames['dirt_0.png'];
+    expect(dirt0).toBeDefined();
+    expect(dirt0.frame.x).toBe(1);
+    expect(dirt0.frame.y).toBe(3 * 34 + 1);
+    expect(dirt0.frame.w).toBe(32);
+    expect(dirt0.frame.h).toBe(32);
+  });
+
+  test('the committed atlas is 544×272 (extruded)', () => {
+    const atlas = JSON.parse(
+      readFileSync(
+        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
+        'utf-8',
+      ),
+    ) as { meta: { size: { w: number; h: number } } };
+    expect(atlas.meta.size).toEqual({ w: 544, h: 272 });
   });
 });

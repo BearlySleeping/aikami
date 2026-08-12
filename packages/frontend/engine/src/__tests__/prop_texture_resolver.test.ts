@@ -239,3 +239,57 @@ describe('createPropFrameResolver — memoization & lifecycle', () => {
     expect(fresh?.source).toBe('hit');
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-378 AC-7 — prop sprites render at the texture's native size + anchor
+// ---------------------------------------------------------------------------
+
+describe('C-378 AC-7 — native prop size + manifest anchor', () => {
+  test('a 32×64 frame resolves with its native dimensions and the manifest anchor', async () => {
+    // A tall prop (e.g. a gate) — the renderer must NOT force 32×32. The
+    // resolver exposes the raw texture; size + anchor application is a
+    // renderer concern, so this test pins the resolver contract: the frame
+    // texture keeps its native geometry and the manifest anchor defaults to
+    // (0.5, 1.0).
+    const tall = {
+      width: 32,
+      height: 64,
+      source: { width: 32, height: 64 } as unknown as Texture['source'],
+      label: 'gate.png',
+    } as unknown as Texture;
+
+    const handle = createPropFrameResolver({
+      textureUrl: 'atlas.webp',
+      spritesheetUrl: 'atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => makeSheet({ 'gate.png': tall, 'grass.png': GRASS }),
+    });
+    await handle.preload();
+
+    const resolution = handle.resolver('gate.png');
+    expect(resolution?.source).toBe('hit');
+    expect(resolution?.texture.width).toBe(32);
+    expect(resolution?.texture.height).toBe(64);
+  });
+
+  test('existing 32×32 props keep their exact native size (pixel-identical)', async () => {
+    const square = {
+      width: 32,
+      height: 32,
+      source: { width: 32, height: 32 } as unknown as Texture['source'],
+      label: 'well.png',
+    } as unknown as Texture;
+
+    const handle = createPropFrameResolver({
+      textureUrl: 'atlas.webp',
+      spritesheetUrl: 'atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => makeSheet({ 'well.png': square, 'grass.png': GRASS }),
+    });
+    await handle.preload();
+
+    const resolution = handle.resolver('well.png');
+    expect(resolution?.texture.width).toBe(32);
+    expect(resolution?.texture.height).toBe(32);
+  });
+});

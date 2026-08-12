@@ -11,6 +11,30 @@
     "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
   },
   "fallbackTile": "grass.png",
+  "terrains": [
+    {
+      "name": "grass",
+      "precedence": 0,
+      "wang": "fill",
+      "frameBase": "grass.png",
+      "variants": ["grass_variant.png", "grass_dark.png"],
+      "isWalkable": true
+    },
+    {
+      "name": "dirt",
+      "precedence": 1,
+      "wang": "corner16",
+      "frameBase": "dirt_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "water",
+      "precedence": 2,
+      "wang": "corner16",
+      "frameBase": "water_0.png",
+      "isWalkable": false
+    }
+  ],
   "tiles": {
     "1": {
       "name": "grass",

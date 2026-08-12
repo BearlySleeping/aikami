@@ -3,6 +3,7 @@
 import type { PackConfig } from '@aikami/types';
 import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
+import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
   buildCollisionGrid,
   extractCollisionGrid,
@@ -22,6 +23,7 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
+import { ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
@@ -34,7 +36,7 @@ import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
-import { renderTilemap } from './systems/tilemap_render_system.ts';
+import { type FrameUvRect, renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
 
 // Vite ?worker&type=module import for the bootstrap entry point.
@@ -429,6 +431,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private readonly _propFrameResolver?: PropTextureResolver;
 
+  /**
+   * Frame → { width, height, anchor } for C-378 AC-7 prop sizing.
+   * Built at loadMap from the resolved pack config; cleared on map switch.
+   * Keyed by frame name because the worker message carries the frame, not
+   * the propId.
+   */
+  private _propFrameMeta = new Map<
+    string,
+    { width: number; height: number; anchorX: number; anchorY: number }
+  >();
+
+  /**
+   * Latest environment UBO received from the worker via STATE_UPDATE
+   * (C-213). The worker flushes its own module-level UBO each tick; the
+   * main thread must read the tint from THIS copy, never from a local
+   * environment_system import (that module is not stepped on the main
+   * thread — C-378 AC-9).
+   */
+  private _environmentUbo: Float32Array | undefined;
+
   constructor(options: GameWorldOptions) {
     super(options);
     this._bridge = options.bridge;
@@ -533,8 +555,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // ── C-177: Update uTime for GPU tile animation ──
+      // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
       if (this._tilemapUniforms) {
         this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+        const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
+        if (tintArr && this._environmentUbo) {
+          // Ambient color from the worker UBO — same factor the rest of the
+          // scene uses. Neutral (1,1,1) when the worker hasn't sent a UBO
+          // yet (boot) → pixel-identical to an untinted render.
+          const ambient = this._environmentUbo;
+          tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
+          tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
+          tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+        }
       }
 
       this._updateRenderFromBuffer(this._activeRenderView, stage);
@@ -1082,8 +1115,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // and weather overlay.
     const envData = message.environment as Record<string, unknown> | undefined;
     if (envData) {
-      // Update the weather overlay with the fresh UBO data (C-213)
+      // Keep the latest worker UBO for the tilemap day/night tint
+      // (C-378 AC-9) — the worker's module-level UBO is not visible here.
       const ubo = envData.ubo as Float32Array | undefined;
+      if (ubo) {
+        this._environmentUbo = ubo;
+      }
+      // Update the weather overlay with the fresh UBO data (C-213)
       if (ubo && this._weatherOverlay) {
         this._weatherOverlay.update(ubo);
       }
@@ -1230,12 +1268,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         child.destroy();
       }
 
+      // C-378 AC-7: render at the texture's native size with the manifest
+      // anchor instead of forcing 32×32. Existing 32×32 props are
+      // pixel-identical (native width/height are 32 and the default anchor
+      // is (0.5, 1.0) — the same values the forced path used). Multi-tile
+      // props (e.g. a 32×64 gate) now render at their authored size.
+      // Prop COLLISION stays one tile from the foot pixel regardless of art
+      // height — that is correct for top-down and must not change here.
+      const propMeta = this._propFrameMeta.get(frame) ?? {
+        width: 0,
+        height: 0,
+        anchorX: 0.5,
+        anchorY: 1.0,
+      };
       const propSprite = new Sprite(resolution.texture);
-      propSprite.width = 32;
-      propSprite.height = 32;
+      propSprite.width = propMeta.width > 0 ? propMeta.width : resolution.texture.width;
+      propSprite.height = propMeta.height > 0 ? propMeta.height : resolution.texture.height;
       // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
-      // and the placeholder it replaces.
-      propSprite.anchor.set(0.5, 1.0);
+      // and the placeholder it replaces. Fallback: manifest default.
+      propSprite.anchor.set(propMeta.anchorX, propMeta.anchorY);
       container.addChild(propSprite);
 
       this.debug('prop-frame-texture-loaded', {
@@ -1252,6 +1303,43 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /**
+   * Builds a frame-name → UV-rect resolver for C-378 terrain layers.
+   *
+   * The terrain autotiler emits frame NAMES (never GIDs). This resolver
+   * converts a frame name to an exact UV rect using the pack's spritesheet
+   * via the injected prop frame resolver — the same atlas and the same
+   * fallback semantics. Missing frames resolve to the pack's fallbackTile
+   * (never a blank map, never a URL).
+   *
+   * Returns undefined when no prop resolver is wired (atlas not preloaded)
+   * — the renderer then degrades to the legacy baked-GID path.
+   */
+  private _buildFrameUvResolver(): ((frame: string) => FrameUvRect | undefined) | undefined {
+    if (!this._propFrameResolver) {
+      return undefined;
+    }
+    return (frame: string) => {
+      const resolution = this._propFrameResolver?.(frame);
+      if (!resolution) {
+        return undefined;
+      }
+      const tex = resolution.texture;
+      // UV rect from the texture's frame rect. PixiJS Texture.frame is the
+      // atlas-space rect in pixels; divide by the source size for [0,1] UVs.
+      const f = tex.frame;
+      const source = tex.source;
+      const sourceW = source.width || 1;
+      const sourceH = source.height || 1;
+      return {
+        u0: f.x / sourceW,
+        v0: f.y / sourceH,
+        u1: (f.x + f.width) / sourceW,
+        v1: (f.y + f.height) / sourceH,
+      };
+    };
   }
 
   /**
@@ -2113,8 +2201,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
+      // C-378 AC-4: decor/overhead layers never contribute solidity. With a
+      // terrain channel, the terrain path ignores baked layers entirely;
+      // without one, only ground-band layers contribute (decor/overhead are
+      // visual-only). An empty ground-band list (unusual map) falls back to
+      // the C-376 default (all non-collision layers) rather than silently
+      // opening every cell.
+      const groundBandLayers = tilemap.terrain
+        ? undefined // terrain-channel path ignores solidityLayers (AC-2)
+        : tilemap.layers
+            .filter((l) => (l.band ?? 'ground') === 'ground' && l.name !== 'collision')
+            .map((l) => l.name);
+      const solidityLayers =
+        groundBandLayers && groundBandLayers.length > 0 ? groundBandLayers : undefined;
       const collisionGridData = packConfig
-        ? buildCollisionGrid(tilemap, packConfig)
+        ? buildCollisionGrid(tilemap, packConfig, { solidityLayers })
         : extractCollisionGrid(tilemap);
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
@@ -2129,18 +2230,82 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // collide to the same zone entity.
       const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
 
+      // C-378 AC-7: prop frame metadata (native atlas size + manifest
+      // anchor) for multi-tile props. Keyed by frame so the worker's
+      // ENTITY_CREATED message (which carries only the frame) can resolve
+      // the size/anchor without a propId round-trip.
+      this._propFrameMeta.clear();
+      for (const propDef of Object.values(packConfig?.props ?? {})) {
+        const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
+        this._propFrameMeta.set(propDef.frame, {
+          width: 0, // filled lazily from the resolved texture
+          height: 0,
+          anchorX: anchor.x,
+          anchorY: anchor.y,
+        });
+      }
+
       // 5. Render the new tilemap background
       if (this._app && this._worldContainer) {
+        // C-378: resolve the terrain channel into frame-name layers when the
+        // map declares `aikami.terrain` AND the pack declares `terrains`.
+        // Legacy maps (no terrain channel / terrain-less pack) render
+        // through the existing baked-GID path (AC-8).
+        let terrainLayers: TerrainLayerEmission[] | undefined;
+        let frameUvResolver: ((frame: string) => FrameUvRect | undefined) | undefined;
+        if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
+          // Frame-name → UV rect, derived from the pack's spritesheet via
+          // the injected prop frame resolver (same atlas, same fallback
+          // semantics). Missing frames fall back to the pack's fallbackTile
+          // (prop resolver contract) — never a blank map.
+          frameUvResolver = this._buildFrameUvResolver();
+          if (frameUvResolver) {
+            terrainLayers = autotileLayers({
+              width: tilemap.width,
+              height: tilemap.height,
+              terrain: tilemap.terrain,
+              terrains: packConfig.terrains,
+            });
+            if (terrainLayers.length > 0) {
+              this.debug('loadMap:terrain-resolved', {
+                layers: terrainLayers.map((l) => l.name),
+                cells: tilemap.width * tilemap.height,
+              });
+            }
+          } else {
+            // Atlas not preloaded — degrade to the legacy baked-GID ground
+            // layer (never a blank map).
+            this.warn('loadMap:terrain-skipped', {
+              hint: 'Prop frame resolver not wired — rendering baked GID ground (C-378 degraded path).',
+            });
+          }
+        }
+
         const result = await renderTilemap({
           tilemap,
+          terrainLayers,
+          frameUvResolver,
         });
-        // C-376 AC-4: explicit band below the entity y-range — the world
-        // container now sorts children by zIndex, so insertion index no
-        // longer guarantees layering.
-        result.container.zIndex = WORLD_Z_BANDS.tilemap;
-        // Place behind all entity sprites (z-band handles ordering)
-        this._worldContainer.addChild(result.container);
-        this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
+        // C-378 AC-1: add each band container with its declared zIndex —
+        // ground/decor below entities, overhead above every entity zIndex.
+        // The merged `result.container` is kept inside the world at the
+        // ground band for callers that render a single z-band (sandbox).
+        if (result.bandContainers.length > 0) {
+          for (const band of result.bandContainers) {
+            band.container.zIndex = band.zIndex;
+            this._worldContainer.addChild(band.container);
+          }
+        } else {
+          // C-376 AC-4: explicit band below the entity y-range — the world
+          // container now sorts children by zIndex, so insertion index no
+          // longer guarantees layering.
+          result.container.zIndex = WORLD_Z_BANDS.tilemapGround;
+          this._worldContainer.addChild(result.container);
+        }
+        this.debug('loadMap:tilemap-rendered', {
+          layers: result.layerCount,
+          bands: result.bandContainers.map((b) => b.band),
+        });
 
         // Store animation resources (C-177)
         this._tilemapUniforms = result.globalUniforms;

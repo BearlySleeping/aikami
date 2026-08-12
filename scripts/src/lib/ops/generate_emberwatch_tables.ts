@@ -13,20 +13,35 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Atlas grid geometry — the 512×256 atlas is 16×8 32px cells.
+ * Atlas grid geometry.
+ *
+ * C-378 AC-5: frames are packed with 1px edge extrusion — each frame
+ * occupies a 34px cell (1px padding on every side) so adjacent-atlas
+ * sampling never bleeds. The 32px content stays at (cell*34+1).
  *
  * Single source of truth for the atlas grid dimensions: the atlas
  * generator's COLS/ROWS/W/H and the map tileset blocks (columns,
- * tilecount, imagewidth, imageheight) are all derived from these so the
- * three cannot drift independently (CodeRabbit review, C-376).
+ * tilecount, imagewidth, imageheight, spacing, margin) are all derived
+ * from these so the three cannot drift independently (CodeRabbit review,
+ * C-376).
  */
 export const ATLAS_COLS = 16;
 export const ATLAS_ROWS = 8;
 export const ATLAS_TILE_SIZE = 32;
 
-export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_TILE_SIZE; // 512
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_TILE_SIZE; // 256
+/** 1px edge extrusion around every frame (C-378 AC-5). */
+export const ATLAS_PADDING = 1;
+
+/** Cell pitch including padding (34px). */
+export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
+
+export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
+
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 272
 export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 128
+
+/** Corner-16 mask count per terrain (C-378). */
+export const CORNER16_FRAMES = 16;
 
 const MANIFEST_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -34,6 +49,17 @@ const MANIFEST_PATH = join(
 );
 
 let _cachedManifestTiles: Record<string, { name: string; frame: string }> | undefined;
+
+let _cachedManifestTerrains:
+  | Array<{
+      name: string;
+      precedence: number;
+      wang: string;
+      frameBase: string;
+      variants?: string[];
+      isWalkable: boolean;
+    }>
+  | undefined;
 
 /**
  * Reads manifest.json and returns tileId (gid string) → { name, frame }.
@@ -186,4 +212,61 @@ export const buildFrames = (): Record<string, [number, number]> => {
     frames[def.frame] = [(numericGid - 1) % ATLAS_COLS, Math.floor((numericGid - 1) / ATLAS_COLS)];
   }
   return frames;
+};
+
+/**
+ * Corner-16 frame name for a mask (C-378): frameBase names mask 0, masks
+ * 1..15 derive as `${stem}_${mask}${ext}`.
+ */
+export const cornerFrameName = (frameBase: string, mask: number): string => {
+  if (mask === 0) {
+    return frameBase;
+  }
+  const dot = frameBase.lastIndexOf('.');
+  const ext = dot > 0 ? frameBase.slice(dot) : '';
+  let stem = dot > 0 ? frameBase.slice(0, dot) : frameBase;
+  stem = stem.replace(/_0$/, '');
+  return `${stem}_${mask}${ext}`;
+};
+
+/**
+ * Reads the pack manifest's `terrains` block (C-378). Returns [] when the
+ * pack declares no terrains (legacy pack).
+ */
+export const readManifestTerrains = (): Array<{
+  name: string;
+  precedence: number;
+  wang: string;
+  frameBase: string;
+  variants?: string[];
+  isWalkable: boolean;
+}> => {
+  if (_cachedManifestTerrains) {
+    return _cachedManifestTerrains;
+  }
+  const raw = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as {
+    terrains?: Array<{
+      name?: string;
+      precedence?: number;
+      wang?: string;
+      frameBase?: string;
+      variants?: string[];
+      isWalkable?: boolean;
+    }>;
+  };
+  const terrains = raw.terrains ?? [];
+  _cachedManifestTerrains = terrains.map((t) => ({
+    name: t.name ?? '',
+    precedence: t.precedence ?? 0,
+    wang: t.wang ?? 'fill',
+    frameBase: t.frameBase ?? '',
+    variants: t.variants,
+    isWalkable: t.isWalkable ?? true,
+  }));
+  return _cachedManifestTerrains;
+};
+
+/** Clears the memoized terrain read (test isolation only). */
+export const resetManifestTerrainsCache = (): void => {
+  _cachedManifestTerrains = undefined;
 };

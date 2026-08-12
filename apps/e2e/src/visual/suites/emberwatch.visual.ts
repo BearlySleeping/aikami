@@ -25,6 +25,13 @@ const EmberwatchSchema = Type.Object({
     description: 'Whether zero LPC character heads are used as props',
   }),
   noWhiteSquares: Type.Boolean({ description: 'Whether zero solid white squares appear' }),
+  terrainTransitionsLookNatural: Type.Boolean({
+    description:
+      'Whether grass/dirt/path boundaries have blended edge tiles rather than hard rectangular seams',
+  }),
+  overheadOccludesPlayer: Type.Boolean({
+    description: 'Whether roof/canopy tiles draw over the player when standing beneath them',
+  }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
@@ -43,6 +50,7 @@ const VILLAGE_PROMPT = [
   '- Is the ground clearly a colorful pixel-art village (grass + paths + walls), not a blank or dark grid?',
   '- Are tile boundaries SHARP — hard-edged pixel art with NO blurring, softening, or bilinear interpolation between adjacent tiles?',
   '- Are the stone walls, wall-top rim, and the gate prop visible?',
+  '- Are grass/dirt/path boundaries blended with diagonal edge tiles (autotiled corner-16) instead of hard rectangular seams?',
   '- Is the player character rendered with natural colors (not a solid green/magenta square)?',
   '- Are there ZERO character-head sprites used as props?',
   '- Are there ZERO solid white squares?',
@@ -64,10 +72,14 @@ export default defineConfig({
   waitCondition: 'game_ready',
   cases: [
     {
-      name: 'Village — default spawn (production /game)',
+      name: 'Village — default spawn at noon (production /game)',
       screenshotSelector: 'canvas',
       prompt: VILLAGE_PROMPT,
       schema: EmberwatchSchema,
+      // C-378 AC-9: the game boots at midnight and the day/night tint
+      // darkens the tilemap. The terrain evidence case captures at noon so
+      // the autotiled grass/dirt/water edges are fully lit.
+      searchParams: { gameHour: '12' },
     },
   ],
 });

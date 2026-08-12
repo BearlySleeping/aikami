@@ -692,6 +692,32 @@ export const ContentPackPropSchema = Type.Object({
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;
 
 /**
+ * A terrain declared by a content pack (C-378). Frames are resolved by name.
+ *
+ * `corner16` terrains reference a contiguous run of 16 frames in mask order
+ * starting at `frameBase` (mask index 0). The engine derives frame names for
+ * masks 1..15 as `${frameBaseWithoutExt}_${mask}${ext}` — a content author
+ * declares one frame name, not 16.
+ */
+export const ContentPackTerrainSchema = Type.Object({
+  name: Type.String({ description: 'Human-readable terrain name' }),
+  /** Draw order. Lower renders first; the lowest-precedence terrain is the base fill. */
+  precedence: Type.Integer({ minimum: 0 }),
+  /** 'fill' = solid base terrain, no transitions. 'corner16' = 16 frames in mask order. */
+  wang: Type.Union([Type.Literal('fill'), Type.Literal('corner16')]),
+  /** Frame name of mask index 0. corner16 derives indices 1..15 from the atlas order. */
+  frameBase: Type.String(),
+  /** Optional extra frames for the 'fill' variant, chosen deterministically per cell. */
+  variants: Type.Optional(Type.Array(Type.String())),
+  isWalkable: Type.Boolean(),
+  movementCost: Type.Optional(Type.Number({ minimum: 0 })),
+  /** Blocks line of sight. Consumed by the vision raycasters (C-379). */
+  blocksSight: Type.Optional(Type.Boolean()),
+});
+
+export type ContentPackTerrain = Static<typeof ContentPackTerrainSchema>;
+
+/**
  * PackConfig — the runtime projection of a manifest's tile/prop definitions
  * that crosses the worker boundary (C-376 AC-2).
  *
@@ -709,6 +735,10 @@ export const PackConfigSchema = Type.Object({
   props: Type.Record(Type.String(), ContentPackPropSchema, {
     description: 'Prop definitions keyed by prop ID',
   }),
+  /** Terrain definitions (C-378) — carried across the worker boundary for the autotiler. */
+  terrains: Type.Optional(
+    Type.Array(ContentPackTerrainSchema, { description: 'Terrain definitions' }),
+  ),
 });
 
 export type PackConfig = Static<typeof PackConfigSchema>;
@@ -785,6 +815,16 @@ export const ContentPackManifestSchema = Type.Object({
       }),
       { description: 'Entity definitions keyed by entity key' },
     ),
+  ),
+  /**
+   * Optional: terrain definitions (C-378). When present, maps carrying an
+   * `aikami.terrain` channel resolve tile frames through the corner-16
+   * autotiler instead of baked GIDs. Absent → legacy baked-GID path.
+   */
+  terrains: Type.Optional(
+    Type.Array(ContentPackTerrainSchema, {
+      description: 'Terrain definitions for the corner-16 autotiler (C-378)',
+    }),
   ),
   /** All maps in this pack, keyed by map ID */
   maps: Type.Record(Type.String(), ContentPackMapEntrySchema, {

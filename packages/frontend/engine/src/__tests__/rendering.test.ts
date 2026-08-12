@@ -2309,19 +2309,42 @@ describe('C-376 AC-4 — zIndex render path (PixiJS sortableChildren)', () => {
     expect(computeEntityZIndex(-600)).toBe(MIN_ENTITY_Y);
   });
 
-  it('WORLD_Z_BANDS sit below MIN_ENTITY_Y (and every supported entity y)', () => {
-    // Every band is below the documented minimum entity y, so tilemap /
-    // debug / zone overlays never interleave with entities even in the
-    // negative coordinate range.
-    for (const band of Object.values(WORLD_Z_BANDS)) {
+  it('WORLD_Z_BANDS: below-bands sit under MIN_ENTITY_Y, overhead sits above every entity y', () => {
+    // C-376: every below-band (tilemap/debug/zone overlays) is below the
+    // documented minimum entity y, so they never interleave with entities
+    // even in the negative coordinate range.
+    // C-378 AC-1: the overhead band is the exception — it must draw ABOVE
+    // every entity zIndex, which is unbounded above by computeEntityZIndex.
+    // It is pinned at a value larger than any realistic map pixel height
+    // (100_000) and asserted here rather than trusted as a constant.
+    const belowBands = [
+      WORLD_Z_BANDS.debugGrid,
+      WORLD_Z_BANDS.tilemapGround,
+      WORLD_Z_BANDS.tilemapDecor,
+      WORLD_Z_BANDS.zoneOverlays,
+    ];
+    for (const band of belowBands) {
       expect(band, `band ${band} below MIN_ENTITY_Y ${MIN_ENTITY_Y}`).toBeLessThan(MIN_ENTITY_Y);
     }
     const entityYs = [MIN_ENTITY_Y, 0, 32, 64, 128, 256, 512, 1024];
-    for (const band of Object.values(WORLD_Z_BANDS)) {
+    for (const band of belowBands) {
       for (const y of entityYs) {
         expect(band, `band ${band} below entity y ${y}`).toBeLessThan(computeEntityZIndex(y));
       }
     }
+    // AC-1 invariant: overhead draws over the player standing beneath a
+    // roof, for any in-map entity y.
+    const inMapEntityYs = [0, 64, 512, 1024, 2048, 4096, 8192];
+    for (const y of inMapEntityYs) {
+      expect(WORLD_Z_BANDS.tilemapOverhead, `overhead above entity y ${y}`).toBeGreaterThan(
+        computeEntityZIndex(y),
+      );
+    }
+    // Overhead must also sit above the ground/decor bands so roofs never
+    // sort below the map they sit on.
+    expect(WORLD_Z_BANDS.tilemapOverhead).toBeGreaterThan(WORLD_Z_BANDS.tilemapDecor);
+    expect(WORLD_Z_BANDS.tilemapOverhead).toBeGreaterThan(WORLD_Z_BANDS.tilemapGround);
+    expect(WORLD_Z_BANDS.tilemapDecor).toBeGreaterThan(WORLD_Z_BANDS.tilemapGround);
   });
 });
 
