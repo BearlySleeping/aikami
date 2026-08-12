@@ -57,6 +57,17 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
   /** Whether the adapter has been closed. */
   private _closed = false;
 
+  /**
+   * Serializes transaction batches on the shared connection.
+   *
+   * Turso/libSQL allows only one open transaction per connection; a
+   * concurrent `transaction()` call would interleave its BEGIN/COMMIT with
+   * the in-flight batch. Each batch chains onto this promise so batches run
+   * one at a time. The chain always settles (success or failure) so a failed
+   * batch never blocks later callers.
+   */
+  private _transactionQueue: Promise<void> = Promise.resolve();
+
   constructor(options: TursoStorageAdapterOptions) {
     this._databasePath = options.databasePath;
     this._syncUrl = options.syncUrl;
@@ -160,18 +171,54 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     this._assertOpen();
     logger.debug('TursoStorageAdapter.transaction', { count: queries.length });
 
-    for (const query of queries) {
+    const run = async (): Promise<void> => {
       const db = this._db;
       if (!db) {
         throw new Error('TursoStorageAdapter: not open');
       }
-      const stmt = await db.prepare(query.sql);
-      if (query.args.length > 0) {
-        stmt.bind(...query.args);
-      }
 
-      await stmt.run();
-    }
+      // C-384 AC-4: the batch must be atomic. Without explicit BEGIN/COMMIT
+      // each statement commits in autocommit mode, so a failure mid-batch
+      // leaves earlier statements committed. Wrap the batch so either every
+      // statement lands or none do (the migration runner depends on this).
+      // BEGIN sits inside the protected region: a failed transaction start
+      // (e.g. a transaction already open on the connection) runs the same
+      // ROLLBACK path and never leaves the mutex unresolved.
+      try {
+        const begin = await db.prepare('BEGIN');
+        await begin.run();
+
+        for (const query of queries) {
+          const stmt = await db.prepare(query.sql);
+          if (query.args.length > 0) {
+            stmt.bind(...query.args);
+          }
+          await stmt.run();
+        }
+        const commit = await db.prepare('COMMIT');
+        await commit.run();
+      } catch (error) {
+        try {
+          const rollback = await db.prepare('ROLLBACK');
+          await rollback.run();
+        } catch (rollbackError) {
+          logger.error('TursoStorageAdapter.transaction:rollback-failed', {
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
+        }
+        throw error;
+      }
+    };
+
+    // Queue this batch behind the previous one so transactions on the shared
+    // connection never overlap. The chain always settles (success or
+    // failure), keeping the mutex usable for subsequent callers.
+    const result = this._transactionQueue.then(run, run);
+    this._transactionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   /** @inheritdoc */

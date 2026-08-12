@@ -15,7 +15,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { AssetHashesFile, AssetManifest } from '@aikami/types';
 import { AssetRegistryRepository, BUNDLED_SOURCE_BACKEND } from '../assets.ts';
-import { AIKAMI_SCHEMA_DDL } from '../storage_adapter.ts';
+import { AIKAMI_MIGRATIONS } from '../migrations.ts';
 import { WasmStorageAdapter } from '../wasm_storage_adapter.ts';
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ const createRegistry = async (): Promise<{
 }> => {
   const db = new WasmStorageAdapter({ databasePath: ':memory:' });
   await db.open();
-  for (const ddl of AIKAMI_SCHEMA_DDL) {
+  for (const ddl of AIKAMI_MIGRATIONS[0].statements) {
     await db.execute({ sql: ddl, args: [] });
   }
   return { db, registry: new AssetRegistryRepository(db) };
