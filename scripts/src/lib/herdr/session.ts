@@ -41,6 +41,7 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { hasDirenv } from '../env/direnv_detect';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { PORTS } from '../../../../packages/shared/constants/src/index';
 
@@ -618,14 +619,11 @@ export const killPort = (port: number): Promise<void> =>
 
 // ── Direnv wrapper ─────────────────────────────────────────
 
-/** Cached after first check — neither changes mid-run. */
-let _hasDirenv: boolean | undefined;
-const hasDirenv = (): boolean => {
-  if (_hasDirenv === undefined) {
-    _hasDirenv = Boolean(Bun.which('direnv'));
-  }
-  return _hasDirenv;
-};
+/**
+ * Shared `hasDirenv()` lives in env/direnv_detect.ts so scripts AND pi
+ * extensions use the same check — it also documents the non-direnv
+ * fallback contract (manual tool installs + .env.local).
+ */
 
 /**
  * Resolved once via Bun.which (our process's PATH), not left as a bare

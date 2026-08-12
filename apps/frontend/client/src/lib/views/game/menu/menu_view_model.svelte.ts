@@ -4,7 +4,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService, campaignService, gameSaveService, routerService } from '$services';
+import { campaignService, gameSaveService, routerService } from '$services';
 import type { SaveSlotInfo } from '$types';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
@@ -19,17 +19,8 @@ export type MenuViewModelOptions = BaseViewModelOptions & {
 };
 
 export type MenuViewModelInterface = BaseViewModelInterface & {
-  /** Whether the user is currently signed in. */
-  readonly isLoggedIn: boolean;
-
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
-
-  /** Whether a Google sign-in is in progress. */
-  readonly isSigningIn: boolean;
-
-  /** The logged-in player's display name, or undefined. */
-  readonly playerDisplayName: string | undefined;
 
   /** Whether there is at least one saved game available to continue. */
   readonly canContinue: boolean;
@@ -48,9 +39,6 @@ export type MenuViewModelInterface = BaseViewModelInterface & {
    */
   continueGame(): Promise<void>;
 
-  /** Signs in with Google (optional). */
-  loginWithGoogle(): Promise<void>;
-
   /** Navigates to the options screen. */
   goToOptions(): void;
 
@@ -62,8 +50,6 @@ export type MenuViewModelInterface = BaseViewModelInterface & {
 };
 
 class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuViewModelInterface {
-  private _isSigningIn = $state(false);
-
   /** @inheritdoc */
   async initialize(): Promise<void> {
     await gameSaveService.fetchAvailableSaves();
@@ -71,23 +57,8 @@ class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuV
   }
 
   /** @inheritdoc */
-  get isLoggedIn(): boolean {
-    return authService.isLoggedIn;
-  }
-
-  /** @inheritdoc */
   get isTauri(): boolean {
     return typeof window !== 'undefined' && '__TAURI__' in window;
-  }
-
-  /** @inheritdoc */
-  get isSigningIn(): boolean {
-    return this._isSigningIn;
-  }
-
-  /** @inheritdoc */
-  get playerDisplayName(): string | undefined {
-    return authService.currentUser?.displayName || authService.currentUser?.email || undefined;
   }
 
   /** @inheritdoc */
@@ -124,25 +95,6 @@ class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuV
       });
     } catch (error) {
       this.debug('continueGame:error', { error: String(error) });
-    }
-  }
-
-  /** @inheritdoc */
-  async loginWithGoogle(): Promise<void> {
-    if (this._isSigningIn) {
-      return;
-    }
-
-    this._isSigningIn = true;
-    authService.setIsChangingAuthState(true);
-
-    try {
-      await authService.socialSignIn('google');
-    } catch (error) {
-      this.debug('loginWithGoogle:error', { error: String(error) });
-    } finally {
-      authService.setIsChangingAuthState(false);
-      this._isSigningIn = false;
     }
   }
 

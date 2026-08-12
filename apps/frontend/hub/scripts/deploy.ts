@@ -58,7 +58,7 @@ try {
   await Bun.write(deployConfigPath, JSON.stringify(config, null, 4));
 
   // Pinned firebase-tools version (not @latest) so deploys are reproducible.
-  await $`npx -y firebase-tools@15.25.1 deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
+  await $`bunx firebase-tools@15.25.1 deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
     process.cwd(),
   );
 } catch (error) {

@@ -126,10 +126,11 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
  * source → gainSfx → gainMaster → compressor → destination
  * ```
  *
- * TTS streaming (C-211) connects into the compressor directly
- * (after PannerNode) to leverage limiter protection:
+ * TTS playback connects to the destination directly (the former
+ * SharedArrayBuffer streaming pipeline that routed through a PannerNode
+ * into the compressor was removed — see docs/gotchas/cross-origin-isolation.md):
  * ```
- * AudioWorkletNode → PannerNode → compressor → destination
+ * source → destination
  * ```
  *
  * All GainNode values are reactive `$state` properties — changing them

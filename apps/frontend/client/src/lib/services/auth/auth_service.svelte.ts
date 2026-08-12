@@ -176,12 +176,28 @@ export class AuthService
 
   private _initialized = false;
 
+  /**
+   * The single in-flight initialize() promise. Cached so concurrent callers
+   * (AppViewModel, LinkViewModel, …) all await the SAME initialization
+   * instead of getting `currentUser` (usually still undefined) back early —
+   * which previously let one-shot checks like the /link handoff trigger run
+   * before auth had actually resolved.
+   */
+  private _initPromise: Promise<CurrentUser | undefined> | undefined;
+
   private get _auth(): FirebaseAuthServiceInterface {
     return this._options.auth;
   }
 
   async initialize(): Promise<CurrentUser | undefined> {
     this.log('initialize');
+    if (!this._initPromise) {
+      this._initPromise = this._initializeOnce();
+    }
+    return await this._initPromise;
+  }
+
+  private async _initializeOnce(): Promise<CurrentUser | undefined> {
     try {
       if (this._initialized) {
         return this.currentUser;
@@ -288,18 +304,31 @@ export class AuthService
       return this._linkDeviceSignIn();
     }
 
-    try {
-      const toAuthProviderId = (provider: FirebaseSignInProviderName): AuthProviderId => {
-        switch (provider) {
-          case 'google':
-            return 'google.com';
-          case 'github':
-            return 'github.com';
-          default:
-            throw new Error('inavlid provider', provider);
-        }
-      };
+    const toAuthProviderId = (provider: FirebaseSignInProviderName): AuthProviderId => {
+      switch (provider) {
+        case 'google':
+          return 'google.com';
+        case 'github':
+          return 'github.com';
+        default:
+          throw new Error('inavlid provider', provider);
+      }
+    };
 
+    // Popup sign-in is used on every non-Tauri path — same as the hub.
+    // The deployed site serves COOP: same-origin-allow-popups and NO COEP
+    // (apps/frontend/client/firebase.json), so the cross-origin popup at
+    // aikami-production.firebaseapp.com/__/auth/handler keeps `window.opener`
+    // and the OAuth helper can relay the result back.
+    //
+    // This deliberately gives up cross-origin isolation: `crossOriginIsolated`
+    // requires COOP to be exactly `same-origin`, which severs the opener and
+    // makes the SDK reject with `auth/popup-closed-by-user`. Isolation is only
+    // an optimization here — the engine falls back to the N-buffer ArrayBuffer
+    // path (engine/src/config/memory_config.ts), sqlite falls back to an
+    // IndexedDB-snapshotted DB, and the SharedArrayBuffer TTS streaming
+    // pipeline requires a local Kokoro server (see docs/gotchas/cross-origin-isolation.md).
+    try {
       const response = await this._auth.signInWithPopup(toAuthProviderId(provider));
 
       const isFailed = (
@@ -356,8 +385,12 @@ export class AuthService
   private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
     try {
       const code = crypto.randomUUID();
-      const { open } = await import('@tauri-apps/plugin-opener');
-      await open(`${DEVICE_LINK_URL}?code=${code}`);
+      // NOTE: the plugin's JS API is `openUrl` (URLs) / `openPath` (files) —
+      // there is no `open` export, and destructuring it silently yields
+      // `undefined`, which throws "t is not a function" in the minified
+      // release build (the error the user saw on Sign In).
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(`${DEVICE_LINK_URL}?code=${code}`);
 
       const token = await this._awaitDeviceHandoffToken(code);
       if (!token) {

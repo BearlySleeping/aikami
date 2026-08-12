@@ -30,7 +30,7 @@ let encryptCalls = 0;
 let decryptCalls = 0;
 let clearCalls = 0;
 
-mock.module('$lib/utils/crypto_vault', () => ({
+mock.module('$lib/views/utils/crypto_vault', () => ({
   encrypt: mock(async (options: { text: string; pin?: string }): Promise<void> => {
     encryptCalls++;
     vaultStore.set('__vault', options.text);

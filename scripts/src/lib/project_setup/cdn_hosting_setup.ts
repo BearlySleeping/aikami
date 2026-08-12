@@ -120,8 +120,7 @@ export const setupCdnHosting = async (
       // Check if site exists by trying to get it
       const getCode = await runStream(
         [
-          'npx',
-          '-y',
+          'bunx',
           'firebase-tools@latest',
           'hosting:sites:get',
           siteId,
@@ -137,8 +136,7 @@ export const setupCdnHosting = async (
         if (!dryRun) {
           const createCode = await runStream(
             [
-              'npx',
-              '-y',
+              'bunx',
               'firebase-tools@latest',
               'hosting:sites:create',
               siteId,

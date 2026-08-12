@@ -267,10 +267,7 @@ const CONTEXT_QUERY_TERMS = [Position, NPCDialog];
 
 // -- Buffer management ------------------------------------------------------
 
-/** Whether we have a SharedArrayBuffer (cross-origin isolated). */
-let useSharedMemory = false;
-
-/** The pool of ArrayBuffers for N-buffer fallback. */
+/** The pool of ArrayBuffers for the N-buffer transfer cycle. */
 const bufferPool: ArrayBuffer[] = [];
 
 /** The Float32Array view wrapping the currently active write buffer. */
@@ -1095,145 +1092,102 @@ const tickLoop = (): void => {
     const events = pendingEvents;
     pendingEvents = [];
 
-    if (useSharedMemory) {
-      // SharedArrayBuffer — main thread reads directly, no transfer needed
-      const camera = getCameraPosition();
-      const zoom = getCameraZoom();
-      const screenPos = getActiveNpcScreenPosition();
-      const message: Record<string, unknown> = {
-        type: 'STATE_UPDATE',
-        events,
-        cameraX: camera.x,
-        cameraY: camera.y,
-        zoom,
-        ack: {
-          tickCount,
-          lastProcessedInputSequence: _lastProcessedInputSequence,
-          writableBufferCount: FALLBACK_BUFFER_COUNT,
-        },
-        environment: {
-          gameHour: environment.gameHour,
-          gameMinute: environment.gameMinute,
-          gameTimeSeconds: environment.gameTimeSeconds,
-          windVelocity: environment.windVelocity,
-          rainIntensity: environment.rainIntensity,
-          ubo: environment.ubo,
-        },
-      };
-      if (screenPos.x !== undefined) {
-        message.npcScreenX = screenPos.x;
-        message.npcScreenY = screenPos.y;
-      }
-
-      // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
-      if (screenPos.x !== undefined) {
-        events.push({
-          type: 'CAMERA_ZOOM_UPDATE',
-          zoom,
-          npcScreenX: screenPos.x,
-          npcScreenY: screenPos.y,
-        });
-      }
-
-      postMessage(message);
-    } else {
-      // ArrayBuffer fallback — transfer ownership so main thread can read.
-      // IMPORTANT: after transfer the worker's reference to `buffer` is
-      // detached.  The next buffer in the pool may also be detached if the
-      // main thread hasn't recycled it yet — guard with byteLength > 0.
-      const buffer = bufferPool[activeBufferIndex];
-      if (!buffer || buffer.byteLength === 0) {
-        return; // No writable buffer available — skip this frame
-      }
-
-      // Advance to the next writable buffer in the pool, skipping
-      // any null entries (transferred but not yet recycled).
-      const oldIndex = activeBufferIndex;
-
-      // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only
-      let nextWritableIndex = -1;
-      for (let attempt = 1; attempt <= FALLBACK_BUFFER_COUNT; attempt++) {
-        const candidate = (oldIndex + attempt) % FALLBACK_BUFFER_COUNT;
-        const buf = bufferPool[candidate] as ArrayBuffer | null;
-        if (buf && buf.byteLength > 0) {
-          nextWritableIndex = candidate;
-          break;
-        }
-      }
-
-      // ── RC-1 FIX: Never transfer the last writable buffer ──
-      // If no free slot remains, the worker is starved. Post a copy of
-      // the current data and retain ownership. The tick loop MUST NOT
-      // stop — this is the deadlock that froze the engine.
-      //
-      // In the normal path: transfer the OLD buffer (bufferPool[oldIndex])
-      // and create a view on the NEW buffer. PostMessage's transfer list
-      // detaches whatever buffer we include — so we must NEVER include the
-      // buffer that activeWriteView wraps.
-      let bufferToSend: ArrayBuffer;
-      if (nextWritableIndex === -1) {
-        // Starvation: copy out, retain ownership.
-        // bufferPool[oldIndex] stays in the pool (not nulled).
-        bufferToSend = buffer.slice(0);
-        logger.debug('[WorkerEngine] tickLoop:starvation-copy', {
-          writableBufferCount: 0,
-        });
-      } else {
-        // Normal path: mark old slot as consumed, advance to next.
-        // Transfer the OLD buffer (the one we just finished writing to),
-        // NOT the new one — otherwise the transfer detaches activeWriteView.
-        bufferToSend = bufferPool[oldIndex] as ArrayBuffer;
-        bufferPool[oldIndex] = null as unknown as ArrayBuffer;
-        activeBufferIndex = nextWritableIndex;
-        activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
-      }
-
-      const camera = getCameraPosition();
-      const zoom = getCameraZoom();
-      const screenPos = getActiveNpcScreenPosition();
-
-      // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
-      if (screenPos.x !== undefined) {
-        events.push({
-          type: 'CAMERA_ZOOM_UPDATE',
-          zoom,
-          npcScreenX: screenPos.x,
-          npcScreenY: screenPos.y,
-        });
-      }
-
-      const message: Record<string, unknown> = {
-        type: 'STATE_UPDATE',
-        buffer: bufferToSend,
-        events,
-        cameraX: camera.x,
-        cameraY: camera.y,
-        zoom,
-        ack: {
-          tickCount,
-          lastProcessedInputSequence: _lastProcessedInputSequence,
-          writableBufferCount: nextWritableIndex === -1 ? 0 : 1,
-        },
-        environment: {
-          gameHour: environment.gameHour,
-          gameMinute: environment.gameMinute,
-          gameTimeSeconds: environment.gameTimeSeconds,
-          windVelocity: environment.windVelocity,
-          rainIntensity: environment.rainIntensity,
-          ubo: environment.ubo,
-        },
-      };
-      if (screenPos.x !== undefined) {
-        message.npcScreenX = screenPos.x;
-        message.npcScreenY = screenPos.y;
-      }
-
-      postMessage(
-        message,
-        // Transfer the buffer to the main thread (zero-copy handoff)
-        [bufferToSend],
-      );
+    // ArrayBuffer transfer cycle — transfer ownership so the main thread can read.
+    // IMPORTANT: after transfer the worker's reference to `buffer` is
+    // detached.  The next buffer in the pool may also be detached if the
+    // main thread hasn't recycled it yet — guard with byteLength > 0.
+    const buffer = bufferPool[activeBufferIndex];
+    if (!buffer || buffer.byteLength === 0) {
+      return; // No writable buffer available — skip this frame
     }
+
+    // Advance to the next writable buffer in the pool, skipping
+    // any null entries (transferred but not yet recycled).
+    const oldIndex = activeBufferIndex;
+
+    // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only
+    let nextWritableIndex = -1;
+    for (let attempt = 1; attempt <= FALLBACK_BUFFER_COUNT; attempt++) {
+      const candidate = (oldIndex + attempt) % FALLBACK_BUFFER_COUNT;
+      const buf = bufferPool[candidate] as ArrayBuffer | null;
+      if (buf && buf.byteLength > 0) {
+        nextWritableIndex = candidate;
+        break;
+      }
+    }
+
+    // ── RC-1 FIX: Never transfer the last writable buffer ──
+    // If no free slot remains, the worker is starved. Post a copy of
+    // the current data and retain ownership. The tick loop MUST NOT
+    // stop — this is the deadlock that froze the engine.
+    //
+    // In the normal path: transfer the OLD buffer (bufferPool[oldIndex])
+    // and create a view on the NEW buffer. PostMessage's transfer list
+    // detaches whatever buffer we include — so we must NEVER include the
+    // buffer that activeWriteView wraps.
+    let bufferToSend: ArrayBuffer;
+    if (nextWritableIndex === -1) {
+      // Starvation: copy out, retain ownership.
+      // bufferPool[oldIndex] stays in the pool (not nulled).
+      bufferToSend = buffer.slice(0);
+      logger.debug('[WorkerEngine] tickLoop:starvation-copy', {
+        writableBufferCount: 0,
+      });
+    } else {
+      // Normal path: mark old slot as consumed, advance to next.
+      // Transfer the OLD buffer (the one we just finished writing to),
+      // NOT the new one — otherwise the transfer detaches activeWriteView.
+      bufferToSend = bufferPool[oldIndex] as ArrayBuffer;
+      bufferPool[oldIndex] = null as unknown as ArrayBuffer;
+      activeBufferIndex = nextWritableIndex;
+      activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
+    }
+
+    const camera = getCameraPosition();
+    const zoom = getCameraZoom();
+    const screenPos = getActiveNpcScreenPosition();
+
+    // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
+    if (screenPos.x !== undefined) {
+      events.push({
+        type: 'CAMERA_ZOOM_UPDATE',
+        zoom,
+        npcScreenX: screenPos.x,
+        npcScreenY: screenPos.y,
+      });
+    }
+
+    const message: Record<string, unknown> = {
+      type: 'STATE_UPDATE',
+      buffer: bufferToSend,
+      events,
+      cameraX: camera.x,
+      cameraY: camera.y,
+      zoom,
+      ack: {
+        tickCount,
+        lastProcessedInputSequence: _lastProcessedInputSequence,
+        writableBufferCount: nextWritableIndex === -1 ? 0 : 1,
+      },
+      environment: {
+        gameHour: environment.gameHour,
+        gameMinute: environment.gameMinute,
+        gameTimeSeconds: environment.gameTimeSeconds,
+        windVelocity: environment.windVelocity,
+        rainIntensity: environment.rainIntensity,
+        ubo: environment.ubo,
+      },
+    };
+    if (screenPos.x !== undefined) {
+      message.npcScreenX = screenPos.x;
+      message.npcScreenY = screenPos.y;
+    }
+
+    postMessage(
+      message,
+      // Transfer the buffer to the main thread (zero-copy handoff)
+      [bufferToSend],
+    );
   } catch (err) {
     logger.error('[WorkerEngine] tickLoop:crash', err);
     postMessage({
@@ -1408,22 +1362,13 @@ self.onmessage = (event: MessageEvent): void => {
         // Reset camera state for fresh engine
         resetCameraTracking();
 
-        // Determine whether we have shared memory
-        const firstBuffer = buffers[0] as ArrayBuffer;
-        useSharedMemory =
-          typeof SharedArrayBuffer !== 'undefined' && firstBuffer instanceof SharedArrayBuffer;
-
-        if (useSharedMemory) {
-          // Single SharedArrayBuffer — both threads read/write the same memory
-          activeWriteView = new Float32Array(firstBuffer);
-        } else {
-          // N-buffer pool for fallback
-          for (let i = 0; i < buffers.length; i++) {
-            bufferPool.push(buffers[i] as ArrayBuffer);
-          }
-          activeWriteView = new Float32Array(bufferPool[0]);
-          activeBufferIndex = 0;
+        // N-buffer pool — the worker writes into one buffer, transfers it,
+        // and receives it back via RECYCLE_BUFFER.
+        for (let i = 0; i < buffers.length; i++) {
+          bufferPool.push(buffers[i] as ArrayBuffer);
         }
+        activeWriteView = new Float32Array(bufferPool[0]);
+        activeBufferIndex = 0;
 
         // ── Wrap initializeEngine in explicit try/catch so any sync
         // error is reported as ENGINE_ERROR instead of a silent worker crash. ──

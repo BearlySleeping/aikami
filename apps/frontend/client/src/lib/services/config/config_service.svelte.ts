@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { clearVault, decrypt, encrypt } from '$lib/utils/crypto_vault';
+import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
 import { logger } from '$logger';
 import type {
   Connection,

@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { $ } from 'bun';
+import { hasDirenv } from '../env/direnv_detect';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -168,11 +169,20 @@ async function main(): Promise<void> {
     );
   }
 
-  if (noReload) {
+  if (noReload || !hasDirenv()) {
     console.log('');
-    console.log('  To apply, run one of:');
-    console.log('    direnv reload');
-    console.log('    cd .. && cd -');
+    if (hasDirenv()) {
+      console.log('  To apply, run one of:');
+      console.log('    direnv reload');
+      console.log('    cd .. && cd -');
+    } else {
+      // Non-direnv machine (see env/direnv_detect.ts): no reload to trigger.
+      // .env.local is read by scripts (resolveAikamiEnv) and by .envrc on
+      // machines that do use direnv — new shells pick it up automatically.
+      console.log('  ℹ️  direnv not installed — mode written to .env.local.');
+      console.log('      New shells read AIKAMI_MODE from .env.local automatically;');
+      console.log('      export AIKAMI_MODE=<mode> in your current shell to apply now.');
+    }
     console.log('');
   } else {
     console.log('');

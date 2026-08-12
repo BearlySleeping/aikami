@@ -1,6 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/start/start_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LoginView from '$lib/views/auth/login/login_view.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';
 import type { StartViewModelInterface } from './start_view_model.svelte';
 
@@ -54,29 +55,8 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
               New Game
             </button>
 
-            <!-- Sign In / Sign Out -->
-            {#if viewModel.isSigningIn}
-              <button type="button" class="btn btn-outline btn-lg" disabled>
-                <span class="loading loading-spinner"></span>
-                {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
-              </button>
-            {:else if viewModel.isLoggedIn}
-              <button
-                type="button"
-                class="btn btn-outline btn-lg"
-                onclick={() => viewModel.signOut()}
-              >
-                Sign Out ({viewModel.playerDisplayName})
-              </button>
-            {:else}
-              <button
-                type="button"
-                class="btn btn-outline btn-lg"
-                onclick={() => viewModel.loginWithGoogle()}
-              >
-                {viewModel.isTauri ? 'Sign In' : 'Sign In with Google'}
-              </button>
-            {/if}
+            <!-- Sign In / Sign Out (shared auth control) -->
+            <LoginView />
 
             <!-- Options -->
             <button type="button" class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>

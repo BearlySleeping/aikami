@@ -20,8 +20,7 @@ type ManualStep = { title: string; url?: string; commands?: string[]; detail?: s
 
 const checkHostingSite = async (projectId: string, siteId: string): Promise<boolean> => {
   const { code } = await run([
-    'npx',
-    '-y',
+    'bunx',
     'firebase-tools@latest',
     'hosting:sites:get',
     siteId,
@@ -32,8 +31,7 @@ const checkHostingSite = async (projectId: string, siteId: string): Promise<bool
 
 const createHostingSite = async (projectId: string, siteId: string): Promise<boolean> => {
   const { code } = await run([
-    'npx',
-    '-y',
+    'bunx',
     'firebase-tools@latest',
     'hosting:sites:create',
     siteId,

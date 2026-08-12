@@ -370,10 +370,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   // -- Buffer state --------------------------------------------------------
 
-  /** Whether shared memory is in use (vs N-buffer fallback). */
-  private _useSharedMemory = false;
-
-  /** Pool of ArrayBuffers for N-buffer fallback mode. */
+  /** Pool of ArrayBuffers for the N-buffer transfer cycle. */
   private _bufferPool: ArrayBuffer[] = [];
 
   /** The Float32Array view used for rendering the current frame. */
@@ -719,27 +716,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
-   * Allocates the shared memory buffers for entity state exchange.
+   * Allocates the N transfer buffers for entity state exchange.
    *
-   * When cross-origin isolated: allocates a single SharedArrayBuffer.
-   * Fallback: allocates N ArrayBuffers for the transfer cycle.
+   * The worker writes state into one buffer, transfers ownership to the
+   * main thread each tick, and receives the buffer back via
+   * RECYCLE_BUFFER. (The former single-SharedArrayBuffer zero-copy path
+   * was removed — see docs/gotchas/cross-origin-isolation.md.)
    */
   private _allocateBuffers(): void {
-    const firstBuffer = createEngineBuffer(BUFFER_SIZE);
-    this._useSharedMemory =
-      typeof SharedArrayBuffer !== 'undefined' && firstBuffer instanceof SharedArrayBuffer;
-
-    if (this._useSharedMemory) {
-      this._bufferPool = [firstBuffer as ArrayBuffer];
-      this._activeRenderView = new Float32Array(firstBuffer as ArrayBuffer);
-    } else {
-      // Allocate N buffers for the fallback cycle
-      this._bufferPool = [firstBuffer as ArrayBuffer];
-      for (let i = 1; i < FALLBACK_BUFFER_COUNT; i++) {
-        this._bufferPool.push(new ArrayBuffer(BUFFER_SIZE));
-      }
-      // No active render view yet — first STATE_UPDATE will provide one
+    this._bufferPool = [];
+    for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
+      this._bufferPool.push(createEngineBuffer(BUFFER_SIZE));
     }
+    // No active render view yet — first STATE_UPDATE will provide one
   }
 
   // -----------------------------------------------------------------------
@@ -863,13 +852,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // instead of transferring ownership. This creates 6 distinct buffers
       // — the main thread's 3 originals and the worker's 3 clones — which
       // are completely disjoint pools.
-      this._useSharedMemory ? [] : [...this._bufferPool],
+      [...this._bufferPool],
     );
     // Ownership moved to worker — clear main-thread references
-    if (!this._useSharedMemory) {
-      this._bufferPool = [];
-      this._activeRenderView = undefined;
-    }
+    this._bufferPool = [];
+    this._activeRenderView = undefined;
 
     // Set up message listener for worker → main communication
     worker.onmessage = (event: MessageEvent): void => {
@@ -1014,29 +1001,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._cameraZoom = message.zoom;
     }
 
-    if (this._useSharedMemory) {
-      // SharedArrayBuffer — render view is already the same memory.
-      // No swap needed; main thread reads the same bytes the worker writes.
-    } else {
-      // N-buffer fallback — the worker transferred ownership of the buffer.
-      // Swap the render view and recycle the old buffer.
-      const newBuffer = message.buffer as ArrayBuffer | undefined;
-      if (!newBuffer) {
-        return;
-      }
-
-      // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
-      // FIFO shift from a ring buffer that has no relation to what the
-      // worker actually owns. After INITIALIZE_ENGINE with transferables,
-      // _bufferPool is empty — and even before the fix, the original
-      // buffers were clones disconnected from the worker's pool. ──
-      const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
-      if (outgoing && outgoing.byteLength > 0 && this._worker) {
-        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
-      }
-
-      this._activeRenderView = new Float32Array(newBuffer);
+    // N-buffer transfer cycle — the worker transferred ownership of the
+    // buffer. Swap the render view and recycle the old buffer.
+    const newBuffer = message.buffer as ArrayBuffer | undefined;
+    if (!newBuffer) {
+      return;
     }
+
+    // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
+    // FIFO shift from a ring buffer that has no relation to what the
+    // worker actually owns. After INITIALIZE_ENGINE with transferables,
+    // _bufferPool is empty — and even before the fix, the original
+    // buffers were clones disconnected from the worker's pool. ──
+    const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
+    if (outgoing && outgoing.byteLength > 0 && this._worker) {
+      this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+    }
+
+    this._activeRenderView = new Float32Array(newBuffer);
 
     // ── C-332: Extract tickCount for semantic heartbeat ──
     const ack = message.ack as { tickCount?: number; writableBufferCount?: number } | undefined;

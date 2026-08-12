@@ -40,8 +40,7 @@ export const MAX_REGISTRY_STRINGS = 50000;
 export const REGISTRY_INITIAL_CAPACITY = 2048;
 
 /**
- * Number of buffers to allocate for the N-buffer fallback when
- * SharedArrayBuffer is unavailable.
+ * Number of buffers to allocate for the N-buffer transfer cycle.
  *
  * Three buffers are enough for a stable producer-consumer cycle:
  * 1 active (worker writing), 1 rendering (main reading), 1 recycling.
@@ -49,32 +48,16 @@ export const REGISTRY_INITIAL_CAPACITY = 2048;
 export const FALLBACK_BUFFER_COUNT = 3;
 
 /**
- * Creates a buffer suitable for exchanging entity state between the
- * worker and the main thread.
+ * Creates a buffer for exchanging entity state between the worker and
+ * the main thread.
  *
- * When the execution context is cross-origin isolated (SharedArrayBuffer
- * is available as a constructor), returns a SharedArrayBuffer for
- * zero-copy synchronization.
- *
- * When cross-origin isolation is not available, falls back to a standard
- * ArrayBuffer. The caller must use the N-buffer protocol with Transferable
- * postMessage to avoid data races.
+ * Always returns a standard ArrayBuffer, transferred via postMessage
+ * using the N-buffer protocol. The SharedArrayBuffer zero-copy path was
+ * removed: it required cross-origin isolation (COOP: same-origin + COEP:
+ * require-corp), which breaks Firebase Auth popup sign-in and is
+ * unavailable in webviews — see docs/gotchas/cross-origin-isolation.md.
  *
  * @param size - Byte size of the buffer to allocate.
- * @returns A SharedArrayBuffer or ArrayBuffer of the requested size.
+ * @returns An ArrayBuffer of the requested size.
  */
-export const createEngineBuffer = (size: number): SharedArrayBuffer | ArrayBuffer => {
-  // Check for cross-origin isolation: `self.crossOriginIsolated` is true
-  // in secure contexts with COOP+COEP headers. When the flag is present
-  // AND SharedArrayBuffer is exposed, use shared memory.
-  const isCrossOriginIsolated =
-    typeof self !== 'undefined' &&
-    self.crossOriginIsolated &&
-    typeof SharedArrayBuffer !== 'undefined';
-
-  if (isCrossOriginIsolated) {
-    return new SharedArrayBuffer(size);
-  }
-
-  return new ArrayBuffer(size);
-};
+export const createEngineBuffer = (size: number): ArrayBuffer => new ArrayBuffer(size);

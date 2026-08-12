@@ -5,6 +5,11 @@
 // operate within a loaded direnv environment; this tool surfaces that state
 // and provides mutation helpers (mode switch, package add, secret add).
 //
+// Non-direnv machines (see scripts/src/lib/env/direnv_detect.ts) get a
+// graceful fallback: mode/project are derived from .env.local, switching
+// mode updates .env.local + this process's env, and the nix-only tools
+// (add_package/add_secret) explain why they need direnv.
+//
 // Env vars guaranteed by .envrc (always available):
 //   AIKAMI_ROOT          — project root (git rev-parse --show-toplevel)
 //   AIKAMI_MODE          — emulator | staging | production
@@ -21,6 +26,11 @@ import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { runSync } from './lib/process_runner.ts';
+import {
+  hasDirenv,
+  isDirenvLoaded,
+  resolveAikamiEnv,
+} from '../../scripts/src/lib/env/direnv_detect';
 
 const VALID_MODES = ['emulator', 'staging', 'production'] as const;
 
@@ -69,13 +79,23 @@ function writeEnvLocal(key: string, value: string): void {
 // ── Tool: direnv_status ───────────────────────────────────────────────
 
 function buildStatusReport(): string {
-  const mode = getEnv('AIKAMI_MODE') || 'unknown';
-  const projectId = getEnv('AIKAMI_PROJECT_ID') || 'unknown';
-  const isEmu = isEmulator();
-  const nixReady = getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined;
+  // Non-direnv machines: derive mode/project from .env.local so the status
+  // is accurate even when .envrc never ran.
+  const env = resolveAikamiEnv(getRoot());
+  const mode = getEnv('AIKAMI_MODE') || env.mode;
+  const projectId = getEnv('AIKAMI_PROJECT_ID') || env.projectId;
+  const isEmu = mode === 'emulator';
+  const nixReady = isDirenvLoaded();
+  const direnvPresent = hasDirenv();
   const root = getRoot();
   const playwrightOk = getEnv('PLAYWRIGHT_BROWSERS_PATH') !== undefined;
   const geminiOk = getEnv('GEMINI_API_KEY') !== undefined;
+
+  const nixLine = nixReady
+    ? '✅ loaded'
+    : direnvPresent
+      ? '⚠️  not loaded — run `direnv reload`'
+      : '— not installed (manual env via .env.local)';
 
   const lines: string[] = [];
   lines.push('');
@@ -90,7 +110,7 @@ function buildStatusReport(): string {
   }
   lines.push('');
   lines.push('  ── Runtime ──');
-  lines.push(`  Nix Shell:  ${nixReady ? '✅ loaded' : '⚠️  not loaded — run `direnv reload`'}`);
+  lines.push(`  Nix Shell:  ${nixLine}`);
   lines.push(`  Playwright: ${playwrightOk ? '✅ configured' : '⚠️  missing — check flake.nix'}`);
   lines.push(`  Gemini Key: ${geminiOk ? '✅ set' : '⚠️  not set (mock in emulator)'}`);
   lines.push('');
@@ -109,23 +129,32 @@ function buildStatusReport(): string {
 
 async function switchMode(mode: string): Promise<string> {
   writeEnvLocal('AIKAMI_MODE', mode);
-  // Reload direnv via bash — this re-evaluates .envrc
-  try {
-    runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 30_000 });
-  } catch {
-    // direnv reload may fail in some contexts (e.g. no direnv binary in the
-    // same PATH that pi was launched with). Fall back to manual env export.
-    const projectMap: Record<string, string> = {
-      emulator: 'demo-aikami-emulator',
-      staging: 'aikami-dev',
-      production: 'aikami-prod',
-    };
-    process.env.AIKAMI_MODE = mode;
-    process.env.AIKAMI_ENV = mode;
-    process.env.AIKAMI_PROJECT_ID = projectMap[mode] || 'demo-aikami-emulator';
-    process.env.AIKAMI_IS_EMULATOR = mode === 'emulator' ? '1' : '0';
+
+  if (hasDirenv()) {
+    // Reload direnv via bash — this re-evaluates .envrc
+    try {
+      runSync('direnv', ['reload'], { cwd: getRoot(), timeoutMs: 30_000 });
+      return `✅ Switched to ${mode} mode.`;
+    } catch {
+      // Reload failed (slow Nix eval, non-interactive context) — fall
+      // through to the in-process env update below so this session still
+      // sees the new mode.
+    }
   }
-  return `✅ Switched to ${mode} mode. Run \`direnv reload\` if env vars aren't refreshed.`;
+
+  // Non-direnv machine (or reload failed): update in-process env from the
+  // authoritative mode→project map so this pi session sees the new mode
+  // immediately. New shells read AIKAMI_MODE from .env.local anyway.
+  const env = resolveAikamiEnv(getRoot());
+  process.env.AIKAMI_MODE = env.mode;
+  process.env.AIKAMI_ENV = env.mode;
+  process.env.AIKAMI_PROJECT_ID = env.projectId;
+  process.env.AIKAMI_IS_EMULATOR = env.isEmulator ? '1' : '0';
+
+  const applyNote = hasDirenv()
+    ? "Run `direnv reload` if env vars aren't refreshed."
+    : 'direnv not installed — new shells read .env.local automatically; env updated in this session.';
+  return `✅ Switched to ${mode} mode. ${applyNote}`;
 }
 
 // ── Tool: direnv_add_package ──────────────────────────────────────────
@@ -135,6 +164,13 @@ async function switchMode(mode: string): Promise<string> {
 // available in the devShell.
 
 function addNixPackage(packageName: string): string {
+  if (!hasDirenv()) {
+    return (
+      '❌ direnv not installed — flake.nix packages only take effect via the ' +
+      'Nix devShell (loaded by direnv). Install tools manually instead ' +
+      '(see `bun run setup`).'
+    );
+  }
   const flakePath = path.join(getRoot(), 'flake.nix');
   if (!fs.existsSync(flakePath)) {
     return `❌ flake.nix not found at ${flakePath}`;
@@ -180,6 +216,13 @@ function addNixPackage(packageName: string): string {
 // ── Tool: direnv_add_secret ───────────────────────────────────────────
 
 function addSecretKey(secretKey: string): string {
+  if (!hasDirenv()) {
+    return (
+      '❌ direnv not installed — secrets.sh is loaded by .envrc, so secrets ' +
+      'only apply inside a direnv/Nix environment. Without direnv, set the ' +
+      'secret as a plain environment variable or in scripts/.env.<mode>.'
+    );
+  }
   const secretsPath = path.join(getRoot(), 'scripts/direnv/secrets.sh');
   if (!fs.existsSync(secretsPath)) {
     return `❌ secrets.sh not found at ${secretsPath}`;
@@ -232,13 +275,14 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
       const report = buildStatusReport();
+      const env = resolveAikamiEnv(getRoot());
       return {
         content: [{ type: 'text', text: report }],
         details: {
-          mode: getEnv('AIKAMI_MODE') || 'unknown',
-          projectId: getEnv('AIKAMI_PROJECT_ID') || 'unknown',
-          isEmulator: isEmulator(),
-          nixReady: getEnv('AIKAMI_NIX_READY') === '1',
+          mode: getEnv('AIKAMI_MODE') || env.mode,
+          projectId: getEnv('AIKAMI_PROJECT_ID') || env.projectId,
+          isEmulator: isEmulator() || env.isEmulator,
+          nixReady: getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined,
         },
       };
     },

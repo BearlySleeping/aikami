@@ -11,7 +11,7 @@
  *    scripts/src/lib/project_setup/ (run: bun run project:setup).
  *
  * What it checks, by category:
- *   essentials — bun, git                       (required for any dev work)
+ *   essentials — bun, node, git               (required for any dev work; node runs Playwright E2E)
  *   dx         — pi, herdr                      (optional agent tools)
  *   cloud      — gcloud, gh                     (optional cloud CLIs)
  *   emulator   — jdk, chromium                  (needed for bun run dev:all)
@@ -144,6 +144,31 @@ const TOOLS: ToolCheck[] = [
       },
     },
     hint: 'Bun 1.x required. After install, restart your shell.',
+  },
+  {
+    name: 'Node.js',
+    bins: ['node'],
+    why: 'Runs the Playwright E2E suite (apps/e2e) — the Playwright CLI must run under Node, not Bun, or CDP browser connections hang (see apps/e2e/playwright.config.ts).',
+    category: 'essentials',
+    verify: (out) => /^v\d+\.\d+\.\d+/.test(out.trim()), // real node prints v24.x — bun's node shim prints 1.x (no v) and must NOT satisfy this
+    install: {
+      linux: {
+        label: 'Install Node 24 LTS (nvm, per-user)',
+        commands: [
+          'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash',
+          'nvm install 24 && nvm alias default 24',
+        ],
+      },
+      darwin: {
+        label: 'Install Node 24 LTS (brew)',
+        commands: ['brew install node@24', 'brew link --overwrite node@24'],
+      },
+      win32: {
+        label: 'Install Node 24 LTS (winget)',
+        commands: ['winget install --id OpenJS.NodeJS.LTS'],
+      },
+    },
+    hint: 'Node 24.x matches the flake pin (nodejs_24). bunx runs Playwright under Node via its #!/usr/bin/env node shebang — restart your shell after installing so node is on PATH.',
   },
   {
     name: 'git',
@@ -473,7 +498,7 @@ function printRecommendedSection(recommended: { direnv: boolean; nix: boolean })
   if (recommended.direnv && recommended.nix) {
     console.log(fmt.ok('direnv + nix found — the flake provides everything else'));
     console.log(
-      fmt.note('Run: direnv allow (one-time), then the devShell loads bun, jdk, chromium,'),
+      fmt.note('Run: direnv allow (one-time), then the devShell loads bun, node, jdk, chromium,'),
     );
     console.log(fmt.note('playwright browsers, tauri deps, gcloud, and herdr automatically.'));
     console.log(fmt.note('You can skip the individual tool checks below.'));
@@ -649,6 +674,6 @@ if (opts.check) {
   }
 }
 
-console.log(fmt.note('\nTip: with direnv + nix, `direnv allow` provides bun, jdk, chromium,'));
+console.log(fmt.note('\nTip: with direnv + nix, `direnv allow` provides bun, node, jdk, chromium,'));
 console.log(fmt.note('playwright browsers, tauri deps, gcloud, and herdr from flake.nix —'));
 console.log(fmt.note('so most of the checks above become unnecessary.'));
