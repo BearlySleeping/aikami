@@ -6,7 +6,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
   if (locals.userSession?.userRole === 'superAdmin') {
     throw redirect(
       302,
-      toRouteHref('personas', {
+      toRouteHref('dashboard', {
         pathParameters: undefined,
         queryParameters: undefined,
         url,

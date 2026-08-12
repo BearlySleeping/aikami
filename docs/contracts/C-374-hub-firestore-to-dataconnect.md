@@ -40,7 +40,7 @@ created_at: "2026-08-07"
 - **Existing implementation to reuse**:
   - `apps/backend/firebase/dataconnect/schema/schema.gql` — the `Persona` table already exists (`@table(key: "id")`, `owner: User! @ref`, `name`, `description`, `avatarUrl`, `uid`, `traits: Any`), plus `updatedAt_expr: "request.time"` conventions documented in `schema-refactor-decisions.md`. **Missing**: `isActive` and `voiceConfigId` columns.
   - `apps/backend/firebase/dataconnect/connector/queries.gql` — existing queries/mutations pattern (`ListSaveSlots`, `UpsertSaveSlot` with caller-constructed `{uid}_{slotNumber}` id). **Missing**: persona operations.
-  - Codegen pipeline: `bun moon run firebase:generate` (firestack generate → `packages/frontend/dataconnect/src/lib/generated/`) and `bun moon run firebase:generate-dataconnect-schemas` (→ `packages/shared/schemas/src/lib/generated-dataconnect/persona.ts`, `PersonaRowSchema`).
+  - Codegen pipeline: removed by C-385 — `apps/backend/firebase/moon.yml` defines no Data Connect generation tasks (`firebase:generate` / `firebase:generate-dataconnect-schemas` no longer exist).
   - Client call pattern: `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` (`getTracksByMood(dataConnect, { mood })`) and `packages/frontend/services/src/lib/services/game_state_sync.svelte.ts` (`upsertSaveSlot(dataConnect, vars)`).
   - Server-side Data Connect pattern: `packages/backend/firestore/src/lib/firebase_data_connect_service.ts` (`FirebaseDataConnectService` — `initializeApp` + `getDataConnect` + `executeQuery`/`executeMutation` + domain-error mapping).
   - Emulator wiring: `packages/frontend/configs/src/lib/data_connect.ts` — `connectDataConnectEmulator(instance, 'localhost', EMULATOR_PORTS.dataconnect)` (port `9398`).
@@ -51,7 +51,7 @@ created_at: "2026-08-07"
   - `firestack.config.ts` sets `dataconnectDirectory: mode !== 'emulator' ? '_EXCLUDE_' : undefined` — Data Connect is not deployed to staging/production (see Open Questions).
 - **Baseline tests**:
   - `moon run hub:test` — currently **no test files** in `apps/frontend/hub/src` (verified via find: no `*.test.ts`).
-  - `moon run firebase:generate` and `moon run firebase:generate-dataconnect-schemas` — regeneration gates that must succeed after schema edits.
+  - Regeneration gates removed by C-385 — `apps/backend/firebase/moon.yml` defines no Data Connect generation tasks (`firebase:generate` / `firebase:generate-dataconnect-schemas` no longer exist).
   - `moon run :typecheck` / `validate()`.
 
 ## User Outcome

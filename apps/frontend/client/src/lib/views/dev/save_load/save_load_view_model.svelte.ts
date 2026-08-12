@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/save_load/save_load_view_model.svelte.ts
 //
 // Dev sandbox ViewModel for testing the cloud save/load pipeline.
-// Exercises GameStateSyncService (Storage + Data Connect) without
+// Exercises GameStateSyncService (Storage + local save metadata) without
 // requiring a running game engine.
 
 import {
@@ -76,7 +76,7 @@ export type SaveLoadViewModelInterface = BaseViewModelInterface & {
   /** Sets the manual payload text. */
   setPayload(text: string): void;
 
-  /** Loads the save slots list from Data Connect. */
+  /** Loads the save slots list from the local saves table. */
   loadSlots(): Promise<void>;
 
   /** Saves the current payload to the selected slot. */

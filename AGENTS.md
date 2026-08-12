@@ -33,7 +33,7 @@ discovers them automatically — load the matching skill BEFORE writing code:
 | Backend / Functions | `backend-conventions` (controller → service → repository) |
 | UI styling | `aikami-ui` |
 | Game engine | `pixijs-v8` |
-| Data Connect | `dataconnect` (🔴 generate ONLY via `bun moon run firebase:generate`) |
+| Data Connect | `dataconnect` (removed from the codebase in C-385 — `apps/backend/firebase/moon.yml` defines no generate tasks) |
 | Firestore collections | `firestore-collection` |
 | Deploy / emulators | `firestack` |
 | Testing | `testing` |

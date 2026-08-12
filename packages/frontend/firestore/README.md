@@ -15,9 +15,7 @@ client and hub apps:
   `configFirestoreRepository`
 
 Local SQLite (Turso/WASM) storage lives in `@aikami/frontend-storage` — see
-`packages/frontend/storage`. Data Connect lives in
-`@aikami/frontend-dataconnect`. Placement decisions: see
-`apps/backend/firebase/dataconnect/schema/firestore-vs-dataconnect.md`.
+`packages/frontend/storage`. (Data Connect was removed in C-385.)
 
 ## Installation
 

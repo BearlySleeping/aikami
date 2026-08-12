@@ -24,12 +24,6 @@ export const routes = {
     routeId: '/(authenticated)/dashboard',
     type: 'authenticated',
   },
-  personas: {
-    getPath: () => '/personas',
-    queryParameters: undefined,
-    routeId: '/(authenticated)/personas',
-    type: 'authenticated',
-  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

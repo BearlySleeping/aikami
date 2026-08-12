@@ -70,7 +70,7 @@ let musicStatus = $state<string>('');
 
 const playTestMusic = async () => {
   isPlayingMusic = true;
-  musicStatus = `Querying Data Connect for '${selectedMood}'...`;
+  musicStatus = `Resolving '${selectedMood}' from static catalog...`;
   try {
     await viewModel.playMusic(selectedMood);
     musicStatus = `✅ Playing '${selectedMood}' BGM from Storage emulator`;

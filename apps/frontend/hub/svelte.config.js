@@ -49,8 +49,6 @@ const config = {
 
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
-      '@aikami/frontend/dataconnect': toPackagesPath('frontend/dataconnect/src'),
-      '@aikami/frontend/dataconnect/*': toPackagesPath('frontend/dataconnect/src/lib'),
       '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
       '@aikami/frontend/firestore': toPackagesPath('frontend/firestore/src'),
