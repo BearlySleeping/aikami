@@ -81,7 +81,9 @@ export const resolvePixiInitOptions = (
   } = options;
   const dpr =
     runtime.devicePixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
-  const resolution = Math.min(dpr, 2);
+  // Clamp to [1, 2]: `??` does not catch an explicitly injected 0, which
+  // would otherwise yield a degenerate resolution of 0 (C-377 AC-2).
+  const resolution = Math.max(1, Math.min(dpr, 2));
   return {
     canvas,
     width,

@@ -259,18 +259,22 @@ describe('C-377 AC-5 — renderTilemap returns the bound uniform group', () => {
 
     expect(result.chunks.length).toBeGreaterThan(0);
     // AC-5: reference-identical — the returned group IS the chunk's group.
-    const firstChunk = result.chunks[0];
-    const boundGroup = _boundUniformGroup(firstChunk);
-    expect(result.globalUniforms).toBe(boundGroup);
+    // Assert every chunk, not just the first, so later layers are covered.
+    for (const chunk of result.chunks) {
+      expect(result.globalUniforms).toBe(_boundUniformGroup(chunk));
+    }
   });
 
   it('a map whose last layer IS rendered also returns the bound group', async () => {
     _installStubTextureLoader();
     await Assets.init({ skipDetections: true });
 
-    // Layer order [ground, path] — the LAST layer is a rendered tile layer
-    // (pre-contract this hit the early-return path with the real group, so
-    // this test guards against regressions in both orderings).
+    // Layer order [ground, path] — the LAST layer is a rendered tile layer.
+    // `_createSyntheticTilemap()` returns [ground, collision], so splicing a
+    // path layer in front of `layers[1]` would still leave collision last;
+    // the collision layer is deliberately dropped to exercise the
+    // rendered-last ordering (pre-contract this hit the early-return path
+    // with the real group, so this guards against regressions in both).
     const tilemap = _createSyntheticTilemap();
     tilemap.layers = [
       tilemap.layers[0],
@@ -281,14 +285,15 @@ describe('C-377 AC-5 — renderTilemap returns the bound uniform group', () => {
         data: new Array<number>(96 * 96).fill(2),
         visible: true,
       },
-      tilemap.layers[1],
     ];
 
     const result: TilemapRenderResult = await renderTilemap({ tilemap });
     expect(result.chunks.length).toBeGreaterThan(0);
-    const firstChunk = result.chunks[0];
-    const boundGroup = _boundUniformGroup(firstChunk);
-    expect(result.globalUniforms).toBe(boundGroup);
+    // Every chunk (ground + path) must be bound to the returned group —
+    // checking only the first chunk can miss a later layer's binding.
+    for (const chunk of result.chunks) {
+      expect(result.globalUniforms).toBe(_boundUniformGroup(chunk));
+    }
   });
 });
 

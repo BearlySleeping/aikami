@@ -400,9 +400,9 @@ describe('camera_system', () => {
     });
 
     // C-377 AC-7: camera follow is framerate-independent.
-    // 1000ms simulated as 30× 33ms ticks vs 143× 7ms ticks must land at
-    // (nearly) the same position — the lerp factor is delta-scaled, not
-    // per-frame.
+    // 1000ms simulated as 33ms ticks vs 7ms ticks must land at (nearly) the
+    // same position — the lerp factor is delta-scaled, not per-frame. The
+    // final tick is clamped so every run covers exactly 1000ms.
     it('reaches the same fraction of remaining distance regardless of frame rate', () => {
       setScreenSize({ width: 1920, height: 1080 });
 
@@ -417,7 +417,10 @@ describe('camera_system', () => {
         addComponent(w, eid, set(Position, { x: 1000, y: 500 }));
         let elapsed = 0;
         while (elapsed < 1000) {
-          updateCameraSystem(w, deltaMs);
+          // Clamp the final tick so each run simulates exactly 1000ms —
+          // 30×33ms would otherwise sum to 1023ms vs 143×7ms summing to
+          // 1001ms, injecting 22ms of drift into a framerate comparison.
+          updateCameraSystem(w, Math.min(deltaMs, 1000 - elapsed));
           elapsed += deltaMs;
         }
         const pos = getCameraPosition();
@@ -429,11 +432,11 @@ describe('camera_system', () => {
       const at33ms = run(33);
       const at7ms = run(7);
 
-      // Both rates cover ~1000ms of wall-clock time; the positions must
-      // agree within a small epsilon (~3px of drift from discrete stepping
-      // at different tick sizes). Pre-delta-scaling, 33ms ticks would move
-      // ~4.7× further than 7ms ticks per unit time — the difference would
-      // be hundreds of pixels, not single digits.
+      // Both rates cover exactly 1000ms of wall-clock time; the positions
+      // must agree within a small epsilon (~3px of drift from discrete
+      // stepping at different tick sizes). Pre-delta-scaling, 33ms ticks
+      // would move ~4.7× further than 7ms ticks per unit time — the
+      // difference would be hundreds of pixels, not single digits.
       expect(Math.abs(at33ms - at7ms)).toBeLessThan(5);
       // Sanity: both actually moved toward the target (not snapped/zero).
       expect(at33ms).toBeGreaterThan(900);

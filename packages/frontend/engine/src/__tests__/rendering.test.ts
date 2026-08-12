@@ -2348,6 +2348,13 @@ describe('C-377 AC-2 — PixiJS app init options (HiDPI)', () => {
     expect(opts.resolution).toBe(2);
   });
 
+  it('floors resolution to 1 when devicePixelRatio is explicitly 0', () => {
+    // `??` does not catch an injected 0 — Math.max(1, ...) prevents a
+    // degenerate resolution of 0 (C-377 AC-2).
+    const opts = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 0 });
+    expect(opts.resolution).toBe(1);
+  });
+
   it('preserveDrawingBuffer is false without the e2e flag and true with it', () => {
     const prod = resolvePixiInitOptions({ canvas }, { isE2E: false, devicePixelRatio: 1 });
     expect(prod.preserveDrawingBuffer).toBe(false);
