@@ -160,17 +160,37 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     this._assertOpen();
     logger.debug('TursoStorageAdapter.transaction', { count: queries.length });
 
-    for (const query of queries) {
-      const db = this._db;
-      if (!db) {
-        throw new Error('TursoStorageAdapter: not open');
-      }
-      const stmt = await db.prepare(query.sql);
-      if (query.args.length > 0) {
-        stmt.bind(...query.args);
-      }
+    const db = this._db;
+    if (!db) {
+      throw new Error('TursoStorageAdapter: not open');
+    }
 
-      await stmt.run();
+    // C-384 AC-4: the batch must be atomic. Without explicit BEGIN/COMMIT
+    // each statement commits in autocommit mode, so a failure mid-batch
+    // leaves earlier statements committed. Wrap the batch so either every
+    // statement lands or none do (the migration runner depends on this).
+    const begin = await db.prepare('BEGIN');
+    await begin.run();
+    try {
+      for (const query of queries) {
+        const stmt = await db.prepare(query.sql);
+        if (query.args.length > 0) {
+          stmt.bind(...query.args);
+        }
+        await stmt.run();
+      }
+      const commit = await db.prepare('COMMIT');
+      await commit.run();
+    } catch (error) {
+      try {
+        const rollback = await db.prepare('ROLLBACK');
+        await rollback.run();
+      } catch (rollbackError) {
+        logger.error('TursoStorageAdapter.transaction:rollback-failed', {
+          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+        });
+      }
+      throw error;
     }
   }
 

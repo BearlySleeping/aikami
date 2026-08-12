@@ -2,8 +2,9 @@
 //
 // C-373: AssetRegistryRepository — Turso-backed asset registry over the
 // shared LocalDatabaseInterface. Owns the `assets`, `asset_sources`, and
-// `install_state` tables (appended to AIKAMI_SCHEMA_DDL) and provides
-// batched, idempotent seeding from the bootstrap manifest + hash sidecar.
+// `install_state` tables (created by schema migration v1, C-384) and
+// provides batched, idempotent seeding from the bootstrap manifest + hash
+// sidecar.
 //
 // The registry is metadata-only: raw binaries never touch SQLite rows.
 // Cache backends (OPFS / Tauri FS) are managed by the client AssetManager.
