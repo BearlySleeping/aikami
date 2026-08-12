@@ -2333,12 +2333,24 @@ describe('C-376 AC-4 — zIndex render path (PixiJS sortableChildren)', () => {
       }
     }
     // AC-1 invariant: overhead draws over the player standing beneath a
-    // roof, for any in-map entity y.
-    const inMapEntityYs = [0, 64, 512, 1024, 2048, 4096, 8192];
+    // roof, for any in-map entity y — including the documented upper bound
+    // of 100_000 (the band is pinned above any realistic map pixel height).
+    const inMapEntityYs = [0, 64, 512, 1024, 2048, 4096, 8192, 100_000];
     for (const y of inMapEntityYs) {
-      expect(WORLD_Z_BANDS.tilemapOverhead, `overhead above entity y ${y}`).toBeGreaterThan(
-        computeEntityZIndex(y),
-      );
+      // Strictly above for every realistic in-map y; at the documented
+      // upper bound the band is pinned AT 100_000, so an entity exactly at
+      // that y ties the band (computeEntityZIndex(100_000) === 100_000) —
+      // the boundary is validated against computeEntityZIndex, not assumed.
+      if (y < WORLD_Z_BANDS.tilemapOverhead) {
+        expect(WORLD_Z_BANDS.tilemapOverhead, `overhead above entity y ${y}`).toBeGreaterThan(
+          computeEntityZIndex(y),
+        );
+      } else {
+        expect<number>(
+          WORLD_Z_BANDS.tilemapOverhead,
+          `overhead ties entity y ${y} at the bound`,
+        ).toBe(computeEntityZIndex(y));
+      }
     }
     // Overhead must also sit above the ground/decor bands so roofs never
     // sort below the map they sit on.

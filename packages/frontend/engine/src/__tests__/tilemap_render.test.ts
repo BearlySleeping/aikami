@@ -332,8 +332,10 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
     });
 
     // C-378: the converted map carries ground + decor + overhead bands;
-    // each visible band produces its own chunk. Collision contributes none.
-    expect(result.chunkCount).toBeGreaterThan(0);
+    // each visible band produces its own chunk (the village is 20×20 = one
+    // chunk per layer). Collision/spawns/transitions contribute none — if a
+    // visible band ever stops emitting, this exact count catches it.
+    expect(result.chunkCount).toBe(3);
     expect(result.chunks.length).toBe(result.chunkCount);
     const chunk = result.chunks[0];
     const geometry = chunk.geometry;

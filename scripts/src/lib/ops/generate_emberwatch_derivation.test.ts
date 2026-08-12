@@ -178,21 +178,46 @@ describe('C-378 — corner-16 terrain frame derivation', () => {
 });
 
 describe('C-378 AC-5 — atlas packer determinism', () => {
-  test('corner-16 frame rects sit inside the extruded cell (1px margin)', () => {
+  test('all 32 corner-16 frame rects exist at 32×32 with 1px margin and distinct cells', () => {
     const atlas = JSON.parse(
       readFileSync(
         join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
         'utf-8',
       ),
     ) as { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> };
-    // dirt_0.png is registered by the terrain pass after the 48 baked frames
-    // (GID 49 → row 3, col 0) → content at (0*34+1, 3*34+1).
-    const dirt0 = atlas.frames['dirt_0.png'];
-    expect(dirt0).toBeDefined();
-    expect(dirt0.frame.x).toBe(1);
-    expect(dirt0.frame.y).toBe(3 * 34 + 1);
-    expect(dirt0.frame.w).toBe(32);
-    expect(dirt0.frame.h).toBe(32);
+    const CELL = 34; // extruded cell pitch (32 content + 1px margin each side)
+    const seenRects = new Set<string>();
+    let checked = 0;
+    // Both corner16 runs: dirt_* (row 3, after the 48 baked frames fill
+    // rows 0-2) and water_* (row 4).
+    for (const [terrain, firstCell] of [
+      ['dirt', 48],
+      ['water', 64],
+    ] as const) {
+      for (let mask = 0; mask < 16; mask++) {
+        const name = mask === 0 ? `${terrain}_0.png` : `${terrain}_${mask}.png`;
+        const entry = atlas.frames[name];
+        expect(entry, `${terrain}_${mask} frame exists`).toBeDefined();
+        if (!entry) {
+          continue;
+        }
+        checked += 1;
+        // 32×32 content with the 1px margin: x = col*34 + 1, y = row*34 + 1.
+        const cell = firstCell + mask;
+        const col = cell % 16;
+        const row = Math.floor(cell / 16);
+        expect(entry.frame.w, `${name} width`).toBe(32);
+        expect(entry.frame.h, `${name} height`).toBe(32);
+        expect(entry.frame.x, `${name} x`).toBe(col * CELL + 1);
+        expect(entry.frame.y, `${name} y`).toBe(row * CELL + 1);
+        // Distinct rectangle — a cell collision would overwrite a frame and
+        // two entries would share a rect.
+        const key = `${entry.frame.x},${entry.frame.y},${entry.frame.w},${entry.frame.h}`;
+        expect(seenRects.has(key), `${name} occupies a distinct cell`).toBe(false);
+        seenRects.add(key);
+      }
+    }
+    expect(checked).toBe(32);
   });
 
   test('the committed atlas is 544×272 (extruded)', () => {

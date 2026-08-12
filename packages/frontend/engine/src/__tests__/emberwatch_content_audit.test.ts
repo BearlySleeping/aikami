@@ -91,17 +91,24 @@ type ManifestJson = {
 
 const EMBERWATCH_FIXTURES = {
   packId: 'emberwatch',
-  version: '3.1.0',
+  // C-378: bumped for the new top-level `terrains` block + aikami map
+  // channels — consumers that cache/gate on the pack version observe it.
+  version: '3.2.0',
   atlas: {
     path: join(
       import.meta.dir,
       '../../../../../apps/frontend/client/static/game-data/sprites/tilesets/atlas.json',
     ),
     // C-378 AC-5: 1px extruded frames — 34px cell pitch, 544×272 atlas.
+    // tileSize/spacing/margin mirror the map tileset blocks (asserted
+    // below) so GID math derives from geometry instead of hardcoded 34/16/1.
     minFrames: 80,
     size: { w: 544, h: 272 },
     columns: 16,
     tilecount: 128,
+    tileSize: 32,
+    spacing: 2,
+    margin: 1,
     maxGid: 48,
   },
   fallbackTile: 'grass.png',
@@ -368,9 +375,17 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
         }
       }
     }
+    // GID math derived from the atlas/tileset geometry (pitch = tileSize +
+    // spacing, margin = 1, columns = 16) — never hardcoded 34/16/1, so a
+    // packer change to spacing/margin keeps this correct.
+    const cellPitch = EMBERWATCH_FIXTURES.atlas.tileSize + EMBERWATCH_FIXTURES.atlas.spacing;
+    const atlasMargin = EMBERWATCH_FIXTURES.atlas.margin;
+    const atlasColumns = EMBERWATCH_FIXTURES.atlas.columns;
     for (const [frameName, cell] of Object.entries(atlas.frames)) {
       const gid =
-        Math.floor((cell.frame.y - 1) / 34) * 16 + Math.floor((cell.frame.x - 1) / 34) + 1;
+        Math.floor((cell.frame.y - atlasMargin) / cellPitch) * atlasColumns +
+        Math.floor((cell.frame.x - atlasMargin) / cellPitch) +
+        1;
       if (terrainFrameNames.has(frameName)) {
         expect(gid, `terrain frame ${frameName} outside baked GID grid`).toBeGreaterThan(
           EMBERWATCH_FIXTURES.atlas.maxGid,
@@ -428,9 +443,10 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
       expect(block.imageheight).toBe(EMBERWATCH_FIXTURES.atlas.size.h);
       expect(block.columns).toBe(EMBERWATCH_FIXTURES.atlas.columns);
       expect(block.tilecount).toBe(EMBERWATCH_FIXTURES.atlas.tilecount);
-      // C-378 AC-5: extruded frames — 2px spacing, 1px margin.
-      expect(block.spacing).toBe(2);
-      expect(block.margin).toBe(1);
+      // C-378 AC-5: extruded frames — 2px spacing, 1px margin (derived
+      // from the fixture so the atlas and tileset blocks cannot drift).
+      expect(block.spacing).toBe(EMBERWATCH_FIXTURES.atlas.spacing);
+      expect(block.margin).toBe(EMBERWATCH_FIXTURES.atlas.margin);
     }
   });
 

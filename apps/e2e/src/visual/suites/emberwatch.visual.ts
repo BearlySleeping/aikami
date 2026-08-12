@@ -13,6 +13,7 @@
 //     it (AC-1). The village map places the arch over the walkable gate gap
 //     at the default spawn, so overheadOccludesPlayer is true by geometry.
 
+import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
@@ -43,9 +44,11 @@ const TerrainSchema = Type.Object({
 // Case B — overhead occlusion (few fields, one hard claim).
 const OverheadSchema = Type.Object({
   score: Type.Number({ description: '0-100 score of visual correctness' }),
+  villageLooksCoherent: Type.Boolean({
+    description: 'Whether the scene reads as a coherent pixel-art village',
+  }),
   overheadOccludesPlayer: Type.Boolean({
-    description:
-      'Whether a roof/arch tile is drawn OVER the player character standing beneath it',
+    description: 'Whether a roof/arch tile is drawn OVER the player character standing beneath it',
   }),
   playerVisible: Type.Boolean({
     description: 'Whether the player character is visible in the gate opening',
@@ -85,13 +88,25 @@ const TERRAIN_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// C-378 visual determinism: wait for the engine's visual-ready flag (set on
+// GAME_READY once the gameHour env command has been applied — either after
+// ENVIRONMENT_UPDATED confirms the requested hour, or immediately on a normal
+// boot). Shared by both cases so the readiness contract stays in one place.
+const waitForVisualReady = async (page: Page): Promise<void> => {
+  await page.waitForFunction(
+    () => (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ === true,
+    undefined,
+    { timeout: 10_000 },
+  );
+};
+
 const OVERHEAD_PROMPT = [
   'This is a screenshot from the Emberwatch village — a top-down pixel-art JRPG scene from the Aikami game engine.',
   'The player has just spawned at the village gate (south-center of the map) and the camera centers on the player.',
   '',
   'THE SCENE AT THE SPAWN POSITION:',
   '- The player stands in the village gate opening at the bottom-center of the screen.',
-  '- DIRECTLY OVER THE PLAYER, a roof/arch tile (brown shingle roof) is drawn ON TOP of the player character — the roof covers part of the player\'s head/upper body while the lower body remains visible below it.',
+  "- DIRECTLY OVER THE PLAYER, a roof/arch tile (brown shingle roof) is drawn ON TOP of the player character — the roof covers part of the player's head/upper body while the lower body remains visible below it.",
   '- A wooden village gate prop with stone posts is directly north of the player.',
   '',
   'EVALUATE:',
@@ -124,17 +139,10 @@ export default defineConfig({
       // the gameHour command has been dispatched) instead of a blind sleep.
       searchParams: { gameHour: '12' },
       // C-378 visual determinism: wait for the engine's visual-ready flag
-      // (set on GAME_READY after the env command dispatch) so the noon tint
-      // is applied before capture — replaces the blind 2s sleep with a
+      // (set once the noon env command has been applied) so the noon tint
+      // is in effect before capture — replaces the blind 2s sleep with a
       // deterministic condition.
-      setupHook: async (page) => {
-        await page.waitForFunction(
-          () =>
-            (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ === true,
-          undefined,
-          { timeout: 10_000 },
-        );
-      },
+      setupHook: waitForVisualReady,
       requiredTrueFields: ['terrainTransitionsLookNatural'],
     },
     {
@@ -143,14 +151,7 @@ export default defineConfig({
       prompt: OVERHEAD_PROMPT,
       schema: OverheadSchema,
       searchParams: { gameHour: '12' },
-      setupHook: async (page) => {
-        await page.waitForFunction(
-          () =>
-            (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ === true,
-          undefined,
-          { timeout: 10_000 },
-        );
-      },
+      setupHook: waitForVisualReady,
       // C-378 AC-1: overheadOccludesPlayer is a HARD gate — a generous
       // score must not paper over the headline visual claim.
       requiredTrueFields: ['overheadOccludesPlayer'],

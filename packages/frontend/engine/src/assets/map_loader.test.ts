@@ -1409,7 +1409,10 @@ describe('loadTilemap: aikami terrain + elevation channels (C-378)', () => {
     });
     const fetchMock = mockFetch(raw);
 
-    expect(loadTilemap({ url: 'test://bad-aikami.json', fetch: fetchMock })).rejects.toThrow(
+    // Await the rejection matcher — an un-awaited rejects assertion lets the
+    // test pass even when the promise never rejects (or surfaces as an
+    // unhandled rejection instead of an assertion failure).
+    await expect(loadTilemap({ url: 'test://bad-aikami.json', fetch: fetchMock })).rejects.toThrow(
       /aikami\.terrain length/,
     );
   });

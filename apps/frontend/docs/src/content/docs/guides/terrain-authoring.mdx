@@ -14,15 +14,20 @@ A terrain is declared in the pack manifest's `terrains` array:
 
 ```ts
 {
-  name: 'dirt',           // human-readable terrain name (used in maps)
+  name: 'dirt',           // terrain identity key used by map aikami.terrain cells
   precedence: 1,          // draw order; lower renders first
   wang: 'corner16',       // 'fill' = solid base, 'corner16' = 16 frames
   frameBase: 'dirt_0.png',// frame name of mask index 0
   isWalkable: true,       // walkability source of truth
-  movementCost: 0.8,      // optional
-  blocksSight: false,     // optional (consumed by vision raycasters)
 }
 ```
+
+This is the full authorable surface today: `name`, `precedence`, `wang`,
+`frameBase`, `variants` (for `fill` terrains) and `isWalkable`. Other fields
+in the shared schema (e.g. `movementCost`, `blocksSight`) are reserved for
+future contracts — nothing parses or consumes them yet, so authoring them
+has no effect. The engine derives walkability from `isWalkable` and treats
+everything else as unsupported.
 
 Rules enforced at load:
 

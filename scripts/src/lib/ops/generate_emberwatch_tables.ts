@@ -255,14 +255,28 @@ export const readManifestTerrains = (): Array<{
     }>;
   };
   const terrains = raw.terrains ?? [];
-  _cachedManifestTerrains = terrains.map((t) => ({
-    name: t.name ?? '',
-    precedence: t.precedence ?? 0,
-    wang: t.wang ?? 'fill',
-    frameBase: t.frameBase ?? '',
-    variants: t.variants,
-    isWalkable: t.isWalkable ?? true,
-  }));
+  // Fail fast: a `corner16` terrain without a frameBase would silently
+  // allocate 16 atlas cells for frames no painter can draw (muted-grass
+  // tiles instead of a generator error). name and frameBase are required.
+  _cachedManifestTerrains = terrains.map((t) => {
+    const wang = t.wang ?? 'fill';
+    if (!t.name) {
+      throw new Error('generate_emberwatch: manifest.terrains entry has no "name"');
+    }
+    if (!t.frameBase) {
+      throw new Error(
+        `generate_emberwatch: terrain "${t.name}" has no "frameBase" (required for wang "${wang}")`,
+      );
+    }
+    return {
+      name: t.name,
+      precedence: t.precedence ?? 0,
+      wang,
+      frameBase: t.frameBase,
+      variants: t.variants,
+      isWalkable: t.isWalkable ?? true,
+    };
+  });
   return _cachedManifestTerrains;
 };
 

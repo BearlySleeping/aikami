@@ -483,12 +483,19 @@ class GameEngineService
             name: string;
             frame: string;
             isWalkable?: boolean;
+            anchor?: { x: number; y: number };
             collision?:
               | { type: 'rect'; width: number; height: number }
               | { type: 'circle'; radius: number };
           } = { name: def.name, frame: def.frame };
           if (def.isWalkable !== undefined) {
             projected.isWalkable = def.isWalkable;
+          }
+          // C-378 AC-7: the manifest anchor must cross the worker boundary
+          // so the engine can apply custom prop anchors (non-default pivot)
+          // — without it, multi-tile props silently fall back to (0.5, 1).
+          if (def.anchor !== undefined) {
+            projected.anchor = def.anchor;
           }
           if (def.collision) {
             projected.collision = def.collision;
@@ -516,19 +523,32 @@ class GameEngineService
       // C-378 AC-9 visual hook: `?gameHour=<0-23>` pre-configures the
       // environment hour once the world is ready (the SET_ENVIRONMENT_CONFIG
       // command handler is registered at world creation). Purely additive —
-      // absent the param, the game boots at its default hour.
+      // absent the param (or an empty one), the game boots at its default
+      // hour and no command is dispatched.
       if (typeof window !== 'undefined') {
-        const hour = Number(new URLSearchParams(window.location.search).get('gameHour'));
+        const rawHour = new URLSearchParams(window.location.search).get('gameHour');
+        const hour = rawHour === null || rawHour.trim() === '' ? Number.NaN : Number(rawHour);
         if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+          // C-378 visual determinism: the visual runner waits for this flag
+          // instead of a blind sleep, so the gameHour tint (and the scene
+          // state) is applied before the capture. The worker applies the
+          // start hour asynchronously, so the flag is raised only once an
+          // ENVIRONMENT_UPDATED event confirms the environment is at the
+          // requested hour.
+          const offReady = bridge.on('ENVIRONMENT_UPDATED', (event) => {
+            if (event.gameHour === hour) {
+              offReady();
+              (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
+            }
+          });
           bridge.send({
             type: 'SET_ENVIRONMENT_CONFIG',
             startHour: hour,
           } as unknown as GameCommand);
+          return;
         }
-        // C-378 visual determinism: the visual runner waits for this flag
-        // instead of a blind sleep, so the gameHour tint (and the scene
-        // state) is applied before the capture. Set once GAME_READY fires
-        // and the env command (if any) has been dispatched.
+        // Normal boot / empty param — the default environment is already in
+        // effect, so the world is immediately ready for capture.
         (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
       }
     });

@@ -432,15 +432,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private readonly _propFrameResolver?: PropTextureResolver;
 
   /**
-   * Frame → { width, height, anchor } for C-378 AC-7 prop sizing.
-   * Built at loadMap from the resolved pack config; cleared on map switch.
-   * Keyed by frame name because the worker message carries the frame, not
-   * the propId.
+   * Frame → { anchor } for C-378 AC-7 prop anchoring. Width/height are NOT
+   * stored — the sprite is rendered at the resolved texture's native size
+   * (0/0 placeholders were unusable zero-sized metadata). Built at loadMap
+   * from the resolved pack config; cleared on map switch. Keyed by frame
+   * name because the worker message carries the frame, not the propId.
    */
-  private _propFrameMeta = new Map<
-    string,
-    { width: number; height: number; anchorX: number; anchorY: number }
-  >();
+  private _propFrameMeta = new Map<string, { anchorX: number; anchorY: number }>();
 
   /**
    * Latest environment UBO received from the worker via STATE_UPDATE
@@ -450,6 +448,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * thread — C-378 AC-9).
    */
   private _environmentUbo: Float32Array | undefined;
+
+  /**
+   * C-378 AC-9: whether the day/night tint has been sampled in screenshot
+   * mode. The first ambient value (once the worker UBO arrives) is retained
+   * for the whole capture instead of refreshing from the advancing worker
+   * UBO, keeping the tint deterministic across runs.
+   */
+  private _screenshotTintSampled = false;
+
+  /**
+   * Cached result of the `screenshot=true` URL check — computed once, since
+   * it cannot change without a page load (C-378 performance pass: the check
+   * used to rebuild URLSearchParams on every ticker frame).
+   */
+  private _visualScreenshotMode: boolean | undefined;
 
   constructor(options: GameWorldOptions) {
     super(options);
@@ -564,15 +577,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         if (!this._isVisualScreenshotMode()) {
           this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
         }
-        const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
-        if (tintArr && this._environmentUbo) {
-          // Ambient color from the worker UBO — same factor the rest of the
-          // scene uses. Neutral (1,1,1) when the worker hasn't sent a UBO
-          // yet (boot) → pixel-identical to an untinted render.
-          const ambient = this._environmentUbo;
-          tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
-          tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
-          tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+        // C-378 AC-9: outside screenshot mode the ambient tint follows the
+        // live worker UBO every frame. In screenshot mode the FIRST sampled
+        // tint is retained for the entire capture — the worker UBO keeps
+        // advancing (game time passes), so refreshing it per frame would
+        // make the tint non-deterministic across runs.
+        const screenshotMode = this._isVisualScreenshotMode();
+        if (!screenshotMode || !this._screenshotTintSampled) {
+          const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
+          if (tintArr && this._environmentUbo) {
+            // Ambient color from the worker UBO — same factor the rest of the
+            // scene uses. Neutral (1,1,1) when the worker hasn't sent a UBO
+            // yet (boot) → pixel-identical to an untinted render.
+            const ambient = this._environmentUbo;
+            tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
+            tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
+            tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+            if (screenshotMode) {
+              this._screenshotTintSampled = true;
+            }
+          }
         }
       }
 
@@ -746,18 +770,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * identically across runs.
    */
   private _isVisualScreenshotMode(): boolean {
+    if (this._visualScreenshotMode !== undefined) {
+      return this._visualScreenshotMode;
+    }
     if (typeof window === 'undefined') {
+      this._visualScreenshotMode = false;
       return false;
     }
+    let enabled = false;
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('screenshot') === 'true') {
-        return true;
-      }
+      enabled = params.get('screenshot') === 'true';
     } catch {
       // window.location may be unavailable (SSR)
     }
-    return false;
+    this._visualScreenshotMode = enabled;
+    return enabled;
   }
 
   /**
@@ -1302,15 +1330,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // props (e.g. a 32×64 gate) now render at their authored size.
       // Prop COLLISION stays one tile from the foot pixel regardless of art
       // height — that is correct for top-down and must not change here.
-      const propMeta = this._propFrameMeta.get(frame) ?? {
-        width: 0,
-        height: 0,
-        anchorX: 0.5,
-        anchorY: 1.0,
-      };
+      const propMeta = this._propFrameMeta.get(frame) ?? { anchorX: 0.5, anchorY: 1.0 };
       const propSprite = new Sprite(resolution.texture);
-      propSprite.width = propMeta.width > 0 ? propMeta.width : resolution.texture.width;
-      propSprite.height = propMeta.height > 0 ? propMeta.height : resolution.texture.height;
+      propSprite.width = resolution.texture.width;
+      propSprite.height = resolution.texture.height;
       // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
       // and the placeholder it replaces. Fallback: manifest default.
       propSprite.anchor.set(propMeta.anchorX, propMeta.anchorY);
@@ -2257,16 +2280,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // collide to the same zone entity.
       const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
 
-      // C-378 AC-7: prop frame metadata (native atlas size + manifest
-      // anchor) for multi-tile props. Keyed by frame so the worker's
-      // ENTITY_CREATED message (which carries only the frame) can resolve
-      // the size/anchor without a propId round-trip.
+      // C-378 AC-7: prop frame metadata (manifest anchor) for multi-tile
+      // props. Keyed by frame so the worker's ENTITY_CREATED message (which
+      // carries only the frame) can resolve the anchor without a propId
+      // round-trip. Width/height are intentionally absent — the sprite is
+      // sized from the resolved texture at render time.
       this._propFrameMeta.clear();
       for (const propDef of Object.values(packConfig?.props ?? {})) {
         const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
         this._propFrameMeta.set(propDef.frame, {
-          width: 0, // filled lazily from the resolved texture
-          height: 0,
           anchorX: anchor.x,
           anchorY: anchor.y,
         });

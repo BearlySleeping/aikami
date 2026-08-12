@@ -182,8 +182,23 @@ export const resolveTerrainGrid = (
     terrains: readonly ContentPackTerrain[];
   },
 ): ResolvedTerrainGrid => {
-  const { width, height, terrain, terrains } = options;
-  const ordered = validateTerrains(terrains);
+  const { terrains } = options;
+  // Public entry point: validates + sorts, then delegates to the shared impl.
+  return _resolveTerrainGridImpl(options, validateTerrains(terrains));
+};
+
+/**
+ * Shared grid-resolution impl for PRE-VALIDATED (already sorted, uniqueness
+ * checked) terrains — skips the second validate/sort pass so internal
+ * callers (e.g. autotileLayers, which validated once already) don't pay it
+ * twice. Direct callers with unvalidated terrains must use
+ * {@link resolveTerrainGrid}.
+ */
+const _resolveTerrainGridImpl = (
+  options: Pick<AutotileOptions, 'width' | 'height' | 'terrain'>,
+  ordered: readonly ContentPackTerrain[],
+): ResolvedTerrainGrid => {
+  const { width, height, terrain } = options;
   const idToIndex = new Map<string, number>();
   for (let i = 0; i < ordered.length; i++) {
     idToIndex.set(ordered[i].name, i);
@@ -331,8 +346,10 @@ export const pickFillVariant = (
  */
 export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[] => {
   const { width, height, terrain, terrains } = options;
+  // Validate/sort ONCE here — the grid resolution below reuses the ordered
+  // list through the pre-validated impl (no duplicate validation pass).
   const ordered = validateTerrains(terrains);
-  const grid = resolveTerrainGrid({ width, height, terrain, terrains: ordered });
+  const grid = _resolveTerrainGridImpl({ width, height, terrain }, ordered);
   const { cells } = grid;
   const total = width * height;
 
@@ -395,6 +412,13 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
     }
 
     const frames: Array<string | 0> = new Array<string | 0>(total).fill(0);
+    // Precompute the 16 possible corner frame names once per terrain — the
+    // result depends only on (frameBase, mask), so building them per cell
+    // is pure waste (C-378 performance pass).
+    const maskFrames: string[] = [];
+    for (let m = 0; m < CORNER16_MASK_COUNT; m++) {
+      maskFrames.push(cornerFrameName(terrainDef.frameBase, m));
+    }
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const cellIndex = y * width + x;
@@ -402,7 +426,7 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
           continue; // not this terrain — empty in this overlay
         }
         const mask = cornerMaskForCell(cells, width, height, x, y, t);
-        frames[cellIndex] = cornerFrameName(terrainDef.frameBase, mask);
+        frames[cellIndex] = maskFrames[mask];
       }
     }
     emissions.push({

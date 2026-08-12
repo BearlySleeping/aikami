@@ -150,4 +150,24 @@ describe('C-378 AC-1 — per-band tilemap containers', () => {
 
     expect(result.bandContainers.map((b) => b.band)).toEqual(['ground']);
   });
+
+  it('a visible layer with an omitted band property lands in the ground band (bandZ default)', async () => {
+    // Strip the band property from the decor layer — an omitted band must
+    // default to 'ground' (the bandZ default branch + `layer.band ?? 'ground'`),
+    // never throw or vanish the layer.
+    const tilemap = _createBandTilemap();
+    const decor = tilemap.layers.find((l) => l.name === 'decor');
+    if (decor) {
+      delete decor.band;
+    }
+    const result = await renderTilemap({ tilemap });
+
+    const groundBand = result.bandContainers.find((b) => b.band === 'ground');
+    // The decor tiles now render in the ground band alongside the ground
+    // fill — two layers merged into one band's chunk list.
+    expect(groundBand?.chunks.length).toBe(2);
+    expect(groundBand?.zIndex).toBe(WORLD_Z_BANDS.tilemapGround);
+    // No decor band exists anymore; overhead keeps its explicit band.
+    expect(result.bandContainers.map((b) => b.band)).toEqual(['ground', 'overhead']);
+  });
 });

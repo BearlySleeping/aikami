@@ -23,11 +23,14 @@ import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import {
   ATLAS_CELL,
+  ATLAS_COLS,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
+  ATLAS_ROWS,
   ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
   buildFrames,
+  CORNER16_FRAMES,
   cornerFrameName,
   readManifestTerrains,
 } from './generate_emberwatch_tables.ts';
@@ -51,9 +54,12 @@ const PAD = ATLAS_PADDING; // 1 — extrusion border width
 const CW = ATLAS_WIDTH; // 544 — final atlas width
 const CH = ATLAS_HEIGHT; // 272 — final atlas height
 
-// Content scratch buffer dimensions (painters write here at 32px pitch).
-const W = 512;
-const H = 256;
+// Content scratch buffer dimensions (painters write here at 32px pitch) —
+// derived from the shared grid constants so the scratch buffer can never be
+// smaller than the atlas grid it feeds (an ATLAS_ROWS/COLS change propagates
+// instead of silently reading past the buffer end).
+const W = ATLAS_COLS * TILE; // 512
+const H = ATLAS_ROWS * TILE; // 256
 
 /**
  * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
@@ -70,16 +76,16 @@ const registerTerrainFrames = (frames: Record<string, [number, number]>): void =
     if (terrain.wang !== 'corner16') {
       continue;
     }
-    for (let mask = 0; mask < 16; mask++) {
+    for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
       const name = cornerFrameName(terrain.frameBase, mask);
       if (frames[name]) {
         throw new Error(
           `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
         );
       }
-      const col = nextCell % 16;
-      const row = Math.floor(nextCell / 16);
-      if (row >= 8) {
+      const col = nextCell % ATLAS_COLS;
+      const row = Math.floor(nextCell / ATLAS_COLS);
+      if (row >= ATLAS_ROWS) {
         throw new Error(
           `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
         );
@@ -873,14 +879,18 @@ const paintSand = (col: number, row: number): void => {
 // mask 5 = diagonal pair, …).
 
 /** Corner bit → wedge test (tile-local x,y in 0..TILE-1, center at 16). */
-const CORNER_WEDGE_TESTS: Array<{
+// The four wedges are true mirror images around the tile center
+// ((x,y) → (31-x,31-y)) and each selects exactly 136 pixels for TILE = 32
+// (the triangle cut by the two edge-midpoint diagonals). Bit order is the
+// documented contract: bit0=NW, bit1=NE, bit2=SE, bit3=SW.
+export const CORNER_WEDGE_TESTS: Array<{
   bit: number;
   test: (x: number, y: number) => boolean;
 }> = [
   { bit: 0b0001, test: (x, y) => x + y < 16 }, // NW: top-left triangle
-  { bit: 0b0010, test: (x, y) => x - y > 16 }, // NE: top-right triangle
-  { bit: 0b0100, test: (x, y) => x + y > 48 }, // SE: bottom-right triangle
-  { bit: 0b1000, test: (x, y) => y - x > 16 }, // SW: bottom-left triangle
+  { bit: 0b0010, test: (x, y) => x - y > 15 }, // NE: top-right triangle (mirror of NW across the vertical axis)
+  { bit: 0b0100, test: (x, y) => x + y > 46 }, // SE: bottom-right triangle (mirror of NW through the center)
+  { bit: 0b1000, test: (x, y) => y - x > 15 }, // SW: bottom-left triangle (mirror of NW across the horizontal axis)
 ];
 
 /** True when the pixel is in the center diamond (always terrain). */
@@ -889,7 +899,7 @@ const inCenterDiamond = (x: number, y: number): boolean => {
 };
 
 /** True when the pixel is owned by a set-corner wedge (or the diamond). */
-const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {
+export const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {
   if (inCenterDiamond(x, y)) {
     return true;
   }

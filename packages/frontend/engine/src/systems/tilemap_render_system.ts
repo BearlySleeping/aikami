@@ -79,6 +79,13 @@ export type TilemapBandContainer = {
 };
 
 /**
+ * Internal mutable variant of {@link TilemapBandContainer} — the chunk array
+ * is accumulated with in-place pushes while the band is being filled, then
+ * exposed readonly via the public types (no per-layer array rebuilds).
+ */
+type MutableBandEntry = Omit<TilemapBandContainer, 'chunks'> & { chunks: TilemapChunk[] };
+
+/**
  * Result of rendering a tilemap into the scene.
  */
 export type TilemapRenderResult = {
@@ -165,8 +172,8 @@ export const renderTilemap = async (
 
   // Band grouping: each rendered layer lands in exactly one band container
   // (C-378 AC-1). Ground/decor render below entities; overhead above them.
-  const bands: TilemapBandContainer[] = [];
-  const bandContainersByKey = new Map<string, TilemapBandContainer>();
+  const bands: MutableBandEntry[] = [];
+  const bandContainersByKey = new Map<string, MutableBandEntry>();
   const bandZ = (band: TilemapBand): number => {
     switch (band) {
       case 'decor':
@@ -178,14 +185,14 @@ export const renderTilemap = async (
         return WORLD_Z_BANDS.tilemapGround;
     }
   };
-  const bandContainerFor = (band: TilemapBand): TilemapBandContainer => {
+  const bandContainerFor = (band: TilemapBand): MutableBandEntry => {
     const existing = bandContainersByKey.get(band);
     if (existing) {
       return existing;
     }
     const bandContainer = new Container();
     bandContainer.label = `tilemap-band-${band}`;
-    const entry: TilemapBandContainer = {
+    const entry: MutableBandEntry = {
       band,
       container: bandContainer,
       zIndex: bandZ(band),
@@ -197,7 +204,11 @@ export const renderTilemap = async (
   };
 
   // Render terrain layers (C-378) first — they are the ground band underlay
-  // (base fill + overlays in precedence order).
+  // (base fill + overlays in precedence order). Track whether the terrain
+  // block ACTUALLY emitted chunks: when the tileset texture is missing or
+  // frame resolution fails, buildTilemapChunks yields zero chunks and the
+  // baked ground layers must remain as fallback (never a blank map).
+  let terrainGroundRendered = false;
   if (terrainLayers && terrainLayers.length > 0) {
     const primaryTileset = tilemap.tilesets[0];
     const texture = primaryTileset ? textureMap.get(primaryTileset.image) : undefined;
@@ -228,8 +239,11 @@ export const renderTilemap = async (
           bandEntry.container.addChild(result.container.children[0]);
         }
         layerCount += 1;
-        bandEntry.chunks = [...bandEntry.chunks, ...result.chunks];
+        bandEntry.chunks.push(...result.chunks);
         allChunks.push(...result.chunks);
+        if (result.chunks.length > 0) {
+          terrainGroundRendered = true;
+        }
       }
     }
   }
@@ -238,8 +252,11 @@ export const renderTilemap = async (
   // C-378: when the autotiler supplied terrain layers, the baked ground
   // band is REPLACED (terrain layers render in its place) — skip
   // ground-band baked layers to avoid double-rendering the base fill.
-  // Decor/overhead baked layers still render on top.
-  const hasTerrainGround = (terrainLayers?.length ?? 0) > 0;
+  // Decor/overhead baked layers still render on top. The baked ground band
+  // is skipped ONLY when terrain chunks really rendered — if the tileset
+  // texture or frame resolution prevented terrain rendering, the baked
+  // ground layers stay as the fallback.
+  const hasTerrainGround = terrainGroundRendered;
   for (const layer of tilemap.layers) {
     if (!layer.visible) {
       continue;
@@ -290,7 +307,7 @@ export const renderTilemap = async (
     }
 
     layerCount += 1;
-    bandEntry.chunks = [...bandEntry.chunks, ...result.chunks];
+    bandEntry.chunks.push(...result.chunks);
     allChunks.push(...result.chunks);
   }
 

@@ -499,16 +499,20 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     return resolved.entry.getUvRect(resolved.localId);
   };
 
-  // Count active tiles first
-  let activeTileCount = 0;
+  // Resolve each cell ONCE: cache non-empty UV results in the counting pass
+  // and reuse them while filling — avoids a second resolver call (and a
+  // second UV object allocation) per active cell (C-378 performance pass).
+  const resolvedUvs = new Map<number, { u0: number; v0: number; u1: number; v1: number }>();
   for (let row = tileStartY; row < tileEndY; row++) {
     for (let col = tileStartX; col < tileEndX; col++) {
       const index = row * layer.width + col;
-      if (resolveUv(index)) {
-        activeTileCount += 1;
+      const uv = resolveUv(index);
+      if (uv) {
+        resolvedUvs.set(index, uv);
       }
     }
   }
+  const activeTileCount = resolvedUvs.size;
 
   if (activeTileCount === 0) {
     return undefined;
@@ -528,7 +532,7 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   for (let row = tileStartY; row < tileEndY; row++) {
     for (let col = tileStartX; col < tileEndX; col++) {
       const dataIndex = row * layer.width + col;
-      const uv = resolveUv(dataIndex);
+      const uv = resolvedUvs.get(dataIndex);
       if (!uv) {
         continue;
       }

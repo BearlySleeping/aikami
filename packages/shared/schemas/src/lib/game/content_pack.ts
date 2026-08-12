@@ -700,7 +700,16 @@ export type ContentPackProp = Static<typeof ContentPackPropSchema>;
  * declares one frame name, not 16.
  */
 export const ContentPackTerrainSchema = Type.Object({
-  name: Type.String({ description: 'Human-readable terrain name' }),
+  /**
+   * Stable terrain identity/lookup key. Map `aikami.terrain` channel cells
+   * reference this value (resolveTerrainGrid maps it to the cell index), so
+   * it must match the channel values exactly — it is NOT a display label.
+   */
+  name: Type.String({
+    minLength: 1,
+    pattern: '^[a-z0-9_]+$',
+    description: 'Terrain id referenced by map aikami.terrain cells',
+  }),
   /** Draw order. Lower renders first; the lowest-precedence terrain is the base fill. */
   precedence: Type.Integer({ minimum: 0 }),
   /** 'fill' = solid base terrain, no transitions. 'corner16' = 16 frames in mask order. */

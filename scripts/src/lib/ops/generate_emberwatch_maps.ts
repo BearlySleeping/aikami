@@ -295,8 +295,10 @@ const buildVillage = (): MapData => {
   }
 
   // C-378 AC-1 visual hook: a gate arch over the walkable gate gap (cols
-  // 9-10, rows 18-19). The player's default spawn (320,560 → tile
-  // (10,17.5)) stands directly beneath it, so the visual suite can assert
+  // 9-10, rows 18-19). The arch tiles (rows 16-17, pixels 512-575) draw
+  // directly over the player standing in the gate opening — the default
+  // spawn (320,560 → tile (10,17.5)) and the gate prop (320,576 → tile
+  // (10,18)) both sit beneath it, so the visual suite can assert
   // overheadOccludesPlayer: true. These tiles live ONLY in the overhead
   // band — the ground stays path/grass, the terrain channel stays `''`,
   // and collision is untouched (overhead never contributes solidity, AC-4).
@@ -340,13 +342,16 @@ const buildVillage = (): MapData => {
   house(14, 14); // SE
 
   // Decor: fences + plants near the plaza/gate. Solid cells must be blocked
-  // so collision matches the visible decor (C-375 AC-5).
+  // so collision matches the visible decor (C-375 AC-5). The plant at (11,17)
+  // used to sit INSIDE the pond (cols 11-13, rows 15-17) and overwrote its
+  // south-west water cell — it lives at (11,13) now, outside the pond, so
+  // no later terrain write alters the pond's shape.
   setTile(m, 6, 4, G.FENCE);
   setTile(m, 6, 5, G.FENCE);
   setTile(m, 13, 4, G.FENCE);
   setTile(m, 13, 5, G.FENCE);
   setTile(m, 8, 17, G.PLANT);
-  setTile(m, 11, 17, G.PLANT);
+  setTile(m, 11, 13, G.PLANT);
   setTile(m, 3, 13, G.PLANT);
   setTile(m, 14, 13, G.PLANT);
   for (const [c, r] of [
@@ -355,7 +360,7 @@ const buildVillage = (): MapData => {
     [13, 4],
     [13, 5],
     [8, 17],
-    [11, 17],
+    [11, 13],
     [3, 13],
     [14, 13],
   ] as const) {
@@ -579,7 +584,24 @@ const emit = (mapName: string, m: MapData): void => {
   // autotiled ground (walls, fences, plants, roofs) are duplicated into
   // decor/overhead bands so they render in BOTH paths.
   const terrains = readManifestTerrains();
-  const terrainNameToId = new Map(terrains.map((t) => [t.name, t.name]));
+  // Variant tile names (grass_variant, grass_dark) are FILL variants of
+  // their owning terrain (grass) — resolve them to the terrain so they
+  // stay in the terrain channel (zeroed decor/overhead) instead of falling
+  // through to the decor fallback.
+  const frameToTileName = new Map<string, string>();
+  for (const def of Object.values(readManifestTiles())) {
+    frameToTileName.set(def.frame, def.name);
+  }
+  const terrainNameToId = new Map<string, string>();
+  for (const t of terrains) {
+    terrainNameToId.set(t.name, t.name);
+    for (const variantFrame of t.variants ?? []) {
+      const variantTileName = frameToTileName.get(variantFrame);
+      if (variantTileName) {
+        terrainNameToId.set(variantTileName, t.name);
+      }
+    }
+  }
   const decor: number[] = [];
   const overhead: number[] = [];
   const terrainChannel: string[] = [];

@@ -125,6 +125,42 @@ describe('cornerMaskForCell — all 16 masks (AC-3)', () => {
       owners: { '-1,-1': 2, '1,-1': 2, '-1,1': 2 },
       expected: 0b0100,
     },
+    // Single corner owned by dirt (the remaining seven masks)
+    {
+      name: 'mask 1 — only NW owned by dirt',
+      owners: { '1,-1': 2, '1,1': 2, '-1,1': 2 },
+      expected: 0b0001,
+    },
+    {
+      name: 'mask 2 — only NE owned by dirt',
+      owners: { '-1,-1': 2, '1,1': 2, '-1,1': 2 },
+      expected: 0b0010,
+    },
+    {
+      name: 'mask 3 — NW+NE owned by dirt (north edge)',
+      owners: { '1,1': 2, '-1,1': 2 },
+      expected: 0b0011,
+    },
+    {
+      name: 'mask 5 — NW+SE owned by dirt (diagonal)',
+      owners: { '1,-1': 2, '-1,1': 2 },
+      expected: 0b0101,
+    },
+    {
+      name: 'mask 6 — NE+SE owned by dirt (east edge)',
+      owners: { '-1,-1': 2, '-1,1': 2 },
+      expected: 0b0110,
+    },
+    {
+      name: 'mask 8 — only SW owned by dirt',
+      owners: { '-1,-1': 2, '1,-1': 2, '1,1': 2 },
+      expected: 0b1000,
+    },
+    {
+      name: 'mask 9 — NW+SW owned by dirt (west edge)',
+      owners: { '1,-1': 2, '1,1': 2 },
+      expected: 0b1001,
+    },
     // All corners owned by water → mask 0 ("no corners")
     {
       name: 'mask 0 — fully enclosed by higher terrain',
@@ -132,6 +168,9 @@ describe('cornerMaskForCell — all 16 masks (AC-3)', () => {
       expected: 0b0000,
     },
   ];
+
+  // The table above covers all 16 masks (15, 14, 13, 11, 7, 12, 10, 4, 1, 2,
+  // 3, 5, 6, 8, 9, 0) — every bit pattern is exercised.
 
   for (const c of cases) {
     test(`cornerMaskForCell → ${c.name}`, () => {
@@ -248,12 +287,16 @@ describe('autotileLayers — layered precedence emission (AC-3)', () => {
     expect(cornerFrameName('water.png', 3)).toBe('water_3.png');
   });
 
-  test('pickFillVariant is deterministic and returns frameBase when no variants', () => {
+  test('pickFillVariant is deterministic, pinned, and selects variants when present', () => {
+    // No variants → always the frameBase (fallback).
     expect(pickFillVariant([], 'grass.png', 3, 7)).toBe('grass.png');
     const variants = ['grass_variant.png', 'grass_dark.png'];
-    expect(pickFillVariant(variants, 'grass.png', 3, 7)).toBe(
-      pickFillVariant(variants, 'grass.png', 3, 7),
-    );
+    // Pinned expectation for (3, 7): the Knuth cell hash picks the FIRST
+    // variant — a real value, not a self-comparison that always passes.
+    expect(pickFillVariant(variants, 'grass.png', 3, 7)).toBe('grass_variant.png');
+    // Coordinates that select the SECOND variant (not the frameBase), proving
+    // the variant branch is reached rather than always falling back.
+    expect(pickFillVariant(variants, 'grass.png', 2, 5)).toBe('grass_dark.png');
   });
 });
 

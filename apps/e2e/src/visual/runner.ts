@@ -217,6 +217,10 @@ const main = async (): Promise<void> => {
             if (evaluate.passed) {
               const cacheLabel = evaluate.fromCache ? ' (📦 cached)' : '';
               console.log(`[runner]     ✅ ${evaluate.score ?? '?'}/100${cacheLabel}`);
+            } else if (evaluate.error) {
+              // C-378: a required-field gate failure carries a specific
+              // error — don't mislabel it as a score below threshold.
+              console.log(`[runner]     ❌ ${evaluate.error}`);
             } else if (evaluate.score !== undefined) {
               console.log(`[runner]     ❌ ${evaluate.score}/100 (below threshold)`);
             } else {
