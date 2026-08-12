@@ -13,7 +13,20 @@ const ROLE_PROMPTS: Record<ContractWorkerRole, string> = {
 const stripFrontmatter = (content: string): string => content.replace(/^---\n[\s\S]*?\n---\n/, '');
 
 /** Mutually exclusive review profiles that isolate context windows per agent mode. */
-export type ReviewProfile = 'yolo' | 'ready' | 'fallback_recovery';
+export type ReviewProfile = 'yolo' | 'ready' | 'post_verify_failure' | 'fallback_recovery';
+
+/**
+ * File backing each profile's inject, relative to repoRoot. Every profile is
+ * a self-contained markdown file — no inline JS string literals — so
+ * prompt-only edits never require touching this module. Mirrors the
+ * pre-existing pattern for `yolo-overrides.md`.
+ */
+const PROFILE_PROMPT_FILES: Record<ReviewProfile, string> = {
+  yolo: '.pi/prompts/yolo-overrides.md',
+  ready: '.pi/prompts/contract-review-ready.md',
+  post_verify_failure: '.pi/prompts/contract-review-post-verify-failure.md',
+  fallback_recovery: '.pi/prompts/contract-review-recovery.md',
+};
 
 export const feedbackMessage = (options: {
   role: ContractWorkerRole;
@@ -142,56 +155,40 @@ export const loadRolePrompt = (options: {
 };
 
 // ── Review profile injects ──────────────────────────────────
-// Each profile is a self-contained context block that appends to the
-// canonical review captain prompt. They are mutually exclusive and
-// carry no code-editing crossover contamination.
-//
-// The full YOLO instructions live in .pi/prompts/yolo-overrides.md
-// and are loaded dynamically at runtime. This YOLO_INJECT is a lightweight
-// header that references the override file.
+// Each profile is backed by exactly one markdown file (PROFILE_PROMPT_FILES
+// above) that appends to the canonical review captain prompt. They are
+// mutually exclusive and carry no code-editing crossover contamination — a
+// run only ever sees the ONE profile file matching its actual outcome, never
+// another profile's rules restated or contradicted alongside it. Keeping
+// them as plain files (not inline JS string arrays) means a prompt-only
+// tweak never needs a code change or redeploy.
 
-const YOLO_INJECT = [
+const YOLO_HEADER = [
   '',
   '## 🚀 YOLO MODE — Fully Automated CodeRabbit Pipeline',
   '',
-  'You are the YOLO Review Captain. No human in the loop. You orchestrate',
-  'CodeRabbit automation — you do NOT edit code or run tests yourself.',
-  '',
-  '🔴 **READ THE STATE JSON ABOVE** before starting. It tells you:',
-  '- Current autofix cycle number (and whether you are at the limit)',
-  '- Whether CodeRabbit has already reviewed',
-  '- How many findings remain unresolved',
-  '',
-  'The full YOLO execution sequence and tool permissions are described in',
-  'the yolo-overrides.md prompt that was appended below. Follow it EXACTLY.',
-  '',
-  '🔴 If you hit the autofix cycle limit (autofix_cycle >= max_autofix_cycles),',
-  'call `contract_review_decision` with `change` instead of looping again.',
+  'You are the YOLO Review Captain. No human in the loop. Read the `📊 STATE`',
+  'JSON above before starting, then follow the instructions below EXACTLY.',
 ].join('\n');
 
-const READY_INJECT = [
+/** Load one profile's markdown file, with a short header for yolo (its file
+ *  is shared with other pi commands and doesn't self-identify as a review
+ *  profile). Returns '' if the file is missing so callers can fall back. */
+const loadProfileFile = (options: { repoRoot: string; profile: ReviewProfile }): string => {
+  const path = resolve(options.repoRoot, PROFILE_PROMPT_FILES[options.profile]);
+  if (!existsSync(path)) {
+    return '';
+  }
+  const body = readFileSync(path, 'utf-8');
+  return options.profile === 'yolo' ? [YOLO_HEADER, '', body].join('\n') : `\n${body}`;
+};
+
+const MANUAL_REVIEW_FALLBACK = [
   '',
-  '## ✅ READY MODE — Human-in-the-Loop Review',
+  '## 📋 Manual Review Mode',
   '',
-  'The pipeline passed verification. The PR should be ready for human review.',
-  '',
-  '### Phase 1: Assemble Status',
-  '1. Read the run manifest from `.pi/contract-runs/<run-id>/manifest.json`.',
-  '2. Read the contract file, implementation report, and verification report.',
-  '3. Produce a concise status summary.',
-  '',
-  '### Phase 2: Create the PR',
-  'Create a public PR immediately — do not wait:',
-  '- Use `gh_create_pr` with `draft: false` and a proper title/body.',
-  '- Title: `C-XXX: Short description`',
-  '- Body: your Phase 1 status report',
-  '',
-  '### Phase 3: Wait for CodeRabbit + User',
-  'CodeRabbit will auto-review the PR. Present findings to the user.',
-  'The user may ask you to:',
-  '- Check CodeRabbit findings via `gh_pr_comments` or `gh_summarize_pr`',
-  '- Apply fixes (use `edit` in the worktree, commit, push)',
-  '- Promote / merge / close — the user decides, you call `contract_review_decision`',
+  'Create a draft PR (`gh_create_pr` with `draft: true`) and wait for the user.',
+  'The user will direct you to check CodeRabbit, apply fixes, or merge.',
   '',
   '### Decision mapping',
   '| User says | Decision |',
@@ -202,37 +199,7 @@ const READY_INJECT = [
   '| "close it", "reject" | `reject` |',
   '',
   '🔴 Never call `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` — the orchestrator',
-  'handles these with proper cleanup (sync main, remove worktree, delete branches).',
-  'Manual gh calls skip cleanup and leave stale worktrees.',
-].join('\n');
-
-const FALLBACK_RECOVERY_INJECT = [
-  '',
-  '## ⚠️ FALLBACK RECOVERY — Verifier Loop Exhaustion',
-  '',
-  'The verifier → implementer bounce loop has been exhausted. This pipeline is BLOCKED.',
-  'You are in diagnostic mode — you do NOT have implementation privileges.',
-  '',
-  '### 🔴 STRICT LIMITATIONS',
-  '- You may NOT edit source files with `edit` or `write`',
-  '- You may NOT run `validate()`, `moon_run_task`, or any test/build commands',
-  '- You may NOT create new worktrees or branches',
-  '- You may NOT call `gh_merge_pr` or `gh_promote_pr`',
-  '',
-  '### Your only permitted actions',
-  '1. **Capture diagnostics**: Read the manifest, contract, and verifier findings.',
-  '2. **Log the failure**: Call `contract_workspace_log_failure` with the workspace path.',
-  '3. **Report**: Produce a clear summary of what failed and why, for human intervention.',
-  '4. **Handoff**: Call `contract_review_decision` with your chosen resolution.',
-  '',
-  '### Decision mapping',
-  '| Intent | Decision |',
-  '|---|---|',
-  '| Fix it yourself (you have edit + bash access) | `change` (retries implementer) |',
-  '| Create a PR for manual review | `approve` |',
-  '| Abandon the pipeline | `reject` |',
-  '',
-  '🔴 Your LAST action must call `contract_review_decision`.',
+  'handles these with proper cleanup.',
 ].join('\n');
 
 const buildPrInfo = (options: {
