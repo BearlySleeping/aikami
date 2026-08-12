@@ -189,6 +189,10 @@ export type ContractHerdrAdapterInterface = {
     contractPath: string;
     reviewDecisionPath: string;
     yolo?: boolean;
+    /** Blocked-review recovery (fallback-recovery / post-verify-failure):
+     *  the captain diagnoses or recovers (push/PR) instead of a plain
+     *  status review. Passed explicitly — never inferred from yolo. */
+    blockedReview?: boolean;
     useWorktreeCwd?: boolean;
   }): Promise<string>;
   sendReviewMessage(options: { paneId: string; message: string }): Promise<void>;
@@ -884,6 +888,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     contractPath: string;
     reviewDecisionPath: string;
     yolo?: boolean;
+    /** Blocked-review recovery (fallback-recovery / post-verify-failure). */
+    blockedReview?: boolean;
     /** Run the review pane from the worktree checkout instead of the repo
      *  root. Needed whenever the captain must inspect or touch the actual
      *  implementation (YOLO, post-verify-failure, fallback-recovery) —
@@ -932,7 +938,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         '--workspace',
         this._workspaceId,
         '--cwd',
-        (options.useWorktreeCwd ?? options.yolo) && this._workspacePath
+        (options.useWorktreeCwd ?? options.yolo ?? options.blockedReview) && this._workspacePath
           ? this._workspacePath
           : this._repoRoot,
         '--label',
@@ -981,9 +987,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runPaneCommand({ paneId, command });
     await this._sendTaskText({
       paneId,
-      text: options.yolo
-        ? `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`
-        : `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
+      text: options.blockedReview
+        ? `Review contract run ${this._runId}. RECOVERY MODE: the pipeline is blocked — diagnose the failure from the manifest and findings, then recover it (push/PR creation, small fix) or hand off with a precise summary. Do NOT re-run the verifier's tests. Your LAST action MUST call contract_review_decision.`
+        : options.yolo
+          ? `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`
+          : `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
     });
     return paneId;
   }

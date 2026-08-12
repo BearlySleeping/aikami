@@ -40,9 +40,13 @@ fixes; it is NOT enough to `approve` anything nontrivial. When in doubt,
 prefer `change` so the fix gets a real implementer + verifier pass instead of
 skipping the gate.
 
-If you do fix something and are confident, push it yourself and create the
-PR (reconciliation never ran on this path, so nothing is pushed for you yet):
-`git push origin HEAD`, then `gh_create_pr` with `draft: false`.
+If you do fix something and are confident, you may offer to push it and
+create the PR (reconciliation never ran on this path, so nothing is pushed
+for you yet). Report the exact actions required — `git push origin HEAD`,
+then `gh_create_pr` with `draft: false` — and ask the user for explicit
+authorization before running them. Do NOT push or create the PR without
+that authorization. Once the user authorizes, push and create the PR as
+described.
 
 ### Still off-limits
 

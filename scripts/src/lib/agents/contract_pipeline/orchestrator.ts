@@ -1283,9 +1283,12 @@ export const runContractPipeline = async (options: {
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
             yolo: isYolo,
-            // Blocked reviews (post-verify-failure, fallback-recovery) need
-            // to inspect/push/fix the actual implementation branch — that
-            // only exists in the worktree, not the repo root.
+            // Blocked reviews (post-verify-failure, fallback-recovery) get a
+            // recovery-specific initial task (diagnose → recover or hand off,
+            // ending in contract_review_decision) and run from the worktree
+            // — the implementation branch only exists there, not the repo
+            // root. Passed explicitly, never inferred from yolo.
+            blockedReview: isBlockedReview,
             useWorktreeCwd: isYolo || isBlockedReview,
           });
           // 🔔 Review spawned — chime regardless of pipeline outcome (clean

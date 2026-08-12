@@ -12,8 +12,7 @@ import { dirname, join } from 'node:path';
 export const ALARM_FILE = '.pi/sounds/alarm.wav';
 
 /** Delay before the chime so the review pane renders first. */
-export const ALARM_DELAY_MS: number =
-  Number(process.env.CONTRACT_ALARM_DELAY_MS) || 800;
+export const ALARM_DELAY_MS: number = Number(process.env.CONTRACT_ALARM_DELAY_MS) || 800;
 
 /**
  * Locate the alarm WAV by walking up from the cwd to the repo root.
@@ -63,9 +62,7 @@ export const playerFor = (
     ];
   }
   // Linux: PulseAudio/ALSA are lightweight and native; ffplay/mpv fall back.
-  const player = ['paplay', 'aplay', 'ffplay', 'mpv'].find(
-    (bin) => which(bin) !== null,
-  );
+  const player = ['paplay', 'aplay', 'ffplay', 'mpv'].find((bin) => which(bin) !== null);
   if (!player) {
     return null;
   }
@@ -99,6 +96,11 @@ export const playAlarm = (options: { delayMs?: number } = {}): void => {
         stdio: 'ignore',
         detached: true,
       });
+      // Async spawn failures (player vanished between the `which` probe and
+      // spawn, ENOENT, …) surface as an 'error' event — without a listener
+      // that unhandled event would terminate the pipeline. Playback stays
+      // best-effort: swallow and move on, never rethrow.
+      child.on('error', () => {});
       child.unref();
       // Safety net: kill a hung player (stuck audio pipe) after 10s.
       const killTimer = setTimeout(() => {
