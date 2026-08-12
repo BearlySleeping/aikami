@@ -1,15 +1,20 @@
 // packages/frontend/engine/src/systems/movement_system.ts
 import type { World } from 'bitecs';
-import { addComponent, getComponent, query, set } from 'bitecs';
+import { addComponent, getComponent, hasComponent, query, set } from 'bitecs';
 import { logger } from '$logger';
-import { CollisionLayer } from '../components/collision_data.ts';
+import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
-import { getMapPixelBounds, isCellBlocked, isWalkable } from './collision_system.ts';
+import {
+  getMapPixelBounds,
+  getTerrainTileSize,
+  isCellBlocked,
+  isWalkable,
+} from './collision_system.ts';
 import { isEntityOffscreen } from './macro_simulation_system.ts';
 
 // ---------------------------------------------------------------------------
@@ -20,10 +25,18 @@ import { isEntityOffscreen } from './macro_simulation_system.ts';
 // checks allow the player to continue moving on the unblocked axis rather
 // than stopping entirely or snapping to a grid cell.
 //
-// Contract C-173: Collision detection upgraded to use spatial grid +
-// bitmask collision. isCellBlocked() checks the dense spatial grid with
-// intrusive linked list and CollisionData layer/mask bitwise AND.
-// Falls back to isWalkable() when no spatial grid is active.
+// Contract C-173: Collision detection uses the spatial grid + bitmask
+// collision. isCellBlocked() checks the dense spatial grid with intrusive
+// linked list and CollisionData layer/mask bitwise AND. Falls back to
+// isWalkable() (terrain cost) when no spatial grid is active.
+//
+// Contract C-379:
+//   - Every mover carries its OWN collision mask — read from
+//     CollisionData.mask[eid] in the loop, never the player's constant.
+//     Entities without CollisionData default to "collides with walls only".
+//   - Tile size comes from the map's terrain grid (getTerrainTileSize),
+//     never a hardcoded 32.
+//   - The boolean CollisionGrid is gone — isWalkable reads terrain cost.
 // ---------------------------------------------------------------------------
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */
@@ -33,9 +46,9 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
  * Default collision mask for the player entity — collides with walls,
  * NPCs, and enemies (not items).
  *
- * Exported for the canonical walkability composite
- * `isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)`
- * reused by the spawn clamp and re-audited callers (C-376 AC-3).
+ * Kept as the player's VALUE (C-379). The movement loop reads each
+ * entity's own mask from CollisionData; this constant is used by the
+ * player spawn clamp and callers that construct the player mask.
  */
 export const PLAYER_COLLISION_MASK =
   CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
@@ -47,13 +60,16 @@ export const PLAYER_COLLISION_MASK =
  *
  * Blocks walls, other NPCs, the player, and other enemies — a combatant
  * must never treat a cell occupied by another combatant as walkable.
- * `CollisionLayer.enemy` is included for symmetry with
- * {@link PLAYER_COLLISION_MASK}; no entity currently carries
- * `layer: enemy` in the spatial grid, so this is a no-op today but keeps
- * the mask correct if enemies gain collision (CodeRabbit review, C-376).
  */
 export const COMBATANT_COLLISION_MASK =
   CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy;
+
+/**
+ * Default collision mask for movers without a CollisionData component
+ * (C-379 AC-3 watch point): "collides with walls only". The movement loop
+ * must never fall back to the player's mask for a non-player mover.
+ */
+const DEFAULT_MOVER_COLLISION_MASK = CollisionLayer.wall;
 
 /**
  * Half-width of the entity collision box in world pixels.
@@ -63,8 +79,8 @@ export const COMBATANT_COLLISION_MASK =
  * asymmetric vertically — it extends entirely upward from the feet
  * (32 px above, 0 px below).
  *
- * Horizontal boundary: `posX ± 16` must stay within `[0, mapPixelWidth)`.
- * Vertical boundary:   `posY - 32` must be ≥ 0; `posY` must be < mapPixelHeight.
+ * These are the ENTITY box, not the tile size — they do NOT scale with
+ * the map's tile size (C-379 AC-5 watch point).
  */
 const ENTITY_HALF_WIDTH = 16;
 
@@ -75,9 +91,6 @@ const ENTITY_HALF_WIDTH = 16;
  * No margin is applied below the feet — the sprite renders entirely upward.
  */
 const ENTITY_HEIGHT_ABOVE = 32;
-
-/** Tile size in world pixels — matches the map `tilewidth`/`tileheight`. */
-const TILE_SIZE = 32;
 
 // ── C-332: NaN/Infinity position recovery ──────────────────────────
 
@@ -110,6 +123,53 @@ const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' 
 };
 
 /**
+ * Returns the collision mask a mover uses for occupancy checks.
+ *
+ * Reads the entity's own CollisionData.mask. Entities WITHOUT the
+ * CollisionData component get {@link DEFAULT_MOVER_COLLISION_MASK}
+ * (walls only) — never the player's mask (C-379 AC-3).
+ *
+ * Component-existence check, not a raw SoA read: recycled eids in the
+ * worker can carry stale CollisionData.mask values from a previous
+ * entity, and a mover without the component must not inherit them.
+ *
+ * @param world - The bitECS world (for component-existence check).
+ * @param eid - The moving entity ID.
+ * @returns The mover's collision mask.
+ */
+const _getMoverMask = (world: World, eid: number): number => {
+  if (!hasComponent(world, eid, CollisionData)) {
+    return DEFAULT_MOVER_COLLISION_MASK;
+  }
+  const mask = CollisionData.mask[eid];
+  return mask === undefined || mask === 0 ? DEFAULT_MOVER_COLLISION_MASK : mask;
+};
+
+/**
+ * Samples a tile for blocking with a mover-specific mask.
+ *
+ * Canonical composite (C-379): dynamic-occupancy bitmask check OR terrain
+ * solidity. Uses the given mover mask, never the player constant.
+ *
+ * @param tx - Tile X.
+ * @param ty - Tile Y.
+ * @param px - Representative pixel X (tile centre).
+ * @param py - Representative pixel Y (tile centre).
+ * @param mask - The mover's collision mask.
+ * @returns `true` when the tile is blocked for this mover.
+ */
+const _isTileBlockedFor = (
+  tx: number,
+  ty: number,
+  px: number,
+  py: number,
+  mask: number,
+  selfEid: number,
+): boolean => {
+  return isCellBlocked(tx, ty, mask, selfEid) || !isWalkable(px, py);
+};
+
+/**
  * Updates world-space positions for all entities that have both a
  * {@link Position} and a {@link Velocity} component.
  *
@@ -119,11 +179,11 @@ const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' 
  * slides along the other — diagonal drift into walls resolves to
  * smooth wall sliding.
  *
- * Collision detection priority (C-173):
- * 1. Bitmask spatial grid (isCellBlocked) — checks CollisionData layer/mask
- * 2. Legacy boolean grid (isWalkable) — Tiled collision layer fallback
+ * Collision detection (C-379):
+ * 1. Bitmask spatial grid (isCellBlocked) with the mover's OWN mask
+ * 2. Terrain cost grid (isWalkable) — the boolean grid is gone
  *
- * Runs every frame at ~60fps via the PixiJS ticker. Pure imperative —
+ * Runs every frame at ~60fps via the worker tick loop. Pure imperative —
  * zero framework reactivity. Position data stays in bitECS raw arrays.
  *
  * @param world - The bitECS world.
@@ -167,22 +227,20 @@ const updateMovement = (world: World, deltaMs: number): void => {
       continue;
     }
 
+    // C-379 AC-3: per-entity mask — never the player's constant.
+    const moverMask = _getMoverMask(world, eid);
+
+    // C-379 AC-5: map-driven tile size — never a hardcoded 32.
+    const tileSize = getTerrainTileSize();
+
     // Axis-independent continuous movement with per-axis collision.
-    // Compute the candidate position after applying full velocity for
-    // this frame, then check each axis independently.
     let nextX = pos.x + vel.x * deltaSeconds;
     let nextY = pos.y + vel.y * deltaSeconds;
-
-    const tileSize = 32; // Default tile size (matches CELL_PIXEL_SIZE in render_system)
 
     // ── Map pixel bounds for per-entity bounding-box enforcement ──
     const bounds = getMapPixelBounds();
 
     // ── X-axis: bounding-box boundary wall ──
-    // The entity box is symmetric horizontally (±ENTITY_HALF_WIDTH).
-    // Both edges must stay within [0, mapPixelWidth); otherwise the axis
-    // is clamped. When no map bounds are active (width === 0), the check
-    // falls through to tile-level collision only.
     if (bounds.width > 0) {
       if (nextX - ENTITY_HALF_WIDTH < 0 || nextX + ENTITY_HALF_WIDTH >= bounds.width) {
         nextX = pos.x;
@@ -190,12 +248,7 @@ const updateMovement = (world: World, deltaMs: number): void => {
     }
 
     // ── X-axis: tile-level collision (only when boundary allows movement) ──
-    // Multi-point bounding-box check: sweeps all tiles the 32×32 collision
-    // box covers, not just the single pixel at the entity's feet. Prevents
-    // the top of the sprite from bleeding into water/wall tiles when the
-    // feet stop at the tile boundary.
     if (nextX !== pos.x) {
-      // Bounding box extents at the candidate X, current Y.
       const boxLeft = nextX - ENTITY_HALF_WIDTH;
       const boxRight = nextX + ENTITY_HALF_WIDTH - 1;
       const boxTop = pos.y - ENTITY_HEIGHT_ABOVE + 1;
@@ -209,11 +262,9 @@ const updateMovement = (world: World, deltaMs: number): void => {
       let blocked = false;
       for (let ty = ty1; ty <= ty2 && !blocked; ty++) {
         for (let tx = tx1; tx <= tx2 && !blocked; tx++) {
-          // Representative pixel: centre of the tile. Any pixel within a
-          // blocked tile is blocked, so the tile-centre sample is sufficient.
           const px = tx * tileSize + tileSize / 2;
           const py = ty * tileSize + tileSize / 2;
-          if (isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)) {
+          if (_isTileBlockedFor(tx, ty, px, py, moverMask, eid)) {
             blocked = true;
           }
         }
@@ -224,11 +275,6 @@ const updateMovement = (world: World, deltaMs: number): void => {
     }
 
     // ── Y-axis: bounding-box boundary wall ──
-    // The entity box is asymmetric vertically (bottom-centre anchor):
-    // it extends ENTITY_HEIGHT_ABOVE (32 px) upward from the feet and
-    // 0 px downward. The top edge must be ≥ 0; the feet must be < mapH.
-    // Uses the (potentially clamped) nextX so an entity blocked on X
-    // slides freely along Y within the bounding box.
     if (bounds.height > 0) {
       if (nextY - ENTITY_HEIGHT_ABOVE < 0 || nextY >= bounds.height) {
         nextY = pos.y;
@@ -236,9 +282,6 @@ const updateMovement = (world: World, deltaMs: number): void => {
     }
 
     // ── Y-axis: tile-level collision (only when boundary allows movement) ──
-    // Multi-point bounding-box check, matching the X-axis logic. Sweeps
-    // all tiles covered by the 32×32 box at the candidate Y. Uses the
-    // (potentially clamped) nextX from the X-axis check above.
     if (nextY !== pos.y) {
       const boxLeft = nextX - ENTITY_HALF_WIDTH;
       const boxRight = nextX + ENTITY_HALF_WIDTH - 1;
@@ -255,7 +298,7 @@ const updateMovement = (world: World, deltaMs: number): void => {
         for (let tx = tx1; tx <= tx2 && !blocked; tx++) {
           const px = tx * tileSize + tileSize / 2;
           const py = ty * tileSize + tileSize / 2;
-          if (isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)) {
+          if (_isTileBlockedFor(tx, ty, px, py, moverMask, eid)) {
             blocked = true;
           }
         }
@@ -266,8 +309,6 @@ const updateMovement = (world: World, deltaMs: number): void => {
     }
 
     // ── C-332: NaN/Infinity position guard ──
-    // If delta-time explosion or collision math produces invalid coordinates,
-    // recover to the entity's current position instead of corrupting ECS state.
     nextX = safeCoordinate(nextX, pos.x, eid, 'x');
     nextY = safeCoordinate(nextY, pos.y, eid, 'y');
 
@@ -292,34 +333,28 @@ export { updateMovement };
  * Returns true when a player at the given feet position would be blocked.
  *
  * Samples the SAME 32×32 collision box the movement system uses (not just
- * the feet tile): `x ± 16` horizontally, `y - 32 .. y` vertically. A spawn
- * whose feet tile is free can still deadlock the player — e.g. the
- * merchant-shop entrance at (256,344) sits one tile below the solid crate
- * at (256,288), so the box overlaps the crate cell on EVERY movement axis
- * and the player is frozen the moment they spawn (C-378). The spawn and
- * restore clamps must therefore validate the full box, exactly like
- * {@link updateMovement} does.
+ * the feet tile): `x ± 16` horizontally, `y - 32 .. y` vertically. Uses the
+ * map-driven tile size and the player's own collision mask (C-379).
  *
  * @param pixelX - Candidate feet X in world pixels.
  * @param pixelY - Candidate feet Y in world pixels.
  * @returns `true` when any tile under the collision box is blocked.
  */
 export const isPlayerSpawnBlocked = (pixelX: number, pixelY: number): boolean => {
+  const tileSize = getTerrainTileSize();
   const boxLeft = pixelX - ENTITY_HALF_WIDTH;
   const boxRight = pixelX + ENTITY_HALF_WIDTH - 1;
   const boxTop = pixelY - ENTITY_HEIGHT_ABOVE + 1;
   const boxBottom = pixelY;
-  const tx1 = Math.floor(boxLeft / TILE_SIZE);
-  const tx2 = Math.floor(boxRight / TILE_SIZE);
-  const ty1 = Math.floor(boxTop / TILE_SIZE);
-  const ty2 = Math.floor(boxBottom / TILE_SIZE);
+  const tx1 = Math.floor(boxLeft / tileSize);
+  const tx2 = Math.floor(boxRight / tileSize);
+  const ty1 = Math.floor(boxTop / tileSize);
+  const ty2 = Math.floor(boxBottom / tileSize);
   for (let ty = ty1; ty <= ty2; ty++) {
     for (let tx = tx1; tx <= tx2; tx++) {
-      // Representative pixel: centre of the tile (same as the movement
-      // sampler). Any pixel within a blocked tile is blocked.
-      const px = tx * TILE_SIZE + TILE_SIZE / 2;
-      const py = ty * TILE_SIZE + TILE_SIZE / 2;
-      if (isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)) {
+      const px = tx * tileSize + tileSize / 2;
+      const py = ty * tileSize + tileSize / 2;
+      if (_isTileBlockedFor(tx, ty, px, py, PLAYER_COLLISION_MASK, 0)) {
         return true;
       }
     }
@@ -331,26 +366,20 @@ export const isPlayerSpawnBlocked = (pixelX: number, pixelY: number): boolean =>
  * Clamps a spawn or restore point to the nearest walkable position.
  *
  * Shared by the worker's LOAD_MAP and RESTORE_PLAYER paths (C-378): a
- * saved position can land inside a solid prop or wall — e.g. a stale save
- * created before a prop was authored, or a map whose collision changed
- * since the save. Because the player's collision box samples the whole
- * tile under the feet, restoring onto a solid cell deadlocks EVERY
- * movement axis: each candidate move still spans the blocked cell, so all
- * axis checks reject it and the player is frozen in place. Clamping at
+ * saved position can land inside a solid prop or wall. Because the
+ * player's collision box samples the whole tile under the feet,
+ * restoring onto a solid cell deadlocks EVERY movement axis. Clamping at
  * restore time (not just at map spawn) prevents that freeze.
  *
  * Scans outward in square rings (ring radius in tiles, up to 20) from the
- * blocked point and returns the first unblocked position — the same scan
- * LOAD_MAP has always used for portal spawns. Falls back to the map
- * centre when no walkable tile is found AND the centre itself is walkable
- * (a blocked centre — solid prop/terrain at the map middle — keeps the
- * original x/y instead of teleporting the player onto a solid cell).
+ * blocked point and returns the first unblocked position. Falls back to the
+ * map centre when no walkable tile is found AND the centre itself is
+ * walkable.
  *
  * @param x - Candidate X position in world pixels.
  * @param y - Candidate Y position in world pixels.
  * @param isBlocked - Oracle: `true` when a pixel position is blocked
- *   (spatial-grid entity occupancy OR terrain solidity — the same
- *   composite the movement sampler uses).
+ *   (spatial-grid entity occupancy OR terrain solidity).
  * @param bounds - Optional map pixel bounds used for the centre fallback.
  * @returns The clamped position (unchanged when the input was walkable).
  */
@@ -364,6 +393,7 @@ export const clampSpawnToWalkable = (
     return { x, y };
   }
 
+  const tileSize = getTerrainTileSize();
   const centerX = (bounds?.width ?? 0) / 2;
   const centerY = (bounds?.height ?? 0) / 2;
   let clampedX = x;
@@ -376,8 +406,8 @@ export const clampSpawnToWalkable = (
         if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
           continue;
         }
-        const tx = x + dx * TILE_SIZE;
-        const ty = y + dy * TILE_SIZE;
+        const tx = x + dx * tileSize;
+        const ty = y + dy * tileSize;
         if (!isBlocked(tx, ty)) {
           clampedX = tx;
           clampedY = ty;
@@ -388,11 +418,6 @@ export const clampSpawnToWalkable = (
   }
 
   if (!found) {
-    // Fall back to the map centre ONLY when it is actually walkable — a
-    // blocked centre (solid prop/terrain in the middle of the map) must
-    // not teleport the player onto it. When the centre is blocked, retain
-    // the original x/y instead: the caller's next restore/autosave cycle
-    // re-clamps, and teleporting to a KNOWN-solid tile is never better.
     if (!isBlocked(centerX, centerY)) {
       clampedX = centerX;
       clampedY = centerY;
@@ -400,19 +425,3 @@ export const clampSpawnToWalkable = (
   }
   return { x: clampedX, y: clampedY };
 };
-
-/**
- * Clears all per-world movement tracking state.
- *
- * With the axis-independent movement system there is no per-world
- * state to clear, but the export is preserved for downstream callers
- * to avoid breaking imports.
- *
- * @param _world - The bitECS world (unused in current implementation).
- */
-const resetMovementTracking = (_world: World): void => {
-  // No-op: axis-independent movement has no per-world state to clear.
-  // Export preserved for downstream compatibility (C-160 AC-2).
-};
-
-export { resetMovementTracking };

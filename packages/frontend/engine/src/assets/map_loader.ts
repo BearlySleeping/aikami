@@ -2,6 +2,13 @@
 
 import type { PackConfig } from '@aikami/types';
 import { logger } from '$logger';
+import type { CollisionGrid } from '../systems/collision_system.ts';
+import {
+  buildTerrainGridFromBoolean,
+  buildTerrainGridFromChannel,
+  collectTerrainCostDefs,
+  type TerrainGrid,
+} from '../systems/terrain_grid.ts';
 import { jtonToTilemapData, parseJtonMap } from './jton_parser.ts';
 
 // ---------------------------------------------------------------------------
@@ -54,6 +61,14 @@ export type TilemapLayer = {
   height: number;
   /** Flat array of tile GIDs, row-major order. 0 = empty tile. */
   data: number[];
+  /**
+   * C-379: per-cell Tiled flip flags, row-major order, parallel to `data`.
+   * Bit 0x80000000 = horizontal, 0x40000000 = vertical, 0x20000000 =
+   * diagonal (anti-diagonal flip). The high bits are masked OFF `data` at
+   * parse time — every downstream GID consumer sees a clean ID — and the
+   * flip state is carried here for the renderer to apply via UV swaps.
+   */
+  flips?: readonly number[];
   /**
    * C-378 terrain layers: flat array of frame NAMES, row-major order.
    * `0` = empty. When present, the chunk renderer resolves frames by name
@@ -327,6 +342,30 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
 };
 
 // ---------------------------------------------------------------------------
+// Tiled flip flags (C-379 AC-9)
+// ---------------------------------------------------------------------------
+
+/** Horizontal flip bit (Tiled GID flag). */
+export const TILED_FLIP_H = 0x80000000;
+
+/** Vertical flip bit (Tiled GID flag). */
+export const TILED_FLIP_V = 0x40000000;
+
+/** Diagonal (anti-diagonal) flip bit (Tiled GID flag). */
+export const TILED_FLIP_D = 0x20000000;
+
+/**
+ * Mask of the three flip bits. After masking, the remaining value is the
+ * clean global tile ID.
+ */
+export const TILED_FLIP_MASK = TILED_FLIP_H | TILED_FLIP_V | TILED_FLIP_D;
+
+/**
+ * Mask that keeps only the flip bits (for reading them back).
+ */
+export const TILED_FLIP_BITS = TILED_FLIP_H | TILED_FLIP_V | TILED_FLIP_D;
+
+// ---------------------------------------------------------------------------
 // Internal parsing
 // ---------------------------------------------------------------------------
 
@@ -505,6 +544,23 @@ const _parseLayer = (
     return num;
   });
 
+  // C-379 AC-9: mask Tiled flip flags at parse time, once. The high bits
+  // (H/V/D) are stripped from every GID so downstream consumers — collision
+  // building, terrain cost, manifest resolution, chunk UV lookup — always
+  // see a clean ID and a flipped tile never becomes a phantom solid cell.
+  // The flip state is carried on the layer for the renderer to apply via
+  // UV swaps (C-379 watch point: strip alone fixes collision but renders
+  // the wrong orientation).
+  const flips = new Array<number>(expectedLength).fill(0);
+  for (let i = 0; i < expectedLength; i++) {
+    const gid = data[i] as number;
+    const flipBits = (gid & TILED_FLIP_BITS) >>> 0;
+    if (flipBits !== 0) {
+      flips[i] = flipBits;
+      data[i] = (gid & ~TILED_FLIP_MASK) >>> 0;
+    }
+  }
+
   // C-378: layer `band` custom property (Tiled properties array). The
   // engine never sniffs the band from the layer name — an explicit
   // property with a documented default of 'ground'.
@@ -528,7 +584,7 @@ const _parseLayer = (
     }
   }
 
-  return { name, width, height, data, visible, band };
+  return { name, width, height, data, flips, visible, band };
 };
 
 /**
@@ -940,7 +996,13 @@ export const buildCollisionGrid = (
       if (gid === 0) {
         continue; // empty cell — walkable by definition
       }
-      const tileDef = tiles[String(gid)];
+      // C-379 AC-9: resolve through the single GID convention
+      // (localId = rawGid - firstgid). Manifest tiles are keyed 1-based
+      // local IDs, so the lookup key is localId + 1. Previously the raw GID
+      // was used directly — correct only while every firstgid === 1.
+      const resolved = resolveGid(gid, tilemap.tilesets);
+      const manifestKey = resolved ? String(resolved.localId + 1) : String(gid);
+      const tileDef = tiles[manifestKey];
       if (!tileDef) {
         unknownGids.add(gid);
         grid[i] = true;
@@ -979,6 +1041,95 @@ export const buildCollisionGrid = (
   }
 
   return grid;
+};
+
+/**
+ * Resolves a (flip-masked) raw GID to a tileset + 0-based local ID.
+ *
+ * C-379 AC-9: THE single GID convention. `localId = rawGid - firstgid`.
+ * Every downstream consumer (collision building, manifest tile lookup,
+ * chunk UV sampling) resolves through this function — none of them should
+ * see `firstgid` again. `rawGid` must already have flip bits masked
+ * ({\@link _parseLayer} does this); passing a flipped GID here would
+ * resolve to a wrong tileset.
+ *
+ * @param rawGid - The (clean) global tile ID.
+ * @param tilesets - The map's tilesets (any order; highest firstgid wins).
+ * @returns The matching tileset and 0-based local ID, or undefined when
+ *   the GID is 0/empty or matches no tileset.
+ */
+export const resolveGid = (
+  rawGid: number,
+  tilesets: readonly { firstgid: number; tilecount: number }[],
+): { tileset: { firstgid: number; tilecount: number }; localId: number } | undefined => {
+  if (rawGid === 0) {
+    return undefined;
+  }
+  for (let i = tilesets.length - 1; i >= 0; i--) {
+    const tileset = tilesets[i];
+    if (rawGid >= tileset.firstgid) {
+      const localId = rawGid - tileset.firstgid;
+      if (localId < tileset.tilecount) {
+        return { tileset, localId };
+      }
+      break;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Builds the authoritative TerrainGrid for a map (C-379 AC-4).
+ *
+ * Terrain-channel path: when the map carries an `aikami.terrain` channel
+ * AND the pack declares `terrains`, cost + blocksSight derive from the pack
+ * terrain defs (movementCost × 16, blocksSight flag), with the explicit
+ * collision layer staying additive.
+ *
+ * Legacy fallback: maps without a terrain channel (or a terrain-less pack)
+ * derive cost 0/16 from the boolean collision grid, with blocksSight
+ * mirroring solidity.
+ *
+ * @param options.tilemap - The parsed tilemap.
+ * @param options.packConfig - The resolved pack config (may be undefined).
+ * @param options.collisionGrid - The legacy boolean grid (used as fallback
+ *   and as the additive collision layer for channel maps).
+ * @returns A TerrainGrid ready to cross the worker boundary.
+ */
+export const buildTerrainGridForMap = (options: {
+  tilemap: TilemapData;
+  packConfig: PackConfig | undefined;
+  collisionGrid: CollisionGrid | undefined;
+}): TerrainGrid => {
+  const { tilemap, packConfig, collisionGrid } = options;
+
+  if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
+    const terrainDefs = collectTerrainCostDefs(packConfig);
+    const baseTerrain = [...packConfig.terrains].sort((a, b) => a.precedence - b.precedence)[0];
+    return buildTerrainGridFromChannel({
+      width: tilemap.width,
+      height: tilemap.height,
+      tileSize: tilemap.tilewidth,
+      terrain: tilemap.terrain,
+      terrainDefs,
+      baseTerrainName: baseTerrain?.name ?? '',
+      legacySolid: collisionGrid?.grid,
+    });
+  }
+
+  if (collisionGrid) {
+    return buildTerrainGridFromBoolean(collisionGrid);
+  }
+
+  // No collision data at all — fully walkable grid (packless sandbox maps).
+  const cellCount = tilemap.width * tilemap.height;
+  return {
+    width: tilemap.width,
+    height: tilemap.height,
+    tileSize: tilemap.tilewidth,
+    cost: new Uint8Array(cellCount).fill(16),
+    blocksSight: new Uint8Array(cellCount),
+  };
 };
 
 /**

@@ -3,7 +3,7 @@
 import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
 import { logger } from '$logger';
 import type { TerrainLayerEmission } from '../assets/autotile.ts';
-import type { TilemapBand, TilemapData } from '../assets/map_loader.ts';
+import type { TilemapBand, TilemapData, TilemapLayer } from '../assets/map_loader.ts';
 import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import {
   buildTilemapChunks,
@@ -292,43 +292,63 @@ export const renderTilemap = async (
     }
 
     // Determine which tileset(s) this layer's GIDs reference.
-    // Build a filtered tileset list for this layer and use the
-    // primary tileset's texture for rendering.
-    const primaryTileset = _findPrimaryTilesetForLayer(layer, tilemap);
-    if (!primaryTileset) {
-      continue;
-    }
-
-    const texture = textureMap.get(primaryTileset.image);
-    if (!texture) {
-      continue;
-    }
-
-    // Build a filtered tilemap containing only this layer + relevant tilesets
-    const layerTilemap: TilemapData = {
-      ...tilemap,
-      layers: [layer],
-      // Include only the tilesets that this layer references
-      tilesets: tilemap.tilesets.filter((ts) => {
-        return _layerReferencesTileset(layer, ts, tilemap.tilesets);
-      }),
-    };
-
-    const result = buildTilemapChunks({
-      tilemap: layerTilemap,
-      tilesetTexture: texture,
-      globalUniforms,
+    // C-379 AC-9: a layer may reference MULTIPLE tilesets. Build a per-
+    // tileset sub-layer for each referenced tileset — each sub-layer keeps
+    // only that tileset's GIDs and renders with THAT tileset's texture, so
+    // every tile samples its own tileset's frame (the old single-primary-
+    // tileset binding rendered garbage when UVs came from a different
+    // tileset's dimensions).
+    const referencedTilesets = tilemap.tilesets.filter((ts) => {
+      return _layerReferencesTileset(layer, ts, tilemap.tilesets);
     });
-
-    // Merge chunk children into the layer's band container
-    const bandEntry = bandContainerFor(layer.band ?? 'ground');
-    while (result.container.children.length > 0) {
-      bandEntry.container.addChild(result.container.children[0]);
+    if (referencedTilesets.length === 0) {
+      continue;
     }
 
-    layerCount += 1;
-    bandEntry.chunks.push(...result.chunks);
-    allChunks.push(...result.chunks);
+    for (const ts of referencedTilesets) {
+      const texture = textureMap.get(ts.image);
+      if (!texture) {
+        continue;
+      }
+
+      // Build a filtered tilemap for THIS tileset: only the layer, with
+      // every GID that is NOT from this tileset zeroed out (empty tile).
+      // Flip flags ride along — the flips array stays index-parallel to the
+      // zeroed data (C-379 AC-9).
+      const subLayer: TilemapLayer = {
+        ...layer,
+        data: layer.data.map((gid) => {
+          if (gid === 0) {
+            return 0;
+          }
+          return gid >= ts.firstgid && gid - ts.firstgid < ts.tilecount ? gid : 0;
+        }),
+        flips: layer.flips ? [...layer.flips] : undefined,
+      };
+      const layerTilemap: TilemapData = {
+        ...tilemap,
+        layers: [subLayer],
+        // Only this tileset participates — UV lookup for non-zero GIDs is
+        // guaranteed to resolve against `ts`.
+        tilesets: [ts],
+      };
+
+      const result = buildTilemapChunks({
+        tilemap: layerTilemap,
+        tilesetTexture: texture,
+        globalUniforms,
+      });
+
+      // Merge chunk children into the layer's band container
+      const bandEntry = bandContainerFor(layer.band ?? 'ground');
+      while (result.container.children.length > 0) {
+        bandEntry.container.addChild(result.container.children[0]);
+      }
+
+      layerCount += 1;
+      bandEntry.chunks.push(...result.chunks);
+      allChunks.push(...result.chunks);
+    }
   }
 
   // The merged container keeps all bands as children for callers that use
@@ -372,55 +392,6 @@ export const renderTilemap = async (
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Finds the primary tileset for a layer by checking which tileset
- * covers the most non-zero GIDs in the layer's tile data.
- *
- * @param layer - The tile layer.
- * @param tilemap - The full tilemap data with tilesets.
- * @returns The primary tileset, or undefined if no tiles are found.
- */
-const _findPrimaryTilesetForLayer = (
-  layer: { data: readonly number[] },
-  tilemap: TilemapData,
-): TilemapData['tilesets'][number] | undefined => {
-  if (tilemap.tilesets.length === 0) {
-    return undefined;
-  }
-
-  // Count GIDs per tileset
-  const counts = new Map<number, number>();
-
-  for (const gid of layer.data) {
-    if (gid === 0) {
-      continue;
-    }
-    for (let i = tilemap.tilesets.length - 1; i >= 0; i--) {
-      const ts = tilemap.tilesets[i];
-      if (gid >= ts.firstgid && gid - ts.firstgid < ts.tilecount) {
-        counts.set(i, (counts.get(i) ?? 0) + 1);
-        break;
-      }
-    }
-  }
-
-  if (counts.size === 0) {
-    return undefined;
-  }
-
-  // Find the tileset with the highest tile count in this layer
-  let bestIndex = -1;
-  let bestCount = 0;
-  for (const [index, count] of counts) {
-    if (count > bestCount) {
-      bestCount = count;
-      bestIndex = index;
-    }
-  }
-
-  return bestIndex >= 0 ? tilemap.tilesets[bestIndex] : undefined;
-};
 
 /**
  * Checks whether a layer references tiles from the given tileset.

@@ -446,3 +446,121 @@ describe('C-378 AC-9 — tilemap tint uniform', () => {
     expect(Array.from(tint as number[])).toEqual([1, 1, 1, 1]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-379 AC-9 — flip flags applied to chunk UVs
+// ---------------------------------------------------------------------------
+
+describe('C-379 AC-9 — flipped tiles render flipped (UV swaps)', () => {
+  it('a horizontally-flipped tile swaps its u coordinates in chunk geometry', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          // The map loader masks flip bits off `data` and carries them on
+          // `flips` (C-379 AC-9) — this is the post-parse shape.
+          data: [5],
+          flips: [0x80000000 >>> 0],
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+
+    // Tile 5 in a 16-column tileset: local tile index 4 (0-based) at UV
+    // column 4 → u0 = 4/16 = 0.25, u1 = 5/16 = 0.3125. After an H flip the
+    // quad corners swap: top-left u becomes the unflipped top-right u.
+    const uTopLeft = uvs[0];
+    const uTopRight = uvs[2];
+    // Flipped: top-left > top-right (mirrored horizontally).
+    expect(uTopLeft).toBeGreaterThan(uTopRight);
+    // v unchanged.
+    expect(uvs[1]).toBe(uvs[3]);
+  });
+
+  it('an unflipped tile keeps its original UV order', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          data: [5],
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+    expect(uvs[0]).toBeLessThan(uvs[2]); // unflipped: left < right
+  });
+});

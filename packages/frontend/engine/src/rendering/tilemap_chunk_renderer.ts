@@ -10,7 +10,14 @@ import {
   type TextureSource,
   UniformGroup,
 } from 'pixi.js';
-import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
+import {
+  resolveGid,
+  TILED_FLIP_D,
+  TILED_FLIP_H,
+  TILED_FLIP_V,
+  type TilemapData,
+  type TilemapTileset,
+} from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
 // TilemapChunkRenderer — chunked tilemap Mesh pipeline
@@ -392,7 +399,58 @@ const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry
 };
 
 /**
+ * Applies Tiled flip flags to a UV rect via corner swaps.
+ *
+ * Tiled's tile-transform semantics: the horizontal and vertical flips are
+ * ordinary mirror operations; the diagonal flag is an anti-diagonal mirror
+ * applied AFTER h/v. The four corner UVs map as:
+ *
+ *   tl = (u0, v0)   tr = (u1, v0)
+ *   bl = (u0, v1)   br = (u1, v1)
+ *
+ * H: swap tl↔tr and bl↔br (mirror left-right).
+ * V: swap tl↔bl and tr↔br (mirror top-bottom).
+ * D: swap tl↔br and tr↔bl (mirror along the anti-diagonal).
+ *
+ * @param rect - The base UV rect.
+ * @param flipBits - Masked flip flags (H|V|D bits only).
+ * @returns The flipped UV rect.
+ */
+const _applyFlipToUv = (
+  rect: { u0: number; v0: number; u1: number; v1: number },
+  flipBits: number,
+): { u0: number; v0: number; u1: number; v1: number } => {
+  let { u0, v0, u1, v1 } = rect;
+
+  if ((flipBits & TILED_FLIP_H) !== 0) {
+    const tmpU = u0;
+    u0 = u1;
+    u1 = tmpU;
+  }
+  if ((flipBits & TILED_FLIP_V) !== 0) {
+    const tmpV = v0;
+    v0 = v1;
+    v1 = tmpV;
+  }
+  if ((flipBits & TILED_FLIP_D) !== 0) {
+    // Anti-diagonal mirror: swap tl↔br and tr↔bl.
+    const tmpU = u0;
+    const tmpV = v0;
+    u0 = u1;
+    v0 = v1;
+    u1 = tmpU;
+    v1 = tmpV;
+  }
+
+  return { u0, v0, u1, v1 };
+};
+
+/**
  * Resolves a global tile ID to a tileset entry + local ID.
+ *
+ * C-379 AC-9: delegates to the single GID convention
+ * (`localId = rawGid - firstgid`, {@link resolveGid}) so collision and
+ * rendering agree. The GID must already be flip-masked by the map loader.
  *
  * @param gid - The global tile ID.
  * @param entries - The sorted tileset entries.
@@ -405,19 +463,12 @@ const _resolveGid = (
   if (gid === 0) {
     return undefined;
   }
-
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i];
-    if (gid >= entry.firstgid) {
-      const localId = gid - entry.firstgid;
-      if (localId < entry.tilecount) {
-        return { entry, localId };
-      }
-      break;
-    }
+  const resolved = resolveGid(gid, entries);
+  if (!resolved) {
+    return undefined;
   }
-
-  return undefined;
+  const entry = entries.find((e) => e.firstgid === resolved.tileset.firstgid);
+  return entry ? { entry, localId: resolved.localId } : undefined;
 };
 
 /**
@@ -443,6 +494,8 @@ type BuildChunkOptions = {
     height: number;
     data?: readonly number[];
     frames?: readonly (string | 0)[];
+    /** C-379 AC-9: per-cell flip flags (H/V/D), parallel to `data`. */
+    flips?: readonly number[];
     name: string;
   };
   /** Chunk grid X (column). */
@@ -516,7 +569,15 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     if (!resolved) {
       return undefined;
     }
-    return resolved.entry.getUvRect(resolved.localId);
+    // C-379 AC-9: apply the tile's flip state (H/V/D) via UV corner swaps.
+    // The map loader masked the flip bits off the GID and carried them on
+    // the layer; without this, a flipped tile renders un-flipped.
+    const flipBits = layer.flips?.[index] ?? 0;
+    if (flipBits === 0) {
+      return resolved.entry.getUvRect(resolved.localId);
+    }
+    const base = resolved.entry.getUvRect(resolved.localId);
+    return _applyFlipToUv(base, flipBits);
   };
 
   // Resolve each cell ONCE: cache non-empty UV results in the counting pass

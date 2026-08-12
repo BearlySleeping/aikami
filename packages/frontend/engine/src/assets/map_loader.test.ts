@@ -10,6 +10,7 @@ import {
   extractCollisionGrid,
   extractSpawnPoints,
   loadTilemap,
+  resolveGid,
 } from './map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -1699,5 +1700,243 @@ describe('buildCollisionGrid: legacy baked-GID path still works (C-378 AC-8)', (
     const grid = buildCollisionGrid(tilemap, packConfig);
     expect(grid?.[0]).toBe(false);
     expect(grid?.[1]).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-379 AC-9: flip flags, single GID convention, multi-tileset layers
+// ---------------------------------------------------------------------------
+
+describe('C-379 AC-9 — flip flags + GID convention + multi-tileset layers', () => {
+  const FlipH = 0x80000000;
+  const FlipV = 0x40000000;
+  const FlipD = 0x20000000;
+
+  it('masks Tiled flip flags at parse time and carries flip state on the layer', async () => {
+    // GID 5 horizontally flipped, GID 6 vertically flipped, GID 7 diagonally
+    // flipped, GID 8 with all three bits. Tiled JSON stores these as
+    // unsigned 32-bit GIDs (e.g. 0x80000005 = 2147483653).
+    const data = new Array<number>(80).fill(1);
+    data[4] = 0x80000005;
+    data[5] = 0x40000006;
+    data[6] = 0x20000007;
+    data[7] = 0xe0000008;
+    const raw = createTestMap({
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          data,
+          visible: true,
+          type: 'tilelayer',
+        },
+      ],
+    });
+    const fetcher = mockFetch(raw);
+    const result = await loadTilemap({ url: 'test://map.json', fetch: fetcher });
+
+    const layer = result.layers[0];
+    // Flip bits are stripped — clean GIDs remain.
+    expect(layer.data[4]).toBe(5);
+    expect(layer.data[5]).toBe(6);
+    expect(layer.data[6]).toBe(7);
+    expect(layer.data[7]).toBe(8);
+    // Flip state survives on the layer for the renderer.
+    expect(layer.flips?.[4]).toBe(FlipH >>> 0);
+    expect(layer.flips?.[5]).toBe(FlipV >>> 0);
+    expect(layer.flips?.[6]).toBe(FlipD >>> 0);
+    expect(layer.flips?.[7]).toBe((FlipH | FlipV | FlipD) >>> 0);
+    // Unflipped cells carry no flip bits.
+    expect(layer.flips?.[0]).toBe(0);
+  });
+
+  it('flipped tiles never become spuriously solid in the collision grid', async () => {
+    // Tileset: tile 1 walkable, tile 2 solid. Layer uses GID 1 (walkable)
+    // and GID 2 flipped horizontally (still tile 2 → solid).
+    const raw = createTestMap({
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test_tileset',
+          image: 'tileset.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          data: [...new Array(79).fill(1), 0x80000002],
+          visible: true,
+          type: 'tilelayer',
+        },
+      ],
+    });
+    const fetcher = mockFetch(raw);
+    const tilemap = await loadTilemap({ url: 'test://map.json', fetch: fetcher });
+
+    const packConfig = {
+      tiles: {
+        '1': { isWalkable: true },
+        '2': { isWalkable: false },
+      },
+      props: {},
+    } as unknown as PackConfig;
+
+    const grid = buildCollisionGrid(tilemap, packConfig, { solidityLayers: ['ground'] });
+    expect(grid).toBeDefined();
+    if (grid) {
+      // Only the last cell (flipped GID 2 → still tile 2 → solid) blocks.
+      expect(grid[79]).toBe(true);
+      expect(grid[78]).toBe(false);
+      expect(grid.filter(Boolean).length).toBe(1);
+    }
+  });
+
+  it('resolveGid resolves local IDs for a tileset whose firstgid is not 1', () => {
+    const tilesets = [
+      { firstgid: 1, tilecount: 16 },
+      { firstgid: 17, tilecount: 64 },
+    ];
+    const r1 = resolveGid(17, tilesets);
+    expect(r1?.tileset.firstgid).toBe(17);
+    expect(r1?.localId).toBe(0);
+
+    const r2 = resolveGid(32, tilesets);
+    expect(r2?.tileset.firstgid).toBe(17);
+    expect(r2?.localId).toBe(15);
+
+    const r3 = resolveGid(5, tilesets);
+    expect(r3?.tileset.firstgid).toBe(1);
+    expect(r3?.localId).toBe(4);
+
+    // GID 0 = empty, unmatched GID.
+    expect(resolveGid(0, tilesets)).toBeUndefined();
+    expect(resolveGid(200, tilesets)).toBeUndefined();
+  });
+
+  it('buildCollisionGrid resolves manifest keys via the GID convention', async () => {
+    // Two tilesets: A (firstgid 1, 16 tiles), B (firstgid 17, 64 tiles).
+    // Manifest keys are 1-based local IDs. GID 17 → local 0 → key "1";
+    // GID 18 → local 1 → key "2".
+    const raw = createTestMap({
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'tileset_a',
+          image: 'a.png',
+          imagewidth: 128,
+          imageheight: 128,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 4,
+          tilecount: 16,
+        },
+        {
+          firstgid: 17,
+          name: 'tileset_b',
+          image: 'b.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          // 78 cells of GID 17 (walkable), last two: GID 18 (solid) + GID 1.
+          data: [...new Array(78).fill(17), 18, 1],
+          visible: true,
+          type: 'tilelayer',
+        },
+      ],
+    });
+    const fetcher = mockFetch(raw);
+    const tilemap = await loadTilemap({ url: 'test://map.json', fetch: fetcher });
+
+    const packConfig = {
+      tiles: {
+        '1': { isWalkable: true },
+        '2': { isWalkable: false },
+      },
+      props: {},
+    } as unknown as PackConfig;
+
+    const grid = buildCollisionGrid(tilemap, packConfig, { solidityLayers: ['ground'] });
+    expect(grid).toBeDefined();
+    if (grid) {
+      // GID 18 → tileset_b local 1 → manifest key "2" → solid.
+      expect(grid[78]).toBe(true);
+      // GID 17 → tileset_b local 0 → manifest key "1" → walkable.
+      expect(grid[0]).toBe(false);
+      // GID 1 → tileset_a local 0 → manifest key "1" → walkable.
+      expect(grid[79]).toBe(false);
+    }
+  });
+
+  it('parses a layer referencing two tilesets (multi-tileset per layer)', async () => {
+    const raw = createTestMap({
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'tileset_a',
+          image: 'a.png',
+          imagewidth: 128,
+          imageheight: 128,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 4,
+          tilecount: 16,
+        },
+        {
+          firstgid: 17,
+          name: 'tileset_b',
+          image: 'b.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          // Mix of tileset_a GIDs (1..16) and tileset_b GIDs (17..32).
+          data: [...new Array(40).fill(1), ...new Array(40).fill(17)],
+          visible: true,
+          type: 'tilelayer',
+        },
+      ],
+    });
+    const fetcher = mockFetch(raw);
+    const result = await loadTilemap({ url: 'test://map.json', fetch: fetcher });
+
+    expect(result.tilesets).toHaveLength(2);
+    expect(result.layers[0].data[0]).toBe(1);
+    expect(result.layers[0].data[40]).toBe(17);
+
+    // resolveGid disambiguates the owning tileset for each GID.
+    const resolvedA = resolveGid(1, result.tilesets);
+    expect(resolvedA?.tileset.firstgid).toBe(1);
+    expect(resolvedA?.localId).toBe(0);
+    const resolvedB = resolveGid(17, result.tilesets);
+    expect(resolvedB?.tileset.firstgid).toBe(17);
+    expect(resolvedB?.localId).toBe(0);
   });
 });

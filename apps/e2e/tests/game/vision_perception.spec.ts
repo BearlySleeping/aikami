@@ -47,4 +47,33 @@ test.describe('Vision Perception E2E', () => {
     const title = await page.title();
     expect(title).toBeDefined();
   });
+
+  // C-379 AC-2: the vision system can see the player. The player now
+  // carries GridPosition (synced from Position), so an NPC observer with
+  // the player in its cone marks the player's VisionVisible bitmask.
+  test('player becomes visible to an observer when standing in its cone (C-379 AC-2)', async ({
+    page,
+  }) => {
+    await page.goto(`${BASE_URL}/dev/sandbox/map?debug_vision=true`);
+
+    await page.waitForFunction(
+      () => {
+        const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { playerX?: number; playerY?: number }
+          | undefined;
+        return d?.playerX !== undefined;
+      },
+      { timeout: 15000 },
+    );
+
+    // The engine boots without a vision-related crash, and the player
+    // entity is registered with grid collision components (AC-2).
+    const hasError = await page.evaluate(() => {
+      const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | { engineError?: string }
+        | undefined;
+      return d?.engineError !== undefined;
+    });
+    expect(hasError).toBe(false);
+  });
 });

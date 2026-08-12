@@ -6,6 +6,7 @@ import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
   buildCollisionGrid,
+  buildTerrainGridForMap,
   extractCollisionGrid,
   extractSpawnPointEntities,
   extractSpawnPoints,
@@ -35,6 +36,7 @@ import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
+import { keyToDirection } from './systems/keybinding_config.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
@@ -1753,6 +1755,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Movement is suppressed when {@link inputLocked} is `true` (dialogue/UI active).
    * The 'E' and 'Enter' keys trigger the {@link interactRequestCallback}.
    *
+   * C-379 AC-8: movement keys resolve through `keyToDirection`, which reads
+   * localStorage on every call, so Settings → Controls rebinds take effect
+   * on the next keydown WITHOUT a reload. Legacy arrow keys keep working
+   * as unconditional aliases (the pre-contract behaviour), while rebound
+   * WASD keys stop responding — the old key does nothing after a rebind.
+   *
    * @returns A cleanup function that removes all listeners.
    */
   private _setupKeyboardInput(): () => void {
@@ -1768,21 +1776,51 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
     };
 
+    // Legacy arrow aliases — never rebindable, always map to the base
+    // direction (preserves pre-C-379 behaviour for arrow users).
+    const LegacyArrowDirection: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+      arrowup: 'up',
+      arrowdown: 'down',
+      arrowleft: 'left',
+      arrowright: 'right',
+    };
+
+    // Direction → unit vector (base speed applied after normalisation).
+    const DirectionDelta: Record<'up' | 'down' | 'left' | 'right', { dx: number; dy: number }> = {
+      up: { dx: 0, dy: -1 },
+      down: { dx: 0, dy: 1 },
+      left: { dx: -1, dy: 0 },
+      right: { dx: 1, dy: 0 },
+    };
+
+    /**
+     * Resolves a keyboard key to a movement direction.
+     *
+     * C-379 AC-8: consults the CURRENT keybindings (localStorage read per
+     * call) via `keyToDirection`, then falls back to the legacy arrow
+     * aliases. Returns undefined for non-movement keys.
+     */
+    const keyToMovementDirection = (key: string): 'up' | 'down' | 'left' | 'right' | undefined => {
+      const bound = keyToDirection(key);
+      if (bound) {
+        return bound;
+      }
+      return LegacyArrowDirection[key];
+    };
+
     const updateVelocity = () => {
       let vx = 0;
       let vy = 0;
 
-      if (this._activeKeys.has('w') || this._activeKeys.has('arrowup')) {
-        vy -= 1;
-      }
-      if (this._activeKeys.has('s') || this._activeKeys.has('arrowdown')) {
-        vy += 1;
-      }
-      if (this._activeKeys.has('a') || this._activeKeys.has('arrowleft')) {
-        vx -= 1;
-      }
-      if (this._activeKeys.has('d') || this._activeKeys.has('arrowright')) {
-        vx += 1;
+      // Aggregate the held movement directions — rebind-aware (AC-8).
+      for (const key of this._activeKeys) {
+        const direction = keyToMovementDirection(key);
+        if (!direction) {
+          continue;
+        }
+        const delta = DirectionDelta[direction];
+        vx += delta.dx;
+        vy += delta.dy;
       }
 
       // Normalize diagonal movement to same speed as orthogonal
@@ -1808,6 +1846,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
     };
 
+    const isMovementKey = (key: string): boolean => keyToMovementDirection(key) !== undefined;
+
     const handleKeyDown = (event: KeyboardEvent): void => {
       const key = event.key.toLowerCase();
 
@@ -1832,13 +1872,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // Block movement keys when input is locked and force-stop velocity.
-      // Repeated keydown events (browser key repeat while a key is held)
-      // must continuously send {0,0} to the worker — otherwise the last
-      // pre-lock velocity persists and the player slides across the map
-      // while the overlay is open.
       if (this._inputLocked) {
         this._activeKeys.clear();
-        if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        if (isMovementKey(key)) {
           _throttledLog('[GameWorld] inputSuppressed:inputLocked', {
             key,
             reason: 'inputLocked',
@@ -1848,7 +1884,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
 
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      if (isMovementKey(key)) {
         event.preventDefault();
         if (!this._activeKeys.has(key)) {
           this._activeKeys.add(key);
@@ -2317,6 +2353,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const collisionGridData = packConfig
         ? buildCollisionGrid(tilemap, packConfig, { solidityLayers })
         : extractCollisionGrid(tilemap);
+
+      // C-379 AC-4: build the authoritative TerrainGrid. Terrain-channel
+      // maps derive cost + blocksSight from the pack terrain defs; legacy
+      // maps without a channel (or a terrain-less pack) fall back to the
+      // boolean grid with cost 0/16. The grid crosses the worker boundary
+      // as flat Uint8Arrays (structured-clone safe).
+      const terrainGrid = buildTerrainGridForMap({
+        tilemap,
+        packConfig,
+        collisionGrid: collisionGridData
+          ? {
+              width: tilemap.width,
+              height: tilemap.height,
+              tileSize: tilemap.tilewidth,
+              grid: collisionGridData,
+            }
+          : undefined,
+      });
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
@@ -2438,6 +2492,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               grid: collisionGridData,
             }
           : undefined,
+        terrainGrid,
         packConfig,
         mapPixelWidth,
         mapPixelHeight,
@@ -2488,6 +2543,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     spawnPoints: import('./assets/map_loader.ts').SpawnPoint[];
     transitionZones: import('./assets/map_loader.ts').TransitionZone[];
     collisionGrid: CollisionGrid | undefined;
+    /** Authoritative terrain cost grid (C-379 AC-4) — preferred over collisionGrid. */
+    terrainGrid?: import('./systems/terrain_grid.ts').TerrainGrid;
     /** Resolved content-pack tile/prop definitions (C-376 AC-2). */
     packConfig?: PackConfig;
     mapPixelWidth: number;
@@ -2579,6 +2636,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         spawnPoints: safeSpawnPoints,
         transitionZones: options.transitionZones,
         collisionGrid: safeCollisionGrid,
+        // C-379 AC-4: the authoritative terrain grid — typed arrays clone
+        // structurally, no sanitization needed.
+        terrainGrid: options.terrainGrid,
         packConfig: options.packConfig,
         mapPixelWidth: options.mapPixelWidth,
         mapPixelHeight: options.mapPixelHeight,
@@ -2742,6 +2802,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           playerX: x,
           playerY: y,
         };
+      }
+
+      // C-379 AC-7: expose every rendered entity's position so E2E can
+      // assert NPCs/companions actually moved (emergent-world integration
+      // spec reads this to verify distributed positions over time).
+      if (typeof window !== 'undefined') {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | Record<string, unknown>
+          | undefined;
+        if (debug) {
+          const positions = (debug.entityPositions ?? {}) as Record<
+            string,
+            { x: number; y: number }
+          >;
+          positions[String(eid)] = { x, y };
+          debug.entityPositions = positions;
+        }
       }
 
       if (x === undefined || y === undefined) {

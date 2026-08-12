@@ -11,6 +11,11 @@ import { SpatialLink } from '../components/spatial_link.ts';
 // integer math. Terminates early if a cell contains an entity whose
 // CollisionData.layer matches the sightMask.
 //
+// C-379: terrain solidity is also consulted. Walls are no longer entities
+// (the spatial grid holds dynamic occupants only), so a cost-0 terrain cell
+// must block LOS the same way a wall entity did. `setBresenhamTerrain`
+// supplies the cost oracle; without it, LOS sees an empty world.
+//
 // Design:
 //   - Pure function: no heap allocations, no arrays, boolean return only
 //   - Handles all 8 octants (positive/negative slopes, steep/shallow)
@@ -36,6 +41,15 @@ let _gridW = 0;
 /** Grid height in tiles. */
 let _gridH = 0;
 
+/** Terrain cost oracle (C-379) — cost-0 cells block LOS. */
+let _terrainCost: Uint8Array | undefined;
+
+/** Terrain grid width (from the terrain cost array). */
+let _terrainW = 0;
+
+/** Terrain grid height (from the terrain cost array). */
+let _terrainH = 0;
+
 /**
  * Sets the spatial grid reference for the raycaster.
  *
@@ -52,6 +66,26 @@ export const setBresenhamGrid = (grid: Uint32Array, width: number, height: numbe
 };
 
 /**
+ * Sets the terrain cost oracle for the raycaster (C-379).
+ *
+ * Cost-0 cells (impassable terrain) block line of sight in addition to
+ * entity-occupancy checks. Cleared by {@link clearBresenhamGrid}.
+ *
+ * @param cost - The terrain cost Uint8Array, or undefined to disable.
+ * @param width - Terrain grid width in tiles.
+ * @param height - Terrain grid height in tiles.
+ */
+export const setBresenhamTerrain = (
+  cost: Uint8Array | undefined,
+  width: number,
+  height: number,
+): void => {
+  _terrainCost = cost;
+  _terrainW = cost ? width : 0;
+  _terrainH = cost ? height : 0;
+};
+
+/**
  * Clears the spatial grid reference.
  *
  * Called by collision_system when the grid is reset.
@@ -60,6 +94,9 @@ export const clearBresenhamGrid = (): void => {
   _gridRef = undefined;
   _gridW = 0;
   _gridH = 0;
+  _terrainCost = undefined;
+  _terrainW = 0;
+  _terrainH = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -184,6 +221,18 @@ export const checkLineOfSight = (
  * @returns `true` if the cell blocks line of sight.
  */
 const _isCellBlocking = (gx: number, gy: number, sightMask: number): boolean => {
+  // ── C-379: terrain solidity first — walls are no longer entities. A
+  // cost-0 cell blocks LOS regardless of the caller's sightMask (walls
+  // block everything). ──
+  if (_terrainCost) {
+    if (gx < 0 || gx >= _terrainW || gy < 0 || gy >= _terrainH) {
+      return true; // Out-of-bounds terrain blocks
+    }
+    if (_terrainCost[gy * _terrainW + gx] === 0) {
+      return true;
+    }
+  }
+
   if (!_gridRef) {
     return false;
   }

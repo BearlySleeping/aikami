@@ -24,6 +24,9 @@ const EmergentWorldSchema = Type.Object({
     description: 'Whether off-screen macro characters maintain correct sector locations',
   }),
   canvasLoaded: Type.Boolean({ description: 'Whether the PixiJS canvas has rendered content' }),
+  npcsOccupyVariedPositions: Type.Boolean({
+    description: 'Whether NPCs are distributed rather than frozen at spawn points',
+  }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
@@ -50,6 +53,8 @@ const EMERGENT_WORLD_PROMPT = [
   '- Are any alert indicators present on guard entities?',
   '- Do pursuit paths respect static obstacles (no wall clipping)?',
   '- Are off-screen characters stable (no flickering/missing)?',
+  '- Are NPCs distributed across the map rather than all frozen at their',
+  '  spawn points (C-379 AC-7 locomotion)?',
   '',
   'Score: 90-100 for full pipeline with guards reacting and pathfinding active,',
   '70-89 for characters visible but no emergent reactions,',
