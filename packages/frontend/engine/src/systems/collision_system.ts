@@ -6,6 +6,7 @@ import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { MAX_ENTITIES } from '../config/memory_config.ts';
+import { createSafeRef, resolveSafeRef } from '../core/entity_reference.ts';
 import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 
 // ---------------------------------------------------------------------------
@@ -79,13 +80,18 @@ let _gridWidth = 0;
 let _gridHeight = 0;
 
 /**
- * Wall entity EIDs created by {@link setCollisionGrid}.
+ * Wall entity references created by {@link setCollisionGrid}.
  *
- * Used for self-cleaning: the next call removes these before re-populating so
- * repeated grid updates never leak wall entities toward MAX_ENTITIES
- * (CodeRabbit review, C-376 round 2).
+ * Stored as generation-safe references (C-176) rather than raw EIDs: a map
+ * teardown removes every non-player entity and bitECS recycles the freed
+ * EIDs for the next map's spawns, so a raw EID held across a map load can
+ * silently point at a NEW entity. The self-cleaning loop resolves each
+ * reference before removal and skips stale ones (generation mismatch), so
+ * it can never delete a recycled entity that now belongs to the current map
+ * — e.g. a transition-zone trigger or NPC that reused an old wall EID
+ * (C-378 regression found in the merchant → village portal path).
  */
-let _wallEids: number[] = [];
+let _wallRefs: number[] = [];
 
 // ---------------------------------------------------------------------------
 // Public: Legacy API
@@ -98,10 +104,12 @@ let _wallEids: number[] = [];
  * and populates it with wall entities for solid tiles.
  *
  * Self-cleaning: wall entities created by a previous call are removed before
- * re-populating, so repeated LOAD_MAP calls (or a mid-session grid update
- * from the sandbox view model) cannot grow the entity count toward
- * MAX_ENTITIES. Callers that clear non-player entities first (ecs_worker)
- * are unaffected — the tracking set is empty by then.
+ * re-populating, so repeated grid updates (LOAD_MAP or a mid-session grid
+ * update) cannot grow the entity count toward MAX_ENTITIES. Cleanup uses
+ * generation-safe references (C-176) — when a prior map's teardown already
+ * removed the walls and bitECS recycled their EIDs, the stale references
+ * resolve to nothing and the CURRENT map's entities are left untouched
+ * (they may have reused those EIDs).
  *
  * @param grid - The collision grid parsed from the map's collision layer.
  * @param world - The bitECS world for wall entity registration.
@@ -118,14 +126,21 @@ export const setCollisionGrid = (grid: CollisionGrid, world?: World): void => {
 
     // Remove wall entities created by a previous grid before re-populating,
     // so repeated calls cannot exhaust the entity budget (CodeRabbit
-    // review, C-376 round 2).
-    if (world && _wallEids.length > 0) {
-      for (const eid of _wallEids) {
+    // review, C-376 round 2). Generation-safe: a stale reference (entity
+    // destroyed + EID recycled by the last map teardown) is skipped so the
+    // recycled EID's CURRENT occupant — possibly a transition zone, NPC, or
+    // prop of the freshly loaded map — is never deleted (C-378).
+    if (world && _wallRefs.length > 0) {
+      for (const ref of _wallRefs) {
+        const eid = resolveSafeRef(ref);
+        if (eid <= 0) {
+          continue; // wall was destroyed and its EID recycled — leave the new occupant alone
+        }
         removeFromSpatialGrid(eid);
         removeEntity(world, eid);
       }
     }
-    _wallEids = [];
+    _wallRefs = [];
 
     initializeSpatialGrid(grid.width, grid.height);
 
@@ -146,7 +161,7 @@ export const resetCollisionGrid = (): void => {
   _gridHeight = 0;
   _mapPixelWidth = 0;
   _mapPixelHeight = 0;
-  _wallEids = [];
+  _wallRefs = [];
   clearBresenhamGrid();
 };
 
@@ -469,7 +484,7 @@ const _populateWallsFromCollisionGrid = (world: World, grid: CollisionGrid): voi
     for (let x = 0; x < grid.width; x++) {
       if (grid.grid[y * grid.width + x]) {
         const eid = addEntity(world);
-        _wallEids.push(eid);
+        _wallRefs.push(createSafeRef(eid));
 
         // set(...) attaches the component and fires its onSet observer in
         // one call — the preceding bare addComponent calls were redundant

@@ -453,6 +453,12 @@ class SessionService
     // Trigger a game save to the checkpoint slot
     try {
       const [map, mapName] = await Promise.all([buildSaveMapBlock(), getCurrentMapName()]);
+      // C-378: a save without map routing cannot be restored (v3 requires
+      // the map block to rebuild the world). Skip rather than write a
+      // world-scope snapshot that corrupts the profile on load.
+      if (!map) {
+        throw new Error('Cannot checkpoint-save: map routing unavailable');
+      }
       await gameSaveService.saveGame({ slotId: saveSlotId, campaignId, mapName, map });
     } catch (error) {
       // Rollback checkpoint record on save failure

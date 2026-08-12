@@ -239,3 +239,63 @@ describe('createPropFrameResolver — memoization & lifecycle', () => {
     expect(fresh?.source).toBe('hit');
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-378 AC-7 — multi-tile prop frames resolve at native size
+// (anchor application is a renderer concern — see the game_world prop tests)
+// ---------------------------------------------------------------------------
+
+describe('C-378 AC-7 — native prop size resolution', () => {
+  test('a 32×64 frame resolves as a hit with the requested frame and nearest scale mode', async () => {
+    // A tall prop (e.g. a gate) — the resolver must hand back the raw frame
+    // texture untouched (no forced 32×32), with nearest filtering forced so
+    // multi-tile props stay crisp. Size application is the renderer's job.
+    const tall = {
+      width: 32,
+      height: 64,
+      source: { width: 32, height: 64 } as unknown as Texture['source'],
+      label: 'gate.png',
+    } as unknown as Texture;
+
+    const handle = createPropFrameResolver({
+      textureUrl: 'atlas.webp',
+      spritesheetUrl: 'atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => makeSheet({ 'gate.png': tall, 'grass.png': GRASS }),
+    });
+    await handle.preload();
+
+    const resolution = handle.resolver('gate.png');
+    expect(resolution).not.toBeNull();
+    expect(resolution?.source).toBe('hit');
+    expect(resolution?.frame).toBe('gate.png');
+    expect(resolution?.texture).toBe(tall);
+    // C-377 AC-1: the resolver forces nearest filtering on the frame source
+    // so props never render blurry regardless of atlas cache timing.
+    expect(tall.source.scaleMode).toBe('nearest');
+  });
+
+  test('resolutions are memoized — repeated lookups return the same object', async () => {
+    const square = {
+      width: 32,
+      height: 32,
+      source: { width: 32, height: 32 } as unknown as Texture['source'],
+      label: 'well.png',
+    } as unknown as Texture;
+
+    const handle = createPropFrameResolver({
+      textureUrl: 'atlas.webp',
+      spritesheetUrl: 'atlas.json',
+      fallbackTile: 'grass.png',
+      sheetLoader: async () => makeSheet({ 'well.png': square, 'grass.png': GRASS }),
+    });
+    await handle.preload();
+
+    const first = handle.resolver('well.png');
+    const second = handle.resolver('well.png');
+    expect(first).not.toBeNull();
+    // Object identity proves the resolver-controlled cache: the sheet is
+    // consulted once and the same resolution object is reused.
+    expect(second).toBe(first);
+  });
+});

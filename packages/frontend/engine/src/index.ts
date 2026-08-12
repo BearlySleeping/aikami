@@ -215,11 +215,25 @@ export {
   validUniquePath,
 } from './assets/asset_manifest.ts';
 export {
+  type AutotileOptions,
+  autotileLayers,
+  CORNER16_MASK_COUNT,
+  cornerFrameName,
+  cornerMaskForCell,
+  pickFillVariant,
+  type ResolvedTerrainGrid,
+  resolveTerrainGrid,
+  TERRAIN_CORNER_BITS,
+  TERRAIN_CORNER_ORDER,
+  type TerrainCorner,
+  type TerrainLayerEmission,
+  validateTerrains,
+} from './assets/autotile.ts';
+export {
   type ContentPackLoaderInterface,
   clearContentPackCache,
   loadContentPack,
 } from './assets/content_pack_loader.ts';
-
 export type { JtonParseResult } from './assets/jton_parser.ts';
 export {
   jtonToTilemapData,
@@ -243,6 +257,7 @@ export type {
 } from './assets/map_loader.ts';
 export {
   clearMapCache,
+  DEFAULT_TILEMAP_BAND,
   djb2Hash,
   extractCollisionGrid,
   extractSpawnPointEntities,

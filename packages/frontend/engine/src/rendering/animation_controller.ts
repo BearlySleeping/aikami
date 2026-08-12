@@ -210,6 +210,21 @@ export const getLpcStateRow = (state: LpcAnimationState, direction: LpcDirection
 const ANIMATION_TICK_DIVISOR = 8;
 
 /**
+ * Consecutive zero-delta frames tolerated before the entity is considered
+ * idle (C-378).
+ *
+ * The main-thread ticker (~16.7ms rAF) reads positions from the worker's
+ * render-view buffer, which updates on a setTimeout(16) loop that drifts
+ * to 20-30ms under load. A single stale read therefore produces a
+ * zero-delta frame while the entity is still moving. Without a grace
+ * period the controller resets its tick counter on every such frame and
+ * the walk cycle never advances past frame 0 — the sprite slides with no
+ * walking animation. A ~100ms grace (≈6 frames) absorbs the jitter while
+ * keeping the idle→frame-0 lock responsive when the player really stops.
+ */
+const IDLE_GRACE_FRAMES = 6;
+
+/**
  * Per-entity animation state machine for the main thread.
  *
  * Tracks facing direction, walk/idle state, and a monotonic tick counter.
@@ -256,6 +271,9 @@ export class AnimationController {
   /** Whether the entity is currently in idle state (zero velocity). */
   private _idle = true;
 
+  /** Consecutive zero-delta frames — resets on any movement frame. */
+  private _consecutiveIdleFrames = 0;
+
   /**
    * Updates the animation state machine with the entity's current
    * world-space position.
@@ -263,6 +281,12 @@ export class AnimationController {
    * On the first call, records the position and returns frame 0 for the
    * default direction (Down). On subsequent calls, computes the delta
    * from the last position to determine movement and facing direction.
+   *
+   * Zero-delta frames are treated as "no new data" (stale render-view
+   * read) rather than instant idle: the walk cycle keeps advancing as
+   * long as the entity was moving within the last
+   * {@link IDLE_GRACE_FRAMES} frames. Only a sustained zero-delta run
+   * (≥ IDLE_GRACE_FRAMES) locks the sprite to the idle frame (C-378).
    *
    * @param options - Update options.
    * @param options.x - Current world-space X position.
@@ -287,15 +311,20 @@ export class AnimationController {
     const isMoving = dx !== 0 || dy !== 0;
 
     if (isMoving) {
+      this._consecutiveIdleFrames = 0;
       this._direction = velocityToDirection(dx, dy);
       this._idle = false;
       this._tickCount += 1;
-    } else if (!this._idle) {
-      // Just transitioned to idle — lock to frame 0
-      this._idle = true;
-      this._tickCount = 0;
+    } else {
+      this._consecutiveIdleFrames += 1;
+      if (this._consecutiveIdleFrames >= IDLE_GRACE_FRAMES && !this._idle) {
+        // Sustained zero-delta — genuinely stopped. Lock to frame 0.
+        this._idle = true;
+        this._tickCount = 0;
+      }
     }
-    // Already idle: tickCount stays at 0, no change needed
+    // While moving (or within the grace window), tickCount keeps
+    // accumulating so the walk cycle advances across stale reads.
 
     const effectiveTicks = Math.floor(this._tickCount / ANIMATION_TICK_DIVISOR);
     return getLpcFrameIndex(LpcAnimationState.Walk, this._direction, effectiveTicks);
@@ -350,5 +379,6 @@ export class AnimationController {
     this._lastY = 0;
     this._hasLastPosition = false;
     this._idle = true;
+    this._consecutiveIdleFrames = 0;
   }
 }

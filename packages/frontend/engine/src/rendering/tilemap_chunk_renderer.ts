@@ -7,6 +7,7 @@ import {
   MeshGeometry,
   Shader,
   type Texture,
+  type TextureSource,
   UniformGroup,
 } from 'pixi.js';
 import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
@@ -58,11 +59,16 @@ const TILEMAP_CHUNK_GLSL_FRAGMENT = /* glsl */ `#version 300 es
   in float vLayer;
 
   uniform sampler2D uTexture;
+  uniform vec4 uTint;
 
   out vec4 fragColor;
 
   void main(void) {
-    fragColor = texture(uTexture, vUV);
+    vec4 tex = texture(uTexture, vUV);
+    // C-378 AC-9: day/night tint — the same factor the rest of the scene
+    // uses. A fully-neutral factor (1,1,1,1) is pixel-identical to an
+    // untinted render (tex * 1 = tex).
+    fragColor = vec4(tex.rgb * uTint.rgb, tex.a);
     // aTextureLayer is supplied by the geometry (C-177) for the (removed)
     // WGSL texture-array path. The GLSL fallback is static — textureLayers
     // are always 0 — but referencing vLayer keeps the attribute active in
@@ -153,6 +159,13 @@ export type TilemapChunkRendererOptions = {
    * returned (direct callers).
    */
   globalUniforms?: UniformGroup;
+  /**
+   * C-378: resolves a frame NAME to a UV rect for terrain layers. The
+   * autotiler emits layers whose cells hold frame names (never GIDs); the
+   * caller builds this resolver from the pack's atlas spritesheet. When
+   * absent, terrain frame layers render nothing (degraded but safe).
+   */
+  frameUvResolver?: FrameUvResolver;
 };
 
 /**
@@ -196,7 +209,7 @@ export type TilemapChunkRenderResult = {
 export const buildTilemapChunks = (
   options: TilemapChunkRendererOptions,
 ): TilemapChunkRenderResult => {
-  const { tilemap, tilesetTexture } = options;
+  const { tilemap, tilesetTexture, frameUvResolver } = options;
 
   const container = new Container();
   container.label = 'tilemap-chunks';
@@ -219,6 +232,7 @@ export const buildTilemapChunks = (
     new UniformGroup({
       uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
       uTime: { value: 0, type: 'f32' },
+      uTint: { value: new Float32Array([1, 1, 1, 1]), type: 'vec4<f32>' },
     });
 
   // ONE shared Shader for this renderer call (per layer when called from
@@ -255,6 +269,7 @@ export const buildTilemapChunks = (
           tilePixelW,
           tilePixelH,
           shader,
+          frameUvResolver,
         });
 
         if (chunk) {
@@ -338,24 +353,37 @@ type TilesetEntry = TilemapTileset & {
 
 /**
  * Builds tileset lookup entries from the tilemap's tileset array.
+ *
+ * C-378 AC-5: exact UV rects are used only for tilesets CONFIRMED to have
+ * atlas extrusion (Tiled `spacing`/`margin` > 0 — the emberwatch atlas
+ * packs at 34px pitch with a 1px extruded border). Tight-packed tilesets
+ * (spacing 0 AND margin 0, no extrusion) get a half-texel inset so the
+ * sampler never bleeds into an adjacent frame.
  */
 const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry[] => {
   return tilesets.map((ts) => {
     const { tilewidth, tileheight, columns, spacing = 0, margin = 0, imagewidth, imageheight } = ts;
+
+    // C-378 AC-5: exact UV rects are safe ONLY when the atlas layout
+    // guarantees a gutter or extrusion border around every frame (Tiled
+    // `spacing`/`margin` > 0 — e.g. the emberwatch atlas: 34px pitch with
+    // a 1px extruded border). A tight-packed tileset (spacing 0 AND
+    // margin 0 — frames flush edge-to-edge, no extrusion) bleeds into the
+    // adjacent frame at the boundary; the half-texel inset keeps the
+    // sampler inside the frame's own pixels.
+    const extruded = spacing > 0 || margin > 0;
+    const inset = extruded ? 0 : 0.5;
 
     const getUvRect = (localId: number): { u0: number; v0: number; u1: number; v1: number } => {
       const col = localId % columns;
       const row = Math.floor(localId / columns);
       const px = margin + col * (tilewidth + spacing);
       const py = margin + row * (tileheight + spacing);
-      // Half-pixel inset prevents texture bleeding at tile boundaries.
-      // Kept as-is (C-377 documents the coupling): the correct fix is 1px
-      // edge extrusion in the atlas packer, owned by C-378.
       return {
-        u0: (px + 0.5) / imagewidth,
-        v0: (py + 0.5) / imageheight,
-        u1: (px + tilewidth - 0.5) / imagewidth,
-        v1: (py + tileheight - 0.5) / imageheight,
+        u0: (px + inset) / imagewidth,
+        v0: (py + inset) / imageheight,
+        u1: (px + tilewidth - inset) / imagewidth,
+        v1: (py + tileheight - inset) / imageheight,
       };
     };
 
@@ -393,11 +421,30 @@ const _resolveGid = (
 };
 
 /**
+ * C-378: a frame NAME → UV rect resolver bound to ONE atlas source.
+ *
+ * The UV rects are computed against {@link source}; chunk sampling must
+ * bind the SAME texture source or the rects land on the wrong pixels.
+ */
+export type FrameUvResolver = {
+  /** Atlas texture source the UV rects are computed against. */
+  source: TextureSource;
+  /** Resolves a frame name to an exact UV rect in {@link source}. */
+  resolve: (frame: string) => { u0: number; v0: number; u1: number; v1: number } | undefined;
+};
+
+/**
  * Options for building a single chunk.
  */
 type BuildChunkOptions = {
-  /** The tile layer to read from. */
-  layer: { width: number; height: number; data: readonly number[]; name: string };
+  /** The tile layer to read from (GIDs via `data` OR frame names via `frames`). */
+  layer: {
+    width: number;
+    height: number;
+    data?: readonly number[];
+    frames?: readonly (string | 0)[];
+    name: string;
+  };
   /** Chunk grid X (column). */
   chunkGridX: number;
   /** Chunk grid Y (row). */
@@ -412,6 +459,8 @@ type BuildChunkOptions = {
   tilePixelH: number;
   /** Shared Shader for all chunks of this layer. */
   shader: Shader;
+  /** C-378: frame-name → UV resolver for terrain layers. */
+  frameUvResolver?: FrameUvResolver;
 };
 
 /**
@@ -427,8 +476,17 @@ type BuildChunkOptions = {
  * @returns The chunk metadata, or undefined if the chunk has no visible tiles.
  */
 const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
-  const { layer, chunkGridX, chunkGridY, tilemap, tilesetEntries, tilePixelW, tilePixelH, shader } =
-    options;
+  const {
+    layer,
+    chunkGridX,
+    chunkGridY,
+    tilemap,
+    tilesetEntries,
+    tilePixelW,
+    tilePixelH,
+    shader,
+    frameUvResolver,
+  } = options;
 
   // Compute tile range for this chunk
   const tileStartX = chunkGridX * CHUNK_SIZE;
@@ -436,22 +494,45 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   const tileEndX = Math.min(tileStartX + CHUNK_SIZE, tilemap.width);
   const tileEndY = Math.min(tileStartY + CHUNK_SIZE, tilemap.height);
 
-  // Count active tiles first
-  let activeTileCount = 0;
+  // Per-cell UV resolution: GID layers resolve through the tileset grid;
+  // C-378 terrain layers resolve frame names through the atlas resolver.
+  // A frame-name layer with no resolver has no resolvable cells.
+  const isFrameLayer = layer.frames !== undefined;
+  const resolveUv = (
+    index: number,
+  ): { u0: number; v0: number; u1: number; v1: number } | undefined => {
+    if (isFrameLayer) {
+      const frame = layer.frames?.[index];
+      if (!frame || !frameUvResolver) {
+        return undefined;
+      }
+      return frameUvResolver.resolve(frame);
+    }
+    const gid = layer.data?.[index] ?? 0;
+    if (gid === 0) {
+      return undefined;
+    }
+    const resolved = _resolveGid(gid, tilesetEntries);
+    if (!resolved) {
+      return undefined;
+    }
+    return resolved.entry.getUvRect(resolved.localId);
+  };
+
+  // Resolve each cell ONCE: cache non-empty UV results in the counting pass
+  // and reuse them while filling — avoids a second resolver call (and a
+  // second UV object allocation) per active cell (C-378 performance pass).
+  const resolvedUvs = new Map<number, { u0: number; v0: number; u1: number; v1: number }>();
   for (let row = tileStartY; row < tileEndY; row++) {
     for (let col = tileStartX; col < tileEndX; col++) {
       const index = row * layer.width + col;
-      const gid = layer.data[index];
-      if (gid === 0) {
-        continue;
+      const uv = resolveUv(index);
+      if (uv) {
+        resolvedUvs.set(index, uv);
       }
-      const resolved = _resolveGid(gid, tilesetEntries);
-      if (!resolved) {
-        continue;
-      }
-      activeTileCount += 1;
     }
   }
+  const activeTileCount = resolvedUvs.size;
 
   if (activeTileCount === 0) {
     return undefined;
@@ -471,17 +552,10 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   for (let row = tileStartY; row < tileEndY; row++) {
     for (let col = tileStartX; col < tileEndX; col++) {
       const dataIndex = row * layer.width + col;
-      const gid = layer.data[dataIndex];
-      if (gid === 0) {
+      const uv = resolvedUvs.get(dataIndex);
+      if (!uv) {
         continue;
       }
-      const resolved = _resolveGid(gid, tilesetEntries);
-      if (!resolved) {
-        continue;
-      }
-
-      const { entry, localId } = resolved;
-      const uv = entry.getUvRect(localId);
 
       // World-space pixel position of this tile
       const px = col * tilePixelW;

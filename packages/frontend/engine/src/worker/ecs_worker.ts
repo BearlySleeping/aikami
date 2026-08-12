@@ -81,10 +81,11 @@ import {
 } from '../systems/camera_system.ts';
 import {
   type CollisionGrid,
+  getMapPixelBounds,
   insertIntoSpatialGrid,
   isCellBlocked,
-  isWalkable,
   removeFromSpatialGrid,
+  resetCollisionGrid,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
 import {
@@ -113,7 +114,11 @@ import {
   hydrateZone,
   startMacroSimulation,
 } from '../systems/macro_simulation_system.ts';
-import { PLAYER_COLLISION_MASK, updateMovement } from '../systems/movement_system.ts';
+import {
+  clampSpawnToWalkable,
+  isPlayerSpawnBlocked,
+  updateMovement,
+} from '../systems/movement_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
@@ -1571,6 +1576,35 @@ self.onmessage = (event: MessageEvent): void => {
             addComponent(world, restoredEid, CameraFocus);
           }
 
+          // C-378: A saved position can land inside a solid prop or wall —
+          // the world was rebuilt by LOAD_MAP with CURRENT collision, while
+          // the save may predate it (this contract's map conversion added
+          // solid shop props, but any save-vs-map drift hits the same trap).
+          // Restoring onto a solid cell freezes the player: the movement
+          // bbox sampler spans the blocked cell on every axis, so no move
+          // is accepted. Re-run the LOAD_MAP spawn clamp on the restored
+          // position so the player always lands on a walkable tile. The
+          // oracle validates the FULL collision box (not just the feet
+          // tile) — a restore one tile below a solid prop deadlocks the
+          // same way (C-378).
+          {
+            const restoredPx = Position.x[playerEntityId] ?? 0;
+            const restoredPy = Position.y[playerEntityId] ?? 0;
+            const clamped = clampSpawnToWalkable(
+              restoredPx,
+              restoredPy,
+              isPlayerSpawnBlocked,
+              getMapPixelBounds(),
+            );
+            if (clamped.x !== restoredPx || clamped.y !== restoredPy) {
+              logger.debug(
+                'RESTORE_PLAYER',
+                `clamped restored spawn from (${restoredPx},${restoredPy}) to (${clamped.x},${clamped.y})`,
+              );
+              addComponent(world, playerEntityId, set(Position, { x: clamped.x, y: clamped.y }));
+            }
+          }
+
           // Snap the camera to the restored position and refresh the
           // player's LPC textures immediately. _refreshPlayerAppearance
           // applies the C-370 body-layer fallback before emitting.
@@ -1935,7 +1969,17 @@ self.onmessage = (event: MessageEvent): void => {
           if (collisionGrid) {
             setCollisionGrid(collisionGrid, world);
           } else {
-            logger.warn('LOAD_MAP', 'collisionGrid missing on map load — spatial grid stays empty');
+            // C-378: never retain the PREVIOUS map's grid when the new map
+            // carries none — a stale grid/bounds would feed RESTORE_PLAYER's
+            // clampSpawnToWalkable (and the spawn clamp) with the wrong
+            // terrain and map bounds. Reset so no stale collision data
+            // survives the transition (the walkability oracle then treats
+            // every cell as walkable instead of clamping to a dead grid).
+            logger.warn(
+              'LOAD_MAP',
+              'collisionGrid missing on map load — resetting collision state',
+            );
+            resetCollisionGrid();
           }
 
           // 6d. C-375 AC-3: register spawned NPC/prop entities in the
@@ -1993,50 +2037,23 @@ self.onmessage = (event: MessageEvent): void => {
           //     C-376 AC-3: use the canonical composite (spatial-grid entity
           //     blocking OR terrain solidity) so a wall/NPC-occupied tile is
           //     never a valid clamp target.
+          //     C-378: shared with RESTORE_PLAYER so a saved position that
+          //     lands inside a solid prop is also repositioned — otherwise
+          //     the bbox sampler deadlocks every movement axis.
           if (playerEntityId > 0) {
             const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
-            const isSpawnBlocked = (px: number, py: number): boolean => {
-              const tx = Math.floor(px / 32);
-              const ty = Math.floor(py / 32);
-              return isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py);
-            };
-            if (pos && isSpawnBlocked(pos.x, pos.y)) {
-              // Scan outward from the target toward the map center to find
-              // the nearest walkable tile. Fall back to center if none found.
-              const centerX = (mapPixelWidth as number) / 2;
-              const centerY = (mapPixelHeight as number) / 2;
-              const tileSize = 32;
-              let clampedX = pos.x;
-              let clampedY = pos.y;
-              let found = false;
-
-              for (let radius = 0; radius < 20 && !found; radius++) {
-                for (let dy = -radius; dy <= radius && !found; dy++) {
-                  for (let dx = -radius; dx <= radius && !found; dx++) {
-                    if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
-                      continue;
-                    }
-                    const tx = pos.x + dx * tileSize;
-                    const ty = pos.y + dy * tileSize;
-                    if (!isSpawnBlocked(tx, ty)) {
-                      clampedX = tx;
-                      clampedY = ty;
-                      found = true;
-                    }
-                  }
-                }
+            if (pos) {
+              const clamped = clampSpawnToWalkable(pos.x, pos.y, isPlayerSpawnBlocked, {
+                width: mapPixelWidth as number,
+                height: mapPixelHeight as number,
+              });
+              if (clamped.x !== pos.x || clamped.y !== pos.y) {
+                logger.debug(
+                  'LOAD_MAP',
+                  `clamped spawn from (${pos.x},${pos.y}) to (${clamped.x},${clamped.y})`,
+                );
+                addComponent(world, playerEntityId, set(Position, { x: clamped.x, y: clamped.y }));
               }
-
-              if (!found) {
-                clampedX = centerX;
-                clampedY = centerY;
-              }
-
-              logger.debug(
-                'LOAD_MAP',
-                `clamped spawn from (${pos.x},${pos.y}) to (${clampedX},${clampedY})`,
-              );
-              addComponent(world, playerEntityId, set(Position, { x: clampedX, y: clampedY }));
             }
           }
 

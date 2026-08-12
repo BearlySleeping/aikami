@@ -272,47 +272,35 @@ const devActions = [
   {
     label: '💾 Save Game (manual-1)',
     onClick: async () => {
-      const { GameSaveService } = await import('$services');
-      const { createEngineBridge } = await import('@aikami/frontend/engine');
-      const bridge = createEngineBridge();
-      type SaveSvc = { saveGame: (slot: string) => Promise<void> };
-      const saveService = new (
-        GameSaveService as unknown as new (
-          opts: Record<string, unknown>,
-        ) => SaveSvc
-      )({
-        className: 'SandboxSaveService',
-        bridge,
-      });
-      await saveService.saveGame('manual-1');
-      alert('Game Saved! Position + items captured. Use "Load Last Save" to restore.');
+      // C-378: use the canonical save path (same as the production save
+      // button) instead of a fabricated cast. The old code called
+      // `saveGame('manual-1')` with a STRING against a fake signature —
+      // every option destructured to undefined, so it overwrote the
+      // auto-save slot with a map-less world-scope snapshot (201 entities
+      // incl. wall entities) that the boot cannot restore (C-378).
+      const { gameOverlayService } = await import('$services');
+      await gameOverlayService.saveGame();
+      // C-378: surface the service's ACTUAL result — saveGame reports
+      // 'Save failed (map unavailable)' / 'Save failed' on handled failures,
+      // so a hardcoded success string would lie to the developer.
+      alert(gameOverlayService.saveMessage ?? 'Save failed');
     },
   },
   {
     label: '📂 Load Last Save',
     onClick: async () => {
-      const { GameSaveService } = await import('$services');
-      type LoadSvc = {
-        fetchAvailableSaves: () => Promise<void>;
-        availableSaves: Array<{ id: string }>;
-        getSavePayload: (slotId: string) => Promise<string>;
-      };
-      const saveService = new (
-        GameSaveService as unknown as new (
-          opts: Record<string, unknown>,
-        ) => LoadSvc
-      )({ className: 'SandboxLoadService' });
-      await saveService.fetchAvailableSaves();
-      if (saveService.availableSaves.length === 0) {
+      const { gameSaveService } = await import('$services');
+      await gameSaveService.fetchAvailableSaves();
+      if (gameSaveService.availableSaves.length === 0) {
         alert('No saves found. Save the game first.');
         return;
       }
-      const latest = saveService.availableSaves[0];
+      const latest = gameSaveService.availableSaves[0];
       if (!latest) {
         alert('No save slot available.');
         return;
       }
-      const payload = await saveService.getSavePayload(latest.id);
+      const payload = await gameSaveService.getSavePayload(latest.id);
       await canvasVm.loadSave(payload);
       canvasVm.resumeEngine();
       alert('Save loaded! Position + items restored.');
