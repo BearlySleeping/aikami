@@ -40,6 +40,7 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
+import { hasDirenv } from '../env/direnv_detect';
 import { findWorkspace, herdrJson } from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
@@ -555,7 +556,15 @@ export CONTRACT_PIPELINE_WORKTREE=1
       timeout: 5000,
     });
   } catch {
-    // direnv may not be installed — not fatal.
+    // direnv may not be installed — not fatal. The .envrc stays in place
+    // for machines that DO use direnv; everyone else runs on their own
+    // shell env (manual tool installs + .env.local fallback).
+  }
+  if (!hasDirenv()) {
+    console.log(
+      `ℹ️  direnv not installed — worktree runs with your shell env (no flake devShell). ` +
+        'Install tools manually or set up direnv + nix (`bun run setup`).',
+    );
   }
 
   // ── 2. skip-worktree — workspace-local tracked files stay local ──

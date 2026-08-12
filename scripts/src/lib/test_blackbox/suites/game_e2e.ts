@@ -161,7 +161,7 @@ export const gameE2eSuite: TestSuite = {
     if (process.env.RUN_PLAYWRIGHT === 'true') {
       console.log('  Running Game Playwright tests from apps/e2e...');
       const proc = Bun.spawn({
-        cmd: ['npx', 'playwright', 'test', '--project=game'],
+        cmd: ['bunx', 'playwright', 'test', '--project=game'],
         cwd: E2E_DIR,
         stdout: 'inherit',
         stderr: 'inherit',

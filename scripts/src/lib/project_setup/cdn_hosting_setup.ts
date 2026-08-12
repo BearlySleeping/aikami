@@ -18,9 +18,9 @@ import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 type ManualStep = { title: string; url?: string; commands?: string[]; detail?: string };
 
-// ── Constants ─────────────────────────────────────────────────────────────
+// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/** Canonical extension per platform — matches pickCanonical() in tauri_release.ts. */
+/** Canonical extension per platform â€” matches pickCanonical() in tauri_release.ts. */
 const PLATFORM_EXTENSIONS: Record<string, string> = {
   linux: '.deb',
   macos: '.dmg',
@@ -56,7 +56,7 @@ const generateCdnFirebaseConfig = (): Record<string, unknown> => {
   const appName = 'client-tauri';
 
   const redirects = [
-    // ── Stable channel (production) ──
+    // â”€â”€ Stable channel (production) â”€â”€
     {
       source: '/aikami/stable/linux',
       destination: buildStorageUrl(productionId, appName, 'stable', 'linux'),
@@ -72,7 +72,7 @@ const generateCdnFirebaseConfig = (): Record<string, unknown> => {
       destination: buildStorageUrl(productionId, appName, 'stable', 'windows'),
       type: 302,
     },
-    // ── Beta channel (staging) ──
+    // â”€â”€ Beta channel (staging) â”€â”€
     {
       source: '/aikami/beta/linux',
       destination: buildStorageUrl(stagingId, appName, 'beta', 'linux'),
@@ -99,7 +99,7 @@ const generateCdnFirebaseConfig = (): Record<string, unknown> => {
   };
 };
 
-// ── Setup ─────────────────────────────────────────────────────────────────
+// â”€â”€ Setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const setupCdnHosting = async (
   dryRun: boolean,
@@ -109,7 +109,7 @@ export const setupCdnHosting = async (
 
   console.log(fmt.section('CDN Hosting Sites'));
 
-  // ── 1. Create CDN hosting sites for staging and production ───────────
+  // â”€â”€ 1. Create CDN hosting sites for staging and production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (const mode of ['staging', 'production'] as const) {
     const projectId = MODE_PROJECT_MAP[mode];
     const siteId = `${projectId}-${CDN_SITE_SUFFIX}`;
@@ -119,14 +119,7 @@ export const setupCdnHosting = async (
     try {
       // Check if site exists by trying to get it
       const getCode = await runStream(
-        [
-          'npx',
-          '-y',
-          'firebase-tools@latest',
-          'hosting:sites:get',
-          siteId,
-          `--project=${projectId}`,
-        ],
+        ['bunx', 'firebase-tools@15.26.0', 'hosting:sites:get', siteId, `--project=${projectId}`],
         {},
       );
       if (getCode === 0) {
@@ -137,9 +130,8 @@ export const setupCdnHosting = async (
         if (!dryRun) {
           const createCode = await runStream(
             [
-              'npx',
-              '-y',
-              'firebase-tools@latest',
+              'bunx',
+              'firebase-tools@15.26.0',
               'hosting:sites:create',
               siteId,
               `--project=${projectId}`,
@@ -164,7 +156,7 @@ export const setupCdnHosting = async (
     }
   }
 
-  // ── 2. Generate firebase.json with redirects ─────────────────────────
+  // â”€â”€ 2. Generate firebase.json with redirects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log(fmt.section('CDN firebase.json'));
   const cdnDir = CDN_PUBLIC_DIR;
   if (!existsSync(cdnDir)) {
@@ -189,7 +181,7 @@ export const setupCdnHosting = async (
     checks.push({ name: 'CDN firebase.json', status: 'missing', fixed: true });
   }
 
-  // ── 3. Apply hosting target to firebase.json ─────────────────────────
+  // â”€â”€ 3. Apply hosting target to firebase.json â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //    This maps the "cdn" target to the site we just created.
   console.log(fmt.section('Firebase Target'));
   const stagingSiteId = `${MODE_PROJECT_MAP.staging}-${CDN_SITE_SUFFIX}`;
@@ -204,19 +196,19 @@ export const setupCdnHosting = async (
     detail: 'These map the "cdn" target to each project\'s CDN hosting site.',
   });
 
-  // ── 4. Custom domain setup ───────────────────────────────────────────
+  // â”€â”€ 4. Custom domain setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   manualSteps.push({
     title: 'Add custom domains in Firebase Console',
     url: `https://console.firebase.google.com/project/${MODE_PROJECT_MAP.production}/hosting/sites`,
     commands: [],
     detail:
-      `Production: cdn.bearlysleeping.com → ${productionSiteId}\n` +
-      `Staging:    cdn.stg.bearlysleeping.com → ${stagingSiteId}\n\n` +
-      'Firebase Console will prompt you to add TXT records for verification —\n' +
+      `Production: cdn.bearlysleeping.com â†’ ${productionSiteId}\n` +
+      `Staging:    cdn.stg.bearlysleeping.com â†’ ${stagingSiteId}\n\n` +
+      'Firebase Console will prompt you to add TXT records for verification â€”\n' +
       'then auto-provisions free SSL certificates.',
   });
 
-  // ── 5. Deploy instructions ───────────────────────────────────────────
+  // â”€â”€ 5. Deploy instructions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   console.log(fmt.section('Deploy'));
   console.log(fmt.note('After setup, deploy the CDN config:'));
   console.log(
@@ -230,7 +222,7 @@ export const setupCdnHosting = async (
     ),
   );
 
-  // ── 6. GCS public access ─────────────────────────────────────────────
+  // â”€â”€ 6. GCS public access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   manualSteps.push({
     title: 'Make channel artifacts publicly readable in GCS',
     commands: [
@@ -245,7 +237,7 @@ export const setupCdnHosting = async (
   return { checks, manualSteps };
 };
 
-// ── CLI ───────────────────────────────────────────────────────────────────
+// â”€â”€ CLI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if (import.meta.main) {
   const opts = parseCliArgs(Bun.argv.slice(2), {

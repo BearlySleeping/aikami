@@ -21,6 +21,13 @@ tauri-plugin-http = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-deep-link = "2"
+# Windows/Linux deliver a deep link by launching a second process with the
+# URL as a CLI arg (see lib.rs) — this plugin catches that relaunch and
+# forwards it into the already-running instance instead of opening a second
+# window. Registered on every platform (harmless where unused, e.g. macOS)
+# to keep lib.rs free of per-OS conditional compilation.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"

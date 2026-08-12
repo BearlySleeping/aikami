@@ -1,0 +1,114 @@
+// scripts/src/lib/env/direnv_detect.ts
+/**
+ * Direnv detection + non-direnv fallbacks.
+ *
+ * Aikami's .envrc (scripts/direnv/bootstrap.sh) is the happy path: it loads
+ * the Nix flake devShell (bun, node, jdk, chromium, playwright browsers,
+ * secrets) and exports AIKAMI_MODE / AIKAMI_PROJECT_ID / AIKAMI_IS_EMULATOR.
+ * But direnv is only present when the developer installed it — `bun run setup`
+ * treats it as the recommended-but-optional path, and Windows developers
+ * (without WSL + Nix) typically run without direnv at all, installing tools
+ * manually and relying on .env.local.
+ *
+ * Everything in scripts/src/lib that would otherwise hard-require direnv
+ * should go through THIS module so non-direnv developers get a working
+ * fallback instead of "command not found: direnv":
+ *
+ *   hasDirenv()        — is the `direnv` binary available on PATH? (cached)
+ *   isDirenvLoaded()   — did .envrc already run in this process?
+ *   resolveAikamiEnv() — non-direnv fallback: derive AIKAMI_MODE + project id
+ *                        from .env.local, mirroring bootstrap.sh's contract
+ *   direnvExecCommand()— wrap a shell command with `direnv exec <cwd>` ONLY
+ *                        when direnv is actually available; otherwise return
+ *                        the command unchanged so it runs with the user's own
+ *                        PATH/env (manual tool installs, .env.local fallback).
+ */
+
+import { existsSync, readFileSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
+
+// ── Mode → project map ──────────────────────────────────────────────────
+// 🔴 Keep in sync with:
+//   - packages/shared/constants/src/lib/project.ts (MODE_PROJECT_MAP)
+//   - scripts/direnv/bootstrap.sh (_AIKAMI_PROJECT_MAP)
+//   - scripts/src/lib/ops/switch_mode.ts (MODE_PROJECTS)
+const MODE_PROJECT_MAP: Record<string, string> = {
+  emulator: 'demo-aikami-emulator',
+  staging: 'aikami-staging',
+  production: 'aikami-production',
+};
+
+const VALID_MODES = new Set(['emulator', 'staging', 'production']);
+
+let _hasDirenv: boolean | undefined;
+
+/**
+ * True when the `direnv` binary is on PATH. Cached after the first call
+ * (neither the binary nor the PATH is expected to change mid-process).
+ * Node-safe: uses Bun.which when running under Bun, otherwise scans PATH.
+ */
+export const hasDirenv = (): boolean => {
+  if (_hasDirenv === undefined) {
+    if (typeof Bun !== 'undefined' && Bun.which) {
+      _hasDirenv = Boolean(Bun.which('direnv'));
+    } else {
+      const exe = process.platform === 'win32' ? 'direnv.exe' : 'direnv';
+      _hasDirenv = (process.env.PATH ?? '')
+        .split(delimiter)
+        .filter(Boolean)
+        .some((dir) => existsSync(join(dir, exe)));
+    }
+  }
+  return _hasDirenv;
+};
+
+/** True when THIS process was already set up by .envrc (direnv + Nix). */
+export const isDirenvLoaded = (): boolean =>
+  process.env.AIKAMI_ENV_LOADED === '1' ||
+  process.env.AIKAMI_NIX_READY === '1' ||
+  process.env.IN_NIX_SHELL !== undefined;
+
+export type AikamiEnv = {
+  mode: 'emulator' | 'staging' | 'production';
+  projectId: string;
+  isEmulator: boolean;
+};
+
+/**
+ * Non-direnv fallback: resolve the AIKAMI_* contract from .env.local —
+ * the same file bootstrap.sh's `_aikami_load_mode` reads. Defaults to
+ * emulator, matching .envrc behavior.
+ */
+export const resolveAikamiEnv = (root: string): AikamiEnv => {
+  let mode = 'emulator';
+  const envLocal = join(root, '.env.local');
+  if (existsSync(envLocal)) {
+    const match = readFileSync(envLocal, 'utf8').match(/^AIKAMI_MODE=(\S+)\s*$/m);
+    if (match?.[1] && VALID_MODES.has(match[1])) {
+      mode = match[1];
+    }
+  }
+  const projectId = MODE_PROJECT_MAP[mode] ?? 'demo-aikami-emulator';
+  return { mode: mode as AikamiEnv['mode'], projectId, isEmulator: mode === 'emulator' };
+};
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+const bashPath = (): string =>
+  typeof Bun !== 'undefined' && Bun.which ? (Bun.which('bash') ?? 'bash') : 'bash';
+
+/**
+ * Wrap a command so it runs inside the flake devShell via
+ * `direnv exec <cwd> bash -c '<command>'` when direnv is available.
+ * When it isn't, return the command unchanged — the caller's own PATH/env
+ * (manual tool installs, .env.local fallback) is assumed.
+ *
+ * Mirrors herdr/session.ts `wrapCommand`, minus the interactive
+ * echo/read trailer — safe for headless worker panes.
+ */
+export const direnvExecCommand = (command: string, cwd: string): string => {
+  if (!hasDirenv()) {
+    return command;
+  }
+  return `direnv exec ${shellQuote(cwd)} ${shellQuote(bashPath())} -c ${shellQuote(command)}`;
+};

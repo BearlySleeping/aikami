@@ -75,10 +75,14 @@ async function postToDiscord(options: {
     description: truncateNotes(release.body),
     color: 0x6d28d9,
     fields: [
-      { name: '🐧 Linux', value: `[AppImage](${downloadBase}/aikami.AppImage)`, inline: true },
+      // Canonical asset names are lowercase (see ci_run.ts BUNDLE_GLOBS) — GitHub
+      // release asset URLs are case-sensitive, so this must match exactly.
+      { name: '🐧 Linux', value: `[AppImage](${downloadBase}/aikami.appimage)`, inline: true },
       { name: '🍎 macOS', value: `[.dmg](${downloadBase}/aikami.dmg)`, inline: true },
       { name: '🪟 Windows', value: `[.exe](${downloadBase}/aikami.exe)`, inline: true },
     ],
+    footer: { text: 'Aikami Desktop' },
+    timestamp: new Date().toISOString(),
   };
 
   const res = await fetch(webhookUrl, {

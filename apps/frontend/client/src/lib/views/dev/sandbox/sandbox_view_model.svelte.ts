@@ -85,7 +85,6 @@ class SandboxViewModel
     this.debug('sandbox:initializeEngine:start', {
       canvasW: canvas.clientWidth,
       canvasH: canvas.clientHeight,
-      crossOriginIsolated: typeof self !== 'undefined' ? self.crossOriginIsolated : 'n/a',
     });
 
     try {
