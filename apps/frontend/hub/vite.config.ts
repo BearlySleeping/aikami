@@ -14,21 +14,27 @@ import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
+// Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline runs
+// so this app's Firebase Auth emulator proxy targets its own per-contract
+// emulator instance, not another contract's. 0 otherwise.
+const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+const emulatorAuthPort = PORTS.emulator.auth + emulatorPortOffset;
+
 /** Firebase Auth emulator proxies so the SDK's popup/relay share one origin. */
 // The auth emulator binds 127.0.0.1 only — target it directly (a `localhost`
 // target resolves to ::1 first and the proxy fails, leaving the popup
 // handler blank).
 const emulatorAuthProxy: Record<string, string | ProxyOptions> = {
   '/emulator/auth': {
-    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${emulatorAuthPort}`,
     changeOrigin: true,
   },
   '/identitytoolkit.googleapis.com': {
-    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${emulatorAuthPort}`,
     changeOrigin: true,
   },
   '/securetoken.googleapis.com': {
-    target: `http://127.0.0.1:${PORTS.emulator.auth}`,
+    target: `http://127.0.0.1:${emulatorAuthPort}`,
     changeOrigin: true,
   },
 };

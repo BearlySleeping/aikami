@@ -1,8 +1,8 @@
 // packages/frontend/configs/src/lib/functions.ts
-import { CLOUD_FUNCTIONS_REGION, EMULATOR_PORTS } from '@aikami/constants';
+import { CLOUD_FUNCTIONS_REGION } from '@aikami/constants';
 import { connectFunctionsEmulator, type Functions, getFunctions } from 'firebase/functions';
 import app from './app.ts';
-import { isEmulatorModePublic } from './environment.ts';
+import { EMULATOR_PORTS, isEmulatorModePublic } from './environment.ts';
 
 export { httpsCallable } from 'firebase/functions';
 

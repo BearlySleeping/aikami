@@ -13,8 +13,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService } from '$services';
 import { isTauri } from '$lib/views/utils/is_tauri';
+import { authService } from '$services';
 
 export type LoginViewModelInterface = BaseViewModelInterface & {
   /** Whether a sign-in or sign-out is in progress. */

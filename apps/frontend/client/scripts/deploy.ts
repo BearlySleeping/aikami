@@ -76,18 +76,18 @@ try {
   //    which fails with EBUSY during cache extraction. The pinned version is
   //    a devDependency and resolves locally/offline via `bunx firebase-tools`.
   if (verbose) {
-    $.verbose = true;
     console.log(`[deploy] mode=${mode}`);
     console.log(`[deploy] project=${projectId}`);
     console.log(`[deploy] hosting site=${targetSite}`);
     console.log(`[deploy] config=${deployConfigPath}`);
+    // Bun 1.3+: `$` echoes command + output by default (old `$.verbose` was removed).
     await $`bunx firebase-tools deploy --only hosting --project ${projectId} --config ${deployConfigPath} --debug`.cwd(
       process.cwd(),
     );
   } else {
-    await $`bunx firebase-tools deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
-      process.cwd(),
-    );
+    await $`bunx firebase-tools deploy --only hosting --project ${projectId} --config ${deployConfigPath}`
+      .quiet()
+      .cwd(process.cwd());
   }
 } catch (error) {
   const err = error as { stderr?: string; stdout?: string; message?: string };

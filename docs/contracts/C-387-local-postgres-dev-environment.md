@@ -2,7 +2,7 @@
 id: C-387
 title: "Local PostgreSQL Development Environment (replaces the Data Connect emulator)"
 source: "user request — 'Can we setup local emulator for psql?'"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -13,6 +13,11 @@ created_at: "2026-08-12"
 
 # Contract C-387: Local PostgreSQL Development Environment
 
+> ✅ **Approved 2026-08-13.** The sole Open Question is resolved (pin
+> PostgreSQL 17; production provider stays undecided and out of scope — that's
+> a future contract for when the hub has a real consumer). No application
+> code, no schema, no consumers — pure dev tooling, safe to land any time.
+
 ## Metadata
 
 | Field | Value |
@@ -21,14 +26,14 @@ created_at: "2026-08-12"
 | **Target** | `flake.nix`, `scripts/src/lib/herdr/session.ts`, `packages/shared/constants/src/lib/development_ports.ts`, plus new database lifecycle scripts |
 | **Priority** | P2 — no consumer exists until the community catalog is built. Land this immediately before that work, not before. |
 | **Dependencies** | C-385 (Data Connect removed — it currently owns the local Postgres and port 5432). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer setup notes in the repo README |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: The only local Postgres in the project is the one the Data Connect emulator provides. `packages/shared/constants/src/lib/emulator.ts` hardcodes `postgresql://postgres@localhost:5432/dataconnect_emulator?sslmode=disable`, while `apps/backend/firebase/scripts/on_emulate.ts` defaults `PGDATABASE` to `fdcdb` — the two disagree about the database name, which is itself evidence that nobody owns this surface.
+- **Current behavior (historical)**: Before C-385, the only local Postgres in the project was the one the Data Connect emulator provided — `packages/shared/constants/src/lib/emulator.ts` hardcoded `postgresql://postgres@localhost:5432/dataconnect_emulator?sslmode=disable`, while `apps/backend/firebase/scripts/on_emulate.ts` defaulted `PGDATABASE` to `fdcdb`, disagreeing about the database name. **Verified 2026-08-13: both are gone.** C-385's merge already removed the Data Connect references from `emulator.ts` and the `PGDATABASE`/`fdcdb` default from `on_emulate.ts`. This bullet is kept only as the "why" — the disagreement is evidence nobody owned this surface, which is why it's worth owning properly now.
 - **The engine is pglite**, not real PostgreSQL. C-374 records a concrete failure caused by that difference: *"raw-SQL `_executeReturning` fails against the pinned pglite emulator (pq: unexpected message 'E')"*. Divergence between the local engine and the production engine is a bug source, not a convenience.
 - **After C-385 there is no local Postgres at all**, because it disappears with the Data Connect emulator.
 - **Existing implementation to reuse**:
@@ -79,8 +84,12 @@ neighbouring one. Nix-provided PostgreSQL runs as the invoking user with no
 system service and no `sudo`.
 
 Architecture: `docs/architecture/data-layer-target-architecture.md` D-8 —
-local must equal production. Use the same major PostgreSQL version that the
-Cloud SQL instance will run.
+local must equal production. The production Postgres provider is not yet
+decided (Cloud SQL, Neon, and Supabase are all live options — see
+`docs/research/database-architecture-recommendation.md` §2); pin to
+PostgreSQL 17, the latest stable major, which every candidate provider
+supports identically over the wire protocol. Re-pin only if the eventual
+provider choice turns out not to offer it (resolved — see Open Questions).
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
@@ -145,7 +154,7 @@ Connection URL:  postgresql://localhost:5433/aikami_dev?sslmode=disable
 - **Out of Scope:**
   - Any schema, table, migration, ORM, or Drizzle configuration.
   - Any application code connecting to this database.
-  - Provisioning the production Cloud SQL instance.
+  - Provisioning any production Postgres instance (provider not yet decided — future contract, when the hub actually needs it).
   - CI integration — no CI job needs Postgres until a consumer exists.
   - Adding `postgres` to the `all` service group.
 
@@ -172,7 +181,7 @@ other service's ergonomics. One cohesive capability.
 
 **Watch Points**:
 - Pin the major version explicitly (`pkgs.postgresql_17`, not `pkgs.postgresql`) so a nixpkgs bump cannot silently change the engine version and break the local≡production guarantee.
-- Confirm the chosen major version is offered by Cloud SQL before pinning.
+- 17 is offered by Cloud SQL, Neon, and Supabase alike (verified 2026-08-13), so the pin holds regardless of which one is chosen later. If the eventual choice doesn't support 17 by then, re-pin as a one-line change — it does not reopen this contract.
 
 ### AC-2: The lifecycle scripts are idempotent
 
@@ -239,22 +248,28 @@ other service's ergonomics. One cohesive capability.
 
 - **Unix socket directory**: PostgreSQL defaults its socket to `/tmp` or `/run/postgresql`, which collides across concurrent projects and can fail on a read-only `/run`. Set the socket directory explicitly to the repo-local path in the State section.
 - **Port 5432 is deliberately not used.** Many developer machines run a system Postgres there. Binding 5433 avoids a confusing "connected to the wrong database" failure. Record this reasoning in the port-allocation comment block.
-- **`initdb` locale**: pass an explicit locale/encoding (`--encoding=UTF8 --locale=C`) so the local collation matches Cloud SQL's default and text ordering does not differ between environments.
+- **`initdb` locale**: pass an explicit locale/encoding (`--encoding=UTF8 --locale=C`) so the local collation is deterministic and matches common managed-provider defaults, regardless of which one is eventually chosen — text ordering should not differ between environments.
 - **Nix store binaries are read-only**: the data directory must be outside the store. The repo-local `.postgres/` path handles this.
 - **Stale postmaster PID after an unclean shutdown**: `start` should detect a stale `postmaster.pid` whose process no longer exists and clear it rather than failing with an opaque message.
 - **Do not seed anything.** There is no schema. A seeding entry point belongs to the catalog contract.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
-
-- Which PostgreSQL major version will the production Cloud SQL instance run? The devShell pin must match it (AC-1).
+**Resolved 2026-08-13.** Which PostgreSQL major version should the devShell
+pin to, given production Postgres provider and instance are not yet decided?
+**Answer: pin to PostgreSQL 17** (latest stable major), rather than block on
+an infra decision this contract doesn't need to make. Cloud SQL, Neon, and
+Supabase all support 17 identically over the wire protocol, so the pin holds
+under any eventual choice. Provisioning that production instance is out of
+scope here (see Scope Boundaries) and lands as its own contract once the hub
+has a real consumer for it — this contract only needs local≡production at the
+engine-version level, not a committed hosting decision.
 
 ## Amendments
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.1.0 | 2026-08-13 | Resolved the sole Open Question (pin PostgreSQL 17 rather than block on an undecided production provider — Cloud SQL/Neon/Supabase all support it identically). Reworded Cloud-SQL-specific language to stay provider-neutral, since the production Postgres choice is deferred to a future contract when the hub has a real consumer. Corrected the stale "current behavior" bullet — verified C-385 already removed the Data Connect Postgres references it described. Status: draft → approved. | snorreks (via Claude) |
 
 ## Promotion Lifecycle
 

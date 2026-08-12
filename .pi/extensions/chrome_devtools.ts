@@ -44,15 +44,25 @@ function getRoot(): string {
   return process.env.AIKAMI_ROOT || process.cwd();
 }
 
+/** Set by herdr_adapter.ts for contract-scoped pipeline runs — same offset
+ *  formula as scripts/src/lib/herdr/session.ts's dev-service tabs, so this
+ *  inspects the correct per-contract client instance. 0 otherwise. */
+function getEmulatorPortOffset(): number {
+  return Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+}
+
 function getAppUrl(app: string): string {
   const mode = getMode();
+  const offset = getEmulatorPortOffset();
   const modePorts = PORTS[mode as keyof typeof PORTS];
   if (modePorts && app in modePorts) {
     const port = (modePorts as Record<string, number>)[app];
-    return `http://localhost:${port}`;
+    if (port !== undefined) {
+      return `http://localhost:${port + offset}`;
+    }
   }
   // Fallback: use emulator client
-  return `http://localhost:${PORTS.emulator.client}`;
+  return `http://localhost:${PORTS.emulator.client + offset}`;
 }
 
 /** Check if Chromium is already running with remote debugging. */

@@ -34,8 +34,8 @@ import type {
   RegisterForm,
 } from '@aikami/types';
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
-import { analyticService } from '../analytics/analytics_service.svelte.ts';
 import { isTauri } from '$lib/views/utils/is_tauri';
+import { analyticService } from '../analytics/analytics_service.svelte.ts';
 
 /**
  * Where the desktop app sends users to sign in — a normal page load of the
