@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [],
     "security": {
-      "csp": "default-src 'self' tauri: asset:; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://*.googleapis.com; connect-src 'self' tauri: asset: https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://*.gstatic.com https://identitytoolkit.googleapis.com http://localhost:11434 http://localhost:8188; img-src 'self' data: blob: tauri: asset: https://*.googleapis.com http://localhost:8188; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com",
+      "csp": "default-src 'self' tauri: asset:; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://*.googleapis.com; connect-src 'self' tauri: asset: https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://*.gstatic.com https://identitytoolkit.googleapis.com https://*.cloudfunctions.net https://hub.bearlysleeping.com http://localhost:11434 http://localhost:8188; img-src 'self' data: blob: tauri: asset: https://*.googleapis.com http://localhost:8188; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com",
       "dangerousDisableAssetCspModification": ["style-src"],
       "headers": {
         "Cross-Origin-Opener-Policy": "same-origin",
@@ -37,6 +37,11 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4QzFGREQwQjA0NjIxQ0IKUldUTElVYXcwUDNCaUNTbGllc3ZTengrT3ZJTVM2R0w0QjRFTGV4YVcyLzQ3cUhUZWVmQlZ2eHUK",
       "endpoints": ["https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["aikami"]
+      }
     }
   }
 }

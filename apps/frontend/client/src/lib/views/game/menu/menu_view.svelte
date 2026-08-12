@@ -67,7 +67,7 @@ const { viewModel }: Props = $props();
             {#if viewModel.isSigningIn}
               <span class="loading loading-spinner loading-xs"></span>
             {/if}
-            Sign in with Google
+            {viewModel.isTauri ? 'Sign in' : 'Sign in with Google'}
           </button>
           <p class="mt-2 text-center text-xs text-base-content/40">
             Optional — enables cloud saves

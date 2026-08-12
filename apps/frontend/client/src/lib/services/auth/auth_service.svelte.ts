@@ -1,4 +1,17 @@
 // apps/frontend/client/src/lib/services/api/auth.svelte.ts
+//
+// Desktop (Tauri) social sign-in note: Firebase's authorized-domains check
+// rejects the Tauri webview's origin outright for signInWithPopup/
+// signInWithRedirect, so socialSignIn() detects Tauri and hands off to a
+// device-link flow instead — see _linkDeviceSignIn():
+//   1. Generate a random code, open DEVICE_LINK_URL (a real, authorized
+//      domain) with it in the system browser via the opener plugin.
+//   2. That page (apps/frontend/client/src/routes/link) signs in normally,
+//      then calls the existing completeDeviceHandoff endpoint to mint a
+//      custom token keyed by the code.
+//   3. _awaitDeviceHandoffToken() races a poll loop against a Tauri deep-
+//      link event for that same code — whichever notices first calls
+//      signInWithCustomToken. See src-tauri/src/lib.rs for the Rust half.
 import {
   type AuthProviderId,
   BaseFrontendClass,
@@ -22,6 +35,24 @@ import type {
 } from '@aikami/types';
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import { analyticService } from '../analytics/analytics_service.svelte.ts';
+
+/** Same check used by start_view_model.svelte.ts / menu_view_model.svelte.ts's `isTauri` getters. */
+const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI__' in window;
+
+/**
+ * Where the desktop app sends users to sign in — a normal page load of the
+ * web build, which (unlike the Tauri webview) is a Firebase-authorized
+ * domain, so signInWithPopup/signInWithRedirect work there unmodified.
+ * Kept in sync with `customDomains.production.client` in
+ * scripts/src/lib/deploy/deployment_config.ts.
+ */
+const DEVICE_LINK_URL = 'https://aikami.bearlysleeping.com/link';
+
+/** How often to poll for the token while waiting on the /link browser tab. */
+const DEVICE_LINK_POLL_INTERVAL_MS = 2000;
+
+/** Give up waiting for the browser-tab sign-in after this long. */
+const DEVICE_LINK_TIMEOUT_MS = 5 * 60 * 1000;
 
 export type AuthServiceOptions = BaseFrontendClassOptions & {
   auth: FirebaseAuthServiceInterface;
@@ -248,6 +279,15 @@ export class AuthService
   }
 
   async socialSignIn(provider: FirebaseSignInProviderName): Promise<SocialSignInResponse> {
+    // Firebase's authorized-domains check rejects the Tauri webview's origin
+    // outright for signInWithPopup/signInWithRedirect — this isn't fixable by
+    // configuration. Hand off to a browser tab on a real, authorized domain
+    // instead. See auth_service.svelte.ts's module doc comment for the
+    // mechanism (device-link code + poll/deep-link race).
+    if (isTauri()) {
+      return this._linkDeviceSignIn();
+    }
+
     try {
       const toAuthProviderId = (provider: FirebaseSignInProviderName): AuthProviderId => {
         switch (provider) {
@@ -305,6 +345,153 @@ export class AuthService
         status: 'failed',
       };
     }
+  }
+
+  /**
+   * Desktop sign-in: opens the device-link page in the system browser (a
+   * real, Firebase-authorized domain) and waits for that tab to complete a
+   * normal sign-in and hand back a custom token — via whichever of the
+   * poll/deep-link race in {@link _awaitDeviceHandoffToken} resolves first.
+   */
+  private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
+    try {
+      const code = crypto.randomUUID();
+      const { open } = await import('@tauri-apps/plugin-opener');
+      await open(`${DEVICE_LINK_URL}?code=${code}`);
+
+      const token = await this._awaitDeviceHandoffToken(code);
+      if (!token) {
+        throw new Error('Sign-in timed out — please try again.');
+      }
+
+      const user = await this._auth.signInWithCustomToken(token);
+      if (!user) {
+        throw new Error('Sign-in failed.');
+      }
+      await this.setAuthUser(user);
+
+      return { status: 'exitingUser', payload: user };
+    } catch (error) {
+      this.error('linkDeviceSignIn', error);
+      const errMsg = error instanceof Error ? error.message : 'Sign-in failed';
+      this.showSnackbar({ text: `Sign-in failed: ${errMsg}`, type: 'error' });
+      // Nothing currently reads a 'failed' socialSignIn() payload's fields on
+      // the Tauri path — this shape only exists to satisfy the interface.
+      return {
+        status: 'failed',
+        payload: {
+          code: 'device-handoff-failed',
+          message: errMsg,
+          email: '',
+          accountExists: false,
+        } as unknown as SocialSignInError,
+      };
+    }
+  }
+
+  /**
+   * Races a ~2s poll loop against a Tauri deep-link event, both hitting the
+   * same `poll_device_handoff` callable — whichever asks first wins (the
+   * Firestore doc is deleted on read), the other observes null and stops
+   * quietly. The deep-link half is best-effort: it's reliably instant on
+   * Windows/macOS, but this project ships Linux as an AppImage with no
+   * installer step to register the OS URL-scheme association, so polling is
+   * the mechanism that actually has to work there.
+   */
+  private async _awaitDeviceHandoffToken(code: string): Promise<string | null> {
+    const exchange = async (): Promise<string | null> => {
+      const { customFirebaseSignInToken } = await firebaseFunctionsService.call(
+        'poll_device_handoff',
+        { code },
+      );
+      return customFirebaseSignInToken;
+    };
+
+    const urlMatchesCode = (url: string): boolean => {
+      try {
+        return new URL(url).searchParams.get('code') === code;
+      } catch {
+        return false;
+      }
+    };
+
+    return new Promise<string | null>((resolve) => {
+      let settled = false;
+      const unlisteners: Array<() => void> = [];
+
+      const finish = (token: string | null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearInterval(pollTimer);
+        clearTimeout(timeoutTimer);
+        for (const unlisten of unlisteners) {
+          unlisten();
+        }
+        resolve(token);
+      };
+
+      const onMatchedUrl = (): void => {
+        void exchange()
+          .then(finish)
+          .catch((error) => {
+            this.debug('_awaitDeviceHandoffToken:deep-link-error', { error: String(error) });
+          });
+      };
+
+      const pollTimer = setInterval(async () => {
+        try {
+          const token = await exchange();
+          if (token) {
+            finish(token);
+          }
+        } catch (error) {
+          this.debug('_awaitDeviceHandoffToken:poll-error', { error: String(error) });
+        }
+      }, DEVICE_LINK_POLL_INTERVAL_MS);
+
+      const timeoutTimer = setTimeout(() => finish(null), DEVICE_LINK_TIMEOUT_MS);
+
+      // macOS/iOS/Android: the deep-link plugin's own event, fired natively
+      // by the OS while this instance is already running.
+      void (async () => {
+        try {
+          const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+          const unlisten = await onOpenUrl((urls) => {
+            if (urls.some(urlMatchesCode)) {
+              onMatchedUrl();
+            }
+          });
+          unlisteners.push(unlisten);
+        } catch (error) {
+          this.debug('_awaitDeviceHandoffToken:deep-link-listener-failed', {
+            error: String(error),
+          });
+        }
+      })();
+
+      // Windows/Linux: the deep-link plugin's docs say `onOpenUrl` doesn't
+      // fire natively there — a relaunch instead lands in src-tauri/src/
+      // lib.rs's single-instance closure, which forwards the URL via this
+      // custom event. Registration failing here is non-fatal either way —
+      // the poll loop above is the guaranteed fallback on every platform.
+      void (async () => {
+        try {
+          const { listen } = await import('@tauri-apps/api/event');
+          const unlisten = await listen<{ url: string }>('deep-link-received', (event) => {
+            if (urlMatchesCode(event.payload.url)) {
+              onMatchedUrl();
+            }
+          });
+          unlisteners.push(unlisten);
+        } catch (error) {
+          this.debug('_awaitDeviceHandoffToken:single-instance-listener-failed', {
+            error: String(error),
+          });
+        }
+      })();
+    });
   }
 
   setIsChangingAuthState(value: boolean): void {

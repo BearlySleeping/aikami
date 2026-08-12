@@ -74,7 +74,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
                 class="btn btn-outline btn-lg"
                 onclick={() => viewModel.loginWithGoogle()}
               >
-                Sign In with Google
+                {viewModel.isTauri ? 'Sign In' : 'Sign In with Google'}
               </button>
             {/if}
 

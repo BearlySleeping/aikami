@@ -1,6 +1,8 @@
 // apps/frontend/client/src-tauri/src/lib.rs
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+use tauri::Emitter;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Aikami.", name)
@@ -18,6 +20,16 @@ fn parse_startup_route() -> Option<String> {
         .map(|w| w[1].clone())
 }
 
+/// Picks the `aikami://...` deep link out of a CLI arg list, if present.
+fn extract_deep_link(args: &[String]) -> Option<String> {
+    args.iter().find(|arg| arg.starts_with("aikami://")).cloned()
+}
+
+#[derive(Clone, serde::Serialize)]
+struct DeepLinkPayload {
+    url: String,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
@@ -27,6 +39,22 @@ pub fn run() {
     println!("Tauri startup — parsed route: {:?}", &startup_route);
 
     tauri::Builder::default()
+        // Must be registered FIRST (Tauri requirement). On Windows/Linux, a
+        // deep link launches a *second* OS process with the URL as a CLI
+        // arg — this plugin intercepts that in the already-running instance
+        // instead of letting a second window open, so we forward the URL to
+        // the frontend directly here rather than depending on
+        // tauri-plugin-deep-link's `onOpenUrl` JS event, which its own docs
+        // say only fires natively on macOS/iOS/Android. See auth_service.
+        // svelte.ts's `_awaitDeviceHandoffToken` for the frontend listener
+        // (`deep-link-received`) — polling is still the fallback there
+        // regardless of whether this fires.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(url) = extract_deep_link(&argv) {
+                let _ = app.emit("deep-link-received", DeepLinkPayload { url });
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
             // Create the main window with the requested route baked into the
             // app URL. `WebviewUrl::App` resolves against `build.devUrl` in dev
