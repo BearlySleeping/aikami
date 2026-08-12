@@ -1,21 +1,19 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { execFileSync, execSync } from 'node:child_process';
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-} from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
 import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
+import {
+  commitContractToMain,
+  currentBranch,
+  isolateContractInWorktree,
+  pullContractFromWorktree,
+} from './contract_sync.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
 import {
   buildWorkspaceLabel,
@@ -448,65 +446,61 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
   return [basePrompt, FALLBACK_RECOVERY_PROMPT_HEADER, summary].join('\n');
 };
 
-// ── Sound effects ──────────────────────────────────────────
-
-const SOUNDS_DIR = join(process.cwd(), '.pi/sounds');
-
-const playSound = (name: string): void => {
-  const path = join(SOUNDS_DIR, `${name}.wav`);
-  // Check file size — skip if still a placeholder (0 bytes).
-  try {
-    if (!existsSync(path) || statSync(path).size === 0) {
-      return;
-    }
-  } catch {
-    return;
-  }
-  // Try common Linux audio players. Quote the path (spaces are legal in it).
-  for (const cmd of ['aplay', 'paplay', 'ffplay -nodisp -autoexit', 'play']) {
-    try {
-      execSync(`${cmd} '${path}'`, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 3000,
-      });
-      return;
-    } catch {
-      // Try next player.
-    }
-  }
-};
-
 // ── Merge helpers ────────────────────────────────────────────
 
 const syncMainOnMerge = (repoRoot: string): void => {
+  const branch = currentBranch(repoRoot);
+  if (branch !== 'main' && branch !== 'master') {
+    // Root mode (`--root`) leaves the checkout on contract/C-XXX after a
+    // merge. Never surprise the user by switching their main working tree
+    // — print the exact commands instead of silently doing nothing.
+    console.log(
+      `\nℹ️  Skipped main sync — repo is on \`${branch ?? 'a detached HEAD'}\` (not main).`,
+    );
+    console.log('   After the merge, sync manually:');
+    console.log('     git checkout main && git pull --ff-only origin main\n');
+    return;
+  }
+
+  // 🔴 `git pull --ff-only` ABORTS when a locally-modified file would be
+  // overwritten by the merge. Detect that up front and name the paths — the
+  // old code let the pull throw into a generic warn, so the user only found
+  // out when their own `git pull` failed minutes later with no context.
+  let dirty = '';
   try {
-    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+    dirty = execSync('git status --porcelain --untracked-files=no', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: repoRoot,
-      timeout: 5000,
+      timeout: 10_000,
     }).trim();
-    if (branch === 'main' || branch === 'master') {
-      execSync('git pull --ff-only origin main', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: repoRoot,
-        timeout: 30000,
-      });
-      console.log('\n📥 Pulled latest main\n');
-    } else {
-      // Root mode (`--root`) leaves the checkout on contract/C-XXX after a
-      // merge. Never surprise the user by switching their main working tree
-      // — print the exact commands instead of silently doing nothing.
-      console.log(`\nℹ️  Skipped main sync — repo is on \`${branch}\` (not main).`);
-      console.log('   After the merge, sync manually:');
-      console.log('     git checkout main && git pull --ff-only origin main\n');
+  } catch {
+    // status failed — fall through and let the pull report the real problem.
+  }
+
+  if (dirty) {
+    console.log('\n⚠️  Skipped main sync — the root checkout has uncommitted changes:\n');
+    for (const line of dirty.split('\n').slice(0, 10)) {
+      console.log(`     ${line}`);
     }
+    console.log('\n   `git pull --ff-only` would abort on these. Commit or stash, then:');
+    console.log('     git pull --ff-only origin main\n');
+    return;
+  }
+
+  try {
+    execSync('git pull --ff-only origin main', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: repoRoot,
+      timeout: 30000,
+    });
+    console.log('\n📥 Pulled latest main\n');
   } catch (e: unknown) {
     console.warn(
-      `⚠️  Could not sync main: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+      `⚠️  Could not sync main: ${e instanceof Error ? e.message.slice(0, 300) : String(e)}`,
     );
+    console.warn('   Sync manually: git pull --ff-only origin main\n');
   }
 };
 
@@ -518,9 +512,6 @@ const buildTerminalNotification = (options: {
 }): string => {
   const pr = options.prUrl ? ` PR: ${options.prUrl}` : '';
   const branch = options.branch ? ` Branch: \`${options.branch}\`.` : '';
-  const cleanupHint =
-    'Workspace cleanup is manual — the user runs `bun run workspace:cleanup` ' +
-    '(use `--pr-merged` after a merge) once they are done reading.';
   const header =
     options.stage === 'merged'
       ? '✅ Pipeline complete — PR merged.'
@@ -533,10 +524,19 @@ const buildTerminalNotification = (options: {
     '',
     'The orchestrator has finished — no further pipeline work will run. Read the',
     'summary above and close this tab whenever you are ready.',
-    cleanupHint,
-    '🔴 Do NOT run `bun run workspace:cleanup`, `herdr worktree remove`, or any',
-    'cleanup command — this tab IS the pipeline workspace; cleanup would kill',
-    'your own session. The workspace is preserved for you to inspect.',
+    '',
+    '### Cleanup',
+    'Run `/cleanup` here to tear down the *other* finished workspaces. It is safe:',
+    '`workspace:cleanup` refuses to remove the worktree it is running inside, so',
+    'this tab survives — it will simply be reported as skipped.',
+    '',
+    'This tab IS the pipeline workspace, so it can only be removed after you close',
+    'it. From the repo root afterwards:',
+    '```',
+    `bun run workspace:cleanup${options.stage === 'merged' ? ' --pr-merged' : ''}`,
+    '```',
+    '🔴 Never pass `--include-self` from this tab, and never run `herdr worktree',
+    'remove` on this workspace by hand — either would kill your own session.',
     '',
     'Reply with a single line acknowledging completion (no commands).',
   ].join('\n');
@@ -862,6 +862,34 @@ export const runContractPipeline = async (options: {
         const attempt = manifest.attempts.filter((e) => e.stage === stage).length + 1;
         const startTime = new Date().toISOString();
         const wPath = adapter.getWorkspacePath();
+
+        // ── Contract isolation — BEFORE the agent runs, for EVERY stage ──
+        // Seed the worktree with the root's contract and (re-)apply
+        // skip-worktree so the file can never enter the PR diff.
+        //
+        // Must not be gated on the critique stage: `--source path` runs (a
+        // hand-authored contract) skip both authoring stages, so a
+        // critique-only gate left those runs unisolated — the implementer's
+        // Execution Report rode the PR branch and the root checkout was left
+        // dirty, conflicting on the next `git pull` after the merge.
+        //
+        // Must run BEFORE runStage: the implementer's very first act is to
+        // read and append to the contract, and the post-stage `commitAll`
+        // (`add -A`) would stage it if the bit were not already set.
+        //
+        // Idempotent, and re-applied per stage because a checkout/reset
+        // inside the worktree clears the skip-worktree bit.
+        if (wPath) {
+          const isolated = isolateContractInWorktree({
+            repoRoot: options.repoRoot,
+            worktreePath: wPath,
+            contractPath: manifest.contractPath,
+          });
+          if (!isolated.ok) {
+            console.warn(`⚠️  ${isolated.message}`);
+          }
+        }
+
         const cwdForGit =
           wPath && (stage === 'implement' || stage === 'verify') ? wPath : options.repoRoot;
         const before = captureGitState(cwdForGit);
@@ -916,16 +944,14 @@ export const runContractPipeline = async (options: {
             }
           }
         }
-        if (
-          wPath &&
-          (stage === 'write_contract' || stage === 'critique') &&
-          existsSync(manifest.contractPath)
-        ) {
-          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
-          try {
-            mkdirSync(dirname(wcp), { recursive: true });
-            copyFileSync(manifest.contractPath, wcp);
-          } catch {}
+        // The writer may have renamed the contract (placeholder → real slug),
+        // so re-isolate the new path before the next stage reads it.
+        if (wPath && stage === 'write_contract' && outcome.result.status === 'passed') {
+          isolateContractInWorktree({
+            repoRoot: options.repoRoot,
+            worktreePath: wPath,
+            contractPath: manifest.contractPath,
+          });
         }
 
         // Postcondition validation — catches agents crossing role boundaries.
@@ -991,51 +1017,35 @@ export const runContractPipeline = async (options: {
         });
         if (stage === 'critique' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });
-          // Sync the approved contract to the worktree for reading, then
-          // skip-worktree it so it's never committed to the PR branch.
-          // The contract only lives on main — never in PR branches.
-          if (wPath && existsSync(manifest.contractPath)) {
-            try {
-              const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
-              mkdirSync(dirname(wcp), { recursive: true });
-              copyFileSync(manifest.contractPath, wcp);
-              const contractRelPath = relative(options.repoRoot, manifest.contractPath);
-              runGit(`update-index --skip-worktree '${contractRelPath}'`, { cwd: wPath });
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: 'Contract synced to worktree (skip-worktree).',
-              });
-            } catch (syncErr: unknown) {
-              const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-              console.warn(`⚠️  Contract sync failed (non-fatal): ${msg.slice(0, 200)}`);
-            }
+          const approved = commitContractToMain({
+            repoRoot: options.repoRoot,
+            contractPath: manifest.contractPath,
+            message: `docs(contracts): approve ${manifest.contractId}`,
+          });
+          pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: approved.message });
+          if (!approved.ok) {
+            console.warn(`⚠️  ${approved.message}`);
           }
-          // Also commit + push the approved contract to main.
-          // After this, worktrees branching from main have the contract.
-          // Implementer/verifier changes stay in the worktree → PR → main.
-          try {
-            const contractRelPath = relative(options.repoRoot, manifest.contractPath);
-            runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
-            runGit(`commit --no-verify -m "docs(contracts): approve ${manifest.contractId}"`, {
-              cwd: options.repoRoot,
-              env: {
-                CONTRACT_PIPELINE_WORKTREE: '1',
-                GIT_AUTHOR_NAME: 'Pi Agent',
-                GIT_AUTHOR_EMAIL: 'agent@pi.internal',
-                GIT_COMMITTER_NAME: 'Pi Agent',
-                GIT_COMMITTER_EMAIL: 'agent@pi.internal',
-              },
-            });
-            runGit('push origin main', { cwd: options.repoRoot });
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: 'Approved contract pushed to main.',
-            });
-          } catch (pushErr: unknown) {
-            const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
-            console.warn(`⚠️  Push contract to main failed (non-fatal): ${msg.slice(0, 200)}`);
+        }
+
+        // ── Contract ownership: the contract lives on main, never in a PR ──
+        // Implementer/verifier agents append their Execution Report and AC
+        // evidence to the contract inside the worktree, where the file is
+        // skip-worktree'd (see isolateContractInWorktree above). Carry that
+        // edit back to root and push it to main on its own commit, so the PR
+        // diff stays code-only and `git pull` after a merge never conflicts
+        // on the contract file.
+        if (wPath && (stage === 'implement' || stage === 'verify') && result.status === 'passed') {
+          const pulled = pullContractFromWorktree({
+            repoRoot: options.repoRoot,
+            worktreePath: wPath,
+            contractPath: manifest.contractPath,
+            contractId: manifest.contractId,
+            stage,
+          });
+          pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: pulled.message });
+          if (!pulled.ok) {
+            console.warn(`⚠️  ${pulled.message}`);
           }
         }
 
@@ -1245,9 +1255,6 @@ export const runContractPipeline = async (options: {
             reviewDecisionPath: reviewPath,
             yolo: isYolo,
           });
-          if (!isYolo) {
-            playSound('pipeline-needs-input');
-          }
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
@@ -1494,9 +1501,6 @@ export const runContractPipeline = async (options: {
       const s = formatBlockedSummary(manifest);
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
-      playSound('pipeline-blocked');
-    } else if (manifest.currentStage === 'merged' || manifest.currentStage === 'pr_created') {
-      playSound('pipeline-complete');
     }
 
     // Terminal workspace handling — one funnel for merged / pr_created /
