@@ -25,6 +25,7 @@ import type {
 import { chatService } from '../chat/chat.svelte';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte';
 import { gameSaveService } from './game_save_service.svelte.ts';
+import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
 /** Options for constructing a {@link SessionService}. */
@@ -451,7 +452,6 @@ class SessionService
 
     // Trigger a game save to the checkpoint slot
     try {
-      const { buildSaveMapBlock, getCurrentMapName } = await import('./save_map_block');
       const [map, mapName] = await Promise.all([buildSaveMapBlock(), getCurrentMapName()]);
       await gameSaveService.saveGame({ slotId: saveSlotId, campaignId, mapName, map });
     } catch (error) {
