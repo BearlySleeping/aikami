@@ -754,6 +754,9 @@ export class GameOverlayService
         this.warn('autosave:skipped-no-map-block', {
           hint: 'Map routing unavailable (engine not on a map yet or position unknown) — skipping this auto-save.',
         });
+        // Reset the 'saving' state set above — otherwise the overlay would
+        // stay stuck on 'saving' forever (no saved/error branch runs).
+        this.autoSaveStatus = 'idle';
         return;
       }
 

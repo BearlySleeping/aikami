@@ -1418,13 +1418,42 @@ describe('loadTilemap: aikami terrain + elevation channels (C-378)', () => {
   });
 
   it('parses the layer band property (defaults to ground)', async () => {
-    const raw = createTestMap();
-    const layers = raw.layers as Record<string, unknown>[];
-    layers[0].properties = [{ name: 'band', type: 'string', value: 'decor' }];
-    const fetchMock = mockFetch(raw);
-    const tilemap = await loadTilemap({ url: 'test://band-map.json', fetch: fetchMock });
+    const warnSpy = spyOn(logger, 'warn');
+    try {
+      // Layer without a band property → documented default 'ground' (the
+      // parsed struct leaves the optional field undefined; consumers apply
+      // `band ?? 'ground'`).
+      const noBand = await loadTilemap({
+        url: 'test://band-map.json',
+        fetch: mockFetch(createTestMap()),
+      });
+      expect(noBand.layers[0].band ?? 'ground').toBe('ground');
 
-    expect(tilemap.layers[0].band).toBe('decor');
+      // Unrecognized band string → warn + band left undefined.
+      const invalidRaw = createTestMap();
+      const invalidLayers = invalidRaw.layers as Record<string, unknown>[];
+      invalidLayers[0].properties = [{ name: 'band', type: 'string', value: 'skybox' }];
+      const invalidTilemap = await loadTilemap({
+        url: 'test://band-map-invalid.json',
+        fetch: mockFetch(invalidRaw),
+      });
+      expect(invalidTilemap.layers[0].band).toBeUndefined();
+      const invalidCall = warnSpy.mock.calls.find((args) => args[0] === 'loadTilemap:invalid-band');
+      expect(invalidCall).toBeDefined();
+      expect(invalidCall?.[1]).toMatchObject({ layer: 'ground', band: 'skybox' });
+
+      // Explicit 'decor' band still parses.
+      const raw = createTestMap();
+      const layers = raw.layers as Record<string, unknown>[];
+      layers[0].properties = [{ name: 'band', type: 'string', value: 'decor' }];
+      const tilemap = await loadTilemap({
+        url: 'test://band-map-decor.json',
+        fetch: mockFetch(raw),
+      });
+      expect(tilemap.layers[0].band).toBe('decor');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
@@ -1521,28 +1550,30 @@ describe('buildCollisionGrid: terrain-channel path (C-378 AC-2)', () => {
     expect(withAutotile?.[8]).toBe(true); // water solid
   });
 
-  it('unknown terrain ids fall back to base terrain walkability + warn once', () => {
+  it('unknown terrain ids fall back to base terrain walkability + warn once (batched)', () => {
     const warnSpy = spyOn(logger, 'warn');
     try {
       const tilemap: TilemapData = {
-        width: 2,
+        width: 3,
         height: 1,
         tilewidth: 32,
         tileheight: 32,
         tilesets: [],
-        terrain: ['grass', 'mystery'],
-        layers: [{ name: 'ground', width: 2, height: 1, data: [1, 1], visible: true }],
+        terrain: ['grass', 'mystery_a', 'mystery_b'],
+        layers: [{ name: 'ground', width: 3, height: 1, data: [1, 1, 1], visible: true }],
       };
 
       const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig());
 
-      expect(grid).toBeUndefined(); // both fall back to walkable grass
-      const call = warnSpy.mock.calls.find(
+      expect(grid).toBeUndefined(); // all fall back to walkable grass
+      // The two unknowns are batched into ONE warn — never one per cell
+      // (warn-once batching, C-376).
+      const warnCalls = warnSpy.mock.calls.filter(
         (args) => args[0] === 'buildCollisionGrid:unknown-terrain',
       );
-      expect(call).toBeDefined();
-      const payload = call?.[1] as { terrains?: string[] };
-      expect(payload.terrains).toEqual(['mystery']);
+      expect(warnCalls.length).toBe(1);
+      const payload = warnCalls[0]?.[1] as { terrains?: string[] };
+      expect(payload.terrains).toEqual(['mystery_a', 'mystery_b']);
     } finally {
       warnSpy.mockRestore();
     }
@@ -1607,6 +1638,41 @@ describe('buildCollisionGrid: solidityLayers honoured with decor/overhead (C-378
     // with every cell walkable — no cell is blocked by the overhead layer.
     expect(grid).toBeDefined();
     expect(grid?.every((v) => v === false)).toBe(true);
+  });
+
+  it('without a terrain channel, solidityLayers keeps overhead tiles non-blocking (band-filtered path)', () => {
+    // NO terrain channel — the legacy GID path with the solidityLayers
+    // filter. Solid roof GIDs live ONLY in the overhead band; solidityLayers
+    // is restricted to 'ground', so the overhead tiles must not contribute
+    // while eligible ground data follows the manifest collision behavior.
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        { name: 'ground', width: 3, height: 1, data: [1, 13, 1], visible: true },
+        {
+          name: 'overhead',
+          width: 3,
+          height: 1,
+          data: [13, 13, 13], // roof everywhere — must NOT block
+          band: 'overhead',
+          visible: true,
+        },
+        { name: 'collision', width: 3, height: 1, data: [0, 0, 0], visible: true },
+      ],
+    };
+
+    const grid = buildCollisionGrid(tilemap, makeTerrainPackConfig(), {
+      solidityLayers: ['ground'],
+    });
+    // The explicit collision layer exists → grid materialized. The overhead
+    // roof tiles are filtered out; the ground layer's middle cell (GID 13,
+    // solid roof tile) blocks.
+    expect(grid).toBeDefined();
+    expect(grid).toEqual([false, true, false]);
   });
 });
 

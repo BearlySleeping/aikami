@@ -71,7 +71,15 @@ const H = ATLAS_ROWS * TILE; // 256
  */
 const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
   const terrains = readManifestTerrains();
-  let nextCell = Object.keys(frames).length; // first free cell after baked frames
+  // Derive the first free cell from the OCCUPIED [col,row] coordinates —
+  // never Object.keys(frames).length: a sparse baked-frames table (a tile
+  // without a frame leaves a gap) would start terrain allocation on a cell
+  // that may already be occupied by a higher-GID baked frame, silently
+  // overwriting it in the atlas. Start after the highest occupied index.
+  let nextCell = 0;
+  for (const [col, row] of Object.values(frames)) {
+    nextCell = Math.max(nextCell, row * ATLAS_COLS + col + 1);
+  }
   for (const terrain of terrains) {
     if (terrain.wang !== 'corner16') {
       continue;

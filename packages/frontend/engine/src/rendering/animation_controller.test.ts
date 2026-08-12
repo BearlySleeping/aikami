@@ -47,7 +47,7 @@ describe('AnimationController — walk cycle vs stale render reads (C-378)', () 
     expect(controller.isIdle).toBe(false);
   });
 
-  it('locks to idle frame 0 only after a sustained stop', () => {
+  it('locks to idle frame 0 exactly at the six-frame grace threshold', () => {
     const controller = new AnimationController();
     controller.update({ x: 0, y: 0 });
     for (let i = 1; i <= 10; i++) {
@@ -55,17 +55,54 @@ describe('AnimationController — walk cycle vs stale render reads (C-378)', () 
     }
     expect(controller.isIdle).toBe(false);
 
-    // One or two zero-delta frames (stale reads) keep the walk state.
+    // Two zero-delta frames (stale reads) keep the walk state.
     controller.update({ x: 20, y: 0 });
     controller.update({ x: 20, y: 0 });
     expect(controller.isIdle).toBe(false);
 
-    // A sustained stop (>= IDLE_GRACE_FRAMES = 6) locks to idle.
-    for (let i = 0; i < 6; i++) {
+    // Three more zero-delta frames → 5 consecutive, still BELOW the
+    // IDLE_GRACE_FRAMES=6 threshold.
+    for (let i = 0; i < 3; i++) {
       controller.update({ x: 20, y: 0 });
     }
+    expect(controller.isIdle).toBe(false);
+
+    // The SIXTH consecutive zero-delta frame crosses the threshold.
+    controller.update({ x: 20, y: 0 });
     expect(controller.isIdle).toBe(true);
     expect(controller.getFrameColumn(9)).toBe(0);
+  });
+
+  it('reset clears the consecutive-idle counter and restores the full grace period', () => {
+    const controller = new AnimationController();
+    controller.update({ x: 0, y: 0 });
+    controller.update({ x: 2, y: 0 }); // moving
+
+    // Build a partial idle sequence — 4 zero-delta frames (below the
+    // 6-frame grace) so the counter sits at 4 and the controller is NOT
+    // idle yet. Without a reset, only 2 more zero-delta frames would lock
+    // it idle.
+    for (let i = 0; i < 4; i++) {
+      controller.update({ x: 2, y: 0 });
+    }
+    expect(controller.isIdle).toBe(false);
+
+    // reset() mid-idle-sequence: the consecutive-idle counter must be
+    // cleared, restoring the FULL grace period for the next movement cycle.
+    controller.reset();
+    controller.update({ x: 10, y: 10 }); // records the new position
+    controller.update({ x: 12, y: 10 }); // moving again — active
+
+    // Five zero-delta frames after reset → still active (5 < 6).
+    for (let i = 0; i < 5; i++) {
+      controller.update({ x: 12, y: 10 });
+    }
+    expect(controller.isIdle).toBe(false);
+    expect(controller.getFrameColumn(9)).toBe(0);
+
+    // The sixth zero-delta frame crosses the restored threshold.
+    controller.update({ x: 12, y: 10 });
+    expect(controller.isIdle).toBe(true);
   });
 
   it('facing direction follows the last nonzero movement vector', () => {

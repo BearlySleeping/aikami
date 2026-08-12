@@ -150,6 +150,30 @@ const EMBERWATCH_MAP_FILES = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * C-378: derives the 16 mask-order frame names for a corner16 terrain from
+ * its `frameBase` (mask 0). Validates the `_0.png` naming contract BEFORE
+ * deriving — a frameBase that does not end in `_0.png` would silently
+ * produce wrong mask names (the suffix replace would no-op), so invalid
+ * naming must fail explicitly instead of generating garbage names.
+ */
+const terrainMaskFrameNames = (terrain: { name?: string; frameBase?: string }): string[] => {
+  const frameBase = terrain.frameBase;
+  if (!frameBase) {
+    throw new Error(`terrain "${terrain.name}" is missing frameBase`);
+  }
+  if (!/_0\.png$/.test(frameBase)) {
+    throw new Error(
+      `terrain "${terrain.name}" frameBase "${frameBase}" must follow the _0.png naming contract (mask-0 frame)`,
+    );
+  }
+  const names: string[] = [frameBase];
+  for (let mask = 1; mask < 16; mask++) {
+    names.push(frameBase.replace(/_0\.png$/, `_${mask}.png`));
+  }
+  return names;
+};
+
 /** Discovers every pack directory under static/content-packs/*. */
 const listPackDirs = (): string[] => {
   const entries = readdirSync(CONTENT_PACKS_ROOT, { withFileTypes: true });
@@ -368,10 +392,8 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
     const terrainFrameNames = new Set<string>();
     for (const terrain of manifest.terrains ?? []) {
       if (terrain.wang === 'corner16' && terrain.frameBase) {
-        for (let mask = 0; mask < 16; mask++) {
-          terrainFrameNames.add(
-            mask === 0 ? terrain.frameBase : terrain.frameBase.replace(/_0\.png$/, `_${mask}.png`),
-          );
+        for (const name of terrainMaskFrameNames(terrain)) {
+          terrainFrameNames.add(name);
         }
       }
     }
@@ -404,10 +426,12 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
       if (terrain.wang !== 'corner16' || !terrain.frameBase) {
         continue;
       }
-      for (let mask = 0; mask < 16; mask++) {
-        const name =
-          mask === 0 ? terrain.frameBase : terrain.frameBase.replace(/_0\.png$/, `_${mask}.png`);
-        expect(frames.has(name), `terrain ${terrain.name} mask ${mask} frame ${name}`).toBe(true);
+      const names = terrainMaskFrameNames(terrain);
+      for (let mask = 0; mask < names.length; mask++) {
+        expect(
+          frames.has(names[mask]),
+          `terrain ${terrain.name} mask ${mask} frame ${names[mask]}`,
+        ).toBe(true);
       }
     }
   });

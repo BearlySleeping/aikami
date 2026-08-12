@@ -280,7 +280,10 @@ const devActions = [
       // incl. wall entities) that the boot cannot restore (C-378).
       const { gameOverlayService } = await import('$services');
       await gameOverlayService.saveGame();
-      alert('Game Saved! Position + items captured. Use "Load Last Save" to restore.');
+      // C-378: surface the service's ACTUAL result — saveGame reports
+      // 'Save failed (map unavailable)' / 'Save failed' on handled failures,
+      // so a hardcoded success string would lie to the developer.
+      alert(gameOverlayService.saveMessage ?? 'Save failed');
     },
   },
   {

@@ -635,6 +635,12 @@ const emit = (mapName: string, m: MapData): void => {
     overhead[idx(m, c, r)] = gid;
   }
 
+  // C-378 AC-8: a map whose terrain channel is ALL empty ids (interior
+  // maps like the inn — no outdoor terrain at all) OMITS the terrain
+  // property entirely. A present-but-empty channel would flip the renderer
+  // into the autotiled terrain path, replacing the baked ground with a
+  // full grass underlay; interior maps must keep the baked-GID ground path.
+  const hasAnyTerrain = terrainChannel.some((id) => id !== '');
   const mapJson = {
     compressionlevel: -1,
     width: m.width,
@@ -648,7 +654,7 @@ const emit = (mapName: string, m: MapData): void => {
     // C-378: additive semantic channels. `elevation` is reserved (all 0).
     aikami: {
       formatVersion: 1,
-      terrain: terrainChannel,
+      ...(hasAnyTerrain ? { terrain: terrainChannel } : {}),
       elevation: new Array(m.width * m.height).fill(0),
     },
     layers: [

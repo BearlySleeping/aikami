@@ -342,7 +342,9 @@ export const isPlayerSpawnBlocked = (pixelX: number, pixelY: number): boolean =>
  * Scans outward in square rings (ring radius in tiles, up to 20) from the
  * blocked point and returns the first unblocked position — the same scan
  * LOAD_MAP has always used for portal spawns. Falls back to the map
- * centre when no walkable tile is found.
+ * centre when no walkable tile is found AND the centre itself is walkable
+ * (a blocked centre — solid prop/terrain at the map middle — keeps the
+ * original x/y instead of teleporting the player onto a solid cell).
  *
  * @param x - Candidate X position in world pixels.
  * @param y - Candidate Y position in world pixels.
@@ -362,7 +364,6 @@ export const clampSpawnToWalkable = (
     return { x, y };
   }
 
-  const tileSize = 32;
   const centerX = (bounds?.width ?? 0) / 2;
   const centerY = (bounds?.height ?? 0) / 2;
   let clampedX = x;
@@ -375,8 +376,8 @@ export const clampSpawnToWalkable = (
         if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
           continue;
         }
-        const tx = x + dx * tileSize;
-        const ty = y + dy * tileSize;
+        const tx = x + dx * TILE_SIZE;
+        const ty = y + dy * TILE_SIZE;
         if (!isBlocked(tx, ty)) {
           clampedX = tx;
           clampedY = ty;
@@ -387,8 +388,15 @@ export const clampSpawnToWalkable = (
   }
 
   if (!found) {
-    clampedX = centerX;
-    clampedY = centerY;
+    // Fall back to the map centre ONLY when it is actually walkable — a
+    // blocked centre (solid prop/terrain in the middle of the map) must
+    // not teleport the player onto it. When the centre is blocked, retain
+    // the original x/y instead: the caller's next restore/autosave cycle
+    // re-clamps, and teleporting to a KNOWN-solid tile is never better.
+    if (!isBlocked(centerX, centerY)) {
+      clampedX = centerX;
+      clampedY = centerY;
+    }
   }
   return { x: clampedX, y: clampedY };
 };

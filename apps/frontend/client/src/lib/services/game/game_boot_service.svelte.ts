@@ -1007,6 +1007,25 @@ class GameBootService
           hint: 'Save carries no map block — starting fresh on the starting map.',
         });
         await this._spawnFreshStart(input, generation);
+        // Check generation after fresh spawn
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        // Preserve the player's ECS state (appearance, combat stats) while
+        // the fresh starting map governs the position: RESTORE_PLAYER runs
+        // AFTER the map is spawned so its spawn-clamping applies against the
+        // freshly loaded collision grid — a stale saved position is clamped
+        // onto a walkable tile of the starting map instead of freezing the
+        // player on a solid cell (C-378). The next auto-save then writes a
+        // proper v3 envelope with map routing.
+        await gameEngineService.restorePlayer(ecsSnapshot);
+        // Check generation after async restore
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        this.debug('stage:hydrating_snapshot:v3-without-map-restored', {
+          bytes: input.pendingSavePayload.length,
+        });
       } else {
         // ── Legacy v2/pre-v2 save without map routing ──
         // Best-effort full-world restore (no tilemap/collision/portals can

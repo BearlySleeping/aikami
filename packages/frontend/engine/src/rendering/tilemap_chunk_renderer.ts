@@ -7,6 +7,7 @@ import {
   MeshGeometry,
   Shader,
   type Texture,
+  type TextureSource,
   UniformGroup,
 } from 'pixi.js';
 import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
@@ -164,9 +165,7 @@ export type TilemapChunkRendererOptions = {
    * caller builds this resolver from the pack's atlas spritesheet. When
    * absent, terrain frame layers render nothing (degraded but safe).
    */
-  frameUvResolver?: (
-    frame: string,
-  ) => { u0: number; v0: number; u1: number; v1: number } | undefined;
+  frameUvResolver?: FrameUvResolver;
 };
 
 /**
@@ -355,26 +354,36 @@ type TilesetEntry = TilemapTileset & {
 /**
  * Builds tileset lookup entries from the tilemap's tileset array.
  *
- * C-378 AC-5: the half-texel UV inset is DELETED — the atlas packer now
- * extrudes a 1px border around every frame, so exact UV rects
- * (`px / imagewidth`) sample the frame's own edge pixels and never bleed.
+ * C-378 AC-5: exact UV rects are used only for tilesets CONFIRMED to have
+ * atlas extrusion (Tiled `spacing`/`margin` > 0 — the emberwatch atlas
+ * packs at 34px pitch with a 1px extruded border). Tight-packed tilesets
+ * (spacing 0 AND margin 0, no extrusion) get a half-texel inset so the
+ * sampler never bleeds into an adjacent frame.
  */
 const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry[] => {
   return tilesets.map((ts) => {
     const { tilewidth, tileheight, columns, spacing = 0, margin = 0, imagewidth, imageheight } = ts;
+
+    // C-378 AC-5: exact UV rects are safe ONLY when the atlas layout
+    // guarantees a gutter or extrusion border around every frame (Tiled
+    // `spacing`/`margin` > 0 — e.g. the emberwatch atlas: 34px pitch with
+    // a 1px extruded border). A tight-packed tileset (spacing 0 AND
+    // margin 0 — frames flush edge-to-edge, no extrusion) bleeds into the
+    // adjacent frame at the boundary; the half-texel inset keeps the
+    // sampler inside the frame's own pixels.
+    const extruded = spacing > 0 || margin > 0;
+    const inset = extruded ? 0 : 0.5;
 
     const getUvRect = (localId: number): { u0: number; v0: number; u1: number; v1: number } => {
       const col = localId % columns;
       const row = Math.floor(localId / columns);
       const px = margin + col * (tilewidth + spacing);
       const py = margin + row * (tileheight + spacing);
-      // Exact UVs — no half-texel inset (C-378 AC-5). Extruded frames make
-      // adjacent-atlas sampling safe at the boundary.
       return {
-        u0: px / imagewidth,
-        v0: py / imageheight,
-        u1: (px + tilewidth) / imagewidth,
-        v1: (py + tileheight) / imageheight,
+        u0: (px + inset) / imagewidth,
+        v0: (py + inset) / imageheight,
+        u1: (px + tilewidth - inset) / imagewidth,
+        v1: (py + tileheight - inset) / imageheight,
       };
     };
 
@@ -412,6 +421,19 @@ const _resolveGid = (
 };
 
 /**
+ * C-378: a frame NAME → UV rect resolver bound to ONE atlas source.
+ *
+ * The UV rects are computed against {@link source}; chunk sampling must
+ * bind the SAME texture source or the rects land on the wrong pixels.
+ */
+export type FrameUvResolver = {
+  /** Atlas texture source the UV rects are computed against. */
+  source: TextureSource;
+  /** Resolves a frame name to an exact UV rect in {@link source}. */
+  resolve: (frame: string) => { u0: number; v0: number; u1: number; v1: number } | undefined;
+};
+
+/**
  * Options for building a single chunk.
  */
 type BuildChunkOptions = {
@@ -438,9 +460,7 @@ type BuildChunkOptions = {
   /** Shared Shader for all chunks of this layer. */
   shader: Shader;
   /** C-378: frame-name → UV resolver for terrain layers. */
-  frameUvResolver?: (
-    frame: string,
-  ) => { u0: number; v0: number; u1: number; v1: number } | undefined;
+  frameUvResolver?: FrameUvResolver;
 };
 
 /**
@@ -486,7 +506,7 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
       if (!frame || !frameUvResolver) {
         return undefined;
       }
-      return frameUvResolver(frame);
+      return frameUvResolver.resolve(frame);
     }
     const gid = layer.data?.[index] ?? 0;
     if (gid === 0) {

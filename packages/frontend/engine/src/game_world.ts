@@ -36,7 +36,7 @@ import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
-import { type FrameUvRect, renderTilemap } from './systems/tilemap_render_system.ts';
+import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
 
 // Vite ?worker&type=module import for the bootstrap entry point.
@@ -456,6 +456,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * UBO, keeping the tint deterministic across runs.
    */
   private _screenshotTintSampled = false;
+
+  /**
+   * C-378 AC-9: the last game hour reported by the worker. When it
+   * changes, a screenshot tint frozen from the previous hour's UBO is
+   * stale — the sample latch is reset so the next ticker frame re-samples
+   * from the fresh UBO (the visual runner waits for the hour-confirmed
+   * flag before capturing, so the re-sample lands on the requested hour,
+   * never the boot hour).
+   */
+  private _lastReportedGameHour: number | undefined;
 
   /**
    * Cached result of the `screenshot=true` URL check — computed once, since
@@ -1178,6 +1188,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (ubo) {
         this._environmentUbo = ubo;
       }
+      // C-378 AC-9: the worker applied a new game hour — a screenshot tint
+      // frozen from the previous hour's UBO no longer matches. Reset the
+      // sample latch so the ticker re-samples once the requested hour's UBO
+      // is in place (the visual runner waits for the hour-confirmed flag,
+      // so the re-sample lands on the requested hour, not the boot hour).
+      // Outside screenshot mode the latch is never set — no-op.
+      const reportedHour = envData.gameHour as number;
+      if (this._lastReportedGameHour !== undefined && this._lastReportedGameHour !== reportedHour) {
+        this._screenshotTintSampled = false;
+      }
+      this._lastReportedGameHour = reportedHour;
       // Update the weather overlay with the fresh UBO data (C-213)
       if (ubo && this._weatherOverlay) {
         this._weatherOverlay.update(ubo);
@@ -1366,31 +1387,46 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * fallback semantics. Missing frames resolve to the pack's fallbackTile
    * (never a blank map, never a URL).
    *
+   * The returned resolver exposes the atlas {@link FrameUvResolver.source}
+   * its UV rects are computed against, so the renderer can verify the
+   * sampled tileset texture is the same source before emitting terrain
+   * chunks (a mismatch degrades to the baked ground fallback instead of
+   * garbage UV sampling).
+   *
    * Returns undefined when no prop resolver is wired (atlas not preloaded)
-   * — the renderer then degrades to the legacy baked-GID path.
+   * or the probe frame cannot resolve — the renderer then degrades to the
+   * legacy baked-GID path.
    */
-  private _buildFrameUvResolver(): ((frame: string) => FrameUvRect | undefined) | undefined {
-    if (!this._propFrameResolver) {
+  private _buildFrameUvResolver(probeFrame: string | undefined): FrameUvResolver | undefined {
+    if (!this._propFrameResolver || !probeFrame) {
       return undefined;
     }
-    return (frame: string) => {
-      const resolution = this._propFrameResolver?.(frame);
-      if (!resolution) {
-        return undefined;
-      }
-      const tex = resolution.texture;
-      // UV rect from the texture's frame rect. PixiJS Texture.frame is the
-      // atlas-space rect in pixels; divide by the source size for [0,1] UVs.
-      const f = tex.frame;
-      const source = tex.source;
-      const sourceW = source.width || 1;
-      const sourceH = source.height || 1;
-      return {
-        u0: f.x / sourceW,
-        v0: f.y / sourceH,
-        u1: (f.x + f.width) / sourceW,
-        v1: (f.y + f.height) / sourceH,
-      };
+    const probe = this._propFrameResolver(probeFrame);
+    if (!probe) {
+      return undefined;
+    }
+    const source = probe.texture.source;
+    return {
+      source,
+      resolve: (frame: string) => {
+        const resolution = this._propFrameResolver?.(frame);
+        if (!resolution) {
+          return undefined;
+        }
+        const tex = resolution.texture;
+        // UV rect from the texture's frame rect. PixiJS Texture.frame is the
+        // atlas-space rect in pixels; divide by the source size for [0,1] UVs.
+        const f = tex.frame;
+        const src = tex.source;
+        const sourceW = src.width || 1;
+        const sourceH = src.height || 1;
+        return {
+          u0: f.x / sourceW,
+          v0: f.y / sourceH,
+          u1: (f.x + f.width) / sourceW,
+          v1: (f.y + f.height) / sourceH,
+        };
+      },
     };
   }
 
@@ -2234,6 +2270,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
       //    (Texture.from) shared across maps are NOT prematurely freed.
       if (this._worldContainer) {
+        // C-378 AC-1: the band path adds one container per band
+        // (`tilemap-band-ground` / `tilemap-band-decor` /
+        // `tilemap-band-overhead`) as a direct child of the world
+        // container — remove EVERY band container from the previous map
+        // (including stale overhead bands) before the new map renders, or
+        // the old chunks keep drawing over the new scene.
+        for (const child of [...this._worldContainer.children]) {
+          if (child.label?.startsWith('tilemap-band-')) {
+            this._worldContainer.removeChild(child);
+            child.destroy({ children: true, texture: true });
+          }
+        }
         const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
         if (oldTilemap) {
           this._worldContainer.removeChild(oldTilemap);
@@ -2303,13 +2351,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         // Legacy maps (no terrain channel / terrain-less pack) render
         // through the existing baked-GID path (AC-8).
         let terrainLayers: TerrainLayerEmission[] | undefined;
-        let frameUvResolver: ((frame: string) => FrameUvRect | undefined) | undefined;
+        let frameUvResolver: FrameUvResolver | undefined;
         if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
           // Frame-name → UV rect, derived from the pack's spritesheet via
           // the injected prop frame resolver (same atlas, same fallback
           // semantics). Missing frames fall back to the pack's fallbackTile
-          // (prop resolver contract) — never a blank map.
-          frameUvResolver = this._buildFrameUvResolver();
+          // (prop resolver contract) — never a blank map. The base terrain's
+          // frameBase probes the atlas source the UV rects live in.
+          frameUvResolver = this._buildFrameUvResolver(packConfig.terrains[0]?.frameBase);
           if (frameUvResolver) {
             terrainLayers = autotileLayers({
               width: tilemap.width,

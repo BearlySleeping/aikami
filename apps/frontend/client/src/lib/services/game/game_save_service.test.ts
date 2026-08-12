@@ -172,6 +172,9 @@ describe('GameSaveService (C-334)', () => {
     });
 
     expect(mockSnapshotCalls).toBe(callsBefore); // no snapshot requested
+    // Re-read from the DATABASE (not the cached array): the skipped save
+    // must leave the previously written save untouched on disk.
+    await service.fetchAvailableSaves();
     const saves = service.availableSaves;
     expect(saves.length).toBe(1); // prior save untouched
     expect(saves[0].id).toBe('auto-save');

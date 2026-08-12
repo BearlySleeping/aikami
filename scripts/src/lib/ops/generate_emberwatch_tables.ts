@@ -257,11 +257,21 @@ export const readManifestTerrains = (): Array<{
   const terrains = raw.terrains ?? [];
   // Fail fast: a `corner16` terrain without a frameBase would silently
   // allocate 16 atlas cells for frames no painter can draw (muted-grass
-  // tiles instead of a generator error). name and frameBase are required.
+  // tiles instead of a generator error). name and frameBase are required,
+  // and `wang` accepts only the two modes the generator understands
+  // ('fill' — the default — and 'corner16', the mode registerTerrainFrames
+  // consumes). An unsupported wang value would otherwise be silently
+  // skipped by the frame registrar while the runtime schema rejects the
+  // pack — surface it here instead.
   _cachedManifestTerrains = terrains.map((t) => {
     const wang = t.wang ?? 'fill';
     if (!t.name) {
       throw new Error('generate_emberwatch: manifest.terrains entry has no "name"');
+    }
+    if (wang !== 'fill' && wang !== 'corner16') {
+      throw new Error(
+        `generate_emberwatch: terrain "${t.name}" has unsupported wang value "${wang}" (only 'fill' and 'corner16' are supported)`,
+      );
     }
     if (!t.frameBase) {
       throw new Error(

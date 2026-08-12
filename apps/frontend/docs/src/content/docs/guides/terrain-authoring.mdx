@@ -34,7 +34,9 @@ Rules enforced at load:
 - **Exactly one `wang: 'fill'` terrain** — the lowest-precedence fill is the
   base terrain and renders under every overlay.
 - **Precedence values must be unique** — duplicate precedences are rejected at
-  schema validation (they are unresolvable).
+  runtime by `validateTerrains` (they are unresolvable; the shared schema
+  validates each terrain object individually and cannot see cross-terrain
+  duplicates).
 - **The base terrain is inferred as the lowest `precedence`** — never declared
   explicitly.
 - **Unknown terrain ids in a map resolve to the base terrain** with one

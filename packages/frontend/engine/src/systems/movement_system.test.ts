@@ -477,18 +477,40 @@ describe('movement_system — axis-independent wall sliding', () => {
       expect(Math.floor(result.y / 32)).toBe(8);
     });
 
-    it('falls back to the map centre when every tile within 20 rings is blocked', () => {
+    it('falls back to the map centre when it is the only walkable tile beyond the scan radius', () => {
+      // Centre (1024,1024) is 32 tiles from the input — outside the 20-ring
+      // scan — so only the fallback can reach it. A WALKABLE centre is still
+      // used as the fallback target (existing behaviour preserved).
+      const centreOnlyWalkable = (px: number, py: number): boolean => !(px === 1024 && py === 1024);
+      const result = clampSpawnToWalkable(0, 0, centreOnlyWalkable, {
+        width: 2048,
+        height: 2048,
+      });
+      expect(result).toEqual({ x: 1024, y: 1024 });
+    });
+
+    it('retains the original position when the map centre is blocked too', () => {
       const everythingBlocked = () => true;
       const result = clampSpawnToWalkable(256, 288, everythingBlocked, {
         width: 512,
         height: 384,
       });
-      expect(result).toEqual({ x: 256, y: 192 });
+      expect(result).toEqual({ x: 256, y: 288 });
     });
 
-    it('falls back to (0,0) with no bounds when everything is blocked', () => {
-      const result = clampSpawnToWalkable(64, 64, () => true);
+    it('falls back to (0,0) with no bounds when the centre is walkable but unreachable by the scan', () => {
+      // With no bounds the centre is (0,0). (0,0) is never a ring-scan
+      // candidate from x=700 (700 mod 32 ≠ 0), so only the fallback can
+      // reach it — and a walkable centre fallback still applies.
+      const blocksEverythingExceptOrigin = (px: number, py: number): boolean =>
+        !(px === 0 && py === 0);
+      const result = clampSpawnToWalkable(700, 700, blocksEverythingExceptOrigin);
       expect(result).toEqual({ x: 0, y: 0 });
+    });
+
+    it('retains the original position with no bounds when (0,0) is blocked', () => {
+      const result = clampSpawnToWalkable(64, 64, () => true);
+      expect(result).toEqual({ x: 64, y: 64 });
     });
 
     it('regression: a player restored onto a solid prop cell is frozen on all axes', () => {

@@ -1,11 +1,13 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
 import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
+import { logger } from '$logger';
 import type { TerrainLayerEmission } from '../assets/autotile.ts';
 import type { TilemapBand, TilemapData } from '../assets/map_loader.ts';
 import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import {
   buildTilemapChunks,
+  type FrameUvResolver,
   frustumCullChunks,
   type TilemapChunk,
 } from '../rendering/tilemap_chunk_renderer.ts';
@@ -59,10 +61,15 @@ export type TilemapRenderOptions = {
   terrainLayers?: readonly TerrainLayerEmission[];
   /**
    * C-378: frame NAME → UV rect resolver built from the pack's atlas
-   * spritesheet. Required to render {@link terrainLayers}.
+   * spritesheet. Required to render {@link terrainLayers}. The resolver
+   * exposes the atlas source its UV rects are computed against — when it
+   * does not match the sampled tileset texture, terrain chunk creation is
+   * skipped so the baked ground fallback renders (never garbage UVs).
    */
-  frameUvResolver?: (frame: string) => FrameUvRect | undefined;
+  frameUvResolver?: FrameUvResolver;
 };
+
+export type { FrameUvResolver } from '../rendering/tilemap_chunk_renderer.ts';
 
 /**
  * One band container from {@link TilemapRenderResult}.
@@ -213,36 +220,49 @@ export const renderTilemap = async (
     const primaryTileset = tilemap.tilesets[0];
     const texture = primaryTileset ? textureMap.get(primaryTileset.image) : undefined;
     if (texture) {
-      const bandEntry = bandContainerFor('ground');
-      for (const terrainLayer of terrainLayers) {
-        const layerTilemap: TilemapData = {
-          ...tilemap,
-          layers: [
-            {
-              name: terrainLayer.name,
-              width: tilemap.width,
-              height: tilemap.height,
-              data: [],
-              frames: terrainLayer.frames,
-              visible: true,
-              band: 'ground',
-            },
-          ],
-        };
-        const result = buildTilemapChunks({
-          tilemap: layerTilemap,
-          tilesetTexture: texture,
-          globalUniforms,
-          frameUvResolver,
+      // C-378: the terrain UV rects are computed against the resolver's
+      // atlas source — they are valid only when the sampled tileset
+      // texture IS that source. A mismatch (a map whose tileset image is
+      // not the pack spritesheet) would sample garbage rects, so skip
+      // terrain chunk creation and leave terrainGroundRendered false:
+      // the baked ground layers then render as the fallback.
+      if (frameUvResolver && frameUvResolver.source !== texture.source) {
+        logger.warn('renderTilemap:terrain-atlas-mismatch', {
+          tileset: primaryTileset?.image,
+          hint: 'Frame UVs come from a different atlas than the sampled tileset — terrain chunk creation skipped; rendering the baked ground fallback (C-378).',
         });
-        while (result.container.children.length > 0) {
-          bandEntry.container.addChild(result.container.children[0]);
-        }
-        layerCount += 1;
-        bandEntry.chunks.push(...result.chunks);
-        allChunks.push(...result.chunks);
-        if (result.chunks.length > 0) {
-          terrainGroundRendered = true;
+      } else {
+        const bandEntry = bandContainerFor('ground');
+        for (const terrainLayer of terrainLayers) {
+          const layerTilemap: TilemapData = {
+            ...tilemap,
+            layers: [
+              {
+                name: terrainLayer.name,
+                width: tilemap.width,
+                height: tilemap.height,
+                data: [],
+                frames: terrainLayer.frames,
+                visible: true,
+                band: 'ground',
+              },
+            ],
+          };
+          const result = buildTilemapChunks({
+            tilemap: layerTilemap,
+            tilesetTexture: texture,
+            globalUniforms,
+            frameUvResolver,
+          });
+          while (result.container.children.length > 0) {
+            bandEntry.container.addChild(result.container.children[0]);
+          }
+          layerCount += 1;
+          bandEntry.chunks.push(...result.chunks);
+          allChunks.push(...result.chunks);
+          if (result.chunks.length > 0) {
+            terrainGroundRendered = true;
+          }
         }
       }
     }

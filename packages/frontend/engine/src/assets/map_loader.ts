@@ -389,6 +389,17 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
       terrain = aikami.terrain.map((v: unknown): string => {
         return typeof v === 'string' ? v : '';
       });
+    } else if (aikami.terrain !== undefined) {
+      // C-378: malformed terrain channel — the map still loads on the
+      // legacy baked-GID path, but the author needs to know the channel
+      // was ignored (a non-array here would otherwise be silently dropped).
+      const bad = aikami.terrain;
+      logger.warn('loadTilemap:invalid-terrain', {
+        url,
+        type: typeof bad,
+        value: typeof bad === 'string' ? bad.slice(0, 40) : undefined,
+        hint: 'aikami.terrain must be an array of terrain-id strings — falling back to the baked-GID path (C-378).',
+      });
     }
     if (Array.isArray(aikami.elevation)) {
       const expectedLength = width * height;

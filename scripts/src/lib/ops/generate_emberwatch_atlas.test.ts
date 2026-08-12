@@ -120,6 +120,16 @@ describe('C-378 AC-5 — atlas packer', () => {
         expect(terrainOwnsPixel(0b0011, x, y), `mask 3 owns top-half pixel (${x},${y})`).toBe(true);
       }
     }
+
+    // Complementary bottom-half coverage: mask 12 (SE+SW) owns the entire
+    // bottom half (y >= 16) — the vertical mirror of the mask-3 top half.
+    for (let y = 16; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        expect(terrainOwnsPixel(0b1100, x, y), `mask 12 owns bottom-half pixel (${x},${y})`).toBe(
+          true,
+        );
+      }
+    }
   });
 
   test('frame rects sit at col*CELL+PAD / row*CELL+PAD with exact 32×32 content', () => {

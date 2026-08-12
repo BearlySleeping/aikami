@@ -160,6 +160,14 @@ export const validateTerrains = (terrains: readonly ContentPackTerrain[]): Conte
   if (fills.length !== 1) {
     throw new Error(`autotile: exactly one 'fill' terrain required (base) — found ${fills.length}`);
   }
+  // C-378: the sole fill must ALSO have the LOWEST precedence — it renders
+  // under every overlay. A fill with a higher precedence than a corner16
+  // terrain would let the corner16 underlay the base (garbage layering);
+  // reject it here with the same invariant autotileLayers asserts.
+  const base = byPrecedence[0];
+  if (base.wang !== 'fill') {
+    throw new Error(`autotile: base terrain "${base.name}" must be 'fill'`);
+  }
   return byPrecedence;
 };
 
@@ -355,8 +363,8 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
 
   const base = ordered[0];
   if (base.wang !== 'fill') {
-    // validateTerrains guarantees exactly one fill and it is the lowest
-    // precedence (sort above) — this is a defensive assertion.
+    // Defensive assertion — validateTerrains guarantees the sole fill is
+    // the lowest precedence after sorting, so ordered[0] is always the fill.
     throw new Error(`autotile: base terrain "${base.name}" must be 'fill'`);
   }
 

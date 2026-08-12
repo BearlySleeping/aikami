@@ -87,9 +87,12 @@ const PASS_SCORE_THRESHOLD = 80;
 /**
  * Determines pass/fail from a validated result object.
  *
- * A case passes when the score meets the threshold AND, for
- * corner-specific schemas, both onGreenGrass and inCorrectCorner
- * are explicitly true. C-378: requiredTrueFields are hard gates.
+ * A case passes when the score meets the threshold AND every
+ * requiredTrueFields entry is explicitly true. C-378: required fields are
+ * hard gates — a generous score can no longer paper over a headline claim
+ * the schema says must be true. Required fields are evaluated BEFORE the
+ * score threshold so a combined failure reports the failing field instead
+ * of only "below threshold".
  *
  * Returns the failing field (when a field gate is what failed) so
  * the caller can surface *why* the case failed instead of blaming
@@ -100,21 +103,17 @@ const _evaluateGates = (
   requiredTrueFields: readonly string[] = [],
 ): { passed: boolean; failedField?: string } => {
   const score = typeof result.score === 'number' ? result.score : 0;
-  if (score < PASS_SCORE_THRESHOLD) {
-    return { passed: false };
-  }
-  if (typeof result.inCorrectCorner === 'boolean' && result.inCorrectCorner !== true) {
-    return { passed: false, failedField: 'inCorrectCorner' };
-  }
-  if (typeof result.onGreenGrass === 'boolean' && result.onGreenGrass !== true) {
-    return { passed: false, failedField: 'onGreenGrass' };
-  }
-  // C-378: headline fields are hard gates — a generous score can no longer
-  // paper over a required field the schema says must be true.
+  // C-378: headline fields are hard gates evaluated FIRST — a 95-score run
+  // that fails only on a required field must report that field, not
+  // "below threshold". Suites declare their own hard fields (e.g.
+  // inCorrectCorner/onGreenGrass) via requiredTrueFields.
   for (const field of requiredTrueFields) {
     if (result[field] !== true) {
       return { passed: false, failedField: field };
     }
+  }
+  if (score < PASS_SCORE_THRESHOLD) {
+    return { passed: false };
   }
   return { passed: true };
 };

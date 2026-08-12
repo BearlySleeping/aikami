@@ -154,6 +154,9 @@ export default defineConfig({
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-left', 'tile (0,0)'),
       schema: CornerVisualSchema,
+      // C-378: the corner/grass claims are HARD gates declared here — the
+      // shared evaluator no longer hardcodes them (per-suite config only).
+      requiredTrueFields: ['onGreenGrass', 'inCorrectCorner'],
     },
 
     // ── Corner: Top-Right — spawn on grass at row 0, col 9 ─
@@ -165,6 +168,8 @@ export default defineConfig({
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-right', 'tile (9,0)'),
       schema: CornerVisualSchema,
+      // C-378: corner/grass hard gates declared per suite.
+      requiredTrueFields: ['onGreenGrass', 'inCorrectCorner'],
     },
 
     // ── Corner: Bottom-Left — spawn on grass at row 9, col 0 ─
@@ -176,6 +181,8 @@ export default defineConfig({
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-left', 'tile (0,9)'),
       schema: CornerVisualSchema,
+      // C-378: corner/grass hard gates declared per suite.
+      requiredTrueFields: ['onGreenGrass', 'inCorrectCorner'],
     },
 
     // ── Corner: Bottom-Right — spawn on grass at row 9, col 9 ─
@@ -187,6 +194,8 @@ export default defineConfig({
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-right', 'tile (9,9)'),
       schema: CornerVisualSchema,
+      // C-378: corner/grass hard gates declared per suite.
+      requiredTrueFields: ['onGreenGrass', 'inCorrectCorner'],
     },
   ],
 });

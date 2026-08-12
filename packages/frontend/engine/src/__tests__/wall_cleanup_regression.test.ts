@@ -169,15 +169,31 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     };
     setCollisionGrid(grid1, world);
 
-    // Simulate a map teardown: remove all non-player entities.
+    const wallEids = [...getAllEntities(world)].filter((e) => e !== player);
+    expect(wallEids.length).toBe(1);
+    const oldWallEid = wallEids[0] as number;
+
+    // Simulate a map teardown the way LOAD_MAP does: bump the generation
+    // FIRST so stale safe refs die, then remove the entity. Without the
+    // bump the wall ref stays resolvable and cleanup would delete whoever
+    // recycles the EID below (the C-378 regression).
     for (const eid of getAllEntities(world)) {
       if (eid !== player) {
+        incrementEntityGeneration(eid);
         removeEntity(world, eid);
       }
     }
 
-    // Grid #2: a new solid cell. The new wall recycles the old wall's EID.
-    // The generation-safe cleanup must NOT remove the newly created wall.
+    // A NON-wall entity (transition-zone trigger stand-in) reclaims the
+    // recycled wall EID before the next grid is set — bitECS reuses the
+    // lowest freed slot, so this is exactly the recycled-occupant scenario.
+    const occupant = addEntity(world);
+    addComponent(world, occupant, Position);
+    addComponent(world, occupant, set(Position, { x: 64, y: 64 }));
+    expect(occupant).toBe(oldWallEid); // reclaimed the wall's slot
+
+    // Grid #2: a new solid cell. The generation-safe cleanup must NOT
+    // remove the recycled occupant — only stale wall refs are skipped.
     const grid2: { width: number; height: number; tileSize: number; grid: boolean[] } = {
       width: 2,
       height: 2,
@@ -186,9 +202,11 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     };
     setCollisionGrid(grid2, world);
 
-    // The grid #2 wall must still be alive (it recycled grid #1's EID).
-    const wallEids = [...getAllEntities(world)].filter((e) => e !== player);
-    expect(wallEids.length).toBe(1);
+    // The intervening entity SURVIVES cleanup (it reuses grid #1's EID), and
+    // the grid #2 wall is created fresh alongside it.
+    expect(getAllEntities(world)).toContain(occupant);
+    const walls = [...getAllEntities(world)].filter((e) => e !== player && e !== occupant);
+    expect(walls.length).toBe(1); // grid #2 wall
 
     resetCollisionGrid();
   });

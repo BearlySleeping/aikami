@@ -33,6 +33,15 @@ import { playSfxByName } from '../audio/audio_asset_resolver';
 // The ViewModel layer reads reactive state directly from this service.
 // ---------------------------------------------------------------------------
 
+/**
+ * C-378 AC-9: how long the visual-ready fallback waits for the worker to
+ * confirm the requested gameHour before raising __AIKAMI_VISUAL_READY__
+ * anyway. The visual runner waits 10s — this bound keeps the capture from
+ * timing out when the worker never applies the hour (degraded
+ * determinism: whatever tint is in effect gets captured).
+ */
+const VISUAL_READY_FALLBACK_MS = 5000;
+
 // ---------------------------------------------------------------------------
 
 /** Data passed to the engine for player entity initialization. */
@@ -204,6 +213,16 @@ class GameEngineService
   private _resizeCleanup: (() => void) | undefined;
   private _initialized = false;
   private _clearContentPackCache: (() => void) | undefined;
+
+  /**
+   * C-378 AC-9: whether the gameHour visual-ready subscription is armed.
+   * GAME_READY re-fires after every worker restore (LOAD_MAP and
+   * RESTORE_PLAYER both re-emit ENGINE_READY) — this guard prevents
+   * duplicate ENVIRONMENT_UPDATED listener registration and duplicate
+   * SET_ENVIRONMENT_CONFIG sends. Set once per page load and never
+   * cleared: the visual runner is a one-shot capture.
+   */
+  private _visualReadyPending = false;
 
   /**
    * Content-pack prop frame resolver (C-375 AC-1) — built + preloaded in
@@ -535,12 +554,32 @@ class GameEngineService
           // start hour asynchronously, so the flag is raised only once an
           // ENVIRONMENT_UPDATED event confirms the environment is at the
           // requested hour.
+          //
+          // Guard: GAME_READY re-fires after worker restores (LOAD_MAP and
+          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire
+          // registers the subscription and dispatches the config — repeated
+          // fires would leak listeners and re-send SET_ENVIRONMENT_CONFIG.
+          if (this._visualReadyPending) {
+            return;
+          }
+          this._visualReadyPending = true;
           const offReady = bridge.on('ENVIRONMENT_UPDATED', (event) => {
             if (event.gameHour === hour) {
+              window.clearTimeout(fallback);
               offReady();
               (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
             }
           });
+          // Bounded fallback: if the worker never confirms the requested
+          // hour (fractional gameHour drift, missing STATE_UPDATEs, or a
+          // worker that never applies the config), still raise the flag so
+          // the visual runner's 10s wait does not time out. The capture
+          // then proceeds with whatever tint is in effect (degraded
+          // determinism instead of a hard failure).
+          const fallback = window.setTimeout(() => {
+            offReady();
+            (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
+          }, VISUAL_READY_FALLBACK_MS);
           bridge.send({
             type: 'SET_ENVIRONMENT_CONFIG',
             startHour: hour,

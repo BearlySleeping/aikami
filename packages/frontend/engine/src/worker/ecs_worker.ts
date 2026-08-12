@@ -85,6 +85,7 @@ import {
   insertIntoSpatialGrid,
   isCellBlocked,
   removeFromSpatialGrid,
+  resetCollisionGrid,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
 import {
@@ -1968,7 +1969,17 @@ self.onmessage = (event: MessageEvent): void => {
           if (collisionGrid) {
             setCollisionGrid(collisionGrid, world);
           } else {
-            logger.warn('LOAD_MAP', 'collisionGrid missing on map load — spatial grid stays empty');
+            // C-378: never retain the PREVIOUS map's grid when the new map
+            // carries none — a stale grid/bounds would feed RESTORE_PLAYER's
+            // clampSpawnToWalkable (and the spawn clamp) with the wrong
+            // terrain and map bounds. Reset so no stale collision data
+            // survives the transition (the walkability oracle then treats
+            // every cell as walkable instead of clamping to a dead grid).
+            logger.warn(
+              'LOAD_MAP',
+              'collisionGrid missing on map load — resetting collision state',
+            );
+            resetCollisionGrid();
           }
 
           // 6d. C-375 AC-3: register spawned NPC/prop entities in the
