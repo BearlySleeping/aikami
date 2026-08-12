@@ -76,29 +76,36 @@ describe('storage rules', () => {
   // NPC files
   // ═══════════════════════════════════════════
   describe('npc files', () => {
-    test('authenticated user can upload npc avatar', async () => {
+    test('owner can upload npc avatar to own folder', async () => {
       const user = env.authenticatedContext('user-123');
       const storage = user.storage();
-      const ref = storage.ref('npcs/npc-1/avatar.png');
+      const ref = storage.ref('npcs/user-123/npc-1/avatar.png');
       await assertSucceeds(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
+    });
+
+    test('other authenticated user cannot upload to another owner folder', async () => {
+      const user = env.authenticatedContext('user-123');
+      const storage = user.storage();
+      const ref = storage.ref('npcs/user-456/npc-1/avatar.png');
+      await assertFails(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
     });
 
     test('unauthenticated can read npc avatar', async () => {
       const user = env.authenticatedContext('user-123');
       await user
         .storage()
-        .ref('npcs/npc-1/avatar.png')
+        .ref('npcs/user-123/npc-1/avatar.png')
         .put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' });
 
       const anon = env.unauthenticatedContext();
       const storage = anon.storage();
-      await assertSucceeds(storage.ref('npcs/npc-1/avatar.png').getDownloadURL());
+      await assertSucceeds(storage.ref('npcs/user-123/npc-1/avatar.png').getDownloadURL());
     });
 
     test('unauthenticated cannot upload npc avatar', async () => {
       const anon = env.unauthenticatedContext();
       const storage = anon.storage();
-      const ref = storage.ref('npcs/npc-1/avatar.png');
+      const ref = storage.ref('npcs/user-123/npc-1/avatar.png');
       await assertFails(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
     });
   });
@@ -107,29 +114,36 @@ describe('storage rules', () => {
   // Public files
   // ═══════════════════════════════════════════
   describe('public files', () => {
-    test('authenticated user can upload public image', async () => {
+    test('owner can upload to own public folder', async () => {
       const user = env.authenticatedContext('user-123');
       const storage = user.storage();
-      const ref = storage.ref('public/banner.png');
+      const ref = storage.ref('public/user-123/banner.png');
       await assertSucceeds(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
+    });
+
+    test('other authenticated user cannot upload to another owner public folder', async () => {
+      const user = env.authenticatedContext('user-456');
+      const storage = user.storage();
+      const ref = storage.ref('public/user-123/banner.png');
+      await assertFails(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
     });
 
     test('unauthenticated can read public file', async () => {
       const user = env.authenticatedContext('user-123');
       await user
         .storage()
-        .ref('public/banner.png')
+        .ref('public/user-123/banner.png')
         .put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' });
 
       const anon = env.unauthenticatedContext();
       const storage = anon.storage();
-      await assertSucceeds(storage.ref('public/banner.png').getDownloadURL());
+      await assertSucceeds(storage.ref('public/user-123/banner.png').getDownloadURL());
     });
 
     test('unauthenticated cannot upload public file', async () => {
       const anon = env.unauthenticatedContext();
       const storage = anon.storage();
-      const ref = storage.ref('public/banner.png');
+      const ref = storage.ref('public/user-123/banner.png');
       await assertFails(ref.put(new Uint8Array([1, 2, 3]), { contentType: 'image/png' }));
     });
   });

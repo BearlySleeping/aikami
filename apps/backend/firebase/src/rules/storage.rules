@@ -43,11 +43,11 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // NPC avatars — public read, creator write
+    // NPC avatars — public read, creator write (owner-scoped)
     // ═══════════════════════════════════════════════════════════════
-    match /npcs/{npcId}/{allPaths=**} {
+    match /npcs/{uid}/{npcId}/{allPaths=**} {
       allow read: if true;
-      allow write: if isAuthenticated() && isValidImageType() && isValidFileSize();
+      allow write: if isOwner(uid) && isValidImageType() && isValidFileSize();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -113,11 +113,11 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Public assets — public read, authenticated write
+    // Public assets — public read, owner write (user-scoped)
     // ═══════════════════════════════════════════════════════════════
-    match /public/{allPaths=**} {
+    match /public/{uid}/{allPaths=**} {
       allow read: if true;
-      allow write: if isAuthenticated() && isValidImageType() && isValidFileSize();
+      allow write: if isOwner(uid) && isValidImageType() && isValidFileSize();
     }
 
     // ═══════════════════════════════════════════════════════════════
