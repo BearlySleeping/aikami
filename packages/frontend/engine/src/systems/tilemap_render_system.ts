@@ -1,20 +1,23 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
-import { Assets, Buffer, BufferUsage, Container, Texture, UniformGroup } from 'pixi.js';
+import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
 import type { TilemapData } from '../assets/map_loader.ts';
-import { buildTilemapChunks, frustumCullChunks } from '../rendering/tilemap_chunk_renderer.ts';
+import {
+  buildTilemapChunks,
+  frustumCullChunks,
+  type TilemapChunk,
+} from '../rendering/tilemap_chunk_renderer.ts';
 
 // ---------------------------------------------------------------------------
-// Tilemap Rendering System — WebGPU chunk-based Mesh pipeline
+// Tilemap Rendering System — chunk-based Mesh pipeline
 //
-// Contract C-171: Replaces the RenderTexture baking system with a
-// spatial chunking architecture. The map is divided into 32×32 tile chunks,
-// each rendered as a single PixiJS `Mesh` backed by `Float32Array` vertex/UV
-// buffers and `Uint32Array` index buffers.
+// The map is divided into 32×32 tile chunks, each rendered as a single
+// PixiJS `Mesh` backed by `Float32Array` vertex/UV buffers and
+// `Uint32Array` index buffers.
 //
-// CPU-side frustum culling (via {@link frustumCullChunks}) removes off-screen
-// chunks from the scene graph, achieving zero-cost GPU culling for maps
-// larger than the viewport.
+// CPU-side frustum culling (via {@link frustumCullChunks}) toggles
+// `mesh.visible` on the owned chunk records — no scene-graph mutation,
+// so chunks return when the camera comes back (C-377 AC-4).
 //
 // All MeshGeometry and Buffer objects are created with `autoGarbageCollect = false`
 // to prevent the PixiJS v8 silent unbinding bug when chunks are temporarily
@@ -47,10 +50,10 @@ export type TilemapRenderResult = {
   layerCount: number;
   /** Number of mesh chunks created. */
   chunkCount: number;
-  /** Global uniform group for animation time. */
+  /** Chunk records owned by the renderer — the culler's iteration source. */
+  chunks: readonly TilemapChunk[];
+  /** Uniform group the chunk meshes are actually bound to. */
   globalUniforms: UniformGroup;
-  /** Storage buffer for animation tables. */
-  animStorageBuffer: Buffer;
 };
 
 /**
@@ -65,6 +68,11 @@ export type TilemapRenderResult = {
  * The returned Container holds all chunk Meshes. Frustum culling is
  * performed externally via {@link frustumCullChunks} every frame.
  *
+ * The returned `globalUniforms` is the uniform group the chunk meshes are
+ * actually bound to, for every layer ordering (C-377 AC-5) — never a fresh
+ * unbound placeholder. `chunks` carries the owned chunk records for the
+ * culler.
+ *
  * @param options - Tilemap data and optional layer filter.
  * @returns A container with all chunk meshes.
  */
@@ -78,14 +86,6 @@ export const renderTilemap = async (
 
   // Collect unique tileset images to load
   const imageSet = new Set<string>();
-  for (const layer of tilemap.layers) {
-    if (!layer.visible || layer.name === 'collision') {
-      continue;
-    }
-    if (layerFilter && !layerFilter(layer.name)) {
-    }
-    // No need to load tileset images per-layer — they're shared across all layers
-  }
   for (const tileset of tilemap.tilesets) {
     imageSet.add(tileset.image);
   }
@@ -105,7 +105,14 @@ export const renderTilemap = async (
   }
 
   let layerCount = 0;
-  let totalChunks = 0;
+  const allChunks: TilemapChunk[] = [];
+  // ONE shared uniform group for every chunk of every layer (C-377 AC-5) —
+  // the returned group is always reference-identical to the group bound in
+  // `chunks[i].mesh.shader.resources.globals`, for every layer ordering.
+  const globalUniforms = new UniformGroup({
+    uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
+    uTime: { value: 0, type: 'f32' },
+  });
 
   // Render layers bottom-to-top (preserve Tiled draw order)
   for (const layer of tilemap.layers) {
@@ -145,6 +152,7 @@ export const renderTilemap = async (
     const result = buildTilemapChunks({
       tilemap: layerTilemap,
       tilesetTexture: texture,
+      globalUniforms,
     });
 
     // Merge chunk children into the main container
@@ -153,32 +161,33 @@ export const renderTilemap = async (
     }
 
     layerCount += 1;
-    totalChunks += result.chunkCount;
-
-    // Return the shared uniforms/buffer from the last layer
-    if (layer === tilemap.layers[tilemap.layers.length - 1]) {
-      return {
-        container,
-        layerCount,
-        chunkCount: totalChunks,
-        globalUniforms: result.globalUniforms,
-        animStorageBuffer: result.animStorageBuffer,
-      };
-    }
+    allChunks.push(...result.chunks);
   }
 
-  // Fallback (empty map)
+  // The uniform group the chunks are actually bound to (C-377 AC-5). When
+  // at least one layer rendered, this is the real shared group. Only a
+  // fully empty map (no rendered layers → no chunks) gets a fresh
+  // placeholder, which is unbound only because there is nothing to bind it
+  // to.
+  if (layerCount > 0) {
+    return {
+      container,
+      layerCount,
+      chunkCount: allChunks.length,
+      chunks: allChunks,
+      globalUniforms,
+    };
+  }
+
+  // Fallback (empty map — no rendered layers)
   return {
     container,
     layerCount,
-    chunkCount: totalChunks,
+    chunkCount: 0,
+    chunks: [],
     globalUniforms: new UniformGroup({
       uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
       uTime: { value: 0, type: 'f32' },
-    }),
-    animStorageBuffer: new Buffer({
-      data: new Float32Array(0),
-      usage: BufferUsage.STORAGE | BufferUsage.COPY_DST,
     }),
   };
 };

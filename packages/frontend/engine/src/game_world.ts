@@ -25,9 +25,10 @@ import type { EngineBridge } from './engine_bridge.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
+import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
-import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
+import { frustumCullChunks, type TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
@@ -389,6 +390,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Global uniform group for animation time (C-177). */
   private _tilemapUniforms: UniformGroup | undefined;
+
+  /**
+   * Owned tilemap chunk records (C-377 AC-4) — the culler's iteration
+   * source. The tilemap chunks live in the scene graph under
+   * `_worldContainer`, but culling toggles `mesh.visible` on these
+   * records instead of walking/removing children.
+   */
+  private _tilemapChunks: readonly TilemapChunk[] | undefined;
+
+  /** Last culled/visible chunk counts (render diagnostic, C-377). */
+  private _lastCulledChunkCounts: { visible: number; total: number } | undefined;
 
   // -- Render state (main thread) ------------------------------------------
 
@@ -2087,6 +2099,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           this._worldContainer.removeChild(oldTilemap);
           oldTilemap.destroy({ children: true, texture: true });
         }
+        // Release the owned chunk records with the container (C-377
+        // cancellation/teardown requirement).
+        this._tilemapChunks = undefined;
+        this._lastCulledChunkCounts = undefined;
       }
 
       // 4. Load and parse the new tilemap
@@ -2128,6 +2144,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
         // Store animation resources (C-177)
         this._tilemapUniforms = result.globalUniforms;
+        // C-377 AC-4: keep the owned chunk records for frustum culling.
+        this._tilemapChunks = result.chunks;
       }
 
       // 5b. Render transition zone debug overlays so portals are visible.
@@ -2520,10 +2538,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._worldContainer.scale.set(dynamicScale);
       }
 
-      this._worldContainer.x =
-        this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x;
-      this._worldContainer.y =
-        this._app.screen.height / 2 - this._cameraY * this._worldContainer.scale.y;
+      // ── C-377 AC-3: device-pixel snap ──
+      // The world container position is the single place where continuous
+      // world coordinates become device pixels. Snap the final x/y to whole
+      // device pixels (accounting for renderer resolution) so the tile grid
+      // does not shimmer while the camera lerps across fractional positions.
+      // The camera's own lerp stays continuous; only the render transform
+      // rounds. At non-integer zoom exact alignment is impossible — snap
+      // anyway for stability (dialogue zoom is transient).
+      const resolution = this._app.renderer.resolution || 1;
+      this._worldContainer.x = snapToDevicePixels(
+        this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x,
+        resolution,
+      );
+      this._worldContainer.y = snapToDevicePixels(
+        this._app.screen.height / 2 - this._cameraY * this._worldContainer.scale.y,
+        resolution,
+      );
 
       // ── C-171: CPU-side frustum culling for tilemap chunks ──
       // Camera position is in world-space pixels; viewport dimensions
@@ -2531,25 +2562,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const viewportWorldW = this._app.screen.width / dynamicScale;
       const viewportWorldH = this._app.screen.height / dynamicScale;
 
-      const chunkContainer = this._worldContainer.getChildByLabel('tilemap-chunks') as
-        | Container
-        | undefined;
-      if (chunkContainer) {
-        frustumCullChunks(
-          chunkContainer,
+      if (this._tilemapChunks && this._tilemapChunks.length > 0) {
+        const culled = frustumCullChunks(
+          this._tilemapChunks,
           this._cameraX - viewportWorldW / 2,
           this._cameraY - viewportWorldH / 2,
           viewportWorldW,
           viewportWorldH,
         );
+        if (culled.total > 0) {
+          this._lastCulledChunkCounts = culled;
+        }
       }
     }
 
     // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
     if (totalCount > 0 && performance.now() - this._lastRenderLog > 1000) {
       this._lastRenderLog = performance.now();
+      const chunkSummary = this._lastCulledChunkCounts
+        ? `, chunks ${this._lastCulledChunkCounts.visible}/${this._lastCulledChunkCounts.total} visible`
+        : '';
       this.render(
-        `${visibleCount}/${totalCount} visible, stage ${stageBounds.width}x${stageBounds.height}`,
+        `${visibleCount}/${totalCount} visible, stage ${stageBounds.width}x${stageBounds.height}${chunkSummary}`,
       );
     }
   }

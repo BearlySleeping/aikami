@@ -2,7 +2,7 @@
 id: C-377
 title: "Pixel-Art Render Correctness — Filtering, HiDPI, Pixel Snap, Tilemap Repair"
 source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §2 S1-S6, §3 B9"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -484,3 +484,56 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Repaired the Emberwatch tilemap render path end to end: nearest-neighbour filtering is now the global default installed at engine-barrel import (before any `Assets.load`, closing the boot-order hazard where the atlas spritesheet loads during `preloading_content`), the PixiJS app renders at native device resolution with `autoDensity`, antialias off, and E2E-gated `preserveDrawingBuffer`, and the world container snaps to whole device pixels each frame. The frustum culler was rewritten onto an owned chunk array with `mesh.visible` toggling (no scene-graph mutation — chunks return when the camera comes back), `renderTilemap` returns the uniform group its chunks are actually bound to for every layer ordering, per-chunk `Shader` allocation was hoisted to one shared shader per layer, and the dead WGSL/animation/depth-sort paths were deleted. A headless integration test renders the real `village.json` and the `emberwatch.visual.ts` gate re-baselined at 95/100.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Global nearest default in `pixi_app.ts` module scope + `texture_defaults.ts`; nearest forced on prop resolver path; visual gate `tilesAreCrisp` schema added; emberwatch re-scored 95/100 |
+| AC-2 | ✅ | `resolution` (clamped to 2) / `autoDensity` / `antialias:false` / E2E-gated `preserveDrawingBuffer`; pure `resolvePixiInitOptions` + 4 unit tests |
+| AC-3 | ✅ | `snapToDevicePixels` on world container transform in `game_world._updateRenderFromBuffer`; 4 unit tests incl. DPR 2 + non-integer zoom |
+| AC-4 | ✅ | `frustumCullChunks` iterates owned chunk array, toggles `mesh.visible`, returns visible/total counts; 2 tests prove chunks return and children constant |
+| AC-5 | ✅ | `renderTilemap` returns the shared bound uniform group for both layer orderings (tests assert reference-identity); empty-map fallback returns a placeholder only when zero chunks exist |
+| AC-6 | ✅ | `TILEMAP_CHUNK_WGSL`, `_getSharedGpuProgram`, `tilemap_animation_shader.ts`, `depth_sort.ts` + test import deleted; shader constructed with `glProgram` only (asserted); barrels pruned; `validate:wgsl` clean |
+| AC-7 | ⚠️ | Lerp was already delta-scaled at HEAD (C-161); added the framerate-independence regression test (1000ms at 33ms vs 7ms slices agree within 5px) — no production change needed |
+| AC-8 | ✅ | `tilemap_render.test.ts` reads the committed `village.json`, builds chunks, asserts chunk count / UVs ∈ [0,1] / vertex positions match `col*tilewidth` / collision layer contributes no geometry |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/__tests__/tilemap_render.test.ts` | C-377 AC-1/4/5/6/8 integration tests (headless PixiJS via DOMAdapter + Assets stub loader) |
+| `packages/frontend/engine/src/pixi_init_options.ts` | Config-free `resolvePixiInitOptions` + `isE2ETestMode` (AC-2) |
+| `packages/frontend/engine/src/rendering/pixel_snap.ts` | Pure `snapToDevicePixels` helper (AC-3) |
+| `packages/frontend/engine/src/rendering/texture_defaults.ts` | `installNearestTextureDefault` — the one global filtering default (AC-1) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts` | WGSL path + per-chunk Shader removed; chunk records own layerName; one shared Shader per layer; culler toggles `mesh.visible`; `chunks` on result |
+| `packages/frontend/engine/src/systems/tilemap_render_system.ts` | Fixed return path (shared group for all orderings); `chunks` in result; empty-`if` removed; `animStorageBuffer` gone |
+| `packages/frontend/engine/src/game_world.ts` | Stores `_tilemapChunks`; culls via chunk array; device-pixel snap; chunk counts in render diagnostic; teardown releases chunks |
+| `packages/frontend/engine/src/pixi_app.ts` | Module-scope nearest default; `resolution`/`autoDensity`/`antialias`/gated `preserveDrawingBuffer` via `resolvePixiInitOptions` |
+| `packages/frontend/engine/src/rendering/prop_texture_resolver.ts` | Nearest scaleMode forced on hit + fallback textures |
+| `packages/frontend/engine/src/index.ts`, `rendering/index.ts` | Export `TilemapChunk`, `installNearestTextureDefault`, `pixi_init_options`; prune deleted symbols |
+| `packages/frontend/engine/src/__tests__/rendering.test.ts` | AC-2 + AC-3 tests; depth_sort test block removed |
+| `packages/frontend/engine/src/systems/camera_system.test.ts` | AC-7 framerate-independence test |
+| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | `tilesAreCrisp` schema field + crisp-tiles prompt criterion |
+| `packages/frontend/engine/src/rendering/depth_sort.ts` | deleted (AC-6) |
+| `packages/frontend/engine/src/rendering/tilemap_animation_shader.ts` | deleted (AC-6) |
+
+### Deviations from Spec
+- **AC-7 required no production change.** The camera lerp (`DEFAULT_LERP_FACTOR`/`ZOOM_LERP_FACTOR`) was already delta-scaled by C-161 at the contract's stated baseline `4ea2ccf5`; only the missing framerate-independence test was added. No Amendment proposed — the AC outcome is satisfied and this is a spec-accuracy note, not a scope change.
+- **Open Question resolved:** `resolution` clamped to `Math.min(devicePixelRatio, 2)` per the contract's own recommendation.
+- **`game_world._tilemapUniforms` uTime write kept** — it now writes to the actually-bound group, harmless and future-useful; contract did not require removal.
+- The `Buffer`/`BufferUsage` imports and `animStorageBuffer` were removed from the chunk renderer result type entirely; no external consumer existed.
+
+### Test Results
+- Unit (engine): 921 pass / 0 fail (baseline 910 pass / 0 fail — 11 new C-377 tests, 6 depth_sort tests removed)
+- Client: 1612 pass / 49 fail — **all 49 pre-existing** (PersonaCreate/Providers/Image VMs; confirmed identical on clean baseline via stash)
+- E2E typecheck: pass
+- Visual: `emberwatch` suite **95/100 PASS** (production `/game` route, screenshot + VLM eval); independent `ai_validate_image` on the captured PNG: 90/100 PASS with sharp hard-edged tile assertion
+- Baseline: 0 pre-existing engine failures, 0 new failures; client 49 pre-existing, 0 new
