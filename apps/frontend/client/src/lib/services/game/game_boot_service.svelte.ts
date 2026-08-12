@@ -614,7 +614,7 @@ class GameBootService
     const t0 = performance.now();
 
     try {
-      // 1. Open the shared DB (applies AIKAMI_SCHEMA_DDL idempotently) + registry
+      // 1. Open the shared DB (runs C-384 schema migrations) + registry
       //    FIRST — cached registry rows are the offline source of truth, and the
       //    network-dependent manifest/sidecar checks below must never block cache
       //    rehydration.
