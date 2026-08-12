@@ -211,6 +211,7 @@ const main = async (): Promise<void> => {
               imageDataUri: capture.base64DataUri,
               prompt: capture.prompt,
               schema: capture.schema,
+              requiredTrueFields: capture.requiredTrueFields,
             });
 
             if (evaluate.passed) {

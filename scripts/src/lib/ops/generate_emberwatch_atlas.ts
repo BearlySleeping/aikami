@@ -56,31 +56,23 @@ const W = 512;
 const H = 256;
 
 /**
- * Frame registry: frameKey → [col, row]. DERIVED from manifest.tiles
- * (C-376 AC-6 D5) — the manifest is the single source of truth for the
- * GID↔frame mapping. GID = row*COLS + col + 1.
- *
- * C-378: corner-16 terrain frames are derived from the manifest's
- * `terrains` block and placed in the next free rows after the baked tiles
- * (16 contiguous cells per terrain, mask order). The content scratch
- * buffer keeps the 16×8 grid; the final atlas is extruded to 34px pitch.
- */
-const FRAMES: Record<string, [number, number]> = buildFrames();
-
-/**
  * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
- * and registers the derived mask frame names.
+ * and registers the derived mask frame names into the caller's frames map.
+ *
+ * C-378 AC-5: frames are built into a LOCAL map per packAtlas() call so a
+ * test can pack twice without the "collides with an existing atlas frame"
+ * throw that a module-level singleton would cause.
  */
-const registerTerrainFrames = (): void => {
+const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
   const terrains = readManifestTerrains();
-  let nextCell = Object.keys(FRAMES).length; // first free cell after baked frames
+  let nextCell = Object.keys(frames).length; // first free cell after baked frames
   for (const terrain of terrains) {
     if (terrain.wang !== 'corner16') {
       continue;
     }
     for (let mask = 0; mask < 16; mask++) {
       const name = cornerFrameName(terrain.frameBase, mask);
-      if (FRAMES[name]) {
+      if (frames[name]) {
         throw new Error(
           `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
         );
@@ -92,13 +84,11 @@ const registerTerrainFrames = (): void => {
           `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
         );
       }
-      FRAMES[name] = [col, row];
+      frames[name] = [col, row];
       nextCell += 1;
     }
   }
 };
-
-registerTerrainFrames();
 
 // ---------------------------------------------------------------------------
 // Canvas
@@ -1140,14 +1130,14 @@ const paintFrame = (key: string, col: number, row: number): void => {
   }
 };
 
-const drawAll = (): void => {
+const drawAll = (frames: Record<string, [number, number]>): void => {
   // Base fill: dark neutral for unused cells
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       setPx(x, y, 47, 95, 42);
     }
   }
-  for (const [key, [col, row]] of Object.entries(FRAMES)) {
+  for (const [key, [col, row]] of Object.entries(frames)) {
     paintFrame(key, col, row);
   }
 };
@@ -1234,8 +1224,51 @@ const outDir = join(
   '../../../../apps/frontend/client/static/game-data/sprites/tilesets',
 );
 
-const main = (): void => {
-  drawAll();
+// ---------------------------------------------------------------------------
+// Pure pack (C-378 AC-5 Evidence Matrix) — no file I/O, no cwebp
+// ---------------------------------------------------------------------------
+
+/**
+ * Frame rects in atlas.json shape (extruded layout).
+ */
+export type PackedAtlasFrame = {
+  frame: { x: number; y: number; w: number; h: number };
+  rotated: boolean;
+  trimmed: boolean;
+  spriteSourceSize: { x: number; y: number; w: number; h: number };
+  sourceSize: { w: number; h: number };
+};
+
+/**
+ * The pure result of packing the emberwatch atlas.
+ */
+export type PackedAtlas = {
+  /** Extruded RGBA pixels, CW×CH×4 (544×272). */
+  rgba: Uint8Array;
+  width: number;
+  height: number;
+  /** atlas.json-shaped frame rects keyed by frame name. */
+  frames: Record<string, PackedAtlasFrame>;
+};
+
+/**
+ * Packs the emberwatch atlas: builds the frame registry (baked tiles +
+ * corner-16 terrain frames), paints every frame into the 512×256 content
+ * scratch, extrudes each frame 1px into the final 544×272 atlas, and
+ * returns the RGBA pixels + frame rects.
+ *
+ * Pure and deterministic — no file I/O, no `cwebp`. A test can call it
+ * twice and assert byte-identical output (C-378 AC-5 Evidence Matrix).
+ * Each call builds its own local frame registry, so repeated calls never
+ * collide with a previous call's frame registrations.
+ */
+export const packAtlas = (): PackedAtlas => {
+  // Local frame registry per call — derived from manifest.tiles (C-376
+  // AC-6 D5) + the `terrains` block (C-378). GID = row*COLS + col + 1.
+  const frames = buildFrames();
+  registerTerrainFrames(frames);
+
+  drawAll(frames);
 
   // ── C-378 AC-5: 1px edge extrusion ──
   // The content scratch is 512×256 at 32px pitch. The final atlas is
@@ -1265,7 +1298,26 @@ const main = (): void => {
     }
   }
 
-  const png = encodePng(CW, CH, extruded);
+  // Frame rects matching the extruded layout: content lives at
+  // (col*CELL + PAD, row*CELL + PAD) sized TILE×TILE. The 1px border
+  // belongs to the frame's own edge (extrusion), so UVs are exact.
+  const frameRects: Record<string, PackedAtlasFrame> = {};
+  for (const [key, [col, row]] of Object.entries(frames)) {
+    frameRects[key] = {
+      frame: { x: col * CELL + PAD, y: row * CELL + PAD, w: TILE, h: TILE },
+      rotated: false,
+      trimmed: false,
+      spriteSourceSize: { x: 0, y: 0, w: TILE, h: TILE },
+      sourceSize: { w: TILE, h: TILE },
+    };
+  }
+
+  return { rgba: extruded, width: CW, height: CH, frames: frameRects };
+};
+
+const main = (): void => {
+  const packed = packAtlas();
+  const png = encodePng(packed.width, packed.height, packed.rgba);
 
   // The intermediate PNG is written to a temp dir OUTSIDE the public
   // tileset dir — only the final atlas.webp belongs in static/. The temp
@@ -1293,35 +1345,24 @@ const main = (): void => {
     rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  // Emit atlas.json with frame rects matching the extruded layout: content
-  // lives at (col*CELL + PAD, row*CELL + PAD) sized TILE×TILE. The 1px
-  // border belongs to the frame's own edge (extrusion), so UVs are exact.
-  const frames: Record<string, unknown> = {};
-  for (const [key, [col, row]] of Object.entries(FRAMES)) {
-    frames[key] = {
-      frame: { x: col * CELL + PAD, y: row * CELL + PAD, w: TILE, h: TILE },
-      rotated: false,
-      trimmed: false,
-      spriteSourceSize: { x: 0, y: 0, w: TILE, h: TILE },
-      sourceSize: { w: TILE, h: TILE },
-    };
-  }
   const atlasJson = {
-    frames,
+    frames: packed.frames,
     meta: {
       app: 'aikami-emberwatch-atlas',
       version: '1.0',
       image: 'atlas.webp',
       format: 'RGBA8888',
-      size: { w: CW, h: CH },
+      size: { w: packed.width, h: packed.height },
       scale: '1',
     },
   };
   writeFileSync(join(outDir, 'atlas.json'), `${JSON.stringify(atlasJson, null, 2)}\n`);
 
   console.log(
-    `Generated atlas: ${webpPath} (${CW}x${CH}, ${Object.keys(FRAMES).length} frames, extruded ${PAD}px)`,
+    `Generated atlas: ${webpPath} (${packed.width}x${packed.height}, ${Object.keys(packed.frames).length} frames, extruded ${PAD}px)`,
   );
 };
 
-main();
+if (import.meta.main) {
+  main();
+}

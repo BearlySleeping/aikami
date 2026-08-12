@@ -52,6 +52,13 @@ export type EvaluateOptions = {
   maxRetries?: number;
   /** Whether to use the cache. Default: true. */
   useCache?: boolean;
+  /**
+   * C-378: boolean schema fields that must be `true` for the case to
+   * pass regardless of the score. E.g. `['overheadOccludesPlayer']` makes
+   * the headline visual claim a hard gate instead of trusting a generous
+   * score.
+   */
+  requiredTrueFields?: string[];
 };
 
 /** Result of a single evaluation, regardless of pass/fail. */
@@ -84,7 +91,10 @@ const PASS_SCORE_THRESHOLD = 80;
  * corner-specific schemas, both onGreenGrass and inCorrectCorner
  * are explicitly true.
  */
-const _computePassed = (result: Record<string, unknown>): boolean => {
+const _computePassed = (
+  result: Record<string, unknown>,
+  requiredTrueFields: readonly string[] = [],
+): boolean => {
   const score = typeof result.score === 'number' ? result.score : 0;
   if (score < PASS_SCORE_THRESHOLD) {
     return false;
@@ -94,6 +104,13 @@ const _computePassed = (result: Record<string, unknown>): boolean => {
   }
   if (typeof result.onGreenGrass === 'boolean' && result.onGreenGrass !== true) {
     return false;
+  }
+  // C-378: headline fields are hard gates — a generous score can no longer
+  // paper over a required field the schema says must be true.
+  for (const field of requiredTrueFields) {
+    if (result[field] !== true) {
+      return false;
+    }
   }
   return true;
 };
@@ -122,7 +139,7 @@ export const getVlmConfig = (): VlmRuntimeConfig => {
  * @returns Structured evaluation result with pass/fail status.
  */
 export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateResult> => {
-  const { imageDataUri, prompt, schema, useCache = true } = options;
+  const { imageDataUri, prompt, schema, useCache = true, requiredTrueFields } = options;
 
   const result = await vlmEvaluateImage<Record<string, unknown>>({
     imageDataUri,
@@ -146,7 +163,7 @@ export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateR
 
   return {
     caseName: result.fromCache ? '(from cache)' : '(eval)',
-    passed: _computePassed(parsed),
+    passed: _computePassed(parsed, requiredTrueFields),
     result: parsed,
     fromCache: result.fromCache,
     score,

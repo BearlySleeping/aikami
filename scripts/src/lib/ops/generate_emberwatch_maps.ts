@@ -74,6 +74,13 @@ type MapData = {
   height: number;
   ground: number[];
   collision: number[];
+  /**
+   * C-378 AC-1 visual hook: overhead tiles placed INDEPENDENTLY of the
+   * ground layer. They render in the overhead band (above every entity)
+   * but never touch the terrain channel or the collision layer, so the
+   * terrain-vs-GID collision byte-parity invariant is preserved.
+   */
+  overheadExtra?: Array<[col: number, row: number, gid: number]>;
 };
 
 const makeMap = (width: number, height: number): MapData => ({
@@ -286,6 +293,19 @@ const buildVillage = (): MapData => {
       setTile(m, c, r, G.DIRT);
     }
   }
+
+  // C-378 AC-1 visual hook: a gate arch over the walkable gate gap (cols
+  // 9-10, rows 18-19). The player's default spawn (320,560 → tile
+  // (10,17.5)) stands directly beneath it, so the visual suite can assert
+  // overheadOccludesPlayer: true. These tiles live ONLY in the overhead
+  // band — the ground stays path/grass, the terrain channel stays `''`,
+  // and collision is untouched (overhead never contributes solidity, AC-4).
+  m.overheadExtra = [
+    [9, 16, G.ROOF],
+    [10, 16, G.ROOF],
+    [9, 17, G.ROOF],
+    [10, 17, G.ROOF],
+  ];
 
   // Houses: wall shell + roof interior + door opening.
   const house = (c0: number, r0: number): void => {
@@ -581,6 +601,16 @@ const emit = (mapName: string, m: MapData): void => {
       decor.push(gid);
       overhead.push(0);
     }
+  }
+
+  // C-378 AC-1 visual hook: overlay `overheadExtra` tiles (e.g. the gate
+  // arch) on top of the ground-derived overhead band. Collision and the
+  // terrain channel are untouched, so byte-parity holds.
+  for (const [c, r, gid] of m.overheadExtra ?? []) {
+    if (c < 0 || c >= m.width || r < 0 || r >= m.height) {
+      continue;
+    }
+    overhead[idx(m, c, r)] = gid;
   }
 
   const mapJson = {

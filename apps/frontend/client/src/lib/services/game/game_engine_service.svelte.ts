@@ -525,6 +525,11 @@ class GameEngineService
             startHour: hour,
           } as unknown as GameCommand);
         }
+        // C-378 visual determinism: the visual runner waits for this flag
+        // instead of a blind sleep, so the gameHour tint (and the scene
+        // state) is applied before the capture. Set once GAME_READY fires
+        // and the env command (if any) has been dispatched.
+        (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
       }
     });
 

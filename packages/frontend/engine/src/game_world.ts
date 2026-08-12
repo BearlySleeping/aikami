@@ -557,7 +557,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // ── C-177: Update uTime for GPU tile animation ──
       // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
       if (this._tilemapUniforms) {
-        this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+        // C-378 visual determinism: freeze the tile animation clock in
+        // screenshot mode (the visual runner always injects `screenshot=true`).
+        // Animated water tiles made every capture pixel-different, which busted
+        // the VLM cache key and produced independent (flaky) judgements.
+        if (!this._isVisualScreenshotMode()) {
+          this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+        }
         const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
         if (tintArr && this._environmentUbo) {
           // Ambient color from the worker UBO — same factor the rest of the
@@ -731,6 +737,27 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // window.location may be unavailable (SSR)
     }
     return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+  }
+
+  /**
+   * True in visual-screenshot mode (the visual runner always injects
+   * `screenshot=true`). Used to freeze time-varying rendering (C-378 visual
+   * determinism): the tilemap clock is pinned so animated tiles render
+   * identically across runs.
+   */
+  private _isVisualScreenshotMode(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('screenshot') === 'true') {
+        return true;
+      }
+    } catch {
+      // window.location may be unavailable (SSR)
+    }
+    return false;
   }
 
   /**
