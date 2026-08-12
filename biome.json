@@ -19,8 +19,7 @@
       "!**/dist/*",
       "!**/build/*",
       "!apps/frontend/client/static/game-data/manifest.json",
-      "!apps/frontend/client/static/game-data/asset_hashes.json",
-      "!packages/shared/schemas/src/lib/generated-dataconnect/**"
+      "!apps/frontend/client/static/game-data/asset_hashes.json"
     ]
   },
   "formatter": {
@@ -77,7 +76,6 @@
               "@aikami/backend-firestore": "Use @aikami/backend/firestore instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",
-              "@aikami/frontend-dataconnect": "Use @aikami/frontend/dataconnect instead",
               "@aikami/frontend-engine": "Use @aikami/frontend/engine instead",
               "@aikami/frontend-repositories": "Use @aikami/frontend/firestore instead",
               "@aikami/frontend-firestore": "Use @aikami/frontend/firestore instead",

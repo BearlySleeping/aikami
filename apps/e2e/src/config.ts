@@ -15,7 +15,6 @@ export const EMULATOR_PORTS = {
   hosting: 5002,
   pubsub: 8086,
   storage: 9198,
-  dataconnect: 9398,
   emulatorHub: 4401,
   client: 5274,
   voice: 8089,

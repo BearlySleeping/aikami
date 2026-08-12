@@ -18,7 +18,6 @@ dependsOn:
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-configs'
-  - 'frontend-dataconnect'
   - 'frontend-storage'
   - 'schemas'
   - 'types'

@@ -1,7 +1,6 @@
 export * from './lib/base_firestore_service.ts';
 export * from './lib/chat.ts';
 export * from './lib/config.ts';
-export * from './lib/firebase_data_connect_service.ts';
 export * from './lib/notification.ts';
 export * from './lib/npc.ts';
 export * from './lib/persona.ts';

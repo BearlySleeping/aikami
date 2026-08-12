@@ -15,9 +15,7 @@ This package provides the local persistence layer used by the client:
 - `OpfsAssetCache` (OPFS asset cache)
 
 This is the *local* SQLite layer only. Firestore repositories live in
-`@aikami/frontend-firestore`; Data Connect in `@aikami/frontend-dataconnect`.
-Placement decisions: see
-`apps/backend/firebase/dataconnect/schema/firestore-vs-dataconnect.md`.
+`@aikami/frontend-firestore` (Data Connect was removed in C-385).
 
 ## Installation
 

@@ -20,5 +20,22 @@ dependsOn:
   - 'types'
   - 'logger'
   - 'frontend-utils'
-  - 'frontend-dataconnect'
+  - 'frontend-storage'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'src/**/*.test.ts'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
 
