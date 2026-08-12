@@ -232,7 +232,9 @@ for (const kind of ['wasm', 'turso'] as const) {
     // ── AC-3: Column added in a new migration reaches existing database ──
 
     test('AC-3: v2 ALTER TABLE reaches a v1 database, preserving rows', async () => {
-      await applyMigrations(db); // land at v1
+      // Land at v1 with ONLY migration 1 — not the full production list — so
+      // this fixture test stays isolated if future migrations are appended.
+      await applyMigrations(db, [AIKAMI_MIGRATIONS[0]]);
 
       await db.execute({
         sql: `INSERT INTO characters (id, display_name, appearance_json, stats_json) VALUES ('char-1', 'Hero', '{}', '{"hp":10}')`,
@@ -282,7 +284,9 @@ for (const kind of ['wasm', 'turso'] as const) {
     test('AC-4: failed migration rolls back atomically and keeps version', async () => {
       const migrations = [AIKAMI_MIGRATIONS[0], makeV2Invalid()];
 
-      await applyMigrations(db); // land at v1 first
+      // Land at v1 with ONLY migration 1 (isolated from future production
+      // migrations), then attempt the invalid v2 fixture.
+      await applyMigrations(db, [AIKAMI_MIGRATIONS[0]]);
 
       await expect(applyMigrations(db, migrations)).rejects.toThrow();
 
@@ -302,7 +306,8 @@ for (const kind of ['wasm', 'turso'] as const) {
       // a failed migration would still bump user_version. This proves the
       // pragma is transactional alongside the DDL/DML.
       const migrations = [AIKAMI_MIGRATIONS[0], makeV2Invalid()];
-      await applyMigrations(db);
+      // Baseline = migration 1 only (isolated from future production migrations).
+      await applyMigrations(db, [AIKAMI_MIGRATIONS[0]]);
       await expect(applyMigrations(db, migrations)).rejects.toThrow();
       expect(await readUserVersion(db)).toBe(1);
     });
