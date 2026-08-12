@@ -51,7 +51,7 @@ export const ENV_UBO_OFFSETS = {
 // ---------------------------------------------------------------------------
 
 /** Colour preset for midnight (00:00 / 24:00). Deep blue-black. */
-export const COLOR_MIDNIGHT: ReadonlyArray<number> = [0.02, 0.02, 0.08, 1.0];
+export const COLOR_MIDNIGHT: ReadonlyArray<number> = [0.18, 0.18, 0.3, 1.0];
 
 /** Colour preset for dawn (06:00). Soft orange-pink. */
 export const COLOR_DAWN: ReadonlyArray<number> = [0.45, 0.25, 0.15, 1.0];

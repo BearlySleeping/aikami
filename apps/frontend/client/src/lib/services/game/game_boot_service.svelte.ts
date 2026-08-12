@@ -934,7 +934,7 @@ class GameBootService
       if (generation !== this._bootGeneration) {
         return;
       }
-      const { ecsSnapshot, serviceSnapshots, map } = parseSavePayloadEnvelope(
+      const { ecsSnapshot, serviceSnapshots, version, map } = parseSavePayloadEnvelope(
         input.pendingSavePayload,
       );
 
@@ -991,6 +991,41 @@ class GameBootService
           playerY: map.playerY,
           bytes: input.pendingSavePayload.length,
         });
+      } else if (version !== undefined && version >= 3) {
+        // ── v3+ envelope WITHOUT a usable map block ──
+        // The save was written by the world-scope fallback (map routing
+        // unavailable at save time — early-boot race or after a corrupt
+        // restore). Restoring it legacy-style floods the world with wall
+        // entities and never loads a tilemap (C-378): the scene becomes a
+        // bare debug grid with every wall rendered as a sprite, and the
+        // cascade repeats forever because no map ever loads. Recover by
+        // starting fresh on the pack's starting map — the next auto-save
+        // writes a proper v3 envelope with map routing.
+        this.warn('stage:hydrating_snapshot:v3-without-map-routing', {
+          version,
+          bytes: input.pendingSavePayload.length,
+          hint: 'Save carries no map block — starting fresh on the starting map.',
+        });
+        await this._spawnFreshStart(input, generation);
+        // Check generation after fresh spawn
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        // Preserve the player's ECS state (appearance, combat stats) while
+        // the fresh starting map governs the position: RESTORE_PLAYER runs
+        // AFTER the map is spawned so its spawn-clamping applies against the
+        // freshly loaded collision grid — a stale saved position is clamped
+        // onto a walkable tile of the starting map instead of freezing the
+        // player on a solid cell (C-378). The next auto-save then writes a
+        // proper v3 envelope with map routing.
+        await gameEngineService.restorePlayer(ecsSnapshot);
+        // Check generation after async restore
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        this.debug('stage:hydrating_snapshot:v3-without-map-restored', {
+          bytes: input.pendingSavePayload.length,
+        });
       } else {
         // ── Legacy v2/pre-v2 save without map routing ──
         // Best-effort full-world restore (no tilemap/collision/portals can
@@ -1006,49 +1041,7 @@ class GameBootService
       }
     } else {
       // Fresh spawn — load the pack's declared starting map
-      const packId = input.contentPackId;
-      const { loadContentPack } = await import('@aikami/frontend/engine');
-      // Check generation after async import
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      const pack = await loadContentPack({ packId });
-      // Check generation after async load
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      const startingMap = pack.getStartingMap();
-
-      if (startingMap.defaultX === undefined || startingMap.defaultY === undefined) {
-        throw new Error(
-          'Starting map is missing spawn coordinates — this should have been caught in preloading_content',
-        );
-      }
-
-      this.bootProgress.detail = `Loading map: ${pack.manifest.startingMapId}`;
-
-      const { worldStateService } = await import('./world_state_service.svelte');
-      // Check generation after async import
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      await gameEngineService.loadMap({
-        mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
-        targetX: startingMap.defaultX,
-        targetY: startingMap.defaultY,
-        defeatedEnemies: [...worldStateService.defeatedEnemies],
-        collectedPickups: [...worldStateService.collectedPickups],
-      });
-      // Check generation after async loadMap
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      this.debug('stage:hydrating_snapshot:fresh', {
-        mapId: pack.manifest.startingMapId,
-        spawnX: startingMap.defaultX,
-        spawnY: startingMap.defaultY,
-      });
+      await this._spawnFreshStart(input, generation);
     }
 
     // Re-lock input after hydration completes
@@ -1056,6 +1049,59 @@ class GameBootService
 
     const elapsed = performance.now() - t0;
     this.debug('stage:hydrating_snapshot:complete', { elapsedMs: elapsed });
+  }
+
+  /**
+   * Spawns a fresh game on the pack's declared starting map.
+   *
+   * Shared by the no-save boot path and the v3-without-map-routing recovery
+   * (C-378): both need a working tilemap/collision world, and the fresh
+   * spawn guarantees the next auto-save carries a proper map block.
+   */
+  private async _spawnFreshStart(input: GameBootInput, generation: number): Promise<void> {
+    const packId = input.contentPackId;
+    const { loadContentPack } = await import('@aikami/frontend/engine');
+    // Check generation after async import
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+    const pack = await loadContentPack({ packId });
+    // Check generation after async load
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+    const startingMap = pack.getStartingMap();
+
+    if (startingMap.defaultX === undefined || startingMap.defaultY === undefined) {
+      throw new Error(
+        'Starting map is missing spawn coordinates — this should have been caught in preloading_content',
+      );
+    }
+
+    this.bootProgress.detail = `Loading map: ${pack.manifest.startingMapId}`;
+
+    const { worldStateService } = await import('./world_state_service.svelte');
+    // Check generation after async import
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+    await gameEngineService.loadMap({
+      mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
+      targetX: startingMap.defaultX,
+      targetY: startingMap.defaultY,
+      defeatedEnemies: [...worldStateService.defeatedEnemies],
+      collectedPickups: [...worldStateService.collectedPickups],
+    });
+    // Check generation after async loadMap
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    this.debug('stage:hydrating_snapshot:fresh', {
+      mapId: pack.manifest.startingMapId,
+      spawnX: startingMap.defaultX,
+      spawnY: startingMap.defaultY,
+    });
   }
 
   /** Stage: unlock input, finalize. */

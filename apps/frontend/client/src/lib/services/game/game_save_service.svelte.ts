@@ -220,16 +220,22 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * mapId, playerX, playerY), campaignId, mapName, and savedAt timestamp.
    * v2 payloads remain loadable — they fall back to the starting map.
    *
+   * 🔴 C-378: `map` is REQUIRED. A v3 save without map routing cannot be
+   * restored (the boot has no tilemap/collision/portals to rebuild), and
+   * writing one forces the world-scope snapshot fallback that corrupts the
+   * profile. Callers that cannot produce a map block must SKIP the save
+   * (the runtime guard does this) rather than write a broken envelope.
+   *
    * @param options.slotId - A named slot identifier (default: 'auto-save').
    * @param options.campaignId - The active campaign ID (C-334).
    * @param options.mapName - The current map display name (C-334).
    * @param options.map - Map-routing block persisted in the envelope (v3+).
    */
-  saveGame(options?: {
+  saveGame(options: {
     slotId?: string;
     campaignId?: string;
     mapName?: string;
-    map?: SaveMapBlock;
+    map: SaveMapBlock;
   }): Promise<void>;
 
   /**
@@ -322,26 +328,40 @@ class GameSaveService
   }
 
   /** @inheritdoc */
-  async saveGame(options?: {
+  async saveGame(options: {
     slotId?: string;
     campaignId?: string;
     mapName?: string;
-    map?: SaveMapBlock;
+    map: SaveMapBlock;
   }): Promise<void> {
     if (this.isSaving) {
       return;
     }
 
-    const { slotId = 'auto-save', campaignId, mapName = 'World', map } = options ?? {};
+    const { slotId = 'auto-save', campaignId, mapName = 'World', map } = options;
 
     this.isSaving = true;
 
     try {
-      // Player-scoped snapshot when the envelope carries a map block (the
-      // map file reconstructs the world on load). When no map block can be
-      // produced (e.g. early-boot autosave race), fall back to a full-world
-      // snapshot so the legacy restore path can still rebuild the world.
-      const ecsSnapshot = await this._getBridge().createSnapshot(map ? 'player' : 'world');
+      // C-378: never write a world-scope v3 save. Without map routing the
+      // boot cannot rebuild the tilemap/collision/portals, and restoring a
+      // full-world snapshot renders wall entities as sprites in a broken,
+      // unplayable world (and the next auto-save re-writes the same corrupt
+      // state forever). A missing map block only happens during an
+      // early-boot autosave race or after a corrupt restore — skip the
+      // write so the previous good save stays loadable; the auto-save
+      // scheduler retries on the next tick.
+      if (!map) {
+        this.warn('saveGame:skipped-no-map-block', {
+          slotId,
+          hint: 'Map routing unavailable (engine not on a map yet or position unknown) — save skipped to avoid a world-scope snapshot that cannot be restored.',
+        });
+        return;
+      }
+
+      // Player-scoped snapshot — the map block in the envelope reconstructs
+      // the world on load (map-authoritative restore, v3).
+      const ecsSnapshot = await this._getBridge().createSnapshot('player');
       const serviceSnapshots = serializeAllServices();
       const savedAt = new Date().toISOString();
 

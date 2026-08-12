@@ -23,14 +23,23 @@
  */
 export const MIN_ENTITY_Y = -512;
 
-/** Declarative z-bands for world-container siblings (C-376 AC-4). */
+/** Declarative z-bands for world-container siblings (C-376 AC-4, C-378 AC-1). */
 export const WORLD_Z_BANDS = {
-  /** Tilemap chunk container — bottom of the world (was addChildAt 0). */
-  tilemap: -1000,
   /** Debug grid overlay — below the tilemap (Pixi sorts ascending). */
   debugGrid: -2000,
+  /** Ground tilemap chunks — bottom of the world (was addChildAt 0). */
+  tilemapGround: -1000,
+  /** Decor tilemap chunks — below entities, above ground (C-378 AC-1). */
+  tilemapDecor: -900,
   /** Transition-zone debug overlays — below MIN_ENTITY_Y (-512). */
   zoneOverlays: -750,
+  /**
+   * Overhead tilemap chunks (roofs, canopies) — ABOVE every entity (C-378
+   * AC-1). Entity zIndex is unbounded above by `computeEntityZIndex`; use a
+   * value larger than any realistic map pixel height (100_000) rather than
+   * trusting MIN_ENTITY_Y, and assert the invariant in the tests.
+   */
+  tilemapOverhead: 100_000,
 } as const;
 
 export type WorldZBand = (typeof WORLD_Z_BANDS)[keyof typeof WORLD_Z_BANDS];

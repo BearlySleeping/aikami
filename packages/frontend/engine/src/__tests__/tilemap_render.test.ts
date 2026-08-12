@@ -322,7 +322,7 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
   it('parses the committed map, builds chunks, and validates geometry', async () => {
     const tilemap = await _loadVillageTilemap();
 
-    // Village is 20×20 tiles → a single 32×32-tile chunk.
+    // Village is 20×20 tiles → a single 32×32-tile chunk per band layer.
     expect(tilemap.width).toBe(20);
     expect(tilemap.height).toBe(20);
 
@@ -331,15 +331,18 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
       tilesetTexture: _createTilesetTexture(),
     });
 
-    expect(result.chunkCount).toBe(1);
-    expect(result.chunks.length).toBe(1);
-
+    // C-378: the converted map carries ground + decor + overhead bands;
+    // each visible band produces its own chunk (the village is 20×20 = one
+    // chunk per layer). Collision/spawns/transitions contribute none — if a
+    // visible band ever stops emitting, this exact count catches it.
+    expect(result.chunkCount).toBe(3);
+    expect(result.chunks.length).toBe(result.chunkCount);
     const chunk = result.chunks[0];
     const geometry = chunk.geometry;
 
-    // Collision layer contributes no geometry: only the ground layer builds
-    // chunks, so the chunk is the ground layer.
-    expect(chunk.layerName).toBe('ground');
+    // Collision layer contributes no geometry — every chunk is a visible
+    // band layer (ground/decor/overhead).
+    expect(chunk.layerName).not.toBe('collision');
 
     // Vertex positions match `col * tilewidth` / `row * tileheight` and all
     // stay within the map's pixel bounds.
@@ -387,10 +390,17 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
     const tilemap = await _loadVillageTilemap();
     const result: TilemapRenderResult = await renderTilemap({ tilemap });
 
-    expect(result.layerCount).toBe(1); // only `ground` — `collision` contributes nothing
-    expect(result.chunkCount).toBe(1);
-    expect(result.chunks.length).toBe(1);
-    expect(result.chunks[0].layerName).toBe('ground');
+    // C-378: the map now carries ground + decor + overhead bands; the
+    // collision layer still contributes no chunks. The map ALSO carries a
+    // terrain channel, but renderTilemap without terrainLayers renders the
+    // baked ground band (legacy path) — chunk count reflects all visible
+    // bands.
+    expect(result.chunkCount).toBeGreaterThan(0);
+    expect(result.chunks.length).toBe(result.chunkCount);
+    expect(result.layerCount).toBe(3); // ground + decor + overhead
+    for (const chunk of result.chunks) {
+      expect(chunk.layerName).not.toBe('collision');
+    }
   });
 });
 
@@ -408,5 +418,31 @@ describe('C-377 AC-1 — tilemap textures use nearest filtering', () => {
 
     const tilesetTexture = Texture.from('/game-data/sprites/tilesets/atlas.webp');
     expect(tilesetTexture.source.scaleMode).toBe('nearest');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-378 AC-9 — day/night tint uniform on the tilemap shader
+// ---------------------------------------------------------------------------
+
+describe('C-378 AC-9 — tilemap tint uniform', () => {
+  it('the chunk shader resources carry a uTint uniform (present, neutral default)', async () => {
+    _installStubTextureLoader();
+    await Assets.init({ skipDetections: true });
+
+    const tilemap = await _loadVillageTilemap();
+    const result: TilemapRenderResult = await renderTilemap({ tilemap });
+
+    expect(result.chunks.length).toBeGreaterThan(0);
+    const shader = result.chunks[0].mesh.shader;
+    if (!shader) {
+      throw new Error('expected chunk shader');
+    }
+    const globals = shader.resources.globals as { uniforms?: Record<string, unknown> } | undefined;
+    expect(globals).toBeDefined();
+    expect(globals?.uniforms?.uTint).toBeDefined();
+    // Neutral default: (1,1,1,1) — pixel-identical to an untinted render.
+    const tint = globals?.uniforms?.uTint as Float32Array | number[] | undefined;
+    expect(Array.from(tint as number[])).toEqual([1, 1, 1, 1]);
   });
 });

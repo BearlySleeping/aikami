@@ -16,12 +16,16 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ATLAS_CELL,
   ATLAS_COLS,
   ATLAS_HEIGHT,
+  ATLAS_PADDING,
   ATLAS_TILE_COUNT,
   ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
   buildG,
+  readManifestTerrains,
+  readManifestTiles,
 } from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +38,20 @@ import {
 // ---------------------------------------------------------------------------
 
 const G = buildG();
+
+/**
+ * GID → manifest tile name, derived from the manifest (C-378 terrain
+ * channel derivation). Inverse of the `buildG` alias map — GIDs that are
+ * not declared in the manifest resolve to undefined and stay baked GIDs.
+ */
+const GID_TO_NAME: Map<number, string> = (() => {
+  const tiles = readManifestTiles();
+  const map = new Map<number, string>();
+  for (const [gid, def] of Object.entries(tiles)) {
+    map.set(Number(gid), def.name);
+  }
+  return map;
+})();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,6 +74,13 @@ type MapData = {
   height: number;
   ground: number[];
   collision: number[];
+  /**
+   * C-378 AC-1 visual hook: overhead tiles placed INDEPENDENTLY of the
+   * ground layer. They render in the overhead band (above every entity)
+   * but never touch the terrain channel or the collision layer, so the
+   * terrain-vs-GID collision byte-parity invariant is preserved.
+   */
+  overheadExtra?: Array<[col: number, row: number, gid: number]>;
 };
 
 const makeMap = (width: number, height: number): MapData => ({
@@ -243,6 +268,47 @@ const buildVillage = (): MapData => {
   // Notice-board pad around (448,352) = col 14, row 11.
   fillRect(m, 13, 10, 15, 12, G.STONE_FLOOR);
 
+  // C-378: village pond (cols 11-13, rows 15-17) — the autotiled water
+  // overlay demonstrates grass/dirt/water edges in the production map.
+  // Water terrain is non-walkable; the explicit collision layer marks the
+  // pond solid so BOTH the terrain-derived and legacy GID-derived paths
+  // agree cell-for-cell. Placed between the vertical path (cols 9-10) and
+  // the SE house (cols 14-17) in previously-open grass.
+  //
+  // A 1-tile dirt border surrounds the pond so the corner-16 transitions
+  // (dirt corners cut by water) are visible — water over open grass renders
+  // straight edges (grass is the base fill and has no corner frames). The
+  // ring stops at row 17 so it never overwrites the bottom wall-rim row 18.
+  for (let r = 15; r <= 17; r++) {
+    for (let c = 11; c <= 13; c++) {
+      setTile(m, c, r, G.WATER);
+      block(m, c, r);
+    }
+  }
+  for (let r = 14; r <= 17; r++) {
+    for (let c = 10; c <= 14; c++) {
+      if (m.ground[idx(m, c, r)] === G.WATER) {
+        continue;
+      }
+      setTile(m, c, r, G.DIRT);
+    }
+  }
+
+  // C-378 AC-1 visual hook: a gate arch over the walkable gate gap (cols
+  // 9-10, rows 18-19). The arch tiles (rows 16-17, pixels 512-575) draw
+  // directly over the player standing in the gate opening — the default
+  // spawn (320,560 → tile (10,17.5)) and the gate prop (320,576 → tile
+  // (10,18)) both sit beneath it, so the visual suite can assert
+  // overheadOccludesPlayer: true. These tiles live ONLY in the overhead
+  // band — the ground stays path/grass, the terrain channel stays `''`,
+  // and collision is untouched (overhead never contributes solidity, AC-4).
+  m.overheadExtra = [
+    [9, 16, G.ROOF],
+    [10, 16, G.ROOF],
+    [9, 17, G.ROOF],
+    [10, 17, G.ROOF],
+  ];
+
   // Houses: wall shell + roof interior + door opening.
   const house = (c0: number, r0: number): void => {
     // shell (cols c0..c0+3, rows r0..r0+3)
@@ -276,13 +342,16 @@ const buildVillage = (): MapData => {
   house(14, 14); // SE
 
   // Decor: fences + plants near the plaza/gate. Solid cells must be blocked
-  // so collision matches the visible decor (C-375 AC-5).
+  // so collision matches the visible decor (C-375 AC-5). The plant at (11,17)
+  // used to sit INSIDE the pond (cols 11-13, rows 15-17) and overwrote its
+  // south-west water cell — it lives at (11,13) now, outside the pond, so
+  // no later terrain write alters the pond's shape.
   setTile(m, 6, 4, G.FENCE);
   setTile(m, 6, 5, G.FENCE);
   setTile(m, 13, 4, G.FENCE);
   setTile(m, 13, 5, G.FENCE);
   setTile(m, 8, 17, G.PLANT);
-  setTile(m, 11, 17, G.PLANT);
+  setTile(m, 11, 13, G.PLANT);
   setTile(m, 3, 13, G.PLANT);
   setTile(m, 14, 13, G.PLANT);
   for (const [c, r] of [
@@ -291,7 +360,7 @@ const buildVillage = (): MapData => {
     [13, 4],
     [13, 5],
     [8, 17],
-    [11, 17],
+    [11, 13],
     [3, 13],
     [14, 13],
   ] as const) {
@@ -431,14 +500,15 @@ const TILESET_BLOCK = {
   image: '/game-data/sprites/tilesets/atlas.webp',
   // Atlas geometry is derived from the shared tables module so the tileset
   // block cannot drift from the atlas generator (CodeRabbit review, C-376).
+  // C-378 AC-5: frames are extruded 1px — 34px cell pitch, 1px margin.
   imagewidth: ATLAS_WIDTH,
   imageheight: ATLAS_HEIGHT,
   tilewidth: ATLAS_TILE_SIZE,
   tileheight: ATLAS_TILE_SIZE,
   columns: ATLAS_COLS,
   tilecount: ATLAS_TILE_COUNT,
-  spacing: 0,
-  margin: 0,
+  spacing: ATLAS_CELL - ATLAS_TILE_SIZE, // 2 — gap between frames
+  margin: ATLAS_PADDING, // 1
 };
 
 /** Reads the original map's object layers (spawns + transitions) verbatim. */
@@ -502,6 +572,75 @@ const emit = (mapName: string, m: MapData): void => {
   const objectLayers = loadObjectLayers(mapName);
   fixPropFrames(objectLayers);
 
+  // C-378: derive the semantic terrain channel from the ground layer by
+  // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
+  // declared terrain (walls, roofs, furniture) stay hand-placed GIDs —
+  // they are NOT terrains. `` = the pack's base terrain.
+  //
+  // The baked ground layer is kept verbatim for the legacy path (AC-8);
+  // the terrain path renders the autotiled ground band INSTEAD of the
+  // baked ground (the renderer skips ground-band baked layers when terrain
+  // layers are present). Non-terrain cells that must still draw over the
+  // autotiled ground (walls, fences, plants, roofs) are duplicated into
+  // decor/overhead bands so they render in BOTH paths.
+  const terrains = readManifestTerrains();
+  // Variant tile names (grass_variant, grass_dark) are FILL variants of
+  // their owning terrain (grass) — resolve them to the terrain so they
+  // stay in the terrain channel (zeroed decor/overhead) instead of falling
+  // through to the decor fallback.
+  const frameToTileName = new Map<string, string>();
+  for (const def of Object.values(readManifestTiles())) {
+    frameToTileName.set(def.frame, def.name);
+  }
+  const terrainNameToId = new Map<string, string>();
+  for (const t of terrains) {
+    terrainNameToId.set(t.name, t.name);
+    for (const variantFrame of t.variants ?? []) {
+      const variantTileName = frameToTileName.get(variantFrame);
+      if (variantTileName) {
+        terrainNameToId.set(variantTileName, t.name);
+      }
+    }
+  }
+  const decor: number[] = [];
+  const overhead: number[] = [];
+  const terrainChannel: string[] = [];
+  const overheadGids = new Set([G.ROOF]);
+  for (const gid of m.ground) {
+    const tileName = gid === 0 ? undefined : GID_TO_NAME.get(gid);
+    const terrainId = tileName ? terrainNameToId.get(tileName) : undefined;
+    terrainChannel.push(terrainId ?? '');
+    if (terrainId) {
+      decor.push(0);
+      overhead.push(0);
+    } else if (gid === 0) {
+      decor.push(0);
+      overhead.push(0);
+    } else if (overheadGids.has(gid)) {
+      decor.push(0);
+      overhead.push(gid);
+    } else {
+      decor.push(gid);
+      overhead.push(0);
+    }
+  }
+
+  // C-378 AC-1 visual hook: overlay `overheadExtra` tiles (e.g. the gate
+  // arch) on top of the ground-derived overhead band. Collision and the
+  // terrain channel are untouched, so byte-parity holds.
+  for (const [c, r, gid] of m.overheadExtra ?? []) {
+    if (c < 0 || c >= m.width || r < 0 || r >= m.height) {
+      continue;
+    }
+    overhead[idx(m, c, r)] = gid;
+  }
+
+  // C-378 AC-8: a map whose terrain channel is ALL empty ids (interior
+  // maps like the inn — no outdoor terrain at all) OMITS the terrain
+  // property entirely. A present-but-empty channel would flip the renderer
+  // into the autotiled terrain path, replacing the baked ground with a
+  // full grass underlay; interior maps must keep the baked-GID ground path.
+  const hasAnyTerrain = terrainChannel.some((id) => id !== '');
   const mapJson = {
     compressionlevel: -1,
     width: m.width,
@@ -512,6 +651,12 @@ const emit = (mapName: string, m: MapData): void => {
     orientation: 'orthogonal',
     renderorder: 'right-down',
     tilesets: [TILESET_BLOCK],
+    // C-378: additive semantic channels. `elevation` is reserved (all 0).
+    aikami: {
+      formatVersion: 1,
+      ...(hasAnyTerrain ? { terrain: terrainChannel } : {}),
+      elevation: new Array(m.width * m.height).fill(0),
+    },
     layers: [
       {
         name: 'ground',
@@ -519,7 +664,29 @@ const emit = (mapName: string, m: MapData): void => {
         width: m.width,
         height: m.height,
         visible: true,
+        // C-378 AC-1: bands are declared per layer, never name-sniffed.
+        properties: [{ name: 'band', type: 'string', value: 'ground' }],
         data: m.ground,
+      },
+      {
+        name: 'decor',
+        type: 'tilelayer',
+        width: m.width,
+        height: m.height,
+        visible: true,
+        // C-378 AC-1: decor renders below entities, above the terrain base.
+        properties: [{ name: 'band', type: 'string', value: 'decor' }],
+        data: decor,
+      },
+      {
+        name: 'overhead',
+        type: 'tilelayer',
+        width: m.width,
+        height: m.height,
+        visible: true,
+        // C-378 AC-1: overhead (roofs) draws above every entity.
+        properties: [{ name: 'band', type: 'string', value: 'overhead' }],
+        data: overhead,
       },
       {
         name: 'collision',

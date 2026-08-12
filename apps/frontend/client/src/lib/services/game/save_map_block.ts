@@ -33,7 +33,11 @@ export const buildSaveMapBlock = async (): Promise<SaveMapBlock | undefined> => 
   const mapId = gameEngineService.currentMapId;
   const packId = gameEngineService.contentPackId;
   const pos = gameEngineService.getPlayerPosition();
-  if (!mapId || !pos) {
+  // C-378: a non-finite coordinate (NaN/Infinity from a mid-frame read or a
+  // corrupt restore) must never be persisted — a map block with NaN playerX
+  // would restore the player to a garbage position. Treat it like a missing
+  // map block (skip the save; the scheduler retries on the next tick).
+  if (!mapId || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
     return undefined;
   }
   return { packId, mapId, playerX: Math.round(pos.x), playerY: Math.round(pos.y) };

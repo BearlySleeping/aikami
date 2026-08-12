@@ -8,8 +8,18 @@ import { Position, registerPositionObservers } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import type { CollisionGrid } from './collision_system.ts';
-import { insertIntoSpatialGrid, resetCollisionGrid, setCollisionGrid } from './collision_system.ts';
-import { updateMovement } from './movement_system.ts';
+import {
+  insertIntoSpatialGrid,
+  isCellBlocked,
+  resetCollisionGrid,
+  setCollisionGrid,
+} from './collision_system.ts';
+import {
+  clampSpawnToWalkable,
+  isPlayerSpawnBlocked,
+  PLAYER_COLLISION_MASK,
+  updateMovement,
+} from './movement_system.ts';
 
 // ---------------------------------------------------------------------------
 // AC-2: Axis-independent wall sliding (Contract C-160)
@@ -432,6 +442,171 @@ describe('movement_system — axis-independent wall sliding', () => {
 
       const pos = getComponent(world, player, Position);
       expect(pos.y).toBe(190); // moves through the empty tile
+    });
+  });
+
+  describe('clampSpawnToWalkable (C-378 restore freeze)', () => {
+    /** Registers a static entity in the spatial grid at a tile cell. */
+    const placeGridEntity = (eid: number, tileX: number, tileY: number, layer: number): void => {
+      GridPosition.x[eid] = tileX;
+      GridPosition.y[eid] = tileY;
+      CollisionData.layer[eid] = layer;
+      CollisionData.mask[eid] = 0;
+      SpatialLink.next[eid] = 0;
+      SpatialLink.prev[eid] = 0;
+      insertIntoSpatialGrid(eid);
+    };
+
+    /** Builds a blocked-tile oracle from a set of "tx,ty" tile keys. */
+    const blockedOracle =
+      (blockedTiles: ReadonlySet<string>) =>
+      (px: number, py: number): boolean =>
+        blockedTiles.has(`${Math.floor(px / 32)},${Math.floor(py / 32)}`);
+
+    it('returns the input unchanged when it is already walkable', () => {
+      // Input (256,288) → tile (8,9); only a different tile is blocked.
+      const result = clampSpawnToWalkable(256, 288, blockedOracle(new Set(['9,9'])));
+      expect(result).toEqual({ x: 256, y: 288 });
+    });
+
+    it('clamps to the nearest free cell scanning outward in ring order', () => {
+      // Feet land on tile (8,9) which is blocked; the ring-1 scan starts at
+      // dy=-1,dx=-1 → tile (7,8) → free → that is the clamp target.
+      const result = clampSpawnToWalkable(256, 288, blockedOracle(new Set(['8,9'])));
+      expect(Math.floor(result.x / 32)).toBe(7);
+      expect(Math.floor(result.y / 32)).toBe(8);
+    });
+
+    it('falls back to the map centre when it is the only walkable tile beyond the scan radius', () => {
+      // Centre (1024,1024) is 32 tiles from the input — outside the 20-ring
+      // scan — so only the fallback can reach it. A WALKABLE centre is still
+      // used as the fallback target (existing behaviour preserved).
+      const centreOnlyWalkable = (px: number, py: number): boolean => !(px === 1024 && py === 1024);
+      const result = clampSpawnToWalkable(0, 0, centreOnlyWalkable, {
+        width: 2048,
+        height: 2048,
+      });
+      expect(result).toEqual({ x: 1024, y: 1024 });
+    });
+
+    it('retains the original position when the map centre is blocked too', () => {
+      const everythingBlocked = () => true;
+      const result = clampSpawnToWalkable(256, 288, everythingBlocked, {
+        width: 512,
+        height: 384,
+      });
+      expect(result).toEqual({ x: 256, y: 288 });
+    });
+
+    it('falls back to (0,0) with no bounds when the centre is walkable but unreachable by the scan', () => {
+      // With no bounds the centre is (0,0). (0,0) is never a ring-scan
+      // candidate from x=700 (700 mod 32 ≠ 0), so only the fallback can
+      // reach it — and a walkable centre fallback still applies.
+      const blocksEverythingExceptOrigin = (px: number, py: number): boolean =>
+        !(px === 0 && py === 0);
+      const result = clampSpawnToWalkable(700, 700, blocksEverythingExceptOrigin);
+      expect(result).toEqual({ x: 0, y: 0 });
+    });
+
+    it('retains the original position with no bounds when (0,0) is blocked', () => {
+      const result = clampSpawnToWalkable(64, 64, () => true);
+      expect(result).toEqual({ x: 64, y: 64 });
+    });
+
+    it('regression: a player restored onto a solid prop cell is frozen on all axes', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // merchant_shop scenario: solid `shop_crate` prop at pixel (256,288)
+      // → tile (8,9); the save restored the player's feet to (256, 304.925)
+      // → the same tile. The 32×32 bbox spans tiles (7,8)(8,8)(7,9)(8,9),
+      // so every candidate move still samples the crate cell → all axes
+      // reject movement and the player is stuck in place (C-378 bug).
+      placeGridEntity(9003, 8, 9, CollisionLayer.wall);
+
+      const player = addEntity(world);
+      addComponent(world, player, Position);
+      addComponent(world, player, set(Position, { x: 256, y: 304.925 }));
+      addComponent(world, player, Velocity);
+
+      // Per-frame step stays inside the crate cell (small velocity), so
+      // each axis is rejected — the freeze.
+      for (const [vx, vy] of [
+        [60, 0],
+        [-60, 0],
+        [0, 60],
+        [0, -60],
+      ] as const) {
+        // reset velocity each attempt, one 16ms frame per direction
+        Velocity.x[player] = vx;
+        Velocity.y[player] = vy;
+        updateMovement(world, 16);
+        const pos = getComponent(world, player, Position);
+        expect(Math.floor(pos.x / 32)).toBe(8);
+        expect(Math.floor(pos.y / 32)).toBe(9);
+      }
+    });
+
+    it('regression: a spawn one tile below a solid prop is clamped (feet tile free, bbox blocked)', () => {
+      // merchant_shop is 16×12; the crate at (8,9) and the entrance at
+      // (256,344) → feet tile (8,10). A 16×12 grid keeps row 10 in bounds.
+      const merchantGrid: CollisionGrid = {
+        width: 16,
+        height: 12,
+        tileSize: 32,
+        grid: new Array(16 * 12).fill(false),
+      };
+      setCollisionGrid(merchantGrid);
+      // the `shop_crate` prop at pixel (256,288) → tile (8,9); the
+      // `shop_entrance` spawn at (256,344) → feet tile (8,10) which is
+      // FREE. But the 32px collision box spans rows 9-10 and overlaps the
+      // crate cell, so the player deadlocks on all four axes the moment
+      // they spawn (C-378). The clamp must reject the position.
+      placeGridEntity(9005, 8, 9, CollisionLayer.wall);
+
+      // Feet tile (8,10) is walkable → the OLD feet-only oracle passed.
+      const oldFeetOnlyOracle = (px: number, py: number): boolean =>
+        isCellBlocked(Math.floor(px / 32), Math.floor(py / 32), PLAYER_COLLISION_MASK);
+      expect(oldFeetOnlyOracle(256, 344)).toBe(false);
+
+      // Full-box oracle rejects it (row 9 of the box contains the crate).
+      expect(isPlayerSpawnBlocked(256, 344)).toBe(true);
+
+      // The clamp repositions onto a spot where the FULL box is free.
+      const clamped = clampSpawnToWalkable(256, 344, isPlayerSpawnBlocked, {
+        width: 512,
+        height: 384,
+      });
+      expect(isPlayerSpawnBlocked(clamped.x, clamped.y)).toBe(false);
+      // Moved off the crate column (the crate sits at col 8, row 9).
+      expect(Math.floor(clamped.x / 32)).not.toBe(8);
+    });
+
+    it('regression: clamping the restored position unsticks the player', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      placeGridEntity(9004, 8, 9, CollisionLayer.wall);
+
+      const player = addEntity(world);
+      addComponent(world, player, Position);
+      addComponent(world, player, set(Position, { x: 256, y: 304.925 }));
+      addComponent(world, player, Velocity);
+
+      // RESTORE_PLAYER now runs the same clamp as LOAD_MAP: composite
+      // oracle = spatial-grid entity blocking OR terrain solidity.
+      const isBlocked = (px: number, py: number): boolean =>
+        isCellBlocked(Math.floor(px / 32), Math.floor(py / 32), PLAYER_COLLISION_MASK);
+      const clamped = clampSpawnToWalkable(256, 304.925, isBlocked, {
+        width: 512,
+        height: 384,
+      });
+      expect(Math.floor(clamped.x / 32)).toBe(7);
+      expect(Math.floor(clamped.y / 32)).toBe(8);
+
+      // After the clamp, movement works again (small step stays in-bounds
+      // on the 10×10 test grid: 272.925 + 10 = 282.925 < 320).
+      addComponent(world, player, set(Position, { x: clamped.x, y: clamped.y }));
+      addComponent(world, player, set(Velocity, { x: 0, y: 10 }));
+      updateMovement(world, 1000); // candidate nextY = 282.925 → rows 7,8
+      const pos = getComponent(world, player, Position);
+      expect(pos.y).toBeGreaterThan(clamped.y); // moved down, unstuck
     });
   });
 });

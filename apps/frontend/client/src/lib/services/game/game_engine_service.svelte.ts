@@ -33,6 +33,15 @@ import { playSfxByName } from '../audio/audio_asset_resolver';
 // The ViewModel layer reads reactive state directly from this service.
 // ---------------------------------------------------------------------------
 
+/**
+ * C-378 AC-9: how long the visual-ready fallback waits for the worker to
+ * confirm the requested gameHour before raising __AIKAMI_VISUAL_READY__
+ * anyway. The visual runner waits 10s — this bound keeps the capture from
+ * timing out when the worker never applies the hour (degraded
+ * determinism: whatever tint is in effect gets captured).
+ */
+const VISUAL_READY_FALLBACK_MS = 5000;
+
 // ---------------------------------------------------------------------------
 
 /** Data passed to the engine for player entity initialization. */
@@ -204,6 +213,16 @@ class GameEngineService
   private _resizeCleanup: (() => void) | undefined;
   private _initialized = false;
   private _clearContentPackCache: (() => void) | undefined;
+
+  /**
+   * C-378 AC-9: whether the gameHour visual-ready subscription is armed.
+   * GAME_READY re-fires after every worker restore (LOAD_MAP and
+   * RESTORE_PLAYER both re-emit ENGINE_READY) — this guard prevents
+   * duplicate ENVIRONMENT_UPDATED listener registration and duplicate
+   * SET_ENVIRONMENT_CONFIG sends. Set once per page load and never
+   * cleared: the visual runner is a one-shot capture.
+   */
+  private _visualReadyPending = false;
 
   /**
    * Content-pack prop frame resolver (C-375 AC-1) — built + preloaded in
@@ -457,7 +476,9 @@ class GameEngineService
    * `propWalkability` side channel — future manifest-driven properties
    * (collision rects, movement cost, interaction radius) ride the same field.
    */
-  private _buildPackConfig(manifest: Pick<ContentPackManifest, 'tiles' | 'props'>): PackConfig {
+  private _buildPackConfig(
+    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains'>,
+  ): PackConfig {
     return {
       tiles: Object.fromEntries(
         Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
@@ -481,6 +502,7 @@ class GameEngineService
             name: string;
             frame: string;
             isWalkable?: boolean;
+            anchor?: { x: number; y: number };
             collision?:
               | { type: 'rect'; width: number; height: number }
               | { type: 'circle'; radius: number };
@@ -488,12 +510,22 @@ class GameEngineService
           if (def.isWalkable !== undefined) {
             projected.isWalkable = def.isWalkable;
           }
+          // C-378 AC-7: the manifest anchor must cross the worker boundary
+          // so the engine can apply custom prop anchors (non-default pivot)
+          // — without it, multi-tile props silently fall back to (0.5, 1).
+          if (def.anchor !== undefined) {
+            projected.anchor = def.anchor;
+          }
           if (def.collision) {
             projected.collision = def.collision;
           }
           return [propId, projected];
         }),
       ),
+      // C-378: terrains cross the worker boundary so the autotiler can run
+      // inside the world (map load). Carried only when the pack declares
+      // them — a terrain-less pack stays legacy (AC-8).
+      ...(manifest.terrains === undefined ? {} : { terrains: manifest.terrains }),
     };
   }
 
@@ -507,6 +539,57 @@ class GameEngineService
 
     bridge.on('GAME_READY', () => {
       this.isGameReady = true;
+      // C-378 AC-9 visual hook: `?gameHour=<0-23>` pre-configures the
+      // environment hour once the world is ready (the SET_ENVIRONMENT_CONFIG
+      // command handler is registered at world creation). Purely additive —
+      // absent the param (or an empty one), the game boots at its default
+      // hour and no command is dispatched.
+      if (typeof window !== 'undefined') {
+        const rawHour = new URLSearchParams(window.location.search).get('gameHour');
+        const hour = rawHour === null || rawHour.trim() === '' ? Number.NaN : Number(rawHour);
+        if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+          // C-378 visual determinism: the visual runner waits for this flag
+          // instead of a blind sleep, so the gameHour tint (and the scene
+          // state) is applied before the capture. The worker applies the
+          // start hour asynchronously, so the flag is raised only once an
+          // ENVIRONMENT_UPDATED event confirms the environment is at the
+          // requested hour.
+          //
+          // Guard: GAME_READY re-fires after worker restores (LOAD_MAP and
+          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire
+          // registers the subscription and dispatches the config — repeated
+          // fires would leak listeners and re-send SET_ENVIRONMENT_CONFIG.
+          if (this._visualReadyPending) {
+            return;
+          }
+          this._visualReadyPending = true;
+          const offReady = bridge.on('ENVIRONMENT_UPDATED', (event) => {
+            if (event.gameHour === hour) {
+              window.clearTimeout(fallback);
+              offReady();
+              (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
+            }
+          });
+          // Bounded fallback: if the worker never confirms the requested
+          // hour (fractional gameHour drift, missing STATE_UPDATEs, or a
+          // worker that never applies the config), still raise the flag so
+          // the visual runner's 10s wait does not time out. The capture
+          // then proceeds with whatever tint is in effect (degraded
+          // determinism instead of a hard failure).
+          const fallback = window.setTimeout(() => {
+            offReady();
+            (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
+          }, VISUAL_READY_FALLBACK_MS);
+          bridge.send({
+            type: 'SET_ENVIRONMENT_CONFIG',
+            startHour: hour,
+          } as unknown as GameCommand);
+          return;
+        }
+        // Normal boot / empty param — the default environment is already in
+        // effect, so the world is immediately ready for capture.
+        (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true;
+      }
     });
 
     bridge.on('GAME_ERROR', (event) => {

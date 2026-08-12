@@ -147,7 +147,17 @@ const _restoreComponentSlice = (
  * @returns A JSON string representing the snapshot.
  */
 export const serializeWorld = (world: World): string => {
-  const allEids = [...getAllEntities(world)];
+  // C-378: only serialize entities that actually carry persistent state.
+  // C-376 wall entities (GridPosition + SpatialLink + CollisionData) have
+  // none of the persistent components — serializing them produced ~190
+  // no-data entity rows in world-scope snapshots, which the legacy restore
+  // then replayed as sprites (broken scene). An entity with no persistent
+  // component is pure noise on the wire.
+  const hasPersistentData = (eid: number): boolean =>
+    PERSISTENT_COMPONENTS.some(([, component]) =>
+      Object.values(component).some((arr) => arr[eid] !== undefined),
+    );
+  const allEids = [...getAllEntities(world)].filter(hasPersistentData);
   if (allEids.length === 0) {
     const emptySnapshot: EcsSnapshot = {
       version: '1.0.0',

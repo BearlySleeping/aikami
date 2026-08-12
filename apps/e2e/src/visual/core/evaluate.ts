@@ -52,6 +52,13 @@ export type EvaluateOptions = {
   maxRetries?: number;
   /** Whether to use the cache. Default: true. */
   useCache?: boolean;
+  /**
+   * C-378: boolean schema fields that must be `true` for the case to
+   * pass regardless of the score. E.g. `['overheadOccludesPlayer']` makes
+   * the headline visual claim a hard gate instead of trusting a generous
+   * score.
+   */
+  requiredTrueFields?: string[];
 };
 
 /** Result of a single evaluation, regardless of pass/fail. */
@@ -80,22 +87,35 @@ const PASS_SCORE_THRESHOLD = 80;
 /**
  * Determines pass/fail from a validated result object.
  *
- * A case passes when the score meets the threshold AND, for
- * corner-specific schemas, both onGreenGrass and inCorrectCorner
- * are explicitly true.
+ * A case passes when the score meets the threshold AND every
+ * requiredTrueFields entry is explicitly true. C-378: required fields are
+ * hard gates — a generous score can no longer paper over a headline claim
+ * the schema says must be true. Required fields are evaluated BEFORE the
+ * score threshold so a combined failure reports the failing field instead
+ * of only "below threshold".
+ *
+ * Returns the failing field (when a field gate is what failed) so
+ * the caller can surface *why* the case failed instead of blaming
+ * the score. Score-only failures return no field.
  */
-const _computePassed = (result: Record<string, unknown>): boolean => {
+const _evaluateGates = (
+  result: Record<string, unknown>,
+  requiredTrueFields: readonly string[] = [],
+): { passed: boolean; failedField?: string } => {
   const score = typeof result.score === 'number' ? result.score : 0;
+  // C-378: headline fields are hard gates evaluated FIRST — a 95-score run
+  // that fails only on a required field must report that field, not
+  // "below threshold". Suites declare their own hard fields (e.g.
+  // inCorrectCorner/onGreenGrass) via requiredTrueFields.
+  for (const field of requiredTrueFields) {
+    if (result[field] !== true) {
+      return { passed: false, failedField: field };
+    }
+  }
   if (score < PASS_SCORE_THRESHOLD) {
-    return false;
+    return { passed: false };
   }
-  if (typeof result.inCorrectCorner === 'boolean' && result.inCorrectCorner !== true) {
-    return false;
-  }
-  if (typeof result.onGreenGrass === 'boolean' && result.onGreenGrass !== true) {
-    return false;
-  }
-  return true;
+  return { passed: true };
 };
 
 // ── Public API ────────────────────────────────────────────────
@@ -122,7 +142,7 @@ export const getVlmConfig = (): VlmRuntimeConfig => {
  * @returns Structured evaluation result with pass/fail status.
  */
 export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateResult> => {
-  const { imageDataUri, prompt, schema, useCache = true } = options;
+  const { imageDataUri, prompt, schema, useCache = true, requiredTrueFields } = options;
 
   const result = await vlmEvaluateImage<Record<string, unknown>>({
     imageDataUri,
@@ -143,10 +163,17 @@ export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateR
 
   const parsed = result.result ?? {};
   const score = result.score ?? 0;
+  const gate = _evaluateGates(parsed, requiredTrueFields);
 
   return {
     caseName: result.fromCache ? '(from cache)' : '(eval)',
-    passed: _computePassed(parsed),
+    passed: gate.passed,
+    // C-378: when a required field gates the run, surface the failing
+    // field instead of reporting the model score as "below threshold" —
+    // a 95-score run that fails only on overheadOccludesPlayer must say so.
+    error: gate.failedField
+      ? `Required field "${gate.failedField}" was not true (got ${JSON.stringify(parsed[gate.failedField])})`
+      : undefined,
     result: parsed,
     fromCache: result.fromCache,
     score,

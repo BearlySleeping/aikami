@@ -747,6 +747,19 @@ export class GameOverlayService
       const mapName = await getCurrentMapName();
       const map = await buildSaveMapBlock();
 
+      // C-378: skip (never world-scope) when map routing is unavailable —
+      // a v3 save without a map block cannot be restored and would corrupt
+      // the profile. The 120s scheduler retries on the next tick.
+      if (!map) {
+        this.warn('autosave:skipped-no-map-block', {
+          hint: 'Map routing unavailable (engine not on a map yet or position unknown) — skipping this auto-save.',
+        });
+        // Reset the 'saving' state set above — otherwise the overlay would
+        // stay stuck on 'saving' forever (no saved/error branch runs).
+        this.autoSaveStatus = 'idle';
+        return;
+      }
+
       await saveService.saveGame({
         slotId: 'auto-save',
         campaignId,
@@ -1025,6 +1038,15 @@ export class GameOverlayService
         campaignService.activeCampaign?.id ?? (await campaignService.ensureDefaultCampaign()).id;
       const mapName = await getCurrentMapName();
       const map = await buildSaveMapBlock();
+
+      // C-378: never write a save without map routing (see autosave guard).
+      if (!map) {
+        this.warn('saveGame:skipped-no-map-block', {
+          hint: 'Map routing unavailable — save skipped to avoid a corrupt world-scope envelope.',
+        });
+        this.saveMessage = 'Save failed (map unavailable)';
+        return;
+      }
 
       await saveService.saveGame({
         slotId: 'manual-1',
