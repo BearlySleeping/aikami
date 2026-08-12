@@ -1,10 +1,18 @@
 // .pi/extensions/lib/process_runner.ts
 //
-// Deadlock-proof child process execution using Bun.spawn.
+// Deadlock-proof child process execution using node:child_process.
 // Replaces pi.exec() for long-running or test/build commands where
 // the built-in executor can hang due to inherited stdio handles.
 //
-// Using Bun.spawn avoids Node.js child_process deadlock issues entirely.
+// 🔴 Extensions run inside the `pi` CLI process itself, which is always
+// launched via its `#!/usr/bin/env node` shebang — never under the Bun
+// runtime, regardless of what's on PATH or which package manager the repo
+// uses elsewhere. So this file must stick to node:child_process; a `Bun.*`
+// call here throws "Bun is not defined" every time, deterministically.
+// Deadlock-safety comes from manually draining stdout/stderr and killing
+// the whole process group on timeout, not from which runtime spawns it.
+
+import { spawn, spawnSync } from 'node:child_process';
 
 export type RunCommandOptions = {
   /** Working directory (default: process.cwd()) */
@@ -77,24 +85,15 @@ function killProcessTreeForce(pid: number | undefined): void {
 }
 
 async function readStream(
-  stream: ReadableStream<Uint8Array> | null,
+  stream: NodeJS.ReadableStream | null,
   onChunk: (text: string) => void,
 ): Promise<void> {
   if (!stream) {
     return;
   }
-  const reader = stream.getReader();
   const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      onChunk(decoder.decode(value, { stream: true }));
-    }
-  } finally {
-    reader.releaseLock();
+  for await (const chunk of stream) {
+    onChunk(decoder.decode(chunk as Buffer, { stream: true }));
   }
 }
 
@@ -130,7 +129,7 @@ export async function runCommand(
     }
   };
 
-  const child = Bun.spawn([command, ...args], {
+  const child = spawn(command, args, {
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -149,8 +148,8 @@ export async function runCommand(
   ]);
 
   // ── Timeout handling ──────────────────────────────────────────
-  let timeoutHandle: Timer | undefined;
-  let escalateHandle: Timer | undefined;
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  let escalateHandle: NodeJS.Timeout | undefined;
   let finished = false;
 
   const onTimeout = () => {
@@ -184,7 +183,13 @@ export async function runCommand(
   }
 
   // ── Wait for exit ────────────────────────────────────────────
-  const exitCode = await child.exited;
+  const exitCode = await new Promise<number | null>((resolve) => {
+    child.once('exit', (code) => resolve(code));
+    child.once('error', (err) => {
+      appendStderr(`\n[Failed to start process: ${err.message}]`);
+      resolve(null);
+    });
+  });
   finished = true;
 
   // Clean up timers
@@ -222,7 +227,7 @@ export type RunSyncResult = {
 };
 
 /**
- * Run a command synchronously using Bun.spawnSync.
+ * Run a command synchronously using node:child_process's spawnSync.
  * Drop-in replacement for `execSync` from node:child_process.
  */
 export function runSync(
@@ -237,16 +242,18 @@ export function runSync(
     ...options.env,
   };
 
-  const result = Bun.spawnSync([command, ...args], {
+  const result = spawnSync(command, args, {
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    encoding: 'utf8',
   });
 
-  const stdout = Buffer.from(result.stdout).toString('utf8').trim();
-  const stderr = Buffer.from(result.stderr).toString('utf8').trim();
-  const code: number | null = result.exitCode;
+  const stdout = (result.stdout ?? '').toString().trim();
+  const stderr =
+    (result.stderr ?? '').toString().trim() || (result.error ? result.error.message : '');
+  const code: number | null = result.status;
 
   return { stdout, stderr, code };
 }
