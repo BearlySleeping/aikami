@@ -62,16 +62,16 @@ service cloud.firestore {
     // Users — public read (authenticated), owner write, admin full access
     // ═══════════════════════════════════════════════════════════════
     match /users/{uid} {
-      allow read: if isAuthenticated();
+      allow read: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid) || isAdmin();
       allow update, delete: if isOwner(uid) || isAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Personas — public read, creator write
+    // Personas — owner read/write, admin full access
     // ═══════════════════════════════════════════════════════════════
     match /personas/{personaId} {
-      allow read: if true;
+      allow read: if isDocumentOwner('uid') || isAdmin();
       allow create: if isAuthenticated() && isRequestOwner('uid');
       allow update, delete: if isDocumentOwner('uid') || isAdmin();
     }

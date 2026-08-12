@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
 import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
+import { playAlarm } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import {
@@ -98,11 +99,29 @@ const verifierFeedback = (options: {
   const prevVerify = [...options.manifest.attempts]
     .reverse()
     .find((c) => c.role === 'verifier' && c.result);
-  if (!prevVerify?.result) {
+  // 🔴 If this implement attempt was triggered by the fallback-recovery
+  // review captain bouncing the run back with `change`, its diagnosis
+  // (often the product of consulting AskClaude/Opus for a second opinion)
+  // is the most current, most specific signal available — more specific
+  // than the stale verifier findings that already exhausted the loop once.
+  // Without this, `contract_review_decision`'s `summary` was written to the
+  // manifest and then never read again — the captain's diagnosis was
+  // discarded and the implementer re-ran blind on the same old findings.
+  const reviewFeedback =
+    options.manifest.reviewDecision?.decision === 'change'
+      ? options.manifest.reviewDecision.summary
+      : undefined;
+  if (!prevVerify?.result && !reviewFeedback) {
     return undefined;
   }
-  const parts = [prevVerify.result.summary];
-  parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
+  const parts: string[] = [];
+  if (reviewFeedback) {
+    parts.push('## Review Captain diagnosis (fallback recovery)', reviewFeedback, '');
+  }
+  if (prevVerify?.result) {
+    parts.push(prevVerify.result.summary);
+    parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
+  }
   if (prevImpl?.result) {
     parts.push(
       '',
@@ -377,73 +396,46 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   return lines.join('\n');
 };
 
-const FALLBACK_RECOVERY_PROMPT_HEADER = [
-  '',
-  '## ⚠️ FALLBACK RECOVERY — Review Captain Override',
-  '',
-  'This pipeline is **blocked** — the verifier → implementer bounce loop',
-  'has been exhausted. You are in diagnostic-only mode.',
-  '',
-  '🔴 You may NOT edit source files or run tests.',
-  '🔴 You may NOT call `gh_merge_pr` or `gh_promote_pr`.',
-  '',
-  '### Your only permitted actions',
-  '1. Read the manifest, contract, and verifier findings',
-  '2. Call `contract_workspace_log_failure` to capture diagnostics',
-  '3. Produce a clear failure summary for human intervention',
-  '4. Call `contract_review_decision`',
-  '',
-  '### Decision shortcuts',
-  '- "retry" → `change` (back to implementer)',
-  '- "approve" / "create PR" → `approve`',
-  '- "abandon" / "reject" → `reject`',
-  '',
-  '🔴 Your LAST action must call `contract_review_decision`.',
-].join('\n');
-
-const POST_VERIFY_FAILURE_HEADER = [
-  '',
-  '## ⚠️ POST-VERIFY FAILURE — Review Captain',
-  '',
-  '**Verification PASSED.** All tests are green, the code is ready.',
-  '',
-  '**🔴 CRITICAL: No PR exists.** The branch is pushed but PR creation failed.',
-  'The base prompt above shows the branch and compare URL.',
-  'Do NOT claim a PR exists.',
-  '',
-  '### Decision shortcuts',
-  '- "fix" or "retry" → `change` (retries reconciliation — only works if gh auth is fixed)',
-  '- "reject" or "abandon" → `reject` (exit with summary)',
-  '',
-  '🔴 Your LAST action must call `contract_review_decision`.',
-].join('\n');
+/**
+ * Pick the review profile for a blocked run.
+ *
+ * 🔴 Single source of truth: this used to be computed twice (once for the
+ * `ReviewProfile` passed to `loadReviewPrompt`, once more via a differently
+ * -shaped boolean check to pick which header string to bolt on afterward),
+ * and the two could in theory disagree. One function, one decision.
+ */
+const blockedReviewProfile = (manifest: RunManifest): ReviewProfile => {
+  const isLoopExhaustion =
+    manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
+    manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
+  if (isLoopExhaustion) {
+    return 'fallback_recovery';
+  }
+  const lastVerifyPassed = [...manifest.attempts]
+    .reverse()
+    .some((a) => a.stage === 'verify' && a.result?.status === 'passed');
+  return lastVerifyPassed ? 'post_verify_failure' : 'fallback_recovery';
+};
 
 const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: string }): string => {
   const r = options.manifest.reconciliation;
-  const lastVerifyPassed = [...options.manifest.attempts]
-    .reverse()
-    .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
-  const isLoopExhaustion =
-    options.manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
-    options.manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
-
-  const profile: ReviewProfile = isLoopExhaustion ? 'fallback_recovery' : 'ready';
+  const profile = blockedReviewProfile(options.manifest);
 
   const basePrompt = loadReviewPrompt({
     repoRoot: options.repoRoot,
     contractPath: options.manifest.contractPath,
     runId: options.manifest.runId,
     prUrl: undefined,
-    headBranch: r?.headBranch,
+    // 🔴 Reconciliation never ran (or threw) on either blocked path — fall
+    // back to the worktree's own checked-out branch so the injected profile
+    // prompt can tell the captain (and findPrUrl() can later discover) the
+    // branch it should push/PR from while fixing the block itself.
+    headBranch: r?.headBranch ?? options.manifest.worktreeBranch,
     baseBranch: r?.baseBranch,
     profile,
   });
   const summary = formatBlockedSummary(options.manifest);
-
-  if (lastVerifyPassed && !isLoopExhaustion) {
-    return [basePrompt, POST_VERIFY_FAILURE_HEADER, summary].join('\n');
-  }
-  return [basePrompt, FALLBACK_RECOVERY_PROMPT_HEADER, summary].join('\n');
+  return [basePrompt, summary].join('\n');
 };
 
 // ── Merge helpers ────────────────────────────────────────────
@@ -504,44 +496,6 @@ const syncMainOnMerge = (repoRoot: string): void => {
   }
 };
 
-const buildTerminalNotification = (options: {
-  stage: ContractPipelineStage;
-  contractId: string;
-  prUrl?: string;
-  branch?: string;
-}): string => {
-  const pr = options.prUrl ? ` PR: ${options.prUrl}` : '';
-  const branch = options.branch ? ` Branch: \`${options.branch}\`.` : '';
-  const header =
-    options.stage === 'merged'
-      ? '✅ Pipeline complete — PR merged.'
-      : options.stage === 'pr_created'
-        ? '✅ Pipeline complete — PR ready for review.'
-        : '🚫 Pipeline blocked — see the summary above.';
-  return [
-    `## ${header}`,
-    `Contract ${options.contractId} finished at \`${options.stage}\`.${pr}${branch}`,
-    '',
-    'The orchestrator has finished — no further pipeline work will run. Read the',
-    'summary above and close this tab whenever you are ready.',
-    '',
-    '### Cleanup',
-    'Run `/cleanup` here to tear down the *other* finished workspaces. It is safe:',
-    '`workspace:cleanup` refuses to remove the worktree it is running inside, so',
-    'this tab survives — it will simply be reported as skipped.',
-    '',
-    'This tab IS the pipeline workspace, so it can only be removed after you close',
-    'it. From the repo root afterwards:',
-    '```',
-    `bun run workspace:cleanup${options.stage === 'merged' ? ' --pr-merged' : ''}`,
-    '```',
-    '🔴 Never pass `--include-self` from this tab, and never run `herdr worktree',
-    'remove` on this workspace by hand — either would kill your own session.',
-    '',
-    'Reply with a single line acknowledging completion (no commands).',
-  ].join('\n');
-};
-
 /**
  * Remove the run's worktree + branch on terminal exits where auto-clean
  * applies (merged, or blocked/pr_created with no live review pane).
@@ -581,14 +535,29 @@ const cleanupRunWorktree = async (options: {
  * Terminal-exit workspace handling — the single funnel for EVERY way the
  * pipeline ends (merged / pr_created / blocked / crash catch-path).
  *
- * 🔴 Default: KEEP the pipeline workspace alive so the review tab (and its
- * summary) survives for the user to read. The orchestrator posts a
- * completion notification into the tab; the user closes it manually and
- * cleans up with `bun run workspace:cleanup`. Auto-clean only when nobody
- * is reading the tab:
- *   - CONTRACT_PIPELINE_AUTO_CLEANUP=1      → always clean (escape hatch)
+ * 🔴 Default: KEEP the pipeline workspace alive so the user can read the
+ * summary and, for `blocked`, actually act on it (inspect the worktree,
+ * fix things, `--resume`). The pane is left exactly as the agent last left
+ * it — no completion message is injected (that would cost a full agent
+ * turn just to produce a throwaway "ok" reply; the user already sees the
+ * outcome from the agent's own last message, e.g. `contract_review_decision`'s
+ * result). The user closes the tab manually and cleans up with
+ * `bun run workspace:cleanup`. Auto-clean only when nobody can plausibly
+ * still be looking at this workspace:
+ *   - CONTRACT_PIPELINE_AUTO_CLEANUP=1         → always clean (escape hatch)
  *   - pure YOLO (autofix cycles not exhausted) → clean (no human in the loop)
- *   - no live review pane                    → clean (crash/block before review)
+ *   - merged/pr_created with no live review pane → clean (the PR is the
+ *     artifact of record; nothing left to see in the workspace itself)
+ *
+ * 🔴 `blocked` is ALWAYS kept alive, even when no review pane was ever
+ * created — e.g. a Phase 0 preflight failure blocks before `review` even
+ * starts. A blocked run is exactly the case where a human is most likely to
+ * want to look inside the worktree, and auto-deleting it out from under
+ * them (previously: any block-before-review nuked the checkout within
+ * seconds of appearing) was the cause of the "workspace randomly
+ * disappeared" reports on C-378/C-379. Blocked-but-abandoned workspaces are
+ * cleaned up later via `bun run workspace:cleanup`, same as any other
+ * preserved run.
  */
 const finalizeWorkspace = async (options: {
   adapter: ContractHerdrAdapterInterface;
@@ -603,12 +572,15 @@ const finalizeWorkspace = async (options: {
     (await options.adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false));
   const pureYolo = options.yolo === true && manifest.autofixCycles < MAX_AUTOFIX_CYCLES;
   const keepAlive =
-    process.env.CONTRACT_PIPELINE_AUTO_CLEANUP !== '1' && reviewPaneAlive && !pureYolo;
+    process.env.CONTRACT_PIPELINE_AUTO_CLEANUP !== '1' &&
+    !pureYolo &&
+    (stage === 'blocked' || reviewPaneAlive);
 
   if (keepAlive) {
     const wsPath = options.adapter.getWorkspacePath();
-    console.log(`\n🧘 Workspace preserved — the review tab stays open for you.`);
-    console.log(`   Read the final summary in the review tab, then close it when done.`);
+    const tabDescription = reviewPaneAlive ? 'review tab' : 'pipeline tab';
+    console.log(`\n🧘 Workspace preserved — the ${tabDescription} stays open for you.`);
+    console.log(`   Read the final summary in the ${tabDescription}, then close it when done.`);
     if (wsPath) {
       console.log(
         `   Manual cleanup: bun run workspace:cleanup${stage === 'merged' ? ' --pr-merged' : ''}\n`,
@@ -619,24 +591,10 @@ const finalizeWorkspace = async (options: {
         `   When done, switch back to main: git checkout main && git pull --ff-only origin main\n`,
       );
     }
-    try {
-      await options.adapter.sendReviewMessage({
-        paneId: manifest.reviewPaneId as string,
-        message: buildTerminalNotification({
-          stage,
-          contractId: manifest.contractId,
-          prUrl: manifest.prUrl,
-          branch: manifest.reconciliation?.headBranch,
-        }),
-      });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`⚠️  Could not notify review pane: ${msg.slice(0, 200)}`);
-    }
     pipelineLog({
       runId: manifest.runId,
       cwd: options.repoRoot,
-      message: `Pipeline terminal at ${stage}. Workspace preserved; review tab notified. Manual cleanup required.`,
+      message: `Pipeline terminal at ${stage}. Workspace preserved. Manual cleanup required.`,
     });
     return;
   }
@@ -895,6 +853,18 @@ export const runContractPipeline = async (options: {
         const before = captureGitState(cwdForGit);
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
+        // 🔴 Consume the review captain's `change` decision exactly once, as
+        // feedback for THIS implement attempt. `manifest.reviewDecision` is
+        // never cleared by `transition()` — left alone, the NEXT time the
+        // pipeline reaches `review` (after this implement→verify round
+        // trip), `decision = manifest.reviewDecision ?? await
+        // waitForReviewDecision(...)` would immediately replay this SAME
+        // stale decision instead of waiting for a fresh one from the
+        // captain, silently bouncing back to implement forever without ever
+        // pausing for a real review.
+        if (stage === 'implement' && manifest.reviewDecision?.decision === 'change') {
+          manifest.reviewDecision = undefined;
+        }
 
         const interactiveStage =
           !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
@@ -1164,7 +1134,13 @@ export const runContractPipeline = async (options: {
 
       if (manifest.currentStage === 'review') {
         const isBlockedReview = !!manifest.blockedReason;
-        const headBranch = manifest.reconciliation?.headBranch;
+        // 🔴 Blocked reviews (verify-loop exhaustion, post-verify reconcile
+        // failure) reach `review` WITHOUT `manifest.reconciliation` ever
+        // being set — reconcile either never ran or threw. Fall back to the
+        // worktree's own checked-out branch (set at initialize time) so
+        // findPrUrl() below can still discover a PR that the review captain
+        // pushes and creates by hand while fixing the block itself.
+        const headBranch = manifest.reconciliation?.headBranch ?? manifest.worktreeBranch;
         const baseBranch = manifest.reconciliation?.baseBranch ?? PIPELINE_BASE_BRANCH;
         const reviewPath = join(
           runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
@@ -1254,7 +1230,18 @@ export const runContractPipeline = async (options: {
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
             yolo: isYolo,
+            // Blocked reviews (post-verify-failure, fallback-recovery) get a
+            // recovery-specific initial task (diagnose → recover or hand off,
+            // ending in contract_review_decision) and run from the worktree
+            // — the implementation branch only exists there, not the repo
+            // root. Passed explicitly, never inferred from yolo.
+            blockedReview: isBlockedReview,
+            useWorktreeCwd: isYolo || isBlockedReview,
           });
+          // 🔔 Review spawned — chime regardless of pipeline outcome (clean
+          // pass or blocked review). Delayed + fire-and-forget so the pane
+          // renders first and the pipeline never blocks on audio.
+          playAlarm();
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 

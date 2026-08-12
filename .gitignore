@@ -129,6 +129,8 @@ docker-compose.override.yml
 
 ## 🔒 Security & DB
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 *.pem

@@ -1,0 +1,167 @@
+---
+title: Terrain Authoring (Corner-16 Autotiling)
+description: How to add a terrain to a content pack — the terrains schema, corner-16 frame layout, mask bit order, precedence rule, and the band property.
+---
+
+The map format is an **authoring format**: a creator paints semantic terrain
+names (`grass`, `dirt`, `water`) and the engine resolves the correct edge and
+corner tiles automatically — including three-way junctions — without touching a
+tile ID. This page documents the terrain format for content-pack creators.
+
+## The `terrains` schema
+
+A terrain is declared in the pack manifest's `terrains` array:
+
+```ts
+{
+  name: 'dirt',           // terrain identity key used by map aikami.terrain cells
+  precedence: 1,          // draw order; lower renders first
+  wang: 'corner16',       // 'fill' = solid base, 'corner16' = 16 frames
+  frameBase: 'dirt_0.png',// frame name of mask index 0
+  isWalkable: true,       // walkability source of truth
+}
+```
+
+This is the full authorable surface today: `name`, `precedence`, `wang`,
+`frameBase`, `variants` (for `fill` terrains) and `isWalkable`. Other fields
+in the shared schema (e.g. `movementCost`, `blocksSight`) are reserved for
+future contracts — nothing parses or consumes them yet, so authoring them
+has no effect. The engine derives walkability from `isWalkable` and treats
+everything else as unsupported.
+
+Rules enforced at load:
+
+- **Exactly one `wang: 'fill'` terrain** — the lowest-precedence fill is the
+  base terrain and renders under every overlay.
+- **Precedence values must be unique** — duplicate precedences are rejected at
+  runtime by `validateTerrains` (they are unresolvable; the shared schema
+  validates each terrain object individually and cannot see cross-terrain
+  duplicates).
+- **The base terrain is inferred as the lowest `precedence`** — never declared
+  explicitly.
+- **Unknown terrain ids in a map resolve to the base terrain** with one
+  batched warning per map load — never a blank map.
+
+## Corner-16 frame layout
+
+A `corner16` terrain needs **16 frames in mask order** — one contiguous run in
+the atlas. `frameBase` names mask 0; masks 1..15 derive as
+`${stem}_${mask}${ext}` (e.g. `dirt_0.png` → `dirt_1.png` … `dirt_15.png`). A
+content author declares ONE frame name, not sixteen.
+
+### Mask bit order
+
+The cell's frame index is a 4-bit mask of which of its four **corners** belong
+to the terrain. **Bit order is part of the atlas contract** — a terrain sheet
+authored against the wrong order renders garbage:
+
+```text
+      NW ───────── NE
+      │  bit0      bit1  │
+      │                  │
+      │                  │
+      │  bit3      bit2  │
+      SW ───────── SE
+```
+
+| Bit | Corner | Value |
+|---|---|---|
+| 0 | NW | 1 |
+| 1 | NE | 2 |
+| 2 | SE | 4 |
+| 3 | SW | 8 |
+
+Mask `0` = no corners (fully enclosed by higher-precedence terrain), mask
+`15` = fully inside. The frame's own center diamond is always the terrain — the
+mask only decides which corner wedges are cut.
+
+### The precedence rule
+
+A corner's terrain is the **highest-precedence** terrain among the up-to-4
+cells touching it. Map-edge corners touch fewer than 4 cells — **out-of-bounds
+cells are treated as the base terrain** (documented OOB rule).
+
+The renderer draws the base fill over every cell, then each higher terrain as
+its own overlay layer in precedence order. An N-terrain map needs N layers and
+N×16 frames — never N²×16.
+
+### Worked example (the same fixture the engine tests use)
+
+A 3×3 grid with `grass` (base, precedence 0), `dirt` (precedence 1), `water`
+(precedence 2):
+
+```text
+grass grass grass
+grass dirt  water
+grass grass grass
+```
+
+The dirt cell at (1,1) has a water cell directly east. Water touches the dirt
+cell's NE and SE corners → both bits clear → dirt mask `0b1001` = **9** →
+`dirt_9.png`. The water cell has all corners owned by water → mask 15 →
+`water_15.png`. This is the fixture in
+`packages/frontend/engine/src/assets/autotile.test.ts` — keep the docs and the
+test in sync.
+
+## The map channel
+
+A map carries the semantic channel additively under `aikami` (Tiled JSON):
+
+```jsonc
+{
+  "width": 20, "height": 20, "tilewidth": 32, "tileheight": 32,
+  "aikami": {
+    "formatVersion": 1,
+    "terrain": ["grass", "grass", "dirt", ""],
+    "elevation": [0, 0, 0, 0]
+  },
+  "layers": []
+}
+```
+
+- `terrain` — row-major, one terrain id per cell. `""` or omitted = the pack's
+  base terrain.
+- `elevation` — row-major int8, **reserved** (all zeros; cliffs/ramps land
+  later). Not consumed by the engine yet.
+- A map with **no** `aikami.terrain` channel renders through the legacy
+  baked-GID path — the terrain channel is additive, not a replacement.
+
+## The `band` property
+
+Tile layers declare their render band via a Tiled layer custom property —
+**the engine never infers the band from the layer name**:
+
+| Band | zIndex | Purpose |
+|---|---|---|
+| `ground` | -1000 | base fill + terrain overlays (below every entity) |
+| `decor` | -900 | paths, walls, furniture (below entities, above ground) |
+| `overhead` | 100000 | roofs, canopies (above every entity — walk behind them) |
+
+```jsonc
+{
+  "name": "overhead",
+  "type": "tilelayer",
+  "properties": [{ "name": "band", "type": "string", "value": "overhead" }],
+  "data": []
+}
+```
+
+`collision` layers are always skipped by rendering and apply **additively** to
+the collision grid — they can only add solidity, never re-open a terrain-solid
+cell.
+
+## Collision reads terrain, rendering reads frames
+
+The load-bearing invariant: a cell's walkability comes from its **terrain
+id**, never from the tile drawn on it. A `grass` cell rendering a water-edge
+overlay frame stays walkable. Collision derives from `isWalkable` on the
+terrain declarations plus the explicit `collision` layer — resolved GIDs are
+excluded from the collision path entirely.
+
+## Source
+
+- `packages/frontend/engine/src/assets/autotile.ts` — the autotiler
+- `packages/shared/schemas/src/lib/game/content_pack.ts` — the schema
+- `packages/frontend/engine/src/assets/map_loader.ts` — map channel parsing +
+  collision derivation
+- `packages/frontend/engine/src/rendering/layer_bands.ts` — the z bands

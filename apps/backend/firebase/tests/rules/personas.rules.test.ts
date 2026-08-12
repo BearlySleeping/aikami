@@ -43,12 +43,20 @@ describe('personas collection', () => {
   // Other authenticated user
   // ───────────────────────────────────────────
   describe('other authenticated user', () => {
-    test('can read public persona', async () => {
+    test('cannot read another persona', async () => {
       const creator = h.db(h.user('user-123'));
       await creator.collection('personas').doc('p-1').set({ uid: 'user-123', name: 'Warrior' });
 
       const other = h.db(h.user('user-456'));
-      await h.assertSucceeds(other.collection('personas').doc('p-1').get());
+      await h.assertFails(other.collection('personas').doc('p-1').get());
+    });
+
+    test('cannot list personas belonging to another user', async () => {
+      const creator = h.db(h.user('user-123'));
+      await creator.collection('personas').doc('p-1').set({ uid: 'user-123', name: 'Warrior' });
+
+      const other = h.db(h.user('user-456'));
+      await h.assertFails(other.collection('personas').where('uid', '==', 'user-123').get());
     });
 
     test('cannot create persona for another user', async () => {
@@ -79,12 +87,20 @@ describe('personas collection', () => {
   // Unauthenticated
   // ───────────────────────────────────────────
   describe('unauthenticated', () => {
-    test('can read public persona', async () => {
+    test('cannot read any persona', async () => {
       const creator = h.db(h.user('user-123'));
       await creator.collection('personas').doc('p-1').set({ uid: 'user-123', name: 'Warrior' });
 
       const anon = h.db(h.anon());
-      await h.assertSucceeds(anon.collection('personas').doc('p-1').get());
+      await h.assertFails(anon.collection('personas').doc('p-1').get());
+    });
+
+    test('cannot list any personas', async () => {
+      const creator = h.db(h.user('user-123'));
+      await creator.collection('personas').doc('p-1').set({ uid: 'user-123', name: 'Warrior' });
+
+      const anon = h.db(h.anon());
+      await h.assertFails(anon.collection('personas').get());
     });
 
     test('cannot create persona', async () => {

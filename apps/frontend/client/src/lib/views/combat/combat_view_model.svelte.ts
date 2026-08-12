@@ -1,7 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
 import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
-import { dataConnect, getTracksByMood } from '@aikami/frontend/dataconnect';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -14,6 +13,10 @@ import {
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
+import {
+  getTracksByMood as getCatalogTracksByMood,
+  resolveAudioTrackUrl,
+} from '$lib/services/audio/audio_track_catalog';
 import {
   audioService,
   diceService,
@@ -1473,46 +1476,42 @@ export class CombatViewModel
   // -----------------------------------------------------------------------
 
   /**
-   * Queries Data Connect for audio tracks matching a scene mood and
-   * triggers an equal-power BGM crossfade via {@link audioService}.
+   * Resolves audio tracks matching a scene mood from the static catalog
+   * and triggers an equal-power BGM crossfade via {@link audioService}.
    *
-   * Picks a random track from matching results for variety. Falls back
-   * to a hardcoded placeholder URL when Firebase is unavailable or no
-   * tracks match the requested mood.
+   * The catalog is a synchronous in-memory map read after first load
+   * (C-385 AC-3) — no per-combat network request. Picks a random track
+   * from matching results for variety. Unknown moods degrade to a
+   * documented fallback track inside the catalog resolver; a failed
+   * transition falls back to scene-based BGM resolution.
    *
    * Fire-and-forget — errors are logged but never propagated to the UI.
    *
    * @param mood - Musical mood tag (e.g. 'epic', 'tense', 'triumph').
    *
-   * Contract: C-151 AI Dynamic Music
+   * Contract: C-151 AI Dynamic Music, C-385 AC-3
    */
   private async _transitionBgmByMood(mood: string): Promise<void> {
     try {
-      const result = await getTracksByMood(dataConnect, { mood });
-
-      if (result.data?.audioTracks && result.data.audioTracks.length > 0) {
-        const tracks = result.data.audioTracks;
-        const selected = tracks[Math.floor(Math.random() * tracks.length)];
-        if (!selected) {
-          return;
-        }
-
-        this.debug('_transitionBgmByMood: crossfading', {
-          mood,
-          track: selected.title,
-          url: selected.storageUrl,
-          availableTracks: tracks.length,
-        });
-
-        await audioService.transitionToBgm(selected.storageUrl, 2000);
-      } else {
-        // No tracks found for this mood — fall back to placeholder
-        this.debug('_transitionBgmByMood: no tracks for mood, using fallback', { mood });
-        await this._transitionBgmFallback(mood);
+      const tracks = await getCatalogTracksByMood(mood);
+      const selected = tracks[Math.floor(Math.random() * tracks.length)];
+      if (!selected) {
+        return;
       }
+
+      const url = resolveAudioTrackUrl(selected);
+
+      this.debug('_transitionBgmByMood: crossfading', {
+        mood,
+        track: selected.title,
+        url,
+        availableTracks: tracks.length,
+      });
+
+      await audioService.transitionToBgm(url, 2000);
     } catch (error) {
-      // Firebase / Data Connect unavailable — use hardcoded placeholder
-      this.debug('_transitionBgmByMood: query failed, using fallback', {
+      // Catalog or playback failure — fall back to scene-based resolution
+      this.debug('_transitionBgmByMood: transition failed, using scene fallback', {
         mood,
         error: (error as Error).message,
       });
@@ -1521,8 +1520,8 @@ export class CombatViewModel
   }
 
   /**
-   * Fallback BGM resolution for when Firebase Data Connect is
-   * unavailable or no tracks exist for the requested mood.
+   * Fallback BGM resolution for when the audio catalog transition fails
+   * or the requested mood cannot be resolved.
    *
    * Resolves through the manifest-backed audio resolver (C-372) instead
    * of legacy /assets/audio/* URLs. Routes through playSceneBgm's recency

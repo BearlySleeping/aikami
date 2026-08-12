@@ -54,8 +54,19 @@ export type TilemapLayer = {
   height: number;
   /** Flat array of tile GIDs, row-major order. 0 = empty tile. */
   data: number[];
+  /**
+   * C-378 terrain layers: flat array of frame NAMES, row-major order.
+   * `0` = empty. When present, the chunk renderer resolves frames by name
+   * through the atlas (never GIDs).
+   */
+  frames?: readonly (string | 0)[];
   /** Whether the layer is visible in the Tiled editor. */
   visible: boolean;
+  /**
+   * Render band (C-378). Declared via the layer's `band` custom property
+   * with a documented default of `'ground'` — never sniffed from the name.
+   */
+  band?: TilemapBand;
 };
 
 /**
@@ -165,7 +176,29 @@ export type TilemapData = {
   layers: TilemapLayer[];
   /** Objectgroup layers extracted from the map (if any). */
   objectLayers?: ObjectLayer[];
+  /**
+   * Semantic terrain channel (C-378). Row-major, one terrain id per cell;
+   * `''` / omitted = the pack's base terrain. Absent → legacy baked-GID
+   * render path.
+   */
+  terrain?: readonly string[];
+  /**
+   * Reserved elevation channel (C-378). Row-major int8, all zeros until
+   * cliffs land. Parsed and carried, never consumed.
+   */
+  elevation?: readonly number[];
 };
+
+/**
+ * A tile layer's render band (C-378). Ground renders below every entity,
+ * decor below entities but above ground, overhead above every entity.
+ * The engine does NOT infer the band from the layer name — a `band`
+ * property on the layer (Tiled custom property) declares it.
+ */
+export type TilemapBand = 'ground' | 'decor' | 'overhead';
+
+/** Default band when a layer declares no `band` property (Tiled default). */
+export const DEFAULT_TILEMAP_BAND: TilemapBand = 'ground';
 
 /**
  * Options for loading a tilemap.
@@ -338,10 +371,65 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
 
   const layers = tileLayers.map((layer) => _parseLayer(layer, width, height, url));
 
+  // C-378: parse the additive `aikami` channel block (terrain + elevation).
+  // Absent → legacy baked-GID path. Unknown fields are ignored so old
+  // tools writing extra metadata never break parsing.
+  const aikami = raw.aikami as Record<string, unknown> | undefined;
+  let terrain: string[] | undefined;
+  let elevation: number[] | undefined;
+  if (aikami && typeof aikami === 'object') {
+    if (Array.isArray(aikami.terrain)) {
+      const expectedLength = width * height;
+      if (aikami.terrain.length !== expectedLength) {
+        throw new Error(
+          `MapLoader: aikami.terrain length (${aikami.terrain.length}) ` +
+            `doesn't match map dimensions (expected ${expectedLength}) at "${url}"`,
+        );
+      }
+      terrain = aikami.terrain.map((v: unknown): string => {
+        return typeof v === 'string' ? v : '';
+      });
+    } else if (aikami.terrain !== undefined) {
+      // C-378: malformed terrain channel — the map still loads on the
+      // legacy baked-GID path, but the author needs to know the channel
+      // was ignored (a non-array here would otherwise be silently dropped).
+      const bad = aikami.terrain;
+      logger.warn('loadTilemap:invalid-terrain', {
+        url,
+        type: typeof bad,
+        value: typeof bad === 'string' ? bad.slice(0, 40) : undefined,
+        hint: 'aikami.terrain must be an array of terrain-id strings — falling back to the baked-GID path (C-378).',
+      });
+    }
+    if (Array.isArray(aikami.elevation)) {
+      const expectedLength = width * height;
+      if (aikami.elevation.length !== expectedLength) {
+        throw new Error(
+          `MapLoader: aikami.elevation length (${aikami.elevation.length}) ` +
+            `doesn't match map dimensions (expected ${expectedLength}) at "${url}"`,
+        );
+      }
+      elevation = aikami.elevation.map((v: unknown): number => {
+        const n = Number(v);
+        return Number.isInteger(n) ? n : 0;
+      });
+    }
+  }
+
   // Extract objectgroup layers (spawn points for NPCs and props)
   const objectLayers = _parseObjectLayers(rawLayers, url);
 
-  return { width, height, tilewidth, tileheight, tilesets, layers, objectLayers };
+  return {
+    width,
+    height,
+    tilewidth,
+    tileheight,
+    tilesets,
+    layers,
+    objectLayers,
+    terrain,
+    elevation,
+  };
 };
 
 /**
@@ -417,7 +505,30 @@ const _parseLayer = (
     return num;
   });
 
-  return { name, width, height, data, visible };
+  // C-378: layer `band` custom property (Tiled properties array). The
+  // engine never sniffs the band from the layer name — an explicit
+  // property with a documented default of 'ground'.
+  let band: TilemapBand | undefined;
+  const props = raw.properties;
+  if (Array.isArray(props)) {
+    for (const entry of props) {
+      if (
+        entry &&
+        typeof entry === 'object' &&
+        (entry as { name?: unknown }).name === 'band' &&
+        typeof (entry as { value?: unknown }).value === 'string'
+      ) {
+        const value = (entry as { value: string }).value;
+        if (value === 'ground' || value === 'decor' || value === 'overhead') {
+          band = value;
+        } else {
+          logger.warn('loadTilemap:invalid-band', { layer: name, band: value, url });
+        }
+      }
+    }
+  }
+
+  return { name, width, height, data, visible, band };
 };
 
 /**
@@ -697,31 +808,33 @@ export const extractCollisionGrid = (
  * Builds the collision grid from the content-pack manifest — the manifest
  * is the single source of truth for terrain solidity (C-376 AC-1).
  *
- * Walks every tile layer (excluding the collision layer itself), looks up
- * each GID in `packConfig.tiles[String(gid)]`, and marks the cell solid when
- * `isWalkable` is false. Semantics:
+ * **Terrain channel path (C-378 AC-2 / AC-4):** when the map carries an
+ * `aikami.terrain` channel AND the pack declares `terrains`, solidity is
+ * derived from each cell's terrain `isWalkable` + the explicit `collision`
+ * layer — resolved GIDs are EXCLUDED from the collision path entirely.
+ * This is the load-bearing invariant of C-378: a cell's walkability comes
+ * from its terrain, never from the tile drawn on it, so a grass cell
+ * rendering a water-edge overlay frame stays walkable. The explicit
+ * `collision` layer stays additive (it can only add solidity).
  *
- * - GID 0 (empty) is always walkable — never treated as "unknown".
- * - Unknown GID (not declared in the manifest) → `warn` + solid (fail-closed).
- *   The per-pack audit validator (AC-6) makes unknown GIDs an authoring error,
- *   so this runtime safety net is rarely hit.
- * - The map `collision` layer applies ADDITIVELY — it can only mark extra
- *   cells solid, never re-open a manifest-solid cell.
+ * **Legacy GID path:** maps without a terrain channel (or packs without
+ * `terrains`) derive solidity from `packConfig.tiles[gid].isWalkable`,
+ * gated by `solidityLayers` (C-376). GID 0 (empty) is always walkable;
+ * unknown GID → `warn` + solid (fail-closed).
  *
  * @param tilemap - The parsed tilemap data.
- * @param packConfig - The resolved pack config (tiles + props). When
- *   undefined (manifest resolution failed), falls back to the explicit
+ * @param packConfig - The resolved pack config (tiles + props + terrains).
+ *   When undefined (manifest resolution failed), falls back to the explicit
  *   collision layer only — all non-collision GIDs are walkable (the
- *   graceful-degradation path, C-376 AC-2 watch point). Sandbox maps
- *   without a pack express GID-2/water solidity in their explicit
- *   collision layers (the debug_map.jton water ring), so no hardcoded
- *   GID set needs to be reintroduced here.
+ *   graceful-degradation path, C-376 AC-2 watch point).
  * @param options - Optional behavior overrides.
  * @param options.layerName - Collision layer name (default: "collision").
  * @param options.solidityLayers - When provided, ONLY these tile layers
  *   contribute manifest solidity; every other non-collision tile layer is
  *   treated as visual-only (CodeRabbit review, C-376). Omitted → all
- *   non-collision tile layers contribute (C-376 contract default).
+ *   non-collision tile layers contribute (C-376 contract default). In the
+ *   terrain-channel path this option is ignored — terrain solidity comes
+ *   from terrain ids, not baked layers.
  * @returns A flat boolean array (true = solid) in row-major order,
  *   or `undefined` if no cell is blocked.
  */
@@ -742,12 +855,70 @@ export const buildCollisionGrid = (
     return extractCollisionGrid(tilemap, { layerName });
   }
 
-  const tiles = packConfig.tiles;
   const totalCells = tilemap.width * tilemap.height;
 
   // Start with an empty grid (all false = walkable)
   const grid = new Array<boolean>(totalCells).fill(false) as boolean[];
   let hasAnyBlocked = false;
+
+  // 0. Terrain-channel path (C-378 AC-2): when the map declares a terrain
+  //    channel and the pack declares terrains, walkability is derived from
+  //    the terrain ids alone — NEVER from resolved GIDs. This is the
+  //    invariant that makes the whole terrain design safe.
+  if (tilemap.terrain && packConfig.terrains && packConfig.terrains.length > 0) {
+    const terrains = packConfig.terrains;
+    const terrainWalkability = new Map<string, boolean>();
+    for (const t of terrains) {
+      terrainWalkability.set(t.name, t.isWalkable);
+    }
+    const baseTerrain = [...terrains].sort((a, b) => a.precedence - b.precedence)[0];
+    const unknownTerrains = new Set<string>();
+    for (let i = 0; i < totalCells; i++) {
+      const id = tilemap.terrain[i] ?? '';
+      const resolved = id === '' ? baseTerrain.name : id;
+      const walkable = terrainWalkability.get(resolved);
+      if (walkable === undefined) {
+        unknownTerrains.add(resolved);
+        // Unknown terrain → base terrain walkability (failure recovery).
+        if (!baseTerrain.isWalkable) {
+          grid[i] = true;
+          hasAnyBlocked = true;
+        }
+        continue;
+      }
+      if (!walkable) {
+        grid[i] = true;
+        hasAnyBlocked = true;
+      }
+    }
+    if (unknownTerrains.size > 0) {
+      logger.warn('buildCollisionGrid:unknown-terrain', {
+        terrains: [...unknownTerrains].sort(),
+        hint: 'Declare these ids in manifest.terrains — treated as the base terrain (C-378).',
+      });
+    }
+
+    // 2. Explicit collision layer — additive only. Never re-opens a
+    //    terrain-solid cell.
+    const collisionLayer = tilemap.layers.find((l) => l.name === layerName);
+    if (collisionLayer) {
+      for (let i = 0; i < totalCells; i++) {
+        if (collisionLayer.data[i] !== 0) {
+          grid[i] = true;
+          hasAnyBlocked = true;
+        }
+      }
+    }
+
+    // Return undefined only if no layer contributed any blocked cells.
+    if (!hasAnyBlocked && !collisionLayer) {
+      return undefined;
+    }
+
+    return grid;
+  }
+
+  const tiles = packConfig.tiles;
 
   // 1. Manifest-driven solidity from tile layers (ground/decor).
   //    GID 0 = empty = walkable; unknown GID = warn + solid (fail-closed).

@@ -7,13 +7,14 @@
 // Tests:
 // - WasmStorageAdapter conforms to LocalDatabaseInterface
 // - query/execute/transaction work correctly
-// - AIKAMI_SCHEMA_DDL applies idempotently
+// - AIKAMI_MIGRATIONS[0] (schema v1) applies idempotently
 // - Campaign JSON round-trip through campaigns table
 // - transaction() rolls back atomically on failure
 // - Data persists across adapter close/reopen
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { AIKAMI_SCHEMA_DDL, type LocalDatabaseInterface } from '../storage_adapter.ts';
+import { AIKAMI_MIGRATIONS } from '../migrations.ts';
+import type { LocalDatabaseInterface } from '../storage_adapter.ts';
 import { WasmStorageAdapter } from '../wasm_storage_adapter.ts';
 
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ const createAdapter = async (): Promise<WasmStorageAdapter> => {
 };
 
 const applySchema = async (db: LocalDatabaseInterface): Promise<void> => {
-  for (const ddl of AIKAMI_SCHEMA_DDL) {
+  for (const ddl of AIKAMI_MIGRATIONS[0].statements) {
     await db.execute({ sql: ddl, args: [] });
   }
 };
@@ -324,8 +325,9 @@ describe('WasmStorageAdapter (in-memory)', () => {
   // ── C-373: Asset registry tables (old-DB additive upgrade) ─────────
 
   test('C-373: assets/asset_sources/install_state tables exist after DDL', async () => {
-    // The three tables must be created by the appended DDL so existing
-    // databases upgrade in place (additive migration, no data loss).
+    // The three tables are created by migration v1 (formerly the appended
+    // AIKAMI_SCHEMA_DDL). New tables upgrade in place; a schema change to
+    // an existing table requires a new numbered migration (C-384).
     const registryTables = await db.query({
       sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('assets', 'asset_sources', 'install_state')",
       args: [],

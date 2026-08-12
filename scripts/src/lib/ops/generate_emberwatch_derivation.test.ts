@@ -15,6 +15,8 @@ import {
   ATLAS_COLS,
   buildFrames,
   buildG,
+  cornerFrameName,
+  readManifestTerrains,
   readManifestTiles,
   resetManifestTilesCache,
   setManifestTilesForTest,
@@ -150,5 +152,81 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
     } finally {
       resetManifestTilesCache();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-378 AC-5 — extruded atlas determinism + corner-16 terrain frames
+// ---------------------------------------------------------------------------
+
+describe('C-378 — corner-16 terrain frame derivation', () => {
+  test('readManifestTerrains reads the committed terrains block', () => {
+    const terrains = readManifestTerrains();
+    expect(terrains.length).toBeGreaterThanOrEqual(3);
+    const names = terrains.map((t) => t.name);
+    expect(names).toContain('grass');
+    expect(names).toContain('dirt');
+    expect(names).toContain('water');
+  });
+
+  test('cornerFrameName derives masks 0..15 from frameBase', () => {
+    expect(cornerFrameName('dirt_0.png', 0)).toBe('dirt_0.png');
+    expect(cornerFrameName('dirt_0.png', 1)).toBe('dirt_1.png');
+    expect(cornerFrameName('dirt_0.png', 15)).toBe('dirt_15.png');
+    expect(cornerFrameName('water_0.png', 7)).toBe('water_7.png');
+  });
+});
+
+describe('C-378 AC-5 — atlas packer determinism', () => {
+  test('all 32 corner-16 frame rects exist at 32×32 with 1px margin and distinct cells', () => {
+    const atlas = JSON.parse(
+      readFileSync(
+        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
+        'utf-8',
+      ),
+    ) as { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> };
+    const CELL = 34; // extruded cell pitch (32 content + 1px margin each side)
+    const seenRects = new Set<string>();
+    let checked = 0;
+    // Both corner16 runs: dirt_* (row 3, after the 48 baked frames fill
+    // rows 0-2) and water_* (row 4).
+    for (const [terrain, firstCell] of [
+      ['dirt', 48],
+      ['water', 64],
+    ] as const) {
+      for (let mask = 0; mask < 16; mask++) {
+        const name = mask === 0 ? `${terrain}_0.png` : `${terrain}_${mask}.png`;
+        const entry = atlas.frames[name];
+        expect(entry, `${terrain}_${mask} frame exists`).toBeDefined();
+        if (!entry) {
+          continue;
+        }
+        checked += 1;
+        // 32×32 content with the 1px margin: x = col*34 + 1, y = row*34 + 1.
+        const cell = firstCell + mask;
+        const col = cell % 16;
+        const row = Math.floor(cell / 16);
+        expect(entry.frame.w, `${name} width`).toBe(32);
+        expect(entry.frame.h, `${name} height`).toBe(32);
+        expect(entry.frame.x, `${name} x`).toBe(col * CELL + 1);
+        expect(entry.frame.y, `${name} y`).toBe(row * CELL + 1);
+        // Distinct rectangle — a cell collision would overwrite a frame and
+        // two entries would share a rect.
+        const key = `${entry.frame.x},${entry.frame.y},${entry.frame.w},${entry.frame.h}`;
+        expect(seenRects.has(key), `${name} occupies a distinct cell`).toBe(false);
+        seenRects.add(key);
+      }
+    }
+    expect(checked).toBe(32);
+  });
+
+  test('the committed atlas is 544×272 (extruded)', () => {
+    const atlas = JSON.parse(
+      readFileSync(
+        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
+        'utf-8',
+      ),
+    ) as { meta: { size: { w: number; h: number } } };
+    expect(atlas.meta.size).toEqual({ w: 544, h: 272 });
   });
 });

@@ -52,6 +52,13 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * Contract: C-217 — E2E visual test stabilisation
    */
   mask?: string[];
+  /**
+   * C-378: boolean schema fields that must be `true` for the case to
+   * pass, regardless of the score. Enforced in evaluate.ts — a generous
+   * score can no longer paper over a headline field (e.g.
+   * `overheadOccludesPlayer`).
+   */
+  requiredTrueFields?: string[];
 };
 
 /** A suite of related visual test cases targeting the same route. */
@@ -87,6 +94,8 @@ export type CaptureResult = {
   schema: TSchema;
   /** Error message if capture failed. */
   error?: string;
+  /** C-378: boolean schema fields that must be true for this case to pass. */
+  requiredTrueFields?: string[];
 };
 
 // ── Path resolution ──────────────────────────────────────────
@@ -386,6 +395,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             base64DataUri,
             prompt: testCase.prompt,
             schema: testCase.schema,
+            requiredTrueFields: testCase.requiredTrueFields,
           });
         } finally {
           await page.close();
@@ -397,6 +407,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           base64DataUri: '',
           prompt: testCase.prompt,
           schema: testCase.schema,
+          requiredTrueFields: testCase.requiredTrueFields,
           error: error instanceof Error ? error.message : String(error),
         });
       }

@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { MockFirestoreService } from '../../../shared/mocks/src/lib/mock_firestore_service.ts';
 import type { BaseFirestoreService } from '../src/lib/base_firestore_service';
-import { FirebaseDataConnectService } from '../src/lib/firebase_data_connect_service';
 import {
   type CreateUserInput,
   UserFirestoreRepository,
@@ -25,15 +24,6 @@ const makeUser = (suffix = ''): CreateUserInput => {
     firstName: 'Test',
     lastName: 'User',
   };
-};
-
-/**
- * Skip integration tests when no Data Connect emulator is available.
- */
-const skipIfNoEmulator = (): boolean => {
-  const host = process.env.DATA_CONNECT_EMULATOR_HOST;
-
-  return !host;
 };
 
 // ---------------------------------------------------------------------------
@@ -209,43 +199,4 @@ const runRepositoryTests = (
 
 runRepositoryTests('MockFirestoreService', () => {
   return new MockFirestoreService();
-});
-
-// =========================================================================
-// Integration tests — FirebaseDataConnectService (requires emulator)
-// =========================================================================
-
-const describeIntegration = skipIfNoEmulator() ? describe.skip : describe;
-
-describeIntegration('FirebaseDataConnectService (integration)', () => {
-  let db: FirebaseDataConnectService;
-
-  beforeEach(() => {
-    db = new FirebaseDataConnectService({
-      serviceId: 'aikami-db',
-      connectorId: 'aikami-connector',
-      location: 'us-central1',
-      projectId: 'aikami-staging',
-      useEmulator: true,
-    });
-  });
-
-  // Smoke test: does the service initialise without errors?
-  it('should initialise the Data Connect connector', () => {
-    // Access a private member via type assertion to verify init happened.
-    expect(db).toBeDefined();
-  });
-
-  // Run full CRUD battery
-  runRepositoryTests(
-    'FirebaseDataConnectService',
-    () =>
-      new FirebaseDataConnectService({
-        serviceId: 'aikami-db',
-        connectorId: 'aikami-connector',
-        location: 'us-central1',
-        projectId: 'aikami-staging',
-        useEmulator: true,
-      }),
-  );
 });

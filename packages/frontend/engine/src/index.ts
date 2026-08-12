@@ -215,11 +215,25 @@ export {
   validUniquePath,
 } from './assets/asset_manifest.ts';
 export {
+  type AutotileOptions,
+  autotileLayers,
+  CORNER16_MASK_COUNT,
+  cornerFrameName,
+  cornerMaskForCell,
+  pickFillVariant,
+  type ResolvedTerrainGrid,
+  resolveTerrainGrid,
+  TERRAIN_CORNER_BITS,
+  TERRAIN_CORNER_ORDER,
+  type TerrainCorner,
+  type TerrainLayerEmission,
+  validateTerrains,
+} from './assets/autotile.ts';
+export {
   type ContentPackLoaderInterface,
   clearContentPackCache,
   loadContentPack,
 } from './assets/content_pack_loader.ts';
-
 export type { JtonParseResult } from './assets/jton_parser.ts';
 export {
   jtonToTilemapData,
@@ -243,6 +257,7 @@ export type {
 } from './assets/map_loader.ts';
 export {
   clearMapCache,
+  DEFAULT_TILEMAP_BAND,
   djb2Hash,
   extractCollisionGrid,
   extractSpawnPointEntities,
@@ -372,13 +387,6 @@ export type {
 export { StringRegistryService } from './services/string_registry_service.ts';
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
-// Firebase SQL Connect sync (C-195)
-export type {
-  FirebaseSqlConnectSyncOptions,
-  SqlConnectDelta,
-  SqlConnectDeltaType,
-} from './sync/firebase_sql_connect_sync.ts';
-export { FirebaseSqlConnectSync } from './sync/firebase_sql_connect_sync.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   getMapPixelBounds,

@@ -47,12 +47,12 @@ describe('users collection', () => {
   // Other authenticated user
   // ───────────────────────────────────────────
   describe('other authenticated user', () => {
-    test('can read another profile', async () => {
+    test('cannot read another profile', async () => {
       const owner = h.db(h.user('user-123'));
       await owner.collection('users').doc('user-123').set({ displayName: 'Alice' });
 
       const other = h.db(h.user('user-456'));
-      await h.assertSucceeds(other.collection('users').doc('user-123').get());
+      await h.assertFails(other.collection('users').doc('user-123').get());
     });
 
     test('cannot create another profile', async () => {

@@ -17,14 +17,11 @@
     "delete": "firestack delete",
     "delete:local": "node ../../../../firestack/dist/main.js delete",
     "logs": "firestack logs",
-    "generate": "firestack generate --dataconnectDirectory dataconnect",
-    "generate:local": "node ../../../../firestack/dist/main.js generate",
     "scripts": "firestack scripts",
     "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun test tests/controllers.test.ts",
     "test:rules": "firestack test:rules --flavor staging",
-    "populate-npcs": "bun run scripts/populate-npcs.ts",
-    "generate:dataconnect-schemas": "bun run scripts/generate_dataconnect_schemas.ts"
+    "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {
     "@aikami/backend-auth": "workspace:*",

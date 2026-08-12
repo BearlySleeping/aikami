@@ -3,6 +3,7 @@
 import type { PackConfig } from '@aikami/types';
 import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
+import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
   buildCollisionGrid,
   extractCollisionGrid,
@@ -22,6 +23,7 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
+import { ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
@@ -34,7 +36,7 @@ import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
-import { renderTilemap } from './systems/tilemap_render_system.ts';
+import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
 
 // Vite ?worker&type=module import for the bootstrap entry point.
@@ -426,6 +428,49 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private readonly _propFrameResolver?: PropTextureResolver;
 
+  /**
+   * Frame → { anchor } for C-378 AC-7 prop anchoring. Width/height are NOT
+   * stored — the sprite is rendered at the resolved texture's native size
+   * (0/0 placeholders were unusable zero-sized metadata). Built at loadMap
+   * from the resolved pack config; cleared on map switch. Keyed by frame
+   * name because the worker message carries the frame, not the propId.
+   */
+  private _propFrameMeta = new Map<string, { anchorX: number; anchorY: number }>();
+
+  /**
+   * Latest environment UBO received from the worker via STATE_UPDATE
+   * (C-213). The worker flushes its own module-level UBO each tick; the
+   * main thread must read the tint from THIS copy, never from a local
+   * environment_system import (that module is not stepped on the main
+   * thread — C-378 AC-9).
+   */
+  private _environmentUbo: Float32Array | undefined;
+
+  /**
+   * C-378 AC-9: whether the day/night tint has been sampled in screenshot
+   * mode. The first ambient value (once the worker UBO arrives) is retained
+   * for the whole capture instead of refreshing from the advancing worker
+   * UBO, keeping the tint deterministic across runs.
+   */
+  private _screenshotTintSampled = false;
+
+  /**
+   * C-378 AC-9: the last game hour reported by the worker. When it
+   * changes, a screenshot tint frozen from the previous hour's UBO is
+   * stale — the sample latch is reset so the next ticker frame re-samples
+   * from the fresh UBO (the visual runner waits for the hour-confirmed
+   * flag before capturing, so the re-sample lands on the requested hour,
+   * never the boot hour).
+   */
+  private _lastReportedGameHour: number | undefined;
+
+  /**
+   * Cached result of the `screenshot=true` URL check — computed once, since
+   * it cannot change without a page load (C-378 performance pass: the check
+   * used to rebuild URLSearchParams on every ticker frame).
+   */
+  private _visualScreenshotMode: boolean | undefined;
+
   constructor(options: GameWorldOptions) {
     super(options);
     this._bridge = options.bridge;
@@ -530,8 +575,36 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // ── C-177: Update uTime for GPU tile animation ──
+      // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
       if (this._tilemapUniforms) {
-        this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+        // C-378 visual determinism: freeze the tile animation clock in
+        // screenshot mode (the visual runner always injects `screenshot=true`).
+        // Animated water tiles made every capture pixel-different, which busted
+        // the VLM cache key and produced independent (flaky) judgements.
+        if (!this._isVisualScreenshotMode()) {
+          this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+        }
+        // C-378 AC-9: outside screenshot mode the ambient tint follows the
+        // live worker UBO every frame. In screenshot mode the FIRST sampled
+        // tint is retained for the entire capture — the worker UBO keeps
+        // advancing (game time passes), so refreshing it per frame would
+        // make the tint non-deterministic across runs.
+        const screenshotMode = this._isVisualScreenshotMode();
+        if (!screenshotMode || !this._screenshotTintSampled) {
+          const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
+          if (tintArr && this._environmentUbo) {
+            // Ambient color from the worker UBO — same factor the rest of the
+            // scene uses. Neutral (1,1,1) when the worker hasn't sent a UBO
+            // yet (boot) → pixel-identical to an untinted render.
+            const ambient = this._environmentUbo;
+            tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
+            tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
+            tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+            if (screenshotMode) {
+              this._screenshotTintSampled = true;
+            }
+          }
+        }
       }
 
       this._updateRenderFromBuffer(this._activeRenderView, stage);
@@ -695,6 +768,31 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // window.location may be unavailable (SSR)
     }
     return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+  }
+
+  /**
+   * True in visual-screenshot mode (the visual runner always injects
+   * `screenshot=true`). Used to freeze time-varying rendering (C-378 visual
+   * determinism): the tilemap clock is pinned so animated tiles render
+   * identically across runs.
+   */
+  private _isVisualScreenshotMode(): boolean {
+    if (this._visualScreenshotMode !== undefined) {
+      return this._visualScreenshotMode;
+    }
+    if (typeof window === 'undefined') {
+      this._visualScreenshotMode = false;
+      return false;
+    }
+    let enabled = false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      enabled = params.get('screenshot') === 'true';
+    } catch {
+      // window.location may be unavailable (SSR)
+    }
+    this._visualScreenshotMode = enabled;
+    return enabled;
   }
 
   /**
@@ -1002,23 +1100,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // N-buffer transfer cycle — the worker transferred ownership of the
-    // buffer. Swap the render view and recycle the old buffer.
+    // buffer. Swap the render view and recycle the old buffer. A SYNC-only
+    // message (e.g. the post-LOAD_MAP APPEARANCE_CHANGED batch from the
+    // worker) carries NO buffer — skip the swap but still process its
+    // events below, otherwise the player stays a tinted placeholder square
+    // on every portal transition (C-378).
     const newBuffer = message.buffer as ArrayBuffer | undefined;
-    if (!newBuffer) {
-      return;
-    }
+    if (newBuffer) {
+      // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
+      // FIFO shift from a ring buffer that has no relation to what the
+      // worker actually owns. After INITIALIZE_ENGINE with transferables,
+      // _bufferPool is empty — and even before the fix, the original
+      // buffers were clones disconnected from the worker's pool. ──
+      const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
+      if (outgoing && outgoing.byteLength > 0 && this._worker) {
+        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+      }
 
-    // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
-    // FIFO shift from a ring buffer that has no relation to what the
-    // worker actually owns. After INITIALIZE_ENGINE with transferables,
-    // _bufferPool is empty — and even before the fix, the original
-    // buffers were clones disconnected from the worker's pool. ──
-    const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
-    if (outgoing && outgoing.byteLength > 0 && this._worker) {
-      this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+      this._activeRenderView = new Float32Array(newBuffer);
     }
-
-    this._activeRenderView = new Float32Array(newBuffer);
 
     // ── C-332: Extract tickCount for semantic heartbeat ──
     const ack = message.ack as { tickCount?: number; writableBufferCount?: number } | undefined;
@@ -1064,8 +1164,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // and weather overlay.
     const envData = message.environment as Record<string, unknown> | undefined;
     if (envData) {
-      // Update the weather overlay with the fresh UBO data (C-213)
+      // Keep the latest worker UBO for the tilemap day/night tint
+      // (C-378 AC-9) — the worker's module-level UBO is not visible here.
       const ubo = envData.ubo as Float32Array | undefined;
+      if (ubo) {
+        this._environmentUbo = ubo;
+      }
+      // C-378 AC-9: the worker applied a new game hour — a screenshot tint
+      // frozen from the previous hour's UBO no longer matches. Reset the
+      // sample latch so the ticker re-samples once the requested hour's UBO
+      // is in place (the visual runner waits for the hour-confirmed flag,
+      // so the re-sample lands on the requested hour, not the boot hour).
+      // Outside screenshot mode the latch is never set — no-op.
+      const reportedHour = envData.gameHour as number;
+      if (this._lastReportedGameHour !== undefined && this._lastReportedGameHour !== reportedHour) {
+        this._screenshotTintSampled = false;
+      }
+      this._lastReportedGameHour = reportedHour;
+      // Update the weather overlay with the fresh UBO data (C-213)
       if (ubo && this._weatherOverlay) {
         this._weatherOverlay.update(ubo);
       }
@@ -1212,12 +1328,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         child.destroy();
       }
 
+      // C-378 AC-7: render at the texture's native size with the manifest
+      // anchor instead of forcing 32×32. Existing 32×32 props are
+      // pixel-identical (native width/height are 32 and the default anchor
+      // is (0.5, 1.0) — the same values the forced path used). Multi-tile
+      // props (e.g. a 32×64 gate) now render at their authored size.
+      // Prop COLLISION stays one tile from the foot pixel regardless of art
+      // height — that is correct for top-down and must not change here.
+      const propMeta = this._propFrameMeta.get(frame) ?? { anchorX: 0.5, anchorY: 1.0 };
       const propSprite = new Sprite(resolution.texture);
-      propSprite.width = 32;
-      propSprite.height = 32;
+      propSprite.width = resolution.texture.width;
+      propSprite.height = resolution.texture.height;
       // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
-      // and the placeholder it replaces.
-      propSprite.anchor.set(0.5, 1.0);
+      // and the placeholder it replaces. Fallback: manifest default.
+      propSprite.anchor.set(propMeta.anchorX, propMeta.anchorY);
       container.addChild(propSprite);
 
       this.debug('prop-frame-texture-loaded', {
@@ -1234,6 +1358,58 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  /**
+   * Builds a frame-name → UV-rect resolver for C-378 terrain layers.
+   *
+   * The terrain autotiler emits frame NAMES (never GIDs). This resolver
+   * converts a frame name to an exact UV rect using the pack's spritesheet
+   * via the injected prop frame resolver — the same atlas and the same
+   * fallback semantics. Missing frames resolve to the pack's fallbackTile
+   * (never a blank map, never a URL).
+   *
+   * The returned resolver exposes the atlas {@link FrameUvResolver.source}
+   * its UV rects are computed against, so the renderer can verify the
+   * sampled tileset texture is the same source before emitting terrain
+   * chunks (a mismatch degrades to the baked ground fallback instead of
+   * garbage UV sampling).
+   *
+   * Returns undefined when no prop resolver is wired (atlas not preloaded)
+   * or the probe frame cannot resolve — the renderer then degrades to the
+   * legacy baked-GID path.
+   */
+  private _buildFrameUvResolver(probeFrame: string | undefined): FrameUvResolver | undefined {
+    if (!this._propFrameResolver || !probeFrame) {
+      return undefined;
+    }
+    const probe = this._propFrameResolver(probeFrame);
+    if (!probe) {
+      return undefined;
+    }
+    const source = probe.texture.source;
+    return {
+      source,
+      resolve: (frame: string) => {
+        const resolution = this._propFrameResolver?.(frame);
+        if (!resolution) {
+          return undefined;
+        }
+        const tex = resolution.texture;
+        // UV rect from the texture's frame rect. PixiJS Texture.frame is the
+        // atlas-space rect in pixels; divide by the source size for [0,1] UVs.
+        const f = tex.frame;
+        const src = tex.source;
+        const sourceW = src.width || 1;
+        const sourceH = src.height || 1;
+        return {
+          u0: f.x / sourceW,
+          v0: f.y / sourceH,
+          u1: (f.x + f.width) / sourceW,
+          v1: (f.y + f.height) / sourceH,
+        };
+      },
+    };
   }
 
   /**
@@ -2076,6 +2252,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
       //    (Texture.from) shared across maps are NOT prematurely freed.
       if (this._worldContainer) {
+        // C-378 AC-1: the band path adds one container per band
+        // (`tilemap-band-ground` / `tilemap-band-decor` /
+        // `tilemap-band-overhead`) as a direct child of the world
+        // container — remove EVERY band container from the previous map
+        // (including stale overhead bands) before the new map renders, or
+        // the old chunks keep drawing over the new scene.
+        for (const child of [...this._worldContainer.children]) {
+          if (child.label?.startsWith('tilemap-band-')) {
+            this._worldContainer.removeChild(child);
+            child.destroy({ children: true, texture: true });
+          }
+        }
         const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
         if (oldTilemap) {
           this._worldContainer.removeChild(oldTilemap);
@@ -2095,8 +2283,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
+      // C-378 AC-4: decor/overhead layers never contribute solidity. With a
+      // terrain channel, the terrain path ignores baked layers entirely;
+      // without one, only ground-band layers contribute (decor/overhead are
+      // visual-only). An empty ground-band list (unusual map) falls back to
+      // the C-376 default (all non-collision layers) rather than silently
+      // opening every cell.
+      const groundBandLayers = tilemap.terrain
+        ? undefined // terrain-channel path ignores solidityLayers (AC-2)
+        : tilemap.layers
+            .filter((l) => (l.band ?? 'ground') === 'ground' && l.name !== 'collision')
+            .map((l) => l.name);
+      const solidityLayers =
+        groundBandLayers && groundBandLayers.length > 0 ? groundBandLayers : undefined;
       const collisionGridData = packConfig
-        ? buildCollisionGrid(tilemap, packConfig)
+        ? buildCollisionGrid(tilemap, packConfig, { solidityLayers })
         : extractCollisionGrid(tilemap);
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
@@ -2111,18 +2312,82 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // collide to the same zone entity.
       const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
 
+      // C-378 AC-7: prop frame metadata (manifest anchor) for multi-tile
+      // props. Keyed by frame so the worker's ENTITY_CREATED message (which
+      // carries only the frame) can resolve the anchor without a propId
+      // round-trip. Width/height are intentionally absent — the sprite is
+      // sized from the resolved texture at render time.
+      this._propFrameMeta.clear();
+      for (const propDef of Object.values(packConfig?.props ?? {})) {
+        const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
+        this._propFrameMeta.set(propDef.frame, {
+          anchorX: anchor.x,
+          anchorY: anchor.y,
+        });
+      }
+
       // 5. Render the new tilemap background
       if (this._app && this._worldContainer) {
+        // C-378: resolve the terrain channel into frame-name layers when the
+        // map declares `aikami.terrain` AND the pack declares `terrains`.
+        // Legacy maps (no terrain channel / terrain-less pack) render
+        // through the existing baked-GID path (AC-8).
+        let terrainLayers: TerrainLayerEmission[] | undefined;
+        let frameUvResolver: FrameUvResolver | undefined;
+        if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
+          // Frame-name → UV rect, derived from the pack's spritesheet via
+          // the injected prop frame resolver (same atlas, same fallback
+          // semantics). Missing frames fall back to the pack's fallbackTile
+          // (prop resolver contract) — never a blank map. The base terrain's
+          // frameBase probes the atlas source the UV rects live in.
+          frameUvResolver = this._buildFrameUvResolver(packConfig.terrains[0]?.frameBase);
+          if (frameUvResolver) {
+            terrainLayers = autotileLayers({
+              width: tilemap.width,
+              height: tilemap.height,
+              terrain: tilemap.terrain,
+              terrains: packConfig.terrains,
+            });
+            if (terrainLayers.length > 0) {
+              this.debug('loadMap:terrain-resolved', {
+                layers: terrainLayers.map((l) => l.name),
+                cells: tilemap.width * tilemap.height,
+              });
+            }
+          } else {
+            // Atlas not preloaded — degrade to the legacy baked-GID ground
+            // layer (never a blank map).
+            this.warn('loadMap:terrain-skipped', {
+              hint: 'Prop frame resolver not wired — rendering baked GID ground (C-378 degraded path).',
+            });
+          }
+        }
+
         const result = await renderTilemap({
           tilemap,
+          terrainLayers,
+          frameUvResolver,
         });
-        // C-376 AC-4: explicit band below the entity y-range — the world
-        // container now sorts children by zIndex, so insertion index no
-        // longer guarantees layering.
-        result.container.zIndex = WORLD_Z_BANDS.tilemap;
-        // Place behind all entity sprites (z-band handles ordering)
-        this._worldContainer.addChild(result.container);
-        this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
+        // C-378 AC-1: add each band container with its declared zIndex —
+        // ground/decor below entities, overhead above every entity zIndex.
+        // The merged `result.container` is kept inside the world at the
+        // ground band for callers that render a single z-band (sandbox).
+        if (result.bandContainers.length > 0) {
+          for (const band of result.bandContainers) {
+            band.container.zIndex = band.zIndex;
+            this._worldContainer.addChild(band.container);
+          }
+        } else {
+          // C-376 AC-4: explicit band below the entity y-range — the world
+          // container now sorts children by zIndex, so insertion index no
+          // longer guarantees layering.
+          result.container.zIndex = WORLD_Z_BANDS.tilemapGround;
+          this._worldContainer.addChild(result.container);
+        }
+        this.debug('loadMap:tilemap-rendered', {
+          layers: result.layerCount,
+          bands: result.bandContainers.map((b) => b.band),
+        });
 
         // Store animation resources (C-177)
         this._tilemapUniforms = result.globalUniforms;

@@ -6,12 +6,11 @@ Shared frontend configuration files and environment schemas.
 
 This package provides centralized Firebase and environment configurations for the frontend:
 - Firebase app initialization (client-side)
-- Firebase Data Connect singleton
 - Environment detection (browser vs server)
 
 ## Where It's Used
 
-Used by all frontend apps (`apps/frontend/client`, `apps/frontend/docs`, `apps/frontend/site`, `apps/frontend/game`) and frontend packages (`frontend-dataconnect`, `frontend-services`, etc.).
+Used by all frontend apps (`apps/frontend/client`, `apps/frontend/docs`, `apps/frontend/site`, `apps/frontend/game`) and frontend packages (`frontend-services`, `frontend-storage`, etc.).
 
 ## Installation
 
@@ -43,14 +42,11 @@ bun install
 
 ```typescript
 import { getFirebaseApp } from '@aikami/frontend-configs';
-import { getDataConnect } from '@aikami/frontend-configs/data_connect';
 
 const app = getFirebaseApp();
-const dc = getDataConnect(connectorConfig);
 ```
 
 ## Provided Configurations
 
 - **Firebase App** — Singleton client-side Firebase app instance
 - **Environment** — Runtime environment detection helpers
-- **Data Connect** — Shared Data Connect singleton for generated SDK wrappers

@@ -60,12 +60,12 @@ export type CombatDevViewModelOptions = CombatViewModelOptions & {
   useRealAi?: boolean;
 
   /**
-   * When true, BGM mood transitions route through the real Data Connect
-   * {@link CombatViewModel._transitionBgmByMood} pipeline — querying
-   * Data Connect for tracks by mood, then streaming from Firebase Storage
-   * emulator via the AudioService crossfade.
+   * When true, BGM mood transitions route through the static audio catalog
+   * {@link CombatViewModel._transitionBgmByMood} pipeline — resolving
+   * bundled tracks by mood from the catalog, then crossfading via the
+   * AudioService.
    *
-   * When false (default), uses hardcoded placeholder URLs from
+   * When false (default), uses scene-based BGM resolution from
    * {@link CombatViewModel._transitionBgmFallback}.
    *
    * Contract: C-151 AI Dynamic Music
@@ -103,7 +103,7 @@ export class CombatDevViewModel extends CombatViewModel {
   /** Whether to use real AI services instead of mock responses. */
   private _useRealAi: boolean;
 
-  /** Whether to use real Data Connect → Storage audio pipeline for BGM. */
+  /** Whether to use the static audio catalog pipeline for BGM. */
   private _useRealMusic: boolean;
 
   constructor(options: CombatDevViewModelOptions) {
@@ -127,9 +127,9 @@ export class CombatDevViewModel extends CombatViewModel {
   }
 
   /**
-   * Enables or disables the real Data Connect → Storage audio pipeline.
-   * When enabled, BGM mood transitions query Data Connect for audio tracks
-   * and stream from Firebase Storage emulator.
+   * Enables or disables the static audio catalog pipeline.
+   * When enabled, BGM mood transitions resolve bundled tracks by mood
+   * from the static catalog.
    */
   setUseRealMusic(enabled: boolean): void {
     this._useRealMusic = enabled;
@@ -137,19 +137,18 @@ export class CombatDevViewModel extends CombatViewModel {
   }
 
   /**
-   * Directly triggers the Data Connect → Storage → AudioService BGM pipeline
+   * Directly triggers the static catalog → AudioService BGM pipeline
    * for a given mood. Bypasses combat flow entirely — pure audio test.
    *
    * Calls the parent's {@link CombatViewModel._transitionBgmByMood} which:
-   * 1. Queries Data Connect for tracks matching the mood
-   * 2. Downloads from Firebase Storage emulator
-   * 3. Crossfades BGM via Web Audio API
+   * 1. Resolves bundled tracks matching the mood from the static catalog
+   * 2. Crossfades BGM via Web Audio API
    *
    * @param mood - Musical mood tag (e.g. 'epic', 'triumph', 'tense').
    */
   async playMusic(mood: string): Promise<void> {
     this.debug('playMusic', { mood });
-    this._addLogEntry(`[Dev Mock] 🎵 Music Test: requesting mood='${mood}' → Data Connect...`);
+    this._addLogEntry(`[Dev Mock] 🎵 Music Test: requesting mood='${mood}' → static catalog...`);
     await (
       this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }
     )._transitionBgmByMood(mood);
@@ -787,12 +786,19 @@ export class CombatDevViewModel extends CombatViewModel {
       if (intent.sceneMood && intent.sceneMood.trim().length > 0) {
         this.debug('_executeRealAiAction: sceneMood detected', {
           sceneMood: intent.sceneMood,
+          useRealMusic: this._useRealMusic,
         });
-        void (
-          this as unknown as {
-            _transitionBgmFallback: (mood: string) => Promise<void>;
-          }
-        )._transitionBgmFallback(intent.sceneMood.trim());
+        if (this._useRealMusic) {
+          void (
+            this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }
+          )._transitionBgmByMood(intent.sceneMood.trim());
+        } else {
+          void (
+            this as unknown as {
+              _transitionBgmFallback: (mood: string) => Promise<void>;
+            }
+          )._transitionBgmFallback(intent.sceneMood.trim());
+        }
       }
 
       // Apply combat mechanics based on LLM classification
@@ -973,8 +979,8 @@ export class CombatDevViewModel extends CombatViewModel {
     });
 
     if (this._useRealMusic) {
-      // Route through the real Data Connect → Storage pipeline (C-151)
-      this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → querying Data Connect...`);
+      // Route through the static audio catalog pipeline (C-151)
+      this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → resolving from catalog...`);
       void (
         this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }
       )._transitionBgmByMood(mood);
@@ -984,7 +990,7 @@ export class CombatDevViewModel extends CombatViewModel {
     // Log the transition so E2E tests can verify
     this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → crossfading...`);
 
-    // Use the parent's fallback method (hardcoded placeholder URLs)
+    // Use the parent's scene-based fallback method
     void (
       this as unknown as { _transitionBgmFallback: (mood: string) => Promise<void> }
     )._transitionBgmFallback(mood);

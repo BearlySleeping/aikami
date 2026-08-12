@@ -1,7 +1,7 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "updatedAt": "2026-08-08T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
@@ -11,6 +11,30 @@
     "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
   },
   "fallbackTile": "grass.png",
+  "terrains": [
+    {
+      "name": "grass",
+      "precedence": 0,
+      "wang": "fill",
+      "frameBase": "grass.png",
+      "variants": ["grass_variant.png", "grass_dark.png"],
+      "isWalkable": true
+    },
+    {
+      "name": "dirt",
+      "precedence": 1,
+      "wang": "corner16",
+      "frameBase": "dirt_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "water",
+      "precedence": 2,
+      "wang": "corner16",
+      "frameBase": "water_0.png",
+      "isWalkable": false
+    }
+  ],
   "tiles": {
     "1": {
       "name": "grass",

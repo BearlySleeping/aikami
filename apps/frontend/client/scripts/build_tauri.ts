@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Builds the Tauri desktop app for a specific Vite mode.
  *
@@ -25,8 +26,8 @@
  * --dry-run prints the commands without running them.
  */
 
+import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

@@ -46,6 +46,8 @@ type MapJson = {
     tilewidth?: number;
     columns: number;
     tilecount: number;
+    spacing?: number;
+    margin?: number;
   }>;
   layers: Array<{
     name: string;
@@ -72,6 +74,14 @@ type ManifestJson = {
   };
   tiles?: Record<string, { name?: string; frame?: string; isWalkable?: boolean; isWall?: boolean }>;
   props?: Record<string, { name?: string; frame?: string; isWalkable?: boolean }>;
+  terrains?: Array<{
+    name?: string;
+    precedence?: number;
+    wang?: string;
+    frameBase?: string;
+    variants?: string[];
+    isWalkable?: boolean;
+  }>;
   maps?: Record<string, { file?: string }>;
 };
 
@@ -81,16 +91,24 @@ type ManifestJson = {
 
 const EMBERWATCH_FIXTURES = {
   packId: 'emberwatch',
-  version: '3.1.0',
+  // C-378: bumped for the new top-level `terrains` block + aikami map
+  // channels — consumers that cache/gate on the pack version observe it.
+  version: '3.2.0',
   atlas: {
     path: join(
       import.meta.dir,
       '../../../../../apps/frontend/client/static/game-data/sprites/tilesets/atlas.json',
     ),
-    minFrames: 32,
-    size: { w: 512, h: 256 },
+    // C-378 AC-5: 1px extruded frames — 34px cell pitch, 544×272 atlas.
+    // tileSize/spacing/margin mirror the map tileset blocks (asserted
+    // below) so GID math derives from geometry instead of hardcoded 34/16/1.
+    minFrames: 80,
+    size: { w: 544, h: 272 },
     columns: 16,
     tilecount: 128,
+    tileSize: 32,
+    spacing: 2,
+    margin: 1,
     maxGid: 48,
   },
   fallbackTile: 'grass.png',
@@ -114,6 +132,11 @@ const EMBERWATCH_FIXTURES = {
     'shop_counter_r',
     'shop_crate',
   ],
+  // C-378: corner-16 terrain frame names derived from frameBase (mask order).
+  terrainFrames: {
+    dirt: 'dirt_0.png',
+    water: 'water_0.png',
+  },
 } as const;
 
 /** Maps the emberwatch fixture map keys to their file names. */
@@ -126,6 +149,30 @@ const EMBERWATCH_MAP_FILES = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * C-378: derives the 16 mask-order frame names for a corner16 terrain from
+ * its `frameBase` (mask 0). Validates the `_0.png` naming contract BEFORE
+ * deriving — a frameBase that does not end in `_0.png` would silently
+ * produce wrong mask names (the suffix replace would no-op), so invalid
+ * naming must fail explicitly instead of generating garbage names.
+ */
+const terrainMaskFrameNames = (terrain: { name?: string; frameBase?: string }): string[] => {
+  const frameBase = terrain.frameBase;
+  if (!frameBase) {
+    throw new Error(`terrain "${terrain.name}" is missing frameBase`);
+  }
+  if (!/_0\.png$/.test(frameBase)) {
+    throw new Error(
+      `terrain "${terrain.name}" frameBase "${frameBase}" must follow the _0.png naming contract (mask-0 frame)`,
+    );
+  }
+  const names: string[] = [frameBase];
+  for (let mask = 1; mask < 16; mask++) {
+    names.push(frameBase.replace(/_0\.png$/, `_${mask}.png`));
+  }
+  return names;
+};
 
 /** Discovers every pack directory under static/content-packs/*. */
 const listPackDirs = (): string[] => {
@@ -231,8 +278,16 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
           // Derive the expected column count from the atlas width and the
           // map's declared tile width instead of hardcoding 16, so a tileset
           // geometry change is caught here (CodeRabbit review, C-376 r2).
+          // C-378 AC-5: frames are extruded — cell pitch is tilewidth + 2px
+          // padding, so columns = imagewidth / (tilewidth + spacing).
           const tileWidth = block.tilewidth ?? 32;
-          expect(block.columns).toBe(Math.floor(atlas.meta.size.w / tileWidth));
+          const spacing = block.spacing ?? 0;
+          const pitch = tileWidth + spacing;
+          expect(block.columns).toBe(Math.floor(atlas.meta.size.w / pitch));
+          // C-378: extruded atlas declares a 1px margin (content offset).
+          if (spacing > 0) {
+            expect(block.margin).toBe(1);
+          }
         });
 
         test(`[${packId}/${mapPath}] no tile GID exceeds the declared frame grid`, () => {
@@ -328,14 +383,56 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
     expect(frames.has(EMBERWATCH_FIXTURES.fallbackTile)).toBe(true);
   });
 
-  test('manifest declares every atlas frame in the 1..48 GID grid (no gaps)', () => {
+  test('manifest declares every baked-GID atlas frame; terrain frames derive from terrains (C-378)', () => {
+    // C-378: baked frames (GIDs 1..48) must each have a manifest.tiles
+    // entry, and the corner-16 terrain frames must derive from the pack's
+    // `terrains[].frameBase` in mask order (dirt_0..15, water_0..15). The
+    // atlas is extruded 1px (34px pitch) — content lives at +1 offset.
     const declared = new Set(Object.keys(manifest.tiles ?? {}));
+    const terrainFrameNames = new Set<string>();
+    for (const terrain of manifest.terrains ?? []) {
+      if (terrain.wang === 'corner16' && terrain.frameBase) {
+        for (const name of terrainMaskFrameNames(terrain)) {
+          terrainFrameNames.add(name);
+        }
+      }
+    }
+    // GID math derived from the atlas/tileset geometry (pitch = tileSize +
+    // spacing, margin = 1, columns = 16) — never hardcoded 34/16/1, so a
+    // packer change to spacing/margin keeps this correct.
+    const cellPitch = EMBERWATCH_FIXTURES.atlas.tileSize + EMBERWATCH_FIXTURES.atlas.spacing;
+    const atlasMargin = EMBERWATCH_FIXTURES.atlas.margin;
+    const atlasColumns = EMBERWATCH_FIXTURES.atlas.columns;
     for (const [frameName, cell] of Object.entries(atlas.frames)) {
-      const gid = String((cell.frame.y / 32) * 16 + cell.frame.x / 32 + 1);
+      const gid =
+        Math.floor((cell.frame.y - atlasMargin) / cellPitch) * atlasColumns +
+        Math.floor((cell.frame.x - atlasMargin) / cellPitch) +
+        1;
+      if (terrainFrameNames.has(frameName)) {
+        expect(gid, `terrain frame ${frameName} outside baked GID grid`).toBeGreaterThan(
+          EMBERWATCH_FIXTURES.atlas.maxGid,
+        );
+        continue;
+      }
       expect(
-        declared.has(gid),
+        declared.has(String(gid)),
         `atlas frame ${frameName} (GID ${gid}) must have a manifest tiles entry`,
       ).toBe(true);
+    }
+  });
+
+  test('corner-16 terrain frames all exist in the atlas (C-378)', () => {
+    for (const terrain of manifest.terrains ?? []) {
+      if (terrain.wang !== 'corner16' || !terrain.frameBase) {
+        continue;
+      }
+      const names = terrainMaskFrameNames(terrain);
+      for (let mask = 0; mask < names.length; mask++) {
+        expect(
+          frames.has(names[mask]),
+          `terrain ${terrain.name} mask ${mask} frame ${names[mask]}`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -362,7 +459,7 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     expect(maps.merchantShop.height).toBe(EMBERWATCH_FIXTURES.footprints.merchant_shop.height);
   });
 
-  test('map tileset blocks match the atlas grid (512×256, 16 cols, 128 tiles)', () => {
+  test('map tileset blocks match the atlas grid (544×272 extruded, 16 cols, 128 tiles)', () => {
     for (const [, map] of Object.entries(maps)) {
       const block = map.tilesets[0];
       expect(block.firstgid).toBe(1);
@@ -370,6 +467,10 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
       expect(block.imageheight).toBe(EMBERWATCH_FIXTURES.atlas.size.h);
       expect(block.columns).toBe(EMBERWATCH_FIXTURES.atlas.columns);
       expect(block.tilecount).toBe(EMBERWATCH_FIXTURES.atlas.tilecount);
+      // C-378 AC-5: extruded frames — 2px spacing, 1px margin (derived
+      // from the fixture so the atlas and tileset blocks cannot drift).
+      expect(block.spacing).toBe(EMBERWATCH_FIXTURES.atlas.spacing);
+      expect(block.margin).toBe(EMBERWATCH_FIXTURES.atlas.margin);
     }
   });
 
@@ -546,5 +647,117 @@ describe('C-376 AC-1 parity — buildCollisionGrid matches manifest solidity on 
     expect(grid?.[0]).toBe(false); // grass walkable
     expect(grid?.[1]).toBe(false); // GID 2 grass_variant walkable
     expect(grid?.[2]).toBe(true); // brick manifest-solid
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-378 AC-6 — terrain channel validation + conversion parity on committed maps
+// ---------------------------------------------------------------------------
+
+describe('C-378 AC-6 — terrain channel audit on committed maps', () => {
+  const packDir = join(CONTENT_PACKS_ROOT, EMBERWATCH_FIXTURES.packId);
+  const manifest = readJson<ManifestJson>(join(packDir, 'manifest.json'));
+  const packConfig: PackConfig = {
+    tiles: Object.fromEntries(
+      Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
+        gid,
+        {
+          name: def.name ?? gid,
+          frame: def.frame ?? '',
+          isWalkable: def.isWalkable ?? true,
+          isWall: def.isWall,
+        },
+      ]),
+    ),
+    props: {},
+    terrains: manifest.terrains as PackConfig['terrains'],
+  };
+
+  const maps: Array<[string, string]> = [
+    ['village', EMBERWATCH_MAP_FILES.village],
+    ['inn', EMBERWATCH_MAP_FILES.inn],
+    ['merchant_shop', EMBERWATCH_MAP_FILES.merchantShop],
+  ];
+
+  test('every terrain id in each map exists in the pack terrains block', () => {
+    const terrainNames = new Set((manifest.terrains ?? []).map((t) => t.name ?? ''));
+    for (const [, file] of maps) {
+      const map = readJson<{ aikami?: { terrain?: string[] } }>(join(packDir, file));
+      const terrain = map.aikami?.terrain ?? [];
+      for (const id of terrain) {
+        if (id === '') {
+          continue; // '' = the pack's base terrain
+        }
+        expect(terrainNames.has(id), `${file} terrain id "${id}"`).toBe(true);
+      }
+    }
+  });
+
+  test('terrain-derived collision equals the pre-conversion GID-derived grid cell-for-cell', () => {
+    // Conversion correctness proof: walk each committed map with its terrain
+    // channel (terrain-derived path) and WITHOUT it (legacy GID path, ground
+    // band only). The grids must be byte-identical — if this fails, the
+    // converter's name → terrain inversion is wrong, not the engine.
+    for (const [name, file] of maps) {
+      const raw = readJson<MapJson & { aikami?: { terrain?: string[] } }>(join(packDir, file));
+      const tilemap: TilemapData = {
+        width: raw.width,
+        height: raw.height,
+        tilewidth: 32,
+        tileheight: 32,
+        tilesets: raw.tilesets.map((t) => ({
+          firstgid: t.firstgid,
+          name: 'atlas',
+          image: '',
+          imagewidth: t.imagewidth,
+          imageheight: t.imageheight,
+          tilewidth: t.tilewidth ?? 32,
+          tileheight: t.tilewidth ?? 32,
+          columns: t.columns,
+          tilecount: t.tilecount,
+          spacing: t.spacing ?? 0,
+          margin: t.margin ?? 0,
+        })),
+        layers: raw.layers
+          .filter((l) => l.type === 'tilelayer')
+          .map((l) => ({
+            name: l.name,
+            width: raw.width,
+            height: raw.height,
+            data: [...(l.data ?? [])],
+            visible: true,
+          })),
+        terrain: raw.aikami?.terrain,
+      };
+
+      const derived = buildCollisionGrid(tilemap, packConfig);
+      const legacy = buildCollisionGrid({ ...tilemap, terrain: undefined }, packConfig, {
+        solidityLayers: ['ground'],
+      });
+
+      expect(derived, `${name}: terrain-derived grid defined`).toBeDefined();
+      expect(legacy, `${name}: legacy grid defined`).toBeDefined();
+      if (!derived || !legacy) {
+        continue;
+      }
+      expect(derived.length).toBe(legacy.length);
+      for (let i = 0; i < derived.length; i++) {
+        expect(derived[i], `${name} cell ${i} parity`).toBe(legacy[i]);
+      }
+    }
+  });
+
+  test('base terrain is the lowest-precedence fill (grass) and every corner16 terrain has 16 frames', () => {
+    const terrains = [...(manifest.terrains ?? [])].sort(
+      (a, b) => (a.precedence ?? 0) - (b.precedence ?? 0),
+    );
+    expect(terrains.length).toBeGreaterThanOrEqual(2);
+    expect(terrains[0]?.wang).toBe('fill');
+    expect(terrains[0]?.name).toBe('grass');
+    for (const t of terrains) {
+      if (t.wang === 'corner16') {
+        expect(t.frameBase).toBeDefined();
+      }
+    }
   });
 });
