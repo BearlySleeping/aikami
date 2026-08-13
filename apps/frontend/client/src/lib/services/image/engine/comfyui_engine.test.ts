@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { ComfyUiEngine } from './comfyui_engine.svelte.ts';
 import type { ImageGenerationRequest } from './types.ts';
 
+/** Original global fetch — captured at module scope, restored after tests. */
+const _realFetch = globalThis.fetch;
+
 const MOCK_OBJECT_INFO = {
   CheckpointLoaderSimple: {
     input: {
@@ -107,7 +110,7 @@ describe('ComfyUiEngine', () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = (globalThis as Record<string, unknown>).__realFetch as typeof fetch;
+    globalThis.fetch = _realFetch;
   });
 
   // ═════════════════════════════════════════════════════════════════════
@@ -234,6 +237,25 @@ describe('ComfyUiEngine', () => {
     expect(body.prompt['4'].inputs.ckpt_name).toBe('sd_xl_turbo.safetensors');
   });
 
+  test('generate preserves checkpoint ids with a known model extension', async () => {
+    mockFetchGenerate();
+
+    // Three representative extensions (each generate takes ~1s due to the
+    // poll sleep, so keep the list short to stay inside the test budget).
+    for (const model of ['model.ckpt', 'model.gguf', 'UPPER.CKPT']) {
+      await engine.generate({ positivePrompt: 'x', model });
+
+      const promptCall = fetchCalls.find(
+        (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
+      );
+      const body = JSON.parse(String(promptCall?.options?.body)) as {
+        prompt: Record<string, { inputs: Record<string, unknown> }>;
+      };
+      expect(body.prompt['4'].inputs.ckpt_name).toBe(model);
+      fetchCalls = [];
+    }
+  });
+
   // ═════════════════════════════════════════════════════════════════════
   // AC-5: unsupported fields are stripped before dispatch
   // ═════════════════════════════════════════════════════════════════════
@@ -256,11 +278,28 @@ describe('ComfyUiEngine', () => {
       (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
     );
     const body = JSON.parse(String(promptCall?.options?.body)) as {
-      prompt: Record<string, { class_type: string }>;
+      prompt: Record<string, { class_type: string; inputs: Record<string, unknown> }>;
     };
-    const classTypes = Object.values(body.prompt).map((n) => n.class_type);
-    expect(classTypes).toContain('LoadImage');
+    const nodes = body.prompt;
+    const classTypes = Object.values(nodes).map((n) => n.class_type);
+
+    // Exactly one LoadImage node — the init image upload only.
+    expect(classTypes.filter((c) => c === 'LoadImage')).toHaveLength(1);
+    // The required img2img chain survives: LoadImage → VAEEncode → KSampler.
     expect(classTypes).toContain('VAEEncode');
+    expect(classTypes).toContain('KSampler');
+
+    // No node or payload field represents the stripped inputs.
+    for (const node of Object.values(nodes)) {
+      expect(node.inputs.mask).toBeUndefined();
+      expect(node.inputs.referenceImages).toBeUndefined();
+      expect(node.inputs.loras).toBeUndefined();
+      expect(node.inputs.ref_images).toBeUndefined();
+      expect(node.inputs.lora).toBeUndefined();
+    }
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('BBB=');
+    expect(serialized).not.toContain('CCC=');
   });
 
   test('generate strips denoise when no initImage', async () => {

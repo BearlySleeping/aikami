@@ -15,6 +15,7 @@ import {
 } from '@aikami/frontend/services';
 import type { ImageEngineId, ImageType } from '@aikami/types';
 import type { ImageEngineCapabilities } from '$lib/services/image/engine/types.ts';
+import { getConfiguredImageEngineId } from '$lib/services/image/engine/image_engine_factory.svelte.ts';
 import {
   type CheckpointInfo,
   compileImagePrompt,
@@ -287,8 +288,24 @@ class ImageViewModel
 
   // ── Engine selector (C-388) ──────────────────────────────────────────
 
+  /** Configured/preferred engine shown by the selector (default 'auto'). */
+  private _selectedEngine = $state<ImageEngineId>(getConfiguredImageEngineId());
+
   get engineId(): string | undefined {
     return imageGenerationService.engineId;
+  }
+
+  /**
+   * Engine preference the selector binds to — 'auto' until the user picks a
+   * concrete engine, independent of the resolved-engine badge (engineId).
+   */
+  get selectedEngine(): ImageEngineId {
+    return this._selectedEngine;
+  }
+
+  set selectedEngine(value: ImageEngineId) {
+    this._selectedEngine = value;
+    void this.setEngine(value);
   }
 
   get engineOptions(): readonly { id: string; label: string }[] {
@@ -311,13 +328,18 @@ class ImageViewModel
 
   async refreshEngine(): Promise<void> {
     this.cancel();
-    this.results = [];
+    this._releaseResults();
+    this.inputMaskDataUrl = undefined;
+    this.inputMaskName = '';
     await imageGenerationService.refreshEngine();
   }
 
   async setEngine(engine: ImageEngineId): Promise<void> {
     this.cancel();
-    this.results = [];
+    this._releaseResults();
+    this.inputMaskDataUrl = undefined;
+    this.inputMaskName = '';
+    this._selectedEngine = engine;
     await imageGenerationService.setEngine(engine);
   }
 
@@ -387,6 +409,7 @@ class ImageViewModel
   clearInputImage(): void {
     this.inputImageDataUrl = undefined;
     this.inputImageName = '';
+    this._releaseResults();
     this.results = [];
   }
 
@@ -417,6 +440,13 @@ class ImageViewModel
     this.generationStatus = '';
   }
 
+  /** Releases previously returned result URLs before they are replaced. */
+  private _releaseResults(): void {
+    for (const url of this.results) {
+      imageGenerationService.releaseResultUrl(url);
+    }
+  }
+
   // ── Public: Image Gen ─────────────────────────────────────────────────
 
   async generate(): Promise<void> {
@@ -430,6 +460,7 @@ class ImageViewModel
     }
 
     this.cancel();
+    this._releaseResults();
     this.results = [];
     this.isGenerating = true;
     this.generationProgress = 0;
@@ -454,6 +485,7 @@ class ImageViewModel
         seed: actualSeed,
         signal: abortController.signal,
       });
+      this._releaseResults();
       this.results = [result.url];
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
@@ -478,6 +510,7 @@ class ImageViewModel
     this.generationProgress = 0;
     this.expressionResults = {};
     this.expressionProgress = {};
+    this._releaseResults();
     this.results = [];
 
     const abortController = new AbortController();
@@ -532,9 +565,10 @@ class ImageViewModel
     }
 
     this.cancel();
+    this._releaseResults();
+    this.results = [];
     this.isGenerating = true;
     this.generationProgress = 0;
-    this.results = [];
 
     const abortController = new AbortController();
     this._abortController = abortController;
@@ -553,6 +587,7 @@ class ImageViewModel
         seed: this.seed < 0 ? undefined : this.seed,
         signal: abortController.signal,
       });
+      this._releaseResults();
       this.results = [result.url];
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {

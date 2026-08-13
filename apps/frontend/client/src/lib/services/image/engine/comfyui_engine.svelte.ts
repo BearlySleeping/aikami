@@ -145,9 +145,12 @@ export class ComfyUiEngine implements ImageEngineClient {
 
     onProgress?.({ fraction: GENERATING_FRACTION, label: 'Generating' });
 
+    let polledResult: { filename: string; subfolder: string | null } | undefined;
+
     try {
       // ── Poll for the output image ──────────────────────────────────────
       const imageRef = await this._pollForResult(promptId, signal, onProgress);
+      polledResult = imageRef;
 
       onProgress?.({ fraction: DOWNLOADING_FRACTION, label: 'Downloading' });
 
@@ -167,8 +170,9 @@ export class ComfyUiEngine implements ImageEngineClient {
         mimeType: blob.type || 'image/png',
       };
     } finally {
-      // AC-6: abort issues ComfyUI's native cancel (POST /interrupt).
-      if (signal?.aborted) {
+      // AC-6: abort issues ComfyUI's native cancel (POST /interrupt). Also
+      // interrupt when polling ended by timeout so the GPU is not left busy.
+      if (signal?.aborted || !polledResult) {
         void this._interrupt().catch(() => {});
       }
     }
@@ -226,7 +230,9 @@ export class ComfyUiEngine implements ImageEngineClient {
     initImageName?: string;
   }): Record<string, unknown> {
     const checkpointId = options.model || 'sd_xl_base_1.0';
-    const ckptName = checkpointId.endsWith('.safetensors')
+    // Preserve the id when it already carries a recognized model extension;
+    // append .safetensors only for bare ids (the ComfyUI default convention).
+    const ckptName = /\.(?:safetensors|ckpt|sft|gguf)$/i.test(checkpointId)
       ? checkpointId
       : `${checkpointId}.safetensors`;
 
@@ -346,6 +352,21 @@ export class ComfyUiEngine implements ImageEngineClient {
           signal,
         );
         const entry = history[promptId];
+
+        // Fail fast when ComfyUI reports the job failed instead of spinning
+        // until the poll budget expires.
+        if (entry?.status && !entry.status.completed) {
+          const messages = entry.status.messages ?? [];
+          const errorText = messages
+            .filter((m) => m[0] === 'execution_error' || m[0] === 'execution_interrupted')
+            .map((m) => String(m[1] ?? ''))
+            .filter(Boolean)
+            .join('; ');
+          throw new Error(
+            `ComfyUI generation failed: ${errorText || 'workflow reported failure'}`,
+          );
+        }
+
         const outputs = entry?.outputs;
 
         if (outputs) {
@@ -358,6 +379,9 @@ export class ComfyUiEngine implements ImageEngineClient {
         }
       } catch (error) {
         if (isAbortError(error)) {
+          throw error;
+        }
+        if (error instanceof Error && error.message.startsWith('ComfyUI generation failed')) {
           throw error;
         }
         // transient poll failure — keep trying

@@ -9,6 +9,8 @@ let { viewModel }: Props = $props();
 
 const showProgress = $derived(viewModel.isGenerating);
 const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
+/** Capability detection is pending until an engine resolves. */
+const enginePending = $derived(viewModel.engineId === undefined);
 const supportsMask = $derived(viewModel.availableControls.includes('mask'));
 const supportsSeed = $derived(viewModel.availableControls.includes('seed'));
 const supportsSampler = $derived(viewModel.availableControls.includes('sampler'));
@@ -19,6 +21,14 @@ const onFileChange = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) {
     viewModel.handleImageUpload(file);
+  }
+};
+
+/** Handles the inpainting-mask file input change events. */
+const onMaskChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) {
+    viewModel.handleMaskUpload(file);
   }
 };
 </script>
@@ -61,6 +71,8 @@ const onFileChange = (e: Event) => {
               <span class="badge badge-ghost gap-1 text-[10px] font-mono"
                 >active: {viewModel.engineId}</span
               >
+            {:else}
+              <span class="badge badge-warning gap-1 text-[10px] font-mono">detecting…</span>
             {/if}
           </div>
           <div class="flex items-end gap-3">
@@ -71,12 +83,8 @@ const onFileChange = (e: Event) => {
               <select
                 class="select select-bordered select-sm w-full"
                 aria-label="Image engine"
-                value={viewModel.engineId ?? 'auto'}
+                bind:value={viewModel.selectedEngine}
                 disabled={viewModel.isGenerating}
-                onchange={(e: Event) => {
-                  const selected = (e.target as HTMLSelectElement).value as 'auto' | 'sdcpp' | 'comfyui';
-                  void viewModel.setEngine(selected);
-                }}
               >
                 {#each viewModel.engineOptions as engine}
                   <option value={engine.id}>{engine.label}</option>
@@ -87,6 +95,12 @@ const onFileChange = (e: Event) => {
               <span class="text-[10px] font-mono text-base-content/40 pb-2"
                 >auto-detect prefers sd-server</span
               >
+            {/if}
+            {#if enginePending}
+              <p class="text-[10px] font-mono text-warning/80 mt-1">
+                No image engine reachable — start ComfyUI or sd-server (both bind :8188), or pick
+                one explicitly above.
+              </p>
             {/if}
           </div>
         </div>
@@ -173,15 +187,15 @@ const onFileChange = (e: Event) => {
                   {/each}
                 </select>
               </label>
-              {#if supportsSampler}
-                <label class="form-control">
+              {#if supportsSampler || enginePending}
+                <label class="form-control" title={enginePending ? 'Waiting for engine detection…' : undefined}>
                   <div class="label py-0.5">
                     <span class="label-text text-xs font-semibold">Sampler</span>
                   </div>
                   <select
                     class="select select-bordered select-sm w-full"
                     bind:value={viewModel.sampler}
-                    disabled={viewModel.isGenerating}
+                    disabled={viewModel.isGenerating || enginePending}
                   >
                     {#each SAMPLERS as s}
                       <option value={s}>{s}</option>
@@ -203,8 +217,8 @@ const onFileChange = (e: Event) => {
                   {/each}
                 </select>
               </label>
-              {#if supportsSeed}
-                <label class="form-control">
+              {#if supportsSeed || enginePending}
+                <label class="form-control" title={enginePending ? 'Waiting for engine detection…' : undefined}>
                   <div class="label py-0.5">
                     <span class="label-text text-xs font-semibold">Seed (-1 = random)</span>
                   </div>
@@ -212,7 +226,7 @@ const onFileChange = (e: Event) => {
                     type="number"
                     class="input input-bordered input-sm w-full font-mono text-xs"
                     bind:value={viewModel.seed}
-                    disabled={viewModel.isGenerating}
+                    disabled={viewModel.isGenerating || enginePending}
                     min="-1"
                   >
                 </label>
@@ -315,8 +329,8 @@ const onFileChange = (e: Event) => {
                 onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
               ></textarea>
             </label>
-            {#if supportsNegative}
-              <label class="form-control w-full">
+            {#if supportsNegative || enginePending}
+              <label class="form-control w-full" title={enginePending ? 'Waiting for engine detection…' : undefined}>
                 <div class="label">
                   <span class="label-text font-semibold text-base-content/70">Negative Prompt</span
                   ><span class="label-text-alt text-base-content/40">things to avoid</span>
@@ -325,7 +339,7 @@ const onFileChange = (e: Event) => {
                   class="textarea textarea-bordered w-full min-h-14 font-mono text-sm opacity-80"
                   placeholder="e.g. blurry, low quality, deformed..."
                   bind:value={viewModel.negativePrompt}
-                  disabled={viewModel.isGenerating}
+                  disabled={viewModel.isGenerating || enginePending}
                 ></textarea>
               </label>
             {/if}
@@ -605,8 +619,8 @@ const onFileChange = (e: Event) => {
         <!-- Edit prompt -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-6">
-            {#if supportsMask}
-              <div class="mb-4">
+            {#if supportsMask || enginePending}
+              <div class="mb-4" title={enginePending ? 'Waiting for engine detection…' : undefined}>
                 <h3
                   class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-2"
                 >
@@ -641,12 +655,8 @@ const onFileChange = (e: Event) => {
                       type="file"
                       accept="image/*"
                       class="hidden"
-                      onchange={(e: Event) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (file) {
-                        viewModel.handleMaskUpload(file);
-                      }
-                    }}
+                      onchange={onMaskChange}
+                      disabled={enginePending}
                     >
                   </label>
                 {/if}

@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
 
@@ -43,6 +43,10 @@ let enterWorldRouteCalls: Array<{ route: string }> = [];
 // storageService tracking
 let uploadAvatarCalls: Array<{ file: File; uid: string }> = [];
 let uploadAvatarResult: string | undefined;
+
+// Original global fetch — restored after each test so avatar-fetch mocks do
+// not leak into other tests.
+const _realFetch = globalThis.fetch;
 
 // ---------------------------------------------------------------------------
 // Setup: install test-specific overrides on the preload barrel stubs
@@ -319,6 +323,10 @@ describe('PersonaCreateViewModel — C-078', () => {
     uploadAvatarCalls = [];
     uploadAvatarResult = undefined;
     _setupServiceOverrides();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = _realFetch;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -622,14 +630,7 @@ describe('PersonaCreateViewModel — C-078', () => {
 
       // Fetch of the current avatar returns a blob; engine delegation happens
       // through imageGenerationService.generateImage (mocked above).
-      globalThis.fetch = mock((url: string): Promise<Response> => {
-        if (url === 'https://example.com/current-avatar.png') {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
-          } as Response);
-        }
+      globalThis.fetch = mock((_url: string): Promise<Response> => {
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -646,6 +647,30 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(call.initImage).toStartWith('data:image/png');
       expect(call.denoise).toBe(0.5);
       expect(call.negativePrompt).toBe('deformed, different person, blurry, low quality');
+    });
+
+    test('C-388: edit-mode regenerateAvatar swallows a failed avatar fetch', async () => {
+      mockAvatarUrl = 'https://example.com/current-avatar.png';
+      const vm = await loadVm();
+      vm.regenerationMode = 'edit';
+      vm.editInstruction = 'add a scar';
+      (vm as unknown as { isRegenerating: boolean }).isRegenerating = true;
+      (vm as unknown as { showRegenerationPanel: boolean }).showRegenerationPanel = true;
+
+      globalThis.fetch = mock((): Promise<Response> =>
+        Promise.resolve({
+          ok: false,
+          status: 404,
+          blob: () => Promise.resolve(new Blob()),
+        } as Response),
+      );
+
+      await vm.regenerateAvatar();
+
+      // The fetch failure is swallowed; state is reset back to idle.
+      expect(imageGenCalls.length).toBe(0);
+      expect(vm.isRegenerating).toBe(false);
+      expect(vm.showRegenerationPanel).toBe(false);
     });
 
     test('C-388: appearance-mode regenerateAvatar delegates without initImage', async () => {

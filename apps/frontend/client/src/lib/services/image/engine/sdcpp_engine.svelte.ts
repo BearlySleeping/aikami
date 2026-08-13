@@ -38,6 +38,8 @@ type SdCppJob = {
   state?: SdCppJobState;
   status?: SdCppJobState;
   progress?: number;
+  width?: number;
+  height?: number;
   image?: string;
   images?: readonly unknown[];
   data?: readonly { b64_json?: string; url?: string; image?: string }[];
@@ -278,12 +280,27 @@ export class SdCppEngine implements ImageEngineClient {
     onProgress?: (progress: { fraction: number; label: string }) => void,
   ): Promise<SdCppJob> {
     const startTime = Date.now();
+    let attempt = 0;
 
-    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    while (true) {
       assertNotAborted(signal);
-      await sleep(POLL_INTERVAL_MS, signal);
 
-      const job = await this._get<SdCppJob>(`/sdcpp/v1/jobs/${jobId}`, signal);
+      // First request fires immediately; sleep only between subsequent polls.
+      if (attempt > 0) {
+        await sleep(POLL_INTERVAL_MS, signal);
+      }
+
+      let job: SdCppJob;
+      try {
+        job = await this._get<SdCppJob>(`/sdcpp/v1/jobs/${jobId}`, signal);
+      } catch (error) {
+        // Request timeout (not caller abort) means the server job may still
+        // be running — cancel it so the GPU is not left busy.
+        if (isTimeoutError(error)) {
+          void this._cancelJob(jobId).catch(() => {});
+        }
+        throw error;
+      }
       const state = job.state ?? job.status ?? 'queued';
 
       if (state === 'completed') {
@@ -301,10 +318,11 @@ export class SdCppEngine implements ImageEngineClient {
           : Math.min(0.95, 0.1 + (attempt / MAX_POLL_ATTEMPTS) * 0.85);
       onProgress?.({ fraction, label: state === 'queued' ? 'Queuing' : 'Generating' });
 
-      // Bound the total wait — a dead engine must not hang the poll loop.
-      if (Date.now() - startTime > QUEUE_WAIT_MS + MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) {
+      // Bound the total wait by wall clock — a dead engine must not hang.
+      if (Date.now() - startTime >= QUEUE_WAIT_MS) {
         break;
       }
+      attempt++;
     }
 
     throw new Error('Image generation timed out — sd-server did not complete in time');
@@ -321,8 +339,10 @@ export class SdCppEngine implements ImageEngineClient {
     const blob = imageDataToBlob(imageData);
     return {
       blob,
-      width: request.width ?? 512,
-      height: request.height ?? 512,
+      // Prefer the dimensions reported by the job payload; fall back to the
+      // requested dimensions (then 512) only when the job omits them.
+      width: job.width ?? request.width ?? 512,
+      height: job.height ?? request.height ?? 512,
       mimeType: blob.type || 'image/png',
     };
   }
@@ -333,7 +353,9 @@ export class SdCppEngine implements ImageEngineClient {
    */
   private _extractInlineImage(payload: unknown): string | undefined {
     if (typeof payload === 'string') {
-      return payload;
+      // Every string must pass image validation — non-image strings such as
+      // "queued" are ignored so the caller can produce a missing-image error.
+      return isImageString(payload) ? payload : undefined;
     }
     if (!payload || typeof payload !== 'object') {
       return undefined;
@@ -352,9 +374,6 @@ export class SdCppEngine implements ImageEngineClient {
     }
     if (Array.isArray(obj.images)) {
       for (const item of obj.images) {
-        if (typeof item === 'string') {
-          return item;
-        }
         const found = this._extractInlineImage(item);
         if (found) {
           return found;
@@ -364,9 +383,6 @@ export class SdCppEngine implements ImageEngineClient {
 
     for (const key of ['image', 'b64_json', 'output', 'result']) {
       const value = obj[key];
-      if (typeof value === 'string' && (value.startsWith('data:') || isBase64Like(value))) {
-        return value;
-      }
       const found = this._extractInlineImage(value);
       if (found) {
         return found;
@@ -408,7 +424,7 @@ export class SdCppEngine implements ImageEngineClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal,
+      signal: withRequestTimeout(signal),
     });
 
     if (!response.ok) {
@@ -422,7 +438,7 @@ export class SdCppEngine implements ImageEngineClient {
   private async _get<TResponse>(path: string, signal?: AbortSignal): Promise<TResponse> {
     const response = await fetch(`${this._baseUrl}${path}`, {
       method: 'GET',
-      signal,
+      signal: withRequestTimeout(signal),
     });
 
     if (!response.ok) {
@@ -452,6 +468,34 @@ const isBase64Like = (value: string): boolean => {
   // A generous heuristic — sd-server returns raw base64 PNGs.
   return /^[A-Za-z0-9+/]+=*$/.test(value.slice(0, 4096));
 };
+
+/** True when a string looks like inline image data (data URL or base64). */
+const MIN_IMAGE_STRING_LENGTH = 64;
+
+const isImageString = (value: string): boolean => {
+  if (value.startsWith('data:')) {
+    return true;
+  }
+  // Raw base64 must be long enough to be real image bytes — short state
+  // strings such as "queued" must not be mistaken for image data.
+  return isBase64Like(value) && value.length >= MIN_IMAGE_STRING_LENGTH;
+};
+
+/** Per-request timeout — a hung sd-server must not stall a fetch forever. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Combines the caller signal with a hard per-request timeout. Caller
+ * cancellation is preserved via AbortSignal.any (AbortError), while a
+ * timeout aborts with TimeoutError so the poll loop can distinguish them.
+ */
+const withRequestTimeout = (signal?: AbortSignal): AbortSignal =>
+  signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+
+const isTimeoutError = (error: unknown): boolean =>
+  error instanceof DOMException
+    ? error.name === 'TimeoutError'
+    : (error as Error)?.name === 'TimeoutError';
 
 const imageDataToBlob = (imageData: string): Blob => {
   if (imageData.startsWith('data:')) {

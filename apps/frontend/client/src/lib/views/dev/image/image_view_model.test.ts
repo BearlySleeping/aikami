@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 let mockCheckpoints: Array<{ id: string; description: string }> = [];
 let mockSelectedCheckpoint = '';
 let mockEngineId: string | undefined;
-let mockCapabilities: Record<string, boolean> = {};
+let mockCapabilities: Record<string, boolean> | undefined = {};
 let mockGenerateImageCalls: Array<Record<string, unknown>> = [];
 let mockRefreshEngineCalled = false;
 let loadCheckpointsCalled = false;
@@ -35,7 +35,7 @@ mock.module('$lib/services/index.ts', () => ({
     get engineId(): string | undefined {
       return mockEngineId;
     },
-    get capabilities(): Record<string, boolean> {
+    get capabilities(): Record<string, boolean> | undefined {
       return mockCapabilities;
     },
     get isAutoDetect(): boolean {
@@ -64,6 +64,7 @@ mock.module('$lib/services/index.ts', () => ({
         return { url: 'blob:mock-url', isDemo: false };
       },
     ),
+    releaseResultUrl: mock((_url: string): void => {}),
     cancel: mock(() => {}),
     isDemoMode: mock((): boolean => true),
   },
@@ -175,7 +176,7 @@ describe('ImageViewModel — C-388 engine abstraction', () => {
 
   test('AC-5: availableControls empty when no engine resolved', async () => {
     mockEngineId = undefined;
-    mockCapabilities = {};
+    mockCapabilities = undefined;
     const viewModel = await getImageViewModel();
     expect(viewModel.availableControls).toEqual([]);
   });
@@ -226,7 +227,18 @@ describe('ImageViewModel — C-388 engine abstraction', () => {
     const viewModel = await getImageViewModel();
     viewModel.inputImageDataUrl = 'data:image/png;base64,BBB=';
 
-    await viewModel.generateExpressions();
+    // Stub the 500 ms inter-expression delay so the 8 calls complete fast.
+    const originalSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((handler: () => void) => {
+      handler();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+
+    try {
+      await viewModel.generateExpressions();
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
 
     // 8 expressions × 1 call each
     expect(mockGenerateImageCalls.length).toBe(8);

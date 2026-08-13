@@ -16,7 +16,23 @@ let mockModels: Array<{ id: string; description: string }> = [
   { id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' },
 ];
 let mockGenerateRequest: Record<string, unknown> | undefined;
-let mockProgress: Array<{ fraction: number; label: string }> = [];
+/** Service-observed progress/status captured after each onProgress callback. */
+let serviceProgressCapture: Array<{ progress: number; status: string }> = [];
+let serviceRef: ImageGenerationServiceInterface | undefined;
+
+// The service reads the legacy checkpoint via configService.state.image.checkpoint.
+// Provide a mutable stand-in so the migration branch is testable.
+const mockConfigService = {
+  state: {
+    image: {
+      checkpoint: '',
+    },
+  },
+};
+
+mock.module('$services', () => ({
+  configService: mockConfigService,
+}));
 
 mock.module('./engine/image_engine_factory.svelte.ts', () => ({
   getConfiguredImageEngineId: () => (mockEngineId === 'comfyui' ? 'comfyui' : 'sdcpp'),
@@ -47,14 +63,21 @@ mock.module('./engine/image_engine_factory.svelte.ts', () => ({
         mockGenerateRequest = request;
         if (callbacks?.onProgress) {
           callbacks.onProgress({ fraction: 0.05, label: 'Queuing' });
+          serviceProgressCapture.push({
+            progress: serviceRef?.generationProgress ?? 0,
+            status: serviceRef?.generationStatus ?? '',
+          });
           callbacks.onProgress({ fraction: 0.5, label: 'Generating' });
+          serviceProgressCapture.push({
+            progress: serviceRef?.generationProgress ?? 0,
+            status: serviceRef?.generationStatus ?? '',
+          });
           callbacks.onProgress({ fraction: 1, label: 'Complete' });
+          serviceProgressCapture.push({
+            progress: serviceRef?.generationProgress ?? 0,
+            status: serviceRef?.generationStatus ?? '',
+          });
         }
-        mockProgress = [
-          { fraction: 0.05, label: 'Queuing' },
-          { fraction: 0.5, label: 'Generating' },
-          { fraction: 1, label: 'Complete' },
-        ];
         if (callbacks?.signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');
         }
@@ -89,8 +112,9 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
     mockEngineId = 'comfyui';
     mockModels = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
     mockGenerateRequest = undefined;
-    mockProgress = [];
+    serviceProgressCapture = [];
     service = createService(false);
+    serviceRef = service;
     URL.createObjectURL = mock((_blob: Blob) => 'blob:mock-url');
   });
 
@@ -151,8 +175,16 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
 
     await service.generateImage({ prompt: 'a dragon' });
 
-    // The mock engine pushes queued → generating → complete.
-    expect(mockProgress.map((p) => p.label)).toEqual(['Queuing', 'Generating', 'Complete']);
+    // Service-observed values after each onProgress callback — the mapped
+    // ImageProgress (fraction→0-100, engine-agnostic label).
+    expect(serviceProgressCapture.map((p) => p.status)).toEqual([
+      'Queuing',
+      'Generating',
+      'Complete',
+    ]);
+    expect(serviceProgressCapture[0].progress).toBe(5);
+    expect(serviceProgressCapture[1].progress).toBe(50);
+    expect(serviceProgressCapture[2].progress).toBe(100);
     // Terminal state observed by the caller
     expect(service.generationProgress).toBe(100);
     expect(service.generationStatus).toBe('Complete');
@@ -165,8 +197,8 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
 
     await service.generateImage({ prompt: 'x' });
 
-    for (const entry of mockProgress) {
-      expect(entry.label).not.toMatch(/comfyui|sdcpp|sd-server|node|websocket/i);
+    for (const entry of serviceProgressCapture) {
+      expect(entry.status).not.toMatch(/comfyui|sdcpp|sd-server|node|websocket/i);
     }
   });
 
@@ -208,6 +240,19 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
 
     expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
     localStorage.removeItem('imageCheckpoint:comfyui');
+  });
+
+  test('Migration: legacy config checkpoint migrates into the namespaced key', async () => {
+    // Legacy path: configService.state.image.checkpoint set, namespaced key unset.
+    localStorage.removeItem('imageCheckpoint:comfyui');
+    mockModels = [{ id: 'legacy_model', description: 'legacy_model.safetensors' }];
+    mockConfigService.state.image.checkpoint = 'legacy_model';
+
+    await service.loadCheckpoints();
+
+    expect(service.selectedCheckpoint).toBe('legacy_model');
+    expect(localStorage.getItem('imageCheckpoint:comfyui')).toBe('legacy_model');
+    mockConfigService.state.image.checkpoint = '';
   });
 
   // ═════════════════════════════════════════════════════════════════════

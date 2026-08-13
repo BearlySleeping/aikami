@@ -22,11 +22,9 @@ const DEFAULT_IMAGE_BASE_URL = 'http://localhost:8188';
  */
 export const resolveImageBaseUrl = (engineId: ResolvedImageEngineId): string => {
   if (engineId === 'sdcpp') {
-    const override = import.meta.env.PUBLIC_SDCPP_URL as string | undefined;
-    const base = (override ?? import.meta.env.PUBLIC_IMAGE_URL ?? DEFAULT_IMAGE_BASE_URL).replace(
-      /\/+$/,
-      '',
-    );
+    const override = (import.meta.env.PUBLIC_SDCPP_URL as string | undefined)?.trim();
+    const fallback = (import.meta.env.PUBLIC_IMAGE_URL as string | undefined)?.trim();
+    const base = (override || fallback || DEFAULT_IMAGE_BASE_URL).replace(/\/+$/, '');
     assertSafeBaseUrl(base, 'sd-server');
     return base;
   }
@@ -42,8 +40,8 @@ export const resolveImageBaseUrl = (engineId: ResolvedImageEngineId): string => 
  * data, javascript, ...) so a compromised config cannot exfiltrate.
  */
 const assertSafeBaseUrl = (baseUrl: string, engineName: string): void => {
-  if (baseUrl.startsWith('/')) {
-    return; // same-origin relative path (Vite dev proxy)
+  if (baseUrl.startsWith('/') && !baseUrl.startsWith('//')) {
+    return; // same-origin relative path (Vite dev proxy), e.g. "/api/image"
   }
   try {
     const parsed = new URL(baseUrl);

@@ -101,6 +101,17 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
    */
   generateImage(options: GenerateImageOptions): Promise<ImageGenerationResult>;
 
+  /**
+   * Revokes a previously returned object URL when its result is replaced or
+   * discarded (caller-side cleanup). The URL for the active result is the
+   * caller's to revoke once it is no longer displayed.
+   * @param url - Object URL previously returned by generateImage.
+   */
+  releaseResultUrl(url: string): void;
+
+  /** Revokes every tracked object URL (service teardown). */
+  dispose(): void;
+
   /** Whether the service is running in demo mode. */
   isDemoMode(): boolean;
 
@@ -304,6 +315,10 @@ export class ImageGenerationService
       };
     }
 
+    // Clear any deferred progress reset from a previous generation so a
+    // stale timer cannot zero out the new run's progress.
+    this._clearProgressResetTimer();
+
     // Reset progress state
     this._isGenerating = true;
     this._generationProgress = 0;
@@ -383,6 +398,7 @@ export class ImageGenerationService
       });
 
       const objectUrl = URL.createObjectURL(result.blob);
+      this._objectUrls.push(objectUrl);
       this._generationProgress = 100;
       this._generationStatus = 'Complete';
 
@@ -401,20 +417,45 @@ export class ImageGenerationService
       if (signal) {
         signal.removeEventListener('abort', onExternalAbort);
       }
-      // Reset progress after a brief delay so the consumer can read the terminal state
-      setTimeout(() => {
-        this._generationProgress = 0;
-        this._generationStatus = '';
-      }, 2000);
+      // Reset progress after a brief delay so the consumer can read the
+      // terminal state. Replace any prior pending timer first so a stale
+      // reset cannot affect a newer generation.
+      this._scheduleProgressReset();
     }
   }
 
   cancel(): void {
     this._abortController?.abort();
     this._abortController = undefined;
+    this._clearProgressResetTimer();
     this._isGenerating = false;
     this._generationProgress = 0;
     this._generationStatus = '';
+  }
+
+  /**
+   * Revokes a previously returned object URL when its result is replaced or
+   * discarded (caller-side cleanup). The URL for the active result is the
+   * caller's to revoke once it is no longer displayed.
+   */
+  releaseResultUrl(url: string): void {
+    const index = this._objectUrls.indexOf(url);
+    if (index >= 0) {
+      this._objectUrls.splice(index, 1);
+    }
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Revokes every tracked object URL. Safe to call when the service is
+   * disposed — the URL returned for the active result is revoked only by
+   * the caller once it is done displaying it.
+   */
+  dispose(): void {
+    this._clearProgressResetTimer();
+    this._revokeObjectUrls();
+    this._abortController?.abort();
+    this._abortController = undefined;
   }
 
   // ── Private: engine resolution ───────────────────────────────────────
@@ -432,6 +473,32 @@ export class ImageGenerationService
   private _applyProgress(progress: ImageProgress): void {
     this._generationProgress = Math.round(Math.max(0, Math.min(1, progress.fraction)) * 100);
     this._generationStatus = progress.label;
+  }
+
+  // ── Private: deferred progress reset + object URL lifecycle ──────────
+
+  private _clearProgressResetTimer(): void {
+    if (this._progressResetTimer !== undefined) {
+      clearTimeout(this._progressResetTimer);
+      this._progressResetTimer = undefined;
+    }
+  }
+
+  private _scheduleProgressReset(): void {
+    this._clearProgressResetTimer();
+    this._progressResetTimer = setTimeout(() => {
+      this._generationProgress = 0;
+      this._generationStatus = '';
+      this._progressResetTimer = undefined;
+    }, 2000);
+  }
+
+  /** Revokes every tracked URL. Called on dispose. */
+  private _revokeObjectUrls(): void {
+    for (const url of this._objectUrls) {
+      URL.revokeObjectURL(url);
+    }
+    this._objectUrls = [];
   }
 
   // ── Private: per-engine checkpoint persistence (C-388 Migration) ────
@@ -472,6 +539,9 @@ export class ImageGenerationService
   }
 
   private _abortController: AbortController | undefined;
+  private _progressResetTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Object URLs created from engine blobs — revoked when replaced/discarded. */
+  private _objectUrls: string[] = [];
 }
 
 // ---------------------------------------------------------------------------

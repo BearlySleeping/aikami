@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { SdCppEngine } from './sdcpp_engine.svelte.ts';
 import type { ImageGenerationRequest } from './types.ts';
 
+/** Original global fetch — captured at module scope, restored after tests. */
+const _realFetch = globalThis.fetch;
+
 describe('SdCppEngine', () => {
   let fetchCalls: Array<{ url: string; options: RequestInit }> = [];
   const engine = new SdCppEngine('http://localhost:8188');
@@ -79,7 +82,7 @@ describe('SdCppEngine', () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = (globalThis as Record<string, unknown>).__realFetch as typeof fetch;
+    globalThis.fetch = _realFetch;
   });
 
   // ═════════════════════════════════════════════════════════════════════
@@ -257,6 +260,79 @@ describe('SdCppEngine', () => {
     await expect(engine.generate({ positivePrompt: 'x' })).rejects.toThrow(/failed/);
   });
 
+  test('generate throws missing-image when a completed job has no image data', async () => {
+    // Completed job whose payload contains only non-image strings ("queued") —
+    // the inline-image extraction must not accept them.
+    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
+      fetchCalls.push({ url, options });
+      if (options?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'job-noimg', state: 'queued' }),
+        } as Response);
+      }
+      if (url.includes('/sdcpp/v1/jobs/job-noimg')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({ id: 'job-noimg', state: 'completed', result: 'queued' }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+
+    await expect(engine.generate({ positivePrompt: 'x' })).rejects.toThrow(
+      /completed without returning an image/,
+    );
+  });
+
+  test('generate uses job-reported dimensions when present', async () => {
+    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
+      fetchCalls.push({ url, options });
+      if (options?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'job-dims', state: 'queued' }),
+        } as Response);
+      }
+      if (url.includes('/sdcpp/v1/jobs/job-dims')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              id: 'job-dims',
+              state: 'completed',
+              width: 768,
+              height: 1024,
+              image: 'data:image/png;base64,aGVsbG8=',
+            }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+
+    // Request asks for 512×512 but the job reports 768×1024 — job wins.
+    const result = await engine.generate({
+      positivePrompt: 'x',
+      width: 512,
+      height: 512,
+    });
+    expect(result.width).toBe(768);
+    expect(result.height).toBe(1024);
+  });
+
   // ═════════════════════════════════════════════════════════════════════
   // AC-6: cancellation issues POST /sdcpp/v1/jobs/{id}/cancel
   // ═════════════════════════════════════════════════════════════════════
@@ -306,7 +382,13 @@ describe('SdCppEngine', () => {
   // ═════════════════════════════════════════════════════════════════════
 
   test('generate rejects a second concurrent call (single-slot)', async () => {
-    // Make the first generate hang on a job that never completes until aborted
+    // Dedicated instance so the shared `engine` stays clean for other tests.
+    const busyEngine = new SdCppEngine('http://localhost:8188');
+    const controller = new AbortController();
+
+    // Make the first generate hang on a job that never completes until the
+    // controller aborts. The hanging poll mock must observe options.signal
+    // and reject on abort so the first call actually settles.
     globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
       fetchCalls.push({ url, options });
       if (options?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
@@ -317,7 +399,13 @@ describe('SdCppEngine', () => {
         } as Response);
       }
       if (url.includes('/sdcpp/v1/jobs/job-slow')) {
-        return new Promise<Response>(() => {}); // never resolves
+        return new Promise<Response>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
       }
       return Promise.resolve({
         ok: true,
@@ -326,10 +414,12 @@ describe('SdCppEngine', () => {
       } as Response);
     });
 
-    const controller = new AbortController();
-    const first = engine.generate({ positivePrompt: 'first' }, { signal: controller.signal });
+    const first = busyEngine.generate(
+      { positivePrompt: 'first' },
+      { signal: controller.signal },
+    );
 
-    await expect(engine.generate({ positivePrompt: 'second' })).rejects.toThrow(/single-slot/);
+    await expect(busyEngine.generate({ positivePrompt: 'second' })).rejects.toThrow(/single-slot/);
 
     // Release the first generation so the test doesn't hang.
     controller.abort();

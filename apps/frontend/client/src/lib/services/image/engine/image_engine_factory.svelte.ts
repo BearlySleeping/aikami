@@ -46,6 +46,9 @@ export const getConfiguredImageEngineId = (): ImageEngineId => {
 /** Detection cache — reset via {@link resetImageEngineCache} (tests). */
 let _detectionCache: ImageEngineClient | undefined;
 
+/** In-flight resolution promise — concurrent first calls share one engine. */
+let _resolveInFlight: Promise<ImageEngineClient | undefined> | undefined;
+
 /** Runtime override — set by the dev sandbox engine selector (C-388). */
 let _engineOverride: ImageEngineId | undefined;
 
@@ -75,10 +78,26 @@ export const getEffectiveImageEngineId = (): ImageEngineId => {
  * - `auto` probes both engines in parallel, prefers sd-server on a tie,
  *   caches the result for the session.
  *
+ * Concurrent first calls share one in-flight promise so a single-slot
+ * engine (sd-server) sees one instance and its `_inFlight` guard holds.
+ *
  * @returns The selected engine, or undefined when auto-detection finds no
  *          reachable engine (callers degrade to demo/placeholder).
  */
 export const resolveImageEngine = async (): Promise<ImageEngineClient | undefined> => {
+  if (_resolveInFlight) {
+    return _resolveInFlight;
+  }
+
+  _resolveInFlight = _resolveImageEngine();
+  try {
+    return await _resolveInFlight;
+  } finally {
+    _resolveInFlight = undefined;
+  }
+};
+
+const _resolveImageEngine = async (): Promise<ImageEngineClient | undefined> => {
   const configured = getEffectiveImageEngineId();
 
   if (isResolvedEngineId(configured)) {
@@ -147,7 +166,16 @@ const probeWithTimeout = async (
   budgetSignal.addEventListener('abort', onBudgetAbort, { once: true });
 
   try {
-    return await engine.healthCheck().catch(() => false);
+    // Actually bound the health check: race it against the probe timeout /
+    // detection-budget abort so a hung engine cannot stall detection.
+    const timeout = new Promise<boolean>((resolve) => {
+      controller.signal.addEventListener(
+        'abort',
+        () => resolve(false),
+        { once: true },
+      );
+    });
+    return await Promise.race([engine.healthCheck(), timeout]).catch(() => false);
   } finally {
     clearTimeout(timer);
     budgetSignal.removeEventListener('abort', onBudgetAbort);
