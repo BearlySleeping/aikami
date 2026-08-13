@@ -2,7 +2,7 @@
 id: C-387
 title: "Local PostgreSQL Development Environment (replaces the Data Connect emulator)"
 source: "user request — 'Can we setup local emulator for psql?'"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -280,3 +280,52 @@ engine-version level, not a committed hosting decision.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Added a real, Nix-pinned PostgreSQL 17 dev environment: `postgresql_17` in the devShell (AC-1), a repo-local lifecycle script (`scripts/src/lib/postgres/lifecycle.ts`) exposing `init`/`start`/`stop`/`reset`/`psql`/`status` with idempotent commands, stale-`postmaster.pid` recovery, and destructive `reset --yes` guard (AC-2), a herdr `postgres` service with an emulator-only `readyPort` on 5433 — kept out of the `all` group — plus a new raw-TCP readiness probe so the generic HTTP fetch never polls a Postgres port (AC-3), and verified client connectivity via `psql` and a `pg` Bun script, with the listener bound to 127.0.0.1 only (AC-4). Port 5433 + rationale recorded in `development_ports.ts`; `.postgres/` gitignored; README developer-setup section added.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `nix develop -c postgres --version` / `psql --version` → 17.10 (pinned `pkgs.postgresql_17`). |
+| AC-2 | ✅ | init→start→start→stop→stop all exit 0, one postmaster after first start, repeats no-op; `reset` requires `--yes`, deletes, re-inits, leaves stopped; `kill -9` stale-pid recovery verified. Cold init 0.6s / warm start 0.15s (budget 15s/2s). |
+| AC-3 | ✅ | `bun herdr:start postgres` → tab, readiness wait passes on :5433, `bun herdr:list` reports `:5433 ready`, `bun herdr:stop postgres` shuts down cleanly. Not added to `all` group (unit-tested). |
+| AC-4 | ✅ | `psql ... -c 'SELECT 1'` → 1; Bun `pg` script connects and reports `PostgreSQL 17.10`; `ss -ltnp` shows `127.0.0.1:5433` only (never 0.0.0.0). |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/postgres/lifecycle.ts` | PostgreSQL lifecycle script (`init`/`start`/`stop`/`reset`/`psql`/`status`, plus `start --foreground` for the herdr pane). |
+| `scripts/src/lib/postgres/lifecycle.test.ts` | Unit tests: config constants, state helpers, stale-pid handling. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `flake.nix` | Added `postgresql_17` to the devShell packages (pinned major). |
+| `packages/shared/constants/src/lib/development_ports.ts` | Added `postgres: 5433` to `EMULATOR_PORTS` + comment-table rows documenting why 5432 is left for a system Postgres. |
+| `scripts/src/lib/herdr/session.ts` | Added `postgres` to `DevService`/`SERVICE_DEFS` (emulator-only `readyPort`, `readyCheck: 'tcp'`), introduced `KNOWN_SERVICES` (validation/listing superset; `ALL_SERVICES`/`all` group unchanged), made `isPortReady` protocol-aware (`http` default, `tcp` probe), threaded `readyCheck` through `waitForReady`/`assessServicePane`/`listServices`. |
+| `scripts/src/lib/herdr/session.test.ts` | Added postgres registry tests + TCP-probe unit tests. |
+| `.pi/extensions/herdr_orchestrator.ts` | Switched the `herdr_session` service enum/messages to `KNOWN_SERVICES` and passed `svc.readyCheck` to readiness probes. |
+| `package.json` | Added `postgres:init/start/stop/reset/psql/status` scripts. |
+| `.gitignore` | Ignored `.postgres/`. |
+| `README.md` | Added “Local PostgreSQL (dev)” developer-setup section (start/stop/reset, connection URL, lifecycle notes). |
+
+### Deviations from Spec
+
+- **No deviations from the approved ACs.** The only scope note: `.pi/extensions/herdr_orchestrator.ts` was updated beyond the listed Target files so the pi `herdr_session` tool schema accepts `postgres` like every other service (the extension is the same herdr manager; without it the tool would reject the new service). This is consistent with “behaves like every other service” and the contract’s reuse map. No AC change, no Amendment needed.
+- **Pre-existing baseline failure (not caused by C-387):** `pi:typecheck`/`pi:fix` fail on `.pi/extensions/direnv.ts:47` — unused `isEmulator` (TS6133). Proven pre-existing by stashing C-387 changes and reproducing at baseline. Left untouched (out of scope; biome’s auto-fix mangles the import block). `scripts` and `constants` projects are fully clean.
+- **Worktree verification caveat:** the herdr pane runs `direnv exec .`, and worktree `.envrc` delegates to the main repo’s flake (which lacks `postgresql_17` until this PR merges). AC-3 was verified end-to-end by temporarily adding the worktree-pinned postgresql_17 bin dir to the worktree `.envrc` (reverted after). In a normal dev checkout, `direnv exec .` uses the repo’s own flake with `postgresql_17` — no issue.
+
+### Test Results
+
+- Unit: 25/25 PASS (lifecycle.test.ts + session.test.ts C-387 additions).
+- Full scripts suite: 91/91 PASS (baseline 70 → +21 new).
+- E2E: N/A (no UI; manual/integration ACs exercised live above).
+- Visual: N/A (internal dev tooling, no UI).
+- Baseline: 1 pre-existing failure (`pi` project `direnv.ts:47`, reproduced at baseline via stash), 0 new failures.
