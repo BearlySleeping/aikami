@@ -2,7 +2,7 @@
 id: C-388
 title: "Image Engine Provider Abstraction (ComfyUI ⇄ sd-server)"
 source: "user request — local-stack engine review: 'Can we create a nice abstract class interface so we can toggle between comfyui and sd-server?'"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -396,3 +396,89 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented the image engine provider abstraction: a new `ImageEngineClient`
+interface with `ComfyUiEngine` (single surviving ComfyUI implementation) and
+`SdCppEngine` (sd-server native `/sdcpp/v1` family) adapters, plus a factory
+with `PUBLIC_IMAGE_ENGINE` resolution and parallel auto-detection (sd-server
+preferred on a tie, cached per session). `image_generation_service` is now a
+thin reactive wrapper delegating to the active engine while preserving its
+public surface; the dev image sandbox and persona avatar-edit view models
+delegate through the abstraction and their private ComfyUI transports were
+deleted. The negative prompt from `prompt_compiler` now reaches both engines.
+Engine selector + capability-gated controls landed in the dev sandbox route;
+per-engine checkpoint persistence with legacy-key migration was added.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Exactly one non-test source file (`engine/comfyui_engine.svelte.ts`) contains `CheckpointLoaderSimple`/`KSampler`; the three rewritten files contain no transport literals (grep-asserted in `image_engine_factory.test.ts`) |
+| AC-2 | ✅ | `image_generation_service.test.ts` + engine tests assert the negative prompt lands in ComfyUI node 7 / sd-server `negative_prompt` |
+| AC-3 | ✅ | `image_engine_factory.test.ts` asserts `PUBLIC_IMAGE_ENGINE`/runtime override selects the right engine; VM tests assert sandbox/persona delegate through the service |
+| AC-4 | ✅ | Four probe permutations tested (both→sdcpp, comfyui-only, sdcpp-only, neither→undefined); detection cached and resettable |
+| AC-5 | ✅ | `image_engine_capabilities.test.ts` + `image_view_model.test.ts` assert unsupported controls absent; adapters strip unsupported fields before dispatch |
+| AC-6 | ✅ | `comfyui_engine.test.ts` asserts `POST /interrupt`; `sdcpp_engine.test.ts` asserts `POST /sdcpp/v1/jobs/{id}/cancel`; both reject with AbortError |
+| AC-7 | ✅ | Service maps engine progress to 0–100 with engine-agnostic labels; tests assert queued→generating→complete sequence |
+| AC-8 | ✅ | `listModels` populates from `/object_info` (ComfyUI) and `/sdapi/v1/sd-models` (sd-server); per-engine persisted checkpoint restored when it matches |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/media/image_engine.ts` | TypeBox schema for `ImageEngineId` / `ImageEnginePreference` (persisted engine preference) |
+| `packages/shared/types/src/lib/media/image_engine.ts` | Derived `ImageEngineId` / `ImageEnginePreference` types |
+| `apps/frontend/client/src/lib/services/image/engine/types.ts` | `ImageEngineClient`, `ImageEngineCapabilities`, `ImageGenerationRequest`, `ImageModelInfo`, `ImageProgress` |
+| `apps/frontend/client/src/lib/services/image/engine/base_url.ts` | Base URL resolution + http(s)/relative-path scheme validation |
+| `apps/frontend/client/src/lib/services/image/engine/comfyui_engine.svelte.ts` | ComfyUI adapter — the single surviving implementation (graph builder, transport, interrupt cancel, progress) |
+| `apps/frontend/client/src/lib/services/image/engine/sdcpp_engine.svelte.ts` | sd-server adapter — `/sdcpp/v1/img_gen` + job polling + cancel + inline image extraction |
+| `apps/frontend/client/src/lib/services/image/engine/image_engine_factory.svelte.ts` | Engine factory: `PUBLIC_IMAGE_ENGINE` resolution, parallel auto-detection, cache, runtime override |
+| `apps/frontend/client/src/lib/services/image/engine/index.ts` | Engine barrel |
+| `apps/frontend/client/src/lib/services/image/engine/comfyui_engine.test.ts` | ComfyUI adapter tests (AC-2/5/6/7/8) |
+| `apps/frontend/client/src/lib/services/image/engine/sdcpp_engine.test.ts` | sd-server adapter tests (AC-2/3/5/6/7/8, single-slot queue) |
+| `apps/frontend/client/src/lib/services/image/engine/image_engine_factory.test.ts` | Factory tests (AC-1 grep, AC-3, AC-4) |
+| `apps/frontend/client/src/lib/services/image/engine/image_engine_capabilities.test.ts` | Capability-surface tests (AC-5) |
+| `apps/frontend/docs/src/content/docs/guides/image-engine-selection.mdx` | User-facing docs for engine selection |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Export new image_engine schema |
+| `packages/shared/types/src/index.ts` | Export new image_engine types |
+| `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts` | Rewritten internals: delegates to active engine; keeps public surface; adds negative prompt, `cancel()`, `engineId`/`capabilities`, `setEngine()`; per-engine checkpoint persistence with legacy migration |
+| `apps/frontend/client/src/lib/services/image/image_generation_service.test.ts` | Rewritten for AC-2/3/7/8 + demo + persistence |
+| `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` | Deleted private ComfyUI transports/workflow builders; delegates via service; adds engine selector state + `availableControls` (AC-5) |
+| `apps/frontend/client/src/lib/views/dev/image/image_view.svelte` | Engine selector UI + capability-gated controls (negative/seed/sampler/mask) |
+| `apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts` | Rewritten for delegation + AC-5 gating |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts` | `_editAvatarImage` delegates via `initImage`+`denoise`; added `blobToDataUrl` helper; removed ComfyUI transport |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts` | Updated barrel mock path (worktree-compatible) + C-388 delegation tests |
+| `apps/frontend/client/src/lib/services/ai/clients/ai/clients/comfyui_client.ts` | Refactored to compose `ComfyUiEngine`; graph builder removed (AC-1) |
+| `apps/frontend/client/src/lib/views/settings/providers/providers_view_model.test.ts` | Mock paths made worktree-compatible (pre-existing artifact) |
+| `apps/frontend/docs/src/content/docs/guides/image-generation.mdx` | Added link to engine-selection guide |
+
+### Deviations from Spec
+- ComfyUI progress is derived from poll cadence rather than the websocket
+  (the Vite `/api/image` proxy does not expose ComfyUI's `/ws` channel).
+  Progress still flows through the same `onProgress` callback so AC-7 holds;
+  no engine-specific string reaches the UI. Noted here for the verifier.
+- The dev sandbox engine selector sets a **runtime override** via
+  `setImageEngineOverride` (session-scoped, not persisted) so the toggle is
+  exercisable without a rebuild; `PUBLIC_IMAGE_ENGINE` remains the
+  persistent kill switch per the contract.
+- `ImageGenerationRequest` follows the contract shape; scheduler was not
+  added to the request type (sd-server maps sampler→`sample_method`;
+  ComfyUI hardcodes `scheduler: 'normal'` as before).
+- Open Question 2 (sd-server pin exposing `/sdcpp/v1/jobs/{id}`) is deferred
+  to C-390 verification — the adapter targets the documented native API and
+  also accepts inline-image responses for builds that return them directly.
+
+### Test Results
+- Unit (focused, worktree): 226 pass / 0 fail across engine, factory,
+  capabilities, service, image VM, persona VM, providers VM, ai, combat.
+- Full client suite: 1751 pass / 1 pre-existing fail (`GameBootService`
+  cancellation — confirmed failing in the main repo before this contract,
+  unrelated to image generation), 0 new failures.
+- schemas: 301 pass / 0 fail. ai-gateway: 58 pass / 0 fail.
+- Visual: dev image route 100/100, persona create 95/100 (PASS).
+- Baseline: 1 pre-existing failure, 0 new failures.
