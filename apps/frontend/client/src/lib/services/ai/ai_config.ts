@@ -73,8 +73,7 @@ function getAiClientOptions(apiClient?: GameApiClientInterface): AiClientOptions
       model: 'gemini-2.0-flash',
     },
     comfyui: {
-      workflowId: (import.meta.env.VITE_COMFYUI_WORKFLOW_ID as string) ?? 'default',
-      timeoutMs: 60000,
+      baseUrl: (import.meta.env.PUBLIC_IMAGE_URL as string) ?? 'http://localhost:8188',
     },
     localTts: {
       rate: 1.0,
