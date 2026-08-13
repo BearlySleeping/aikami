@@ -1,30 +1,24 @@
 // apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts
 //
 // ConnectedChatsService — manages the asymmetric chat bridge between
-// Game and OOC/Conversation chats. Handles ChatLink CRUD (Firestore
+// Game and OOC/Conversation chats. Handles ChatLink CRUD (locally
 // persisted), bridge context injection, OOC cross-posting, and game
 // context forwarding.
 //
 // Contract: C-244 Connected Chats Cross-Mode Bridge
+// C-386a: ChatLink rehomed from Firestore to the local `chat_links` table.
 
-import {
-  BRIDGE_CONTEXT_MAX_CHARS,
-  CHAT_LINKS_COLLECTION,
-  OOC_GAME_CONTEXT_MESSAGE_COUNT,
-} from '@aikami/constants';
+import { BRIDGE_CONTEXT_MAX_CHARS, OOC_GAME_CONTEXT_MESSAGE_COUNT } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { ChatLinkSchema } from '@aikami/schemas';
 import type { BridgeContext, ChatLink } from '@aikami/types';
-import { Value } from 'typebox/value';
 import { authService } from '../auth/auth_service.svelte.ts';
+import { chatLinkStorage } from './chat_link_storage.svelte.ts';
+import { chatStorage } from './chat_storage.svelte.ts';
 import { chatService } from './chat.svelte.ts';
-import { npcChatService } from './npc_chat_firestore.svelte.ts';
-
-type FirestoreModule = typeof import('@aikami/frontend/configs/firestore.ts');
 
 export type ConnectedChatsServiceOptions = BaseFrontendClassOptions;
 
@@ -50,7 +44,7 @@ export type ConnectedChatsServiceInterface = BaseFrontendClassInterface & {
    * Soft-deactivates a ChatLink (preserves notes/influences for re-link).
    *
    * @param options.linkId — The link ID to deactivate.
-   * @param options.targetChatId — The target (game) chat ID for Firestore path.
+   * @param options.targetChatId — The target (game) chat ID.
    */
   unlink(options: { linkId: string; targetChatId: string }): Promise<void>;
 
@@ -67,12 +61,20 @@ export type ConnectedChatsServiceInterface = BaseFrontendClassInterface & {
   /**
    * Adds a pending influence to an active ChatLink.
    */
-  addInfluence(options: { linkId: string; targetChatId: string; influence: string }): Promise<void>;
+  addInfluence(options: {
+    linkId: string;
+    targetChatId: string;
+    influence: string;
+  }): Promise<void>;
 
   /**
    * Removes a pending influence from an active ChatLink by index.
    */
-  removeInfluence(options: { linkId: string; targetChatId: string; index: number }): Promise<void>;
+  removeInfluence(options: {
+    linkId: string;
+    targetChatId: string;
+    index: number;
+  }): Promise<void>;
 
   /**
    * Assembles the BridgeContext for prompt injection.
@@ -90,7 +92,7 @@ export type ConnectedChatsServiceInterface = BaseFrontendClassInterface & {
   crossPostOoc(options: { targetChatId: string; oocContents: string[] }): Promise<void>;
 
   /**
-   * Deletes a ChatLink document from Firestore.
+   * Deletes a ChatLink document.
    */
   deleteLink(options: { linkId: string; targetChatId: string }): Promise<void>;
 };
@@ -99,119 +101,36 @@ class ConnectedChatsService
   extends BaseFrontendClass<ConnectedChatsServiceOptions>
   implements ConnectedChatsServiceInterface
 {
-  /** Lazily-loaded Firestore module. */
-  private _firestoreModule: FirestoreModule | undefined;
-
-  private async _getFirestore(): Promise<FirestoreModule> {
-    if (this._firestoreModule) {
-      return this._firestoreModule;
-    }
-    this._firestoreModule = await import('@aikami/frontend/configs/firestore.ts');
-    return this._firestoreModule;
-  }
-
   /** @inheritdoc */
   async getActiveLink(options: { targetChatId: string }): Promise<ChatLink | undefined> {
-    const fs = await this._getFirestore();
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      'active',
-    );
-
-    try {
-      const snapshot = await fs.getDoc(linkRef);
-      if (!snapshot.exists()) {
-        return undefined;
-      }
-
-      const data = snapshot.data();
-      if (!data?.isActive) {
-        return undefined;
-      }
-
-      if (!Value.Check(ChatLinkSchema, data)) {
-        this.warn('getActiveLink: schema validation failed', {
-          targetChatId: options.targetChatId,
-        });
-        return undefined;
-      }
-
-      return data as ChatLink;
-    } catch {
-      return undefined;
-    }
+    return await chatLinkStorage.getActiveLink(options);
   }
 
   /** @inheritdoc */
   async createLink(options: { sourceChatId: string; targetChatId: string }): Promise<ChatLink> {
-    const fs = await this._getFirestore();
-    const now = Date.now();
-    const linkId = crypto.randomUUID();
-
-    const link: ChatLink = {
-      linkId,
-      sourceChatId: options.sourceChatId,
-      targetChatId: options.targetChatId,
-      notes: [],
-      pendingInfluences: [],
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      linkId,
-    );
-    await fs.setDoc(linkRef, link);
-
-    this.debug('createLink: created', {
-      linkId,
+    const link = await chatLinkStorage.createLink(options);
+    this.debug('createLink:created', {
+      linkId: link.linkId,
       sourceChatId: options.sourceChatId,
       targetChatId: options.targetChatId,
     });
-
     return link;
   }
 
   /** @inheritdoc */
   async unlink(options: { linkId: string; targetChatId: string }): Promise<void> {
-    const fs = await this._getFirestore();
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.updateDoc(linkRef, { isActive: false, updatedAt: Date.now() });
-    this.debug('unlink: deactivated', { linkId: options.linkId });
+    await chatLinkStorage.unlink({ linkId: options.linkId });
+    this.debug('unlink:deactivated', { linkId: options.linkId });
   }
 
   /** @inheritdoc */
   async addNote(options: { linkId: string; targetChatId: string; note: string }): Promise<void> {
-    const link = await this.getActiveLink({ targetChatId: options.targetChatId });
+    const link = await chatLinkStorage.getActiveLink({ targetChatId: options.targetChatId });
     if (!link || link.linkId !== options.linkId) {
       return;
     }
-
-    const fs = await this._getFirestore();
-    const newNotes = [...link.notes, options.note];
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.updateDoc(linkRef, { notes: newNotes, updatedAt: Date.now() });
-    this.debug('addNote: added', { linkId: options.linkId });
+    await chatLinkStorage.addNote({ linkId: options.linkId, note: options.note });
+    this.debug('addNote:added', { linkId: options.linkId });
   }
 
   /** @inheritdoc */
@@ -220,22 +139,12 @@ class ConnectedChatsService
     targetChatId: string;
     index: number;
   }): Promise<void> {
-    const link = await this.getActiveLink({ targetChatId: options.targetChatId });
+    const link = await chatLinkStorage.getActiveLink({ targetChatId: options.targetChatId });
     if (!link || link.linkId !== options.linkId) {
       return;
     }
-
-    const fs = await this._getFirestore();
-    const newNotes = link.notes.filter((_, i) => i !== options.index);
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.updateDoc(linkRef, { notes: newNotes, updatedAt: Date.now() });
-    this.debug('removeNote: removed', { linkId: options.linkId, index: options.index });
+    await chatLinkStorage.removeNote({ linkId: options.linkId, index: options.index });
+    this.debug('removeNote:removed', { linkId: options.linkId, index: options.index });
   }
 
   /** @inheritdoc */
@@ -244,22 +153,12 @@ class ConnectedChatsService
     targetChatId: string;
     influence: string;
   }): Promise<void> {
-    const link = await this.getActiveLink({ targetChatId: options.targetChatId });
+    const link = await chatLinkStorage.getActiveLink({ targetChatId: options.targetChatId });
     if (!link || link.linkId !== options.linkId) {
       return;
     }
-
-    const fs = await this._getFirestore();
-    const newInfluences = [...link.pendingInfluences, options.influence];
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.updateDoc(linkRef, { pendingInfluences: newInfluences, updatedAt: Date.now() });
-    this.debug('addInfluence: added', { linkId: options.linkId });
+    await chatLinkStorage.addInfluence({ linkId: options.linkId, influence: options.influence });
+    this.debug('addInfluence:added', { linkId: options.linkId });
   }
 
   /** @inheritdoc */
@@ -268,27 +167,17 @@ class ConnectedChatsService
     targetChatId: string;
     index: number;
   }): Promise<void> {
-    const link = await this.getActiveLink({ targetChatId: options.targetChatId });
+    const link = await chatLinkStorage.getActiveLink({ targetChatId: options.targetChatId });
     if (!link || link.linkId !== options.linkId) {
       return;
     }
-
-    const fs = await this._getFirestore();
-    const newInfluences = link.pendingInfluences.filter((_, i) => i !== options.index);
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.updateDoc(linkRef, { pendingInfluences: newInfluences, updatedAt: Date.now() });
-    this.debug('removeInfluence: removed', { linkId: options.linkId, index: options.index });
+    await chatLinkStorage.removeInfluence({ linkId: options.linkId, index: options.index });
+    this.debug('removeInfluence:removed', { linkId: options.linkId, index: options.index });
   }
 
   /** @inheritdoc */
   async assembleBridgeContext(options: { targetChatId: string }): Promise<BridgeContext | null> {
-    const link = await this.getActiveLink(options);
+    const link = await chatLinkStorage.getActiveLink(options);
     if (!link) {
       return null;
     }
@@ -304,20 +193,8 @@ class ConnectedChatsService
 
     // Consume influences after reading them
     if (turnInfluences.length > 0) {
-      const fs = await this._getFirestore();
-      const linkRef = fs.doc(
-        fs.firestore,
-        'chats',
-        options.targetChatId,
-        CHAT_LINKS_COLLECTION,
-        link.linkId,
-      );
-      await fs.updateDoc(linkRef, {
-        pendingInfluences: [],
-        updatedAt: Date.now(),
-      });
-
-      this.debug('assembleBridgeContext: consumed influences', {
+      await chatLinkStorage.consumeInfluences({ linkId: link.linkId });
+      this.debug('assembleBridgeContext:consumed-influences', {
         count: turnInfluences.length,
       });
     }
@@ -336,7 +213,7 @@ class ConnectedChatsService
       return;
     }
 
-    const link = await this.getActiveLink({ targetChatId });
+    const link = await chatLinkStorage.getActiveLink({ targetChatId });
     if (!link) {
       return;
     }
@@ -346,40 +223,32 @@ class ConnectedChatsService
       return;
     }
 
-    const oocChat = await npcChatService.getChatById({ chatId: link.sourceChatId });
+    const oocChat = await chatStorage.getChatById({ chatId: link.sourceChatId });
     if (!oocChat) {
-      this.warn('crossPostOoc: OOC chat not found', { sourceChatId: link.sourceChatId });
+      this.warn('crossPostOoc:OOC-chat-not-found', { sourceChatId: link.sourceChatId });
       return;
     }
 
     for (const content of oocContents) {
       try {
-        await npcChatService.addMessage({
+        await chatStorage.addMessage({
           chatId: link.sourceChatId,
           uid,
           npcId: oocChat.npcId,
           message: content,
           sender: 'user',
         });
-        this.debug('crossPostOoc: posted', { sourceChatId: link.sourceChatId, content });
+        this.debug('crossPostOoc:posted', { sourceChatId: link.sourceChatId, content });
       } catch (error) {
-        this.error('crossPostOoc: failed to post', error);
+        this.error('crossPostOoc:failed-to-post', error);
       }
     }
   }
 
   /** @inheritdoc */
   async deleteLink(options: { linkId: string; targetChatId: string }): Promise<void> {
-    const fs = await this._getFirestore();
-    const linkRef = fs.doc(
-      fs.firestore,
-      'chats',
-      options.targetChatId,
-      CHAT_LINKS_COLLECTION,
-      options.linkId,
-    );
-    await fs.deleteDoc(linkRef);
-    this.debug('deleteLink: deleted', { linkId: options.linkId });
+    await chatLinkStorage.deleteLink({ linkId: options.linkId });
+    this.debug('deleteLink:deleted', { linkId: options.linkId });
   }
 
   // ── Private helpers ────────────────────────────────────────────────
@@ -415,7 +284,7 @@ class ConnectedChatsService
         resultNotes.push(note);
         totalLength += sep + note.length;
       } else {
-        this.warn('_applyTokenBudget: note truncated', { note });
+        this.warn('_applyTokenBudget:note-truncated', { note });
         const remaining = BRIDGE_CONTEXT_MAX_CHARS - totalLength - 16;
         if (remaining > 0) {
           resultNotes.push(`${note.slice(0, remaining)}...(truncated)`);
@@ -430,7 +299,7 @@ class ConnectedChatsService
         resultInfluences.push(influence);
         totalLength += sep + influence.length;
       } else {
-        this.warn('_applyTokenBudget: influence truncated', { influence });
+        this.warn('_applyTokenBudget:influence-truncated', { influence });
         const remaining = BRIDGE_CONTEXT_MAX_CHARS - totalLength - 16;
         if (remaining > 0) {
           resultInfluences.push(`${influence.slice(0, remaining)}...(truncated)`);

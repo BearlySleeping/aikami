@@ -8,7 +8,7 @@
 // Contract: C-327 AC-3 — optional onboarding section added
 
 import Type, { type Static } from 'typebox';
-import { ConsumableEffectSchema, EquipmentSlotSchema } from '../firestore/item.ts';
+import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';

@@ -1,22 +1,17 @@
 // apps/backend/firebase/scripts/on_emulate.ts
+//
+// Emulator seeding (C-386 AC-11): creates Auth users only — zero Firestore
+// writes. Personas, NPCs, and custom agents are seeded client-side into the
+// local SQLite tables by emulatorSeedService (the emulator process cannot
+// reach the browser's OPFS-backed database). NPC images still upload to the
+// Storage emulator (Storage is out of scope for the Firestore removal).
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getAuth } from '@aikami/backend/configs/auth';
-import { serverTimestamp } from '@aikami/backend/configs/firestore';
-import { npcFirestoreRepository } from '@aikami/backend/firestore/npc';
-import { personaFirestoreRepository } from '@aikami/backend/firestore/persona';
-import { setUserData } from '@aikami/backend/firestore/user';
 import { uploadToFirebase } from '@aikami/backend/utils/storage';
-import {
-  EMULATOR_GOOGLE_PERSONA_DATA,
-  EMULATOR_GOOGLE_USERS,
-  EMULATOR_NPCS,
-  EMULATOR_PASSWORD,
-  EMULATOR_PERSONA_DATA,
-  EMULATOR_USERS,
-} from '@aikami/mocks';
+import { EMULATOR_GOOGLE_USERS, EMULATOR_NPCS, EMULATOR_PASSWORD, EMULATOR_USERS } from '@aikami/mocks';
 
-import type { NpcCreateData, PersonaCreateData, UserCreateData } from '@aikami/types';
+import type { UserCreateData } from '@aikami/types';
 import { logger } from '$logger';
 
 const ASSETS_DIR = join(__dirname, '../assets');
@@ -70,25 +65,14 @@ const deleteAllEmulatorUsers = async () => {
   }
 };
 
-const createPersona = async (
-  uid: string,
-  data?: Omit<PersonaCreateData, 'uid'>,
-): Promise<string> => {
-  const personaData: PersonaCreateData = {
-    ...(data ?? EMULATOR_PERSONA_DATA),
-    uid,
-  } as PersonaCreateData;
-
-  const id = await personaFirestoreRepository.addDocument({
-    getCollectionPathArgument: { uid },
-    createData: personaData,
-  });
-  return id;
-};
-
-const createNpcs = async () => {
+/**
+ * Uploads NPC expression images to the Storage emulator so seeded local NPCs
+ * (created client-side by emulatorSeedService) have avatar/expression URLs.
+ * Storage is untouched by the Firestore removal (C-386 out of scope).
+ */
+const uploadNpcAssets = async () => {
   const npcImagesDir = join(ASSETS_DIR, 'images/npc');
-  logger.log('Creating NPCs with images...');
+  logger.log('Uploading NPC images...');
 
   try {
     const npcDirs = await readdir(npcImagesDir);
@@ -104,28 +88,12 @@ const createNpcs = async () => {
         continue;
       }
 
-      // Use npcDir as the id for consistent path structure in Storage
+      // Use npcDir as the id for consistent path structure in Storage.
       const npcId = npcDir.toLowerCase();
-      const expressions = await uploadNpcImages(
-        join(npcImagesDir, npcDir),
-        npcId,
-        'emulator-admin',
-      );
-
-      const npcWithExpressions: NpcCreateData = {
-        ...npcData,
-        expressions,
-        avatarUrl: expressions.neutral || expressions.happy || Object.values(expressions)[0],
-      };
-
-      const id = await npcFirestoreRepository.addDocument({
-        getCollectionPathArgument: {} as Record<string, never>,
-        createData: npcWithExpressions,
-      });
-      logger.log(`Created NPC: ${npcData.name} (${id})`);
+      await uploadNpcImages(join(npcImagesDir, npcDir), npcId, 'emulator-admin');
     }
   } catch (error) {
-    logger.error('Error creating NPCs:', error);
+    logger.error('Error uploading NPC images:', error);
   }
 };
 
@@ -144,22 +112,11 @@ const createEmulatorUser = async (
 
     const uid = userRecord.uid;
 
-    // Inject custom claims: userRole + tenant mapping
+    // Inject custom claims: userRole + tenant mapping. The Firestore user
+    // document was deleted (C-386 OQ1) — claims live on the Auth record.
     await auth.setCustomUserClaims(uid, {
       userRole,
     });
-
-    // Create Firestore user document via the domain repository helper
-    const userData: UserCreateData = {
-      agreedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      displayName,
-      email: email.toLowerCase(),
-      signInProviders: [],
-      userRole,
-    };
-    await setUserData(uid, userData);
-    await createPersona(uid);
 
     logger.log(`Created user: ${email} (${uid})`);
     return { uid, email: email.toLowerCase(), displayName };
@@ -181,10 +138,11 @@ const createEmulatorUser = async (
  * Google identities.
  *
  * Strategy:
- * - **Pre-existing users** (`preExisting: true`) — get an Auth account,
- *   Firestore user document, and a populated persona (returning player flow).
- * - **Fresh users** (`preExisting: false`) — get ONLY an Auth account with
- *   no Firestore doc or persona (new player onboarding flow).
+ * - **Pre-existing users** (`preExisting: true`) — get an Auth account with
+ *   a populated persona (the persona itself is seeded client-side; the Auth
+ *   account and claims are created here).
+ * - **Fresh users** (`preExisting: false`) — get ONLY an Auth account
+ *   (new player onboarding flow).
  */
 const importGoogleEmulatorUsers = async () => {
   const auth = getAuth();
@@ -217,23 +175,9 @@ const importGoogleEmulatorUsers = async () => {
       }
     }
 
-    // Create Firestore documents + personas for pre-existing (returning) users only.
-    // Fresh users have ONLY an Auth account — no Firestore doc, no persona.
     for (const user of EMULATOR_GOOGLE_USERS) {
       const uid = `google-${user.email.replace(/[^a-zA-Z0-9]/g, '-')}`;
-
       if (user.preExisting) {
-        const userData: UserCreateData = {
-          agreedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-          displayName: user.displayName,
-          email: user.email.toLowerCase(),
-          signInProviders: ['google'],
-          userRole: user.userRole,
-        };
-        await setUserData(uid, userData);
-        await createPersona(uid, EMULATOR_GOOGLE_PERSONA_DATA);
-
         logger.log(`Created returning Google user: ${user.email} (${uid}) with persona`);
       } else {
         logger.log(
@@ -252,7 +196,7 @@ logger.log('Starting emulation...');
 
 await deleteAllEmulatorUsers();
 
-await createNpcs();
+await uploadNpcAssets();
 
 for (const user of EMULATOR_USERS) {
   await createEmulatorUser(user.email, user.displayName, user.userRole);
@@ -261,4 +205,7 @@ for (const user of EMULATOR_USERS) {
 // Import Google-simulated users for emulator OAuth sign-in
 await importGoogleEmulatorUsers();
 
-logger.log('Emulation complete!');
+logger.log(
+  'Emulation complete! Local personas/NPCs/custom agents are seeded client-side ' +
+    '(emulatorSeedService) on first app boot in emulator mode.',
+);

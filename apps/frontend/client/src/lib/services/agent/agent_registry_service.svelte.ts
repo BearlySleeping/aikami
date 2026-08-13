@@ -1,12 +1,12 @@
 // apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts
 //
-// Agent Registry Service — Firestore-backed CRUD for custom agent
+// Agent Registry Service — local SQLite-backed CRUD for custom agent
 // definitions, plus import/export and duplication.
 //
 // Contract: C-247 Custom Agent Creation
+// C-386b: rehomed from Firestore to the local `custom_agents` table.
 
 import {
-  AGENT_DEFINITIONS_COLLECTION,
   AGENT_MAX_DESCRIPTION_LENGTH,
   AGENT_MAX_NAME_LENGTH,
   AGENT_MAX_TIMEOUT,
@@ -20,8 +20,7 @@ import {
 } from '@aikami/frontend/services';
 import type { CreateAgentInput, CustomAgentDefinition, UpdateAgentInput } from '$types';
 import { authService } from '../auth/auth_service.svelte.ts';
-
-type FirestoreModule = typeof import('@aikami/frontend/configs/firestore.ts');
+import { agentRegistryStorage } from './agent_registry_storage.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -57,37 +56,12 @@ export type AgentRegistryServiceInterface = BaseFrontendClassInterface & {
 
 const DEFAULT_TIMEOUT = 15_000;
 
-/**
- * Strips keys with undefined values from an object, returning a plain
- * object suitable for Firestore setDoc (which rejects undefined).
- */
-const stripUndefined = <T extends Record<string, unknown>>(obj: T): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-  return result;
-};
-
 // ── Implementation ───────────────────────────────────────────────────────
 
 class AgentRegistryService
   extends BaseFrontendClass<AgentRegistryServiceOptions>
   implements AgentRegistryServiceInterface
 {
-  /** Lazily-loaded Firestore module. */
-  private _firestoreModule: FirestoreModule | undefined;
-
-  private async _getFirestore(): Promise<FirestoreModule> {
-    if (this._firestoreModule) {
-      return this._firestoreModule;
-    }
-    this._firestoreModule = await import('@aikami/frontend/configs/firestore.ts');
-    return this._firestoreModule;
-  }
-
   /**
    * Validates a candidate agent id — rejects built-in IDs.
    */
@@ -157,12 +131,7 @@ class AgentRegistryService
       updatedAt: now,
     };
 
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, AGENT_DEFINITIONS_COLLECTION, id);
-    await fs.setDoc(docRef, stripUndefined(definition));
-
-    this.debug('createAgent:done', { id, name: definition.name });
-    return definition;
+    return await agentRegistryStorage.createAgent(definition);
   }
 
   /** @inheritdoc */
@@ -202,64 +171,24 @@ class AgentRegistryService
       updatedAt: now,
     };
 
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, AGENT_DEFINITIONS_COLLECTION, id);
-    await fs.setDoc(docRef, stripUndefined(updated));
-
-    this.debug('updateAgent:done', { id });
-    return updated;
+    return await agentRegistryStorage.updateAgent(updated);
   }
 
   /** @inheritdoc */
   async deleteAgent({ id }: { id: string }): Promise<void> {
     this._validateNotBuiltIn(id);
-
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, AGENT_DEFINITIONS_COLLECTION, id);
-    await fs.deleteDoc(docRef);
-
+    await agentRegistryStorage.deleteAgent({ id });
     this.debug('deleteAgent:done', { id });
   }
 
   /** @inheritdoc */
   async getAgent({ id }: { id: string }): Promise<CustomAgentDefinition | undefined> {
-    const fs = await this._getFirestore();
-    const docRef = fs.doc(fs.firestore, AGENT_DEFINITIONS_COLLECTION, id);
-    const snapshot = await fs.getDoc(docRef);
-
-    if (!snapshot.exists()) {
-      return undefined;
-    }
-
-    return snapshot.data() as CustomAgentDefinition;
+    return await agentRegistryStorage.getAgent({ id });
   }
 
   /** @inheritdoc */
   async listAgents(options?: { folder?: string }): Promise<CustomAgentDefinition[]> {
-    const uid = authService.uid;
-    if (!uid) {
-      return [];
-    }
-
-    const fs = await this._getFirestore();
-    const agentsCollection = fs.collection(fs.firestore, AGENT_DEFINITIONS_COLLECTION);
-
-    const constraints: Array<ReturnType<typeof fs.where>> = [fs.where('uid', '==', uid)];
-
-    if (options?.folder) {
-      constraints.push(fs.where('folder', '==', options.folder));
-    }
-
-    // orderBy is applied separately from where constraints
-    const q = fs.query(agentsCollection, ...constraints, fs.orderBy('createdAt', 'asc'));
-    const snapshot = await fs.getDocs(q);
-
-    const agents: CustomAgentDefinition[] = [];
-    for (const doc of snapshot.docs) {
-      agents.push(doc.data() as CustomAgentDefinition);
-    }
-
-    return agents;
+    return await agentRegistryStorage.listAgents(options);
   }
 
   /** @inheritdoc */

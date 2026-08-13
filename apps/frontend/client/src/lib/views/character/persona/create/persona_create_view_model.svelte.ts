@@ -16,7 +16,6 @@ import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   aiSettingsService,
   authService,
-  characterService,
   equipmentService,
   imageGenerationService,
   inventoryService,
@@ -582,48 +581,17 @@ export class PersonaCreateViewModel
       this.error('saveCharacter:local-failed', error);
     }
 
-    // 2. Save to Firestore if user is signed in
-    const uid = (authService as { uid?: string }).uid;
-    if (uid) {
-      try {
-        // Upload avatar to Firebase Storage first, then save persona to Firestore
-        let firestoreAvatarUrl = personaCreationService.avatarUrl;
-
-        if (firestoreAvatarUrl?.startsWith('blob:')) {
-          // Convert blob URL to a file and upload
-          const blobResponse = await fetch(firestoreAvatarUrl);
-          const blob = await blobResponse.blob();
-          const file = new File([blob], `${persona.id}.png`, { type: blob.type || 'image/png' });
-
-          // Use the character service's uploadAvatar
-          const uploadedUrl = await characterService.uploadAvatar({
-            file,
-            characterId: persona.id,
-          });
-          if (uploadedUrl) {
-            firestoreAvatarUrl = uploadedUrl;
-          }
-        }
-
-        // Save to Firestore via personaService
-        try {
-          // Try update first (if exists), fallback is OK — updatePersona throws on missing doc
-          await personaService.updatePersona(persona.id, {
-            ...persona,
-            avatarUrl: firestoreAvatarUrl || persona.avatarUrl || '',
-          });
-        } catch {
-          // If update fails (doc doesn't exist), we'd need a create endpoint.
-          // For now, log and move on — local save succeeded.
-          this.warn(
-            'saveCharacter:firestore-update-failed (doc may not exist — create not yet available)',
-          );
-        }
-
-        this.info('saveCharacter:firestore', { id: persona.id });
-      } catch (error) {
-        this.error('saveCharacter:firestore-failed', error);
-      }
+    // 2. Save to the local personas table (C-386b) — per-install persistence.
+    //    updatePersona upserts, so this covers both create and update.
+    try {
+      await personaService.updatePersona(persona.id, {
+        ...persona,
+        avatarUrl: persistentAvatarUrl || persona.avatarUrl || '',
+        isActive: persona.isActive ?? false,
+      });
+      this.info('saveCharacter:local-table', { id: persona.id });
+    } catch (error) {
+      this.error('saveCharacter:local-table-failed', error);
     }
   }
 

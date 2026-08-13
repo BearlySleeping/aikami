@@ -16,7 +16,6 @@ project:
 dependsOn:
   - 'backend-configs'
   - 'backend-utils'
-  - 'backend-firestore'
   - 'schemas'
   - 'types'
   - 'constants'

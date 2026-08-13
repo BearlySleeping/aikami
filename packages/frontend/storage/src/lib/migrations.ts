@@ -217,6 +217,98 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_install_state_status ON install_state(status)`,
     ],
   },
+
+  // ── v2: chat metadata + ChatLink (C-386a) ────────────────────────────
+  // `chat_history` already holds turns (v1). This migration adds the
+  // chat-level metadata the Firestore `chats` collection used to own
+  // (npcId, npcName, affection, stats, background image) plus the local
+  // ChatLink bridge table. Messages stay in `chat_history` — no dual write.
+  {
+    version: 2,
+    name: 'chat-metadata-and-chatlinks',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS chats (
+    id TEXT PRIMARY KEY,
+    npc_id TEXT NOT NULL,
+    npc_name TEXT NOT NULL DEFAULT '',
+    npc_avatar_url TEXT,
+    uid TEXT NOT NULL DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'private',
+    affection INTEGER NOT NULL DEFAULT 0,
+    stats_json TEXT NOT NULL DEFAULT '{}',
+    background_image_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_chats_npc_uid ON chats(npc_id, uid)`,
+
+      `CREATE TABLE IF NOT EXISTS chat_links (
+    link_id TEXT PRIMARY KEY,
+    target_chat_id TEXT NOT NULL,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_chat_links_target ON chat_links(target_chat_id)`,
+    ],
+  },
+
+  // ── v3: personas (C-386b) ────────────────────────────────────────────
+  // Partial unique index gives the one-active-persona invariant at the
+  // database level — the constraint that needed a hand-applied migration
+  // under Data Connect becomes a single local transaction.
+  {
+    version: 3,
+    name: 'personas',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS personas (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    is_active   INTEGER NOT NULL DEFAULT 0,
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_one_active
+  ON personas(is_active) WHERE is_active = 1`,
+    ],
+  },
+
+  // ── v4: npcs (C-386b) ────────────────────────────────────────────────
+  // Per-install NPCs — no is_active/ownership columns (OQ3: no catalog
+  // exists to own or filter against). creatorUid/visibility fold into data.
+  {
+    version: 4,
+    name: 'npcs',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS npcs (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+    ],
+  },
+
+  // ── v5: custom_agents (C-386b) ───────────────────────────────────────
+  // `folder` is an explicit column because listAgents({ folder }) filters
+  // on it today — same convention as personas.is_active.
+  {
+    version: 5,
+    name: 'custom_agents',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS custom_agents (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    folder      TEXT,
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_custom_agents_folder ON custom_agents(folder)`,
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------

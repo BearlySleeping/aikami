@@ -1,4 +1,3 @@
-import { updateUserData } from '@aikami/backend/firestore/user.ts';
 import { updateFirebaseAuthUser } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
@@ -18,7 +17,9 @@ export const updateEmail = async (
       });
     }
 
-    await Promise.all([updateFirebaseAuthUser(uid, { email }), updateUserData(uid, { email })]);
+    // The Firestore user document was deleted (C-386 OQ1) — only the Auth
+    // email is updated.
+    await updateFirebaseAuthUser(uid, { email });
   } catch (error) {
     logger.error('updateEmail', error);
     throw error;

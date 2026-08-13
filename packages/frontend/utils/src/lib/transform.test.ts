@@ -1,25 +1,24 @@
 import { describe, expect, test } from 'bun:test';
 import { unixLabel } from '@aikami/constants';
 import type { CoreData } from '@aikami/types';
-import type { Timestamp } from 'firebase/firestore';
 import { fromJsonData } from './transform.ts';
 
 interface TestData extends Omit<CoreData, 'createdAt'> {
   id: string;
   name: string;
   value: number;
-  updatedAt?: Timestamp;
+  updatedAt?: Date;
   complex?: {
     nestedValue: string;
-    nestedDate?: Timestamp;
+    nestedDate?: Date;
   };
-  items?: { name: string; date?: Timestamp }[];
+  items?: { name: string; date?: Date }[];
   /** Regression: key contains the unixLabel earlier (lastUnixUpdatedUnix). */
-  lastUnixUpdated?: Timestamp;
+  lastUnixUpdated?: Date;
 }
 
 describe('fromJsonData', () => {
-  test('should convert Unix timestamps to Firestore Timestamps', () => {
+  test('should convert Unix timestamps to Date instances', () => {
     const now = Date.now();
     const rawData = {
       id: 'test1',
@@ -38,12 +37,12 @@ describe('fromJsonData', () => {
     expect(result.id).toBe('test1');
     expect(result.name).toBe('Test Object');
     expect(result.value).toBe(123);
-    expect(result.updatedAt?.toMillis()).toBe(now);
+    expect(result.updatedAt?.getTime()).toBe(now);
     expect(result.complex?.nestedValue).toBe('hello');
-    expect(result.complex?.nestedDate?.toMillis()).toBe(now - 10000);
+    expect(result.complex?.nestedDate?.getTime()).toBe(now - 10000);
     expect(result.items?.length).toBe(2);
     expect(result.items?.[0]?.name).toBe('item1');
-    expect(result.items?.[0]?.date?.toMillis()).toBe(now - 20000);
+    expect(result.items?.[0]?.date?.getTime()).toBe(now - 20000);
     expect(result.items?.[1]?.name).toBe('item2');
     expect(result.items?.[1]?.date).toBeUndefined();
   });
@@ -97,11 +96,11 @@ describe('fromJsonData', () => {
 
     expect(result.items?.length).toBe(3);
     expect(result.items?.[0].name).toBe('itemA');
-    expect(result.items?.[0].date?.toMillis()).toBe(now);
+    expect(result.items?.[0].date?.getTime()).toBe(now);
     expect(result.items?.[1].name).toBe('itemB');
     expect(result.items?.[1].date).toBeUndefined();
     expect(result.items?.[2].name).toBe('itemC');
-    expect(result.items?.[2].date?.toMillis()).toBe(now - 5000);
+    expect(result.items?.[2].date?.getTime()).toBe(now - 5000);
   });
 
   test('should return an empty object for empty input', () => {
@@ -122,7 +121,7 @@ describe('fromJsonData', () => {
 
     // `lastUnixUpdatedUnix` → `lastUnixUpdated` (only the trailing "Unix" is
     // removed — the earlier occurrence inside the name is preserved).
-    expect(result.lastUnixUpdated?.toMillis()).toBe(now);
+    expect(result.lastUnixUpdated?.getTime()).toBe(now);
     expect('lastUpdatedUnix' in result).toBe(false);
   });
 });

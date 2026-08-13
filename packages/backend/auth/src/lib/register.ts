@@ -1,18 +1,30 @@
-import { deleteUserData, setUserData, toUserCreateData } from '@aikami/backend/firestore/user.ts';
 import {
   createCustomFirebaseToken,
   createFirebaseAuthUser,
   deleteFirebaseAuthUser,
   updateUserClaims,
 } from '@aikami/backend/utils/auth.ts';
-import type { AuthCreateRequest, AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
+import type {
+  AuthCreateRequest,
+  AuthMessagePayload,
+  AuthMessageResponse,
+  UserRole,
+} from '@aikami/types';
+import { toAppError, toUserClaims } from '@aikami/utils';
 
+/**
+ * Registers a new account.
+ *
+ * The Firestore user document was deleted (C-386 OQ1). Registration creates
+ * the Firebase Auth account, sets the userRole custom claim, and returns a
+ * custom sign-in token. displayName/email live on the Auth record itself.
+ */
 export const register = async (
   options: AuthMessagePayload<'register'>,
 ): Promise<AuthMessageResponse<'register'>> => {
   const { registerForm } = options;
+  const createdHere = options.uid === undefined;
   let uid = options.uid;
-  let hasCreatedUserInFirestore = false;
   try {
     if (!uid) {
       const createRequest: AuthCreateRequest = {
@@ -24,20 +36,12 @@ export const register = async (
       uid = await createFirebaseAuthUser(createRequest);
     }
 
-    const userCreateData = toUserCreateData({
-      userCreateForm: registerForm,
-    });
-
-    await Promise.all([
-      updateUserClaims({
-        ...userCreateData,
-        id: uid,
+    await updateUserClaims(
+      toUserClaims({
+        uid,
+        token: { userRole: 'member' as UserRole },
       }),
-      (async () => {
-        await setUserData(uid, userCreateData);
-        hasCreatedUserInFirestore = true;
-      })(),
-    ]);
+    );
 
     const customFirebaseSignInToken = await createCustomFirebaseToken(uid);
 
@@ -45,13 +49,11 @@ export const register = async (
       customFirebaseSignInToken,
       uid,
     };
-  } catch (error) {
-    if (uid) {
-      await Promise.all([
-        deleteFirebaseAuthUser(uid),
-        hasCreatedUserInFirestore && deleteUserData(uid),
-      ]);
+  } catch (_error) {
+    // Roll back the Auth account only if this call created it.
+    if (createdHere && uid) {
+      await deleteFirebaseAuthUser(uid);
     }
-    throw error;
+    throw toAppError({ errorType: 'internal', errorMessage: 'Registration failed' });
   }
 };

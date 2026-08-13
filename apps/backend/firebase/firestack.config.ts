@@ -17,4 +17,12 @@ export default defineConfig(() => ({
   sourcemap: true,
 
   cloudCacheFileName: 'functions_cache.ts',
+
+  rulesTests: {
+    firestore: {
+      rulesFile: 'src/rules/firestore.rules',
+      testPattern: 'tests/rules/**/*.rules.test.ts',
+      projectId: 'demo-aikami-emulator',
+    },
+  },
 }));

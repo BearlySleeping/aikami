@@ -5,7 +5,6 @@
 // download triggering for all export operations.
 
 import { AIKAMI_PNG_CHUNK_KEYWORD, EXPORT_FORMAT_VERSION } from '@aikami/constants';
-import { chatFirestoreRepository } from '@aikami/frontend/firestore/chat.ts';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -21,7 +20,7 @@ import type {
 } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import JSZip from 'jszip';
-import { authService, npcService, personaService, sessionService } from '$services';
+import { authService, chatStorage, npcService, personaService, sessionService } from '$services';
 import type { GameSession } from '$types';
 import { createPlaceholderPngCard, embedCharacterInPng } from '../character/png_writer.ts';
 import { sessionToEpub } from './formatters/epub_formatter.ts';
@@ -225,7 +224,7 @@ class ExportService
   // ── Chat ────────────────────────────────────────────────────────────
 
   async listChats(): Promise<ChatData[]> {
-    return await chatFirestoreRepository.getDocumentsByCollection(undefined);
+    return await chatStorage.listChats();
   }
 
   async exportChatAsJsonl(options: { chat: ChatData; npcName?: string }): Promise<void> {

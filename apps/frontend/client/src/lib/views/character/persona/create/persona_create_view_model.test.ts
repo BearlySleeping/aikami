@@ -212,8 +212,6 @@ const _setupServiceOverrides = (): void => {
       }),
     }),
     ImageGenerationService: class {},
-    notificationService: _createServiceStub(),
-    NotificationService: class {},
     npcService: _createServiceStub(),
     NpcService: class {},
     onboardingService: _createServiceStub(),
@@ -228,8 +226,6 @@ const _setupServiceOverrides = (): void => {
     aiSettingsService: _createServiceStub(),
     AISettingsService: class {},
     StorageService: class {},
-    userService: _createServiceStub(),
-    UserService: class {},
     routerService: {
       goToRoute: mock(async (route: string) => {
         enterWorldRouteCalls.push({ route });

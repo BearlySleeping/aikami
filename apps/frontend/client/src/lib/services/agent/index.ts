@@ -16,6 +16,10 @@ export {
   type AgentRegistryServiceOptions,
   agentRegistryService,
 } from './agent_registry_service.svelte.ts';
+export {
+  type AgentRegistryStorageInterface,
+  agentRegistryStorage,
+} from './agent_registry_storage.svelte.ts';
 export type {
   AgentOutput,
   CyoaAgentOutput,
