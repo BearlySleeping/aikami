@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/frontend/client/` — build config, runtime config loader, `services/audio/`, `src-tauri/` |
 | **Priority** | P0 — the build-time endpoint baking is the direct blocker on publishing any client container image to GHCR, which is the stated goal of the local-stack work. |
 | **Dependencies** | None hard. C-390 depends on this. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → "Configure your local engines" page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -102,7 +102,7 @@ engine host by editing one JSON file — no rebuild.
 | Kokoro asset sourcing | `kokoro_worker.ts:18,69,74` | replace — local/app-controlled origin |
 | Voice server probe | `tts_service.svelte.ts:620` | modify — config-driven, opt-in |
 | Audio playback | `audio_queue_player.ts`, `audio_context_manager.ts` | reuse unchanged |
-| Tauri shell | `src-tauri/tauri.conf.json` | modify — CSP, resources, model fetch command |
+| Tauri shell | `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json` | modify — CSP, capability ACL, resources, model fetch command, first-run config writer |
 
 ## Overview
 
@@ -124,8 +124,13 @@ Runtime config precedence, highest first:
 1. `localStorage` override (developer escape hatch, dev builds only)
 2. Tauri: config file in the app config directory, written by the installer/first run
 3. Web: `GET /config.json` relative to the app origin
-4. Compile-time `PUBLIC_*` defaults
-5. Hardcoded localhost defaults
+4. Compile-time `PUBLIC_*` defaults (dev server only — tree-shaken out of production bundles)
+5. **No engine URL** — `text.url`, `image.url`, and `voice.*.url` resolve to unset; the app renders normally, engine-dependent features report unavailable, and the "Configure your local engines" docs page is the setup path
+
+> Rung 5 deliberately contains no localhost literals: any engine URL string in the
+> bundle would trip AC-1 and defeat the topology-agnostic image goal. The
+> "no user-visible change on upgrade" promise (Migration) is carried by the
+> deployment paths that emit a config file, not by baked-in fallbacks.
 
 For Tauri model fetching, download through the **Rust side** (a Tauri command
 using the HTTP plugin), not the webview. This bypasses webview CSP entirely,
@@ -142,7 +147,8 @@ checksum before the bytes ever reach JavaScript.
 - **`config.json` is served next to the SPA and is not part of the build
   output.** In the container it is a mounted file; served locally it sits
   beside `index.html`; in Tauri it lives in the app config directory. Missing
-  or malformed → fall back to defaults and log once, never crash.
+  or malformed → fall back down the precedence chain (to rung 5, unset, in
+  production) and log once, never crash.
 - **Browser TTS is the default; the voice sidecar is opt-in.** The probe at
   `tts_service.svelte.ts:620` must only run when `voice.url` is present in the
   runtime config. No blind localhost probing.
@@ -225,9 +231,18 @@ Validate the fetched document against the schema and fall back on failure.
 
 ## Migration & Rollback
 
-- **Old data compatibility**: existing installs have no `config.json`. Absence resolves to the compile-time defaults, which equal today's values — no user-visible change on upgrade.
+- **Old data compatibility**: existing installs have no `config.json`. Every
+  deployment path emits one carrying today's values — `local-stack`'s
+  `build:client` writes it into the staged output, the Tauri app writes its
+  default config file on first run, and static hosts ship one beside
+  `index.html` — so resolved values equal today's and there is no user-visible
+  change on upgrade. A naked production build with no config source resolves
+  engine URLs to unset (precedence rung 5).
 - **Migration**: none required for user data. `local-stack/package.json` → `build:client` drops its `PUBLIC_*` prefix and instead emits a `config.json` into the staged output.
-- **Rollback**: the compile-time `PUBLIC_*` defaults remain wired, so a build with the old env vars set still produces a working (if inflexible) client.
+- **Rollback**: an operator restores the previous topology by shipping a
+  `config.json` with the old endpoint values (or, for a dev server, by setting
+  the old `PUBLIC_*` env vars). Rollback uses the same mechanism as the forward
+  change — no SPA redeploy is required.
 - **Feature flag or kill switch**: `voice.tts.mode` — `browser` | `server` | `disabled` covers every rollback case for the TTS change without a redeploy.
 - **Failure recovery**: a corrupt cached model is detected by checksum and re-fetched; if re-fetch fails, TTS reports `unavailable` and the app continues.
 
@@ -239,7 +254,7 @@ Validate the fetched document against the schema and fall back on failure.
   - An explicit "Download voice model" control in settings, with size shown up front, progress, cancel, and delete — plus the `VoiceModelState` surface behind it.
   - WebGPU capability detection and honest `TtsBackend` reporting.
   - Making the voice-server probe config-gated.
-  - Tauri: CSP update for the new engine ports, Rust-side model download command, COEP/COOP reconciliation.
+  - Tauri: CSP update for the new engine ports, capability ACL alignment, Rust-side model download command, first-run default config file writer, COEP/COOP header removal (Open Question 2).
   - A `serve` path for the built `dist/` (static file server) documented as the no-Docker option.
 - **Out of Scope:**
   - Any compose/Docker topology work — C-390.
@@ -262,8 +277,8 @@ Kept as one contract.
 
 ### AC-1: No engine URL survives in the bundle
 **Given** a production build produced without any `PUBLIC_*_URL` env var set
-**When** the built assets in `build/` are searched for `localhost:8188`, `localhost:11434`, `localhost:6006`, and `localhost:8880`
-**Then** no engine URL appears in any emitted JS chunk.
+**When** the built assets in `build/` are searched for every engine URL literal the old code or its defaults could emit — `localhost:8080`, `localhost:8089`, `localhost:8188`, `localhost:11434`, `localhost:6006`, and `localhost:8880`
+**Then** no engine URL appears in any emitted JS chunk (precedence rung 5 must stay literal-free for this to hold).
 
 ### AC-2: Runtime config drives the engines
 **Given** a `config.json` served beside `index.html` pointing `text.url` and `image.url` at non-default ports
@@ -293,7 +308,7 @@ Kept as one contract.
 ### AC-4d: The Tauri installer does not carry the weights
 **Given** the packaged desktop installer
 **When** its contents and size are inspected
-**Then** no Kokoro `.onnx` weight file is bundled, and the installer size shows no corresponding increase over the pre-contract baseline.
+**Then** no Kokoro `.onnx` weight file is bundled, and the installer size shows no corresponding increase over the pre-contract baseline (record the pre-change installer size in the PR so the comparison is checkable).
 
 ### AC-5: Kokoro initialises inside Tauri
 **Given** the packaged desktop app on a machine with WebGPU
@@ -316,9 +331,9 @@ Kept as one contract.
 **Then** `POST {url}/v1/audio/speech` is called and audio plays — proving the sidecar remains a first-class option on a non-8880 port.
 
 ### AC-9: Tauri CSP admits the new engines
-**Given** the packaged desktop app configured for a `llama-server` and an `sd-server`
-**When** text and image generation are exercised
-**Then** both succeed with no CSP violation, and `connect-src` contains no wildcard host and no CDN.
+**Given** the packaged desktop app configured for a `llama-server`, an `sd-server`, and server-mode voice on the voice port
+**When** text, image, and voice generation are exercised
+**Then** all succeed with no CSP violation; `connect-src` contains no wildcard host and no CDN; and the voice port is present — currently missing from `connect-src`, so it must be added (`http://localhost:8089` per `development_ports.ts`, plus `http://localhost:6006` for the current compose topology until C-390 lands). `src-tauri/capabilities/default.json`'s `http:allow-fetch` allow-list must be widened in lockstep with the CSP if any engine call ever goes through the JS HTTP plugin.
 
 ### AC-10: `dist/` serves standalone
 **Given** a production build
@@ -330,7 +345,7 @@ Kept as one contract.
 |---|---|---|---|---|
 | AC-1 | Integration | build-output grep assertion in the client test suite | N/A | Filled during verification |
 | AC-2 | Unit | `runtime_config.test.ts` | N/A | Filled during verification |
-| AC-3 | Unit | `runtime_config.test.ts` — four failure modes | N/A | Filled during verification |
+| AC-3 | Unit + Integration | `runtime_config.test.ts` — four failure modes; boot smoke via the existing client Playwright app fixture for the "renders normally" clause | N/A | Filled during verification |
 | AC-4 | Integration | `tts_service.test.ts` with offline fetch mock | `/game/...` | Filled during verification |
 | AC-4b | Unit | `tts_service.test.ts` — asserts zero fetches on synthesize | N/A | Filled during verification |
 | AC-4c | Unit + Visual | `voice_model_download.test.ts`, settings visual suite | settings route | Filled during verification |
@@ -361,7 +376,7 @@ Kept as one contract.
 2. **Phase 2 (Assets)**: vendor ORT WASM; implement checksum-verified Kokoro fetch + cache; flip `allowLocalModels`.
 3. **Phase 3 (TTS)**: WebGPU detection, `TtsBackend` reporting, config-gated server probe, UI state for degraded modes.
 4. **Phase 4 (Tauri)**: CSP update, Rust model-download command, COEP/COOP reconciliation, packaged-build verification.
-5. **Phase 5 (Serve)**: static-serve script for `build/` plus `config.json` emission; update `local-stack:build-client` to stop baking URLs.
+5. **Phase 5 (Serve)**: static-serve script for `build/` plus `config.json` emission; extend `local-stack`'s `scripts/check.sh` with the static-serve + config-swap check AC-10's evidence depends on; update `local-stack:build-client` to stop baking URLs.
 6. **Phase 6 (Validation)**: `bun moon run client:test`, `:typecheck`, `:lint`, `:build`, plus a packaged Tauri smoke test.
 
 ## Edge Cases & Gotchas
@@ -375,11 +390,11 @@ Kept as one contract.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+All three questions are resolved; recorded for traceability.
 
 - ~~Vendor the Kokoro weights into the Tauri installer, or download on first use?~~ **Resolved 2026-08-13 by the user:** neither implicit nor bundled — an explicit download **button**. The installer stays small, and the fetch is a deliberate user action. See AC-4b through AC-4d.
-- Restore cross-origin isolation (threaded WASM, but re-opens the Google popup sign-in problem that `ce14406b` just solved) or accept single-threaded WASM? Proposed: accept single-threaded, since WebGPU is the primary path and the WASM path is a fallback.
-- Should `config.json` be writable from the app's settings UI, or file-only? File-only is proposed for this contract; a settings UI is a follow-up.
+- ~~Restore cross-origin isolation (threaded WASM, but re-opens the Google popup sign-in problem that `ce14406b` just solved) or accept single-threaded WASM?~~ **Resolved 2026-08-13:** accept single-threaded WASM — drop the `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers from `tauri.conf.json` so the Tauri webview matches the browser build. Restoring COI would re-open the exact Google popup sign-in problem `ce14406b` was created to fix, and WebGPU (the primary path) does not require COI. AC-6 covers honest `wasm` reporting; Linux WebKitGTK users who find WASM too slow get the documented `voice.tts.mode: 'server'` remedy.
+- ~~Should `config.json` be writable from the app's settings UI, or file-only?~~ **Resolved 2026-08-13:** file-only for this contract; a settings UI is a follow-up. The only settings-UI surface added here is the voice-model download control (AC-4c).
 
 ## Amendments
 
