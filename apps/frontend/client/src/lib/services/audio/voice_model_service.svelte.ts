@@ -113,6 +113,14 @@ const remoteModelUrl = (path: string, origin: string): string =>
 const voiceCacheKey = (path: string): string =>
   `https://huggingface.co/${VOICE_REPO}/resolve/main/${path}`;
 
+/**
+ * Actual network URL for a voice file, derived from the configured model
+ * origin (C-389 CR) — the cache key above stays canonical for kokoro-js
+ * while the fetch honors `models.originUrl`.
+ */
+const voiceFetchUrl = (path: string, origin: string): string =>
+  `${origin}/${VOICE_REPO}/resolve/main/${path}`;
+
 /** True when running inside a Tauri webview. */
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
@@ -169,11 +177,30 @@ class VoiceModelService
         this.state = { status: 'not-downloaded', bytes: this.totalBytes };
         return this.state;
       }
-      const meta = (await manifest.json()) as { files?: string[] };
-      const allPresent = await Promise.all(
-        (meta.files ?? []).map(async (key) => (await cache.match(key)) !== undefined),
+      const meta = (await manifest.json()) as {
+        files?: Array<{ cache?: string; key?: string }> | string[];
+        version?: number;
+      };
+      // v1 manifests predate the voice files (C-389 CR) — treat as
+      // not-downloaded so the download re-runs and includes the voice.
+      if ((meta.version ?? 1) < 2) {
+        this.state = { status: 'not-downloaded', bytes: this.totalBytes };
+        return this.state;
+      }
+      const entries = (meta.files ?? []).map((entry) =>
+        typeof entry === 'string'
+          ? { cache: TRANSFORMERS_CACHE, key: entry }
+          : { cache: entry.cache ?? TRANSFORMERS_CACHE, key: entry.key ?? '' },
       );
-      if (allPresent && (meta.files?.length ?? 0) > 0) {
+      const allPresent = (
+        await Promise.all(
+          entries.map(async (entry) => {
+            const cache = await caches.open(entry.cache);
+            return (await cache.match(entry.key)) !== undefined;
+          }),
+        )
+      ).every(Boolean);
+      if (allPresent && entries.length > 0) {
         this.state = { status: 'ready' };
       } else {
         this.state = { status: 'not-downloaded', bytes: this.totalBytes };
@@ -273,8 +300,13 @@ class VoiceModelService
         if (done) {
           break;
         }
-        chunks.push(value);
         downloaded += value.byteLength;
+        // C-389 CR: enforce the expected size while streaming — abort before
+        // buffering an oversized response.
+        if (downloaded > file.size) {
+          throw new Error(`Download exceeded expected size for ${file.path} (${file.size} bytes)`);
+        }
+        chunks.push(value);
         received += value.byteLength;
         this.state = {
           status: 'downloading',
@@ -321,7 +353,7 @@ class VoiceModelService
     for (const file of VOICE_FILES) {
       await downloadFile(
         file,
-        voiceCacheKey(file.path),
+        voiceFetchUrl(file.path, origin),
         KOKORO_VOICES_CACHE,
         voiceCacheKey(file.path),
       );
@@ -333,35 +365,54 @@ class VoiceModelService
     const origin =
       runtimeConfigService.getModelsOrigin()?.replace(/\/+$/, '') ?? 'https://huggingface.co';
 
+    // Cumulative bytes across already-completed files; per-file progress
+    // events from Rust are added on top of this base.
+    let base = 0;
+
     const downloadTauriFile = async (
       file: ManifestFile,
       url: string,
       cacheName: string,
       cacheKey: string,
     ): Promise<void> => {
-      // Rust-side download: bypasses webview CSP, verifies SHA-256, writes
-      // to the app data dir, and emits progress events.
-      const unlisten = await this._listenTauriProgress(file.path, () => {
-        if (signal.aborted) {
-          return;
-        }
+      // C-389 CR: cancellation takes effect between files (Rust has no abort
+      // channel) — checked before every file in both loops.
+      if (signal.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      const unlisten = await this._listenTauriProgress(file.path, (receivedBytes) => {
+        this.state = {
+          status: 'downloading',
+          receivedBytes: Math.min(total, base + receivedBytes),
+          totalBytes: total,
+        };
       });
       try {
+        // Rust-side download: bypasses webview CSP, verifies SHA-256 + size,
+        // writes to the app data dir, and emits progress events.
         await tauriInvoke('download_model_file', {
           url,
           checksum: file.sha256,
           fileName: file.path,
+          expectedSize: file.size,
         });
       } finally {
         unlisten();
       }
 
+      base += file.size;
+      this.state = {
+        status: 'downloading',
+        receivedBytes: base,
+        totalBytes: total,
+      };
+
       // Read the verified bytes back so the worker can load from the
-      // standard transformers Cache Storage path.
-      const bytes = (await tauriInvoke('read_model_file', {
+      // standard transformers Cache Storage path. C-389 CR: Rust returns the
+      // bytes as a raw payload (tauri::ipc::Response) → ArrayBuffer.
+      const buffer = (await tauriInvoke('read_model_file', {
         fileName: file.path,
-      })) as number[];
-      const buffer = Uint8Array.from(bytes);
+      })) as ArrayBuffer;
       if (buffer.byteLength !== file.size) {
         throw new Error(`Size mismatch for ${file.path} after Rust download`);
       }
@@ -375,11 +426,6 @@ class VoiceModelService
           },
         }),
       );
-      this.state = {
-        status: 'downloading',
-        receivedBytes: total, // Rust side reports per-file completion
-        totalBytes: total,
-      };
     };
 
     for (const file of MODEL_FILES) {
@@ -393,61 +439,60 @@ class VoiceModelService
     for (const file of VOICE_FILES) {
       await downloadTauriFile(
         file,
-        voiceCacheKey(file.path),
+        voiceFetchUrl(file.path, origin),
         KOKORO_VOICES_CACHE,
         voiceCacheKey(file.path),
       );
     }
   }
 
-  /** Subscribes to Rust-side per-file progress events. */
-  private _listenTauriProgress(fileName: string, onProgress: () => void): () => void {
-    let unlisten = (): void => {};
-    try {
-      const internals = (
-        window as unknown as {
-          // biome-ignore lint/style/useNamingConvention: Tauri global API name
-          __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
-          // biome-ignore lint/style/useNamingConvention: Tauri global event API name
-          __TAURI_EVENT__?: {
-            listen: (
-              event: string,
-              handler: (e: { payload: unknown }) => void,
-            ) => Promise<() => void>;
-          };
-        }
-      ).__TAURI_INTERNALS__;
-      const eventApi = (
-        window as unknown as {
-          // biome-ignore lint/style/useNamingConvention: Tauri global event API name
-          __TAURI_EVENT__?: { listen: unknown };
-        }
-      ).__TAURI_EVENT__;
-      if (eventApi?.listen) {
-        void eventApi
-          .listen('model-download-progress', (event) => {
-            const payload = event.payload as { file?: string; receivedBytes?: number };
-            if (payload.file === fileName) {
-              onProgress();
-            }
-          })
-          .then((fn) => {
-            unlisten = fn;
-          });
+  /**
+   * Subscribes to Rust-side per-file progress events. Resolves only once the
+   * listener is registered so a fast download cannot complete before
+   * `unlisten` exists (C-389 CR) — no fire-and-forget listener leak.
+   */
+  private async _listenTauriProgress(
+    fileName: string,
+    onProgress: (receivedBytes: number) => void,
+  ): Promise<() => void> {
+    const eventApi = (
+      window as unknown as {
+        // biome-ignore lint/style/useNamingConvention: Tauri global event API name
+        __TAURI_EVENT__?: {
+          listen: (
+            event: string,
+            handler: (e: { payload: unknown }) => void,
+          ) => Promise<() => void>;
+        };
       }
-      void internals.invoke; // keep reference for TS strictness
+    ).__TAURI_EVENT__;
+    if (!eventApi?.listen) {
+      return () => {};
+    }
+    try {
+      return await eventApi.listen('model-download-progress', (event) => {
+        const payload = event.payload as { file?: string; receivedBytes?: number };
+        if (payload.file === fileName && payload.receivedBytes !== undefined) {
+          onProgress(payload.receivedBytes);
+        }
+      });
     } catch {
       // Event API unavailable — per-file completion still drives the state.
+      return () => {};
     }
-    return () => unlisten();
   }
 
   private async _writeManifest(): Promise<void> {
     const cache = await caches.open(TRANSFORMERS_CACHE);
-    const files = [...MODEL_FILES.map((f) => localCacheKey(f.path)), MANIFEST_KEY];
+    // C-389 CR: record the cache name alongside every key so checkStatus can
+    // verify model AND voice entries; version bumped to 2 (voice included).
+    const files: Array<{ cache: string; key: string }> = [
+      ...MODEL_FILES.map((f) => ({ cache: TRANSFORMERS_CACHE, key: localCacheKey(f.path) })),
+      ...VOICE_FILES.map((f) => ({ cache: KOKORO_VOICES_CACHE, key: voiceCacheKey(f.path) })),
+    ];
     await cache.put(
       MANIFEST_KEY,
-      new Response(JSON.stringify({ files, version: 1 }), {
+      new Response(JSON.stringify({ files, version: 2 }), {
         headers: { 'Content-Type': 'application/json' },
       }),
     );

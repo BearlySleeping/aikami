@@ -9,6 +9,26 @@ import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts
 import { audioContextManager } from './audio_context_manager';
 import { voiceModelService } from './voice_model_service.svelte.ts';
 
+/** True when running inside a Tauri webview. */
+const isTauriRuntime = (): boolean =>
+  typeof window !== 'undefined' &&
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
+
+/**
+ * Local engine hosts the packaged Tauri CSP admits (AC-9 — connect-src
+ * enumerates the local ports, no wildcards). Non-localhost voice URLs would
+ * be silently CSP-blocked in the desktop webview, so they are rejected with
+ * a warning instead (C-389 CR). Browser builds are unrestricted.
+ */
+const isLocalhostUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+};
+
 /** Lifecycle status of the native Kokoro TTS engine. */
 export type TtsStatus =
   | 'uninitialized'
@@ -76,6 +96,14 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
    * request, and resets state.
    */
   stop(): void;
+
+  /**
+   * Tears the TTS engine down to its uninitialized state: terminates the
+   * browser worker, drops the server-mode URL, and reports `unavailable`
+   * (C-389 CR — used after deleting the voice model so a stale worker or
+   * backend can never outlive the model it loaded).
+   */
+  reset(): void;
 
   /**
    * Checks if the service is running in demo/emulator mode.
@@ -207,6 +235,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   isDemoMode(): boolean {
     return false;
+  }
+
+  /** @inheritdoc */
+  reset(): void {
+    this._worker?.terminate();
+    this._worker = null;
+    this._kokoroServerUrl = undefined;
+    this.isKokoroServerAvailable = false;
+    this.status = 'uninitialized';
+    this.backend = 'unavailable';
+    this.errorMessage = null;
+    this.debug('reset');
   }
 
   async loadVoices(): Promise<void> {
@@ -428,16 +468,23 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     // Server mode: probe ONLY the configured URL (AC-7 — no blind
     // localhost probing). Unreachable → fall through to browser TTS.
     if (mode === 'server' && serverUrl) {
-      this._kokoroServerUrl = serverUrl.replace(/\/+$/, '');
-      await this.checkKokoroServer();
-      if (this.isKokoroServerAvailable) {
-        this.status = 'ready';
-        this.backend = 'server';
-        this.debug('initialize:server-ready', { url: this._kokoroServerUrl });
-        return;
+      if (isTauriRuntime() && !isLocalhostUrl(serverUrl)) {
+        // C-389 CR: the packaged CSP cannot admit arbitrary hosts (AC-9);
+        // reject a non-localhost voice URL here so the user sees a clear
+        // warning instead of a confusing CSP violation in the webview.
+        this.warn('initialize:server-url-not-allowed-in-tauri', { url: serverUrl });
+      } else {
+        this._kokoroServerUrl = serverUrl.replace(/\/+$/, '');
+        await this.checkKokoroServer();
+        if (this.isKokoroServerAvailable) {
+          this.status = 'ready';
+          this.backend = 'server';
+          this.debug('initialize:server-ready', { url: this._kokoroServerUrl });
+          return;
+        }
+        this.warn('initialize:server-unreachable', { url: this._kokoroServerUrl });
+        this._kokoroServerUrl = undefined;
       }
-      this.warn('initialize:server-unreachable', { url: this._kokoroServerUrl });
-      this._kokoroServerUrl = undefined;
     }
 
     // Browser mode: the voice model must have been downloaded explicitly

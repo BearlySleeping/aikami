@@ -640,12 +640,19 @@ class ConnectionManagerViewModel
   async testDraftModel(): Promise<void> {
     const provider = this.draft.provider ?? 'openrouter';
     const config = PROVIDER_MODEL_FETCH[provider];
-    this.debug('testDraftModel', { provider, hasConfig: !!config });
-    if (!config?.chatTestUrl) {
+    // C-389 CR: Ollama's endpoints are runtime-resolved — never use the
+    // empty static registry entry (fetch('') would hit the app origin).
+    const chatTestUrl =
+      provider === 'ollama' ? getOllamaRuntimeEndpoints().chatTestUrl : config?.chatTestUrl;
+    this.debug('testDraftModel', { provider, hasConfig: !!config, chatTestUrl });
+    if (!chatTestUrl) {
       this.draftModelTestResult = {
         ok: false,
         latencyMs: 0,
-        error: 'Model testing not supported for this provider',
+        error:
+          provider === 'ollama'
+            ? 'No local text engine configured (text.url missing from config.json)'
+            : 'Model testing not supported for this provider',
       };
       return;
     }
@@ -698,7 +705,7 @@ class ConnectionManagerViewModel
       }
 
       this.debug('testDraftModel:fetch', {
-        url: config.chatTestUrl,
+        url: chatTestUrl,
         model,
         bodyLength: body.length,
       });
@@ -707,7 +714,7 @@ class ConnectionManagerViewModel
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
       try {
-        const response = await fetch(config.chatTestUrl, {
+        const response = await fetch(chatTestUrl, {
           body,
           headers: { 'Content-Type': 'application/json', ...headers },
           method: 'POST',

@@ -12,8 +12,7 @@ import {
   TtsModeSchema,
 } from './runtime_engine_config.ts';
 
-const check = (schema: unknown, value: unknown): boolean =>
-  Value.Check(schema as never, value);
+const check = (schema: unknown, value: unknown): boolean => Value.Check(schema as never, value);
 
 describe('RuntimeEngineConfigSchema (C-389)', () => {
   test('accepts a full document', () => {
@@ -59,15 +58,28 @@ describe('RuntimeEngineConfigSchema (C-389)', () => {
   });
 
   test('rejects non-http(s) URLs (security)', () => {
-    expect(check(RuntimeEngineConfigSchema, { text: { url: 'javascript:alert(1)' } })).toBe(
-      false,
-    );
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'javascript:alert(1)' } })).toBe(false);
     expect(check(RuntimeEngineConfigSchema, { text: { url: 'file:///etc/passwd' } })).toBe(false);
     expect(check(RuntimeEngineConfigSchema, { text: { url: '/api/text' } })).toBe(false);
     expect(check(RuntimeEngineConfigSchema, { text: { url: 'http://localhost:8080/v1' } })).toBe(
       true,
     );
     expect(check(RuntimeEngineConfigSchema, { text: { url: 'https://example.com' } })).toBe(true);
+  });
+
+  test('rejects empty or malformed authorities (C-389 CR)', () => {
+    // Bare scheme — no authority at all.
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'http://' } })).toBe(false);
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'https://' } })).toBe(false);
+    // Authority starts with a slash — still no host.
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'http:///path' } })).toBe(false);
+    // Whitespace in the host.
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'http://a b/v1' } })).toBe(false);
+    // Valid hosts still pass.
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'http://a' } })).toBe(true);
+    expect(check(RuntimeEngineConfigSchema, { text: { url: 'https://huggingface.co/x/y' } })).toBe(
+      true,
+    );
   });
 
   test('rejects a non-object document', () => {

@@ -237,7 +237,10 @@ describe('TtsService — C-389 config-driven TTS', () => {
 
     // Configure server-mode TTS pointing at a non-default port.
     const runtimeConfig = await import('../config/runtime_config_service.svelte.ts');
-    (runtimeConfig.runtimeConfigService as unknown as Service).engineConfig = {
+    const runtimeSvc = runtimeConfig.runtimeConfigService as unknown as Service & {
+      loadConfig: () => Promise<unknown>;
+    };
+    runtimeSvc.engineConfig = {
       text: { url: undefined, model: undefined },
       image: { url: undefined, engine: 'auto' },
       voice: {
@@ -246,23 +249,33 @@ describe('TtsService — C-389 config-driven TTS', () => {
       },
       models: { originUrl: undefined },
     };
-    fetchMock.mockImplementation(async (url: string | URL) => {
-      const href = typeof url === 'string' ? url : url.href;
-      if (href.includes(':6006')) {
-        return new Response('ok', { status: 200 });
+    // C-389 CR: stub loadConfig — when this test runs before any other
+    // initialize() call has primed the cache, the first loadConfig() would
+    // overwrite engineConfig above. Stub it so the assignment is stable
+    // regardless of test order; restore afterwards.
+    const originalLoadConfig = runtimeSvc.loadConfig;
+    runtimeSvc.loadConfig = mock(async () => ({}));
+    try {
+      fetchMock.mockImplementation(async (url: string | URL) => {
+        const href = typeof url === 'string' ? url : url.href;
+        if (href.includes(':6006')) {
+          return new Response('ok', { status: 200 });
+        }
+        return new Response('nope', { status: 404 });
+      });
+
+      await ttsService.initialize();
+
+      expect(ttsService.status).toBe('ready');
+      expect(ttsService.backend).toBe('server');
+      // Every fetch targeted the configured port — never a localhost literal.
+      for (const call of (fetchMock as ReturnType<typeof mock>).mock.calls) {
+        const href = typeof call[0] === 'string' ? call[0] : (call[0] as URL).href;
+        expect(href).toContain(':6006');
+        expect(href).not.toContain('localhost');
       }
-      return new Response('nope', { status: 404 });
-    });
-
-    await ttsService.initialize();
-
-    expect(ttsService.status).toBe('ready');
-    expect(ttsService.backend).toBe('server');
-    // Every fetch targeted the configured port — never a localhost literal.
-    for (const call of (fetchMock as ReturnType<typeof mock>).mock.calls) {
-      const href = typeof call[0] === 'string' ? call[0] : (call[0] as URL).href;
-      expect(href).toContain(':6006');
-      expect(href).not.toContain('localhost');
+    } finally {
+      runtimeSvc.loadConfig = originalLoadConfig;
     }
   });
 

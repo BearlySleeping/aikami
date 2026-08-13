@@ -162,30 +162,86 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   test('cancel() aborts the download and returns to not-downloaded', async () => {
     await resetServiceState();
     const fetchMock = installFetchMock();
+    let firstFetchResolved!: () => void;
+    const firstFetchDone = new Promise<void>((resolve) => {
+      firstFetchResolved = resolve;
+    });
     // First file (config.json, 44 B) succeeds; the second stalls until the
-    // abort signal fires.
+    // abort signal fires. The listener handles an already-aborted signal and
+    // clears the delayed timer so the test cannot hang (C-389 CR).
     fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
       const href = typeof url === 'string' ? url : url.href;
       if (href.includes('config.json')) {
+        firstFetchResolved();
         return new Response(new Uint8Array(44), { status: 200 });
       }
       return await new Promise<Response>((resolve, reject) => {
-        init?.signal?.addEventListener('abort', () =>
-          reject(new DOMException('Aborted', 'AbortError')),
+        const signal = init?.signal;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        signal?.addEventListener('abort', () => {
+          if (timer !== undefined) {
+            clearTimeout(timer);
+          }
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+        timer = setTimeout(
+          () => resolve(new Response(new Uint8Array(4_608), { status: 200 })),
+          60_000,
         );
-        setTimeout(() => resolve(new Response(new Uint8Array(4_608), { status: 200 })), 60_000);
       });
     });
     pinDigestBySize();
 
     const { voiceModelService } = await import('./voice_model_service.svelte.ts');
     const promise = voiceModelService.download();
-    // Let the first file land, then cancel mid-download.
-    await new Promise((r) => setTimeout(r, 20));
+    // Wait until the first file has actually been fetched, then cancel
+    // mid-download (synchronization instead of a fixed sleep).
+    await firstFetchDone;
     voiceModelService.cancel();
     const state = await promise;
 
     expect(state.status).toBe('not-downloaded');
+  });
+
+  test('a size-matched body with an unknown checksum fails verification', async () => {
+    await resetServiceState();
+    installFetchMock();
+    // Force a non-matching hash for every body (overriding any digest mock
+    // a previous test installed): a correctly-sized body whose checksum is
+    // not recognized must fail verification (C-389 CR — the mismatch branch
+    // was previously untested).
+    crypto.subtle.digest = mock(async () => new Uint8Array(32)) as typeof crypto.subtle.digest;
+
+    const { voiceModelService } = await import('./voice_model_service.svelte.ts');
+    const state = await voiceModelService.download();
+
+    expect(state.status).toBe('error');
+    expect(state.message ?? '').toContain('Checksum mismatch');
+  });
+
+  test('an oversized body fails size verification during streaming', async () => {
+    await resetServiceState();
+    const fetchMock = installFetchMock();
+    // First file arrives one byte larger than its manifest size — the size
+    // guard must reject it while streaming, before any checksum step.
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const href = typeof url === 'string' ? url : url.href;
+      if (href.includes('config.json')) {
+        return new Response(new Uint8Array(45), { status: 200 }); // 44 + 1
+      }
+      return new Response(new Uint8Array(fileSizeForUrl(url)), { status: 200 });
+    });
+    pinDigestBySize();
+
+    const { voiceModelService } = await import('./voice_model_service.svelte.ts');
+    const state = await voiceModelService.download();
+
+    expect(state.status).toBe('error');
+    expect(state.message ?? '').toContain('exceeded expected size');
   });
 
   test('deleteModel() removes the cached model and returns to not-downloaded', async () => {

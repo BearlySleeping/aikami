@@ -207,9 +207,11 @@ class SettingsAudioViewModel
 
   async downloadVoiceModel(): Promise<void> {
     await voiceModelService.download();
-    // Re-initialize TTS now that the model exists.
-    if (voiceModelService.state.status === 'ready' && ttsService.status === 'not-downloaded') {
-      (ttsService as unknown as { status: string }).status = 'uninitialized';
+    // Re-initialize TTS now that the model exists (C-389 CR): whenever the
+    // engine is not already ready after a successful download — but never
+    // tear down an active server backend.
+    if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
+      ttsService.reset();
       await ttsService.initialize().catch(() => {});
     }
   }
@@ -220,7 +222,10 @@ class SettingsAudioViewModel
 
   async deleteVoiceModel(): Promise<void> {
     await voiceModelService.deleteModel();
-    (ttsService as unknown as { status: string }).status = 'uninitialized';
+    // Reset through the service-owned lifecycle method so the browser
+    // worker is terminated and the backend reports unavailable again
+    // (C-389 CR — previously only the status flag was cleared).
+    ttsService.reset();
   }
 }
 

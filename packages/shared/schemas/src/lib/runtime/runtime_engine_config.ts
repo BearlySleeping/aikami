@@ -32,10 +32,14 @@ export type ImageEngine = Type.Static<typeof ImageEngineSchema>;
  * Security (C-389): only `http(s)` engine URLs are accepted — anything
  * else (javascript:, file:, relative paths) fails schema validation so
  * the loader falls back down the precedence chain instead of passing a
- * hostile URL to fetch().
+ * hostile URL to fetch(). The pattern also requires a non-empty
+ * authority (rejects bare `http://`, `http:///path`, trailing spaces in
+ * the host) so a malformed document cannot pass as "configured" (C-389
+ * CR — validation via strict pattern in the schema module; the loader's
+ * fetch layer performs the final URL parse).
  */
 export const RuntimeUrlSchema = Type.Optional(
-  Type.Union([Type.String({ pattern: '^https?://' }), Type.Null()]),
+  Type.Union([Type.String({ pattern: '^https?://[^/\\s]+(/[^\\s]*)?$' }), Type.Null()]),
 );
 
 /** Text (LLM) engine entry. */
