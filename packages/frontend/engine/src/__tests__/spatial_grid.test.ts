@@ -7,15 +7,16 @@
 // handle out-of-bounds coordinates without typed-array exceptions,
 // returning safe default values (blocked / false) at all map edges.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { createWorld, query } from 'bitecs';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import type { World } from 'bitecs';
+import { addComponent, addEntity, createWorld, getAllEntities, query, set } from 'bitecs';
 import {
   CollisionData,
   CollisionLayer,
   registerCollisionDataObservers,
 } from '../components/collision_data.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
-import { registerPositionObservers } from '../components/position.ts';
+import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpatialLinkObservers, SpatialLink } from '../components/spatial_link.ts';
 import {
   type CollisionGrid,
@@ -25,10 +26,19 @@ import {
   isCellBlocked,
   isWalkable,
   isWithinMapBounds,
+  peekSpatialGridHead,
   removeFromSpatialGrid,
   resetCollisionGrid,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
+// Namespace import so spyOn can patch the module exports — Bun patches the
+// live bindings, so syncGridPositions (which imports these functions by
+// name) sees the spies too.
+import * as collisionSystemModule from '../systems/collision_system.ts';
+import { syncGridPositions } from '../systems/grid_position_sync_system.ts';
+
+/** Reads the head EID of a spatial-grid cell (0 = empty). */
+const spatialGridHeadAt = (gx: number, gy: number): number => peekSpatialGridHead(gx, gy);
 
 // ---------------------------------------------------------------------------
 // Test constants
@@ -380,7 +390,7 @@ describe('setCollisionGrid — spatial grid wiring', () => {
     expect(isWalkable(-32, 160)).toBe(false);
   });
 
-  test('creates wall entities for solid cells when a world is provided (C-376 AC-3)', () => {
+  test('creates NO wall entities for solid cells (C-379 AC-4)', () => {
     const world = createWorld();
     // Observers are required for set() to write the SoA arrays (the worker
     // registers them before grid population; the test mirrors that order).
@@ -391,61 +401,43 @@ describe('setCollisionGrid — spatial grid wiring', () => {
 
     setCollisionGrid(_makeBorderGrid(), world);
 
-    // Border cell (0,0) is solid → a wall entity occupies it in the spatial
-    // grid, so isCellBlocked reports it blocked for the player mask.
-    const playerMask = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
-    expect(isCellBlocked(0, 0, playerMask)).toBe(true);
-    // Interior (5,5) is walkable terrain → no wall entity.
-    expect(isCellBlocked(5, 5, playerMask)).toBe(false);
+    // Terrain solidity comes from the cost grid — the border cell is
+    // impassable via isWalkable, NOT via an occupying wall entity.
+    expect(isWalkable(0, 0)).toBe(false);
 
-    // Inspect the created wall entity directly: layer is wall, GridPosition
-    // matches a known solid cell (CodeRabbit review, C-376). World-scoped
-    // query — module-level SoA arrays retain entries from earlier tests.
+    // No wall entities exist: nothing with layer wall was spawned.
     const wallEids = query(world, [GridPosition, CollisionData]).filter(
       (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
     );
-    expect(wallEids.length).toBeGreaterThan(0);
-    const borderCell = wallEids.find(
-      (eid) => GridPosition.x[eid] === 0 && GridPosition.y[eid] === 0,
-    );
-    expect(borderCell, 'wall entity exists at border cell (0,0)').toBeDefined();
+    expect(wallEids.length).toBe(0);
   });
 
-  test('setCollisionGrid is self-cleaning — repeated calls do not leak wall entities (C-376 AC-3)', () => {
-    // setCollisionGrid tracks and removes wall entities from a previous call
-    // before re-populating, so repeated LOAD_MAP calls (or a mid-session
-    // grid update) cannot grow the entity count toward MAX_ENTITIES
-    // (CodeRabbit review, C-376 round 2). No manual clearing needed.
+  test('setCollisionGrid is idempotent — repeated calls never leak entities (C-379)', () => {
+    // C-379 deletes wall entities: repeated grid updates only re-allocate
+    // the spatial grid and never grow the entity count. No self-cleaning
+    // pass is needed because nothing is spawned from terrain.
     const world = createWorld();
     registerPositionObservers(world);
     registerGridPositionObservers(world);
     registerSpatialLinkObservers(world);
     registerCollisionDataObservers(world);
 
-    const countWalls = (): number =>
-      query(world, [GridPosition, CollisionData]).filter(
-        (eid) => CollisionData.layer[eid] === CollisionLayer.wall,
-      ).length;
+    const countEntities = (): number => getAllEntities(world).length;
 
     setCollisionGrid(_makeBorderGrid(), world);
-    const wallCountAfterFirst = countWalls();
-    expect(wallCountAfterFirst).toBeGreaterThan(0);
+    const afterFirst = countEntities();
 
     setCollisionGrid(_makeBorderGrid(), world);
-    const wallCountAfterSecond = countWalls();
+    const afterSecond = countEntities();
 
-    expect(wallCountAfterSecond).toBe(wallCountAfterFirst);
-    expect(wallCountAfterSecond).toBeGreaterThan(0);
+    expect(afterSecond).toBe(afterFirst);
+    expect(afterFirst).toBe(0); // no entities created from terrain
   });
 
-  test('setCollisionGrid throws when solid cells exceed the MAX_ENTITIES budget', () => {
-    const world = createWorld();
-    registerPositionObservers(world);
-    registerGridPositionObservers(world);
-    registerSpatialLinkObservers(world);
-    registerCollisionDataObservers(world);
-
-    // A 101×101 all-solid grid = 10201 cells > MAX_ENTITIES (10000).
+  test('terrain cost drives blocking — no entity budget is consumed (C-379)', () => {
+    // A 101×101 all-solid grid no longer needs a MAX_ENTITIES wall guard:
+    // solidity lives in the cost array, which is bounded by grid size, not
+    // the entity budget.
     const oversized: CollisionGrid = {
       width: 101,
       height: 101,
@@ -453,14 +445,15 @@ describe('setCollisionGrid — spatial grid wiring', () => {
       grid: new Array<boolean>(101 * 101).fill(true),
     };
 
-    expect(() => setCollisionGrid(oversized, world)).toThrow(/MAX_ENTITIES/);
+    expect(() => setCollisionGrid(oversized)).not.toThrow();
+    expect(isWalkable(0, 0)).toBe(false);
+    expect(isWalkable(3200, 3200)).toBe(false);
   });
 
-  test('skips wall entity creation when no world is provided (tests)', () => {
+  test('setCollisionGrid without a world still blocks via terrain cost (tests)', () => {
     setCollisionGrid(_makeBorderGrid());
-    // No world → no wall entities; the boolean grid still blocks via
-    // isWalkable (terrain oracle) and isCellBlocked (grid empty → false).
     expect(isWalkable(0, 0)).toBe(false);
+    // isCellBlocked consults the occupancy grid — empty without entities.
     expect(
       isCellBlocked(0, 0, CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy),
     ).toBe(false);
@@ -502,5 +495,122 @@ describe('map pixel bounds — absolute boundary enforcement', () => {
     // No setCollisionGrid → free scene, nothing to enforce.
     expect(isWithinMapBounds(-9999, -9999)).toBe(true);
     expect(isWithinMapBounds(9999, 9999)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-379 AC-1: GridPosition sync — derived from Position, change-gated
+// ---------------------------------------------------------------------------
+
+describe('syncGridPositions — GridPosition tracks Position (C-379 AC-1)', () => {
+  let world: World;
+
+  beforeEach(() => {
+    world = createWorld();
+    registerPositionObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCollisionDataObservers(world);
+  });
+
+  afterEach(() => {
+    resetCollisionGrid();
+  });
+
+  // Returns the eid ACTUALLY allocated by addEntity — never assume a
+  // caller-supplied id (bitecs allocates sequentially; a recycled or
+  // pre-populated world would hand out a different id). The GridPosition
+  // divisor uses TILE_SIZE, the same constant _makeBorderGrid uses
+  // (CodeRabbit review, C-379).
+  const spawnEntity = (x: number, y: number, withLink = true): number => {
+    const eid = addEntity(world);
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x, y }));
+    addComponent(world, eid, GridPosition);
+    addComponent(
+      world,
+      eid,
+      set(GridPosition, { x: Math.floor(x / TILE_SIZE), y: Math.floor(y / TILE_SIZE) }),
+    );
+    if (withLink) {
+      addComponent(world, eid, SpatialLink);
+      addComponent(world, eid, set(SpatialLink, { next: 0, prev: 0 }));
+      addComponent(world, eid, CollisionData);
+      addComponent(world, eid, set(CollisionData, { layer: CollisionLayer.npc, mask: 0 }));
+    }
+    return eid;
+  };
+
+  test('syncs GridPosition from Position after movement across a tile boundary', () => {
+    setCollisionGrid(_makeBorderGrid());
+    const eid = spawnEntity(32, 32); // tile (1,1)
+
+    // Move to (100, 100) → tile (3,3).
+    addComponent(world, eid, set(Position, { x: 100, y: 100 }));
+    syncGridPositions(world);
+
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
+  });
+
+  test('updates the occupancy grid: old cell list no longer contains it', () => {
+    setCollisionGrid(_makeBorderGrid());
+    const eid = spawnEntity(32, 32); // tile (1,1)
+    insertIntoSpatialGrid(eid);
+
+    // Move to tile (3,3).
+    addComponent(world, eid, set(Position, { x: 100, y: 100 }));
+    syncGridPositions(world);
+
+    // Old cell (1,1) must be empty; new cell (3,3) must contain the entity.
+    expect(spatialGridHeadAt(1, 1)).toBe(0);
+    expect(spatialGridHeadAt(3, 3)).toBe(eid);
+  });
+
+  test('no duplicate insertion when moving within one cell', () => {
+    setCollisionGrid(_makeBorderGrid());
+    const eid = spawnEntity(32, 32); // tile (1,1)
+    insertIntoSpatialGrid(eid);
+
+    // Move within the same cell (33, 33) → still tile (1,1).
+    addComponent(world, eid, set(Position, { x: 33, y: 33 }));
+    syncGridPositions(world);
+
+    expect(GridPosition.x[eid]).toBe(1);
+    expect(GridPosition.y[eid]).toBe(1);
+
+    // Intrusive list integrity: cell (1,1) head is the entity and its
+    // next/prev are consistent (single node → next=0, prev=0).
+    expect(spatialGridHeadAt(1, 1)).toBe(eid);
+    expect(SpatialLink.next[eid]).toBe(0);
+    expect(SpatialLink.prev[eid]).toBe(0);
+  });
+
+  test('sync is O(moving): a stationary entity triggers no grid mutation', () => {
+    setCollisionGrid(_makeBorderGrid());
+    const eid = spawnEntity(32, 32);
+    insertIntoSpatialGrid(eid);
+
+    // Spy on the occupancy-grid mutators: for a stationary entity the sync
+    // must call NEITHER — direct change-gating observation, not just
+    // unchanged coordinates (CodeRabbit review, C-379).
+    const insertSpy = spyOn(collisionSystemModule, 'insertIntoSpatialGrid');
+    const removeSpy = spyOn(collisionSystemModule, 'removeFromSpatialGrid');
+    try {
+      syncGridPositions(world);
+      expect(insertSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+    } finally {
+      insertSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
+
+    // GridPosition must not be rewritten.
+    expect(GridPosition.x[eid]).toBe(1);
+    expect(GridPosition.y[eid]).toBe(1);
+
+    // Supplemental: still a single node in the list — no double insert.
+    expect(spatialGridHeadAt(1, 1)).toBe(eid);
+    expect(SpatialLink.next[eid]).toBe(0);
   });
 });

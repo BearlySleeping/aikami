@@ -16,6 +16,7 @@ import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
+import { GoapAgent } from '../components/goap_agent.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { Interactable } from '../components/interactable.ts';
 import { InteractableState, type InteractableStateMap } from '../components/interactable_state.ts';
@@ -25,7 +26,12 @@ import { SpatialLink } from '../components/spatial_link.ts';
 import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
 import { Transition } from '../components/transition.ts';
 import { TurnOrder } from '../components/turn_order.ts';
+import { ObserverState, VisionObserver } from '../components/vision_observer.ts';
+import { VisionVisible } from '../components/vision_visible.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
+import { DEFAULT_ACTION_GO_TO_PUB } from '../math/goap/action_registry.ts';
+import { WorldStateBit } from '../math/goap/world_state_bits.ts';
+import { getTerrainTileSize } from './collision_system.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,9 +108,6 @@ const PROP_TINT = 0xffffff;
 // Spatial grid collision (C-375 AC-3)
 // ---------------------------------------------------------------------------
 
-/** Tile size in world pixels — matches movement_system + tilemap renderer. */
-const TILE_SIZE = 32;
-
 /**
  * NPC collision mask: blocks walls, other NPCs, and the player (two-way
  * blocking so a future GOAP/moving NPC cannot walk through the player).
@@ -122,11 +125,13 @@ const PROP_COLLISION_MASK =
 /**
  * Attaches spatial-grid collision components to a spawned entity.
  *
- * The entity receives GridPosition (tile coords from pixel coords ÷ 32),
- * SpatialLink (linked-list pointers), and CollisionData (layer/mask). The
- * caller must insert the entity into the spatial grid AFTER the collision
+ * The entity receives GridPosition (tile coords from pixel coords ÷ tile
+ * size), SpatialLink (linked-list pointers), and CollisionData (layer/mask).
+ * The caller must insert the entity into the spatial grid AFTER the terrain
  * grid is set — `initializeSpatialGrid` re-allocates the grid and wipes
- * any earlier inserts (C-375 AC-3 worker ordering).
+ * any earlier inserts (C-375 AC-3 worker ordering). GridPosition is derived
+ * state: the GridPositionSyncSystem recomputes it from Position each tick
+ * (C-379 AC-1), so the spawn-time value is only the initial placement.
  */
 const _addSpatialCollision = (
   world: World,
@@ -136,13 +141,14 @@ const _addSpatialCollision = (
   layer: number,
   mask: number,
 ): void => {
+  const tileSize = getTerrainTileSize();
   addComponent(world, eid, GridPosition);
   addComponent(
     world,
     eid,
     set(GridPosition, {
-      x: Math.floor(pixelX / TILE_SIZE),
-      y: Math.floor(pixelY / TILE_SIZE),
+      x: Math.floor(pixelX / tileSize),
+      y: Math.floor(pixelY / tileSize),
     }),
   );
   addComponent(world, eid, SpatialLink);
@@ -426,6 +432,51 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
       vendorInventory,
     }),
   );
+
+  // ── C-379 AC-7: NPCs are locomotion consumers. A minimal GoapAgent lets
+  // the GOAP movement executor request paths (goal cell → A* → PathFollow)
+  // so villagers actually walk rather than standing frozen at spawn. The
+  // agent starts hungry with money so the "Go to pub" movement action
+  // (DEFAULT_ACTION_GO_TO_PUB) stays valid — the scheduler keeps it
+  // selected and the movement executor drives a wander destination.
+  // `wanders` (default true) opts a static NPC out of locomotion: no
+  // movement action and no hungry/money world-state bits (CodeRabbit
+  // review, C-379).
+  const wanders = _getBoolProperty(spawnPoint.properties, 'wanders', true);
+  addComponent(world, eid, GoapAgent);
+  addComponent(
+    world,
+    eid,
+    set(GoapAgent, {
+      currentState: wanders ? WorldStateBit.IsHungry | WorldStateBit.HasMoney : 0,
+      currentGoal: 0,
+      currentActionId: wanders ? DEFAULT_ACTION_GO_TO_PUB : -1,
+      targetEntityId: 0,
+    }),
+  );
+
+  // ── C-379 AC-2: NPCs are vision observers — they can see the player
+  // once the player carries GridPosition. Default: idle patrol cone. Only
+  // NPCs that need perception get an observer (`perception` property,
+  // default true — map authors can opt a prop-like NPC out). VisionVisible
+  // is added unconditionally so any NPC can be SEEN (CodeRabbit review,
+  // C-379).
+  const needsPerception = _getBoolProperty(spawnPoint.properties, 'perception', true);
+  if (needsPerception) {
+    addComponent(world, eid, VisionObserver);
+    addComponent(
+      world,
+      eid,
+      set(VisionObserver, {
+        fovRadius: 6,
+        fovAngle: Math.PI / 2,
+        lookDirection: 0,
+        stateMask: ObserverState.idle,
+      }),
+    );
+  }
+  addComponent(world, eid, VisionVisible);
+  addComponent(world, eid, set(VisionVisible, { visibleByMask: 0 }));
 
   // ── Companion attachment (C-340) ──
   const isCompanion = _getBoolProperty(spawnPoint.properties, 'isCompanion', false);

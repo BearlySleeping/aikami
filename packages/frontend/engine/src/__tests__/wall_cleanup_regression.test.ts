@@ -49,7 +49,7 @@ import { registerTransitionObservers, Transition } from '../components/transitio
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { MAX_ENTITIES } from '../config/memory_config.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
-import { resetCollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
+import { isWalkable, resetCollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { spawnSpawnPointEntities, spawnTransitionEntities } from '../systems/entity_spawner.ts';
 import { hydrateZone } from '../systems/macro_simulation_system.ts';
 
@@ -148,7 +148,7 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     expect(query(world, ZONE_TERMS).length).toBe(2);
   });
 
-  it('self-cleaning removes live wall entities but never recycled occupants', () => {
+  it('no wall entities are created — recycled EIDs always belong to the new map', () => {
     const world = createWorld();
     registerPositionObservers(world);
     registerTransitionObservers(world);
@@ -160,7 +160,8 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     addComponent(world, player, Position);
     addComponent(world, player, set(Position, { x: 10, y: 10 }));
 
-    // Grid #1: single solid cell at (0,0) → one wall entity
+    // Grid #1: single solid cell at (0,0). C-379 AC-4: terrain solidity
+    // lives in the cost grid — NO wall entity is created for the solid cell.
     const grid1: { width: number; height: number; tileSize: number; grid: boolean[] } = {
       width: 2,
       height: 2,
@@ -169,14 +170,11 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     };
     setCollisionGrid(grid1, world);
 
-    const wallEids = [...getAllEntities(world)].filter((e) => e !== player);
-    expect(wallEids.length).toBe(1);
-    const oldWallEid = wallEids[0] as number;
+    expect(getAllEntities(world)).toEqual([player]);
+    expect(isWalkable(0, 0)).toBe(false); // terrain cost blocks, not an entity
 
     // Simulate a map teardown the way LOAD_MAP does: bump the generation
-    // FIRST so stale safe refs die, then remove the entity. Without the
-    // bump the wall ref stays resolvable and cleanup would delete whoever
-    // recycles the EID below (the C-378 regression).
+    // FIRST so stale safe refs die, then remove the entity.
     for (const eid of getAllEntities(world)) {
       if (eid !== player) {
         incrementEntityGeneration(eid);
@@ -184,16 +182,15 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
       }
     }
 
-    // A NON-wall entity (transition-zone trigger stand-in) reclaims the
-    // recycled wall EID before the next grid is set — bitECS reuses the
-    // lowest freed slot, so this is exactly the recycled-occupant scenario.
+    // A NON-wall entity (transition-zone trigger stand-in) claims the
+    // lowest freed slot.
     const occupant = addEntity(world);
     addComponent(world, occupant, Position);
     addComponent(world, occupant, set(Position, { x: 64, y: 64 }));
-    expect(occupant).toBe(oldWallEid); // reclaimed the wall's slot
 
-    // Grid #2: a new solid cell. The generation-safe cleanup must NOT
-    // remove the recycled occupant — only stale wall refs are skipped.
+    // Grid #2: a new solid cell at (1,1). The old wall-entity cleanup path
+    // is GONE (C-379 deletes wall entities entirely), so the occupant can
+    // never be misidentified as a stale wall and deleted.
     const grid2: { width: number; height: number; tileSize: number; grid: boolean[] } = {
       width: 2,
       height: 2,
@@ -202,11 +199,12 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     };
     setCollisionGrid(grid2, world);
 
-    // The intervening entity SURVIVES cleanup (it reuses grid #1's EID), and
-    // the grid #2 wall is created fresh alongside it.
+    // The intervening entity SURVIVES the grid update — nothing removes it.
     expect(getAllEntities(world)).toContain(occupant);
-    const walls = [...getAllEntities(world)].filter((e) => e !== player && e !== occupant);
-    expect(walls.length).toBe(1); // grid #2 wall
+    expect(getAllEntities(world).length).toBe(2); // player + occupant only
+    // grid2 solidity: only (1,1) is solid; (0,0) is now walkable.
+    expect(isWalkable(0, 0)).toBe(true); // grid2 replaced grid1
+    expect(isWalkable(1 * 32 + 16, 1 * 32 + 16)).toBe(false); // (1,1) solid
 
     resetCollisionGrid();
   });

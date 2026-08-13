@@ -12,13 +12,17 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, removeEntity, set } from 'bitecs';
+import { registerCollisionDataObservers } from '../components/collision_data.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
+import { registerPositionObservers } from '../components/position.ts';
+import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
 import {
   ObserverState,
   registerVisionObserverObservers,
   VisionObserver,
 } from '../components/vision_observer.ts';
 import { registerVisionVisibleObservers, VisionVisible } from '../components/vision_visible.ts';
+import { createPlayer } from '../entities/create_player.ts';
 import { castDdaVisionCone } from '../math/vision/dda_raycaster.ts';
 import { castShadowcastingFov } from '../math/vision/shadowcasting.ts';
 import {
@@ -827,5 +831,81 @@ describe('AC-1: Performance envelope', () => {
     expect(elapsed).toBeLessThan(50);
 
     clearVisionGrid();
+  });
+});
+
+// ===========================================================================
+// C-379 AC-2 — the vision system can see the REAL player entity
+// ===========================================================================
+
+describe('C-379 AC-2 — vision sees the real player', () => {
+  let world: World;
+
+  beforeEach(() => {
+    world = createTestWorld();
+    // Register Position + CollisionData observers so createPlayer's set()
+    // writes its SoA arrays (C-379 AC-2: the player now carries
+    // GridPosition + CollisionData + SpatialLink).
+    registerPositionObservers(world);
+    registerCollisionDataObservers(world);
+    registerSpatialLinkObservers(world);
+  });
+
+  afterEach(() => {
+    clearVisionGrid();
+  });
+
+  test('an NPC observer sees the player standing in its cone (AC-2)', () => {
+    const walls = new Set<string>();
+    setVisionGrid(makeWallCheck(walls), TEST_GRID_W, TEST_GRID_H);
+
+    // Real player entity — Position at (400, 300) initially; we override
+    // GridPosition to (8,5) to place it in the observer's cone.
+    const playerEid = createPlayer(world, {});
+    addComponent(world, playerEid, set(GridPosition, { x: 8, y: 5 }));
+    // The player needs VisionVisible to be a vision TARGET (spatial_vision
+    // indexes targets by VisionVisible presence). Production adds this via
+    // the entity spawner when the player is observable.
+    addComponent(world, playerEid, set(VisionVisible, { visibleByMask: 0 }));
+
+    // Observer at (5,5) looking right (direction 0 = +x).
+    const obsEid = createObserver(world, {
+      gx: 5,
+      gy: 5,
+      fovRadius: 6,
+      fovAngle: Math.PI / 2,
+      lookDirection: 0,
+      stateMask: ObserverState.idle,
+    });
+
+    resetVisibilityMasks();
+    updateSpatialVision(world);
+
+    const observerBit = 1 << (obsEid % 31);
+    expect(VisionVisible.visibleByMask[playerEid] & observerBit).toBe(observerBit);
+  });
+
+  test('a blocksSight tile between observer and player hides the player (AC-2)', () => {
+    const walls = new Set<string>(['7,5']); // solid tile between (5,5) and (8,5)
+    setVisionGrid(makeWallCheck(walls), TEST_GRID_W, TEST_GRID_H);
+
+    const playerEid = createPlayer(world, {});
+    addComponent(world, playerEid, set(GridPosition, { x: 8, y: 5 }));
+    addComponent(world, playerEid, set(VisionVisible, { visibleByMask: 0 }));
+
+    const obsEid = createObserver(world, {
+      gx: 5,
+      gy: 5,
+      fovRadius: 6,
+      fovAngle: Math.PI / 2,
+      lookDirection: 0,
+      stateMask: ObserverState.idle,
+    });
+
+    resetVisibilityMasks();
+    updateSpatialVision(world);
+
+    const observerBit = 1 << (obsEid % 31);
+    expect(VisionVisible.visibleByMask[playerEid] & observerBit).toBe(0);
   });
 });

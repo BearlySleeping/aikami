@@ -50,7 +50,7 @@ export {
   resetEconomyTracking,
 } from './systems/economy_system.ts';
 // Systems
-export { resetMovementTracking, updateMovement } from './systems/movement_system.ts';
+export { updateMovement } from './systems/movement_system.ts';
 export {
   advanceTurn,
   createSeedableRng,
@@ -256,6 +256,7 @@ export type {
   TransitionZone,
 } from './assets/map_loader.ts';
 export {
+  buildTerrainGridForMap,
   clearMapCache,
   DEFAULT_TILEMAP_BAND,
   djb2Hash,
@@ -265,7 +266,14 @@ export {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
+  resolveGid,
+  TILED_FLIP_BITS,
+  TILED_FLIP_D,
+  TILED_FLIP_H,
+  TILED_FLIP_MASK,
+  TILED_FLIP_V,
 } from './assets/map_loader.ts';
+export { PathFollow, registerPathFollowObservers } from './components/path_follow.ts';
 export {
   COLOR_DAWN,
   COLOR_DUSK,
@@ -279,6 +287,7 @@ export {
   ENVIRONMENT_UBO_BYTES,
   ENVIRONMENT_UBO_SIZE,
 } from './environment/environment_ubo.ts';
+export { type AstarGrid, type AstarResult, findPath, type GridCell } from './math/astar.ts';
 export { checkLineOfSight, clearBresenhamGrid, setBresenhamGrid } from './math/bresenham.ts';
 export type { StaticActionDefinition } from './math/goap/action_registry.ts';
 // GOAP (C-191)
@@ -294,27 +303,6 @@ export {
 } from './math/goap/action_registry.ts';
 export { Faction, IsHostileTo, IsMemberOf, IsProtectorOf } from './math/goap/faction_relations.ts';
 export { WORLD_STATE_BIT_COUNT, WorldStateBit } from './math/goap/world_state_bits.ts';
-export type { PathfinderMemoryBuffers } from './math/jps/generational_table.ts';
-// JPS Pathfinding (C-192)
-export {
-  allocatePathfinderBuffers,
-  freePathfinderBuffers,
-  fromNodeId,
-  getGlobalGeneration,
-  incrementGeneration,
-  isNodeVisited,
-  markNodeVisited,
-  resetNode,
-  toNodeId,
-} from './math/jps/generational_table.ts';
-export type { JpsSearchConfig, JpsSearchResult } from './math/jps/jps_search.ts';
-export {
-  cancelJpsSearch,
-  isSearchActive,
-  startJpsSearch,
-  stepJpsSearch,
-} from './math/jps/jps_search.ts';
-export { MinHeap } from './math/jps/min_heap.ts';
 export { castDdaVisionCone } from './math/vision/dda_raycaster.ts';
 export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
 // Turso hydration bridge (C-195)
@@ -390,14 +378,21 @@ export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   getMapPixelBounds,
+  getTerrainGrid,
+  getTerrainTileSize,
   initializeSpatialGrid,
   insertIntoSpatialGrid,
+  isBlocksSight,
   isCellBlocked,
+  isEntityInSpatialGrid,
   isWalkable,
   isWithinMapBounds,
+  peekSpatialGridHead,
   removeFromSpatialGrid,
   resetCollisionGrid,
   setCollisionGrid,
+  setTerrainCellCost,
+  setTerrainGrid,
 } from './systems/collision_system.ts';
 export { spawnEncounterEnemy, updateEncounterSystem } from './systems/encounter_system.ts';
 export type {
@@ -428,12 +423,16 @@ export {
   scoreTarget,
   updateGoapCombatTactics,
 } from './systems/goap_combat_tactics_system.ts';
+// GOAP movement executor (C-379 AC-7)
+export { updateGoapMovement } from './systems/goap_movement_executor.ts';
 // GOAP (C-191)
 export {
   resetGoapState,
   setFactionProtection,
   updateGoapScheduler,
 } from './systems/goap_scheduler_system.ts';
+// GridPosition sync (C-379 AC-1)
+export { syncGridPositions } from './systems/grid_position_sync_system.ts';
 export {
   clearInteractionProximityState,
   updateInteractionProximity,
@@ -443,14 +442,6 @@ export {
   type InteractionTarget,
   selectInteractionTarget,
 } from './systems/interaction_target_selector.ts';
-// JPS Pathfinding (C-192)
-export {
-  cancelPathfinding,
-  initJpsPathfinder,
-  isPathfinding,
-  requestPath,
-  tickJpsPathfinder,
-} from './systems/jps_pathfinder_system.ts';
 // Keybinding config (shared between settings UI and engine)
 export {
   buildKeyToAction,
@@ -463,6 +454,12 @@ export {
   MOVEMENT_ACTION_IDS,
   OVERLAY_ACTION_IDS,
 } from './systems/keybinding_config.ts';
+export { updatePartyFollow } from './systems/party_follow_system.ts';
+// PathFollow + party follow (C-379 AC-7)
+export {
+  hasActivePath,
+  updatePathFollow,
+} from './systems/path_follow_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
@@ -488,6 +485,15 @@ export {
   setVisionGrid,
   updateSpatialVision,
 } from './systems/spatial_vision_system.ts';
+export {
+  buildTerrainGridFromBoolean,
+  buildTerrainGridFromChannel,
+  collectTerrainCostDefs,
+  TERRAIN_COST_SCALE,
+  TERRAIN_COST_WALKABLE,
+  type TerrainCostDef,
+  type TerrainGrid,
+} from './systems/terrain_grid.ts';
 export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
 export { renderTilemap } from './systems/tilemap_render_system.ts';
 export { updateZoningSystem } from './systems/zoning_system.ts';

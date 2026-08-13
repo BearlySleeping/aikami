@@ -446,3 +446,289 @@ describe('C-378 AC-9 — tilemap tint uniform', () => {
     expect(Array.from(tint as number[])).toEqual([1, 1, 1, 1]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-379 AC-9 — flip flags applied to chunk UVs
+// ---------------------------------------------------------------------------
+
+describe('C-379 AC-9 — flipped tiles render flipped (UV swaps)', () => {
+  it('a horizontally-flipped tile swaps its u coordinates in chunk geometry', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          // The map loader masks flip bits off `data` and carries them on
+          // `flips` (C-379 AC-9) — this is the post-parse shape.
+          data: [5],
+          flips: [0x80000000 >>> 0],
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+
+    // Tile 5 in a 16-column tileset: local tile index 4 (0-based) at UV
+    // column 4 → u0 = 4/16 = 0.25, u1 = 5/16 = 0.3125. After an H flip the
+    // quad corners swap: top-left u becomes the unflipped top-right u.
+    const uTopLeft = uvs[0];
+    const uTopRight = uvs[2];
+    // Flipped: top-left > top-right (mirrored horizontally).
+    expect(uTopLeft).toBeGreaterThan(uTopRight);
+    // v unchanged.
+    expect(uvs[1]).toBe(uvs[3]);
+  });
+
+  it('an unflipped tile keeps its original UV order', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          data: [5],
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+    expect(uvs[0]).toBeLessThan(uvs[2]); // unflipped: left < right
+  });
+
+  it('a vertically-flipped tile swaps its v coordinates in chunk geometry', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          data: [5],
+          flips: [0x40000000 >>> 0], // TILED_FLIP_V
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+
+    // Vertex order TL, TR, BR, BL. After a V flip the top corners carry the
+    // old bottom v (v1) and the bottom corners the old top v (v0), so top v
+    // is GREATER than bottom v; u stays unchanged per column (CodeRabbit
+    // review, C-379).
+    expect(uvs[1]).toBeGreaterThan(uvs[5]); // TL.v > BR.v
+    expect(uvs[3]).toBeGreaterThan(uvs[7]); // TR.v > BL.v
+    expect(uvs[0]).toBeLessThan(uvs[2]); // u unchanged: left < right
+  });
+
+  it('a diagonal-flipped tile transposes tr/bl instead of collapsing into H|V', async () => {
+    const width = 1;
+    const height = 1;
+    const tilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      width,
+      height,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test-tileset',
+          image: 'tiles.png',
+          imagewidth: 512,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 16,
+          tilecount: 128,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width,
+          height,
+          data: [5],
+          flips: [0x20000000 >>> 0], // TILED_FLIP_D
+          visible: true,
+        },
+      ],
+    };
+
+    const result = buildTilemapChunks({
+      tilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    expect(result.chunkCount).toBe(1);
+
+    const geometry = result.chunks[0]?.geometry;
+    if (!geometry) {
+      throw new Error('expected chunk geometry');
+    }
+    const uvBuffer = geometry.getBuffer('aUV');
+    if (!uvBuffer) {
+      throw new Error('expected aUV buffer');
+    }
+    const uvs = uvBuffer.data as Float32Array;
+
+    // Tile 5 (localId 4) in a 16-column tight-packed 512×256 tileset gets
+    // the half-texel inset (spacing 0 / margin 0):
+    //   u0 = (4·32 + 0.5)/512, u1 = (5·32 − 0.5)/512,
+    //   v0 = (0 + 0.5)/256,    v1 = (32 − 0.5)/256.
+    const U0 = (4 * 32 + 0.5) / 512;
+    const U1 = (5 * 32 - 0.5) / 512;
+    const V0 = (0 + 0.5) / 256;
+    const V1 = (32 - 0.5) / 256;
+
+    // The true D (anti-diagonal/transpose) transform PRESERVES tl/br and
+    // EXCHANGES tr/bl: TL=(U0,V0), TR=(U0,V1), BR=(U1,V1), BL=(U1,V0). A
+    // rect-based 180° swap (the old implementation) produced TR=(U0,V1) at
+    // BL and BL=(U1,V0) at TR — identical to H|V. These assertions pin the
+    // transpose distinction (CodeRabbit review, C-379).
+    expect(uvs[0]).toBeCloseTo(U0, 5); // TL.u preserved
+    expect(uvs[1]).toBeCloseTo(V0, 5); // TL.v preserved
+    expect(uvs[4]).toBeCloseTo(U1, 5); // BR.u preserved
+    expect(uvs[5]).toBeCloseTo(V1, 5); // BR.v preserved
+    // TR now carries the old BL UV (U0, V1) — NOT the old TR (U1, V0).
+    expect(uvs[2]).toBeCloseTo(U0, 5);
+    expect(uvs[3]).toBeCloseTo(V1, 5);
+    // BL now carries the old TR UV (U1, V0).
+    expect(uvs[6]).toBeCloseTo(U1, 5);
+    expect(uvs[7]).toBeCloseTo(V0, 5);
+
+    // D must differ from the plain H|V (180°) result — compare against an
+    // explicitly H|V-flipped tile: there TR=(u0,v1) and BL=(u1,v0) are
+    // swapped relative to the transpose, and tl/br are NOT preserved.
+    const hvTilemap: Awaited<ReturnType<typeof loadTilemap>> = {
+      ...tilemap,
+      layers: [{ ...tilemap.layers[0], flips: [0x80000000 | 0x40000000] }],
+    };
+    const hvResult = buildTilemapChunks({
+      tilemap: hvTilemap,
+      tilesetTexture: _createTilesetTexture(),
+    });
+    const hvGeometry = hvResult.chunks[0]?.geometry;
+    if (!hvGeometry) {
+      throw new Error('expected H|V chunk geometry');
+    }
+    const hvBuffer = hvGeometry.getBuffer('aUV');
+    if (!hvBuffer) {
+      throw new Error('expected H|V aUV buffer');
+    }
+    const hvUvs = hvBuffer.data as Float32Array;
+    // H|V (180° rotation): TL=(U1,V1), TR=(U0,V1), BR=(U0,V0), BL=(U1,V0).
+    // The D case above has TL=(U0,V0), TR=(U0,V1), BR=(U1,V1), BL=(U1,V0) —
+    // the two differ in the tl/br corners.
+    expect(hvUvs[0]).toBeCloseTo(U1, 5);
+    expect(hvUvs[1]).toBeCloseTo(V1, 5);
+    expect(hvUvs[2]).toBeCloseTo(U0, 5);
+    expect(hvUvs[3]).toBeCloseTo(V1, 5);
+    expect(hvUvs[4]).toBeCloseTo(U0, 5);
+    expect(hvUvs[5]).toBeCloseTo(V0, 5);
+    expect(hvUvs[6]).toBeCloseTo(U1, 5);
+    expect(hvUvs[7]).toBeCloseTo(V0, 5);
+    // Explicitly: D differs from H|V at the tl/br corners.
+    expect(hvUvs[0]).not.toBeCloseTo(uvs[0], 5);
+    expect(hvUvs[4]).not.toBeCloseTo(uvs[4], 5);
+  });
+});
