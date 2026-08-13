@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/math/bresenham.ts
 
+import { logger } from '$logger';
 import { CollisionData } from '../components/collision_data.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 
@@ -10,6 +11,11 @@ import { SpatialLink } from '../components/spatial_link.ts';
 // ECS raycaster. Interrogates the dense 1D SpatialGrid cell-by-cell using
 // integer math. Terminates early if a cell contains an entity whose
 // CollisionData.layer matches the sightMask.
+//
+// C-379: terrain solidity is also consulted. Walls are no longer entities
+// (the spatial grid holds dynamic occupants only), so a cost-0 terrain cell
+// must block LOS the same way a wall entity did. `setBresenhamTerrain`
+// supplies the cost oracle; without it, LOS sees an empty world.
 //
 // Design:
 //   - Pure function: no heap allocations, no arrays, boolean return only
@@ -36,6 +42,18 @@ let _gridW = 0;
 /** Grid height in tiles. */
 let _gridH = 0;
 
+/** Terrain cost oracle (C-379) — cost-0 cells block LOS. */
+let _terrainCost: Uint8Array | undefined;
+
+/** Terrain sight oracle (C-379) — blocksSight cells block LOS. */
+let _terrainBlocksSight: Uint8Array | undefined;
+
+/** Terrain grid width (from the terrain cost array). */
+let _terrainW = 0;
+
+/** Terrain grid height (from the terrain cost array). */
+let _terrainH = 0;
+
 /**
  * Sets the spatial grid reference for the raycaster.
  *
@@ -52,6 +70,48 @@ export const setBresenhamGrid = (grid: Uint32Array, width: number, height: numbe
 };
 
 /**
+ * Sets the terrain oracle for the raycaster (C-379).
+ *
+ * Cost-0 cells (impassable terrain) block line of sight in addition to
+ * entity-occupancy checks. When a `blocksSight` array is provided, sight
+ * blocking is read from it (a movement-passable but sight-blocking tile —
+ * e.g. a hedge or window — blocks LOS without being impassable); without
+ * it, the legacy boolean path is preserved (cost-0 blocks). Cleared by
+ * {@link clearBresenhamGrid}.
+ *
+ * @param cost - The terrain cost Uint8Array, or undefined to disable.
+ * @param blocksSight - Optional terrain blocksSight Uint8Array (1 = blocks
+ *   line of sight). Falls back to the cost-0 oracle when omitted.
+ * @param width - Terrain grid width in tiles.
+ * @param height - Terrain grid height in tiles.
+ */
+export const setBresenhamTerrain = (
+  cost: Uint8Array | undefined,
+  blocksSight: Uint8Array | undefined,
+  width: number,
+  height: number,
+): void => {
+  // Validate a provided cost array covers the declared dimensions before
+  // trusting them — a truncated grid would sample undefined cells and
+  // silently report everything as visible/blocked.
+  if (cost !== undefined && cost.length < width * height) {
+    logger.warn('setBresenhamTerrain:invalid-cost-length', {
+      provided: cost.length,
+      expected: width * height,
+    });
+    _terrainCost = undefined;
+    _terrainBlocksSight = undefined;
+    _terrainW = 0;
+    _terrainH = 0;
+    return;
+  }
+  _terrainCost = cost;
+  _terrainBlocksSight = blocksSight && cost ? blocksSight : undefined;
+  _terrainW = cost ? width : 0;
+  _terrainH = cost ? height : 0;
+};
+
+/**
  * Clears the spatial grid reference.
  *
  * Called by collision_system when the grid is reset.
@@ -60,6 +120,10 @@ export const clearBresenhamGrid = (): void => {
   _gridRef = undefined;
   _gridW = 0;
   _gridH = 0;
+  _terrainCost = undefined;
+  _terrainBlocksSight = undefined;
+  _terrainW = 0;
+  _terrainH = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -184,6 +248,23 @@ export const checkLineOfSight = (
  * @returns `true` if the cell blocks line of sight.
  */
 const _isCellBlocking = (gx: number, gy: number, sightMask: number): boolean => {
+  // ── C-379: terrain solidity first — walls are no longer entities. When
+  // a blocksSight oracle is available it is authoritative (a walkable
+  // hedge/window blocks LOS); otherwise the legacy cost-0 oracle applies
+  // (impassable terrain blocks everything). Out-of-bounds terrain blocks. ──
+  if (_terrainCost) {
+    if (gx < 0 || gx >= _terrainW || gy < 0 || gy >= _terrainH) {
+      return true; // Out-of-bounds terrain blocks
+    }
+    if (_terrainBlocksSight) {
+      if (_terrainBlocksSight[gy * _terrainW + gx] === 1) {
+        return true;
+      }
+    } else if (_terrainCost[gy * _terrainW + gx] === 0) {
+      return true;
+    }
+  }
+
   if (!_gridRef) {
     return false;
   }

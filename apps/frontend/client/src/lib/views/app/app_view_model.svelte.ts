@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts
 
-import { isDevelopmentModePublic, publicEnv } from '@aikami/frontend/configs';
+import { getPublicMode, isDevelopmentModePublic, publicEnv } from '@aikami/frontend/configs';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -16,6 +16,7 @@ import {
   aiSettingsService,
   appService,
   authService,
+  emulatorSeedService,
   onboardingService,
   routerService,
   updaterService,
@@ -119,6 +120,14 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
 
     // 3. Resolve auth state and handle the initial route.
     const user = await authService.initialize();
+
+    // Seed local personas/NPCs/custom agents in emulator mode BEFORE the
+    // initial route renders, so a fresh browser (empty local DB) boots into
+    // a playable game (C-386 AC-11). The Firebase emulator cannot reach the
+    // browser's local DB — seeding is client-side.
+    if (getPublicMode() === 'emulator') {
+      await emulatorSeedService.seedIfEmpty();
+    }
 
     this.log('initialize', {
       version: publicEnv.APP_VERSION,

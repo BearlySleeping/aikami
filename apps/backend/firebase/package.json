@@ -20,13 +20,12 @@
     "scripts": "firestack scripts",
     "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun test tests/controllers.test.ts",
-    "test:rules": "firestack test:rules --flavor staging",
+    "test:rules": "firestack test:rules --mode emulator",
     "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {
     "@aikami/backend-auth": "workspace:*",
     "@aikami/backend-configs": "workspace:*",
-    "@aikami/backend-firestore": "workspace:*",
     "@aikami/backend-utils": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",

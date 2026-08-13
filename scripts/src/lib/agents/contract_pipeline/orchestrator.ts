@@ -6,11 +6,11 @@ import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
 import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
-import { playAlarm } from './alarm.ts';
+import { playAlarm, playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
-import { readContractStatus, updateContractStatus } from './contract_status.ts';
+import { readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
-  commitContractToMain,
+  commitContractContent,
   currentBranch,
   isolateContractInWorktree,
   pullContractFromWorktree,
@@ -986,15 +986,33 @@ export const runContractPipeline = async (options: {
           result,
         });
         if (stage === 'critique' && result.status === 'passed') {
-          updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });
-          const approved = commitContractToMain({
-            repoRoot: options.repoRoot,
-            contractPath: manifest.contractPath,
-            message: `docs(contracts): approve ${manifest.contractId}`,
-          });
-          pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: approved.message });
-          if (!approved.ok) {
-            console.warn(`⚠️  ${approved.message}`);
+          // Compute the approved content and commit it straight to main —
+          // deliberately not `updateContractStatus` (a raw write to
+          // manifest.contractPath) followed by a separate commit step. That
+          // two-step left a window where the stamped file sat, uncommitted,
+          // on whatever branch repoRoot happened to have checked out — the
+          // same class of bug pullContractFromWorktree used to have. See
+          // contract_sync.ts's `commitContractContent`.
+          try {
+            const currentContent = readFileSync(manifest.contractPath, 'utf-8');
+            const approvedContent = withUpdatedStatus(currentContent, 'approved');
+            const approved = commitContractContent({
+              repoRoot: options.repoRoot,
+              contractPath: manifest.contractPath,
+              content: approvedContent,
+              message: `docs(contracts): approve ${manifest.contractId}`,
+            });
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: approved.message,
+            });
+            if (!approved.ok) {
+              console.warn(`⚠️  ${approved.message}`);
+            }
+          } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.warn(`⚠️  Could not stamp contract approved: ${msg.slice(0, 200)}`);
           }
         }
 
@@ -1508,6 +1526,7 @@ export const runContractPipeline = async (options: {
     // worktree cleanup, then rethrow so the launcher surfaces the real error.
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`\n❌ Pipeline crashed: ${msg}`);
+    playError();
     try {
       manifest.blockedReason = `Infrastructure failure: ${msg.slice(0, 1500)}`;
       manifest = transition({ manifest, next: 'blocked' });

@@ -350,9 +350,10 @@ const _localServicesMock = () => ({
   personaCreationTextStreamService: _createServiceStub(),
   PersonaCreationTextStreamService: class {},
   chatService: _createServiceStub(),
+  chatStorage: _createServiceStub(),
+  chatLinkStorage: _createServiceStub(),
   contextBuilder: _createServiceStub(),
   conversationStorage: _createServiceStub(),
-  npcChatService: _createServiceStub(),
   configService: _createServiceStub(),
   ConfigService: class {},
   lorebookStore: _createServiceStub(),
@@ -540,8 +541,6 @@ const _localServicesMock = () => ({
       return this.status[key as keyof typeof this.status] ?? 'disconnected';
     }
   },
-  notificationService: _createServiceStub(),
-  NotificationService: class {},
   npcService: _createServiceStub(),
   NpcService: class {},
   onboardingService: _createServiceStub(),
@@ -557,8 +556,6 @@ const _localServicesMock = () => ({
   AISettingsService: class {},
   storageService: _createServiceStub(),
   StorageService: class {},
-  userService: _createServiceStub(),
-  UserService: class {},
   routerService: _createServiceStub(),
   pixiTextureInjector: _createServiceStub(),
   idleDetectionService: Object.assign(_createServiceStub(), {

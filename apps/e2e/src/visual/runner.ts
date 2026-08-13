@@ -117,7 +117,7 @@ const loadSuites = async (): Promise<VisualTestSuite[]> => {
  * instructions on how to start it.
  */
 const checkClientRunning = async (): Promise<void> => {
-  const url = `http://localhost:${EMULATOR_PORTS.client}`;
+  const url = `http://localhost:${EMULATOR_PORTS.client + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}`;
 
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });

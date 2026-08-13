@@ -15,7 +15,12 @@ import {
 } from 'bitecs';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
-import { djb2Hash, type SpawnPointEntity, type TransitionZone } from '../assets/map_loader.ts';
+import {
+  buildTerrainGridForMap,
+  djb2Hash,
+  type SpawnPointEntity,
+  type TransitionZone,
+} from '../assets/map_loader.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -34,6 +39,7 @@ import {
   SimulationState,
   setSimulationState,
 } from '../components/engine_state.ts';
+import { registerGoapAgentObservers } from '../components/goap_agent.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import {
@@ -43,6 +49,7 @@ import {
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
+import { registerPathFollowObservers } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerResistancesObservers } from '../components/resistances.ts';
@@ -52,6 +59,11 @@ import { registerStatusEffectsObservers } from '../components/status_effects.ts'
 import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
+import { registerVisionObserverObservers } from '../components/vision_observer.ts';
+import {
+  registerVisionVisibleObservers,
+  VisionVisible,
+} from '../components/vision_visible.ts';
 import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
@@ -60,7 +72,6 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
-
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import {
   deserializeWorld,
@@ -83,10 +94,11 @@ import {
   type CollisionGrid,
   getMapPixelBounds,
   insertIntoSpatialGrid,
+  isBlocksSight,
   isCellBlocked,
   removeFromSpatialGrid,
   resetCollisionGrid,
-  setCollisionGrid,
+  setTerrainGrid,
 } from '../systems/collision_system.ts';
 import {
   isCombatStageActive,
@@ -105,10 +117,11 @@ import {
 import { setEnvironmentConfig, stepEnvironment } from '../systems/environment_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
+import { updateGoapMovement } from '../systems/goap_movement_executor.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
+import { syncGridPositions } from '../systems/grid_position_sync_system.ts';
 import { updateInteractionProximity } from '../systems/interaction_proximity_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
-import { initJpsPathfinder, tickJpsPathfinder } from '../systems/jps_pathfinder_system.ts';
 import {
   dehydrateZone,
   hydrateZone,
@@ -119,6 +132,8 @@ import {
   isPlayerSpawnBlocked,
   updateMovement,
 } from '../systems/movement_system.ts';
+import { updatePartyFollow } from '../systems/party_follow_system.ts';
+import { updatePathFollow } from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
@@ -126,6 +141,7 @@ import {
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
+import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
 import {
   handleCombatAction,
   initCombat,
@@ -674,29 +690,21 @@ const initializeEngine = (
   registerCollisionDataObservers(world);
   registerGridPositionObservers(world);
   registerSpatialLinkObservers(world);
+  registerGoapAgentObservers(world);
+  registerVisionObserverObservers(world);
+  registerVisionVisibleObservers(world);
+  registerPathFollowObservers(world);
   registerMapLocationObservers(world);
   registerZoneStatusObservers(world);
 
-  // 3. Set the collision grid before any entities or systems start.
-  //    C-376 AC-3: pass the world so solid cells become real wall entities.
+  // 3. Set the terrain grid before any entities or systems start.
+  //    C-379 AC-4: the authoritative TerrainGrid replaces the boolean grid
+  //    + wall entities. The vision grid is fed from blocksSight (AC-2).
   if (collisionGrid) {
-    setCollisionGrid(collisionGrid, world);
+    setTerrainGrid(buildTerrainGridFromBoolean(collisionGrid), world);
 
-    // C-196: Initialize JPS pathfinder for time-sliced navigation
-    const jpsIsWalkable = (gx: number, gy: number): boolean => {
-      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
-        return false;
-      }
-      return !collisionGrid.grid[gy * collisionGrid.width + gx];
-    };
-    initJpsPathfinder(collisionGrid.width, collisionGrid.height, jpsIsWalkable);
-
-    // C-196: Initialize spatial vision grid for perception sweeps
     const visionWallCheck = (gx: number, gy: number): boolean => {
-      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
-        return true;
-      }
-      return collisionGrid.grid[gy * collisionGrid.width + gx];
+      return isBlocksSight(gx, gy);
     };
     setVisionGrid(visionWallCheck, collisionGrid.width, collisionGrid.height);
   }
@@ -991,29 +999,38 @@ const tickLoop = (): void => {
     // perpetrator targets, and drop stale behavioral loops.
     //
     // C-197: Also runs tactical combat evaluations for enemy combatants —
-    // scores targets using JPS distance weighting, selects optimal
-    // tactical actions (attack/move/retreat/hold) in sub-ms time.
+    // scores targets and selects optimal tactical actions.
     // ────────────────────────────────────────────────────────────────────────
     updateGoapScheduler(world);
     updateGoapCombatTactics(world, playerEntityId);
 
+    // ── C-379 AC-7: party-follow goal provider (Navigation slot) ──
+    updatePartyFollow(world, playerEntityId);
+
     // ────────────────────────────────────────────────────────────────────────
-    // Step 5: Navigation — time-sliced JPS pathfinding
+    // Step 5: Navigation — path-follow locomotion
     //
-    // Cooperative JPS search with generational O(1) reset and flat
-    // min-heap. Steps one time-budgeted iteration per frame — path
-    // completion may span multiple ticks under the 2.0ms ceiling.
+    // GOAP movement executor requests paths (goal cell → A* waypoints);
+    // the path-follow system writes Velocity toward the current waypoint.
+    // Runs BEFORE updateMovement in Resolution so the velocity it writes
+    // is resolved the same frame (C-379 AC-7 watch point).
     // ────────────────────────────────────────────────────────────────────────
-    tickJpsPathfinder();
+    updateGoapMovement(world);
+    updatePathFollow(world, deltaMs);
 
     // ────────────────────────────────────────────────────────────────────────
     // Step 6: Resolution — movement + collision
     //
-    // Axis-independent continuous movement with bitmask collision via
-    // the dense spatial grid (isCellBlocked) and boolean grid
-    // fallback (isWalkable).
+    // Axis-independent continuous movement with per-entity masks and the
+    // terrain cost grid.
     // ────────────────────────────────────────────────────────────────────────
     updateMovement(world, deltaMs);
+
+    // ── C-379 AC-1: GridPosition sync — derived from Position, change-gated.
+    // Runs after movement so perception/cognition consumers on the NEXT
+    // frame read the resolved cell. Occupancy updates happen only on cell
+    // change. ──
+    syncGridPositions(world);
 
     // ────────────────────────────────────────────────────────────────────────
     // Post-resolution systems (do not mutate core state)
@@ -1175,6 +1192,11 @@ const tickLoop = (): void => {
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
+      // C-379 AC-2: forward the player's vision mask so the main thread
+      // can expose it on the debug bridge — E2E asserts the vision system
+      // actually marks the player visible (CodeRabbit review).
+      playerVisibleByMask:
+        playerEntityId > 0 ? (VisionVisible.visibleByMask[playerEntityId] ?? 0) : 0,
       ack: {
         tickCount,
         lastProcessedInputSequence: _lastProcessedInputSequence,
@@ -1798,6 +1820,7 @@ self.onmessage = (event: MessageEvent): void => {
             spawnPoints,
             transitionZones,
             collisionGrid,
+            terrainGrid,
             packConfig,
             mapPixelWidth,
             mapPixelHeight,
@@ -1915,13 +1938,29 @@ self.onmessage = (event: MessageEvent): void => {
             });
           }
 
-          // 6. Set the new collision grid.
-          //    C-376 AC-3: pass world so solid cells become real wall
-          //    entities registered in the spatial grid. Guarded like the
-          //    initializeEngine site — never pass an undefined grid
-          //    (CodeRabbit review, C-376 round 2).
-          if (collisionGrid) {
-            setCollisionGrid(collisionGrid, world);
+          // 6. Set the new terrain grid.
+          //    C-379 AC-4: prefer the authoritative TerrainGrid (terrain
+          //    channel or legacy fallback, built client-side). Fall back to
+          //    the legacy boolean grid when no terrainGrid was sent (older
+          //    callers / sandbox) — setTerrainGrid converts it internally.
+          if (terrainGrid) {
+            setTerrainGrid(terrainGrid, world);
+          } else if (collisionGrid) {
+            setTerrainGrid(
+              buildTerrainGridForMap({
+                tilemap: {
+                  width: (collisionGrid as CollisionGrid).width,
+                  height: (collisionGrid as CollisionGrid).height,
+                  tilewidth: (collisionGrid as CollisionGrid).tileSize,
+                  tileheight: (collisionGrid as CollisionGrid).tileSize,
+                  tilesets: [],
+                  layers: [],
+                },
+                packConfig: _packConfig,
+                collisionGrid: collisionGrid as CollisionGrid,
+              }),
+              world,
+            );
           } else {
             // C-378: never retain the PREVIOUS map's grid when the new map
             // carries none — a stale grid/bounds would feed RESTORE_PLAYER's
@@ -1957,32 +1996,23 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // 6b. C-196: Initialize JPS pathfinder for time-sliced navigation.
-          //     The collision grid boolean array (true = solid) serves as
-          //     the walkability oracle for JPS jump-point expansion.
-          if (collisionGrid) {
-            const cg = collisionGrid as CollisionGrid;
-            const jpsIsWalkable = (gx: number, gy: number): boolean => {
-              if (gx < 0 || gx >= cg.width || gy < 0 || gy >= cg.height) {
-                return false;
-              }
-              return !cg.grid[gy * cg.width + gx];
-            };
-            initJpsPathfinder(cg.width, cg.height, jpsIsWalkable);
-          }
+          // 6b. C-379: A* pathfinding reads the terrain grid directly — no
+          //     separate initialization needed (JPS deleted, AC-6).
 
-          // 6c. C-196: Initialize spatial vision grid for perception sweeps.
-          //     Uses the same collision boolean array as the occlusion oracle.
-          //     Solid tiles block DDA ray cones and shadowcasting FOV.
-          if (collisionGrid) {
-            const cg = collisionGrid as CollisionGrid;
-            const visionWallCheck = (gx: number, gy: number): boolean => {
-              if (gx < 0 || gx >= cg.width || gy < 0 || gy >= cg.height) {
-                return true;
-              }
-              return cg.grid[gy * cg.width + gx];
-            };
-            setVisionGrid(visionWallCheck, cg.width, cg.height);
+          // 6c. C-196/C-379: Initialize spatial vision grid for perception
+          //     sweeps. The oracle is blocksSight from the terrain grid — a
+          //     movement-passable but sight-blocking tile (window, hedge)
+          //     now blocks vision without blocking movement (AC-2, issue I).
+          {
+            const cg = (terrainGrid ?? collisionGrid) as
+              | { width: number; height: number }
+              | undefined;
+            if (cg) {
+              const visionWallCheck = (gx: number, gy: number): boolean => {
+                return isBlocksSight(gx, gy);
+              };
+              setVisionGrid(visionWallCheck, cg.width, cg.height);
+            }
           }
 
           // 6a. C-180: Clamp player spawn position to a walkable tile.

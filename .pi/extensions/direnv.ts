@@ -25,12 +25,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { runSync } from './lib/process_runner.ts';
 import {
   hasDirenv,
   isDirenvLoaded,
   resolveAikamiEnv,
 } from '../../scripts/src/lib/env/direnv_detect';
+import { runSync } from './lib/process_runner.ts';
 
 const VALID_MODES = ['emulator', 'staging', 'production'] as const;
 
@@ -42,10 +42,6 @@ function getEnv(key: string): string | undefined {
 
 function getRoot(): string {
   return getEnv('AIKAMI_ROOT') || process.cwd();
-}
-
-function isEmulator(): boolean {
-  return getEnv('AIKAMI_IS_EMULATOR') === '1';
 }
 
 function readEnvLocal(): Record<string, string> {

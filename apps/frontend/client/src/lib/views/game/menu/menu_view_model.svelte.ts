@@ -4,9 +4,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import { campaignService, gameSaveService, routerService } from '$services';
 import type { SaveSlotInfo } from '$types';
-import { isTauri } from '$lib/views/utils/is_tauri';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
   /** Called when the player clicks "Start" to begin the game. */

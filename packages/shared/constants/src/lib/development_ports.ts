@@ -81,3 +81,27 @@ export const PORTS = {
   production: PRODUCTION_PORTS,
   testing: EMULATOR_PORTS,
 } as const;
+
+// ── Per-contract port offsets ───────────────────────────────────────────
+//
+// Multiple `bun run contract C-XXX` pipelines can run concurrently, each in
+// its own herdr workspace. Without this, every contract's dev servers (and
+// the Firebase emulator suite) fight over the same fixed ports above. The
+// offset is a pure function of the contract ID so every consumer (dev
+// service tabs, pi worker/review tabs, cleanup) computes the same value
+// independently — no shared allocation table or IPC needed.
+
+export const CONTRACT_PORT_SLOTS = 200;
+export const CONTRACT_PORT_STEP = 10;
+
+/** 0 for non-contract workspaces — manual dev keeps today's exact ports. */
+export const contractPortOffset = (contractId: string | undefined): number => {
+  if (!contractId) {
+    return 0;
+  }
+  const num = Number(contractId.match(/\d+/)?.[0] ?? 0);
+  return ((num % CONTRACT_PORT_SLOTS) + 1) * CONTRACT_PORT_STEP;
+};
+
+export const withPortOffset = <T extends Record<string, number>>(ports: T, offset: number): T =>
+  Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, v + offset])) as T;

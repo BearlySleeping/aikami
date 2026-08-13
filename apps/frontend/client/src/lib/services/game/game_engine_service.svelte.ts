@@ -989,7 +989,7 @@ class GameEngineService
         return;
       }
     } catch (error) {
-      logger.debug('GameEngineService:loadActivePersona:firestore-failed', {
+      logger.debug('GameEngineService:loadActivePersona:local-failed', {
         error: String(error),
       });
     }
