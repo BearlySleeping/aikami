@@ -16,9 +16,9 @@ import {
 } from '@aikami/frontend/services';
 import type { BridgeContext, ChatLink } from '@aikami/types';
 import { authService } from '../auth/auth_service.svelte.ts';
+import { chatService } from './chat.svelte.ts';
 import { chatLinkStorage } from './chat_link_storage.svelte.ts';
 import { chatStorage } from './chat_storage.svelte.ts';
-import { chatService } from './chat.svelte.ts';
 
 export type ConnectedChatsServiceOptions = BaseFrontendClassOptions;
 
@@ -61,20 +61,12 @@ export type ConnectedChatsServiceInterface = BaseFrontendClassInterface & {
   /**
    * Adds a pending influence to an active ChatLink.
    */
-  addInfluence(options: {
-    linkId: string;
-    targetChatId: string;
-    influence: string;
-  }): Promise<void>;
+  addInfluence(options: { linkId: string; targetChatId: string; influence: string }): Promise<void>;
 
   /**
    * Removes a pending influence from an active ChatLink by index.
    */
-  removeInfluence(options: {
-    linkId: string;
-    targetChatId: string;
-    index: number;
-  }): Promise<void>;
+  removeInfluence(options: { linkId: string; targetChatId: string; index: number }): Promise<void>;
 
   /**
    * Assembles the BridgeContext for prompt injection.

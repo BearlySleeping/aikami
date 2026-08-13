@@ -1,8 +1,16 @@
-/** biome-ignore-all lint/style/useNamingConvention: ComfyUI API uses snake_case fields */
-// packages/frontend/engine/src/ai_clients/ai/clients/comfyui_client.ts
+// apps/frontend/client/src/lib/services/ai/clients/ai/clients/comfyui_client.ts
+//
+// ComfyUiClient — FrontendAiInterface implementation for ComfyUI.
+// C-388: composes the ComfyUiEngine adapter (services/image/engine) so the
+// graph construction lives in exactly one place. This file keeps its
+// FrontendAiInterface shape but carries no workflow builder or transport.
+//
+// Contract: C-388 Image Engine Provider Abstraction
 
 import type { TSchema } from 'typebox';
 
+import { ComfyUiEngine } from '$lib/services/image/engine/comfyui_engine.svelte.ts';
+import type { ImageGenerationRequest } from '$lib/services/image/engine/types.ts';
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
   AiProviderCapabilities,
@@ -19,13 +27,8 @@ import type {
 } from '../types.ts';
 
 /**
- * ComfyUI local provider — connects directly to a local ComfyUI instance.
- *
- * Uses plain `fetch()` against `http://localhost:8188`. The ComfyUI
- * workflow is asynchronous: POST to `/prompt` returns a `prompt_id`,
- * then you poll `/history/{prompt_id}` until the result is ready.
- *
- * Requires a pre-configured workflow JSON.
+ * ComfyUI local provider — connects directly to a local ComfyUI instance
+ * through the shared ComfyUiEngine adapter.
  *
  * API: https://github.com/comfyanonymous/ComfyUI/blob/master/server.py
  */
@@ -41,25 +44,13 @@ class ComfyUiClient implements FrontendAiInterface {
     isLocal: true,
   };
 
-  private baseUrl: string;
-  private timeoutMs: number;
-  private outputFormat: string;
+  private readonly _engine: ComfyUiEngine;
 
   /**
    * @param options - ComfyUI client configuration.
    */
   constructor(options: ComfyUiClientOptions) {
-    if (!options.workflowId) {
-      throw new Error(
-        'ComfyUiClient requires a workflowId. Configure a pre-defined workflow in ComfyUI first.',
-      );
-    }
-
-    // C-389: no baked-in engine URL. The caller resolves baseUrl from the
-    // runtime config; an empty URL fails fast instead of probing localhost.
-    this.baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
-    this.timeoutMs = options.timeoutMs ?? 60000;
-    this.outputFormat = options.outputFormat ?? 'png';
+    this._engine = new ComfyUiEngine(options.baseUrl);
   }
 
   // -----------------------------------------------------------------------
@@ -93,34 +84,22 @@ class ComfyUiClient implements FrontendAiInterface {
   // -----------------------------------------------------------------------
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<ImageResult> {
-    // The prompt is injected into the workflow's text node
-    const workflow = {
-      prompt,
-      width: options?.width ?? 512,
-      height: options?.height ?? 512,
-      steps: options?.steps ?? 20,
-      cfg: options?.cfgScale ?? 7.0,
+    const request: ImageGenerationRequest = {
+      positivePrompt: prompt,
+      width: options?.width,
+      height: options?.height,
+      steps: options?.steps,
+      cfgScale: options?.cfgScale,
+      model: options?.model,
     };
 
-    // 1. Queue the prompt
-    const queueResponse = await this.post<ComfyUiQueueResponse>('/prompt', {
-      client_id: `game-${Date.now()}`,
-      prompt: this.buildWorkflow(workflow),
-    });
-
-    const promptId = queueResponse.prompt_id;
-
-    // 2. Poll for completion
-    const result = await this.pollForResult(promptId);
-
-    // 3. Get the output image URL
-    const imageUrl = `${this.baseUrl}/view?filename=${result.filename}&subfolder=${result.subfolder ?? ''}&type=output`;
+    const result = await this._engine.generate(request);
 
     return {
-      imageUrl,
-      width: options?.width ?? 512,
-      height: options?.height ?? 512,
-      mimeType: `image/${this.outputFormat}`,
+      imageUrl: URL.createObjectURL(result.blob),
+      width: result.width,
+      height: result.height,
+      mimeType: result.mimeType,
     };
   }
 
@@ -145,10 +124,14 @@ class ComfyUiClient implements FrontendAiInterface {
   async healthCheck(): Promise<HealthCheckResult> {
     try {
       const start = performance.now();
-      await this.get<Record<string, unknown>>('/');
+      const available = await this._engine.healthCheck();
       const latencyMs = Math.round(performance.now() - start);
 
-      return { available: true, latencyMs, message: 'ComfyUI running' };
+      return {
+        available,
+        latencyMs: available ? latencyMs : 0,
+        message: available ? 'ComfyUI running' : 'ComfyUI unreachable',
+      };
     } catch (err) {
       return {
         available: false,
@@ -157,197 +140,6 @@ class ComfyUiClient implements FrontendAiInterface {
       };
     }
   }
-
-  // -----------------------------------------------------------------------
-  // Internal: Workflow Building
-  // -----------------------------------------------------------------------
-
-  /**
-   * Builds a ComfyUI workflow JSON from the prompt parameters.
-   *
-   * This is a simplified workflow that uses the built-in ComfyUI nodes.
-   * For production use, load the actual workflow from disk and inject
-   * the prompt into the appropriate text node.
-   */
-  private buildWorkflow(params: {
-    prompt: string;
-    width: number;
-    height: number;
-    steps: number;
-    cfg: number;
-  }): Record<string, unknown> {
-    // Load pre-configured workflow from this.workflowId
-    // For now, build a minimal embedded workflow
-    return {
-      '3': {
-        class_type: 'KSampler',
-        inputs: {
-          seed: Math.floor(Math.random() * 2 ** 32),
-          steps: params.steps,
-          cfg: params.cfg,
-          sampler_name: 'euler',
-          scheduler: 'normal',
-          denoise: 1,
-          model: ['4', 0],
-          positive: ['6', 0],
-          negative: ['7', 0],
-          latent_image: ['5', 0],
-        },
-      },
-      '4': {
-        class_type: 'CheckpointLoaderSimple',
-        inputs: { ckpt_name: 'sd_xl_base_1.0.safetensors' },
-      },
-      '5': {
-        class_type: 'EmptyLatentImage',
-        inputs: { width: params.width, height: params.height, batch_size: 1 },
-      },
-      '6': {
-        class_type: 'CLIPTextEncode',
-        inputs: { text: params.prompt, clip: ['4', 1] },
-      },
-      '7': {
-        class_type: 'CLIPTextEncode',
-        inputs: { text: '', clip: ['4', 1] },
-      },
-      '8': {
-        class_type: 'VAEDecode',
-        inputs: { samples: ['3', 0], vae: ['4', 2] },
-      },
-      '9': {
-        class_type: 'SaveImage',
-        inputs: { filename_prefix: 'game-gen', images: ['8', 0] },
-      },
-    };
-  }
-
-  // -----------------------------------------------------------------------
-  // Internal: Poll for Result
-  // -----------------------------------------------------------------------
-
-  /**
-   * Polls ComfyUI's `/history/{promptId}` endpoint until the image is ready.
-   */
-  private async pollForResult(
-    promptId: string,
-  ): Promise<{ filename: string; subfolder: string | null }> {
-    const pollInterval = 1000;
-    const maxAttempts = Math.ceil(this.timeoutMs / pollInterval);
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await sleep(pollInterval);
-
-      const history = await this.get<ComfyUiHistoryResponse>(`/history/${promptId}`);
-      const outputs = history[promptId]?.outputs;
-
-      if (outputs) {
-        // Find the SaveImage node output
-        for (const nodeOutput of Object.values(outputs)) {
-          if (nodeOutput.images && nodeOutput.images.length > 0) {
-            const image = nodeOutput.images[0];
-
-            return { filename: image.filename, subfolder: image.subfolder ?? null };
-          }
-        }
-      }
-    }
-
-    throw new Error('ComfyUI image generation timed out');
-  }
-
-  // -----------------------------------------------------------------------
-  // HTTP Helpers
-  // -----------------------------------------------------------------------
-
-  private async post<TResponse>(path: string, body: unknown): Promise<TResponse> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-
-        throw new Error(`ComfyUI API error (${response.status}): ${text}`);
-      }
-
-      return response.json() as Promise<TResponse>;
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new Error('ComfyUI request timed out');
-      }
-
-      throw err;
-    }
-  }
-
-  private async get<TResponse>(path: string): Promise<TResponse> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`ComfyUI error (${response.status})`);
-      }
-
-      return response.json() as Promise<TResponse>;
-    } catch (err) {
-      clearTimeout(timeoutId);
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new Error('ComfyUI request timed out');
-      }
-
-      throw err;
-    }
-  }
 }
 
 export { ComfyUiClient };
-
-// ---------------------------------------------------------------------------
-// ComfyUI API types (internal)
-// ---------------------------------------------------------------------------
-
-type ComfyUiQueueResponse = {
-  prompt_id: string;
-  number: number;
-  node_errors: Record<string, unknown>;
-};
-
-type ComfyUiHistoryResponse = Record<
-  string,
-  {
-    prompt: unknown;
-    outputs: Record<
-      string,
-      { images: Array<{ filename: string; subfolder: string | null; type: string }> }
-    >;
-    status: { completed: boolean; messages: Array<[string, unknown]> };
-  }
->;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

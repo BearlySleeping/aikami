@@ -66,6 +66,7 @@ export * from './lib/game/rules_command.ts';
 export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/world_gen.ts';
+export * from './lib/media/image_engine.ts';
 export * from './lib/media/image_style_profile.ts';
 export * from './lib/media/music.ts';
 export * from './lib/media/voice.ts';

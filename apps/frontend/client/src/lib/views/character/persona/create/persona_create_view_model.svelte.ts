@@ -597,6 +597,11 @@ export class PersonaCreateViewModel
 
   // ── Private: avatar editing (img2img) ────────────────────────────────
 
+  /**
+   * Edits the current avatar via the image engine abstraction (C-388).
+   * The engine absorbs the inline init image (base64/data URL) — no private
+   * ComfyUI upload or workflow builder here.
+   */
   private async _editAvatarImage(imageUrl: string, instruction: string): Promise<void> {
     // Fetch current avatar as blob
     const response = await fetch(imageUrl);
@@ -605,115 +610,19 @@ export class PersonaCreateViewModel
     }
     const blob = await response.blob();
 
-    // Upload to ComfyUI
-    const formData = new FormData();
-    formData.append('image', blob, 'avatar.png');
+    // Convert blob → data URL so it can ride in ImageGenerationRequest.initImage
+    const dataUrl = await blobToDataUrl(blob);
 
-    const uploadResponse = await fetch('/api/image/upload/image', {
-      method: 'POST',
-      body: formData,
+    const result = await imageGenerationService.generateImage({
+      prompt: `${instruction}, same person, same face, high quality`,
+      negativePrompt: 'deformed, different person, blurry, low quality',
+      initImage: dataUrl,
+      denoise: 0.5,
+      steps: 25,
+      cfgScale: 7.0,
     });
 
-    if (!uploadResponse.ok) {
-      throw new Error('Failed to upload image to ComfyUI');
-    }
-    const uploadResult = (await uploadResponse.json()) as { name?: string };
-    const imageName = uploadResult.name;
-    if (!imageName) {
-      throw new Error('No image name returned from upload');
-    }
-
-    // Build img2img workflow
-    const checkpoint = imageGenerationService.selectedCheckpoint || 'sd_xl_base_1.0';
-    const ckptName = `${checkpoint}.safetensors`;
-
-    const workflow = {
-      '3': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'KSampler',
-        inputs: {
-          seed: Math.floor(Math.random() * 2 ** 32),
-          steps: 25,
-          cfg: 7.0,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          sampler_name: 'euler',
-          scheduler: 'normal',
-          denoise: 0.5,
-          model: ['4', 0],
-          positive: ['6', 0],
-          negative: ['7', 0],
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          latent_image: ['11', 0],
-        },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
-      '6': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'CLIPTextEncode',
-        inputs: { text: `${instruction}, same person, same face, high quality`, clip: ['4', 1] },
-      },
-      '7': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'CLIPTextEncode',
-        inputs: { text: 'deformed, different person, blurry, low quality', clip: ['4', 1] },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      '9': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'SaveImage',
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        inputs: { filename_prefix: 'aikami-edit', images: ['8', 0] },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '10': { class_type: 'LoadImage', inputs: { image: imageName } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
-    };
-
-    // Queue the workflow
-    const queueResponse = await fetch('/api/image/prompt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      body: JSON.stringify({ client_id: `aikami-edit-${Date.now()}`, prompt: workflow }),
-    });
-
-    if (!queueResponse.ok) {
-      throw new Error('Failed to queue image edit workflow');
-    }
-
-    // biome-ignore lint/style/useNamingConvention: API contract field name
-    const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
-
-    // Poll for result
-    for (let attempt = 1; attempt <= 60; attempt++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const historyResponse = await fetch(`/api/image/history/${promptId}`);
-      if (!historyResponse.ok) {
-        continue;
-      }
-
-      const history = (await historyResponse.json()) as Record<string, unknown>;
-      const entry = history[promptId] as Record<string, unknown> | undefined;
-      const outputs = entry?.outputs as Record<string, unknown> | undefined;
-      const node9 = outputs?.['9'] as
-        | { images?: Array<{ filename: string; subfolder?: string }> }
-        | undefined;
-      const images = node9?.images;
-
-      if (images && images.length > 0) {
-        const img = images[0];
-        const viewUrl = `/api/image/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder ?? '')}&type=output`;
-        const blobResponse = await fetch(viewUrl);
-        const newBlob = await blobResponse.blob();
-        personaCreationService.avatarUrl = URL.createObjectURL(newBlob);
-        return;
-      }
-    }
-
-    throw new Error('Image edit timed out');
+    personaCreationService.avatarUrl = result.url;
   }
 
   /** Enhances an appearance description for better ComfyUI image generation. */
@@ -868,4 +777,23 @@ export const getPersonaCreateViewModel = (
   options: PersonaCreateViewModelOptions,
 ): PersonaCreateViewModelInterface => {
   return new PersonaCreateViewModel(options);
+};
+
+// ---------------------------------------------------------------------------
+// Module helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a Blob to a base64 data URL. Uses arrayBuffer + btoa so it works
+ * in both browsers and the Bun test environment (FileReader events do not
+ * fire in Bun).
+ */
+const blobToDataUrl = async (blob: Blob): Promise<string> => {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return `data:${blob.type || 'image/png'};base64,${btoa(binary)}`;
 };
