@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
-import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
+import {
+  CollisionData,
+  CollisionLayer,
+  registerCollisionDataObservers,
+} from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
@@ -51,6 +55,9 @@ describe('movement_system — axis-independent wall sliding', () => {
     world = createWorld();
     registerPositionObservers(world);
     registerVelocityObservers(world);
+    // C-379 AC-3: movement reads the mover's OWN CollisionData mask, so the
+    // observer must be registered for set() to write the SoA arrays.
+    registerCollisionDataObservers(world);
   });
 
   afterEach(() => {
@@ -388,6 +395,26 @@ describe('movement_system — axis-independent wall sliding', () => {
       insertIntoSpatialGrid(eid);
     };
 
+    /**
+     * Creates the player with CollisionData (C-379 AC-2: the player carries
+     * layer/mask; the movement loop reads the mover's OWN mask).
+     */
+    const placePlayer = (eid: number, x: number, y: number, vx: number, vy: number): void => {
+      addComponent(world, eid, Position);
+      addComponent(world, eid, set(Position, { x, y }));
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, set(Velocity, { x: vx, y: vy }));
+      addComponent(world, eid, CollisionData);
+      addComponent(
+        world,
+        eid,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: PLAYER_COLLISION_MASK,
+        }),
+      );
+    };
+
     it('player is blocked from walking into an NPC grid cell', () => {
       setCollisionGrid(ALL_WALKABLE);
       // NPC occupies tile (5,5) — pixel x 160..191, y 160..191.
@@ -395,11 +422,8 @@ describe('movement_system — axis-independent wall sliding', () => {
       placeGridEntity(9001, 5, 5, CollisionLayer.npc);
 
       const player = addEntity(world);
-      addComponent(world, player, Position);
       // Feet at (160, 130) — tile (5,4); moving down into the NPC cell.
-      addComponent(world, player, set(Position, { x: 160, y: 130 }));
-      addComponent(world, player, Velocity);
-      addComponent(world, player, set(Velocity, { x: 0, y: 60 }));
+      placePlayer(player, 160, 130, 0, 60);
 
       updateMovement(world, 1000); // candidate nextY = 190 → box overlaps (5,5)
 
@@ -416,11 +440,8 @@ describe('movement_system — axis-independent wall sliding', () => {
       placeGridEntity(9002, 7, 4, CollisionLayer.wall);
 
       const player = addEntity(world);
-      addComponent(world, player, Position);
       // Feet at (192, 130) — tile (6,4); moving right into the prop cell.
-      addComponent(world, player, set(Position, { x: 192, y: 130 }));
-      addComponent(world, player, Velocity);
-      addComponent(world, player, set(Velocity, { x: 60, y: 0 }));
+      placePlayer(player, 192, 130, 60, 0);
 
       updateMovement(world, 1000); // candidate nextX = 252 → box overlaps (7,4)
 
@@ -433,15 +454,96 @@ describe('movement_system — axis-independent wall sliding', () => {
       setCollisionGrid(ALL_WALKABLE);
       // A walkable prop (isWalkable: true) is NOT registered in the grid.
       const player = addEntity(world);
-      addComponent(world, player, Position);
-      addComponent(world, player, set(Position, { x: 160, y: 130 }));
-      addComponent(world, player, Velocity);
-      addComponent(world, player, set(Velocity, { x: 0, y: 60 }));
+      placePlayer(player, 160, 130, 0, 60);
 
       updateMovement(world, 1000);
 
       const pos = getComponent(world, player, Position);
       expect(pos.y).toBe(190); // moves through the empty tile
+    });
+
+    // C-379 AC-3: an entity with Velocity but NO CollisionData defaults to
+    // "collides with walls only" — it is NOT blocked by NPCs/enemies and is
+    // not blocked by the player's mask. The old code applied the player mask
+    // to every mover.
+    it('mover without CollisionData defaults to walls-only (AC-3)', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // NPC occupies tile (5,5).
+      placeGridEntity(9003, 5, 5, CollisionLayer.npc);
+
+      const mover = addEntity(world);
+      addComponent(world, mover, Position);
+      addComponent(world, mover, set(Position, { x: 160, y: 130 }));
+      addComponent(world, mover, Velocity);
+      addComponent(world, mover, set(Velocity, { x: 0, y: 60 }));
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, mover, Position);
+      // NPC layer (npc) is not in the walls-only default mask → passes through.
+      expect(pos.y).toBe(190);
+    });
+
+    // C-379 AC-3: a mover's own mask governs blocking — an enemy walking into
+    // a player cell is blocked only when the enemy mask includes player.
+    it('enemy with player-blocking mask is blocked by the player (AC-3)', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // Player occupies tile (5,5) with layer player.
+      placeGridEntity(9004, 5, 5, CollisionLayer.player);
+
+      const enemy = addEntity(world);
+      addComponent(world, enemy, Position);
+      addComponent(world, enemy, set(Position, { x: 160, y: 130 }));
+      addComponent(world, enemy, Velocity);
+      addComponent(world, enemy, set(Velocity, { x: 0, y: 60 }));
+      addComponent(world, enemy, CollisionData);
+      addComponent(
+        world,
+        enemy,
+        set(CollisionData, {
+          layer: CollisionLayer.enemy,
+          mask: CollisionLayer.wall | CollisionLayer.player,
+        }),
+      );
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, enemy, Position);
+      // Enemy mask includes player → blocked, stays at 130.
+      expect(pos.x).toBe(160);
+      expect(pos.y).toBe(130);
+    });
+
+    // C-379 AC-3 negative control: an enemy whose mask EXCLUDES the player
+    // layer must NOT be blocked by a player-occupied cell — collision
+    // decisions use the MOVER's mask, never a fixed player mask (CodeRabbit
+    // review, C-379).
+    it('enemy with walls-only mask is NOT blocked by the player (AC-3 negative control)', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // Player occupies tile (5,5) with layer player.
+      placeGridEntity(9005, 5, 5, CollisionLayer.player);
+
+      const enemy = addEntity(world);
+      addComponent(world, enemy, Position);
+      addComponent(world, enemy, set(Position, { x: 160, y: 130 }));
+      addComponent(world, enemy, Velocity);
+      addComponent(world, enemy, set(Velocity, { x: 0, y: 60 }));
+      addComponent(world, enemy, CollisionData);
+      addComponent(
+        world,
+        enemy,
+        set(CollisionData, {
+          layer: CollisionLayer.enemy,
+          mask: CollisionLayer.wall, // explicitly excludes player
+        }),
+      );
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, enemy, Position);
+      // Mask excludes player → the player cell is passable → moves through.
+      expect(pos.x).toBe(160);
+      expect(pos.y).toBe(190);
     });
   });
 

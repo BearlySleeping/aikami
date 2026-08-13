@@ -1,15 +1,21 @@
-// apps/frontend/game/src/engine/entities/create_player.ts
+// packages/frontend/engine/src/entities/create_player.ts
 
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CameraFocus } from '../components/camera_focus.ts';
+import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { GridPosition } from '../components/grid_position.ts';
 import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
 import { Position } from '../components/position.ts';
+import { SpatialLink } from '../components/spatial_link.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { Velocity } from '../components/velocity.ts';
+import { VisionVisible } from '../components/vision_visible.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
+import { getTerrainTileSize } from '../systems/collision_system.ts';
+import { PLAYER_COLLISION_MASK } from '../systems/movement_system.ts';
 
 // ---------------------------------------------------------------------------
 // Player entity factory
@@ -51,6 +57,41 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
 
   addComponent(world, entityId, Velocity);
   addComponent(world, entityId, set(Velocity, { x: 0, y: 0 }));
+
+  // C-379 AC-2: the player is a spatial participant. GridPosition lets the
+  // vision system see them (observers query [VisionObserver, GridPosition]
+  // and targets need GridPosition); CollisionData + SpatialLink make them a
+  // dynamic occupant so NPC/enemy masks block them and vice versa. The
+  // GridPositionSyncSystem derives the exact cell from Position each tick.
+  const tileSize = getTerrainTileSize();
+  addComponent(world, entityId, GridPosition);
+  addComponent(
+    world,
+    entityId,
+    set(GridPosition, {
+      x: Math.floor(400 / tileSize),
+      y: Math.floor(300 / tileSize),
+    }),
+  );
+  addComponent(world, entityId, SpatialLink);
+  addComponent(world, entityId, set(SpatialLink, { next: 0, prev: 0 }));
+  addComponent(world, entityId, CollisionData);
+  addComponent(
+    world,
+    entityId,
+    set(CollisionData, {
+      layer: CollisionLayer.player,
+      mask: PLAYER_COLLISION_MASK,
+    }),
+  );
+
+  // C-379 AC-2: the player is a vision TARGET. SpatialVisionSystem's
+  // dynamic-actor index scans VisionVisible (the "CAN be seen" marker)
+  // plus GridPosition — without VisionVisible the player can never be
+  // marked visible, so observer NPCs could never notice them. Zero mask =
+  // invisible until an observer's cone covers them (CodeRabbit review).
+  addComponent(world, entityId, VisionVisible);
+  addComponent(world, entityId, set(VisionVisible, { visibleByMask: 0 }));
 
   addComponent(world, entityId, Visual);
   addComponent(

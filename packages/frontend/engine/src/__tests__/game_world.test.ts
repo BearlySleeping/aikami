@@ -14,7 +14,7 @@ import { MockEngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer } from '../entities/create_player.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
-import { resetMovementTracking, updateMovement } from '../systems/movement_system.ts';
+import { updateMovement } from '../systems/movement_system.ts';
 
 // ---------------------------------------------------------------------------
 // Helper: set up a world with all component observers registered
@@ -41,7 +41,7 @@ describe('GameWorld — entity creation', () => {
   });
 
   afterEach(() => {
-    resetMovementTracking(world);
+    // C-379: resetMovementTracking deleted (documented no-op).
   });
 
   it('createPlayer() adds an entity with Position, Velocity, and Visual', () => {
@@ -122,7 +122,7 @@ describe('GameWorld — movement system', () => {
   });
 
   afterEach(() => {
-    resetMovementTracking(world);
+    // C-379: resetMovementTracking deleted (documented no-op).
   });
 
   it('updates position based on velocity and delta time', () => {
@@ -217,7 +217,7 @@ describe('GameWorld — axis-independent movement', () => {
   });
 
   afterEach(() => {
-    resetMovementTracking(world);
+    // C-379: resetMovementTracking deleted (documented no-op).
   });
 
   it('supports diagonal movement (both axes advance)', () => {

@@ -4,6 +4,7 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getAllEntities, hasComponent, set } from 'bitecs';
 import { Appearance, registerAppearanceObservers } from '../components/appearance.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import {
@@ -46,6 +47,15 @@ const _resetComponentArrays = (): void => {
   CombatStats.initiative.length = 0;
   Velocity.x.length = 0;
   Velocity.y.length = 0;
+  // C-379 AC-10: PathFollow is runtime-only and must never leak into a
+  // snapshot — reset every module-level array so each test starts clean
+  // (CodeRabbit review, C-379).
+  PathFollow.waypoints.length = 0;
+  PathFollow.index.length = 0;
+  PathFollow.length.length = 0;
+  PathFollow.speed.length = 0;
+  PathFollow.repathAtMs.length = 0;
+  PathFollow.arriveRadius.length = 0;
 };
 
 /**
@@ -57,6 +67,7 @@ const createTestWorld = (): World => {
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
   registerVelocityObservers(world);
+  registerPathFollowObservers(world);
   return world;
 };
 
@@ -306,17 +317,76 @@ describe('AC-1: serializeWorld produces valid payload', () => {
       initiative: 10,
     });
 
-    // Add Velocity (ephemeral)
-    addComponent(world, eid, Velocity);
-    set(Velocity, { x: 10, y: -5 });
+    // Add Velocity (ephemeral) through the supported bitecs API so the
+    // values are ACTUALLY present in the SoA arrays the serializer reads
+    // (a bare `addComponent` + discarded `set()` proxy wrote nothing — the
+    // exclusion test was vacuous; CodeRabbit review, C-379).
+    addComponent(world, eid, set(Velocity, { x: 10, y: -5 }));
+
+    // Prove the setup populated the module-level arrays — if Velocity were
+    // added to PERSISTENT_COMPONENTS, this assertion would now fail.
+    expect(Velocity.x[eid]).toBe(10);
+    expect(Velocity.y[eid]).toBe(-5);
 
     const payload = serializeWorld(world);
     const snapshot = JSON.parse(payload);
 
     // Velocity should NOT appear in components
     expect(snapshot.components.Velocity).toBeUndefined();
+    expect(Object.keys(snapshot.components)).not.toContain('Velocity');
 
     // But persistent components should still be present
+    expect(snapshot.components.Position).toBeDefined();
+    expect(snapshot.components.Position.x).toEqual([100]);
+  });
+
+  it('excludes runtime-only PathFollow from the payload (C-379 AC-10)', () => {
+    const eid = createPersistentEntity(world, {
+      x: 100,
+      y: 200,
+      layer0: 0,
+      layer1: 0,
+      layer2: 0,
+      layer3: 0,
+      layer4: 0,
+      health: 100,
+      maxHealth: 100,
+      initiative: 10,
+    });
+
+    // Attach a live PathFollow (runtime-only — a companion mid-route)
+    // through the supported bitecs API so the values are ACTUALLY present
+    // in the SoA arrays the serializer reads (CodeRabbit review, C-379).
+    addComponent(
+      world,
+      eid,
+      set(PathFollow, {
+        waypoints: new Float32Array([100, 200, 200, 200]),
+        index: 1,
+        length: 2,
+        speed: 80,
+        repathAtMs: 0,
+        arriveRadius: 6,
+      }),
+    );
+
+    // Prove the setup populated the module-level arrays — if PathFollow
+    // were added to PERSISTENT_COMPONENTS, the snapshot key assertion
+    // below would now fail (this is the AC-10 watch point made real).
+    expect(PathFollow.waypoints[eid]).toBeDefined();
+    expect(PathFollow.index[eid]).toBe(1);
+
+    const payload = serializeWorld(world);
+    const snapshot = JSON.parse(payload);
+
+    // PathFollow must never leak into a save snapshot: no PathFollow key
+    // and no stray top-level waypoints key (AC-10 watch point: runtime-
+    // only, excluded from PERSISTENT_COMPONENTS).
+    expect(snapshot.components.PathFollow).toBeUndefined();
+    expect(Object.keys(snapshot.components)).not.toContain('PathFollow');
+    expect(snapshot.components.waypoints).toBeUndefined();
+
+    // Persistent components unaffected.
     expect(snapshot.components.Position).toBeDefined();
     expect(snapshot.components.Position.x).toEqual([100]);
   });
