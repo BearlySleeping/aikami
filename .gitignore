@@ -99,7 +99,10 @@ pids/
 *.pid
 *.seed
 *.pid.lock
-runtime/
+# Root-level runtime data dir (legacy deno setup). Anchored to the repo
+# root so source directories named `runtime/` under packages/ are tracked
+# normally (e.g. packages/shared/schemas/src/lib/runtime/ — C-389).
+/runtime/
 *.tmp
 *.temp
 *.swp

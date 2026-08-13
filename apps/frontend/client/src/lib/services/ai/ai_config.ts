@@ -6,6 +6,7 @@ import type {
   FrontendAiInterface,
   GameApiClientInterface,
 } from '@aikami/types';
+import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 
 /**
  * Priority chain for provider selection:
@@ -73,7 +74,9 @@ function getAiClientOptions(apiClient?: GameApiClientInterface): AiClientOptions
       model: 'gemini-2.0-flash',
     },
     comfyui: {
-      baseUrl: (import.meta.env.PUBLIC_IMAGE_URL as string) ?? 'http://localhost:8188',
+      // C-389: no baked-in engine URL — resolved from the runtime config
+      // chain; undefined fails fast instead of probing localhost (AC-1).
+      baseUrl: runtimeConfigService.getImageUrl(),
     },
     localTts: {
       rate: 1.0,

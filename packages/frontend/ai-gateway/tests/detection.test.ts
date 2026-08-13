@@ -64,11 +64,14 @@ describe('detectTextAvailability — parity with capability_service.detectText',
     expect(toDetectionStatus(result)).toBe('detected');
   });
 
-  test('proxy fails, native tags responds → detected (fallback path)', async () => {
+  test('proxy fails, runtime-configured native tags responds → detected (fallback path)', async () => {
+    // C-389: the native fallback URL is injected by the caller from the
+    // runtime config — the default carries no baked-in endpoint.
     const result = await detectTextAvailability({
+      nativeUrl: 'http://10.0.0.5:11434/api/tags',
       fetchFn: routedFetch([
         {
-          match: '11434/api/tags',
+          match: '10.0.0.5:11434/api/tags',
           respond: () =>
             Promise.resolve(
               new Response(JSON.stringify({ models: [{ name: 'llama3' }] }), { status: 200 }),
@@ -80,6 +83,16 @@ describe('detectTextAvailability — parity with capability_service.detectText',
     expect(result.available).toBe(true);
     expect(result.detail).toContain('natively');
     expect(toDetectionStatus(result)).toBe('detected');
+  });
+
+  test('no native URL configured → no native ping is attempted (AC-7)', async () => {
+    const result = await detectTextAvailability({
+      hasCloudConfig: () => false,
+      nativeUrl: undefined,
+      fetchFn: routedFetch([]),
+    });
+
+    expect(result.available).toBe(false);
   });
 
   test('nothing reachable and no config → not_found within the 3s budget', async () => {

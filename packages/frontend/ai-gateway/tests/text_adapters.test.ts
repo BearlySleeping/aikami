@@ -91,9 +91,35 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     expect(calls[0].headers['X-Title']).toBe('Aikami');
   });
 
-  test('falls back to well-known local endpoint for ollama', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
+  test('does not fall back to a baked-in local endpoint (C-389 AC-1)', async () => {
+    // The SPA bundle must not embed engine URLs; with no configured endpoint
+    // and no runtime default, the adapter reports not_configured.
+    const { fetchFn } = createSseFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    let error: unknown;
+    try {
+      await adapter.generateText({
+        resolution: resolution({ mode: 'offline', provider: 'ollama', endpoint: '' }),
+        signal: signal(),
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeDefined();
+    expect((error as { code?: string }).code).toBe('not_configured');
+  });
+
+  test('uses the injected runtime default endpoint for local providers', async () => {
+    const { fetchFn, calls } = createJsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      // C-389: local endpoints resolve from runtime config via this hook.
+      getDefaultEndpoint: (provider) =>
+        provider === 'ollama' ? 'http://10.0.0.5:8080/v1' : undefined,
+    });
 
     await adapter.generateText({
       resolution: resolution({ mode: 'offline', provider: 'ollama', endpoint: '' }),
@@ -101,7 +127,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(calls[0].url).toBe('http://localhost:11434/api/chat');
+    expect(calls[0].url).toBe('http://10.0.0.5:8080/api/chat');
   });
 
   test('uses injected default endpoint for cloud providers without one', async () => {
@@ -148,7 +174,11 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     await adapter.generateText({
-      resolution: resolution({ mode: 'offline', provider: 'ollama', endpoint: '' }),
+      resolution: resolution({
+        mode: 'offline',
+        provider: 'ollama',
+        endpoint: 'http://10.0.0.5:8080/v1',
+      }),
       signal: signal(),
       messages: [{ role: 'user', content: 'Hi' }],
     });
@@ -262,7 +292,11 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
     });
 
     const result = await adapter.generateText({
-      resolution: resolution({ mode: 'offline', provider: 'ollama', endpoint: '' }),
+      resolution: resolution({
+        mode: 'offline',
+        provider: 'ollama',
+        endpoint: 'http://10.0.0.5:8080/v1',
+      }),
       signal: signal(),
       messages: [{ role: 'user', content: 'Extract a wizard' }],
       schema: characterSchema,

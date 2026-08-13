@@ -288,6 +288,15 @@ export class SettingsViewModel
 
   override async initialize(): Promise<void> {
     this.debug('initialize', { overlayMode: this._overlayMode });
+    // Deep-link a settings section via `?section=<id>` (e.g. /settings?section=audio)
+    try {
+      const sectionParam = new URLSearchParams(window.location.search).get('section');
+      if (sectionParam && SETTINGS_SECTIONS.some((s) => s.id === sectionParam)) {
+        this.activeSectionId = sectionParam;
+      }
+    } catch {
+      // location unavailable (tests) — keep the default section.
+    }
     // Capture pre-edit state for preview/revert
     this._capturePreEditState();
     await super.initialize();

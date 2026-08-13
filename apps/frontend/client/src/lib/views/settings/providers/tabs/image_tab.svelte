@@ -56,7 +56,7 @@ const imageConfig = $derived(viewModel.config.image);
         <input
           type="text"
           class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
-          placeholder="http://localhost:8188"
+          placeholder="http://<host>:<port>"
           value={imageConfig.url ?? ''}
           oninput={(e: Event) =>
             viewModel.setField('image', 'url', (e.target as HTMLInputElement).value)}

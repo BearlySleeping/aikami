@@ -1,36 +1,37 @@
 // apps/frontend/client/src/lib/services/image/engine/base_url.ts
 //
-// Base URL resolution for image engines (C-388).
+// Base URL resolution for image engines (C-388 + C-389).
 //
-// Both adapters resolve from PUBLIC_IMAGE_URL (default http://localhost:8188).
-// In emulator dev this is the Vite proxy path /api/image → localhost:8188.
-// Per C-390 the bundled sd-server also binds 8188 (mutually exclusive
-// defaults), so sd-server reuses the same base URL; PUBLIC_SDCPP_URL is an
-// override for when sd-server runs on a different port.
+// C-389: the image engine URL resolves from the runtime config chain
+// (localStorage dev override → Tauri config file → ./config.json →
+// dev-only PUBLIC_* defaults → unset). No engine URL literal may exist in
+// a production bundle (AC-1), so there is deliberately no localhost
+// default here — an unconfigured engine resolves to `undefined` and the
+// adapters report unavailable instead of probing a baked-in host.
 //
-// Contract: C-388 Image Engine Provider Abstraction
+// In emulator dev the Vite proxy path /api/image (PUBLIC_IMAGE_URL) flows
+// through runtimeConfigService's dev-default rung, so the same-origin
+// relative path is still accepted by assertSafeBaseUrl.
+//
+// Contract: C-388 Image Engine Provider Abstraction / C-389 AC-1, AC-2
 
+import { runtimeConfigService } from '../../config/runtime_config_service.svelte.ts';
 import type { ResolvedImageEngineId } from './types.ts';
 
-/** Default base URL for local image engines (ComfyUI / sd-server). */
-const DEFAULT_IMAGE_BASE_URL = 'http://localhost:8188';
-
 /**
- * Resolves the base URL for an image engine.
- * @param engineId — Engine to resolve for.
- * @returns Trailing-slash-stripped base URL.
+ * Resolves the base URL for an image engine from the runtime config.
+ * @param engineId — Engine to resolve for (kept for call-site clarity).
+ * @returns Trailing-slash-stripped base URL, or undefined when no image
+ *          engine is configured (precedence rung 5 — unset).
  */
-export const resolveImageBaseUrl = (engineId: ResolvedImageEngineId): string => {
-  if (engineId === 'sdcpp') {
-    const override = (import.meta.env.PUBLIC_SDCPP_URL as string | undefined)?.trim();
-    const fallback = (import.meta.env.PUBLIC_IMAGE_URL as string | undefined)?.trim();
-    const base = (override || fallback || DEFAULT_IMAGE_BASE_URL).replace(/\/+$/, '');
-    assertSafeBaseUrl(base, 'sd-server');
-    return base;
+export const resolveImageBaseUrl = (engineId: ResolvedImageEngineId): string | undefined => {
+  const configured = runtimeConfigService.getImageUrl()?.trim();
+  if (!configured) {
+    return undefined;
   }
 
-  const base = (import.meta.env.PUBLIC_IMAGE_URL ?? DEFAULT_IMAGE_BASE_URL).replace(/\/+$/, '');
-  assertSafeBaseUrl(base, 'ComfyUI');
+  const base = configured.replace(/\/+$/, '');
+  assertSafeBaseUrl(base, engineId === 'sdcpp' ? 'sd-server' : 'ComfyUI');
   return base;
 };
 

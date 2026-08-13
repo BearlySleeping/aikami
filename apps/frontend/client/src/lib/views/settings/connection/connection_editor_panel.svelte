@@ -119,7 +119,7 @@ const {
               id="conn-url"
               type="text"
               class="input input-bordered input-sm font-mono text-sm"
-              placeholder="http://localhost:11434/v1"
+              placeholder="http://<host>:<port>/v1"
               value={viewModel.draft.baseUrl ?? ''}
               oninput={(e) => viewModel.setDraftField('baseUrl', (e.target as HTMLInputElement).value)}
             >
@@ -236,9 +236,9 @@ const {
               </div>
               <div class="collapse-content pt-0 space-y-2 text-xs font-mono text-[#938ea1]">
                 <p>
-                  A deployed HTTPS site can reach Ollama on
-                  <code class="text-[#00e3fd]">http://localhost:11434</code>, but you must clear two
-                  browser security barriers:
+                  A deployed HTTPS site can reach Ollama on the engine URL from
+                  <code class="text-[#00e3fd]">config.json</code>, but you must clear two browser
+                  security barriers:
                 </p>
 
                 <div>

@@ -22,3 +22,4 @@ export type * from './session.ts';
 export type * from './session_checkpoint.ts';
 export type * from './vendor.ts';
 export type * from './voice.ts';
+export type * from './voice_model.ts';
