@@ -106,6 +106,11 @@ runtime/
 *.swo
 *~
 
+## 🐘 Local PostgreSQL (C-387)
+# Data dir + sockets + logs for the Nix-provided dev server (lifecycle:
+# scripts/src/lib/postgres/lifecycle.ts). Reset with `bun postgres:reset --yes`.
+.postgres/
+
 # --- 5. Environment & Config ---
 ## 🔑 Environment Variables
 # Ignore all .env files...

@@ -75,6 +75,12 @@
           # ── Hybrid Cloud Emulation ──
           google-cloud-sql-proxy
 
+          # ── Local PostgreSQL (C-387) ──
+          # Pinned major (17) so the local engine matches production's wire
+          # protocol. Nix provides the binaries; initdb + data live under
+          # .postgres/ in the repo (see scripts/src/lib/postgres/lifecycle.ts).
+          postgresql_17
+
           # ── Developer Experience ──
           # direnv + nix-direnv for cached flake evaluation
           # (nix-direnv is small; gcloud/jq should be installed separately
