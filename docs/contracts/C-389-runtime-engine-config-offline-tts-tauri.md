@@ -2,7 +2,7 @@
 id: C-389
 title: "Runtime Engine Configuration, Offline Browser TTS, and Tauri Packaging"
 source: "user request — local-stack engine review: 'maybe kokoro can be only in-browser/tauri?' + 'include the tauri build, or just serve the client locally, like the dist folder'"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/frontend/client/` — build config, runtime config loader, `services/audio/`, `src-tauri/` |
 | **Priority** | P0 — the build-time endpoint baking is the direct blocker on publishing any client container image to GHCR, which is the stated goal of the local-stack work. |
 | **Dependencies** | None hard. C-390 depends on this. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → "Configure your local engines" page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -413,3 +413,82 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Replaced build-time `PUBLIC_*` engine-URL baking with a runtime `config.json` loader (precedence: localStorage dev override → Tauri app-config file → `GET ./config.json` → dev-only `PUBLIC_*` defaults → unset), so the SPA bundle is now topology-agnostic. Vendored the ONNX runtime WASM into `static/ort/`, reworked the Kokoro worker for fully offline loading (`allowLocalModels=true`, local-model cache keys), added an explicit checksum-verified voice-model download service with progress/cancel/delete (AC-4c), reworked the TTS service around config-driven modes with honest `TtsBackend` reporting and no blind probing (AC-6/7/8), widened the Tauri CSP/capabilities for the new engine ports and dropped the stale COOP/COEP headers, added Rust-side model download + first-run config writer, and made the local-stack `build:client` emit `config.json` with static-serve + config-swap checks. Packaged-Tauri verification (AC-4d/5/9) is documented as manual — the Rust side compiles (`cargo check` passes) but no desktop build was produced in this environment.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Production build grep: 0 engine-URL literals across 217 emitted text files; enforced by `build_output.test.ts` + local-stack check.sh |
+| AC-2 | ✅ | `runtime_config_service.test.ts` — config.json drives text/image/voice URLs, request uses `cache: no-store` |
+| AC-3 | ✅ | 4 failure modes (missing/404/malformed/schema-invalid) tested; single warning; boot smoke via settings page load |
+| AC-4 | ✅ | Offline loading design: worker loads from pre-warmed `transformers-cache` (`/models/…`) keys; no external fetch after first use |
+| AC-4b | ✅ | `tts_service.test.ts` asserts zero fetches + `not-downloaded` state on synthesize with no model |
+| AC-4c | ✅ | `voice_model_service.test.ts` (6 tests) + settings UI card; visual validation 95/100 |
+| AC-4d | ⚠️ | No Kokoro weights bundled (weights are runtime-downloaded only); installer size comparison needs a packaged Tauri build (manual, recorded as pending) |
+| AC-5 | ⚠️ | Rust commands implemented + `cargo check` passes; end-to-end packaged verification requires a desktop build (manual) |
+| AC-6 | ✅ | Worker reports `backend: 'webgpu' \| 'wasm'`; main-thread WebGPU gate with timeout; UI states slower WASM |
+| AC-7 | ✅ | `checkKokoroServer` probes only the configured URL; zero-fetch assertion in tests; boot logs confirm no 8880 probe |
+| AC-8 | ✅ | Server mode POSTs to `{voice.tts.url}/v1/audio/speech` on non-default ports (tests + dev boot) |
+| AC-9 | ⚠️ | CSP + capability ACL widened (11434/8188/8089/6006, no wildcard/CDN), COOP/COEP dropped; webview console verification needs packaged build (manual) |
+| AC-10 | ✅ | `local-stack:test` passes: static serve of `build/`, config.json served, config swap without rebuild |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/runtime/runtime_engine_config.ts` | TypeBox schema for the runtime `config.json` document |
+| `packages/shared/schemas/src/lib/runtime/runtime_engine_config.test.ts` | Schema validation tests (AC-3) |
+| `packages/shared/types/src/lib/runtime/runtime_engine_config.ts` | Derived `Static<>` types |
+| `apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts` | Runtime config loader (precedence chain, validation, single warning) |
+| `apps/frontend/client/src/lib/services/config/runtime_config_service.test.ts` | 9 loader tests (AC-2/AC-3) |
+| `apps/frontend/client/src/lib/services/config/build_output.test.ts` | AC-1 build-output grep assertion |
+| `apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts` | Explicit voice-model download service (progress, checksum, cancel, delete, idempotent join) |
+| `apps/frontend/client/src/lib/services/audio/voice_model_service.test.ts` | 6 AC-4c tests |
+| `apps/frontend/client/src/lib/types/voice_model.ts` | `TtsBackend`, `VoiceModelState` client types |
+| `apps/frontend/client/static/ort/` | Vendored ONNX runtime WASM binaries (4 files) |
+| `apps/backend/local-stack/scripts/emit_config.sh` | Emits `config.json` for the staged client build |
+| `apps/frontend/docs/src/content/docs/guides/configure-local-engines.mdx` | "Configure your local engines" docs page |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/audio/kokoro_worker.ts` | `allowLocalModels=true`, `localModelPath=/models/`, vendored `wasmPaths`, webgpu/wasm backend report |
+| `apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts` | Config-driven modes, backend state, config-gated probe, not-downloaded gate |
+| `apps/frontend/client/src/lib/services/audio/tts_service.test.ts` | Rewritten for AC-4b/6/7/8 |
+| `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts` | `image.url` from runtime config; graceful not-configured |
+| `apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts` | Server-TTS URL from runtime config |
+| `apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts` | Native Ollama detection URL from runtime config |
+| `apps/frontend/client/src/lib/services/config/provider_endpoints.ts` | Ollama endpoints runtime-resolved (`getOllamaRuntimeEndpoints`) |
+| `apps/frontend/client/src/lib/services/ai/clients/ai/clients/{ollama,comfyui}_client.ts` | Removed baked-in localhost defaults |
+| `apps/frontend/client/src/lib/views/settings/audio/settings_audio_view{,_model}.svelte.ts` | Voice-model download control UI (AC-4c) |
+| `apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts` | `?section=` deep-link for settings sections |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts` | Detection-seeded connection URLs from runtime config |
+| `apps/frontend/client/src/lib/views/settings/connection/connection_manager_view_model.svelte.ts` | Ollama probes/tests from runtime config |
+| `apps/frontend/client/src/lib/views/settings/providers/tabs/{text,image,voice}_tab*.svelte*` | Placeholder literals → neutral hints; auto-detect from runtime config |
+| `apps/frontend/client/src/lib/test_preload.ts` | Barrel mock additions for new services |
+| `apps/frontend/client/src-tauri/tauri.conf.json` | CSP: added 8089/6006; dropped COOP/COEP headers |
+| `apps/frontend/client/src-tauri/capabilities/default.json` | `http:allow-fetch` widened to 8089/6006 |
+| `apps/frontend/client/src-tauri/src/lib.rs` | `read_runtime_config`, `download_model_file`, `read_model_file`, `delete_model_files`, first-run config writer |
+| `apps/frontend/client/src-tauri/Cargo.toml` / `Cargo.lock` | reqwest/sha2/hex/futures-util for Rust-side download |
+| `apps/backend/local-stack/package.json` | `build:client` drops `PUBLIC_*` baking; `stage:client` emits `config.json` |
+| `apps/backend/local-stack/scripts/check.sh` | AC-1 bundle grep + AC-10 static-serve/config-swap checks |
+| `apps/backend/local-stack/docker/client-server/client_server.ts` | `CLIENT_ROOT` env + `no-store` for config.json |
+| `apps/backend/local-stack/docker/client/nginx.conf` | `no-store` for config.json |
+| `packages/frontend/ai-gateway/src/lib/detection.ts` | `DEFAULT_OLLAMA_NATIVE_URL=''` + native-URL guard |
+| `packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts` | `DEFAULT_LOCAL_TEXT_ENDPOINTS` emptied (no baked-in endpoints) |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts` | Export new runtime config schema/types |
+
+### Deviations from Spec
+- **Resolved-config type is all-optional** (vs the contract's pseudocode with required `url`): the loader treats missing config as "unset" (rung 5) and the derived `Static<>` type reflects that; the contract's design note explicitly wants unset URLs, so this matches intent.
+- **Voice pre-warm is limited to the default voice (`af_heart`)**; other voices cache on first use (kokoro-js fetches them with its own `kokoro-voices` cache). Full voice pre-warm would add ~20 MB to the download; noted for a follow-up if multi-voice offline matters.
+- **`?section=` settings deep-link** added as a small testing/docs affordance (not in the contract's scope list).
+- **Manual ACs (4d/5/9)**: no packaged Tauri desktop build possible in this environment; Rust side compiles (`cargo check` clean), CSP/capabilities updated, and the webview console cannot be verified without a packaged build. Needs the manual desktop verification step.
+
+### Test Results
+- Unit: 32 new tests added (runtime_config 9, tts_service 8, voice_model 6, build_output 1, schema 8); all pass. Client suite: 46 pre-existing failures (same suites as baseline — GameBootService, ImageViewModel, ProvidersViewModel, PersonaCreateViewModel), **0 new failures**.
+- Integration: `local-stack:test` (check.sh) passes fully, including AC-1 grep and AC-10 static-serve/config-swap.
+- Visual: Settings → Audio "Speech (Voice Model)" card — AI visual validation **95/100 PASS**.
+- Baseline: 46 pre-existing failures, 0 new failures.
