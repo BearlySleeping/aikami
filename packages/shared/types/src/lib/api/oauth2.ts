@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/style/useNamingConvention: OAuth2 API uses snake_case fields */
 /* eslint-disable @typescript-eslint/no-invalid-void-type */
-import type { OAuthExecuteData } from '../firestore/oauth2.ts';
+import type { OAuthExecuteData } from '../domain/oauth2.ts';
 
 /**
  * Some providers uses number as id, some uses string. We don't know which one,

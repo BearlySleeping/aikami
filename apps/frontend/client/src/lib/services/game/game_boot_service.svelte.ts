@@ -21,7 +21,7 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
-import { personaService } from '../persona/persona_firestore.svelte';
+import { personaService } from '../persona/persona_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */

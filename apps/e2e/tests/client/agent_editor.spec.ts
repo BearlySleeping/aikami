@@ -43,8 +43,11 @@ test.describe('Agent Editor — Dev Sandbox', () => {
     await expect(page.locator('#agent-prompt')).toBeVisible();
     await expect(page.locator('#agent-schema')).toBeVisible();
 
-    // Close via the modal Cancel button
-    await page.locator('.card .btn-ghost').first().click();
+    // Close via the modal Cancel button. Scoped to the dialog: C-386 seeded
+    // custom agents add `.card .btn-ghost` buttons to the list behind the
+    // modal, so an unscoped `.card .btn-ghost` first() would hit the wrong
+    // element.
+    await page.locator('[role="dialog"] button:has-text("Cancel")').click();
     await expect(page.locator('#agent-name')).not.toBeVisible();
   });
 

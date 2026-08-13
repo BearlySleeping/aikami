@@ -1,5 +1,5 @@
-import { updateUserClaimsOptional, updateUserData } from '@aikami/backend/firestore/user.ts';
-import type { AuthMessagePayload, AuthMessageResponse, UserClaims } from '@aikami/types';
+import { updateUserClaims } from '@aikami/backend/utils/auth.ts';
+import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { logger } from '$logger';
 
 export const confirmTermsAndService = async (
@@ -8,16 +8,14 @@ export const confirmTermsAndService = async (
   try {
     logger.log('confirmTermsAndService', options);
     const { uid } = options;
-    const userUpdateData: Partial<UserClaims> = {
-      status: 'active',
-    };
 
-    await Promise.all([
-      updateUserClaimsOptional(uid, userUpdateData),
-      updateUserData(uid, userUpdateData),
-    ]);
+    // The Firestore user document was deleted (C-386 OQ1). Terms acceptance
+    // is recorded as a status claim on the Auth account itself.
+    await updateUserClaims({
+      id: uid,
+      status: 'active',
+    });
     return undefined;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   } catch (error) {
     logger.error('confirmTermsAndService', error);
     throw error;

@@ -7,7 +7,7 @@
 // Contract: C-337 Complete Character Progression, Classes, Abilities, Skills, and Spells
 
 import Type, { type Static } from 'typebox';
-import { AbilityTypeSchema } from '../firestore/skills.ts';
+import { AbilityTypeSchema } from '../domain/skills.ts';
 
 // ---------------------------------------------------------------------------
 // Ability Activation — how an active ability is triggered

@@ -22,6 +22,7 @@ import {
   authService,
   type ChatMessage,
   chatService,
+  chatStorage,
   choiceHistoryStore,
   connectedChatsService,
   diceService,
@@ -29,7 +30,6 @@ import {
   imageGenerationService,
   impersonationService,
   messageBranchStore,
-  npcChatService,
   npcService,
   personaService,
   SentenceBoundaryChunker,
@@ -274,7 +274,7 @@ export class ChatViewModel
       return super.initialize();
     }
 
-    const chatDataLookup = await npcChatService.getChatById({ chatId: this._chatId });
+    const chatDataLookup = await chatStorage.getChatById({ chatId: this._chatId });
     if (!chatDataLookup) {
       this.error('Chat not found', { chatId: this._chatId });
       this.errorMessage = 'Chat not found';
@@ -1070,7 +1070,7 @@ export class ChatViewModel
       return;
     }
     try {
-      await npcChatService.addMessage({
+      await chatStorage.addMessage({
         chatId,
         uid,
         npcId: this.npc.id,
@@ -1089,9 +1089,9 @@ export class ChatViewModel
       return;
     }
     try {
-      const chat = await npcChatService.getChat({ uid, npcId: this.npc.id });
+      const chat = await chatStorage.getChat({ uid, npcId: this.npc.id });
       if (chat?.id) {
-        await npcChatService.updateChat({ chatId: chat.id, messages: msgs });
+        await chatStorage.updateChat({ chatId: chat.id, messages: msgs });
       }
     } catch {}
   }

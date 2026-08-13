@@ -115,10 +115,10 @@ const _setupServiceOverrides = (): void => {
 };
 
 // ---------------------------------------------------------------------------
-// Mock persona_firestore (pre-existing Bun resolution issue for .svelte → .svelte.ts)
+// Mock persona_service (Bun resolution for .svelte → .svelte.ts)
 // ---------------------------------------------------------------------------
 
-mock.module('$lib/services/persona/persona_firestore.svelte', () => ({
+mock.module('$lib/services/persona/persona_service.svelte', () => ({
   personaService: {
     setActivePersona: mock(async () => {}),
   },

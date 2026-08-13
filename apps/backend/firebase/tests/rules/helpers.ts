@@ -1,4 +1,5 @@
 // apps/backend/firebase/tests/rules/helpers.ts
+// biome-ignore-all lint/style/noNonNullAssertion: regex capture parsing in the seed path builder
 
 import type { RulesTestContext } from '@firebase/rules-unit-testing';
 import { assertFails, assertSucceeds, rulesTest } from '@snorreks/firestack/testing';
@@ -12,6 +13,8 @@ export type TestHelpers = {
   cleanup: () => Promise<void>;
   assertSucceeds: typeof assertSucceeds;
   assertFails: typeof assertFails;
+  /** Seeds a document bypassing rules (admin SDK equivalent). */
+  seed: (options: { path: string[]; data: Record<string, unknown> }) => Promise<void>;
 };
 
 /**
@@ -30,5 +33,26 @@ export async function getTestHelpers(): Promise<TestHelpers> {
     cleanup,
     assertSucceeds,
     assertFails,
+    seed: async ({ path, data }) => {
+      // `path` is an alternating collection/doc segment list, e.g.
+      // ['chats', 'chat-1'] or ['users', 'u1', 'notifications', 'n1'].
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        let ref = ctx.firestore() as unknown as {
+          collection(name: string): unknown;
+          doc(id: string): unknown;
+        };
+        for (let i = 0; i < path.length; i += 2) {
+          const collection = path[i]!;
+          const doc = path[i + 1];
+          if (doc === undefined) {
+            throw new Error(`seed: path must be alternating collection/doc: ${path.join('/')}`);
+          }
+          ref = (ref.collection(collection) as unknown as {
+            doc(id: string): unknown;
+          }).doc(doc) as unknown as typeof ref;
+        }
+        await (ref as unknown as { set(data: Record<string, unknown>): Promise<void> }).set(data);
+      });
+    },
   };
 }

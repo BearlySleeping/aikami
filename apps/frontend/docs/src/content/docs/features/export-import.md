@@ -5,6 +5,8 @@ description: Export your chats, characters, and sessions in multiple formats. Im
 
 The **Export & Data** system lets you back up, share, and relive your adventures. Export individual chats as JSONL or plain text, download completed sessions as EPUB novels, save characters as portable `.aikami.json` or `.aikami.png` cards, or create a full backup zip of everything.
 
+> 🔒 **Local-first**: Your chats, characters, and personas live on your device in a local database. Everything works fully offline — export is the way to move your data between devices or keep a backup.
+
 ## Export Formats
 
 | Format | What It Exports | File Extension |
