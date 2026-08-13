@@ -1,12 +1,24 @@
 // packages/frontend/configs/src/lib/environment.ts
 /** biome-ignore-all lint/style/useNamingConvention: env variables should be UPPER_CASE */
 
-import { MODE_PROJECT_MAP } from '@aikami/constants';
+import {
+  EMULATOR_PORTS as BASE_EMULATOR_PORTS,
+  MODE_PROJECT_MAP,
+  withPortOffset,
+} from '@aikami/constants';
 import { FrontendAppIdSchema, LogLevelSchema, ModeSchema } from '@aikami/schemas';
 import { toAppError } from '@aikami/utils';
 import Type from 'typebox';
 
-export { EMULATOR_PORTS } from '@aikami/constants';
+// Shifted by PUBLIC_EMULATOR_PORT_OFFSET for contract-scoped pipeline runs
+// (set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts) so this app's
+// Firebase SDK connects to its own per-contract emulator instance instead of
+// colliding with another concurrently-running contract. 0 in normal dev.
+const emulatorPortOffset = Number(
+  (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_EMULATOR_PORT_OFFSET ||
+    0,
+);
+export const EMULATOR_PORTS = withPortOffset(BASE_EMULATOR_PORTS, emulatorPortOffset);
 
 /**
  * 1. MASTER SCHEMA (TypeBox — used for type inference only)

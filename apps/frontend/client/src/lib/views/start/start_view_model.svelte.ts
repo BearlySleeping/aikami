@@ -12,8 +12,8 @@ import {
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
-  authService,
   campaignService,
   equipmentService,
   gameModeService,
@@ -35,20 +35,11 @@ import type { SaveSlotInfo } from '$types';
 export type StartViewModelOptions = BaseViewModelOptions;
 
 export type StartViewModelInterface = BaseViewModelInterface & {
-  /** Whether the user is currently signed in. */
-  readonly isLoggedIn: boolean;
-
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
 
-  /** Whether a Google sign-in or sign-out is in progress. */
-  readonly isSigningIn: boolean;
-
   /** An initialization error message, or null when initialized successfully. */
   readonly initError: string | null;
-
-  /** The logged-in player's display name, or undefined. */
-  readonly playerDisplayName: string | undefined;
 
   /** Whether the credits modal is visible. */
   readonly showCredits: boolean;
@@ -75,12 +66,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   continueGame(): Promise<void>;
 
   startGame(): Promise<void>;
-
-  /** Signs in with Google (optional). Updates to "Sign Out" when logged in. */
-  loginWithGoogle(): Promise<void>;
-
-  /** Signs out the current user. */
-  signOut(): Promise<void>;
 
   /** Navigates to the options/settings screen. */
   goToOptions(): Promise<void>;
@@ -215,9 +200,6 @@ class StartViewModel
   extends BaseViewModel<StartViewModelOptions>
   implements StartViewModelInterface
 {
-  /** Private — tracks sign-in/sign-out progress to prevent double-clicks. */
-  private _isSigningIn = $state(false);
-
   /** Initialization error message — null when initialization succeeded. */
   private _initError = $state<string | null>(null);
 
@@ -251,28 +233,13 @@ class StartViewModel
   selectedPackId = $state<string | undefined>(undefined);
 
   /** @inheritdoc */
-  get isLoggedIn(): boolean {
-    return authService.isLoggedIn;
-  }
-
-  /** @inheritdoc */
   get isTauri(): boolean {
-    return typeof window !== 'undefined' && '__TAURI__' in window;
-  }
-
-  /** @inheritdoc */
-  get isSigningIn(): boolean {
-    return this._isSigningIn;
+    return isTauri();
   }
 
   /** @inheritdoc */
   get initError(): string | null {
     return this._initError;
-  }
-
-  /** @inheritdoc */
-  get playerDisplayName(): string | undefined {
-    return authService.currentUser?.displayName || authService.currentUser?.email || undefined;
   }
 
   /** @inheritdoc */
@@ -355,42 +322,6 @@ class StartViewModel
 
     await super.initialize();
     this._showLoadingView = false;
-  }
-
-  /** @inheritdoc */
-  async loginWithGoogle(): Promise<void> {
-    if (this._isSigningIn) {
-      return;
-    }
-
-    this._isSigningIn = true;
-    authService.setIsChangingAuthState(true);
-
-    try {
-      await authService.socialSignIn('google');
-    } catch (error) {
-      this.debug('loginWithGoogle:error', { error: String(error) });
-    } finally {
-      authService.setIsChangingAuthState(false);
-      this._isSigningIn = false;
-    }
-  }
-
-  /** @inheritdoc */
-  async signOut(): Promise<void> {
-    if (this._isSigningIn) {
-      return;
-    }
-
-    this._isSigningIn = true;
-
-    try {
-      await authService.signOut();
-    } catch (error) {
-      this.debug('signOut:error', { error: String(error) });
-    } finally {
-      this._isSigningIn = false;
-    }
   }
 
   /** @inheritdoc */

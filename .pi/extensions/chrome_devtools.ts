@@ -18,6 +18,7 @@
 //   AIKAMI_MODE          — determines which port to target
 //   AIKAMI_ROOT          — project root
 
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
@@ -43,15 +44,25 @@ function getRoot(): string {
   return process.env.AIKAMI_ROOT || process.cwd();
 }
 
+/** Set by herdr_adapter.ts for contract-scoped pipeline runs — same offset
+ *  formula as scripts/src/lib/herdr/session.ts's dev-service tabs, so this
+ *  inspects the correct per-contract client instance. 0 otherwise. */
+function getEmulatorPortOffset(): number {
+  return Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+}
+
 function getAppUrl(app: string): string {
   const mode = getMode();
+  const offset = getEmulatorPortOffset();
   const modePorts = PORTS[mode as keyof typeof PORTS];
   if (modePorts && app in modePorts) {
     const port = (modePorts as Record<string, number>)[app];
-    return `http://localhost:${port}`;
+    if (port !== undefined) {
+      return `http://localhost:${port + offset}`;
+    }
   }
   // Fallback: use emulator client
-  return `http://localhost:${PORTS.emulator.client}`;
+  return `http://localhost:${PORTS.emulator.client + offset}`;
 }
 
 /** Check if Chromium is already running with remote debugging. */
@@ -66,10 +77,27 @@ async function isCdpAlive(): Promise<boolean> {
   }
 }
 
+/** Resolve an executable from PATH (extensions run under Node — no `Bun.which`). */
+function which(bin: string): string | null {
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) {
+      continue;
+    }
+    const candidate = path.join(dir, bin);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // Not here — keep looking.
+    }
+  }
+  return null;
+}
+
 /** Find the chromium binary — prefer Nix-provided, fall back to PATH. */
 function findChromium(): string | null {
   for (const bin of ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome']) {
-    const p = Bun.which(bin);
+    const p = which(bin);
     if (p) {
       return p;
     }
@@ -113,8 +141,9 @@ async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: stri
     'about:blank',
   ];
 
-  const proc = Bun.spawn([chromiumPath, ...args], {
+  const proc = spawn(chromiumPath, args, {
     stdio: ['ignore', 'ignore', 'ignore'],
+    detached: true,
   });
   proc.unref();
   spawnedChromePid = proc.pid ?? null;

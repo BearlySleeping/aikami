@@ -42,7 +42,8 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import { PORTS } from '../../../../packages/shared/constants/src/index';
+import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
+import { hasDirenv } from '../env/direnv_detect';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -77,6 +78,10 @@ export type SessionConfig = {
   /** Canonical service names to start. */
   services: DevService[];
   force?: boolean;
+  /** Kill whatever's already bound to each requested service's port before
+   *  starting it, instead of failing with EADDRINUSE. Does NOT recreate the
+   *  workspace (unlike `force`) — only frees the ports. */
+  forcePorts?: boolean;
   join?: boolean;
   projectRoot?: string;
   /**
@@ -190,6 +195,38 @@ export const ALL_SERVICES: DevService[] = [
   'tauri',
 ];
 
+/** Services whose ports vary per contract — dev servers with a Firebase-
+ *  adjacent port that collides across concurrent contract pipelines.
+ *  voice/image/text stay on shared base ports (heavy singleton backends). */
+const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site', 'firebase']);
+
+/** Resolve a service's ready port, shifted by a contract's port offset
+ *  when that service is offset-aware. */
+export const resolveReadyPort = (
+  serviceKey: DevService,
+  mode: AikamiMode,
+  offset: number,
+): number | undefined => {
+  const port = SERVICE_DEFS[serviceKey].readyPort?.(mode);
+  if (port === undefined || offset === 0 || !OFFSET_AWARE_SERVICES.has(serviceKey)) {
+    return port;
+  }
+  return port + offset;
+};
+
+/** Build the wrapped shell command for a service, prefixing
+ *  PUBLIC_EMULATOR_PORT_OFFSET / PORT env vars for contract-scoped runs so
+ *  concurrent contracts never bind the same port. */
+const buildServiceCommand = (serviceKey: DevService, mode: AikamiMode, offset: number): string => {
+  const command = SERVICE_DEFS[serviceKey].command(mode);
+  if (offset === 0 || !OFFSET_AWARE_SERVICES.has(serviceKey)) {
+    return command;
+  }
+  const port = resolveReadyPort(serviceKey, mode, offset);
+  const portEnv = port !== undefined ? ` PORT=${port}` : '';
+  return `PUBLIC_EMULATOR_PORT_OFFSET=${offset}${portEnv} ${command}`;
+};
+
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   if (![...ALL_SERVICES, 'all'].includes(input)) {
@@ -214,15 +251,17 @@ export const expandServices = (inputs: ServiceInput[]): DevService[] => {
 export const buildSessionName = (mode: AikamiMode, contractId?: string): string =>
   contractId ? `aikami-${mode}-${contractId}` : `aikami-${mode}`;
 
-/** Extract the current contract ID from the pipeline env, or undefined. */
-export const currentContractId = (): string | undefined => {
-  const contractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
-  if (contractPath) {
-    const m = contractPath.match(/(C-\d+|MIG-\d+)/);
-    return m?.[0];
+/** Extract a contract ID (e.g. `C-379`) from a contract file path, or undefined. */
+export const parseContractIdFromPath = (contractPath: string | undefined): string | undefined => {
+  if (!contractPath) {
+    return undefined;
   }
-  return undefined;
+  return contractPath.match(/(C-\d+|MIG-\d+)/)?.[0];
 };
+
+/** Extract the current contract ID from the pipeline env, or undefined. */
+export const currentContractId = (): string | undefined =>
+  parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH);
 
 /** Resolve the workspace name for a given mode in the current context. */
 export const resolveSessionName = (mode: AikamiMode): string =>
@@ -618,14 +657,11 @@ export const killPort = (port: number): Promise<void> =>
 
 // ── Direnv wrapper ─────────────────────────────────────────
 
-/** Cached after first check — neither changes mid-run. */
-let _hasDirenv: boolean | undefined;
-const hasDirenv = (): boolean => {
-  if (_hasDirenv === undefined) {
-    _hasDirenv = Boolean(Bun.which('direnv'));
-  }
-  return _hasDirenv;
-};
+/**
+ * Shared `hasDirenv()` lives in env/direnv_detect.ts so scripts AND pi
+ * extensions use the same check — it also documents the non-direnv
+ * fallback contract (manual tool installs + .env.local).
+ */
 
 /**
  * Resolved once via Bun.which (our process's PATH), not left as a bare
@@ -880,12 +916,14 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     mode,
     services,
     force = false,
+    forcePorts = false,
     join = false,
     wait = true,
     waitTimeoutMs = 120_000,
     projectRoot = process.cwd(),
   } = config;
   const workspaceLabel = resolveSessionName(mode);
+  const offset = contractPortOffset(currentContractId());
 
   if (services.length === 0) {
     throw new Error(
@@ -894,6 +932,22 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   }
 
   await ensureServer();
+
+  // ── Force-ports: kill whatever's squatting on our target ports first ──
+  // Distinct from `force` (which recreates the whole workspace) — this only
+  // clears the ports, so it's safe to use even when the workspace/tabs
+  // already exist and are healthy. killPort() only kills known dev-tool
+  // process names (node/bun/vite/uwsgi/python/firebase), never unrelated ones.
+  if (forcePorts) {
+    await Promise.all(
+      services.map(async (s) => {
+        const port = resolveReadyPort(s, mode, offset);
+        if (port !== undefined) {
+          await killPort(port);
+        }
+      }),
+    );
+  }
 
   const existingWsId = await findWorkspace(workspaceLabel);
 
@@ -939,7 +993,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     // Rename initial tab and run command
     const rootPaneId = r.result.root_pane.pane_id;
     await herdr(['tab', 'rename', `${workspaceId}:1`, svc.name]);
-    await herdr(['pane', 'run', rootPaneId, wrapCommand(svc.command(mode))]);
+    await herdr(['pane', 'run', rootPaneId, wrapCommand(buildServiceCommand(first, mode, offset))]);
     console.log(`  ✓ Tab: ${svc.name}`);
 
     // Add remaining services as new tabs
@@ -957,7 +1011,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         '--no-focus',
       ]);
       if (tabR?.result) {
-        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(s.command(mode))]);
+        await herdr([
+          'pane',
+          'run',
+          tabR.result.root_pane.pane_id,
+          wrapCommand(buildServiceCommand(service, mode, offset)),
+        ]);
         console.log(`  ✓ Tab: ${s.name}`);
       }
     }
@@ -973,12 +1032,17 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         const tabId = await findTab(workspaceId, svc.name);
         if (tabId) {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
-          const port = svc.readyPort?.(mode);
+          const port = resolveReadyPort(service, mode, offset);
           if (servicePane) {
             const state = await assessServicePane(servicePane.pane_id, port);
             if (state === 'crashed') {
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
-              await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command(mode))]);
+              await herdr([
+                'pane',
+                'run',
+                servicePane.pane_id,
+                wrapCommand(buildServiceCommand(service, mode, offset)),
+              ]);
               continue;
             }
             if (state === 'booting') {
@@ -1002,7 +1066,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         '--no-focus',
       ]);
       if (tabR?.result) {
-        await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(svc.command(mode))]);
+        await herdr([
+          'pane',
+          'run',
+          tabR.result.root_pane.pane_id,
+          wrapCommand(buildServiceCommand(service, mode, offset)),
+        ]);
         console.log(`  ✓ Tab: ${svc.name}`);
       }
     }
@@ -1033,7 +1102,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
       if (!pane) {
         continue;
       }
-      const port = SERVICE_DEFS[service].readyPort?.(mode);
+      const port = resolveReadyPort(service, mode, offset);
       if ((await assessServicePane(pane.pane_id, port)) === 'crashed') {
         crashedOthers.push(tabName);
       }
@@ -1119,6 +1188,7 @@ export const stopServices = async (config: {
 export const restartServices = async (config: SessionConfig): Promise<string> => {
   const { mode, services, projectRoot } = config;
   const workspaceLabel = resolveSessionName(mode);
+  const offset = contractPortOffset(currentContractId());
 
   const svcNames = services.map((s) => SERVICE_DEFS[s].name).join(', ');
   console.log(`🔄 Restarting ${svcNames}...`);
@@ -1134,10 +1204,10 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
   }
 
   // Force-kill any stale processes on the target ports so the cooldown
-  // isn't defeated by orphaned Vite/uwsgi processes from prior runs.
+  // isn't defeated by orphaned Vite/uwsgi processes from prior runs. Uses
+  // this workspace's own offset — never touches another contract's ports.
   for (const service of services) {
-    const def = SERVICE_DEFS[service];
-    const port = def.readyPort?.(mode);
+    const port = resolveReadyPort(service, mode, offset);
     if (port !== undefined) {
       await killPort(port);
     }
@@ -1253,6 +1323,10 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
 
     const parsed = parseWorkspaceName(ws.label);
     const wsMode = parsed ?? 'emulator';
+    // Derive the offset from THIS workspace's own label — listServices
+    // inspects every aikami workspace, not just the current process's own
+    // contract, so it must never assume `currentContractId()`.
+    const wsOffset = contractPortOffset(contractIdFromSessionName(ws.label));
 
     const tabs = await getWorkspaceTabs(ws.workspace_id);
     const tabIdByName = new Map(tabs.map((t) => [t.label, t.tab_id]));
@@ -1266,7 +1340,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
         service: svc,
         name: def.name,
         running,
-        readyPort: def.readyPort ? def.readyPort(wsMode) : undefined,
+        readyPort: resolveReadyPort(svc, wsMode, wsOffset),
         portOpen: false,
         state: running ? 'booting' : 'stopped',
       };
@@ -1283,7 +1357,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
           if (!pane) {
             return;
           }
-          const port = def.readyPort?.(wsMode);
+          const port = resolveReadyPort(s.service, wsMode, wsOffset);
           s.state = await assessServicePane(pane.pane_id, port);
           if (port !== undefined) {
             s.portOpen = await isPortReady(port);
@@ -1358,6 +1432,7 @@ export const waitForReady = async (
 ): Promise<string[]> => {
   const { services, mode } = config;
   const workspaceLabel = resolveSessionName(mode);
+  const offset = contractPortOffset(currentContractId());
 
   const wsId = await findWorkspace(workspaceLabel);
   if (!wsId) {
@@ -1366,12 +1441,12 @@ export const waitForReady = async (
   }
 
   console.log('  Waiting for services...');
-  const targets = services.map((s) => SERVICE_DEFS[s]);
   const failed: string[] = [];
 
   await Promise.all(
-    targets.map(async (svc) => {
-      const port = svc.readyPort?.(mode);
+    services.map(async (serviceKey) => {
+      const svc = SERVICE_DEFS[serviceKey];
+      const port = resolveReadyPort(serviceKey, mode, offset);
       const deadline = Date.now() + timeoutMs;
 
       // Services with no HTTP port (tauri, preview-*) can't be probed via

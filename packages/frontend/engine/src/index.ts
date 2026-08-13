@@ -375,13 +375,6 @@ export type {
 export { StringRegistryService } from './services/string_registry_service.ts';
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
-// Firebase SQL Connect sync (C-195)
-export type {
-  FirebaseSqlConnectSyncOptions,
-  SqlConnectDelta,
-  SqlConnectDeltaType,
-} from './sync/firebase_sql_connect_sync.ts';
-export { FirebaseSqlConnectSync } from './sync/firebase_sql_connect_sync.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   getMapPixelBounds,

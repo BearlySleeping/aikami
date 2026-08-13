@@ -17,6 +17,8 @@ import { register } from './lib/register.ts';
 import { sendResetPassword } from './lib/send_reset_password.ts';
 import { updateEmail } from './lib/update_email.ts';
 
+export { pollDeviceHandoff } from './lib/poll_device_handoff.ts';
+
 type AssertUserFn = (value: UserClaims | undefined) => asserts value is UserClaims;
 
 export const assertAuthUser: AssertUserFn = (value) => {

@@ -26,6 +26,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 4. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
 5. **No automated dependency updates** — Dependabot/Renovate not configured.
 6. **Turso local DB lifecycle** — the embedded libSQL store is initialized by `LocalDatabaseFactory` at boot; schema changes must remain compatible with existing local saves (migration strategy tracked under C-321).
+7. **No cross-origin isolation (no SharedArrayBuffer)** — the web client deliberately serves `COOP: same-origin-allow-popups` and **no COEP**, so cross-origin isolation is off everywhere. This is required for Firebase Auth popup sign-in (strict COOP severs the popup opener). All SAB-dependent code (engine zero-copy buffers, sqlite OPFS, Kokoro streaming pipeline) was removed; graceful fallbacks are in place. See [Cross-Origin Isolation — Gotchas & Lessons Learned](../gotchas/cross-origin-isolation.md).
 
 ## Feature Gaps
 
@@ -103,6 +104,15 @@ A validation script (`scripts/src/lib/ops/validate_gql_fields.ts`) enforces this
 ### 2xx on Business Failures (Sync Queues)
 
 If a future sync queue rejects server-side business validation (e.g. insufficient gold for a purchase), the backend should respond with a 2xx success status and carry the error in the response body. Responding with a 4xx can jam an upload queue and block all subsequent sync operations. This only matters once the Turso embedded-replica sync (C-357) is wired end-to-end.
+
+### Cross-Origin Isolation (COOP/COEP) — Do Not Re-enable
+
+The web client must stay **non-cross-origin-isolated**: `COOP: same-origin-allow-popups` and **no COEP** (see `apps/frontend/client/firebase.json`). Rules:
+
+- **Never set `Cross-Origin-Embedder-Policy: require-corp`** on the client — it provides zero isolation benefit without strict COOP and only blocks cross-origin subresources (e.g. Google avatar images).
+- **Never set `COOP: same-origin` (strict)** on the client — it severs `window.opener` on the cross-origin Firebase auth handler popup (`aikami-production.firebaseapp.com/__/auth/handler`), breaking Google sign-in with `auth/popup-closed-by-user`.
+- **No header combination yields both popup sign-in and SharedArrayBuffer** — Chrome only grants `crossOriginIsolated` with strict `same-origin` COOP. If SharedArrayBuffer is ever needed again, sign-in must use the redirect flow (no popup).
+- **Do not reintroduce `SharedArrayBuffer` / `Atomics` / `crossOriginIsolated`-gated code** in the client or engine — it is dead weight that throws at runtime (`SharedArrayBuffer is not defined`) wherever isolation is off. The Tauri desktop build never had SAB either (WebKitGTK/WKWebView don't implement it).
 
 ## TODO (High Priority)
 

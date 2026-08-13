@@ -68,8 +68,6 @@ class AppBarViewModel
     switch (this.currentRoute) {
       case 'dashboard':
         return 'Dashboard';
-      case 'personas':
-        return 'Personas';
       case 'login':
         return 'Login';
       default:

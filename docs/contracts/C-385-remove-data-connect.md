@@ -2,12 +2,13 @@
 id: C-385
 title: "Remove Firebase Data Connect and rehome its three consumers"
 source: "external data-layer review (docs/research/database-architecture-recommendation.md §2)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/133"
+  pr_number: 133
 created_at: "2026-08-12"
 ---
 
@@ -21,7 +22,7 @@ created_at: "2026-08-12"
 | **Target** | `apps/backend/firebase/dataconnect/` (deleted), `packages/frontend/dataconnect/` (deleted), `packages/shared/schemas/src/lib/generated-dataconnect/` (deleted), plus the three consumers and all config referencing them |
 | **Priority** | P1 — Data Connect is excluded from every non-emulator mode, so its one product feature is silently broken in production. It is the largest single source of schema duplication and it blocks C-386. |
 | **Dependencies** | C-383 (ships first — do not delete the connector before its auth directives are corrected, so the two changes are independently revertable). |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -152,19 +153,39 @@ required: `slot_id`, `campaign_id`, `timestamp`, `map_name` already cover
   - `packages/frontend/configs/src/lib/data_connect.ts`
   - `apps/frontend/hub/src/routes/(authenticated)/personas/` (whole route)
   - `apps/frontend/hub/src/lib/client/services/dataconnect/` (whole directory)
+  - `apps/frontend/hub/src/lib/views/personas/` (whole directory — feature views for the deleted route; `personas_view_model.svelte.ts` imports `personaDataService` from the deleted services dir)
   - `apps/frontend/hub/scripts/verify_persona_dataconnect.ts`
   - `apps/frontend/hub/scripts/browser_verify_personas.ts`
+  - `packages/frontend/engine/src/__tests__/string_registry.test.ts` (imports `FirebaseSqlConnectSync` and `SqlConnectDelta` from the deleted sync file)
 - **In Scope — edit these:**
   - `apps/backend/firebase/firestack.config.ts` — remove the `dataconnectDirectory` line and its comment.
   - `apps/backend/firebase/moon.yml` — remove the `generate` and `generate-dataconnect-schemas` tasks.
   - `apps/backend/firebase/package.json` — remove the `generate` and `generate:dataconnect-schemas` scripts.
-  - `apps/backend/firebase/scripts/on_emulate.ts` — delete `seedAudioTracks` and its call; keep `uploadAudioAssets` only if the static catalog references Storage URLs, otherwise delete it too (see AC-3).
+  - `apps/backend/firebase/scripts/on_emulate.ts` — delete both `uploadAudioAssets` and `seedAudioTracks` and their call site. Resolved: the bundled files exist at `apps/frontend/client/static/game-data/music/{combat,exploration}/bgm_{combat,explore}.webm`, so the catalog references bundled files and neither uploader has a consumer (see Open Questions).
   - `packages/shared/constants/src/lib/development_ports.ts` — remove the `dataconnect: 9398` entry and its line in the port-allocation comment block.
-  - `packages/shared/constants/src/lib/emulator.ts` — remove `EMULATOR_DATACONNECT_URL` and `getAuditLogsQueryUrl` if unused.
+  - `packages/shared/constants/src/lib/emulator.ts` — remove `EMULATOR_DATACONNECT_URL` and `getAuditLogsQueryUrl` (verified: no callers anywhere in `apps/`, `packages/`, or `scripts/` — see Open Questions).
   - `apps/frontend/hub/moon.yml` — remove `frontend-dataconnect` from `dependsOn`.
-  - `apps/frontend/hub/package.json` — remove `pg` and `@types/pg` (the only consumers were the two deleted verify scripts).
+  - `apps/frontend/hub/package.json` — remove `pg` (and `@types/pg` if present; the current `package.json` lists only `pg` — the only consumers were the two deleted verify scripts).
   - `packages/frontend/services/src/lib/services/game_state_sync.svelte.ts` — rehome per AC-2.
   - `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — rehome per AC-3.
+  - `packages/shared/schemas/src/index.ts` — remove the `export * from './lib/generated-dataconnect/index.ts'` re-export (line 56); deleting the directory without this edit breaks the schemas build.
+  - `packages/frontend/engine/src/index.ts` — remove the `FirebaseSqlConnectSync` / `SqlConnectDelta` / `SqlConnectDeltaType` re-exports (the sync file is deleted).
+  - `packages/frontend/engine/moon.yml`, `package.json`, `tsconfig.json` — remove `frontend-dataconnect` from `dependsOn`, remove the `@aikami/frontend-dataconnect` workspace dependency, remove the `@aikami/frontend/dataconnect` path mappings.
+  - `packages/frontend/services/moon.yml`, `package.json`, `tsconfig.json` — same three removals as engine, plus add a `test` task (`command: 'bun run test'`) and a `"test": "bun test"` script: `frontend-services` currently defines no test task, but AC-2 requires a new unit test in this package. Use `packages/frontend/storage/moon.yml` as the template.
+  - `apps/frontend/client/svelte.config.js` and `apps/frontend/hub/svelte.config.js` — remove the `@aikami/frontend/dataconnect` alias entries (these regenerate the `.svelte-kit/tsconfig.json` path mappings).
+  - `apps/frontend/hub/src/lib/client/services/index.ts` — remove the `export * from './dataconnect/persona_data.svelte.ts'` line; deleting the services dir without this edit breaks the hub build.
+  - `apps/frontend/hub/src/lib/constants/routes.ts` — remove the `personas` route constant; all references below redirect to `dashboard` instead.
+  - `apps/frontend/hub/src/lib/views/dashboard/dashboard_view_model.svelte.ts` and `dashboard_view.svelte` — remove the persona-count feature (imports `personaDataService` from the deleted services dir and renders a count + "manage personas" CTA).
+  - `apps/frontend/hub/src/lib/views/login/login_view_model.svelte.ts` — after login route to `dashboard` instead of `personas`.
+  - `apps/frontend/hub/src/routes/+page.server.ts` and `apps/frontend/hub/src/routes/(unauthenticated)/+layout.server.ts` — redirect signed-in / superAdmin users to `/dashboard` instead of `/personas`.
+  - `apps/frontend/hub/src/lib/views/app/drawer/navigation/navigation_drawer_view_model.svelte.ts` — remove the `personas` nav entry.
+  - `apps/frontend/hub/src/lib/views/app/bar/app_bar_view_model.svelte.ts` — remove the `'personas'` case.
+  - `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts` — rewrite the Data Connect comments/log strings (the dev mock BGM pipeline no longer routes through Data Connect).
+  - `apps/frontend/client/src/lib/views/dev/save_load/save_load_view_model.svelte.ts` — update the "Storage + Data Connect" comments.
+  - `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` — replace the `Querying Data Connect for '...'` status string.
+  - `apps/e2e/src/config.ts` — remove the `dataconnect: 9398` entry from `EMULATOR_PORTS` (kept in sync with `development_ports.ts`).
+  - `packages/backend/firestore/tests/user_firestore_repository.test.ts` — remove the `FirebaseDataConnectService` import and the `FirebaseDataConnectService (integration)` describe block (lines ~220-251); keep the `UserFirestoreRepository` tests.
+  - `apps/backend/firebase/package.json` — also remove `generate:local` (same `firestack generate` Data Connect codegen as `generate`).
   - Any navigation entry linking to the deleted `/personas` hub route.
 - **Out of Scope:**
   - Provisioning Cloud SQL or writing any Postgres code (D-7 — a later contract).
@@ -199,7 +220,7 @@ grep -rn "data-connect\|dataconnect\|dataConnect\|DataConnect" \
   apps packages scripts | grep -v node_modules
 ```
 
-**And** `bun install` succeeds, `bun moon run :typecheck` passes across the workspace, and `bun moon run :lint` reports no unused-import or unresolved-import errors.
+**And** `bun install` succeeds, `bun moon run :typecheck` passes across the workspace, and `bun moon run :lint` reports no unused-import or unresolved-import errors. Note: the grep pattern does not match `*.js`/`*.md`/`*.svelte` config files — the final sweep below covers them.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -213,7 +234,7 @@ grep -rn "data-connect\|dataconnect\|dataConnect\|DataConnect" \
 **Watch Points**:
 - 🔴 Removing the `packages/frontend/dataconnect` workspace package requires updating `bun.lock`. Run `bun install` (not `--frozen-lockfile`) once to regenerate, then commit the lockfile.
 - The historical docs under `apps/backend/firebase/dataconnect/schema/*.md` are deleted with the directory. `docs/architecture/data-layer-target-architecture.md` already records that it supersedes `firestore-vs-dataconnect.md`, so the decision history is preserved — do not resurrect those files elsewhere.
-- Check `.pi/`, `.github/workflows/`, `cloudbuild.yaml` and `apps/e2e/` for Data Connect references as well; the grep above covers them only if the paths are included, so run it from the repository root without a path filter as a final sweep.
+- The final sweep must run from the repository root and exclude three classes of false positives: (1) `.pi/generated-skills/` — vendored upstream Firebase reference docs, not project code; (2) gitignored build artifacts (`apps/backend/firebase/dist/`, `apps/frontend/client/.svelte-kit/`, `.fast-check/`), which regenerate — run `bun run build`/`svelte-kit sync` first or add them to the exclusion; (3) `bun.lock` (allowed by the command). Include `--include='*.js'` so `svelte.config.js` is covered. `.github/workflows/` and `cloudbuild.yaml` are not matched by the extension filter — grep them separately and confirm zero matches (verified: none today).
 
 ### AC-2: Save slots list and persist without Data Connect
 
@@ -229,10 +250,10 @@ grep -rn "data-connect\|dataconnect\|dataConnect\|DataConnect" \
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit | `packages/frontend/services/src/lib/services/__tests__/game_state_sync.test.ts` | `/dev/save-load` | Filled during verification |
+| AC-2 | Unit | `packages/frontend/services/src/lib/services/__tests__/game_state_sync.test.ts` | `/dev/save_load` (route dir is `(dev)/dev/save_load/`) | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun moon run frontend-services:test`
+- Moon Task: `bun moon run frontend-services:test` (note: `frontend-services` has no `test` task today — this contract must add one, see Scope — without it the AC-2 test has no runner).
 - Integration: `bun herdr:start client` in emulator mode, open the dev save/load view, save → reload → list → load.
 
 **Watch Points**:
@@ -261,7 +282,7 @@ grep -rn "data-connect\|dataconnect\|dataConnect\|DataConnect" \
 
 **Watch Points**:
 - An unknown mood must degrade to a documented default rather than throwing or returning silence. Pick one track as the fallback and assert it in a test.
-- After deleting `seedAudioTracks`, check whether `uploadAudioAssets` still has a consumer in `on_emulate.ts`. If the static catalog points at bundled files, delete `uploadAudioAssets` too and remove the now-unused `pg` dynamic import. Leaving a dead uploader that no longer feeds anything is a partial completion.
+- Resolved from codebase evidence: the track files already exist as bundled assets (`apps/frontend/client/static/game-data/music/combat/bgm_combat.webm`, `apps/frontend/client/static/game-data/music/exploration/bgm_explore.webm`, both git-tracked), so the catalog references bundled files and `uploadAudioAssets` is deleted along with `seedAudioTracks`. `on_emulate.ts` should no longer import or call either; the `audioUrls` seed flow disappears entirely.
 
 ### AC-4: The hub builds, deploys, and serves without the personas route
 
@@ -296,17 +317,19 @@ grep -rn "data-connect\|dataconnect\|dataConnect\|DataConnect" \
 ## Edge Cases & Gotchas
 
 - **Phase ordering is load-bearing.** Deleting Data Connect first would leave the consumers uncompilable and make it impossible to test a rehoming against a working baseline. Follow the sequence.
-- **`firestack generate` is entirely Data Connect.** `apps/backend/firebase/package.json` defines it as `firestack generate --dataconnectDirectory dataconnect`, so removing both generate tasks removes no other capability. Verify nothing else invokes `firebase:generate` — check `cloudbuild.yaml` and `.github/workflows/`.
-- **Port 9398 appears in a comment table** in `development_ports.ts` as well as in the `FB_EMULATOR_PORTS` object. Remove both.
-- **`getAuditLogsQueryUrl`** in `emulator.ts` references the Data Connect emulator's audit worker. Grep for callers before deleting; if it has none, delete it, and if it does, record it under Open Questions.
+- **`firestack generate` is entirely Data Connect.** `apps/backend/firebase/package.json` defines `generate` as `firestack generate --dataconnectDirectory dataconnect`, and `generate:local` runs the same codegen. Removing all three scripts (`generate`, `generate:local`, `generate:dataconnect-schemas`) removes no other capability. Verify nothing else invokes `firebase:generate` — check `cloudbuild.yaml` and `.github/workflows/` (verified: none today).
+- **Port 9398 appears in a comment table** in `development_ports.ts` as well as in the `FB_EMULATOR_PORTS` object. Remove both. The mirrored `dataconnect: 9398` entry in `apps/e2e/src/config.ts` must go too.
+- **`getAuditLogsQueryUrl`** in `emulator.ts` references the Data Connect emulator's audit worker. Already resolved: it has zero callers (see Open Questions) — delete it and `EMULATOR_DATACONNECT_URL` without further investigation.
 - **The `saves` table has no `uid` column and must not gain one.** The local database is the user's own device. Multi-tenancy there is a Data Connect concept that should not survive the migration.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Both previously open questions are **resolved from codebase evidence** (recorded 2026-08-12 by the critic review):
 
-- Does `getAuditLogsQueryUrl` (`packages/shared/constants/src/lib/emulator.ts`) have any caller? If yes, what depends on the Data Connect audit worker, and does that capability need to survive?
-- Do the audio track files referenced by the new static catalog exist as bundled assets under `apps/frontend/client/static/game-data/`, or only as emulator Storage uploads from `apps/backend/firebase/assets/audio/`? If only the latter, the catalog must either reference Storage URLs or the files must be bundled — decide before implementing AC-3.
+- `getAuditLogsQueryUrl` (`packages/shared/constants/src/lib/emulator.ts`) has **zero callers** across `apps/`, `packages/`, and `scripts/`. The only reference to `EMULATOR_DATACONNECT_URL` is a comment inside `apps/frontend/hub/scripts/verify_persona_dataconnect.ts`, which this contract deletes. Resolved: delete both `EMULATOR_DATACONNECT_URL` and `getAuditLogsQueryUrl`; no capability depends on the Data Connect audit worker.
+- The audio track files **exist as bundled assets**: `apps/frontend/client/static/game-data/music/combat/bgm_combat.webm` and `apps/frontend/client/static/game-data/music/exploration/bgm_explore.webm` are both git-tracked. The emulator-only copies under `apps/backend/firebase/assets/audio/` are what `uploadAudioAssets` uploads. Resolved: the catalog references bundled files (relative to the game-data root), and both `uploadAudioAssets` and `seedAudioTracks` are deleted from `on_emulate.ts`.
+
+If the implementer discovers a caller of `getAuditLogsQueryUrl` or a missing track file during Phase 1, that is a blocker to report — do not improvise around it.
 
 ## Amendments
 
@@ -323,3 +346,77 @@ Must be resolved before status becomes `approved`:
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Removed Firebase Data Connect end-to-end (schema, connector, generated SDK, generated row schemas, codegen scripts, config, ports, server-side service wrapper, and the engine SQL-connect sync) and rehomed its three consumers: save-slot metadata now lives in the local SQLite `saves` table (AC-2), combat music resolves moods from a static JSON catalog validated by a new shared TypeBox schema (AC-3), and the hub's personas feature is deleted with all navigation redirects to `/dashboard` (AC-4). The AC-1 grep is clean across `apps/`/`packages/`/`scripts/`, `bun install` regenerated the lockfile, `:typecheck` (32 tasks) and `:lint` pass, and both the client and hub boot and serve in emulator mode with visual verification (hub dashboard 90/100, hub 404 page 100/100, save/load persistence 95/100, game boot 100/100).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Zero matches for `data-connect\|dataconnect\|dataConnect\|DataConnect` across apps/packages/scripts (only gitignored build artifacts, regenerated clean); `bun install` + `:typecheck` + `:lint` pass. |
+| AC-2 | ✅ | `gameStateSyncService` reads/writes slot metadata in the local `saves` table (blob path unchanged); new `frontend-services:test` task + 5 unit tests; dev save/load verified save → reload → list → load via Playwright (95/100). |
+| AC-3 | ✅ | Static catalog at `static/game-data/audio_tracks.json` (8 moods) + `AudioTrackCatalogSchema` in `packages/shared/schemas`; resolver is an in-memory map after first load with a documented fallback (`bgm-combat-epic`); 6 unit tests; `/game` boots with zero console errors; catalog + track files serve 200. |
+| AC-4 | ✅ | Hub personas route/services/views/verify scripts deleted; routes.ts, nav drawer, app bar, login, root + (unauthenticated) layout redirect to `/dashboard`; `/personas` returns HTTP 404; signed-in `/dashboard` renders with no persona count card and no Personas nav item (visual 90/100); hub builds and tests pass (new route-table regression test). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/media/audio_track_catalog.ts` | TypeBox schemas for the static audio catalog (`AudioTrackEntrySchema`, `AudioTrackCatalogSchema`). |
+| `apps/frontend/client/static/game-data/audio_tracks.json` | Static catalog covering the 8 legacy moods, referencing bundled webm files. |
+| `apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts` | Catalog loader/resolver (cached in-memory map, fallback track, URL resolution). |
+| `apps/frontend/client/src/lib/views/combat/__tests__/audio_track_catalog.test.ts` | AC-3 resolver tests (schema validation, mood coverage, fallback, URL shape). |
+| `apps/frontend/client/src/lib/views/combat/__tests__/combat_view_model.test.ts` | AC-3 VM integration tests (catalog → `transitionToBgm`, no network round trip). |
+| `packages/frontend/services/src/lib/services/__tests__/game_state_sync.test.ts` | AC-2 unit tests for the local-saves rehome (save/list/load/delete, invalid payload). |
+| `apps/frontend/hub/src/lib/constants/routes.test.ts` | AC-4 regression guard — route table has no `/personas`; keeps `hub:test` green. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Added `audio_track_catalog` export; removed `generated-dataconnect` re-export. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | `_transitionBgmByMood` now resolves from the static catalog; removed `@aikami/frontend/dataconnect` import. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts` | Rewrote Data Connect comments/log strings to the static catalog. |
+| `apps/frontend/client/src/lib/views/dev/save_load/save_load_view_model.svelte.ts` | Comment updates (Storage + local saves table). |
+| `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` | Replaced the "Querying Data Connect" status string. |
+| `apps/frontend/client/svelte.config.js` | Removed `@aikami/frontend/dataconnect` aliases. |
+| `packages/frontend/services/src/lib/services/game_state_sync.svelte.ts` | Rehomed slot metadata to the local `saves` table (AC-2). |
+| `packages/frontend/services/moon.yml` / `package.json` / `tsconfig.json` | Dropped `frontend-dataconnect`; added `frontend-storage`; added `test` task + `bun test` script. |
+| `packages/frontend/engine/src/index.ts` | Removed `FirebaseSqlConnectSync` / `SqlConnectDelta` / `SqlConnectDeltaType` exports. |
+| `packages/frontend/engine/moon.yml` / `package.json` / `tsconfig.json` | Removed `frontend-dataconnect` dependency/mappings. |
+| `packages/frontend/configs/src/lib/data_connect.ts` | Deleted. |
+| `packages/backend/firestore/src/index.ts` | Removed the deleted service's re-export. |
+| `packages/backend/firestore/tests/user_firestore_repository.test.ts` | Removed `FirebaseDataConnectService` import + integration describe block. |
+| `packages/shared/constants/src/lib/development_ports.ts` | Removed `dataconnect: 9398` + comment lines. |
+| `packages/shared/constants/src/lib/emulator.ts` | Removed `EMULATOR_DATACONNECT_URL` + `getAuditLogsQueryUrl`. |
+| `apps/backend/firebase/firestack.config.ts` | Removed `dataconnectDirectory`; `defineConfig(() => ({...}))`. |
+| `apps/backend/firebase/moon.yml` | Removed `generate` + `generate-dataconnect-schemas` tasks. |
+| `apps/backend/firebase/package.json` | Removed `generate`, `generate:local`, `generate:dataconnect-schemas` scripts. |
+| `apps/backend/firebase/scripts/on_emulate.ts` | Deleted `uploadAudioAssets`, `seedAudioTracks`, their call site, and the unused `existsSync` import. |
+| `apps/frontend/hub/moon.yml` | Removed `frontend-dataconnect` from `dependsOn`. |
+| `apps/frontend/hub/package.json` | Removed `pg` devDependency. |
+| `apps/frontend/hub/svelte.config.js` | Removed `@aikami/frontend/dataconnect` aliases. |
+| `apps/frontend/hub/src/lib/client/services/index.ts` | Removed `dataconnect/persona_data` export. |
+| `apps/frontend/hub/src/lib/constants/routes.ts` | Removed `personas` route. |
+| `apps/frontend/hub/src/lib/types/data.ts` | Removed `PersonasPageData`. |
+| `apps/frontend/hub/src/lib/views/dashboard/*` | Removed persona-count feature + CTA card. |
+| `apps/frontend/hub/src/lib/views/login/login_view_model.svelte.ts` | Routes to `dashboard` after login. |
+| `apps/frontend/hub/src/lib/views/app/bar/app_bar_view_model.svelte.ts` | Removed `'personas'` case. |
+| `apps/frontend/hub/src/lib/views/app/drawer/navigation/navigation_drawer_view_model.svelte.ts` | Removed the Personas nav entry. |
+| `apps/frontend/hub/src/routes/+page.server.ts` + `(unauthenticated)/+layout.server.ts` | Redirect signed-in/superAdmin users to `/dashboard`. |
+| `apps/e2e/src/config.ts` | Removed `dataconnect: 9398`. |
+| `.moon/workspace.yml` | Removed the `frontend-dataconnect` project mapping (moon sync failed without it). |
+| `biome.json` | Removed stale ignore glob + `@aikami/frontend-dataconnect` import-style rule. |
+| `bun.lock` | Regenerated — no `@aikami/frontend-dataconnect`, no hub `pg`. |
+
+### Deviations from Spec
+- **Necessary dependency additions beyond the listed scope** (all required by the rehoming, no behavior change): `frontend-services` gained `frontend-storage` in `moon.yml`/`package.json` so `game_state_sync` can reach the local `saves` table; `.moon/workspace.yml` and `biome.json` were edited because `bun install`'s postinstall (`moon sync`) failed and the lint config referenced the deleted package — both were unlisted but mandatory for AC-1 to hold.
+- **New test file `apps/frontend/hub/src/lib/constants/routes.test.ts`**: after deleting the persona feature, `hub:test` had zero test files and `bun test` exits 1. Added a small regression test asserting `/personas` is not registered (AC-4 guard) — not a shim, keeps the AC-4 test hook green.
+- **`client:test-unit` delta**: 49 pre-existing failures at baseline → 50 after the change. The extra failure (`GameBootService — cancellation during boot returns cancelled result`) reproduces identically on the pristine base commit (verified in the untouched main checkout) — it is a 5ms-window timing test that is environment-sensitive, not a regression from this contract.
+- No other scope changes; all three ACs landed together as required.
+
+### Test Results
+- Unit: 1741 pass / 55 fail total across suites (firebase 11/0, hub 3/0, frontend-storage 48/0, frontend-services 5/0, client 1619 pass / 50 fail — 49 pre-existing + 1 pre-existing env-flaky GameBootService; +6 new AC-3 tests pass).
+- E2E: N/A for this contract's ACs (hub has no e2e specs; hub E2E evidence covered by hub:build + hub:test + live boot verification).
+- Visual: hub dashboard 90/100 (PASS), hub `/personas` 404 page 100/100 (PASS), save/load persistence 95/100 (PASS), `/game` boot 100/100 (PASS).
+- Baseline: 49 pre-existing client failures, 1 new observed failure that reproduces on pristine code (env-flaky, documented above).

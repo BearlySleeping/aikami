@@ -29,7 +29,7 @@ class LoginViewModel
     try {
       await authService.signInWithGoogle();
 
-      await routerService.goToRoute('personas', {
+      await routerService.goToRoute('dashboard', {
         queryParameters: undefined,
         pathParameters: undefined,
       });

@@ -2,7 +2,7 @@
 // Shared CLI argument parsing for herdr scripts.
 //
 // Usage:
-//   bun herdr:start <services>  [--mode <mode>] [--join] [--force]
+//   bun herdr:start <services>  [--mode <mode>] [--join] [--force] [--force-ports]
 //   bun herdr:stop  <services>  [--mode <mode>] [--force]
 //   bun herdr:join              [--mode <mode>]
 //   bun herdr:list              [--mode <mode>]
@@ -26,6 +26,8 @@ export type ServiceArgs = {
   mode: AikamiMode;
   join: boolean;
   force: boolean;
+  /** Kill whatever's already bound to each target port before starting. */
+  forcePorts: boolean;
 };
 
 export type ModeArgs = {
@@ -78,11 +80,12 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   const serviceArg = args.find((a) => !a.startsWith('--'));
   if (!serviceArg) {
     console.error(
-      'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force]\n' +
-        '  services: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
-        '  mode:     emulator | staging | production (default: $AIKAMI_MODE)\n' +
-        '  --join:   attach to session after starting\n' +
-        '  --force:  kill and recreate if workspace already exists\n',
+      'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force] [--force-ports]\n' +
+        '  services:      firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
+        '  mode:          emulator | staging | production (default: $AIKAMI_MODE)\n' +
+        '  --join:        attach to session after starting\n' +
+        '  --force:       kill and recreate if workspace already exists\n' +
+        '  --force-ports: kill whatever is bound to each target port first (e.g. a leftover process from a crashed prior run) instead of failing with EADDRINUSE\n',
     );
     process.exit(1);
   }
@@ -98,8 +101,9 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   const mode = resolveMode(args);
   const join = args.includes('--join') || args.includes('-j');
   const force = args.includes('--force') || args.includes('-f');
+  const forcePorts = args.includes('--force-ports');
 
-  return { services, mode, join, force };
+  return { services, mode, join, force, forcePorts };
 };
 
 export const parseModeArgs = (args: string[]): ModeArgs => {

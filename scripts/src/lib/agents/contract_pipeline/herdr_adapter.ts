@@ -3,6 +3,7 @@
 
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
 import { getScriptsEnv } from '../../env/scripts_env';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import {
@@ -644,6 +645,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // Env vars are passed via `tab create --env KEY=VALUE` (herdr sets them
     // on the tab's shell) instead of inline `KEY=V pi ...` shell prefixes.
     // This eliminates the inline-env first-character-drop hazard entirely.
+    // Same offset formula as scripts/src/lib/herdr/session.ts's dev-service
+    // tabs — a pure function of the contract ID, so both sides land on the
+    // same value independently. Lets chrome_devtools.ts (running in this
+    // pi tab) inspect the correct per-contract client instance.
+    const portOffset = contractPortOffset(extractContractId(request.contractPath));
     const env: string[] = [
       `CONTRACT_PIPELINE_RUN_ID=${request.runId}`,
       `CONTRACT_PIPELINE_ROLE=${request.role}`,
@@ -651,6 +657,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_ATTEMPT=${String(request.attempt)}`,
       `CONTRACT_PIPELINE_CONTRACT_PATH=${request.contractPath}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${request.resultPath}`,
+      `PUBLIC_EMULATOR_PORT_OFFSET=${portOffset}`,
       'HERDR_DISABLE_SOUND=1',
       ...inheritedPathEnv(),
     ];
@@ -914,6 +921,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'CONTRACT_PIPELINE_ROLE=review',
       `CONTRACT_PIPELINE_CONTRACT_PATH=${options.contractPath}`,
       `CONTRACT_PIPELINE_REVIEW_PATH=${options.reviewDecisionPath}`,
+      `PUBLIC_EMULATOR_PORT_OFFSET=${contractPortOffset(contractId)}`,
       ...inheritedPathEnv(),
     ];
     if (this._workspacePath) {

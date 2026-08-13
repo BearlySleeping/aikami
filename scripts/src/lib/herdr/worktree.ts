@@ -33,6 +33,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index.ts';
 import {
   commitAll,
   pushBranch,
@@ -40,7 +41,8 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
-import { findWorkspace, herdrJson } from './session.ts';
+import { hasDirenv } from '../env/direnv_detect';
+import { findWorkspace, herdrJson, killPort } from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -555,7 +557,15 @@ export CONTRACT_PIPELINE_WORKTREE=1
       timeout: 5000,
     });
   } catch {
-    // direnv may not be installed — not fatal.
+    // direnv may not be installed — not fatal. The .envrc stays in place
+    // for machines that DO use direnv; everyone else runs on their own
+    // shell env (manual tool installs + .env.local fallback).
+  }
+  if (!hasDirenv()) {
+    console.log(
+      `ℹ️  direnv not installed — worktree runs with your shell env (no flake devShell). ` +
+        'Install tools manually or set up direnv + nix (`bun run setup`).',
+    );
   }
 
   // ── 2. skip-worktree — workspace-local tracked files stay local ──
@@ -647,6 +657,37 @@ export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: str
 };
 
 /**
+ * Last resort: free a finished contract's dev-server ports so a leftover
+ * process (implementer left `client`/`firebase` running) doesn't block the
+ * next contract that happens to land on the same offset. Derives the
+ * contract ID from the worktree folder name (e.g.
+ * `contract-task-c-379-msqg9jqx`, hence case-insensitive) and reuses
+ * `killPort()`'s existing process-name safety check — never touches a port
+ * held by something that isn't one of our own dev tools. Best-effort: never
+ * throws, never blocks the removal it runs after.
+ */
+const killContractPorts = async (checkoutPath: string): Promise<void> => {
+  const contractId = checkoutPath.match(/(c-\d+|mig-\d+)/i)?.[0];
+  const offset = contractPortOffset(contractId);
+  if (offset === 0) {
+    return;
+  }
+  const ports = [
+    PORTS.emulator.client,
+    PORTS.emulator.hub,
+    PORTS.emulator.site,
+    PORTS.emulator.auth,
+    PORTS.emulator.firestore,
+    PORTS.emulator.functions,
+    PORTS.emulator.hosting,
+    PORTS.emulator.pubsub,
+    PORTS.emulator.storage,
+    PORTS.emulator.emulatorHub,
+  ];
+  await Promise.all(ports.map((port) => killPort(port + offset).catch(() => {})));
+};
+
+/**
  * Remove a worktree: herdr state + checkout together, then optionally the
  * local and/or remote branch. herdr `worktree remove` NEVER deletes the
  * branch — that is always a separate explicit git step here.
@@ -698,6 +739,10 @@ export const removeWorktree = async (
     }
   } else {
     reason = 'No workspace id or checkout path provided';
+  }
+
+  if (checkoutRemoved && options.checkoutPath) {
+    await killContractPorts(options.checkoutPath);
   }
 
   let branchDeleted = !options.branch;

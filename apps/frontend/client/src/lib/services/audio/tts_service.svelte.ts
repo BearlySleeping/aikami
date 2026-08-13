@@ -6,12 +6,6 @@ import {
 } from '@aikami/frontend/services';
 import type { VoiceInfo } from '$types';
 import { audioContextManager } from './audio_context_manager';
-import { audioService } from './audio_service.svelte';
-import {
-  createWaitFreeRingBuffer,
-  ringBufferClear,
-  type WaitFreeRingBuffer,
-} from './wait_free_ring_buffer';
 
 /** Lifecycle status of the native Kokoro WebGPU TTS engine. */
 export type TtsStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
@@ -58,8 +52,8 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Converts text to speech and plays the resulting audio immediately.
-   * Fetches from the Kokoro REST endpoint and pipes the WAV response
-   * through the audio streaming pipeline.
+   * Fetches the full WAV from the Kokoro REST endpoint and schedules
+   * gapless playback through the Web Audio API.
    *
    * @param options.text The text to convert to speech.
    * @param options.voiceId Optional voice ID to use (defaults to {@link selectedVoice}).
@@ -108,10 +102,9 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   /**
    * Synthesizes text to speech.
    *
-   * Routes to the streaming pipeline (Kokoro server detected) or
-   * the WebGPU worker (browser-native fallback). The streaming path
-   * uses a Web Worker + AudioWorkletProcessor + SharedArrayBuffer
-   * ring buffer for gapless real-time playback.
+   * Routes to the Kokoro REST server (docker/local dev, detected by
+   * {@link checkKokoroServer}) or the WebGPU worker (browser-native
+   * fallback, kokoro-js offline synthesis).
    *
    * @param options.text — The text to synthesize.
    * @param options.voice — The Kokoro voice key (e.g., 'af_bella').
@@ -121,8 +114,10 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   /**
    * Updates the spatial position of the active TTS stream.
    *
-   * When a PannerNode is active (streaming pipeline), this pans
-   * and attenuates the audio based on NPC position.
+   * Reserved for spatial audio. The previous PannerNode-based
+   * implementation was tied to the removed SharedArrayBuffer streaming
+   * pipeline; playback now goes straight to the destination, so this is
+   * a no-op.
    *
    * @param options.x — World-space X coordinate.
    * @param options.y — World-space Y coordinate.
@@ -149,26 +144,28 @@ type WordBoundary = {
 // ---------------------------------------------------------------------------
 // TtsService
 //
-// Text-to-speech with dual backend:
-//   A) Streaming pipeline (Kokoro server on port 8880) — C-211
-//      Web Worker → SharedArrayBuffer ring buffer → AudioWorkletProcessor
-//      → PannerNode → AudioService.masterGainNode → destination
+// Text-to-speech with two backends — neither requires SharedArrayBuffer:
+//   A) Kokoro REST server (docker / local dev, detected via
+//      checkKokoroServer) — fetches the full WAV from the server and plays
+//      it through the Web Audio API.
 //   B) WebGPU worker (kokoro-js offline synthesis) — C-131 fallback
 //      Web Worker → PCM Float32Array → AudioBuffer → destination
 //
-// Architecture (streaming pipeline):
+// The former SharedArrayBuffer streaming pipeline (C-211: Web Worker →
+// wait-free ring buffer → AudioWorkletProcessor) was removed: it required
+// cross-origin isolation (COOP: same-origin + COEP: require-corp), which
+// breaks Firebase Auth popup sign-in and is unavailable in webviews. See
+// docs/gotchas/cross-origin-isolation.md.
+//
 //   1. initialize() → checkKokoroServer()
-//      ├─ Found: spawns kokoro_stream_worker.ts, loads
-//      │         kokoro_audio_worklet.ts, creates PannerNode
-//      │         connected into AudioService.masterGainNode
+//      ├─ Found: status = 'ready'; synthesize() fetches audio from the server
 //      └─ Not found: spawns kokoro_worker.ts (WebGPU)
 //
-//   2. synthesize() — streams via ring buffer
-//      ├─ Streaming: postMessage to worker → HTTP chunks → ring buffer
-//      │             → AudioWorklet reads and outputs
+//   2. synthesize() / speak()
+//      ├─ Server: POST /v1/audio/speech → full WAV → decode → play
 //      └─ WebGPU: postMessage to worker → PCM → playAudioBuffer
 //
-// Contract: C-131, C-148, C-211
+// Contract: C-131, C-148
 // ---------------------------------------------------------------------------
 
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
@@ -182,18 +179,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   selectedVoice = $state('af_heart');
 
   private _worker: Worker | null = null; // WebGPU kokoro-js worker (C-131)
-  private _streamWorker: Worker | null = null; // Streaming pipeline worker (C-211)
   private _kokoroServerUrl = '/api/voice'; // Discovered Kokoro server URL
   private _abortController: AbortController | undefined;
   private currentAudio: HTMLAudioElement | null = null;
 
-  // ── Streaming pipeline state (C-211) ──
-  private _ringBuffer: WaitFreeRingBuffer | null = null;
-  private _audioWorkletNode: AudioWorkletNode | null = null;
-  private _pannerNode: PannerNode | null = null;
-  private _pipelineReady = false;
-
-  // --- Streaming state (word tracking, gapless playback) ---
+  // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
   private nextStartTime = 0;
   private wordBoundaries: WordBoundary[] = [];
@@ -242,35 +232,19 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this.isSynthesizing = true;
 
     try {
-      const speechUrl = '/api/voice/v1/audio/speech';
-
-      const response = await fetch(speechUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice: voiceId ?? this.selectedVoice,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          response_format: 'wav',
-        }),
+      const buffer = await this._requestSpeech({
+        text,
+        voice: voiceId ?? this.selectedVoice,
         signal,
       });
-
-      if (!response.ok) {
-        this.error('speak:fetch-failed', {
-          status: response.status,
-          statusText: response.statusText,
-        });
-        return;
-      }
-
-      const buffer = await response.arrayBuffer();
       if (signal.aborted) {
         return;
       }
+      if (!buffer) {
+        return;
+      }
 
-      // Play the WAV audio through the streaming pipeline.
+      // Play the WAV audio through the gapless AudioBufferSourceNode queue.
       // Pass words so the rAF tracking loop can detect when playback ends.
       const words = text.split(/\s+/).filter(Boolean);
       this.startStream({ messageId: `tts_${Date.now()}`, text });
@@ -293,16 +267,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     if (controller) {
       controller.abort();
       this._abortController = undefined;
-    }
-
-    // Abort streaming pipeline synthesis
-    if (this._streamWorker) {
-      this._streamWorker.postMessage({ action: 'abort' });
-    }
-
-    // Clear the ring buffer to stop AudioWorklet output
-    if (this._ringBuffer) {
-      ringBufferClear(this._ringBuffer);
     }
 
     // Stop HTMLAudioElement playback
@@ -423,7 +387,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this._streamEnded = true;
   }
 
-  // ── Kokoro WebGPU TTS ──
+  // ── Kokoro TTS ──
 
   async initialize(): Promise<void> {
     if (this.status !== 'uninitialized') {
@@ -431,16 +395,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Step 1: Check for a running Kokoro REST API server
+    // Step 1: Check for a running Kokoro REST API server (docker / local dev)
     await this.checkKokoroServer();
 
     if (this.isKokoroServerAvailable) {
-      // Step 2: Build the streaming pipeline (C-211)
-      await this._initializeStreamingPipeline();
+      // Server detected — synthesize() will fetch full WAV audio from it.
+      // No worker needed.
+      this.status = 'ready';
+      this.debug('initialize:kokoro-server-ready', { url: this._kokoroServerUrl });
       return;
     }
 
-    // Step 3: Fall back to browser-native WebGPU worker (C-131)
+    // Step 2: Fall back to browser-native WebGPU worker (C-131)
     this.status = 'initializing';
     this.errorMessage = null;
 
@@ -509,48 +475,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Path 1: Streaming pipeline (C-211) — Kokoro server detected
-    if (this._pipelineReady && this._streamWorker) {
-      // Abort existing controller before creating a new one
-      if (this._abortController) {
-        this._abortController.abort();
-      }
-      // Initialize abort controller before async operations
-      this._abortController = new AbortController();
-      const localController = this._abortController;
-      const signal = localController.signal;
-
-      // Resume AudioContext — user gesture (button click) makes this safe
-      const ctx = audioContextManager.context;
-      if (ctx.state !== 'running') {
-        try {
-          await ctx.resume();
-          this.debug('synthesize:audio-context-resumed', { state: ctx.state });
-        } catch (error) {
-          this.warn('synthesize:audio-context-resume-failed', error);
-          this._abortController = undefined;
-          return;
-        }
-      }
-
-      // Check if cancelled during resume
-      if (signal.aborted) {
-        if (this._abortController === localController) {
-          this._abortController = undefined;
-        }
-        return;
-      }
-
-      this.isSynthesizing = true;
-
-      try {
-        await this._synthesizeViaStreaming({ text, voice });
-      } finally {
-        this.isSynthesizing = false;
-        if (this._abortController === localController) {
-          this._abortController = undefined;
-        }
-      }
+    // Path 1: Kokoro REST server (docker / local dev) — fetch full WAV and play
+    if (this.isKokoroServerAvailable && this._kokoroServerUrl) {
+      await this._synthesizeViaServer({ text, voice });
       return;
     }
 
@@ -559,7 +486,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this.debug('synthesize:not-ready', {
         status: this.status,
         hasWorker: !!this._worker,
-        pipelineReady: this._pipelineReady,
       });
       return;
     }
@@ -567,192 +493,124 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this._worker.postMessage({ action: 'synthesize', text, voice });
   }
 
-  // ── Streaming pipeline (C-211) ──
-
   /**
-   * Builds the real-time streaming pipeline:
-   *   ring buffer → stream worker → AudioWorkletProcessor → PannerNode
-   *
-   * Connects the PannerNode into AudioService.masterGainNode for unified
-   * volume control alongside BGM and SFX.
+   * Server path: POSTs the text to the Kokoro REST API, decodes the
+   * returned WAV, and plays it through the Web Audio API.
    */
-  private async _initializeStreamingPipeline(): Promise<void> {
-    this.status = 'initializing';
-    this.errorMessage = null;
+  private async _synthesizeViaServer(options: { text: string; voice: string }): Promise<void> {
+    const { text, voice } = options;
+
+    // Stop existing playback and reset scheduling state (sourceNodes,
+    // nextStartTime, wordBoundaries) before starting new synthesis, and
+    // abort any in-flight speech request.
+    this.stop();
+
+    const abortController = new AbortController();
+    this._abortController = abortController;
+    const { signal } = abortController;
+
+    this.isSynthesizing = true;
 
     try {
-      // 1. Create the lock-free ring buffer (4 seconds at 24 kHz)
-      this._ringBuffer = createWaitFreeRingBuffer({ sampleCapacity: 96000 });
+      const buffer = await this._requestSpeech({ text, voice, signal });
+      if (signal.aborted) {
+        return;
+      }
+      if (!buffer) {
+        return;
+      }
 
-      // 2. Spawn the streaming Web Worker
-      this._streamWorker = new Worker(new URL('./kokoro_stream_worker.ts', import.meta.url), {
-        type: 'module',
-      });
-
-      this._streamWorker.onmessage = this._handleStreamWorkerMessage.bind(this);
-      this._streamWorker.onerror = (error: ErrorEvent) => {
-        this.error('stream-worker:onerror', {
-          message: error.message || 'Unknown worker error',
-        });
-      };
-
-      // 3. Send ring buffer to worker
-      this._streamWorker.postMessage({
-        action: 'initialize',
-        sharedBuffer: this._ringBuffer.sharedBuffer,
-        sampleCapacity: this._ringBuffer.sampleCapacity,
-        serverUrl: this._kokoroServerUrl,
-      });
-
-      // 4. Load the AudioWorkletProcessor
+      // Resume the AudioContext — game combat flows call this from user
+      // gestures (button clicks), which makes resume() safe.
       const ctx = audioContextManager.context;
-      await ctx.audioWorklet.addModule(new URL('./kokoro_audio_worklet.ts', import.meta.url));
+      audioContextManager.unlock();
+      if (ctx.state !== 'running') {
+        try {
+          await ctx.resume();
+        } catch (error) {
+          this.warn('synthesize:audio-context-resume-failed', error);
+        }
+      }
+      if (signal.aborted) {
+        return;
+      }
 
-      // 5. Create AudioWorkletNode
-      this._audioWorkletNode = new AudioWorkletNode(ctx, 'kokoro-audio-processor');
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
+      } catch (error) {
+        this.error('synthesize:decode-failed', error);
+        return;
+      }
 
-      // 5b. Send ring buffer to the worklet (it needs explicit init message)
-      this._audioWorkletNode.port.postMessage({
-        type: 'init',
-        sharedBuffer: this._ringBuffer.sharedBuffer,
-        sampleCapacity: this._ringBuffer.sampleCapacity,
-      });
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.start();
 
-      // 6. Send ring buffer to AudioWorklet
-      this._audioWorkletNode.port.postMessage({
-        type: 'init',
-        sharedBuffer: this._ringBuffer.sharedBuffer,
-        sampleCapacity: this._ringBuffer.sampleCapacity,
-      });
-
-      // 7. Create PannerNode for spatial audio
-      this._pannerNode = ctx.createPanner();
-      this._pannerNode.panningModel = 'equalpower';
-      this._pannerNode.distanceModel = 'inverse';
-      this._pannerNode.refDistance = 1;
-      this._pannerNode.maxDistance = 10000;
-      this._pannerNode.rolloffFactor = 1;
-
-      // 8. Connect: AudioWorkletNode → PannerNode → AudioService.masterCompressorNode
-      this._audioWorkletNode.connect(this._pannerNode);
-      this._pannerNode.connect(audioService.masterCompressorNode);
-
-      this._pipelineReady = true;
-      this.status = 'ready';
-      this.debug('initialize:streaming-pipeline-ready');
+      this.isPlaying = true;
+      // Track the source so stop()/dispose() can terminate this playback,
+      // and drop it on ended so a stale onended cannot clear isPlaying while
+      // a newer source is active.
+      this.sourceNodes.push(source);
+      source.onended = () => {
+        const idx = this.sourceNodes.indexOf(source);
+        if (idx !== -1) {
+          this.sourceNodes.splice(idx, 1);
+        }
+        if (this.sourceNodes.length === 0) {
+          this.isPlaying = false;
+        }
+      };
     } catch (error: unknown) {
-      this._pipelineReady = false;
-      this.status = 'error';
-      this.errorMessage =
-        error instanceof Error ? error.message : 'Failed to initialize streaming pipeline';
-      this.error('_initializeStreamingPipeline:failed', error);
-      this._disposeStreamingPipeline();
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      this.error('synthesize:server-failed', error);
+    } finally {
+      this.isSynthesizing = false;
+      if (this._abortController === abortController) {
+        this._abortController = undefined;
+      }
     }
   }
 
   /**
-   * Handles messages from the streaming Web Worker.
+   * Shared speech request: POSTs text to the discovered Kokoro REST server
+   * (`_kokoroServerUrl` + `/v1/audio/speech`) and returns the raw WAV bytes.
+   * Used by both {@link speak} and the server synthesis path.
    *
-   * Message types:
-   *   ready     — Worker acknowledged ring buffer initialization.
-   *   header    — WAV header parsed (sampleRate, channels, bitsPerSample).
-   *   progress  — Samples written to ring buffer (periodic).
-   *   complete  — Stream finished, all samples written.
-   *   aborted   — Stream was cancelled.
-   *   error     — Synthesis failed.
+   * @returns The WAV ArrayBuffer, or undefined when the request failed.
    */
-  private _handleStreamWorkerMessage = (event: MessageEvent): void => {
-    const payload = event.data as {
-      type: 'ready' | 'header' | 'progress' | 'complete' | 'aborted' | 'error';
-      sampleRate?: number;
-      channels?: number;
-      bitsPerSample?: number;
-      samplesWritten?: number;
-      totalSamples?: number;
-      message?: string;
-    };
+  private async _requestSpeech(options: {
+    text: string;
+    voice: string;
+    signal: AbortSignal;
+  }): Promise<ArrayBuffer | undefined> {
+    const { text, voice, signal } = options;
 
-    switch (payload.type) {
-      case 'ready':
-        this.debug('stream-worker:ready');
-        break;
-
-      case 'header':
-        this.debug('stream-worker:header', {
-          sampleRate: payload.sampleRate,
-          channels: payload.channels,
-          bitsPerSample: payload.bitsPerSample,
-        });
-        break;
-
-      case 'progress':
-        // Periodic progress — ring buffer is being filled by worker
-        // and consumed by AudioWorklet simultaneously
-        break;
-
-      case 'complete':
-        this.debug('stream-worker:complete', {
-          totalSamples: payload.totalSamples,
-          sampleRate: payload.sampleRate,
-          durationSec:
-            payload.totalSamples && payload.sampleRate
-              ? (payload.totalSamples / payload.sampleRate).toFixed(2)
-              : 'unknown',
-        });
-        this.isSynthesizing = false;
-        this._disconnectStreamOutput();
-        break;
-
-      case 'aborted':
-        this.debug('stream-worker:aborted');
-        this.isSynthesizing = false;
-        this._disconnectStreamOutput();
-        break;
-
-      case 'error':
-        this.error('stream-worker:error', { message: payload.message });
-        this.isSynthesizing = false;
-        this._disconnectStreamOutput();
-        break;
-
-      default:
-        break;
-    }
-  };
-
-  /**
-   * Sends a synthesize request through the streaming pipeline.
-   *
-   * The worker fetches chunked HTTP from the Kokoro server, writes PCM
-   * into the ring buffer, and the AudioWorklet plays it automatically.
-   */
-  private async _synthesizeViaStreaming(options: { text: string; voice: string }): Promise<void> {
-    const { text, voice } = options;
-
-    if (!this._streamWorker) {
-      return;
-    }
-
-    // Clear any residual data from a previous stream
-    if (this._ringBuffer) {
-      ringBufferClear(this._ringBuffer);
-    }
-
-    // Reconnect PannerNode if it was disconnected by a previous
-    // stream completion. The AudioWorkletNode stays connected.
-    if (this._pannerNode) {
-      try {
-        this._pannerNode.connect(audioService.masterCompressorNode);
-      } catch {
-        // Already connected — ignore
-      }
-    }
-
-    this._streamWorker.postMessage({
-      action: 'synthesize',
-      text,
-      voice,
+    const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text,
+        voice,
+        // biome-ignore lint/style/useNamingConvention: API contract field name
+        response_format: 'wav',
+      }),
+      signal,
     });
+
+    if (!response.ok) {
+      this.error('tts:speech-request-failed', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return undefined;
+    }
+
+    return await response.arrayBuffer();
   }
 
   /** @inheritdoc */
@@ -823,99 +681,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   /**
    * Updates the spatial position of the active TTS stream.
    *
-   * When the streaming pipeline is active, this pans and attenuates
-   * the audio based on NPC world position. Uses the Web Audio API
-   * PannerNode for equal-power stereo panning and distance attenuation.
-   *
-   * No-op when the streaming pipeline is not active.
+   * No-op — the previous PannerNode-based spatial panning was tied to the
+   * SharedArrayBuffer streaming pipeline (removed). Playback now connects
+   * straight to the AudioContext destination.
    */
-  updateSpatialPosition(options: { x: number; y: number }): void {
-    if (!this._pannerNode) {
-      return;
-    }
-
-    const { x, y } = options;
-    const ctx = audioContextManager.context;
-
-    // Position the listener at origin (camera-centered)
-    if (ctx.listener.positionX) {
-      ctx.listener.positionX.value = 0;
-      ctx.listener.positionY.value = 0;
-      ctx.listener.positionZ.value = 0;
-    }
-
-    // Position the audio source at the NPC's world coordinates
-    this._pannerNode.positionX.value = x;
-    this._pannerNode.positionY.value = y;
-    this._pannerNode.positionZ.value = 0;
+  updateSpatialPosition(_options: { x: number; y: number }): void {
+    // No-op (see class doc comment).
   }
 
   // ── Private ──
 
-  /**
-   * Disconnects the PannerNode output when a stream completes or is
-   * aborted. This stops audio from the worklet reaching the speakers
-   * and allows the PannerNode to be garbage-collected if no longer
-   * referenced.
-   *
-   * The AudioWorkletNode stays connected — it continues to run its
-   * process() callback, outputting silence since the ring buffer is
-   * cleared. The PannerNode is reconnected on the next synthesize call.
-   */
-  private _disconnectStreamOutput(): void {
-    if (this._pannerNode) {
-      try {
-        this._pannerNode.disconnect();
-      } catch {
-        // Already disconnected
-      }
-    }
-  }
-
-  /**
-   * Disconnects and cleans up the streaming pipeline.
-   *
-   * Disconnects the AudioWorkletNode and PannerNode, terminates the
-   * stream worker, and nulls all pipeline references. Safe to call
-   * multiple times (idempotent).
-   */
-  private _disposeStreamingPipeline(): void {
-    // Disconnect audio nodes
-    if (this._audioWorkletNode) {
-      try {
-        this._audioWorkletNode.disconnect();
-      } catch {
-        // Already disconnected
-      }
-      this._audioWorkletNode = null;
-    }
-
-    if (this._pannerNode) {
-      try {
-        this._pannerNode.disconnect();
-      } catch {
-        // Already disconnected
-      }
-      this._pannerNode = null;
-    }
-
-    // Terminate stream worker
-    if (this._streamWorker) {
-      this._streamWorker.terminate();
-      this._streamWorker = null;
-    }
-
-    // Release ring buffer reference (SharedArrayBuffer will be GC'd
-    // when both this reference and the AudioWorklet's reference drop)
-    this._ringBuffer = null;
-    this._pipelineReady = false;
-  }
-
   override async dispose(): Promise<void> {
     this.stop();
-
-    // Dispose streaming pipeline
-    this._disposeStreamingPipeline();
 
     // Terminate WebGPU worker
     if (this._worker) {

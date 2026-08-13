@@ -7,17 +7,26 @@
 //
 // Update both files together if port allocations change.
 
-/** Firebase emulator ports for Aikami (must match development_ports.ts). */
+// Set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts for
+// contract-scoped pipeline runs — same offset formula as
+// packages/shared/constants/src/lib/development_ports.ts's
+// contractPortOffset(), so this lands on the identical value independently
+// (can't import that helper here either, same CJS-loader constraint above).
+// 0 for a manual, non-contract test run.
+const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+
+/** Firebase emulator ports for Aikami (must match development_ports.ts).
+ *  `voice` stays on its shared base port — it's a singleton backend, never
+ *  duplicated per contract (see OFFSET_AWARE_SERVICES in session.ts). */
 export const EMULATOR_PORTS = {
-  auth: 9098,
-  firestore: 8081,
-  functions: 5003,
-  hosting: 5002,
-  pubsub: 8086,
-  storage: 9198,
-  dataconnect: 9398,
-  emulatorHub: 4401,
-  client: 5274,
+  auth: 9098 + emulatorPortOffset,
+  firestore: 8081 + emulatorPortOffset,
+  functions: 5003 + emulatorPortOffset,
+  hosting: 5002 + emulatorPortOffset,
+  pubsub: 8086 + emulatorPortOffset,
+  storage: 9198 + emulatorPortOffset,
+  emulatorHub: 4401 + emulatorPortOffset,
+  client: 5274 + emulatorPortOffset,
   voice: 8089,
 } as const;
 

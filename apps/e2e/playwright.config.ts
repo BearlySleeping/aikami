@@ -22,12 +22,20 @@ import { defineConfig, devices } from '@playwright/test';
 // Node.js native ESM imports.
 // ──────────────────────────────────────────────────────────────
 
-const AUTH_PORT = 9098;
-const FIRESTORE_PORT = 8081;
-const STORAGE_PORT = 9198;
-const PUBSUB_PORT = 8086;
-const CLIENT_PORT = 5274;
-const SITE_PORT = 5280;
+// Set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts for
+// contract-scoped pipeline runs — same offset formula as
+// packages/shared/constants/src/lib/development_ports.ts's
+// contractPortOffset(), so this lands on the identical value independently
+// (can't import that helper here either, same ESM-loader constraint above).
+// 0 for a manual, non-contract test run.
+const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+
+const AUTH_PORT = 9098 + EMULATOR_PORT_OFFSET;
+const FIRESTORE_PORT = 8081 + EMULATOR_PORT_OFFSET;
+const STORAGE_PORT = 9198 + EMULATOR_PORT_OFFSET;
+const PUBSUB_PORT = 8086 + EMULATOR_PORT_OFFSET;
+const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
+const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 
 /**
  * Worker-specific project ID for emulator data isolation.

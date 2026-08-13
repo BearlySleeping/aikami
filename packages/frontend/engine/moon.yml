@@ -16,7 +16,6 @@ project:
 
 dependsOn:
   - 'frontend-configs'
-  - 'frontend-dataconnect'
 
 fileGroups:
   sources:

@@ -17,7 +17,7 @@ export const pwaSuite: TestSuite = {
     console.log('  Running Client Playwright tests from apps/e2e...');
 
     try {
-      execSync('npx playwright test --project=client --reporter=list', {
+      execSync('bunx playwright test --project=client --reporter=list', {
         cwd: E2E_DIR,
         stdio: 'inherit',
         timeout: 120_000,

@@ -6,7 +6,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
   throw redirect(
     302,
     locals.userSession?.userRole
-      ? toRouteHref('personas', {
+      ? toRouteHref('dashboard', {
           pathParameters: undefined,
           queryParameters: undefined,
           url,

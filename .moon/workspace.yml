@@ -38,7 +38,6 @@ projects:
 
   # Frontend Packages
   frontend-engine: "packages/frontend/engine"
-  frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-ai-gateway: "packages/frontend/ai-gateway"

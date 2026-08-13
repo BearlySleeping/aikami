@@ -48,12 +48,10 @@ const rootDirectory = resolve(projectDirectory, '../../..');
 
 export default defineConfig(({ mode }) => {
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
-
-  /** COEP relaxed in emulator so Firebase Auth emulator popup/iframe relay works cross-origin.
-   * In emulator mode, COEP is unset (matching hooks.server.ts behavior) to allow the Firebase
-   * Auth popup/iframe relay to work. In other modes, 'require-corp' enables crossOriginIsolated
-   * (SharedArrayBuffer for TTS). */
-  const crossOriginEmbedderPolicy = mode === 'emulator' ? undefined : 'require-corp';
+  // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline
+  // runs so this app's Firebase Auth emulator proxy targets its own
+  // per-contract emulator instance, not another contract's. 0 otherwise.
+  const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
   const plugins: PluginOption[] = [
     tailwindcss(),
@@ -62,27 +60,6 @@ export default defineConfig(({ mode }) => {
       project: './project.inlang',
       outdir: './src/lib/paraglide',
     }) as PluginOption,
-    {
-      name: 'cross-origin-isolation',
-      configureServer(server) {
-        server.middlewares.use((_req, res, next) => {
-          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-          if (crossOriginEmbedderPolicy) {
-            res.setHeader('Cross-Origin-Embedder-Policy', crossOriginEmbedderPolicy);
-          }
-          next();
-        });
-      },
-      configurePreviewServer(server) {
-        server.middlewares.use((_req, res, next) => {
-          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-          if (crossOriginEmbedderPolicy) {
-            res.setHeader('Cross-Origin-Embedder-Policy', crossOriginEmbedderPolicy);
-          }
-          next();
-        });
-      },
-    } as PluginOption,
     {
       name: 'internal-logging-endpoint',
       configureServer(server) {
@@ -197,12 +174,6 @@ export default defineConfig(({ mode }) => {
       fs: {
         allow: [rootDirectory],
       },
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        ...(crossOriginEmbedderPolicy
-          ? { 'Cross-Origin-Embedder-Policy': crossOriginEmbedderPolicy }
-          : {}),
-      },
       port,
       strictPort: true,
       proxy:
@@ -212,18 +183,18 @@ export default defineConfig(({ mode }) => {
               // popup, relay iframe, and main page all share localhost:5274.
               // This fixes the "No matching frame" error in signInWithPopup.
               '/emulator/auth': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               // Proxy Firebase Auth REST API calls to the emulator.
               // The SDK calls identitytoolkit + securetoken endpoints to
               // exchange OAuth credentials for Firebase tokens.
               '/identitytoolkit.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               '/securetoken.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               '/api/voice': {
@@ -295,15 +266,6 @@ export default defineConfig(({ mode }) => {
     preview: {
       port,
       strictPort: true,
-      headers: {
-        // Required for SharedArrayBuffer (crossOriginIsolated).
-        // Without these, the worker falls back to N-buffer mode which
-        // has a transfer-cycle race condition under setInterval ticks.
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        ...(crossOriginEmbedderPolicy
-          ? { 'Cross-Origin-Embedder-Policy': crossOriginEmbedderPolicy }
-          : {}),
-      },
     },
   };
 });

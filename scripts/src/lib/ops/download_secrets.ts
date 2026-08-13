@@ -169,9 +169,16 @@ function readEnvDefaults(appPath: string): Map<string, string> {
   return defaults;
 }
 
-/** Keys that should come from GSM (excludes PUBLIC_ for most). */
-function isSecretKey(key: string): boolean {
-  return !key.startsWith('PUBLIC_');
+/**
+ * Keys that come from GSM. EVERY key is included now — including PUBLIC_ build
+ * config (Firebase keys, app id, mode, site url, …): those live in GSM as
+ * shared `PUBLIC_*` or prefixed `<APP>_PUBLIC_*` secrets (upload_secrets
+ * pushes every non-empty env key), so download mirrors that and pulls them
+ * back, stripping the prefix back to the local key name. Emulator mode never
+ * fetches — it uses EMULATOR_ENV_OVERRIDES + .env.example defaults instead.
+ */
+function isSecretKey(_key: string): boolean {
+  return true;
 }
 
 // ── GSM batch fetch ──────────────────────────────────────────────────────
@@ -455,14 +462,38 @@ if (isEmulator) {
 const missing = isEmulator ? 0 : allGcmNames.size - secrets.size;
 if (missing > 0) {
   const missingNames = [...allGcmNames].filter((n) => !secrets.has(n));
-  console.warn(`   ⚠️  ${missing} secret(s) not found in GSM (${GCP_PROJECT}):`);
-  for (const m of missingNames) {
-    console.warn(`      - ${m}`);
+  // PUBLIC_ build-config keys are optional — blank is a valid value (log
+  // levels, recaptcha key, analytics ids). Never fatal, even with --strict,
+  // so CI (release.yml runs --strict) isn't blocked by an unset optional.
+  // Classify by the ORIGINAL local env key (GSM names may not carry the
+  // PUBLIC_ prefix), so only local keys starting with PUBLIC_ are treated
+  // as public; everything else is a secret.
+  const gcmToKey = new Map<string, string>();
+  for (const m of appMappings) {
+    for (const [localKey, gcmName] of m.keyToGcm) {
+      gcmToKey.set(gcmName, localKey);
+    }
+  }
+  const missingPublic = missingNames.filter((n) => gcmToKey.get(n)?.startsWith('PUBLIC_'));
+  const missingSecret = missingNames.filter((n) => !gcmToKey.get(n)?.startsWith('PUBLIC_'));
+  if (missingPublic.length > 0) {
+    console.warn(
+      `   ⚠️  ${missingPublic.length} public build-config key(s) not in GSM (stays blank/default):`,
+    );
+    for (const m of missingPublic) {
+      console.warn(`      - ${m}`);
+    }
+  }
+  if (missingSecret.length > 0) {
+    console.warn(`   ⚠️  ${missingSecret.length} secret(s) not found in GSM (${GCP_PROJECT}):`);
+    for (const m of missingSecret) {
+      console.warn(`      - ${m}`);
+    }
   }
 
-  if (opts.strict) {
+  if (opts.strict && missingSecret.length > 0) {
     console.error(
-      `\n❌ Strict mode: ${missing} secret(s) could not be fetched from GSM (${GCP_PROJECT}).`,
+      `\n❌ Strict mode: ${missingSecret.length} secret(s) could not be fetched from GSM (${GCP_PROJECT}).`,
     );
     console.error('   Failing early — the generated .env files would be incomplete.');
     for (const [name, reason] of fetchFailures) {

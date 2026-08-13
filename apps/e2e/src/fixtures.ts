@@ -15,7 +15,7 @@ import { ClientChatPage, ClientNavigation } from './pom/index';
 // ── Configuration ───────────────────────────────────────────
 
 const PWA_BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
-const AUTH_STATE_FILE = './.auth/user.json';
+const AUTH_STATE_FILE = './.auth/user-worker-0.json';
 
 // ── POM Factory Types ───────────────────────────────────────
 
