@@ -224,12 +224,6 @@ export type OllamaClientOptions = {
 export type ComfyUiClientOptions = {
   /** ComfyUI server base URL. Default: 'http://localhost:8188'. */
   baseUrl?: string;
-  /** Pre-configured workflow JSON path or ID. Required. */
-  workflowId: string;
-  /** Image generation timeout in milliseconds. Default: 60000. */
-  timeoutMs?: number;
-  /** Output format. Default: 'png'. */
-  outputFormat?: 'png' | 'webp' | 'jpeg';
 };
 
 /**
