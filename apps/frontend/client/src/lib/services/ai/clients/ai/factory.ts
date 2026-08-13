@@ -46,10 +46,6 @@ async function createAiClient(
     }
 
     case 'comfyui': {
-      if (!options.comfyui?.workflowId) {
-        throw new Error('ComfyUiClient requires a workflowId in options.comfyui.');
-      }
-
       const { ComfyUiClient } = await import('./clients/comfyui_client.ts');
 
       return new ComfyUiClient(options.comfyui);

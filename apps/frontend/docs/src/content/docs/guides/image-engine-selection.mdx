@@ -1,0 +1,69 @@
+---
+title: Image Engine Selection
+description: Choosing between ComfyUI and sd-server (stable-diffusion.cpp) for Aikami's image generation, with auto-detection and per-engine capabilities.
+---
+
+Aikami's image generation runs against one of two local engines behind a
+single abstraction: **ComfyUI** (the advanced, Python-based engine) or
+**sd-server** (stable-diffusion.cpp — a single C++/ggml binary with no Python
+or PyTorch). Both are selectable at runtime; the default is auto-detection
+which prefers sd-server.
+
+## How the engine is chosen
+
+The engine is resolved once per session and cached:
+
+- **`PUBLIC_IMAGE_ENGINE=auto`** (default) — probes both engines in parallel
+  with a short timeout and prefers **sd-server** when both respond. If only
+  one responds, that one is used. If neither responds, image generation
+  degrades to the demo/placeholder path (`isReady` stays `false`).
+- **`PUBLIC_IMAGE_ENGINE=comfyui`** — always use ComfyUI (no probing).
+- **`PUBLIC_IMAGE_ENGINE=sdcpp`** — always use sd-server (no probing).
+
+Both engines bind port **8188** by default (they are mutually exclusive
+bundled defaults). `PUBLIC_IMAGE_URL` supplies the base URL
+(`http://localhost:8188`, or the Vite `/api/image` proxy in emulator dev);
+`PUBLIC_SDCPP_URL` overrides the base URL only when sd-server runs elsewhere.
+
+The dev sandbox at `/dev/image` shows the active engine and lets you switch
+it live to see capability differences.
+
+## Per-engine capabilities
+
+Controls in the UI are gated by what the active engine actually supports:
+
+| Capability | ComfyUI | sd-server |
+| --- | --- | --- |
+| Negative prompt | ✅ | ✅ |
+| Seed / sampler | ✅ | ✅ |
+| Init image (img2img) | ✅ | ✅ |
+| Inpainting mask | ❌ | ✅ |
+| Reference images / LoRA / ControlNet | ❌ | ✅ (request-level) |
+| Native cancel | ✅ (`POST /interrupt`) | ✅ (job cancel) |
+| Progress reporting | ✅ (poll-based) | ✅ (job states) |
+
+If a control is not rendered, the active engine cannot honour it — no request
+is ever sent carrying a field the engine does not declare support for.
+
+## Negative prompts
+
+The style profile pipeline (`compileImagePrompt`) extracts negative tags
+(text, watermark, blurry, bad anatomy, …) into a `negativePrompt`. Since
+C-388 this value is actually sent to the engine — the ComfyUI graph's
+negative `CLIPTextEncode` node and sd-server's `negative_prompt` field both
+receive it. Generated images finally respect the negative prompt the style
+profile computes.
+
+## Persistence
+
+The selected engine's checkpoint is stored per engine
+(`imageCheckpoint:comfyui` / `imageCheckpoint:sdcpp`). The legacy
+unnamespaced checkpoint key is treated as the ComfyUI value on first read and
+migrated forward automatically.
+
+## Source
+
+- Engine abstraction + adapters:
+  `apps/frontend/client/src/lib/services/image/engine/`
+- Reactive wrapper: `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts`
+- Dev sandbox: `/dev/image`
