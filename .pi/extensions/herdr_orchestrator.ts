@@ -23,12 +23,12 @@ import { contractPortOffset } from '../../packages/shared/constants/src/index.ts
 import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
 import {
   type AikamiMode,
-  ALL_SERVICES,
   currentContractId,
   type DevService,
   findWorkspace,
   getWorkspaceTabNames,
   isPortReady,
+  KNOWN_SERVICES,
   listServices,
   resolveReadyPort,
   restartServices,
@@ -848,7 +848,7 @@ export default function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({
       action: Type.String({ enum: ['start', 'stop', 'restart', 'status', 'read', 'list'] }),
-      service: Type.Optional(Type.String({ enum: [...ALL_SERVICES] })),
+      service: Type.Optional(Type.String({ enum: [...KNOWN_SERVICES] })),
       lines: Type.Optional(Type.Number({ default: 100 })),
       force: Type.Optional(
         Type.Boolean({
@@ -909,7 +909,7 @@ export default function (pi: ExtensionAPI) {
           if (!svc) {
             return {
               content: [
-                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+                { type: 'text', text: `Service required. Valid: ${KNOWN_SERVICES.join(', ')}` },
               ],
               isError: true,
               details: {},
@@ -924,7 +924,7 @@ export default function (pi: ExtensionAPI) {
           if (wsId && !params.force) {
             const tabNames = await getWorkspaceTabNames(wsId);
             const port = resolveReadyPort(params.service as DevService, mode, offset);
-            if (tabNames.includes(svc.name) && port && (await isPortReady(port))) {
+            if (tabNames.includes(svc.name) && port && (await isPortReady(port, svc.readyCheck))) {
               return {
                 content: [{ type: 'text', text: `✅ ${svc.name} already running (port :${port})` }],
                 details: {},
@@ -972,7 +972,7 @@ export default function (pi: ExtensionAPI) {
           if (!svc) {
             return {
               content: [
-                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+                { type: 'text', text: `Service required. Valid: ${KNOWN_SERVICES.join(', ')}` },
               ],
               isError: true,
               details: {},
@@ -1017,7 +1017,7 @@ export default function (pi: ExtensionAPI) {
           if (!svc) {
             return {
               content: [
-                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+                { type: 'text', text: `Service required. Valid: ${KNOWN_SERVICES.join(', ')}` },
               ],
               isError: true,
               details: {},
@@ -1053,7 +1053,7 @@ export default function (pi: ExtensionAPI) {
           if (!svc) {
             return {
               content: [
-                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+                { type: 'text', text: `Service required. Valid: ${KNOWN_SERVICES.join(', ')}` },
               ],
               isError: true,
               details: {},
@@ -1077,7 +1077,7 @@ export default function (pi: ExtensionAPI) {
           }
 
           const port = svc.readyPort?.(mode);
-          const ready = port ? await isPortReady(port) : true;
+          const ready = port ? await isPortReady(port, svc.readyCheck) : true;
           return {
             content: [
               {
@@ -1094,7 +1094,7 @@ export default function (pi: ExtensionAPI) {
           if (!svc) {
             return {
               content: [
-                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+                { type: 'text', text: `Service required. Valid: ${KNOWN_SERVICES.join(', ')}` },
               ],
               isError: true,
               details: {},

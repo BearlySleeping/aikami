@@ -18,11 +18,15 @@
 //   9098        Aikami     Firebase emulator (auth)
 //   9199        Nordclaw   Firebase emulator (storage)
 //   9198        Aikami     Firebase emulator (storage)
+//   5432        (reserved) System PostgreSQL — deliberately NOT used by Aikami
+//                         so a developer's own postgres on the default port
+//                         can never be confused with ours (C-387)
+//   5433        Aikami     Local PostgreSQL (dev) — real engine, Nix-provided
 //
 //   Within each project range, even ports = emulator mode, odd = staging,
 //   offset +4 = production.
 //
-//   Aikami apps:  client=5274  voice=8089
+//   Aikami apps:  client=5274  voice=8089  postgres=5433
 
 // ── Firebase Emulator (unique for Aikami) ────────────────────────────────
 
@@ -48,6 +52,9 @@ export const EMULATOR_PORTS = {
   voice: 8089,
   image: 8188,
   text: 11434,
+  // Local PostgreSQL (C-387). Emulator-only — there is no local Postgres in
+  // staging/production. 5432 is left free for a developer's system Postgres.
+  postgres: 5433,
 } as const;
 
 export const STAGING_PORTS = {
