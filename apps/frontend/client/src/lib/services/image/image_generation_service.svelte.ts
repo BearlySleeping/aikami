@@ -144,7 +144,9 @@ export class ImageGenerationService
   implements ImageGenerationServiceInterface
 {
   private isDemo: boolean;
-  private _engine: ImageEngineClient | undefined;
+  // $state — the view reads `engineId`/`capabilities` getters in templates;
+  // a plain field would never invalidate after async engine detection.
+  private _engine = $state<ImageEngineClient | undefined>(undefined);
 
   constructor(options: ImageGenerationOptions) {
     super(options);
