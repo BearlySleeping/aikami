@@ -6,7 +6,7 @@ import {
 } from '@aikami/frontend/services';
 import type { ChatData, NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError, toAppErrorFromUnknownError } from '@aikami/utils';
-import { authService, npcChatService, npcService, routerService } from '$services';
+import { authService, chatStorage, npcService, routerService } from '$services';
 
 export type NpcListViewModelOptions = BaseViewModelOptions;
 
@@ -235,7 +235,7 @@ class NpcListViewModel
 
     this.isLoading = true;
     try {
-      await npcChatService.deleteChatById({ chatId });
+      await chatStorage.deleteChatById({ chatId });
       this.userChats = this.userChats.filter((c) => c.id !== chatId);
       this.log('handleDeleteChat', 'Chat deleted successfully');
     } catch (error) {
@@ -263,7 +263,7 @@ class NpcListViewModel
         errorMessage: 'NPC not found',
       });
     }
-    return npcChatService.getOrCreateChat({
+    return chatStorage.getOrCreateChat({
       uid,
       npcId: npc.id,
       npcName: npc.name,

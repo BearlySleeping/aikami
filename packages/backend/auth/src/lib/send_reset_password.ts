@@ -1,5 +1,4 @@
-import { getUserByEmail } from '@aikami/backend/firestore/user.ts';
-import { getPasswordResetLink } from '@aikami/backend/utils/auth.ts';
+import { getFirebaseAuthUserByEmail, getPasswordResetLink } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { toAppError, toSupportedLocale } from '@aikami/utils';
 import { logger } from '$logger';
@@ -7,26 +6,28 @@ import { logger } from '$logger';
 /**
  * Send reset password if email exists
  *
- * @param options the user email
+ * The Firestore user document was deleted (C-386 OQ1). Email lookup now uses
+ * the Firebase Auth record; the preferred locale comes from custom claims.
  */
 export const sendResetPassword = async (
   options: AuthMessagePayload<'sendResetPassword'>,
 ): Promise<AuthMessageResponse<'sendResetPassword'>> => {
   const { email } = options;
-  const user = await getUserByEmail(email);
-  if (!user) {
+  let user: Awaited<ReturnType<typeof getFirebaseAuthUserByEmail>>;
+  try {
+    user = await getFirebaseAuthUserByEmail(email);
+  } catch {
     throw toAppError({
       errorType: 'not-found',
       errorMessage: `User with email ${email} not found`,
     });
   }
 
-  const isFirstTime = !user.agreedAt;
-  const supportedLocale = toSupportedLocale(user.localeCode);
+  const supportedLocale = toSupportedLocale(user.preferredLocale);
 
   const passwordResetLink = await getPasswordResetLink({
     email,
-    isFirstTime,
+    isFirstTime: false,
     supportedLocale,
   });
 

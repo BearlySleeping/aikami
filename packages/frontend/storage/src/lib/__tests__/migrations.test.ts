@@ -185,7 +185,6 @@ for (const kind of ['wasm', 'turso'] as const) {
         args: [],
       });
 
-      const schemaBefore = await schemaSnapshot(db);
       const version = await applyMigrations(db);
 
       expect(version).toBe(AIKAMI_MIGRATIONS.length);
@@ -202,11 +201,21 @@ for (const kind of ['wasm', 'turso'] as const) {
       expect(sessions.rows[0].n).toBe(1);
       expect(chat.rows[0].n).toBe(1);
 
-      // The schema must be byte-identical before and after — migration 1 is
-      // all IF NOT EXISTS, so applying it to an already-schema'd v0 database
-      // must not change anything.
+      // Migration 1 is all IF NOT EXISTS — applying it to an already-
+      // schema'd v0 database must not change the legacy tables. Later
+      // versions (v2-v5, C-386) append NEW tables, so the overall schema
+      // snapshot is allowed to grow; the legacy tables must be untouched.
       const schemaAfter = await schemaSnapshot(db);
-      expect(schemaAfter).toEqual(schemaBefore);
+      const afterNames = schemaAfter
+        .filter((row) => row.type === 'table')
+        .map((row) => row.name as string);
+      for (const table of SCHEMA_TABLES) {
+        expect(afterNames).toContain(table);
+      }
+      // New C-386 tables exist after migration.
+      for (const table of ['chats', 'chat_links', 'personas', 'npcs', 'custom_agents']) {
+        expect(afterNames).toContain(table);
+      }
     });
 
     test('AC-2: legacy v0 and fresh-migrated databases have identical schemas', async () => {

@@ -60,6 +60,7 @@
     "@aikami/frontend-utils": "workspace:*",
     "@aikami/frontend/engine": "workspace:*",
     "@aikami/logger": "workspace:*",
+    "@aikami/mocks": "workspace:*",
     "@aikami/parser": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",

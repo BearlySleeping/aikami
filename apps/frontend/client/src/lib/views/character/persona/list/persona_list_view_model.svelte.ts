@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts
 //
 // ViewModel for the Persona List screen. Loads personas from localStorage
-// and Firestore (when authenticated), supports selection (→ /game),
+// and the local personas table (C-386b), supports selection (→ /game),
 // deletion, active persona management, and navigation to persona creation.
 import {
   BaseViewModel,
@@ -88,11 +88,8 @@ class PersonaListViewModel
       // authService.initialize() is idempotent — returns immediately if already ready.
       await authService.initialize();
 
-      // Load from Firestore if authenticated
-      const uid = (authService as { uid?: string }).uid;
-      if (uid) {
-        await this._loadFromFirestore(uid);
-      }
+      // Load from the local personas table (C-386b) — personas are per-install.
+      await this._loadFromLocalTable();
     } catch (error) {
       this.warn('initialize:partial-load-failed', error);
     } finally {
@@ -175,11 +172,8 @@ class PersonaListViewModel
     try {
       await personaService.setActivePersona(personaId);
 
-      // Refresh from Firestore to get updated active states
-      const uid = (authService as { uid?: string }).uid;
-      if (uid) {
-        await this._loadFromFirestore(uid);
-      }
+      // Refresh to get updated active states
+      await this._loadFromLocalTable();
     } catch (error) {
       this.error('setActivePersona', error);
     }
@@ -202,13 +196,13 @@ class PersonaListViewModel
     }
   }
 
-  private async _loadFromFirestore(uid: string): Promise<void> {
+  private async _loadFromLocalTable(): Promise<void> {
     try {
-      const firestorePersonas = await personaService.getPersonas(uid);
+      const localPersonas = await personaService.getPersonas('local');
 
-      if (firestorePersonas.length > 0) {
-        // Merge Firestore personas into the local list
-        // Firestore personas take precedence for matching IDs
+      if (localPersonas.length > 0) {
+        // Merge local-table personas into the local list
+        // Local-table personas take precedence for matching IDs
         const mergedMap = new Map<string, SavedPersona>();
 
         // Start with localStorage personas
@@ -216,8 +210,8 @@ class PersonaListViewModel
           mergedMap.set(sp.persona.id, sp);
         }
 
-        // Overlay Firestore personas (more authoritative)
-        for (const fp of firestorePersonas) {
+        // Overlay local-table personas (more authoritative)
+        for (const fp of localPersonas) {
           if (!fp.id) {
             continue;
           }
@@ -235,7 +229,7 @@ class PersonaListViewModel
         );
       }
     } catch (error) {
-      this.warn('_loadFromFirestore:failed', error);
+      this.warn('_loadFromLocalTable:failed', error);
     }
   }
 

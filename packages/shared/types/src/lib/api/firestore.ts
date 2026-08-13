@@ -1,96 +1,60 @@
-// frontend aka firebase
-// backend aka firebase-admin
-import type {
-  CollectionReference as BackendCollectionReference,
-  DocumentData as BackendDocumentData,
-  DocumentReference as BackendDocumentReference,
-  DocumentSnapshot as BackendDocumentSnapshot,
-  FieldPath as BackendFieldPath,
-  FieldValue as BackendFieldValue,
-  Firestore as BackendFirestore,
-  GeoPoint as BackendGeoPoint,
-  Query as BackendQuery,
-  QuerySnapshot as BackendQuerySnapshot,
-  Timestamp as BackendTimestamp,
-  UpdateData as BackendUpdateData,
-  WhereFilterOp as BackendWhereFilterOp,
-  WriteBatch as BackendWriteBatch,
-} from '@google-cloud/firestore';
-import type {
-  DocumentData as FrontendDocumentData,
-  DocumentReference as FrontendDocumentReference,
-  DocumentSnapshot as FrontendDocumentSnapshot,
-  FieldPath as FrontendFieldPath,
-  FieldValue as FrontendFieldValue,
-  Firestore as FrontendFirestore,
-  GeoPoint as FrontendGeoPoint,
-  Query as FrontendQuery,
-  QuerySnapshot as FrontendQuerySnapshot,
-  Timestamp as FrontendTimestamp,
-  UpdateData as FrontendUpdateData,
-  WhereFilterOp as FrontendWhereFilterOp,
-  WriteBatch as FrontendWriteBatch,
-} from 'firebase/firestore';
+// packages/shared/types/src/lib/api/firestore.ts
+//
+// ⚠️ Firestore has been removed from the product (C-386). This file keeps the
+// legacy type surface that downstream shared packages still reference
+// (FieldValue, Timestamp, GeoPoint, repository option shapes) as plain
+// structural types with NO firebase SDK import. No new code should depend on
+// these; they exist solely so the shared types package compiles for the
+// remaining consumers (oauth2 form helpers, Removable/Nullable, domain utils).
 
-export type {
-  BackendCollectionReference,
-  BackendDocumentData,
-  BackendDocumentReference,
-  BackendDocumentSnapshot,
-  BackendFieldPath,
-  BackendFieldValue,
-  BackendFirestore,
-  BackendGeoPoint,
-  BackendQuery,
-  BackendQuerySnapshot,
-  BackendTimestamp,
-  BackendWhereFilterOp,
-};
+// ── Generic document/value shapes (firestore-shaped, SDK-free) ─────────
 
-export type WriteBatch = FrontendWriteBatch | BackendWriteBatch;
+/** A Firestore-shaped document (any JSON-ish record). */
+export type DocumentData = Record<string, unknown>;
 
-export type UpdateData<T extends DocumentData = DocumentData> =
-  | BackendUpdateData<T>
-  | FrontendUpdateData<T>;
+/** Sentinel values such as serverTimestamp/delete (structural stand-in). */
+export type FieldValue = unknown;
 
-export type Firestore = FrontendFirestore | BackendFirestore;
+/** A timestamp value (Date, number, or { seconds, nanoseconds }). */
+export type Timestamp =
+  | Date
+  | number
+  | { seconds: number; nanoseconds?: number; toDate: () => Date };
 
-export type DocumentData = FrontendDocumentData | BackendDocumentData;
-export type WhereFilterOp = FrontendWhereFilterOp | BackendWhereFilterOp;
+/** A geospatial point. */
+export type GeoPoint = { latitude: number; longitude: number };
 
-export type FieldPath = FrontendFieldPath | BackendFieldPath;
-// Query
-export type Query<T extends DocumentData = DocumentData> = FrontendQuery<T> | BackendQuery<T>;
+/** Field path operator set (legacy surface). */
+export type WhereFilterOp = string;
 
-export type QuerySnapshot<T extends DocumentData = DocumentData> =
-  | FrontendQuerySnapshot<T>
-  | BackendQuerySnapshot<T>;
+/** Field path reference (legacy surface). */
+export type FieldPath = string;
 
-export type CollectionReference<T extends DocumentData = DocumentData> =
-  | FrontendQuery<T>
-  | BackendCollectionReference<T>;
+// ── Repository-shaped types (legacy surface, SDK-free) ─────────────────
 
-export type DocumentReference<T extends DocumentData = DocumentData> =
-  | FrontendDocumentReference<T>
-  | BackendDocumentReference<T>;
+export type WriteBatch = unknown;
+export type Firestore = unknown;
+export type Query = unknown;
+export type QuerySnapshot = unknown;
+export type CollectionReference = unknown;
+export type DocumentReference = unknown;
+export type DocumentSnapshot = unknown;
+export type UpdateData = unknown;
 
-export type DocumentSnapshot<T extends DocumentData = DocumentData> =
-  | FrontendDocumentSnapshot<T>
-  | BackendDocumentSnapshot<T>;
-
-// Fields
-export type Timestamp = FrontendTimestamp | BackendTimestamp;
-export type FieldValue = FrontendFieldValue | BackendFieldValue;
-export type GeoPoint = FrontendGeoPoint | BackendGeoPoint;
-
+/** Creates a Firestore FieldValue serverTimestamp sentinel. */
 export type ServerTimestamp = () => FieldValue;
+/** Creates a Firestore FieldValue increment sentinel. */
 export type ServerIncrement = (amount: number) => FieldValue;
+/** Creates a Firestore FieldValue arrayUnion sentinel. */
 export type ServerArrayUnion = (...elements: unknown[]) => FieldValue;
+/** Creates a Firestore FieldValue arrayRemove sentinel. */
 export type ServerArrayRemove = (...elements: unknown[]) => FieldValue;
-
+/** Creates a Firestore FieldValue delete sentinel. */
 export type ServerDelete = () => FieldValue;
 
+/** Converts lat/lng to a GeoPoint. */
 export type ToGeoPoint = (lat: number, lng: number) => GeoPoint;
+/** Converts a Date to a Timestamp. */
 export type ToTimestamp = (date: Date) => Timestamp;
-
+/** Returns the current time as a Timestamp. */
 export type ToTimestampNow = () => Timestamp;

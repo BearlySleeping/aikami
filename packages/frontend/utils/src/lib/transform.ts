@@ -1,9 +1,11 @@
 import { unixLabel } from '@aikami/constants';
 import type { CoreData } from '@aikami/types';
-import { Timestamp } from 'firebase/firestore';
 
 /**
- * Converts json data back to Timestamp instances.
+ * Converts json data back to timestamp instances.
+ *
+ * Firestore was removed from the product (C-386); unix-suffixed numeric
+ * values are now converted to a plain Date so the shape stays JSON-safe.
  *
  * @param data The data to convert.
  * @returns The converted data.
@@ -26,7 +28,7 @@ export const fromJsonData = <T extends Omit<CoreData, 'createdAt'>>(
     if (key.endsWith(unixLabel) && typeof value === 'number') {
       // Strip only the trailing unixLabel suffix so earlier occurrences in the
       // key (e.g. `lastUnixUpdatedUnix` → `lastUnixUpdated`) are preserved.
-      transformedData[key.slice(0, -unixLabel.length)] = Timestamp.fromMillis(value);
+      transformedData[key.slice(0, -unixLabel.length)] = new Date(value);
       continue;
     }
 

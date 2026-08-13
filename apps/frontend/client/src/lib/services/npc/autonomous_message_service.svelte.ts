@@ -268,7 +268,7 @@ class AutonomousMessageService
       }
     }
 
-    // Also try to get user NPCs from the npc service (firestore-backed NPCs)
+    // Also try to get user NPCs from the npc service (local SQLite NPCs)
     try {
       // This is async but called from _tick — we handle inline
       // Since we can't await here, we use cached data from schedules
