@@ -7,7 +7,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/135"
+  pr_number: 135
 created_at: "2026-08-11"
 ---
 
@@ -21,7 +22,7 @@ created_at: "2026-08-11"
 | **Target** | `packages/frontend/engine/src/systems/` — collision, movement, new path-follow; `math/` — A* replacing JPS; `components/` — GridPosition sync, PathFollow; `assets/map_loader.ts` — flip flags, GID convention; `game_world.ts` — keybinding wiring; `apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts` — folded into ECS |
 | **Priority** | P0 — `GridPosition` is written once at spawn and never updated, so the player has **no grid position at all** and the entire vision system can never see them; the movement system applies the **player's** collision mask to every entity; and ~1,400 lines of pathfinder have zero callers while NPCs cannot walk. |
 | **Dependencies** | **C-378** (hard — `terrainCost` derives from the terrain channel). C-377 (transitively). C-376 (merged — this contract removes the wall entities it introduced). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` — `/game` route, `collision_e2e.spec.ts`, `emergent_world.visual.ts` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -56,7 +57,7 @@ checks.
 
 ### 🔴 B. Movement applies the player's collision mask to every entity
 
-`systems/movement_system.ts:213` and `:255` both hardcode:
+`systems/movement_system.ts:216`, `:258` and `:322` all hardcode:
 
 ```ts
 if (isCellBlocked(tx, ty, PLAYER_COLLISION_MASK) || !isWalkable(px, py)) {
@@ -68,17 +69,21 @@ inside the shared `query(world, [Position, Velocity])` loop.
 never for movement. So a moving NPC is not blocked by the player, and enemies
 are not blocked by each other.
 
-This is currently masked by the fact that only the player and party followers
-move — and followers move badly. `services/game/party_follow_service.svelte.ts`
-posts `SET_ENTITY_VELOCITY` bridge commands on a **150ms** interval
-(`FOLLOW_TICK_MS`) at `FOLLOW_SPEED = 80` px/s from the **main thread**, with
-pure formation-offset steering and no pathfinding. Combined with A2, a follower
-pins on the first wall corner and leaves a phantom blocker behind.
+This is currently masked by the fact that only the player moves in production
+— `services/game/party_follow_service.svelte.ts` posts `SET_ENTITY_VELOCITY`
+bridge commands on a **150ms** interval (`FOLLOW_TICK_MS`) at
+`FOLLOW_SPEED = 80` px/s from the **main thread**, with pure formation-offset
+steering and no pathfinding — but it has **zero consumers** (only a barrel
+re-export; the composition root never wires it), so recruited companions simply
+never move. The live-but-broken follower loop is the dev sandbox VM
+(`views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts`),
+which posts `SET_ENTITY_VELOCITY` itself; combined with A2 it pins on the
+first wall corner and leaves a phantom blocker behind.
 
 ### 🔴 C. `movement_system` hardcodes a 32px tile
 
 ```ts
-// movement_system.ts:173
+// movement_system.ts:176
 const tileSize = 32; // Default tile size (matches CELL_PIXEL_SIZE in render_system)
 ```
 
@@ -89,7 +94,9 @@ system. Any pack that is not 32px gets silently wrong collision.
 ### 🔴 D. Wall-as-entity is pure redundancy
 
 `systems/collision_system.ts:446-486` (`_populateWallsFromCollisionGrid`) creates
-one bitECS entity per solid tile — **182 on the village map alone**. Every caller
+one bitECS entity per solid tile — **191 on the committed village map at HEAD**
+(182 at the old verified HEAD `4ea2ccf5`; the map gained solid cells in C-378's
+conversion — recompute at implementation time, do not hardcode). Every caller
 uses the composite:
 
 ```ts
@@ -117,9 +124,9 @@ already separate entities (`entity_spawner._spawnInteractable`).
 
 `systems/jps_pathfinder_system.ts:78` exports `requestPath`. Grep across
 `packages` and `apps`: **the only occurrences are the definition, the barrel
-re-export (`index.ts:439`), and its own test.** `initJpsPathfinder` is called on
-LOAD_MAP (`ecs_worker.ts:690`, `:1973`) and `tickJpsPathfinder()` runs every
-frame (`:1005`) over an always-empty queue.
+re-export (`index.ts:458`), and its own test.** `initJpsPathfinder` is called on
+LOAD_MAP (`ecs_worker.ts:695`, `:2017`) and `tickJpsPathfinder()` runs every
+frame (`:1010`) over an always-empty queue.
 
 `apps/e2e/tests/game/jps_navigation.spec.ts` claims to be the E2E for C-192 but
 only navigates to `/dev/sandbox/map` and asserts `page.title()` is defined — it
@@ -133,8 +140,8 @@ uniform-cost, obstacle-sparse grids over long distances. The maps are 20×20 to
 ### 🔴 F. `input_system.ts` is dead, so keybinding rebinds do nothing
 
 `systems/input_system.ts:45` (`setupInput`) has **no callers**. The live handler
-is `GameWorld._setupKeyboardInput` (`game_world.ts:1570-1708`), which hardcodes
-`w/a/s/d/arrow*` at `:1587-1598`. `systems/keybinding_config.ts` (`keyToDirection`)
+is `GameWorld._setupKeyboardInput` (`game_world.ts:1758`), which hardcodes
+`w/a/s/d/arrow*` at `:1776-1787`. `systems/keybinding_config.ts` (`keyToDirection`)
 is imported **only** by the dead `input_system.ts`. The Settings → Controls UI
 (`views/settings/controls/settings_controls_view_model.svelte.ts:125`) writes
 rebinds to localStorage that nothing reads.
@@ -171,15 +178,18 @@ dimensions — multi-tileset layers render garbage.
 `ContentPackTileSchema` declares `isWall`. The vision raycasters
 (`math/vision/dda_raycaster.ts:52`, `math/vision/shadowcasting.ts:106`) take an
 `isWall(gx, gy)` callback, and `spatial_vision_system.ts:151,164` supplies one —
-but it is wired to the spatial grid, not to manifest sight-blocking. A fence
-blocks movement but not sight; a window blocks movement but not sight. The
-distinction has a declared field and no implementation.
+but the caller (`ecs_worker.ts:695-704`) wires it to the **boolean collision
+grid**, not to manifest sight-blocking. So today a fence blocks sight *because
+it is solid* — the manifest's `isWall` field is never read, and a
+movement-passable but sight-blocking tile (e.g. a window or hedge) is
+impossible to author. This contract feeds a real `blocksSight` grid to the
+raycasters so the declared distinction becomes implementable.
 
 ### Baseline tests
 
 - `moon run engine:test` — 910 pass / 0 fail
 - `apps/e2e/tests/game/collision_e2e.spec.ts`, `vision_perception.spec.ts`, `goap_cognition.spec.ts`, `emergent_world_integration.spec.ts`
-- `packages/frontend/engine/src/systems/movement_system.test.ts` (437 lines), `__tests__/spatial_grid.test.ts` (506), `__tests__/spatial_vision.test.ts` (831), `__tests__/jps_pathfinder.test.ts` (423 — deleted by this contract)
+- `packages/frontend/engine/src/systems/movement_system.test.ts` (612 lines), `__tests__/spatial_grid.test.ts` (506), `__tests__/spatial_vision.test.ts` (831), `__tests__/jps_pathfinder.test.ts` (423 — deleted by this contract)
 
 ## User Outcome
 
@@ -229,6 +239,7 @@ for GOAP agents and party followers alike.
 
 - C-173 introduced the dense spatial grid + `SpatialLink`; C-376 completed it with wall entities. This contract keeps the former and removes the latter — read both contracts before touching `collision_system.ts`.
 - C-378 owns the terrain channel; `terrainCost` is derived from it, not re-parsed.
+- **Plumbing gap (verified at HEAD):** the worker's `LOAD_MAP` payload carries only `collisionGrid` (boolean) + `packConfig` — the per-cell `aikami.terrain` channel is parsed client-side in `map_loader` and never crosses the worker boundary, and the committed maps (`village.json` etc.) have **no** terrain channel (legacy baked-GID). Phase 1 must therefore (a) add the terrain channel (or a derived cost array) to the `LOAD_MAP` message, and (b) define the legacy fallback: terrainless maps derive cost from the boolean grid (0/16). AC-6's weighted-cost case requires a terrain-channel fixture or a synthetic cost grid in the A* test — it cannot be exercised on `village.json` as committed.
 - `systems/goap_scheduler_system.ts` already selects actions; the missing piece is an executor. Follow the existing worker tick ordering (`ecs_worker.ts:911-1090`): Perception → Cognition → **Navigation** → Resolution. Path-follow belongs in Navigation, writing `Velocity` that Resolution consumes.
 - `math/vision/dda_raycaster.ts` and `shadowcasting.ts` already take an `isWall` callback — supply a real `blocksSight` grid rather than changing their signatures.
 
@@ -289,7 +300,7 @@ type MoveGoal = {
 
 - **Offline/degraded mode**: N/A — no network path.
 - **Accessibility/input**: keybinding rebinds from Settings → Controls must take effect on the next keydown without reload. This is the first time that UI does anything.
-- **Performance budget**: A* under 2ms for a 200×200 grid; `GridPosition` sync is O(moving entities), not O(all entities); removing 182 wall entities per village load should reduce every `query()` in the tick.
+- **Performance budget**: A* under 2ms for a 200×200 grid; `GridPosition` sync is O(moving entities), not O(all entities); removing ~191 wall entities per village load should reduce every `query()` in the tick.
 - **Security/privacy**: N/A.
 - **Persistence/migration**: wall entities are runtime-only and never serialized (`serialization/ecs_serializer.ts` persists player-scoped components only), so removing them does not affect saves. `PathFollow` is runtime-only and must be excluded from serialization. See Migration & Rollback.
 - **Cancellation/retry/idempotency**: `LOAD_MAP` rebuilds both grids from scratch; repeated loads must not leak occupancy entries. A path request superseded by a new goal must abandon cleanly.
@@ -298,7 +309,7 @@ type MoveGoal = {
 ## Migration & Rollback
 
 - **Old data compatibility**: saves are unaffected — wall entities and `PathFollow` are runtime-only, and no serialized component changes shape. Existing saves must load and restore identically; that is AC-9.
-- **Migration**: none for persisted data. The `party_follow_service` public interface is consumed by `game_composition_root.svelte.ts` — its `configure`/`start`/`stop`/`setFormation` surface is preserved while the implementation moves behind the bridge.
+- **Migration**: none for persisted data. `party_follow_service.svelte.ts` is currently **dead code** — the `partyFollowService` singleton has zero consumers (verified: only the barrel re-export at `apps/frontend/client/src/lib/services/index.ts:85`; the composition root wires `partyRosterService`, never `partyFollowService`). The live follower loop lives in the dev sandbox VM (`views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts`), which posts `SET_ENTITY_VELOCITY` itself. This contract folds follow into the ECS and may delete the service outright — there is no facade to preserve. The dev sandbox VM is out of scope (dev-only route) and keeps its own loop, or is migrated at the implementer's discretion.
 - **Rollback**: `git revert`. No data written by this contract outlives the process.
 - **Feature flag or kill switch**: NPC locomotion is gated on a `PathFollow` component being attached. If GOAP's movement executor is disabled, agents simply stand still — the pre-contract behaviour — with no other system affected.
 - **Failure recovery**: an unreachable goal returns no path and the agent holds position with a logged warning; it must never spin re-requesting every tick (enforce `repathAtMs`).
@@ -313,7 +324,7 @@ type MoveGoal = {
   - Deletion of `math/jps/*`, `systems/jps_pathfinder_system.ts`, its test, and `apps/e2e/tests/game/jps_navigation.spec.ts`
   - Weighted A* + `PathFollow` component + path-follow system in the Navigation slot
   - GOAP movement executor (goal cell → path request)
-  - Party follow folded into the ECS as a goal provider; client service becomes a thin facade
+  - Party follow folded into the ECS as a goal provider; `party_follow_service.svelte.ts` deleted (no production consumer — see Migration & Rollback) or kept only if the dev sandbox VM is migrated too
   - Deletion of `systems/input_system.ts`; `keyToDirection` wired into `GameWorld._setupKeyboardInput`
   - Tiled flip-flag masking at parse; single GID convention; multi-tileset-per-layer support
   - `blocksSight` fed to the vision raycasters
@@ -398,7 +409,7 @@ this contract exists to remove.
 ### AC-4: Terrain solidity comes from a cost grid, and no wall entities exist
 **Given** any map load
 **When** the collision structures are built
-**Then** `terrainCost` and `blocksSight` are populated from the terrain channel, zero entities are created for solid tiles, and the entity count after loading `village.json` is the pre-contract count minus 182
+**Then** `terrainCost` and `blocksSight` are populated (terrain-channel maps from the channel; legacy maps without one fall back to the boolean grid with cost 0/16), zero entities are created for solid tiles, and the entity count after loading `village.json` is the pre-contract count minus the map's solid-cell count (191 on the committed `village.json` at current HEAD)
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -411,8 +422,8 @@ this contract exists to remove.
 - E2E / Visual: `collision_e2e.spec.ts` — the player must still be stopped by the same walls as before
 
 **Watch Points**:
-- `math/bresenham.ts` is wired to the spatial grid via `setBresenhamGrid` (`collision_system.ts:248`) and its callers assume terrain shows up there. Re-point it at `terrainCost` or it silently sees an empty world.
-- The composite `isCellBlocked(...) || !isWalkable(...)` appears at several call sites (`ecs_worker.ts:1950,1968`, `turn_manager_system.ts:1948`, `goap_combat_tactics_system.ts:129,272`). Every one must move to the new API in the same change — a half-migrated composite is worse than either version.
+- `math/bresenham.ts` is wired to the spatial grid via `setBresenhamGrid` (`collision_system.ts:263`) and its callers assume terrain shows up there. Re-point it at `terrainCost` or it silently sees an empty world.
+- The composite `isCellBlocked(...) || !isWalkable(...)` appears at several call sites (`ecs_worker.ts:1950,1968`, `turn_manager_system.ts:1948`, `goap_combat_tactics_system.ts:129,272`, plus a third hardcoded-mask site the contract's Problem B misses: `isPlayerSpawnBlocked` at `movement_system.ts:322`, which also uses `PLAYER_COLLISION_MASK` + the `TILE_SIZE = 32` const at `movement_system.ts:80`). Every one must move to the new API in the same change — a half-migrated composite is worse than either version.
 
 ### AC-5: Movement uses the map's tile size
 **Given** a content pack declaring a tile size other than 32
@@ -431,6 +442,7 @@ this contract exists to remove.
 
 **Watch Points**:
 - `ENTITY_HALF_WIDTH = 16` and `ENTITY_HEIGHT_ABOVE = 32` (`movement_system.ts:69,77`) are the *entity* box, not the tile — do not scale them with tile size. They are a separate concern; leave them and note it.
+- **Also hardcoded: `TILE_SIZE = 32` at `movement_system.ts:80`**, consumed by `isPlayerSpawnBlocked` (`movement_system.ts:312-315`) and the axis sampler. Replace it with the map-driven tile size in the same change, or the spawn clamp silently mis-samples on non-32px maps.
 - `CELL_PIXEL_SIZE = 32` in `render_system.ts:32` is in the mostly-dead module; do not chase it here.
 
 ### AC-6: Weighted A* replaces JPS and honours movement cost
@@ -465,14 +477,14 @@ this contract exists to remove.
 
 **Test Hooks**:
 - Moon Task: `moon run engine:test`
-- Integration: place a companion behind a wall from the player, step the sim, assert it reaches the formation slot without passing through the wall; assert `SET_ENTITY_VELOCITY` has no remaining producer in `apps/frontend/client/src`
+- Integration: place a companion behind a wall from the player, step the sim, assert it reaches the formation slot without passing through the wall; assert `SET_ENTITY_VELOCITY` has no remaining producer in `apps/frontend/client/src/lib/services` (the dev sandbox VM at `views/dev/sandbox/party_follow/` is a dev-only route and is exempt)
 - E2E / Visual:
   - **Functional**: extend `apps/e2e/tests/game/emergent_world_integration.spec.ts` with an NPC-moved-over-time assertion
   - **Visual**: `emergent_world.visual.ts` — add `npcsOccupyVariedPositions: Type.Boolean({ description: 'Whether NPCs are distributed rather than frozen at spawn points' })`
 
 **Watch Points**:
 - Path-follow must run in the Navigation slot (`ecs_worker.ts` step 5), before `updateMovement` in Resolution — writing `Velocity` after movement resolves loses a frame and desynchronises facing.
-- `party_follow_service` keeps its public interface for `game_composition_root.svelte.ts:448`; only the implementation moves. Verify the composition root still wires cleanly.
+- `party_follow_service` has no production consumer (see Migration & Rollback) — delete it, or keep the barrel export only if the dev sandbox is migrated too. Do not preserve a facade for a nonexistent composition-root consumer.
 - Guard against repath storms: an agent whose goal is unreachable must back off via `repathAtMs`, not retry every tick.
 
 ### AC-8: Keybinding rebinds take effect
@@ -525,19 +537,19 @@ this contract exists to remove.
 
 **Test Hooks**:
 - Moon Task: `moon run client:test && moon run engine:test`
-- Integration: load a committed pre-contract v3 save fixture; assert restored position and that `serializeEntityStates` output contains no `PathFollow`
+- Integration: build a v3 save envelope in-memory following the existing pattern in `game_save_service.test.ts` (no committed save fixture exists at HEAD — the suite synthesizes envelopes); assert restored position and that `serializeEntityStates` output contains no `PathFollow`
 - E2E / Visual: N/A
 
 **Watch Points**:
-- The LOAD_MAP spawn clamp (`ecs_worker.ts:1950,1968`) currently calls bare `isWalkable`; when it moves to `terrainCost` the clamp behaviour must not shift, or restored saves land on different tiles than they were saved on.
+- The LOAD_MAP spawn clamp (`ecs_worker.ts:1593,2046`) currently calls bare `isWalkable`; when it moves to `terrainCost` the clamp behaviour must not shift, or restored saves land on different tiles than they were saved on.
 
 ## Implementation Sequence
 
-1. **Phase 1 (Grids)**: Build `terrainCost` + `blocksSight` from C-378's terrain channel. Migrate every `isCellBlocked || !isWalkable` composite call site in one change. Re-point `setBresenhamGrid`. Delete `_populateWallsFromCollisionGrid`, `_wallEids`, the budget guard and the boolean grid.
+1. **Phase 1 (Grids)**: Build `terrainCost` + `blocksSight` from C-378's terrain channel, plumbing the channel into the `LOAD_MAP` message (client `map_loader`/`game_world` → worker), with the legacy fallback (boolean grid → cost 0/16) for terrainless maps. Migrate every `isCellBlocked || !isWalkable` composite call site in one change. Re-point `setBresenhamGrid`. Delete `_populateWallsFromCollisionGrid`, `_wallEids`, the budget guard and the boolean grid.
 2. **Phase 2 (GridPosition)**: Add the sync system with change-gated occupancy updates. Give the player `GridPosition` + `CollisionData` + `SpatialLink`. Feed `blocksSight` to the vision raycasters.
 3. **Phase 3 (Movement)**: Per-entity masks; map-driven tile size.
 4. **Phase 4 (Navigation)**: Write weighted A* with tests. Add `PathFollow` + the path-follow system in the Navigation slot. Delete `math/jps/*`, `jps_pathfinder_system.ts`, its test, and the E2E spec.
-5. **Phase 5 (Consumers)**: GOAP movement executor. Fold party follow into an ECS goal provider behind the existing service facade.
+5. **Phase 5 (Consumers)**: GOAP movement executor. Fold party follow into an ECS goal provider; delete `party_follow_service.svelte.ts` (no production consumer exists — see Migration & Rollback) and remove its barrel re-export, or migrate the dev sandbox VM at the implementer's discretion.
 6. **Phase 6 (Input)**: Wire `keyToDirection` into `GameWorld._setupKeyboardInput`; delete `input_system.ts`; prune the barrel.
 7. **Phase 7 (Parsing)**: Flip-flag masking, single GID convention, multi-tileset layer support.
 8. **Phase 8 (Validation)**: `moon run :typecheck && :test && :lint`; `collision_e2e.spec.ts`, `vision_perception.spec.ts`, `emergent_world_integration.spec.ts`; `emergent_world.visual.ts`.
@@ -546,18 +558,26 @@ this contract exists to remove.
 
 - **Giving the player `CollisionData` is a behaviour change, not a bookkeeping one.** NPCs will start being blocked by the player. Verify no NPC can be permanently trapped between the player and a wall, and that dialogue proximity still triggers.
 - **The intrusive linked list is unforgiving.** A double insert or a missed remove silently corrupts a cell's list and produces phantom blockers that survive until map reload. Assert list integrity (walk every cell, count nodes, compare to expected occupancy) in a test helper.
-- **`serializeEntityStates` still indexes by raw `eid`.** Removing 182 wall entities relieves the pressure but does not fix the coupling; if entity counts grow later, entities past index 10000 vanish. Note it; do not fix it here.
-- **`resetMovementTracking` is a documented no-op** (`movement_system.ts:293`). Delete it while in this file.
+- **`serializeEntityStates` still indexes by raw `eid`.** Removing ~191 wall entities relieves the pressure but does not fix the coupling; if entity counts grow later, entities past index 10000 vanish. Note it; do not fix it here.
+- **`resetMovementTracking` is a documented no-op** (`movement_system.ts:413-418`). Delete it while in this file.
 - **The GOAP action registry has no notion of "where".** Adding a goal cell to actions is a genuine design step, not a wiring step — keep it minimal (a handful of actions gain a destination; the rest stay in place) rather than modelling a full navigation graph.
 - **Do not "improve" `goap_combat_tactics_system` while passing through.** It has 529 lines of tests pinning current behaviour; the mask fix is the only intended change.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved at critic stage (recommendations accepted — recorded so the
+implementer does not re-litigate):
 
-- Cost encoding: `Uint8Array` with cost ×16 caps at 15.9. Is that range sufficient, or should it be `Uint16Array`? Recommendation: `Uint8Array` — a cost above ~4 is indistinguishable from impassable in practice.
-- Should `PathFollow` support path smoothing (string-pulling) in this contract, or is waypoint-to-waypoint movement acceptable? Recommendation: defer smoothing — grid-aligned movement reads as deliberate in a JRPG, and smoothing interacts with the collision box in ways worth testing separately.
-- Does the party-follow formation goal become a GOAP action, or a separate lightweight goal provider? Recommendation: separate provider — companions should follow while GOAP is idle, without competing for the action slot.
+- **Cost encoding**: `Uint8Array` with cost ×16. A cost above ~4 is
+  indistinguishable from impassable in practice; `Uint16Array` would double the
+  grid's memory for no gameplay win at this scale. If a future pack needs finer
+  granularity, widening is a one-line type change confined to the grid builder.
+- **Path smoothing**: deferred. Grid-aligned waypoint-to-waypoint movement is
+  deliberate in a JRPG; string-pulling interacts with the collision box and
+  deserves its own tested contract.
+- **Party-follow goal provider**: separate lightweight provider, not a GOAP
+  action. Companions follow while GOAP is idle; competing for the action slot
+  would starve follow whenever an action is available.
 
 ## Amendments
 
