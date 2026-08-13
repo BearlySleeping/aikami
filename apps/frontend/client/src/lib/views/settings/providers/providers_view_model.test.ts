@@ -14,8 +14,7 @@ let loadCalls = 0;
 let saveCalls = 0;
 let resetCalls = 0;
 
-const CONFIG_SERVICE_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/config_service.svelte.ts';
+const CONFIG_SERVICE_PATH = '$lib/services/config/config_service.svelte.ts';
 
 const getDefaultConfig = () => ({
   advancedOverrides: { thinkingLevel: 0 },
@@ -149,8 +148,7 @@ let mockServiceStatus: Record<string, string> = {
 let detectAllCalls = 0;
 let detectServiceCalls: string[] = [];
 
-const DETECTOR_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/local_service_detector.svelte';
+const DETECTOR_PATH = '$lib/services/config/local_service_detector.svelte';
 
 mock.module(DETECTOR_PATH, () => ({
   LocalServiceDetector: class {

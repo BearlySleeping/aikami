@@ -9,6 +9,10 @@ let { viewModel }: Props = $props();
 
 const showProgress = $derived(viewModel.isGenerating);
 const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
+const supportsMask = $derived(viewModel.availableControls.includes('mask'));
+const supportsSeed = $derived(viewModel.availableControls.includes('seed'));
+const supportsSampler = $derived(viewModel.availableControls.includes('sampler'));
+const supportsNegative = $derived(viewModel.availableControls.includes('negativePrompt'));
 
 /** Handles file input change events. */
 const onFileChange = (e: Event) => {
@@ -44,6 +48,48 @@ const onFileChange = (e: Event) => {
             {tab.label}
           </button>
         {/each}
+      </div>
+
+      <!-- ── Engine selector (C-388) ─────────────────────────────────── -->
+      <div class="card bg-base-200 shadow mb-6">
+        <div class="card-body p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff]">
+              Image Engine
+            </h2>
+            {#if viewModel.engineId}
+              <span class="badge badge-ghost gap-1 text-[10px] font-mono"
+                >active: {viewModel.engineId}</span
+              >
+            {/if}
+          </div>
+          <div class="flex items-end gap-3">
+            <label class="form-control flex-1">
+              <div class="label py-0.5">
+                <span class="label-text text-xs font-semibold">Engine (PUBLIC_IMAGE_ENGINE)</span>
+              </div>
+              <select
+                class="select select-bordered select-sm w-full"
+                aria-label="Image engine"
+                value={viewModel.engineId ?? 'auto'}
+                disabled={viewModel.isGenerating}
+                onchange={(e: Event) => {
+                  const selected = (e.target as HTMLSelectElement).value as 'auto' | 'sdcpp' | 'comfyui';
+                  void viewModel.setEngine(selected);
+                }}
+              >
+                {#each viewModel.engineOptions as engine}
+                  <option value={engine.id}>{engine.label}</option>
+                {/each}
+              </select>
+            </label>
+            {#if viewModel.isAutoDetect}
+              <span class="text-[10px] font-mono text-base-content/40 pb-2"
+                >auto-detect prefers sd-server</span
+              >
+            {/if}
+          </div>
+        </div>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════
@@ -127,20 +173,22 @@ const onFileChange = (e: Event) => {
                   {/each}
                 </select>
               </label>
-              <label class="form-control">
-                <div class="label py-0.5">
-                  <span class="label-text text-xs font-semibold">Sampler</span>
-                </div>
-                <select
-                  class="select select-bordered select-sm w-full"
-                  bind:value={viewModel.sampler}
-                  disabled={viewModel.isGenerating}
-                >
-                  {#each SAMPLERS as s}
-                    <option value={s}>{s}</option>
-                  {/each}
-                </select>
-              </label>
+              {#if supportsSampler}
+                <label class="form-control">
+                  <div class="label py-0.5">
+                    <span class="label-text text-xs font-semibold">Sampler</span>
+                  </div>
+                  <select
+                    class="select select-bordered select-sm w-full"
+                    bind:value={viewModel.sampler}
+                    disabled={viewModel.isGenerating}
+                  >
+                    {#each SAMPLERS as s}
+                      <option value={s}>{s}</option>
+                    {/each}
+                  </select>
+                </label>
+              {/if}
               <label class="form-control">
                 <div class="label py-0.5">
                   <span class="label-text text-xs font-semibold">Scheduler</span>
@@ -155,18 +203,20 @@ const onFileChange = (e: Event) => {
                   {/each}
                 </select>
               </label>
-              <label class="form-control">
-                <div class="label py-0.5">
-                  <span class="label-text text-xs font-semibold">Seed (-1 = random)</span>
-                </div>
-                <input
-                  type="number"
-                  class="input input-bordered input-sm w-full font-mono text-xs"
-                  bind:value={viewModel.seed}
-                  disabled={viewModel.isGenerating}
-                  min="-1"
-                >
-              </label>
+              {#if supportsSeed}
+                <label class="form-control">
+                  <div class="label py-0.5">
+                    <span class="label-text text-xs font-semibold">Seed (-1 = random)</span>
+                  </div>
+                  <input
+                    type="number"
+                    class="input input-bordered input-sm w-full font-mono text-xs"
+                    bind:value={viewModel.seed}
+                    disabled={viewModel.isGenerating}
+                    min="-1"
+                  >
+                </label>
+              {/if}
               <label class="form-control">
                 <div class="label py-0.5">
                   <span class="label-text text-xs font-semibold">Steps ({viewModel.steps})</span>
@@ -265,18 +315,20 @@ const onFileChange = (e: Event) => {
                 onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
               ></textarea>
             </label>
-            <label class="form-control w-full">
-              <div class="label">
-                <span class="label-text font-semibold text-base-content/70">Negative Prompt</span
-                ><span class="label-text-alt text-base-content/40">things to avoid</span>
-              </div>
-              <textarea
-                class="textarea textarea-bordered w-full min-h-14 font-mono text-sm opacity-80"
-                placeholder="e.g. blurry, low quality, deformed..."
-                bind:value={viewModel.negativePrompt}
-                disabled={viewModel.isGenerating}
-              ></textarea>
-            </label>
+            {#if supportsNegative}
+              <label class="form-control w-full">
+                <div class="label">
+                  <span class="label-text font-semibold text-base-content/70">Negative Prompt</span
+                  ><span class="label-text-alt text-base-content/40">things to avoid</span>
+                </div>
+                <textarea
+                  class="textarea textarea-bordered w-full min-h-14 font-mono text-sm opacity-80"
+                  placeholder="e.g. blurry, low quality, deformed..."
+                  bind:value={viewModel.negativePrompt}
+                  disabled={viewModel.isGenerating}
+                ></textarea>
+              </label>
+            {/if}
             <div class="flex gap-3 mt-4">
               {#if viewModel.isGenerating}
                 <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
@@ -553,6 +605,53 @@ const onFileChange = (e: Event) => {
         <!-- Edit prompt -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-6">
+            {#if supportsMask}
+              <div class="mb-4">
+                <h3
+                  class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-2"
+                >
+                  Inpainting Mask (optional)
+                </h3>
+                {#if viewModel.inputMaskDataUrl}
+                  <div class="flex items-start gap-4">
+                    <img
+                      src={viewModel.inputMaskDataUrl}
+                      alt="Mask"
+                      class="w-16 h-16 rounded object-cover border border-white/10"
+                    >
+                    <div class="flex-1">
+                      <p class="text-xs text-base-content/70 mb-2">{viewModel.inputMaskName}</p>
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
+                        onclick={() => viewModel.clearMask()}
+                      >
+                        Remove mask
+                      </button>
+                    </div>
+                  </div>
+                {:else}
+                  <label
+                    class="flex items-center gap-2 p-3 border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-[#cabeff]/30 transition-colors"
+                    title="Inpainting mask — single-channel image marking the region to redraw"
+                  >
+                    <span class="text-xl">🖼</span>
+                    <span class="text-xs text-base-content/50">Click to upload a mask</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      class="hidden"
+                      onchange={(e: Event) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        viewModel.handleMaskUpload(file);
+                      }
+                    }}
+                    >
+                  </label>
+                {/if}
+              </div>
+            {/if}
             <label class="form-control w-full">
               <div class="label">
                 <span class="label-text font-semibold">Edit Description</span

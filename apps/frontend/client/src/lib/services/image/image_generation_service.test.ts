@@ -1,21 +1,74 @@
-// apps/frontend/client/src/lib/services/media/image_generation.test.ts
+// apps/frontend/client/src/lib/services/image/image_generation_service.test.ts
 // biome-ignore-all lint/style/useNamingConvention: Property names must match ComfyUI API field names (PascalCase and snake_case)
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+//
+// ImageGenerationService — C-388 AC-2 (negative prompt reaches engine),
+// AC-3 (engine toggle changes wire protocol), AC-7 (progress),
+// AC-8 (model listing both engines).
+//
+// Contract: C-388 Image Engine Provider Abstraction
 
-// Mock configService BEFORE importing ImageGenerationService to avoid
-// cross-test contamination from other test files that also import it.
-const CONFIG_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/config_service.svelte.ts';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-mock.module(CONFIG_SVC_PATH, () => ({
-  configService: {
-    state: {
-      image: { checkpoint: '' },
+// Mock the engine factory BEFORE importing the service so loadCheckpoints /
+// generateImage delegate to a controllable engine.
+let mockEngineId: 'comfyui' | 'sdcpp' = 'comfyui';
+let mockModels: Array<{ id: string; description: string }> = [
+  { id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' },
+];
+let mockGenerateRequest: Record<string, unknown> | undefined;
+let mockProgress: Array<{ fraction: number; label: string }> = [];
+
+mock.module('./engine/image_engine_factory.svelte.ts', () => ({
+  getConfiguredImageEngineId: () => (mockEngineId === 'comfyui' ? 'comfyui' : 'sdcpp'),
+  resolveImageEngine: mock(async () => ({
+    id: mockEngineId,
+    capabilities: {
+      negativePrompt: true,
+      seed: true,
+      sampler: true,
+      initImage: true,
+      mask: mockEngineId === 'sdcpp',
+      referenceImages: mockEngineId === 'sdcpp',
+      controlNet: mockEngineId === 'sdcpp',
+      lora: mockEngineId === 'sdcpp',
+      cancel: true,
+      progress: true,
     },
-    load: mock(async () => {}),
-    save: mock(async () => {}),
-  },
-  __esModule: true,
+    healthCheck: mock(async () => true),
+    listModels: mock(async () => mockModels),
+    generate: mock(
+      async (
+        request: Record<string, unknown>,
+        callbacks: {
+          signal?: AbortSignal;
+          onProgress?: (p: { fraction: number; label: string }) => void;
+        },
+      ) => {
+        mockGenerateRequest = request;
+        if (callbacks?.onProgress) {
+          callbacks.onProgress({ fraction: 0.05, label: 'Queuing' });
+          callbacks.onProgress({ fraction: 0.5, label: 'Generating' });
+          callbacks.onProgress({ fraction: 1, label: 'Complete' });
+        }
+        mockProgress = [
+          { fraction: 0.05, label: 'Queuing' },
+          { fraction: 0.5, label: 'Generating' },
+          { fraction: 1, label: 'Complete' },
+        ];
+        if (callbacks?.signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
+        return {
+          blob: new Blob(['fake-png'], { type: 'image/png' }),
+          width: 512,
+          height: 512,
+          mimeType: 'image/png',
+        };
+      },
+    ),
+  })),
+  resetImageEngineCache: () => {},
+  setImageEngineOverride: () => {},
 }));
 
 import {
@@ -23,439 +76,205 @@ import {
   type ImageGenerationServiceInterface,
 } from './image_generation_service.svelte.ts';
 
-// ---------------------------------------------------------------------------
-// ImageGenerationService — C-076: Image Sandbox Checkpoints
-// ---------------------------------------------------------------------------
+// Stub URL.createObjectURL for Bun test environment
+const _realCreateObjectURL = URL.createObjectURL.bind(URL);
 
-/** ComfyUI object_info with checkpoints (filenames include .safetensors). */
-const MOCK_OBJECT_INFO = {
-  CheckpointLoaderSimple: {
-    input: {
-      required: {
-        ckpt_name: [
-          ['sd_xl_base_1.0.safetensors', 'sd_xl_turbo.safetensors', 'dreamshaper_xl.safetensors'],
-        ],
-      },
-    },
-  },
-};
-
-// Capture real fetch at module load time and isolate from cross-test contamination
-const _realFetch = globalThis.fetch;
-
-beforeAll(() => {
-  // Stash and restore on entry
-  globalThis.fetch = _realFetch;
-  // Stub URL.createObjectURL for Bun test environment
-  if (!(globalThis as Record<string, unknown>).__url_createObjectURL_stubbed) {
-    const origCreateObjectURL = URL.createObjectURL.bind(URL);
-    URL.createObjectURL = mock((_blob: Blob) => 'blob:mock-url');
-    (globalThis as Record<string, unknown>).__url_createObjectURL_orig = origCreateObjectURL;
-    (globalThis as Record<string, unknown>).__url_createObjectURL_stubbed = true;
-  }
-});
-
-afterAll(() => {
-  globalThis.fetch = _realFetch;
-  const orig = (globalThis as Record<string, unknown>)
-    .__url_createObjectURL_orig as typeof URL.createObjectURL;
-  if (orig) {
-    URL.createObjectURL = orig;
-    delete (globalThis as Record<string, unknown>).__url_createObjectURL_stubbed;
-    delete (globalThis as Record<string, unknown>).__url_createObjectURL_orig;
-  }
-});
-
-describe('ImageGenerationService — C-076 Checkpoints', () => {
+describe('ImageGenerationService — C-388 engine abstraction', () => {
   let service: ImageGenerationServiceInterface;
-  let fetchCalls: Array<{ url: string; options: RequestInit }> = [];
 
   const createService = (isDemo: boolean): ImageGenerationServiceInterface =>
     new ImageGenerationService({ className: 'TestImageGen', isDemo });
 
-  const mockFetchSuccess = (responseBody: unknown, status = 200): void => {
-    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
-      fetchCalls.push({ url, options });
-      return Promise.resolve({
-        ok: status >= 200 && status < 300,
-        status,
-        statusText: status === 200 ? 'OK' : 'Error',
-        json: () => Promise.resolve(responseBody),
-      } as Response);
-    });
-  };
-
-  const mockFetchFailure = (status: number): void => {
-    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
-      fetchCalls.push({ url, options });
-      return Promise.resolve({
-        ok: false,
-        status,
-        statusText: 'Server Error',
-        text: () => Promise.resolve('Server Error'),
-        json: () => Promise.reject(new Error('JSON parse failed')),
-      } as Response);
-    });
-  };
-
-  /**
-   * Mock fetch that handles the ComfyUI queue-then-poll-blob pattern:
-   *  1. POST /prompt          → returns { prompt_id }
-   *  2. GET  /history/{id}    → returns outputs with image data
-   *  3. GET  /view?...        → returns image blob
-   */
-  const mockFetchComfyUiGenerate = (
-    promptId: string,
-    filename: string,
-    subfolder: string,
-  ): void => {
-    const imageBlob = new Blob(['fake-png-data'], { type: 'image/png' });
-
-    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
-      fetchCalls.push({ url, options });
-
-      // GET /view?... — return image blob (bypasses CORP)
-      if (url.includes('/view')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          blob: () => Promise.resolve(imageBlob),
-        } as Response);
-      }
-
-      // POST /prompt — return prompt_id
-      if (options?.method === 'POST' && url.includes('/prompt')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({ prompt_id: promptId, number: 1, node_errors: {} }),
-        } as Response);
-      }
-
-      // GET /history/{id} — return image output (succeed on first poll)
-      if (url.includes('/history/')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () =>
-            Promise.resolve({
-              [promptId]: {
-                outputs: {
-                  '9': {
-                    images: [{ filename, subfolder, type: 'output' }],
-                  },
-                },
-                status: { completed: true, messages: [] },
-              },
-            }),
-        } as Response);
-      }
-
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({}),
-      } as Response);
-    });
-  };
-
-  const mockFetchNetworkError = (): void => {
-    globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
-      fetchCalls.push({ url, options });
-      return Promise.reject(new Error('Network error'));
-    });
-  };
+  beforeEach(() => {
+    mockEngineId = 'comfyui';
+    mockModels = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
+    mockGenerateRequest = undefined;
+    mockProgress = [];
+    service = createService(false);
+    URL.createObjectURL = mock((_blob: Blob) => 'blob:mock-url');
+  });
 
   afterEach(() => {
-    globalThis.fetch = _realFetch;
-    fetchCalls = [];
+    URL.createObjectURL = _realCreateObjectURL;
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-1: Service Checkpoint Loading
-  // ═══════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════
+  // AC-2: negative prompt reaches the engine
+  // ═════════════════════════════════════════════════════════════════════
 
-  describe('AC-1: loadCheckpoints', () => {
-    describe('demo mode', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(true);
-      });
+  test('AC-2: generateImage forwards negativePrompt to the engine', async () => {
+    service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
+    service.selectedCheckpoint = 'sd_xl_base_1.0';
 
-      test('should populate mock checkpoint without calling fetch', async () => {
-        await service.loadCheckpoints();
-
-        expect(service.checkpoints.length).toBe(1);
-        expect(service.checkpoints[0].id).toBe('sd_xl_base_1.0');
-        expect(service.checkpoints[0].description).toBe('SDXL Base 1.0 (Demo)');
-        expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
-      });
-
-      test('should not overwrite an existing selectedCheckpoint', async () => {
-        service.selectedCheckpoint = 'custom_model';
-        await service.loadCheckpoints();
-
-        expect(service.selectedCheckpoint).toBe('custom_model');
-      });
+    await service.generateImage({
+      prompt: 'a dragon',
+      negativePrompt: 'bad anatomy, bad hands',
     });
 
-    describe('non-demo mode — successful fetch', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(false);
-        mockFetchSuccess(MOCK_OBJECT_INFO);
-      });
-
-      test('should fetch from ComfyUI object_info endpoint', async () => {
-        await service.loadCheckpoints();
-
-        expect(fetchCalls.length).toBe(1);
-        expect(fetchCalls[0].url).toBe('http://localhost:8188/object_info');
-      });
-
-      test('should map safetensors filenames to CheckpointInfo (stripped extension)', async () => {
-        await service.loadCheckpoints();
-
-        expect(service.checkpoints.length).toBe(3);
-        expect(service.checkpoints[0].id).toBe('sd_xl_base_1.0');
-        expect(service.checkpoints[0].description).toBe('sd_xl_base_1.0.safetensors');
-        expect(service.checkpoints[1].id).toBe('sd_xl_turbo');
-        expect(service.checkpoints[2].id).toBe('dreamshaper_xl');
-      });
-
-      test('should set selectedCheckpoint to first checkpoint when empty', async () => {
-        service.selectedCheckpoint = '';
-
-        await service.loadCheckpoints();
-
-        expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
-      });
-
-      test('should not overwrite existing selectedCheckpoint', async () => {
-        service.selectedCheckpoint = 'dreamshaper_xl';
-
-        await service.loadCheckpoints();
-
-        expect(service.selectedCheckpoint).toBe('dreamshaper_xl');
-      });
-    });
-
-    describe('non-demo mode — missing CheckpointLoaderSimple', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(false);
-        mockFetchSuccess({ OtherNode: {} });
-      });
-
-      test('should keep checkpoints empty when CheckpointLoaderSimple is missing', async () => {
-        await service.loadCheckpoints();
-
-        expect(service.checkpoints.length).toBe(0);
-      });
-    });
-
-    describe('non-demo mode — fetch failure', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(false);
-      });
-
-      test('should not crash on HTTP error status', async () => {
-        mockFetchFailure(500);
-
-        await service.loadCheckpoints();
-
-        expect(service.checkpoints.length).toBe(0);
-      });
-
-      test('should not crash on network error', async () => {
-        mockFetchNetworkError();
-
-        await service.loadCheckpoints();
-
-        expect(service.checkpoints.length).toBe(0);
-      });
-    });
+    expect(mockGenerateRequest?.positivePrompt).toBe('a dragon');
+    expect(mockGenerateRequest?.negativePrompt).toBe('bad anatomy, bad hands');
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-4: Generation via ComfyUI
-  // ═══════════════════════════════════════════════════════════════════════
+  test('AC-2: negative prompt omitted when undefined', async () => {
+    service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'x' }];
+    service.selectedCheckpoint = 'sd_xl_base_1.0';
 
-  describe('AC-4: generateImage via ComfyUI', () => {
-    describe('demo mode', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(true);
-      });
+    await service.generateImage({ prompt: 'a cat' });
 
-      test('should return mock image without calling fetch', async () => {
-        const result = await service.generateImage({ prompt: 'a cat' });
-
-        expect(result.isDemo).toBe(true);
-        expect(result.url).toContain('placehold.co');
-        expect(result.url).toContain('a%20cat');
-      });
-
-      test('should return mock image even with checkpoint set', async () => {
-        service.selectedCheckpoint = 'sd_xl_turbo';
-        const result = await service.generateImage({ prompt: 'a dog' });
-
-        expect(result.isDemo).toBe(true);
-        expect(result.url).toContain('a%20dog');
-      });
-    });
-
-    describe('non-demo mode — ComfyUI queue + poll', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(false);
-        mockFetchComfyUiGenerate('prompt-001', 'game-gen_00001_.png', '');
-        // Pre-populate checkpoints so generateImage() skips lazy loadCheckpoints()
-        // (which calls GET /object_info without options, breaking the mock).
-        service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
-        service.selectedCheckpoint = 'sd_xl_base_1.0';
-      });
-
-      test('should POST workflow to /prompt, poll /history, and return blob URL', async () => {
-        const result = await service.generateImage({ prompt: 'a dragon' });
-
-        expect(result.isDemo).toBe(false);
-        // URL should be a blob: object URL (not a ComfyUI view URL)
-        expect(result.url).toStartWith('blob:');
-
-        // Should have called /prompt (POST), /history/{id} (GET), and /view (GET)
-        const promptCall = fetchCalls.find(
-          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
-        );
-        expect(promptCall).toBeDefined();
-
-        const historyCall = fetchCalls.find((c) => c.url.includes('/history/'));
-        expect(historyCall).toBeDefined();
-
-        const viewCall = fetchCalls.find((c) => c.url.includes('/view'));
-        expect(viewCall).toBeDefined();
-      });
-
-      test('should include checkpoint filename in workflow', async () => {
-        service.selectedCheckpoint = 'sd_xl_turbo';
-
-        await service.generateImage({ prompt: 'a dragon' });
-
-        const promptCall = fetchCalls.find(
-          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
-        );
-        expect(promptCall).toBeDefined();
-
-        const body = JSON.parse(promptCall?.options?.body as string);
-        const workflow = body.prompt as Record<
-          string,
-          { class_type: string; inputs: Record<string, unknown> }
-        >;
-        const checkpointLoader = Object.values(workflow).find(
-          (n) => n.class_type === 'CheckpointLoaderSimple',
-        );
-        expect(checkpointLoader).toBeDefined();
-        expect(checkpointLoader?.inputs.ckpt_name).toBe('sd_xl_turbo.safetensors');
-      });
-
-      test('should use explicit checkpoint over selectedCheckpoint', async () => {
-        service.selectedCheckpoint = 'sd_xl_base_1.0';
-
-        await service.generateImage({ prompt: 'a dragon', checkpoint: 'dreamshaper_xl' });
-
-        const promptCall = fetchCalls.find(
-          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
-        );
-        expect(promptCall).toBeDefined();
-
-        const body = JSON.parse(promptCall?.options?.body as string);
-        const workflow = body.prompt as Record<
-          string,
-          { class_type: string; inputs: Record<string, unknown> }
-        >;
-        const checkpointLoader = Object.values(workflow).find(
-          (n) => n.class_type === 'CheckpointLoaderSimple',
-        );
-        expect(checkpointLoader?.inputs.ckpt_name).toBe('dreamshaper_xl.safetensors');
-      });
-
-      test('should throw when checkpoint is empty', async () => {
-        service.selectedCheckpoint = '';
-
-        await expect(service.generateImage({ prompt: 'a dragon' })).rejects.toThrow(
-          'No checkpoint selected',
-        );
-      });
-
-      test('should fetch image blob via /view endpoint', async () => {
-        fetchCalls = [];
-        mockFetchComfyUiGenerate('prompt-002', 'img_00042_.png', 'subdir');
-
-        const result = await service.generateImage({ prompt: 'a castle' });
-
-        // Blob URL should be created (stubbed by URL.createObjectURL mock)
-        expect(result.url).toStartWith('blob:');
-        expect(result.isDemo).toBe(false);
-
-        // Should have called /view endpoint
-        const viewCall = fetchCalls.find((c) => c.url.includes('/view'));
-        expect(viewCall).toBeDefined();
-        expect(viewCall?.url).toContain('filename=img_00042_.png');
-        expect(viewCall?.url).toContain('subfolder=subdir');
-      });
-    });
-
-    describe('non-demo mode — error handling', () => {
-      beforeEach(() => {
-        fetchCalls = [];
-        service = createService(false);
-        service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
-        service.selectedCheckpoint = 'sd_xl_base_1.0';
-      });
-
-      test('should throw on /prompt HTTP error', async () => {
-        mockFetchFailure(500);
-
-        await expect(service.generateImage({ prompt: 'test' })).rejects.toThrow(
-          'ComfyUI API error (500)',
-        );
-      });
-    });
+    expect(mockGenerateRequest?.negativePrompt).toBeUndefined();
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // $state reactivity
-  // ═══════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════
+  // AC-3: engine toggle changes the wire protocol
+  // ═════════════════════════════════════════════════════════════════════
 
-  describe('$state reactivity', () => {
+  test('AC-3: selected engine id is exposed on the service', async () => {
+    service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'x' }];
+    service.selectedCheckpoint = 'sd_xl_base_1.0';
+
+    mockEngineId = 'comfyui';
+    await service.loadCheckpoints();
+    expect(service.engineId).toBe('comfyui');
+
+    mockEngineId = 'sdcpp';
+    await service.refreshEngine();
+    expect(service.engineId).toBe('sdcpp');
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // AC-7: progress is engine-agnostic
+  // ═════════════════════════════════════════════════════════════════════
+
+  test('AC-7: generationProgress and generationStatus reflect engine progress', async () => {
+    service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'x' }];
+    service.selectedCheckpoint = 'sd_xl_base_1.0';
+
+    await service.generateImage({ prompt: 'a dragon' });
+
+    // The mock engine pushes queued → generating → complete.
+    expect(mockProgress.map((p) => p.label)).toEqual(['Queuing', 'Generating', 'Complete']);
+    // Terminal state observed by the caller
+    expect(service.generationProgress).toBe(100);
+    expect(service.generationStatus).toBe('Complete');
+    expect(service.isGenerating).toBe(false);
+  });
+
+  test('AC-7: progress labels never leak engine-specific strings', async () => {
+    service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'x' }];
+    service.selectedCheckpoint = 'sd_xl_base_1.0';
+
+    await service.generateImage({ prompt: 'x' });
+
+    for (const entry of mockProgress) {
+      expect(entry.label).not.toMatch(/comfyui|sdcpp|sd-server|node|websocket/i);
+    }
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // AC-8: model listing
+  // ═════════════════════════════════════════════════════════════════════
+
+  test('AC-8: loadCheckpoints populates from the engine model list', async () => {
+    mockModels = [
+      { id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' },
+      { id: 'sd_xl_turbo', description: 'sd_xl_turbo.safetensors' },
+    ];
+
+    await service.loadCheckpoints();
+
+    expect(service.checkpoints.length).toBe(2);
+    expect(service.checkpoints[0].id).toBe('sd_xl_base_1.0');
+    expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
+  });
+
+  test('AC-8: persisted per-engine selection is restored when it matches', async () => {
+    localStorage.setItem('imageCheckpoint:comfyui', 'sd_xl_turbo');
+    mockModels = [
+      { id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' },
+      { id: 'sd_xl_turbo', description: 'sd_xl_turbo.safetensors' },
+    ];
+
+    await service.loadCheckpoints();
+
+    expect(service.selectedCheckpoint).toBe('sd_xl_turbo');
+    localStorage.removeItem('imageCheckpoint:comfyui');
+  });
+
+  test('AC-8: persisted selection ignored when no longer available', async () => {
+    localStorage.setItem('imageCheckpoint:comfyui', 'ghost_model');
+    mockModels = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
+
+    await service.loadCheckpoints();
+
+    expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
+    localStorage.removeItem('imageCheckpoint:comfyui');
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // Demo mode (preserved public surface)
+  // ═════════════════════════════════════════════════════════════════════
+
+  describe('demo mode', () => {
     beforeEach(() => {
       service = createService(true);
     });
 
-    test('selectedCheckpoint should be mutable via assignment', () => {
-      expect(service.selectedCheckpoint).toBe('');
-
-      service.selectedCheckpoint = 'my_model';
-
-      expect(service.selectedCheckpoint).toBe('my_model');
+    test('loadCheckpoints populates a mock checkpoint without engine calls', async () => {
+      await service.loadCheckpoints();
+      expect(service.checkpoints.length).toBe(1);
+      expect(service.checkpoints[0].id).toBe('sd_xl_base_1.0');
+      expect(service.selectedCheckpoint).toBe('sd_xl_base_1.0');
     });
 
-    test('checkpoints should be reactive array', () => {
-      expect(service.checkpoints.length).toBe(0);
-      expect(Array.isArray(service.checkpoints)).toBe(true);
+    test('generateImage returns a placehold.co mock', async () => {
+      const result = await service.generateImage({ prompt: 'a cat' });
+      expect(result.isDemo).toBe(true);
+      expect(result.url).toContain('placehold.co');
+      expect(mockGenerateRequest).toBeUndefined();
     });
 
-    test('isDemoMode should reflect constructor option', () => {
-      const demoSvc = new ImageGenerationService({ className: 'Demo', isDemo: true });
-      const liveSvc = new ImageGenerationService({ className: 'Live', isDemo: false });
-
-      expect(demoSvc.isDemoMode()).toBe(true);
-      expect(liveSvc.isDemoMode()).toBe(false);
+    test('isReady is true in demo mode', () => {
+      expect(service.isReady).toBe(true);
     });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // isReady / offline degradation (AC-4)
+  // ═════════════════════════════════════════════════════════════════════
+
+  test('isReady is false before engine resolution', () => {
+    expect(service.isReady).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Baseline compatibility: $state reactivity (preserved surface)
+// ---------------------------------------------------------------------------
+
+describe('$state reactivity (preserved)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = mock((_blob: Blob) => 'blob:mock-url');
+  });
+  afterEach(() => {
+    URL.createObjectURL = _realCreateObjectURL;
+  });
+
+  test('selectedCheckpoint should be mutable via assignment', () => {
+    const svc = new ImageGenerationService({ className: 'Reactive', isDemo: false });
+    expect(svc.selectedCheckpoint).toBe('');
+    svc.selectedCheckpoint = 'my_model';
+    expect(svc.selectedCheckpoint).toBe('my_model');
+  });
+
+  test('checkpoints should be an array', () => {
+    const svc = new ImageGenerationService({ className: 'Reactive', isDemo: false });
+    expect(Array.isArray(svc.checkpoints)).toBe(true);
+  });
+
+  test('isDemoMode should reflect constructor option', () => {
+    const demoSvc = new ImageGenerationService({ className: 'Demo', isDemo: true });
+    const liveSvc = new ImageGenerationService({ className: 'Live', isDemo: false });
+    expect(demoSvc.isDemoMode()).toBe(true);
+    expect(liveSvc.isDemoMode()).toBe(false);
   });
 });

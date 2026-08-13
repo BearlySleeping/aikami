@@ -1,18 +1,36 @@
 // apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts
+//
+// Image generation service — thin reactive wrapper over the image engine
+// abstraction (C-388). Preserves the pre-C-388 public surface
+// (checkpoints / selectedCheckpoint / isReady / loadCheckpoints /
+// generateImage / isDemoMode / isGenerating / generationProgress /
+// generationStatus) while delegating all transport to the active
+// ImageEngineClient (ComfyUI or sd-server).
+//
+// Contract: C-388 Image Engine Provider Abstraction
+
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { ImageEngineId } from '@aikami/types';
 import { configService } from '$services';
+import {
+  getConfiguredImageEngineId,
+  resetImageEngineCache,
+  resolveImageEngine,
+  setImageEngineOverride,
+} from './engine/image_engine_factory.svelte.ts';
+import type {
+  ImageEngineCapabilities,
+  ImageEngineClient,
+  ImageGenerationRequest,
+  ImageProgress,
+  ResolvedImageEngineId,
+} from './engine/types.ts';
 
-/** Base URL of the local ComfyUI instance. */
-const COMFY_BASE_URL = (import.meta.env.PUBLIC_IMAGE_URL ?? 'http://localhost:8188').replace(
-  /\/+$/,
-  '',
-);
-
-/** Descriptor for a ComfyUI checkpoint/model returned by the checkpoints endpoint. */
+/** Descriptor for a checkpoint/model returned by the model listing. */
 export type CheckpointInfo = {
   readonly id: string;
   readonly description: string;
@@ -28,34 +46,62 @@ export type ImageGenerationResult = {
   isDemo: boolean;
 };
 
+/** Extended options for generateImage — superset of the old { prompt, checkpoint }. */
+export type GenerateImageOptions = {
+  prompt: string;
+  negativePrompt?: string;
+  checkpoint?: string;
+  width?: number;
+  height?: number;
+  steps?: number;
+  cfgScale?: number;
+  seed?: number;
+  sampler?: string;
+  initImage?: string;
+  denoise?: number;
+  mask?: string;
+  signal?: AbortSignal;
+};
+
 export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
-  /** Available ComfyUI checkpoint models. */
+  /** Available checkpoint models from the active engine. */
   readonly checkpoints: readonly CheckpointInfo[];
 
   /** The currently selected checkpoint ID. */
   selectedCheckpoint: string;
 
   /**
-   * Whether image generation is ready — checkpoints have been loaded
-   * from a running ComfyUI instance and at least one is available.
+   * Whether image generation is ready — an engine is reachable and a
+   * checkpoint is available.
    */
   get isReady(): boolean;
 
-  /** Fetches the list of available checkpoints from the ComfyUI object_info API. */
+  /** The resolved engine id ('comfyui' | 'sdcpp'), or undefined pre-detection. */
+  get engineId(): ResolvedImageEngineId | undefined;
+
+  /** Capability flags of the active engine. */
+  get capabilities(): ImageEngineCapabilities | undefined;
+
+  /** Whether auto-detection is configured (PUBLIC_IMAGE_ENGINE=auto). */
+  get isAutoDetect(): boolean;
+
+  /** Fetches the list of available models from the active engine. */
   loadCheckpoints(): Promise<void>;
 
-  /**
-   * Generates an image via the ComfyUI REST API.
-   * @param options - Configuration object.
-   * @param options.prompt The description of the image to generate.
-   * @param options.checkpoint Optional checkpoint ID to use (defaults to {@link selectedCheckpoint}).
-   * @returns A promise that resolves to the image URL.
-   */
-  generateImage(options: { prompt: string; checkpoint?: string }): Promise<ImageGenerationResult>;
+  /** Forces re-detection of the engine (dev sandbox engine toggle). */
+  refreshEngine(): Promise<void>;
+
+  /** Sets a runtime engine override (dev sandbox engine selector). */
+  setEngine(engine: ImageEngineId): Promise<void>;
 
   /**
-   * Checks if the service is running in demo mode.
+   * Generates an image via the active engine.
+   * @param options - Generation options (prompt, negative prompt, params).
+   * @returns A promise that resolves to the image URL.
    */
+  generateImage(options: GenerateImageOptions): Promise<ImageGenerationResult>;
+
+  /** Whether the service is running in demo mode. */
   isDemoMode(): boolean;
 
   /** Whether an image generation is currently in progress. */
@@ -66,27 +112,30 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
 
   /** Human-readable status label for the current generation step. */
   readonly generationStatus: string;
+
+  /** Cancels the in-flight generation (issues the engine's native cancel). */
+  cancel(): void;
 };
 
-// ── ComfyUI API types (internal) ────────────────────────────────────────
+// ── Per-engine checkpoint storage keys (C-388 Migration) ──────────────
 
-type ComfyUiQueueResponse = {
-  // biome-ignore lint/style/useNamingConvention: API contract field name
-  prompt_id: string;
-  number: number;
-  // biome-ignore lint/style/useNamingConvention: API contract field name
-  node_errors: Record<string, unknown>;
+const CHECKPOINT_KEY_PREFIX = 'imageCheckpoint:';
+
+const _readNamespacedCheckpoint = (engineId: ResolvedImageEngineId): string => {
+  try {
+    return localStorage.getItem(`${CHECKPOINT_KEY_PREFIX}${engineId}`) ?? '';
+  } catch {
+    return '';
+  }
 };
 
-type ComfyUiHistoryEntry = {
-  outputs: Record<
-    string,
-    { images: Array<{ filename: string; subfolder: string | null; type: string }> }
-  >;
-  status: { completed: boolean; messages: Array<[string, unknown]> };
+const _writeNamespacedCheckpoint = (engineId: ResolvedImageEngineId, id: string): void => {
+  try {
+    localStorage.setItem(`${CHECKPOINT_KEY_PREFIX}${engineId}`, id);
+  } catch {
+    // storage may be unavailable (SSR/tests) — persistence is best-effort
+  }
 };
-
-type ComfyUiObjectInfo = Record<string, { input: { required: Record<string, Array<unknown>> } }>;
 
 // ── Implementation ──────────────────────────────────────────────────────
 
@@ -95,65 +144,80 @@ export class ImageGenerationService
   implements ImageGenerationServiceInterface
 {
   private isDemo: boolean;
-  private _baseUrl: string;
+  private _engine: ImageEngineClient | undefined;
 
   constructor(options: ImageGenerationOptions) {
     super(options);
     this.isDemo = options.isDemo ?? false;
-    this._baseUrl = COMFY_BASE_URL;
   }
 
   checkpoints: CheckpointInfo[] = $state([]);
-  selectedCheckpoint = $state('');
+  private _selectedCheckpoint = $state('');
+  private _isGenerating = $state(false);
+  private _generationProgress = $state(0);
+  private _generationStatus = $state('');
 
   /** Whether an image generation is currently in progress. */
-  isGenerating = $state(false);
+  get isGenerating(): boolean {
+    return this._isGenerating;
+  }
 
   /** Progress of the current generation (0-100). */
-  generationProgress = $state(0);
+  get generationProgress(): number {
+    return this._generationProgress;
+  }
 
   /** Human-readable status label for the current generation step. */
-  generationStatus = $state('');
+  get generationStatus(): string {
+    return this._generationStatus;
+  }
+
+  /** The currently selected checkpoint ID. */
+  get selectedCheckpoint(): string {
+    return this._selectedCheckpoint;
+  }
+
+  set selectedCheckpoint(value: string) {
+    this._selectedCheckpoint = value;
+    this._persistSelectedCheckpoint(value);
+  }
+
+  get engineId(): ResolvedImageEngineId | undefined {
+    return this._engine?.id;
+  }
+
+  get capabilities(): ImageEngineCapabilities | undefined {
+    return this._engine?.capabilities;
+  }
+
+  get isAutoDetect(): boolean {
+    return getConfiguredImageEngineId() === 'auto';
+  }
 
   /** Whether image generation is ready to use. */
   get isReady(): boolean {
-    // checkpoints loaded and selected → ready
-    if (this.checkpoints.length > 0 && this.selectedCheckpoint.length > 0) {
+    if (this.isDemo) {
       return true;
     }
-    // Check if there's actually a configured image connection with a usable provider.
-    // A persisted checkpoint alone does not mean the service is reachable.
-    let connections: Array<{ capability?: string; apiKey?: string; provider?: string }> = [];
-    try {
-      connections = configService.state.connections ?? [];
-    } catch {
-      // configService state may be unavailable (tests/SSR) — treat as no connections.
-    }
-    const hasImageConn = connections.some(
-      (c) => (c.capability ?? 'text') === 'image' && (c.apiKey || c.provider === 'comfyui'),
-    );
-    if (!hasImageConn) {
+    // An engine must be resolved (auto-detected or configured) AND a
+    // checkpoint must be loaded + selected.
+    if (!this._engine) {
       return false;
     }
-    // Fallback: if a checkpoint was persisted in config, it was verified
-    const persisted = this._readPersistedCheckpoint();
-    return persisted.length > 0;
-  }
-
-  /** Reads the persisted checkpoint from ConfigService if available. */
-  private _readPersistedCheckpoint(): string {
-    try {
-      return configService.state.image.checkpoint || '';
-    } catch {
-      // configService state may be unavailable (tests/SSR) — no persisted checkpoint.
-      return '';
+    if (this.checkpoints.length === 0 || this._selectedCheckpoint.length === 0) {
+      return false;
     }
+    return true;
   }
 
   isDemoMode(): boolean {
     return this.isDemo;
   }
 
+  /**
+   * Loads the model list from the active engine and restores the persisted
+   * per-engine checkpoint (with legacy-key migration for ComfyUI).
+   */
   async loadCheckpoints(): Promise<void> {
     if (this.isDemo) {
       this.debug('loadCheckpoints: demo mode - loading mock checkpoint');
@@ -164,49 +228,71 @@ export class ImageGenerationService
       return;
     }
 
+    const engine = await this._getEngine();
+    if (!engine) {
+      this.warn('loadCheckpoints: no engine available');
+      this.checkpoints = [];
+      return;
+    }
+
     try {
-      const response = await fetch(`${this._baseUrl}/object_info`);
-      if (!response.ok) {
-        this.error('loadCheckpoints:fetch-failed', { status: response.status });
-        return;
+      const models = await engine.listModels();
+      this.checkpoints = models.map((model) => ({
+        id: model.id,
+        description: model.description,
+      }));
+
+      const persisted = this._readPersistedCheckpoint(engine.id);
+      if (persisted && this.checkpoints.some((c) => c.id === persisted)) {
+        this.selectedCheckpoint = persisted;
+      } else if (!this.selectedCheckpoint && this.checkpoints.length > 0) {
+        this.selectedCheckpoint = this.checkpoints[0].id;
       }
 
-      const data = (await response.json()) as ComfyUiObjectInfo;
-      const checkpointNode = data.CheckpointLoaderSimple;
-      if (!checkpointNode?.input?.required?.ckpt_name) {
-        this.warn('loadCheckpoints: no CheckpointLoaderSimple in object_info');
-        return;
-      }
-
-      // ckpt_name is [["model1.safetensors", "model2.safetensors"]] — nested array
-      const raw = checkpointNode.input.required.ckpt_name as unknown;
-      const filenames: string[] = Array.isArray(raw) ? (Array.isArray(raw[0]) ? raw[0] : raw) : [];
-      this.checkpoints = filenames.map((filename) => {
-        const id = filename.replace(/\.safetensors$/, '');
-        return { id, description: filename };
+      this.debug('loadCheckpoints', {
+        engine: engine.id,
+        count: this.checkpoints.length,
       });
-
-      if (!this.selectedCheckpoint && this.checkpoints.length > 0) {
-        // Restore persisted checkpoint if it matches an available one
-        const persisted = this._readPersistedCheckpoint();
-        if (persisted && this.checkpoints.some((c) => c.id === persisted)) {
-          this.selectedCheckpoint = persisted;
-        } else {
-          this.selectedCheckpoint = this.checkpoints[0].id;
-        }
-      }
-
-      this.debug('loadCheckpoints', { count: this.checkpoints.length });
     } catch (error) {
       this.error('loadCheckpoints:failed', error);
+      this.checkpoints = [];
     }
   }
 
-  async generateImage(options: {
-    prompt: string;
-    checkpoint?: string;
-  }): Promise<ImageGenerationResult> {
-    const { prompt, checkpoint } = options;
+  /** Forces re-detection of the engine (dev sandbox engine toggle). */
+  async refreshEngine(): Promise<void> {
+    resetImageEngineCache();
+    this._engine = undefined;
+    this.checkpoints = [];
+    await this._getEngine();
+    await this.loadCheckpoints();
+  }
+
+  /**
+   * Sets a runtime engine override (dev sandbox engine selector).
+   * @param engine — Engine id, or 'auto' to return to config + detection.
+   */
+  async setEngine(engine: ImageEngineId): Promise<void> {
+    setImageEngineOverride(engine);
+    await this.refreshEngine();
+  }
+
+  async generateImage(options: GenerateImageOptions): Promise<ImageGenerationResult> {
+    const {
+      prompt,
+      negativePrompt,
+      checkpoint,
+      width,
+      height,
+      steps,
+      cfgScale,
+      seed,
+      sampler,
+      initImage,
+      denoise,
+      mask,
+      signal,
+    } = options;
 
     if (this.isDemo) {
       this.debug('generateImage: demo mode - returning mock image');
@@ -217,253 +303,190 @@ export class ImageGenerationService
     }
 
     // Reset progress state
-    this.isGenerating = true;
-    this.generationProgress = 0;
-    this.generationStatus = 'Queuing...';
+    this._isGenerating = true;
+    this._generationProgress = 0;
+    this._generationStatus = 'Queuing';
 
     // Lazy-load checkpoints if not already fetched
     if (this.checkpoints.length === 0) {
       await this.loadCheckpoints();
     }
 
-    // Compute effective checkpoint AFTER loadCheckpoints may have set selectedCheckpoint
+    const engine = await this._getEngine();
+    if (!engine) {
+      this._isGenerating = false;
+      this._generationStatus = 'Failed';
+      throw new Error('No image engine available — is ComfyUI or sd-server running?');
+    }
+
     const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
+    const request: ImageGenerationRequest = {
+      positivePrompt: prompt,
+      model: effectiveCheckpoint || undefined,
+    };
+    if (negativePrompt) {
+      request.negativePrompt = negativePrompt;
+    }
+    if (width !== undefined) {
+      request.width = width;
+    }
+    if (height !== undefined) {
+      request.height = height;
+    }
+    if (steps !== undefined) {
+      request.steps = steps;
+    }
+    if (cfgScale !== undefined) {
+      request.cfgScale = cfgScale;
+    }
+    if (seed !== undefined) {
+      request.seed = seed;
+    }
+    if (sampler) {
+      request.sampler = sampler;
+    }
+    if (initImage) {
+      request.initImage = initImage;
+    }
+    if (denoise !== undefined) {
+      request.denoise = denoise;
+    }
+    if (mask) {
+      request.mask = mask;
+    }
+
+    const abortController = new AbortController();
+    const onExternalAbort = (): void => abortController.abort();
+    if (signal) {
+      if (signal.aborted) {
+        abortController.abort();
+      } else {
+        signal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+    }
+    this._abortController = abortController;
+
+    const startedAt = performance.now();
 
     try {
-      this.generationProgress = 5;
-
-      // Step 1 — queue the prompt
-      const queueResponse = await this._post<ComfyUiQueueResponse>('/prompt', {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        client_id: `aikami-staging-${Date.now()}`,
-        prompt: this._buildWorkflow({ prompt, checkpoint: effectiveCheckpoint }),
+      const result = await engine.generate(request, {
+        signal: abortController.signal,
+        onProgress: (progress: ImageProgress) => this._applyProgress(progress),
       });
 
-      const promptId = queueResponse.prompt_id;
-      this.debug('generateImage: queued', { promptId });
+      this.debug('image-generation:done', {
+        engine: engine.id,
+        model: effectiveCheckpoint,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
 
-      this.generationStatus = 'Generating...';
-      this.generationProgress = 10;
-
-      // Step 2 — poll for result with progress updates
-      const imageRef = await this._pollForResult(promptId);
-
-      this.generationProgress = 95;
-      this.generationStatus = 'Downloading...';
-
-      // Step 3 — fetch the image blob to bypass CORP restrictions
-      const imageUrl =
-        `${this._baseUrl}/view?filename=${encodeURIComponent(imageRef.filename)}` +
-        `&subfolder=${encodeURIComponent(imageRef.subfolder ?? '')}&type=output`;
-
-      const blob = await this._fetchBlob(imageUrl);
-      const objectUrl = URL.createObjectURL(blob);
-
-      this.generationProgress = 100;
-      this.generationStatus = 'Complete';
+      const objectUrl = URL.createObjectURL(result.blob);
+      this._generationProgress = 100;
+      this._generationStatus = 'Complete';
 
       return { url: objectUrl, isDemo: false };
     } catch (error) {
-      this.generationStatus = 'Failed';
-      this.error('generateImage failed', error);
+      this._generationStatus = 'Failed';
+      if (isAbortError(error)) {
+        this.debug('generateImage:aborted', { engine: engine.id });
+      } else {
+        this.error('generateImage failed', error);
+      }
       throw error;
     } finally {
-      this.isGenerating = false;
-      // Reset progress after a brief delay so the consumer can read 'Complete'/'Failed'
+      this._isGenerating = false;
+      this._abortController = undefined;
+      if (signal) {
+        signal.removeEventListener('abort', onExternalAbort);
+      }
+      // Reset progress after a brief delay so the consumer can read the terminal state
       setTimeout(() => {
-        this.generationProgress = 0;
-        this.generationStatus = '';
+        this._generationProgress = 0;
+        this._generationStatus = '';
       }, 2000);
     }
   }
 
-  // ── Private: Workflow builder ─────────────────────────────────────────
-
-  /**
-   * Builds a minimal ComfyUI workflow JSON with the given prompt and
-   * optional checkpoint. Uses node IDs matching common defaults so the
-   * workflow only needs the prompt text to change between generations.
-   */
-  private _buildWorkflow(options: {
-    prompt: string;
-    checkpoint?: string;
-  }): Record<string, unknown> {
-    const { prompt, checkpoint } = options;
-    const checkpointId =
-      (checkpoint && checkpoint.length > 0 ? checkpoint : undefined) ?? this.selectedCheckpoint;
-    const ckptName = checkpointId ? `${checkpointId}.safetensors` : undefined;
-
-    if (!ckptName) {
-      throw new Error(
-        'No checkpoint selected. Call loadCheckpoints() first or select a checkpoint.',
-      );
-    }
-
-    return {
-      '3': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'KSampler',
-        inputs: {
-          seed: Math.floor(Math.random() * 2 ** 32),
-          steps: 20,
-          cfg: 7.0,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          sampler_name: 'euler',
-          scheduler: 'normal',
-          denoise: 1,
-          model: ['4', 0],
-          positive: ['6', 0],
-          negative: ['7', 0],
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          latent_image: ['5', 0],
-        },
-      },
-      '4': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'CheckpointLoaderSimple',
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        inputs: { ckpt_name: ckptName },
-      },
-      '5': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'EmptyLatentImage',
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        inputs: { width: 512, height: 512, batch_size: 1 },
-      },
-      '6': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'CLIPTextEncode',
-        inputs: { text: prompt, clip: ['4', 1] },
-      },
-      '7': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'CLIPTextEncode',
-        inputs: { text: '', clip: ['4', 1] },
-      },
-      '8': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'VAEDecode',
-        inputs: { samples: ['3', 0], vae: ['4', 2] },
-      },
-      '9': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'SaveImage',
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        inputs: { filename_prefix: 'aikami-staging', images: ['8', 0] },
-      },
-    };
+  cancel(): void {
+    this._abortController?.abort();
+    this._abortController = undefined;
+    this._isGenerating = false;
+    this._generationProgress = 0;
+    this._generationStatus = '';
   }
 
-  // ── Private: Polling ──────────────────────────────────────────────────
+  // ── Private: engine resolution ───────────────────────────────────────
 
-  /**
-   * Polls ComfyUI's `/history/{promptId}` endpoint until the generation
-   * completes and the image is available.
-   */
-  private async _pollForResult(
-    promptId: string,
-  ): Promise<{ filename: string; subfolder: string | null }> {
-    const pollIntervalMs = 1000;
-    const maxAttempts = 120; // 2 minutes max
-    const controller = new AbortController();
+  private async _getEngine(): Promise<ImageEngineClient | undefined> {
+    if (this._engine) {
+      return this._engine;
+    }
+    this._engine = await resolveImageEngine();
+    return this._engine;
+  }
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await this._sleep(pollIntervalMs, controller.signal);
+  // ── Private: progress mapping ────────────────────────────────────────
 
-      // Update progress — linear from 10% to 95% over maxAttempts
-      this.generationProgress = Math.min(95, 10 + Math.round((attempt / maxAttempts) * 85));
+  private _applyProgress(progress: ImageProgress): void {
+    this._generationProgress = Math.round(Math.max(0, Math.min(1, progress.fraction)) * 100);
+    this._generationStatus = progress.label;
+  }
 
-      try {
-        const history = await this._get<ComfyUiHistoryEntry>(`/history/${promptId}`, controller);
-        const outputs = history[promptId]?.outputs;
+  // ── Private: per-engine checkpoint persistence (C-388 Migration) ────
 
-        if (outputs) {
-          for (const nodeOutput of Object.values(outputs)) {
-            if (nodeOutput.images && nodeOutput.images.length > 0) {
-              const image = nodeOutput.images[0];
-              return { filename: image.filename, subfolder: image.subfolder ?? null };
-            }
-          }
-        }
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') {
-          break;
-        }
-        this.warn('_pollForResult: history fetch failed', { attempt, error });
+  private _persistSelectedCheckpoint(id: string): void {
+    const engineId = this._engine?.id;
+    if (!engineId) {
+      return;
+    }
+    _writeNamespacedCheckpoint(engineId, id);
+  }
+
+  private _readPersistedCheckpoint(engineId: ResolvedImageEngineId): string {
+    const namespaced = _readNamespacedCheckpoint(engineId);
+    if (namespaced) {
+      return namespaced;
+    }
+
+    // Migration: the legacy unnamespaced key (configService.state.image.checkpoint)
+    // is the ComfyUI value on first read — migrate it forward.
+    if (engineId === 'comfyui') {
+      const legacy = this._readLegacyCheckpoint();
+      if (legacy) {
+        _writeNamespacedCheckpoint('comfyui', legacy);
+        return legacy;
       }
     }
-
-    this.warn('_pollForResult: timed out', { promptId });
-    throw new Error('Image generation timed out — ComfyUI did not complete in time');
+    return '';
   }
 
-  // ── Private: HTTP helpers ─────────────────────────────────────────────
-
-  /**
-   * Fetches a binary resource (image) as a Blob to bypass CORP restrictions.
-   * Cross-origin images loaded via <img src> are blocked by CORP, but fetching
-   * them as a Blob and creating an object URL avoids the check.
-   */
-  private async _fetchBlob(url: string): Promise<Blob> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image (${response.status})`);
+  /** Reads the legacy checkpoint from ConfigService if available. */
+  private _readLegacyCheckpoint(): string {
+    try {
+      return configService.state.image.checkpoint || '';
+    } catch {
+      return '';
     }
-    return response.blob();
   }
 
-  private async _post<TResponse>(path: string, body: unknown): Promise<TResponse> {
-    const response = await fetch(`${this._baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`ComfyUI API error (${response.status}): ${text}`);
-    }
-
-    return response.json() as Promise<TResponse>;
-  }
-
-  private async _get<TResponse>(
-    path: string,
-    controller: AbortController,
-  ): Promise<Record<string, TResponse>> {
-    const response = await fetch(`${this._baseUrl}${path}`, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`ComfyUI error (${response.status})`);
-    }
-
-    return response.json() as Promise<Record<string, TResponse>>;
-  }
-
-  private _sleep(ms: number, signal: AbortSignal): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (signal.aborted) {
-        reject(new DOMException('Aborted', 'AbortError'));
-        return;
-      }
-      const onAbort = () => {
-        clearTimeout(id);
-        reject(new DOMException('Aborted', 'AbortError'));
-      };
-      const id = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
-  }
+  private _abortController: AbortController | undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Singleton
+// ---------------------------------------------------------------------------
 
 export const imageGenerationService: ImageGenerationServiceInterface =
   ImageGenerationService.create({
     className: 'ImageGenerationService',
     isDemo: false,
   });
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const isAbortError = (error: unknown): boolean =>
+  error instanceof DOMException
+    ? error.name === 'AbortError'
+    : (error as Error)?.name === 'AbortError';

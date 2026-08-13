@@ -38,3 +38,10 @@ Generated images are stored per-chat in a masonry grid with hover expand and ful
 - Contextual triggers: `apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts`
 - Gallery service: `apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts`
 - Dev sandbox: `/dev/image-gen`
+
+## Engine selection
+
+Image generation runs against **ComfyUI** or **sd-server** behind a single
+abstraction, chosen by `PUBLIC_IMAGE_ENGINE` or auto-detected. See the
+[image engine selection guide](image-engine-selection) for engine switching,
+capability gating, and negative-prompt support.

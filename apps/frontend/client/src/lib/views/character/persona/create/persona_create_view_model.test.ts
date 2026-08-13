@@ -12,6 +12,14 @@ let personaCalls: Array<{ history: string }> = [];
 let personaResult: object | undefined;
 let imageCalls: Array<{ prompt: string }> = [];
 let imageResult = { url: 'https://example.com/avatar.png', isDemo: true };
+// C-388: imageGenerationService.generateImage calls (edit/regenerate)
+let imageGenCalls: Array<{
+  prompt: string;
+  negativePrompt?: string;
+  checkpoint?: string;
+  initImage?: string;
+  denoise?: number;
+}> = [];
 let streamOut = '';
 let streaming = false;
 let cancels = 0;
@@ -43,8 +51,7 @@ let uploadAvatarResult: string | undefined;
 // stubs that auto-create mock functions. We replace the specific service
 // methods with test-aware implementations before each test.
 
-const _MOCK_SVC =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts';
+const _MOCK_SVC = '$lib/services/index.ts';
 
 const _createServiceStub = () => {
   const handler: ProxyHandler<Record<string, unknown>> = {
@@ -136,6 +143,43 @@ const _setupServiceOverrides = (): void => {
     imageGenerationService: {
       isReady: true,
       isDemoMode: () => false,
+      generateImage: mock(
+        async (options: {
+          prompt: string;
+          negativePrompt?: string;
+          checkpoint?: string;
+          initImage?: string;
+          denoise?: number;
+          signal?: AbortSignal;
+        }): Promise<{ url: string; isDemo: boolean }> => {
+          imageGenCalls.push(options);
+          return { url: 'https://example.com/generated.png', isDemo: false };
+        },
+      ),
+      cancel: mock(() => {}),
+      get engineId() {
+        return 'comfyui';
+      },
+      get capabilities() {
+        return {
+          negativePrompt: true,
+          seed: true,
+          sampler: true,
+          initImage: true,
+          mask: false,
+          referenceImages: false,
+          controlNet: false,
+          lora: false,
+          cancel: true,
+          progress: true,
+        };
+      },
+      get isAutoDetect() {
+        return true;
+      },
+      loadCheckpoints: mock(async () => {}),
+      refreshEngine: mock(async () => {}),
+      setEngine: mock(async () => {}),
     },
     storageService: {
       uploadAvatar: mock(async (options: { file: Blob | File; uid: string }) => {
@@ -260,6 +304,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     personaCalls = [];
     personaResult = undefined;
     imageCalls = [];
+    imageGenCalls = [];
     imageResult = { url: 'https://example.com/avatar.png', isDemo: true };
     streamOut = '';
     streaming = false;
@@ -569,6 +614,56 @@ describe('PersonaCreateViewModel — C-078', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-4: Tweak & Cancel', () => {
+    test('C-388: edit-mode regenerateAvatar delegates via initImage + denoise', async () => {
+      mockAvatarUrl = 'https://example.com/current-avatar.png';
+      const vm = await loadVm();
+      vm.regenerationMode = 'edit';
+      vm.editInstruction = 'add a scar';
+
+      // Fetch of the current avatar returns a blob; engine delegation happens
+      // through imageGenerationService.generateImage (mocked above).
+      globalThis.fetch = mock((url: string): Promise<Response> => {
+        if (url === 'https://example.com/current-avatar.png') {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
+        } as Response);
+      });
+
+      await vm.regenerateAvatar();
+
+      expect(imageGenCalls.length).toBe(1);
+      const call = imageGenCalls[0];
+      expect(call.prompt).toInclude('add a scar');
+      expect(call.initImage).toBeDefined();
+      expect(call.initImage).toStartWith('data:image/png');
+      expect(call.denoise).toBe(0.5);
+      expect(call.negativePrompt).toBe('deformed, different person, blurry, low quality');
+    });
+
+    test('C-388: appearance-mode regenerateAvatar delegates without initImage', async () => {
+      const vm = await loadVm();
+      mockPersona = {
+        id: 'p1',
+        name: 'Thorin',
+        appearance: { physicalDescription: 'stout dwarf with red beard' },
+      };
+      vm.regenerationMode = 'appearance';
+
+      await vm.regenerateAvatar();
+
+      expect(imageGenCalls.length).toBe(1);
+      expect(imageGenCalls[0].initImage).toBeUndefined();
+      expect(imageGenCalls[0].prompt).toInclude('red beard');
+    });
+
     test('should have populated persona in TWEAK', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Halfling bard');
@@ -916,9 +1011,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       const vm = await loadVm();
 
       // Mock authService uid
-      const { authService } = await import(
-        '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
-      );
+      const { authService } = await import('$lib/services/index.ts');
       (authService as Record<string, unknown>).uid = 'test-user-123';
 
       uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
@@ -933,9 +1026,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     test('should set avatarUrl after successful upload', async () => {
       const vm = await loadVm();
 
-      const { authService } = await import(
-        '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
-      );
+      const { authService } = await import('$lib/services/index.ts');
       (authService as Record<string, unknown>).uid = 'test-user-123';
 
       uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
@@ -1004,9 +1095,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       // Verify resets were called: player, inventory, equipment, world state
       // Each domain service must be reset exactly once, not the retired gameStateService.
       const { playerStateService, inventoryService, equipmentService, worldStateService } =
-        await import(
-          '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
-        );
+        await import('$lib/services/index.ts');
       expect(playerStateService.reset).toHaveBeenCalledTimes(1);
       expect(inventoryService.reset).toHaveBeenCalledTimes(1);
       expect(equipmentService.reset).toHaveBeenCalledTimes(1);

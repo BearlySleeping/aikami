@@ -1,10 +1,20 @@
 // apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts
+//
+// Dev sandbox image ViewModel (C-388). Keeps its view-model interface but
+// drops the private ComfyUI transports and workflow builders — all
+// generation and uploads go through the engine abstraction
+// (imageGenerationService → ImageEngineClient) so the sandbox honours the
+// engine toggle.
+//
+// Contract: C-388 Image Engine Provider Abstraction
+
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { ImageType } from '@aikami/types';
+import type { ImageEngineId, ImageType } from '@aikami/types';
+import type { ImageEngineCapabilities } from '$lib/services/image/engine/types.ts';
 import {
   type CheckpointInfo,
   compileImagePrompt,
@@ -88,11 +98,36 @@ export const EXPRESSIONS: readonly ExpressionDef[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Constants
+// Engine selector + capability-gated control list (AC-5)
 // ---------------------------------------------------------------------------
 
-const MAX_POLL_ATTEMPTS = 60;
-const POLL_INTERVAL_MS = 1000;
+export const ENGINE_OPTIONS = [
+  { id: 'auto', label: 'Auto-detect (sd-server first)' },
+  { id: 'sdcpp', label: 'sd-server (stable-diffusion.cpp)' },
+  { id: 'comfyui', label: 'ComfyUI' },
+] as const;
+
+export type ImageControlId =
+  | 'negativePrompt'
+  | 'seed'
+  | 'sampler'
+  | 'initImage'
+  | 'mask'
+  | 'referenceImages'
+  | 'lora';
+
+const CONTROL_BY_CAPABILITY: readonly {
+  control: ImageControlId;
+  capability: keyof ImageEngineCapabilities;
+}[] = [
+  { control: 'negativePrompt', capability: 'negativePrompt' },
+  { control: 'seed', capability: 'seed' },
+  { control: 'sampler', capability: 'sampler' },
+  { control: 'initImage', capability: 'initImage' },
+  { control: 'mask', capability: 'mask' },
+  { control: 'referenceImages', capability: 'referenceImages' },
+  { control: 'lora', capability: 'lora' },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -103,6 +138,15 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
   readonly activeTab: ImageTab;
   readonly tabs: readonly ImageTabMeta[];
   setActiveTab(tab: ImageTab): void;
+
+  // ── Engine selector (C-388) ─────────────────────────────────────────
+  readonly engineId: string | undefined;
+  readonly engineOptions: readonly { id: string; label: string }[];
+  readonly isAutoDetect: boolean;
+  /** Control ids the active engine supports — drives UI affordances (AC-5). */
+  readonly availableControls: readonly ImageControlId[];
+  refreshEngine(): Promise<void>;
+  setEngine(engine: ImageEngineId): Promise<void>;
 
   // ── Shared ────────────────────────────────────────────────────────────
   readonly checkpoints: readonly CheckpointInfo[];
@@ -150,6 +194,11 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
   // ── Image Edit tab ────────────────────────────────────────────────────
   readonly editPrompt: string;
   readonly editDenoise: number;
+  /** Optional inpainting mask (capability-gated, AC-5). */
+  readonly inputMaskDataUrl: string | undefined;
+  readonly inputMaskName: string;
+  handleMaskUpload(file: File): void;
+  clearMask(): void;
   editImage(): Promise<void>;
 };
 
@@ -208,6 +257,10 @@ class ImageViewModel
   editPrompt = $state('');
   editDenoise = $state(0.55);
 
+  // Inpainting mask (capability-gated)
+  inputMaskDataUrl = $state<string | undefined>();
+  inputMaskName = $state('');
+
   private _abortController: AbortController | undefined;
 
   // ── Getters ──────────────────────────────────────────────────────────
@@ -230,6 +283,42 @@ class ImageViewModel
 
   get expressions(): readonly ExpressionDef[] {
     return EXPRESSIONS;
+  }
+
+  // ── Engine selector (C-388) ──────────────────────────────────────────
+
+  get engineId(): string | undefined {
+    return imageGenerationService.engineId;
+  }
+
+  get engineOptions(): readonly { id: string; label: string }[] {
+    return ENGINE_OPTIONS;
+  }
+
+  get isAutoDetect(): boolean {
+    return imageGenerationService.isAutoDetect;
+  }
+
+  get availableControls(): readonly ImageControlId[] {
+    const capabilities = imageGenerationService.capabilities;
+    if (!capabilities) {
+      return [];
+    }
+    return CONTROL_BY_CAPABILITY.filter((entry) => capabilities[entry.capability]).map(
+      (entry) => entry.control,
+    );
+  }
+
+  async refreshEngine(): Promise<void> {
+    this.cancel();
+    this.results = [];
+    await imageGenerationService.refreshEngine();
+  }
+
+  async setEngine(engine: ImageEngineId): Promise<void> {
+    this.cancel();
+    this.results = [];
+    await imageGenerationService.setEngine(engine);
   }
 
   // ── Pipeline getters/setters (C-242) ──────────────────────────────────
@@ -301,11 +390,28 @@ class ImageViewModel
     this.results = [];
   }
 
+  // ── Public: mask upload (capability-gated, AC-5) ─────────────────────
+
+  handleMaskUpload(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      this.inputMaskDataUrl = reader.result as string;
+      this.inputMaskName = file.name;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearMask(): void {
+    this.inputMaskDataUrl = undefined;
+    this.inputMaskName = '';
+  }
+
   // ── Public: cancel ────────────────────────────────────────────────────
 
   cancel(): void {
     this._abortController?.abort();
     this._abortController = undefined;
+    imageGenerationService.cancel();
     this.isGenerating = false;
     this.generationProgress = 0;
     this.generationStatus = '';
@@ -327,30 +433,28 @@ class ImageViewModel
     this.results = [];
     this.isGenerating = true;
     this.generationProgress = 0;
-    this.generationStatus = 'Queuing...';
+    this.generationStatus = 'Queuing';
 
     const abortController = new AbortController();
     this._abortController = abortController;
 
     try {
-      const { prompt, negativePrompt, steps, cfg, sampler, scheduler, seed } = this;
-      const actualSeed = seed < 0 ? Math.floor(Math.random() * 2 ** 32) : seed;
+      const { prompt, negativePrompt, steps, cfg, sampler, seed } = this;
+      const actualSeed = seed < 0 ? undefined : seed;
 
-      const workflow = this._buildTxt2ImgWorkflow({
-        checkpoint: this.selectedCheckpoint,
+      const result = await imageGenerationService.generateImage({
         prompt: prompt.trim(),
-        negative: negativePrompt.trim(),
-        steps,
-        cfg,
-        sampler,
-        scheduler,
-        seed: actualSeed,
+        negativePrompt: negativePrompt.trim() || undefined,
+        checkpoint: this.selectedCheckpoint,
         width: this.width,
         height: this.height,
+        steps,
+        cfgScale: cfg,
+        sampler,
+        seed: actualSeed,
+        signal: abortController.signal,
       });
-
-      const url = await this._executeWorkflow(workflow, abortController.signal);
-      this.results = [url];
+      this.results = [result.url];
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         return;
@@ -380,13 +484,7 @@ class ImageViewModel
     this._abortController = abortController;
 
     try {
-      // Upload the input image to ComfyUI
-      const imageName = await this._uploadImage(this.inputImageDataUrl, abortController.signal);
-      if (!imageName) {
-        return;
-      }
-
-      // Run each expression sequentially
+      // Run each expression sequentially against the shared input image.
       for (const expr of EXPRESSIONS) {
         if (abortController.signal.aborted) {
           break;
@@ -394,25 +492,23 @@ class ImageViewModel
 
         this.expressionProgress = { ...this.expressionProgress, [expr.id]: 'Generating...' };
 
-        const workflow = this._buildImg2ImgWorkflow({
-          checkpoint: this.selectedCheckpoint,
-          imageName,
+        const result = await imageGenerationService.generateImage({
           prompt: `${expr.prompt}, same person, same face, same style, high quality`,
-          negative: 'different person, different face, deformed, blurry',
-          steps: 25,
-          cfg: 7.0,
-          sampler: 'euler',
-          scheduler: 'normal',
-          seed: Math.floor(Math.random() * 2 ** 32),
+          negativePrompt: 'different person, different face, deformed, blurry',
+          checkpoint: this.selectedCheckpoint,
+          initImage: this.inputImageDataUrl,
           denoise: 0.45,
+          steps: 25,
+          cfgScale: 7.0,
+          sampler: 'euler',
+          signal: abortController.signal,
         });
 
-        const url = await this._executeWorkflow(workflow, abortController.signal);
-        this.expressionResults = { ...this.expressionResults, [expr.id]: url };
-        this.results = [...this.results, url];
+        this.expressionResults = { ...this.expressionResults, [expr.id]: result.url };
+        this.results = [...this.results, result.url];
         this.expressionProgress = { ...this.expressionProgress, [expr.id]: 'Done' };
 
-        // Brief pause between expressions to avoid hammering ComfyUI
+        // Brief pause between expressions to avoid hammering the engine
         if (EXPRESSIONS.indexOf(expr) < EXPRESSIONS.length - 1) {
           await new Promise((r) => setTimeout(r, 500));
         }
@@ -444,26 +540,20 @@ class ImageViewModel
     this._abortController = abortController;
 
     try {
-      const imageName = await this._uploadImage(this.inputImageDataUrl, abortController.signal);
-      if (!imageName) {
-        return;
-      }
-
-      const workflow = this._buildImg2ImgWorkflow({
-        checkpoint: this.selectedCheckpoint,
-        imageName,
+      const result = await imageGenerationService.generateImage({
         prompt: this.editPrompt.trim(),
-        negative: 'deformed, blurry, low quality',
-        steps: this.steps,
-        cfg: this.cfg,
-        sampler: this.sampler,
-        scheduler: this.scheduler,
-        seed: this.seed < 0 ? Math.floor(Math.random() * 2 ** 32) : this.seed,
+        negativePrompt: 'deformed, blurry, low quality',
+        checkpoint: this.selectedCheckpoint,
+        initImage: this.inputImageDataUrl,
         denoise: this.editDenoise,
+        mask: this.inputMaskDataUrl,
+        steps: this.steps,
+        cfgScale: this.cfg,
+        sampler: this.sampler,
+        seed: this.seed < 0 ? undefined : this.seed,
+        signal: abortController.signal,
       });
-
-      const url = await this._executeWorkflow(workflow, abortController.signal);
-      this.results = [url];
+      this.results = [result.url];
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         return;
@@ -474,241 +564,7 @@ class ImageViewModel
       this._abortController = undefined;
     }
   }
-
-  // ── Private: image upload ─────────────────────────────────────────────
-
-  private async _uploadImage(dataUrl: string, signal: AbortSignal): Promise<string | null> {
-    this.generationStatus = 'Uploading image...';
-    this.generationProgress = 2;
-
-    try {
-      // Convert data URL to Blob
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('image', blob, this.inputImageName || 'input.png');
-
-      const uploadResponse = await fetch('/api/image/upload/image', {
-        method: 'POST',
-        body: formData,
-        signal,
-      });
-
-      if (!uploadResponse.ok) {
-        this.error('_uploadImage: failed', { status: uploadResponse.status });
-        return null;
-      }
-
-      const result = (await uploadResponse.json()) as { name?: string };
-      return result.name ?? null;
-    } catch (error) {
-      this.error('_uploadImage: error', error);
-      return null;
-    }
-  }
-
-  // ── Private: workflow execution ───────────────────────────────────────
-
-  private async _executeWorkflow(
-    workflow: Record<string, unknown>,
-    signal: AbortSignal,
-  ): Promise<string> {
-    this.generationStatus = 'Queuing...';
-    this.generationProgress = 5;
-
-    const queueResponse = await fetch('/api/image/prompt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      body: JSON.stringify({ client_id: `aikami-staging-${Date.now()}`, prompt: workflow }),
-      signal,
-    });
-
-    if (!queueResponse.ok) {
-      const errText = await queueResponse.text().catch(() => '');
-      throw new Error(`ComfyUI API error (${queueResponse.status}): ${errText.slice(0, 200)}`);
-    }
-
-    // biome-ignore lint/style/useNamingConvention: API contract field name
-    const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
-
-    this.generationStatus = 'Generating...';
-    this.generationProgress = 10;
-
-    for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt++) {
-      if (signal.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
-
-      const historyResponse = await fetch(`/api/image/history/${promptId}`, { signal });
-
-      if (historyResponse.ok) {
-        const history = (await historyResponse.json()) as Record<string, unknown>;
-        const entry = history[promptId];
-
-        if (entry) {
-          const outputs = (entry as Record<string, unknown>).outputs as Record<string, unknown>;
-          const node9 = outputs?.['9'] as
-            | { images?: Array<{ filename: string; subfolder?: string }> }
-            | undefined;
-          const images = node9?.images;
-
-          if (images && images.length > 0) {
-            this.generationProgress = 100;
-            this.generationStatus = 'Downloading...';
-
-            const img = images[0];
-            const imageUrl =
-              `/api/image/view?filename=${encodeURIComponent(img.filename)}` +
-              `&subfolder=${encodeURIComponent(img.subfolder ?? '')}&type=output`;
-
-            const blobResponse = await fetch(imageUrl, { signal });
-            if (!blobResponse.ok) {
-              throw new Error(`Failed to fetch image (${blobResponse.status})`);
-            }
-
-            const blob = await blobResponse.blob();
-            return URL.createObjectURL(blob);
-          }
-        }
-      }
-
-      this.generationProgress = Math.min(95, 10 + Math.round((attempt / MAX_POLL_ATTEMPTS) * 85));
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-
-    throw new Error('Generation timed out — ComfyUI did not return a result.');
-  }
-
-  // ── Private: workflow builders ────────────────────────────────────────
-
-  private _buildTxt2ImgWorkflow(options: {
-    checkpoint: string;
-    prompt: string;
-    negative: string;
-    steps: number;
-    cfg: number;
-    sampler: string;
-    scheduler: string;
-    seed: number;
-    width: number;
-    height: number;
-  }): Record<string, unknown> {
-    const { checkpoint, prompt, negative, steps, cfg, sampler, scheduler, seed, width, height } =
-      options;
-    const ckptName = checkpoint ? `${checkpoint}.safetensors` : 'sd_xl_base_1.0.safetensors';
-
-    return {
-      '3': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'KSampler',
-        inputs: {
-          seed,
-          steps,
-          cfg,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          sampler_name: sampler,
-          scheduler,
-          denoise: 1,
-          model: ['4', 0],
-          positive: ['6', 0],
-          negative: ['7', 0],
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          latent_image: ['5', 0],
-        },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      '9': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'SaveImage',
-        inputs: {
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          filename_prefix: 'aikami-staging',
-          images: ['8', 0],
-        },
-      },
-    };
-  }
-
-  private _buildImg2ImgWorkflow(options: {
-    checkpoint: string;
-    imageName: string;
-    prompt: string;
-    negative: string;
-    steps: number;
-    cfg: number;
-    sampler: string;
-    scheduler: string;
-    seed: number;
-    denoise: number;
-  }): Record<string, unknown> {
-    const {
-      checkpoint,
-      imageName,
-      prompt,
-      negative,
-      steps,
-      cfg,
-      sampler,
-      scheduler,
-      seed,
-      denoise,
-    } = options;
-    const ckptName = checkpoint ? `${checkpoint}.safetensors` : 'sd_xl_base_1.0.safetensors';
-
-    return {
-      '3': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'KSampler',
-        inputs: {
-          seed,
-          steps,
-          cfg,
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          sampler_name: sampler,
-          scheduler,
-          denoise,
-          model: ['4', 0],
-          positive: ['6', 0],
-          negative: ['7', 0],
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          latent_image: ['11', 0],
-        },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      '9': {
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        class_type: 'SaveImage',
-        inputs: {
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          filename_prefix: 'aikami-staging',
-          images: ['8', 0],
-        },
-      },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '10': { class_type: 'LoadImage', inputs: { image: imageName } },
-      // biome-ignore lint/style/useNamingConvention: API contract field name
-      '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
-    };
-  }
 }
 
 export const getImageViewModel = (options: ImageViewModelOptions): ImageViewModelInterface =>
-  new ImageViewModel(options);
+  ImageViewModel.create(options);

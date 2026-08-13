@@ -55,6 +55,7 @@ export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/media/audio_track_catalog.ts';
+export * from './lib/media/image_engine.ts';
 export * from './lib/media/image_generation.ts';
 export * from './lib/media/image_style_profile.ts';
 export * from './lib/media/music.ts';
