@@ -12,6 +12,7 @@ import {
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   campaignService,
   equipmentService,
@@ -26,7 +27,6 @@ import {
   worldStateService,
 } from '$services';
 import type { SaveSlotInfo } from '$types';
-import { isTauri } from '$lib/views/utils/is_tauri';
 
 // ---------------------------------------------------------------------------
 // Types

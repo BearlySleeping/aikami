@@ -48,6 +48,10 @@ const rootDirectory = resolve(projectDirectory, '../../..');
 
 export default defineConfig(({ mode }) => {
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
+  // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline
+  // runs so this app's Firebase Auth emulator proxy targets its own
+  // per-contract emulator instance, not another contract's. 0 otherwise.
+  const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
   const plugins: PluginOption[] = [
     tailwindcss(),
@@ -179,18 +183,18 @@ export default defineConfig(({ mode }) => {
               // popup, relay iframe, and main page all share localhost:5274.
               // This fixes the "No matching frame" error in signInWithPopup.
               '/emulator/auth': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               // Proxy Firebase Auth REST API calls to the emulator.
               // The SDK calls identitytoolkit + securetoken endpoints to
               // exchange OAuth credentials for Firebase tokens.
               '/identitytoolkit.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               '/securetoken.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth}`,
+                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
                 changeOrigin: true,
               },
               '/api/voice': {

@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { playError } from './alarm.ts';
 import { type ContractPipelineStage, isTerminalStage, type RunManifest } from './types.ts';
 
 const RUNS_DIR = '.pi/contract-runs';
@@ -147,12 +148,31 @@ export const acquireLock = async (options: {
   }
 
   const cleanup = (): void => removeFile(path);
+  // 🔴 Without this logging, a SIGINT/SIGTERM (pane closed, session restart,
+  // manual kill, OOM) unlocks and exits totally silently — pipeline.log just
+  // stops mid-stage with zero trace, and the only way to notice is staring at
+  // a stalled tab. Log + chime BEFORE exit so the failure is loud and the
+  // resume path is obvious. Best-effort: logging/audio must never block exit.
+  const announceInterruption = (signal: string, code: number): void => {
+    try {
+      pipelineLog({
+        runId: options.runId,
+        cwd: options.cwd,
+        message: `⚠️  Pipeline process received ${signal} and exited (code ${code}) — lock released. Resume with: bun run contract --resume ${options.runId}`,
+      });
+      playError();
+    } catch {
+      // Never let logging/audio failure block process exit.
+    }
+  };
   const signalCleanup = (): void => {
     cleanup();
+    announceInterruption('SIGINT', 130);
     process.exit(130);
   };
   const terminationCleanup = (): void => {
     cleanup();
+    announceInterruption('SIGTERM', 143);
     process.exit(143);
   };
 
