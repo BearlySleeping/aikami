@@ -502,7 +502,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * timeout aborts with TimeoutError so the poll loop can distinguish them.
  */
 const withRequestTimeout = (signal?: AbortSignal): AbortSignal =>
-  signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+    : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
 const isTimeoutError = (error: unknown): boolean =>
   error instanceof DOMException

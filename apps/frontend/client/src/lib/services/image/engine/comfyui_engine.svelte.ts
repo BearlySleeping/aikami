@@ -375,9 +375,7 @@ export class ComfyUiEngine implements ImageEngineClient {
             .map((m) => String(m[1] ?? ''))
             .filter(Boolean)
             .join('; ');
-          throw new Error(
-            `ComfyUI generation failed: ${errorText || 'workflow reported failure'}`,
-          );
+          throw new Error(`ComfyUI generation failed: ${errorText || 'workflow reported failure'}`);
         }
 
         const outputs = entry?.outputs;

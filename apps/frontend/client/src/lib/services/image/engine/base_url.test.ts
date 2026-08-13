@@ -16,7 +16,7 @@ mock.module('../../config/runtime_config_service.svelte.ts', () => ({
   },
 }));
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { resolveImageBaseUrl } from './base_url.ts';
 
 describe('resolveImageBaseUrl (C-389 runtime config)', () => {
