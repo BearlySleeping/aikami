@@ -138,6 +138,29 @@ database, AI, and game engine boundaries.
 
 ---
 
+### Local AI Stack — Self-Hostable Engine Bundle
+
+One-command local AI setup: text, image, voice, and speech engines matched to
+the user's hardware, published as container images. Implementation order is
+C-388/C-389 (client, parallel) → C-390 (stack) → C-391 and C-392 (parallel) →
+C-393 (before C-359 starts).
+
+| ID | Title | Priority | Status |
+|----|-------|----------|--------|
+| C-388 | Image Engine Provider Abstraction (ComfyUI ⇄ sd-server) | P1 | 📝 draft |
+| C-389 | Runtime Engine Configuration, Offline Browser TTS, and Tauri Packaging | P0 | 📝 draft |
+| C-390 | Local Stack v2 — Publishable Compose Topology, Engine Baseline, and Model Store | P1 | 📝 draft |
+| C-391 | `stack init` — Hardware Detection, Modality Selection, and Model Recommendation | P1 | 📝 draft |
+| C-392 | Converge the herdr Dev Engine Services with the Local Stack | P1 | 📝 draft |
+| C-393 | Speech-to-Text Backend Service (sherpa-onnx streaming + whisper.cpp batch) | P2 | 📝 draft |
+
+C-391's planning core lands in `packages/shared/local-ai` behind an injected
+`ProbeExecutor`, so a native/Tauri wizard is a later adapter contract rather
+than a refactor. C-393 is the backend half of C-359 (Speech Input and
+Hands-Free Play).
+
+---
+
 ### Completed Contracts (Phase 1–2 era, pre-TODO.md consolidation)
 
 These contracts were completed before the TODO.md consolidation. They built the
