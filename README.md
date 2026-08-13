@@ -74,6 +74,32 @@ bun run dev         # client dev server
 bun run dev:all     # client + Firebase emulators (herdr workspace)
 ```
 
+### Local PostgreSQL (dev)
+
+Aikami pins **PostgreSQL 17** in the Nix devShell — the same engine major the
+production providers speak over the wire — and runs it as a herdr dev service
+like any other. No Docker, no system Postgres, no sudo: the server runs as
+your OS user, binds to `127.0.0.1:5433` only (port 5432 is left free for your
+own system Postgres), and keeps all state in the gitignored `.postgres/`
+directory.
+
+```bash
+bun herdr:start postgres   # or: bun postgres:start (background)
+bun herdr:stop postgres    # or: bun postgres:stop
+bun postgres:status        # server state + connection details
+bun postgres:reset --yes   # delete all local data and re-initialise
+bun postgres:psql          # interactive psql
+```
+
+Connection URL (database `aikami_dev` is created for you by `init`):
+
+```
+postgresql://localhost:5433/aikami_dev?sslmode=disable
+```
+
+Lifecycle script: `scripts/src/lib/postgres/lifecycle.ts`. If a previous run
+left a stale `postmaster.pid`, `start` clears it automatically.
+
 ### Option 3 — Desktop app (Tauri v2)
 
 ```bash

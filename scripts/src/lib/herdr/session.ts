@@ -14,6 +14,7 @@
 //     voice           → bun run dev
 //     image           → bun run dev
 //     text            → bun run dev
+//     postgres        → bun run scripts/src/lib/postgres/lifecycle.ts start --foreground
 //     preview-client  → bun run scripts/src/lib/ops/preview_client.ts
 //     preview-hub     → bun run scripts/src/lib/ops/preview_hub.ts
 //     tauri           → bun run scripts/src/lib/ops/run_tauri.ts (launches an
@@ -40,6 +41,7 @@
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
@@ -57,6 +59,7 @@ export type DevService =
   | 'voice'
   | 'image'
   | 'text'
+  | 'postgres'
   | 'preview-client'
   | 'site'
   | 'preview-site'
@@ -66,11 +69,16 @@ export type DevService =
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
 
+/** How a service's readyPort should be probed: HTTP fetch or raw TCP connect. */
+export type ReadyCheck = 'http' | 'tcp';
+
 export type ServiceDef = {
   name: string;
   command: (mode: AikamiMode) => string;
   cwd: (root: string) => string;
   readyPort?: (mode: AikamiMode) => number | undefined;
+  /** Readiness probe for readyPort — 'http' by default; raw-TCP services (postgres) use 'tcp'. */
+  readyCheck?: ReadyCheck;
 };
 
 export type SessionConfig = {
@@ -149,6 +157,23 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
   },
+  // Local PostgreSQL (C-387) — a real engine matching production, Nix-provided.
+  // Runs the lifecycle script in foreground mode so the pane stays alive and
+  // doubles as the log viewer. Emulator-only: no local Postgres exists in
+  // staging/production, so readyPort returns undefined there.
+  postgres: {
+    name: 'postgres',
+    command: (mode) =>
+      mode === 'emulator'
+        ? 'bun run scripts/src/lib/postgres/lifecycle.ts start --foreground'
+        : 'echo "postgres is an emulator-only service — no local Postgres in this mode"',
+    cwd: (root) => root,
+    readyPort: (mode) => (mode === 'emulator' ? PORTS.emulator.postgres : undefined),
+    // PostgreSQL speaks the wire protocol, not HTTP — the generic fetch()
+    // probe would never pass (and would spam "invalid length of startup
+    // packet" into the server log). Probe with a raw TCP connect instead.
+    readyCheck: 'tcp',
+  },
   'preview-client': {
     name: 'preview-client',
     command: () => 'bun run scripts/src/lib/ops/preview_client.ts',
@@ -195,6 +220,12 @@ export const ALL_SERVICES: DevService[] = [
   'tauri',
 ];
 
+/**
+ * All valid service names — superset of ALL_SERVICES. Used for CLI validation
+ * and `herdr:list` so `postgres` is fully manageable even though it is NOT in
+ * the `all` group (C-387 keeps it opt-in: `bun herdr:start postgres`).
+ */
+export const KNOWN_SERVICES: DevService[] = [...ALL_SERVICES, 'postgres'];
 /** Services whose ports vary per contract — dev servers with a Firebase-
  *  adjacent port that collides across concurrent contract pipelines.
  *  voice/image/text stay on shared base ports (heavy singleton backends). */
@@ -229,10 +260,8 @@ const buildServiceCommand = (serviceKey: DevService, mode: AikamiMode, offset: n
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
-  if (![...ALL_SERVICES, 'all'].includes(input)) {
-    throw new Error(
-      `Unknown service: "${input}". Valid: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all`,
-    );
+  if (![...KNOWN_SERVICES, 'all'].includes(input)) {
+    throw new Error(`Unknown service: "${input}". Valid: ${KNOWN_SERVICES.join(', ')}, all`);
   }
   return input as DevService | 'all';
 };
@@ -568,7 +597,10 @@ export const workspaceExists = async (workspaceLabel: string): Promise<boolean> 
 
 // ── Health check ───────────────────────────────────────────
 
-export const isPortReady = async (port: number): Promise<boolean> => {
+export const isPortReady = async (port: number, check: ReadyCheck = 'http'): Promise<boolean> => {
+  if (check === 'tcp') {
+    return tcpConnectReady(port);
+  }
   try {
     const res = await fetch(`http://localhost:${port}/`, {
       signal: AbortSignal.timeout(2000),
@@ -578,6 +610,22 @@ export const isPortReady = async (port: number): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * Raw TCP connect probe for non-HTTP services (e.g. PostgreSQL). Binds to
+ * 127.0.0.1 explicitly — that is where the postgres listener is configured.
+ */
+const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
+  new Promise((resolveTcp) => {
+    const socket = net.createConnection({ port, host });
+    const settle = (ready: boolean): void => {
+      socket.destroy();
+      resolveTcp(ready);
+    };
+    socket.setTimeout(2000, () => settle(false));
+    socket.once('connect', () => settle(true));
+    socket.once('error', () => settle(false));
+  });
 
 /** Kill any process occupying a port so the next bind succeeds deterministically. */
 export const killPort = (port: number): Promise<void> =>
@@ -798,13 +846,14 @@ const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
 const assessServicePane = async (
   paneId: string,
   port?: number,
+  readyCheck: ReadyCheck = 'http',
 ): Promise<'crashed' | 'booting' | 'healthy'> => {
   const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
   const procs = r?.result?.process_info?.foreground_processes;
 
   // process-info unavailable — fall back to the port only, never restart on missing data
   if (!procs) {
-    if (port !== undefined && (await isPortReady(port))) {
+    if (port !== undefined && (await isPortReady(port, readyCheck))) {
       return 'healthy';
     }
     return 'booting';
@@ -816,7 +865,7 @@ const assessServicePane = async (
     return 'crashed';
   }
 
-  if (port !== undefined && !(await isPortReady(port))) {
+  if (port !== undefined && !(await isPortReady(port, readyCheck))) {
     const pid = real[0]?.pid;
     if (pid !== undefined) {
       const age = await processAgeSeconds(pid);
@@ -926,9 +975,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   const offset = contractPortOffset(currentContractId());
 
   if (services.length === 0) {
-    throw new Error(
-      'No services specified. Use: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, all',
-    );
+    throw new Error(`No services specified. Use: ${KNOWN_SERVICES.join(', ')}, all`);
   }
 
   await ensureServer();
@@ -1034,7 +1081,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
           const port = resolveReadyPort(service, mode, offset);
           if (servicePane) {
-            const state = await assessServicePane(servicePane.pane_id, port);
+            const state = await assessServicePane(servicePane.pane_id, port, svc.readyCheck);
             if (state === 'crashed') {
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
               await herdr([
@@ -1103,7 +1150,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         continue;
       }
       const port = resolveReadyPort(service, mode, offset);
-      if ((await assessServicePane(pane.pane_id, port)) === 'crashed') {
+      if (
+        (await assessServicePane(pane.pane_id, port, SERVICE_DEFS[service].readyCheck)) ===
+        'crashed'
+      ) {
         crashedOthers.push(tabName);
       }
     }
@@ -1333,7 +1383,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
     const panes = await getWorkspacePanes(ws.workspace_id);
     const paneByTab = new Map(panes.map((p) => [p.tab_id, p]));
 
-    const servicesStatus: ServiceStatus[] = ALL_SERVICES.map((svc) => {
+    const servicesStatus: ServiceStatus[] = KNOWN_SERVICES.map((svc) => {
       const def = SERVICE_DEFS[svc];
       const running = tabIdByName.has(def.name);
       return {
@@ -1358,9 +1408,9 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
             return;
           }
           const port = resolveReadyPort(s.service, wsMode, wsOffset);
-          s.state = await assessServicePane(pane.pane_id, port);
+          s.state = await assessServicePane(pane.pane_id, port, def.readyCheck);
           if (port !== undefined) {
-            s.portOpen = await isPortReady(port);
+            s.portOpen = await isPortReady(port, def.readyCheck);
           }
         }),
     );
@@ -1477,7 +1527,7 @@ export const waitForReady = async (
       }
 
       while (Date.now() < deadline) {
-        if (await isPortReady(port)) {
+        if (await isPortReady(port, svc.readyCheck)) {
           console.log(`  ✓ ${svc.name} ready on :${port}`);
           return;
         }
