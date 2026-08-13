@@ -356,14 +356,17 @@ export const TILED_FLIP_D = 0x20000000;
 
 /**
  * Mask of the three flip bits. After masking, the remaining value is the
- * clean global tile ID.
+ * clean global tile ID. Also the mask that keeps only the flip bits (for
+ * reading them back) — one authoritative mask, two uses (CodeRabbit
+ * review, C-379).
  */
 export const TILED_FLIP_MASK = TILED_FLIP_H | TILED_FLIP_V | TILED_FLIP_D;
 
 /**
- * Mask that keeps only the flip bits (for reading them back).
+ * Alias of {@link TILED_FLIP_MASK} retained for the engine's public barrel
+ * (index.ts exports both names; consumers may use either).
  */
-export const TILED_FLIP_BITS = TILED_FLIP_H | TILED_FLIP_V | TILED_FLIP_D;
+export const TILED_FLIP_BITS = TILED_FLIP_MASK;
 
 // ---------------------------------------------------------------------------
 // Internal parsing
@@ -551,11 +554,17 @@ const _parseLayer = (
   // The flip state is carried on the layer for the renderer to apply via
   // UV swaps (C-379 watch point: strip alone fixes collision but renders
   // the wrong orientation).
-  const flips = new Array<number>(expectedLength).fill(0);
+  //
+  // Allocate the flips array LAZILY — only when a nonzero flipBits value
+  // is actually encountered — so layers without flipped tiles stay
+  // `flips: undefined` and consumers keep receiving 0 via their existing
+  // fallback (CodeRabbit review, C-379).
+  let flips: number[] | undefined;
   for (let i = 0; i < expectedLength; i++) {
     const gid = data[i] as number;
-    const flipBits = (gid & TILED_FLIP_BITS) >>> 0;
+    const flipBits = (gid & TILED_FLIP_MASK) >>> 0;
     if (flipBits !== 0) {
+      flips ??= new Array<number>(expectedLength).fill(0);
       flips[i] = flipBits;
       data[i] = (gid & ~TILED_FLIP_MASK) >>> 0;
     }
@@ -1058,24 +1067,35 @@ export const buildCollisionGrid = (
  * @returns The matching tileset and 0-based local ID, or undefined when
  *   the GID is 0/empty or matches no tileset.
  */
-export const resolveGid = (
+export const resolveGid = <T extends { firstgid: number; tilecount: number }>(
   rawGid: number,
-  tilesets: readonly { firstgid: number; tilecount: number }[],
-): { tileset: { firstgid: number; tilecount: number }; localId: number } | undefined => {
+  tilesets: readonly T[],
+): { tileset: T; localId: number } | undefined => {
   if (rawGid === 0) {
     return undefined;
   }
-  for (let i = tilesets.length - 1; i >= 0; i--) {
-    const tileset = tilesets[i];
-    if (rawGid >= tileset.firstgid) {
-      const localId = rawGid - tileset.firstgid;
-      if (localId < tileset.tilecount) {
-        return { tileset, localId };
-      }
-      break;
+  // JSDoc contract: tilesets may be provided in ANY order. Select the
+  // tileset with the HIGHEST firstgid that does not exceed rawGid, then
+  // require the localId to fall within that tileset's tilecount — no
+  // reliance on reverse iteration order or an early break (CodeRabbit
+  // review, C-379).
+  let best: T | undefined;
+  for (const tileset of tilesets) {
+    if (rawGid < tileset.firstgid) {
+      continue;
+    }
+    if (best === undefined || tileset.firstgid > best.firstgid) {
+      best = tileset;
     }
   }
-  return undefined;
+  if (!best) {
+    return undefined;
+  }
+  const localId = rawGid - best.firstgid;
+  if (localId >= best.tilecount) {
+    return undefined;
+  }
+  return { tileset: best, localId };
 };
 
 /**
@@ -1102,6 +1122,17 @@ export const buildTerrainGridForMap = (options: {
   collisionGrid: CollisionGrid | undefined;
 }): TerrainGrid => {
   const { tilemap, packConfig, collisionGrid } = options;
+
+  // Non-square tiles are unsupported (the grid encodes a single tileSize);
+  // surface the mismatch so an authoring error is visible instead of
+  // silently sampling with the wrong aspect (CodeRabbit review, C-379).
+  if (tilemap.tilewidth !== tilemap.tileheight) {
+    logger.warn('buildTerrainGridForMap:non-square-tiles', {
+      tilewidth: tilemap.tilewidth,
+      tileheight: tilemap.tileheight,
+      hint: 'Non-square tiles are not supported — tileSize uses tilewidth.',
+    });
+  }
 
   if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
     const terrainDefs = collectTerrainCostDefs(packConfig);

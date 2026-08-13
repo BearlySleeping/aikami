@@ -100,9 +100,9 @@ test.describe('Emergent World Integration E2E', () => {
     await page.waitForFunction(
       () => {
         const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
-          | { playerX?: number; entityPositions?: Record<string, unknown> }
+          | { playerX?: number; playerEid?: number; entityPositions?: Record<string, unknown> }
           | undefined;
-        return d?.playerX !== undefined;
+        return d?.playerX !== undefined && d?.playerEid !== undefined;
       },
       { timeout: 15000 },
     );
@@ -116,6 +116,16 @@ test.describe('Emergent World Integration E2E', () => {
       });
     };
 
+    // Identify the player's eid so the movement assertion can EXCLUDE it —
+    // the player may move under input focus, and AC-7 is about NPCs and
+    // companions walking, not the player (CodeRabbit review, C-379).
+    const playerEid = await page.evaluate(() => {
+      const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | { playerEid?: number }
+        | undefined;
+      return d?.playerEid ?? 0;
+    });
+
     // Wait for the map (village) to load and spawn NPCs.
     await page.waitForTimeout(3000);
     const before = await samplePositions();
@@ -126,17 +136,21 @@ test.describe('Emergent World Integration E2E', () => {
     await page.waitForTimeout(2000);
     const after = await samplePositions();
 
-    // At least one entity (NPC/companion) must have moved. The player may
-    // also move if input focus is active, so we count ANY changed position
-    // — the assertion is that the world is not a freeze-frame.
-    let movedCount = 0;
+    // At least one NON-PLAYER entity (NPC/companion) must have moved. The
+    // old assertion counted ANY changed position — the player alone could
+    // satisfy it, which the pre-contract frozen-NPC behaviour would also
+    // pass under input focus.
+    let movedNpcCount = 0;
     for (const [eid, pos] of Object.entries(before)) {
+      if (Number(eid) === playerEid) {
+        continue;
+      }
       const afterPos = after[eid];
       if (afterPos && (afterPos.x !== pos.x || afterPos.y !== pos.y)) {
-        movedCount++;
+        movedNpcCount++;
       }
     }
 
-    expect(movedCount).toBeGreaterThan(0);
+    expect(movedNpcCount).toBeGreaterThan(0);
   });
 });

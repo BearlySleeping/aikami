@@ -21,8 +21,28 @@ import { PathFollow } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { findPath, type GridCell } from '../math/astar.ts';
+import {
+  DEFAULT_ACTION_COMBAT_MOVE,
+  DEFAULT_ACTION_GO_TO_PUB,
+  DEFAULT_ACTION_GO_TO_WORKPLACE,
+  DEFAULT_ACTION_IDLE,
+  DEFAULT_ACTION_PURSUE_TARGET,
+} from '../math/goap/action_registry.ts';
 import { getTerrainGrid, getTerrainTileSize } from './collision_system.ts';
 import { hasActivePath } from './path_follow_system.ts';
+
+/**
+ * Executor-owned repath backoff, keyed by entity id (CodeRabbit review,
+ * C-379).
+ *
+ * NOT stored on `PathFollow.repathAtMs`: that SoA slot is shared with the
+ * party-follow provider, and a stale value there would gate this executor
+ * across entity lifecycles (a recycled eid inherits a deadline written by
+ * a previous companion). A Map entry is per-entity and disappears with the
+ * entity; a brand-new entity starts with no deadline. Cleared/overwritten
+ * whenever a path is attached or a new goal is requested.
+ */
+const _backoffUntil = new Map<number, number>();
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */
 const GOAP_QUERY_TERMS = [GoapAgent, Position, GridPosition];
@@ -30,16 +50,19 @@ const GOAP_QUERY_TERMS = [GoapAgent, Position, GridPosition];
 /**
  * Movement-capable GOAP actions (default registry actionIds).
  *
- * 0  = Idle — the scheduler always falls back to it (cost 0, no
- *      preconditions), so idle agents wander toward a nearby walkable goal
- *      (C-379 AC-7: "NPCs walk paths" — a villager with nothing to do
- *      still strolls rather than freezing at spawn).
- * 2  = Go to pub
- * 4  = Go to workplace
- * 7  = Pursue target (goal = target's current cell)
- * 10 = Combat — move to range (goal = target's current cell)
+ * Idle — the scheduler always falls back to it (cost 0, no preconditions),
+ * so idle agents wander toward a nearby walkable goal (C-379 AC-7: "NPCs
+ * walk paths" — a villager with nothing to do still strolls rather than
+ * freezing at spawn). Go to pub / Go to workplace are destination actions;
+ * Pursue target / Combat move to range follow the target's cell.
  */
-const MOVEMENT_ACTION_IDS = new Set<number>([0, 2, 4, 7, 10]);
+const MOVEMENT_ACTION_IDS = new Set<number>([
+  DEFAULT_ACTION_IDLE,
+  DEFAULT_ACTION_GO_TO_PUB,
+  DEFAULT_ACTION_GO_TO_WORKPLACE,
+  DEFAULT_ACTION_PURSUE_TARGET,
+  DEFAULT_ACTION_COMBAT_MOVE,
+]);
 
 /** Wander radius in tiles around the agent's spawn for non-target actions. */
 const WANDER_RADIUS_TILES = 4;
@@ -142,8 +165,9 @@ export const updateGoapMovement = (world: World): void => {
 
     // Repath backoff — do not re-request every tick for unreachable goals.
     // Idle wanderers also pace themselves (stroll cadence). The deadline is
-    // a timestamp, so a stale value simply expires — no reset needed.
-    const deadline = PathFollow.repathAtMs[eid] ?? 0;
+    // executor-owned (per-eid map), so a stale PathFollow.repathAtMs value
+    // written by another provider can never gate this executor.
+    const deadline = _backoffUntil.get(eid) ?? 0;
     if (deadline > 0 && Date.now() < deadline) {
       continue;
     }
@@ -161,7 +185,7 @@ export const updateGoapMovement = (world: World): void => {
     let goal: GridCell | undefined;
 
     // Target-based actions follow the target's current cell.
-    if (actionId === 7 || actionId === 10) {
+    if (actionId === DEFAULT_ACTION_PURSUE_TARGET || actionId === DEFAULT_ACTION_COMBAT_MOVE) {
       const targetEid = GoapAgent.targetEntityId[eid] ?? 0;
       if (targetEid > 0) {
         const targetGx = GridPosition.x[targetEid];
@@ -184,10 +208,10 @@ export const updateGoapMovement = (world: World): void => {
     });
 
     if (result.path.length === 0) {
-      // Unreachable — back off and try again later. The raw SoA write is
-      // fine: the deadline is a timestamp that expires, and the executor
-      // reads it unconditionally (no component needed).
-      PathFollow.repathAtMs[eid] = Date.now() + UNREACHABLE_BACKOFF_MS;
+      // Unreachable — back off and try again later. The deadline is a
+      // timestamp that expires; the executor owns it in a per-eid map so
+      // recycled eids never inherit another entity's backoff.
+      _backoffUntil.set(eid, Date.now() + UNREACHABLE_BACKOFF_MS);
       continue;
     }
 
@@ -206,12 +230,20 @@ export const updateGoapMovement = (world: World): void => {
         index: 1, // skip the start cell — the agent is already there
         length: result.path.length,
         speed: GOAP_WALK_SPEED,
-        // Idle wanderers pause between strolls (the path-follow system
-        // detaches PathFollow on arrival; the deadline gates the next
-        // request). Pursuit/movement actions re-request immediately.
-        repathAtMs: actionId === 0 ? Date.now() + IDLE_WANDER_BACKOFF_MS : 0,
+        // Idle wanderers pause between strolls: the backoff deadline gates
+        // the next request after the path-follow system detaches PathFollow
+        // on arrival. Pursuit/movement actions re-request immediately.
+        repathAtMs: 0,
         arriveRadius: GOAP_ARRIVE_RADIUS,
       }),
     );
+    // Pace idle wanderers via the executor-owned backoff (CodeRabbit
+    // review, C-379): the deadline outlives the PathFollow component so it
+    // still gates the NEXT wander request after detachment.
+    if (actionId === DEFAULT_ACTION_IDLE) {
+      _backoffUntil.set(eid, Date.now() + IDLE_WANDER_BACKOFF_MS);
+    } else {
+      _backoffUntil.delete(eid);
+    }
   }
 };

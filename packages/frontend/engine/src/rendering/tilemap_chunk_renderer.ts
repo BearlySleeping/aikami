@@ -399,50 +399,80 @@ const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry
 };
 
 /**
- * Applies Tiled flip flags to a UV rect via corner swaps.
+ * Per-corner UVs for a tile quad, in vertex order TL, TR, BR, BL.
  *
- * Tiled's tile-transform semantics: the horizontal and vertical flips are
- * ordinary mirror operations; the diagonal flag is an anti-diagonal mirror
- * applied AFTER h/v. The four corner UVs map as:
+ * The D (anti-diagonal) flip cannot be represented as a UV rect — it
+ * preserves the tl/br corners and exchanges the tr/bl corner UVs — so the
+ * flip transform works on corners, never on the rect (CodeRabbit review,
+ * C-379).
+ */
+type TileUvCorners = {
+  tl: { u: number; v: number };
+  tr: { u: number; v: number };
+  br: { u: number; v: number };
+  bl: { u: number; v: number };
+};
+
+/** Converts a UV rect into per-corner UVs (vertex order TL, TR, BR, BL). */
+const _rectToCorners = (rect: {
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
+}): TileUvCorners => ({
+  tl: { u: rect.u0, v: rect.v0 },
+  tr: { u: rect.u1, v: rect.v0 },
+  br: { u: rect.u1, v: rect.v1 },
+  bl: { u: rect.u0, v: rect.v1 },
+});
+
+/**
+ * Applies Tiled flip flags to a tile quad's corner UVs.
  *
- *   tl = (u0, v0)   tr = (u1, v0)
- *   bl = (u0, v1)   br = (u1, v1)
- *
- * H: swap tl↔tr and bl↔br (mirror left-right).
- * V: swap tl↔bl and tr↔br (mirror top-bottom).
- * D: swap tl↔br and tr↔bl (mirror along the anti-diagonal).
+ * Tiled composition order: D (anti-diagonal) FIRST, then H, then V. The D
+ * flag is a true anti-diagonal transform — it preserves the tl/br corner
+ * UVs and exchanges the tr/bl corner UV pairs. A rect-based 180° swap
+ * would make D identical to H|V and produce the wrong orientation for D
+ * combined with H/V, so the transform works on per-corner UVs (CodeRabbit
+ * review, C-379).
  *
  * @param rect - The base UV rect.
  * @param flipBits - Masked flip flags (H|V|D bits only).
- * @returns The flipped UV rect.
+ * @returns The flipped per-corner UVs.
  */
 const _applyFlipToUv = (
   rect: { u0: number; v0: number; u1: number; v1: number },
   flipBits: number,
-): { u0: number; v0: number; u1: number; v1: number } => {
-  let { u0, v0, u1, v1 } = rect;
+): TileUvCorners => {
+  let tl = { u: rect.u0, v: rect.v0 };
+  let tr = { u: rect.u1, v: rect.v0 };
+  let br = { u: rect.u1, v: rect.v1 };
+  let bl = { u: rect.u0, v: rect.v1 };
 
+  if ((flipBits & TILED_FLIP_D) !== 0) {
+    // Anti-diagonal (transpose): preserve tl/br, exchange tr/bl.
+    const tmp = tr;
+    tr = bl;
+    bl = tmp;
+  }
   if ((flipBits & TILED_FLIP_H) !== 0) {
-    const tmpU = u0;
-    u0 = u1;
-    u1 = tmpU;
+    const tmpTl = tl;
+    tl = tr;
+    tr = tmpTl;
+    const tmpBl = bl;
+    bl = br;
+    br = tmpBl;
   }
   if ((flipBits & TILED_FLIP_V) !== 0) {
-    const tmpV = v0;
-    v0 = v1;
-    v1 = tmpV;
-  }
-  if ((flipBits & TILED_FLIP_D) !== 0) {
-    // Anti-diagonal mirror: swap tl↔br and tr↔bl.
-    const tmpU = u0;
-    const tmpV = v0;
-    u0 = u1;
-    v0 = v1;
-    u1 = tmpU;
-    v1 = tmpV;
+    const tmpTl = tl;
+    tl = bl;
+    bl = tmpTl;
+    const tmpTr = tr;
+    tr = br;
+    br = tmpTr;
   }
 
-  return { u0, v0, u1, v1 };
+  return { tl, tr, br, bl };
 };
 
 /**
@@ -463,12 +493,14 @@ const _resolveGid = (
   if (gid === 0) {
     return undefined;
   }
+  // resolveGid is generic over the tileset element type, so the resolved
+  // tileset IS the caller's TilesetEntry — no redundant entries.find and
+  // no cast needed (CodeRabbit review, C-379).
   const resolved = resolveGid(gid, entries);
   if (!resolved) {
     return undefined;
   }
-  const entry = entries.find((e) => e.firstgid === resolved.tileset.firstgid);
-  return entry ? { entry, localId: resolved.localId } : undefined;
+  return { entry: resolved.tileset, localId: resolved.localId };
 };
 
 /**
@@ -551,15 +583,14 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   // C-378 terrain layers resolve frame names through the atlas resolver.
   // A frame-name layer with no resolver has no resolvable cells.
   const isFrameLayer = layer.frames !== undefined;
-  const resolveUv = (
-    index: number,
-  ): { u0: number; v0: number; u1: number; v1: number } | undefined => {
+  const resolveUv = (index: number): TileUvCorners | undefined => {
     if (isFrameLayer) {
       const frame = layer.frames?.[index];
       if (!frame || !frameUvResolver) {
         return undefined;
       }
-      return frameUvResolver.resolve(frame);
+      const rect = frameUvResolver.resolve(frame);
+      return rect ? _rectToCorners(rect) : undefined;
     }
     const gid = layer.data?.[index] ?? 0;
     if (gid === 0) {
@@ -569,21 +600,18 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     if (!resolved) {
       return undefined;
     }
-    // C-379 AC-9: apply the tile's flip state (H/V/D) via UV corner swaps.
-    // The map loader masked the flip bits off the GID and carried them on
-    // the layer; without this, a flipped tile renders un-flipped.
-    const flipBits = layer.flips?.[index] ?? 0;
-    if (flipBits === 0) {
-      return resolved.entry.getUvRect(resolved.localId);
-    }
+    // C-379 AC-9: apply the tile's flip state (H/V/D) via per-corner UV
+    // swaps. The map loader masked the flip bits off the GID and carried
+    // them on the layer; without this, a flipped tile renders un-flipped.
     const base = resolved.entry.getUvRect(resolved.localId);
-    return _applyFlipToUv(base, flipBits);
+    const flipBits = layer.flips?.[index] ?? 0;
+    return flipBits === 0 ? _rectToCorners(base) : _applyFlipToUv(base, flipBits);
   };
 
   // Resolve each cell ONCE: cache non-empty UV results in the counting pass
   // and reuse them while filling — avoids a second resolver call (and a
   // second UV object allocation) per active cell (C-378 performance pass).
-  const resolvedUvs = new Map<number, { u0: number; v0: number; u1: number; v1: number }>();
+  const resolvedUvs = new Map<number, TileUvCorners>();
   for (let row = tileStartY; row < tileEndY; row++) {
     for (let col = tileStartX; col < tileEndX; col++) {
       const index = row * layer.width + col;
@@ -629,29 +657,29 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
       // Top-left
       positions[posOffset] = px;
       positions[posOffset + 1] = py;
-      uvs[uvOffset] = uv.u0;
-      uvs[uvOffset + 1] = uv.v0;
+      uvs[uvOffset] = uv.tl.u;
+      uvs[uvOffset + 1] = uv.tl.v;
       textureLayers[vi] = 0;
 
       // Top-right
       positions[posOffset + 2] = px + tilePixelW;
       positions[posOffset + 3] = py;
-      uvs[uvOffset + 2] = uv.u1;
-      uvs[uvOffset + 3] = uv.v0;
+      uvs[uvOffset + 2] = uv.tr.u;
+      uvs[uvOffset + 3] = uv.tr.v;
       textureLayers[vi + 1] = 0;
 
       // Bottom-right
       positions[posOffset + 4] = px + tilePixelW;
       positions[posOffset + 5] = py + tilePixelH;
-      uvs[uvOffset + 4] = uv.u1;
-      uvs[uvOffset + 5] = uv.v1;
+      uvs[uvOffset + 4] = uv.br.u;
+      uvs[uvOffset + 5] = uv.br.v;
       textureLayers[vi + 2] = 0;
 
       // Bottom-left
       positions[posOffset + 6] = px;
       positions[posOffset + 7] = py + tilePixelH;
-      uvs[uvOffset + 6] = uv.u0;
-      uvs[uvOffset + 7] = uv.v1;
+      uvs[uvOffset + 6] = uv.bl.u;
+      uvs[uvOffset + 7] = uv.bl.v;
       textureLayers[vi + 3] = 0;
 
       // Write 6 indices (2 triangles)

@@ -193,13 +193,16 @@ describe('path_follow_system (C-379 AC-7)', () => {
     expect(frames).toBeLessThan(2000);
   });
 
-  it('empty path is a no-op', () => {
+  it('empty path is a no-op and clears any existing motion', () => {
     setCollisionGrid(ALL_WALKABLE);
     const eid = nextEid();
     addComponent(world, eid, Position);
     addComponent(world, eid, set(Position, { x: 160, y: 160 }));
     addComponent(world, eid, Velocity);
-    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+    // Start with NON-zero velocity — the system must clear it when the
+    // path is empty (a zero-initialized test proved nothing; CodeRabbit
+    // review, C-379).
+    addComponent(world, eid, set(Velocity, { x: 50, y: -30 }));
     attachPath(eid, [], 80, 4);
 
     updatePathFollow(world, 100);
@@ -207,6 +210,7 @@ describe('path_follow_system (C-379 AC-7)', () => {
     const vel = getComponent(world, eid, Velocity) as { x: number; y: number } | undefined;
     expect(vel).toBeDefined();
     if (vel) {
+      // Motion cleared to zero.
       expect(vel.x).toBe(0);
       expect(vel.y).toBe(0);
     }

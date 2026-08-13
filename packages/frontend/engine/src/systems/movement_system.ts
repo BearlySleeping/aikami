@@ -27,8 +27,10 @@ import { isEntityOffscreen } from './macro_simulation_system.ts';
 //
 // Contract C-173: Collision detection uses the spatial grid + bitmask
 // collision. isCellBlocked() checks the dense spatial grid with intrusive
-// linked list and CollisionData layer/mask bitwise AND. Falls back to
-// isWalkable() (terrain cost) when no spatial grid is active.
+// linked list and CollisionData layer/mask bitwise AND. Terrain solidity
+// via isWalkable() (terrain cost) is an INDEPENDENT condition — the
+// composite is `isCellBlocked(...) || !isWalkable(...)`, evaluated
+// regardless of whether a spatial grid is active (C-379).
 //
 // Contract C-379:
 //   - Every mover carries its OWN collision mask — read from
@@ -125,9 +127,12 @@ const safeCoordinate = (value: number, fallback: number, eid: number, axis: 'x' 
 /**
  * Returns the collision mask a mover uses for occupancy checks.
  *
- * Reads the entity's own CollisionData.mask. Entities WITHOUT the
- * CollisionData component get {@link DEFAULT_MOVER_COLLISION_MASK}
- * (walls only) — never the player's mask (C-379 AC-3).
+ * Reads the entity's own CollisionData.mask and returns it UNCHANGED —
+ * including an explicit 0, which is a valid non-colliding mask (the mover
+ * collides with nothing). Only an entity WITHOUT the CollisionData
+ * component gets {@link DEFAULT_MOVER_COLLISION_MASK} (walls only); a
+ * component with no stored value yet also falls back to the default
+ * (CodeRabbit review, C-379). Never falls back to the player's mask.
  *
  * Component-existence check, not a raw SoA read: recycled eids in the
  * worker can carry stale CollisionData.mask values from a previous
@@ -142,7 +147,8 @@ const _getMoverMask = (world: World, eid: number): number => {
     return DEFAULT_MOVER_COLLISION_MASK;
   }
   const mask = CollisionData.mask[eid];
-  return mask === undefined || mask === 0 ? DEFAULT_MOVER_COLLISION_MASK : mask;
+  // An explicit 0 is a valid non-colliding mask — return it unchanged.
+  return mask === undefined ? DEFAULT_MOVER_COLLISION_MASK : mask;
 };
 
 /**

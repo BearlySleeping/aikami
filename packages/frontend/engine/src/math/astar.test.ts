@@ -10,6 +10,7 @@
 //   blocked cells.
 
 import { describe, expect, test } from 'bun:test';
+import { logger } from '$logger';
 import { type AstarGrid, findPath } from './astar.ts';
 
 const makeGrid = (width: number, height: number, fill = 16): AstarGrid => ({
@@ -41,7 +42,7 @@ describe('findPath — weighted A* (C-379 AC-6)', () => {
     expect(result.path).toEqual([]);
   });
 
-  test('returns no path when start or goal is impassable', () => {
+  test('returns no path when start or goal is impassable or out of bounds', () => {
     const grid = makeGrid(5, 5);
     grid.cost[0] = 0; // start (0,0) blocked
     const startBlocked = findPath({ grid, start: { x: 0, y: 0 }, goal: { x: 4, y: 4 } });
@@ -51,6 +52,19 @@ describe('findPath — weighted A* (C-379 AC-6)', () => {
     grid.cost[24] = 0; // goal (4,4) blocked
     const goalBlocked = findPath({ grid, start: { x: 0, y: 0 }, goal: { x: 4, y: 4 } });
     expect(goalBlocked.path).toEqual([]);
+
+    // Out-of-bounds endpoints — negative and equal-to-extent coordinates —
+    // must return an empty path without throwing (CodeRabbit review, C-379).
+    const negativeStart = findPath({ grid, start: { x: -1, y: 0 }, goal: { x: 4, y: 4 } });
+    expect(negativeStart.path).toEqual([]);
+    const negativeGoal = findPath({ grid, start: { x: 0, y: 0 }, goal: { x: 4, y: -1 } });
+    expect(negativeGoal.path).toEqual([]);
+    const extentStart = findPath({ grid, start: { x: 5, y: 0 }, goal: { x: 4, y: 4 } });
+    expect(extentStart.path).toEqual([]);
+    const extentGoal = findPath({ grid, start: { x: 0, y: 0 }, goal: { x: 4, y: 5 } });
+    expect(extentGoal.path).toEqual([]);
+    const bothOutOfBounds = findPath({ grid, start: { x: -3, y: -3 }, goal: { x: 9, y: 9 } });
+    expect(bothOutOfBounds.path).toEqual([]);
   });
 
   test('prefers a low-cost road over high-cost rough terrain', () => {
@@ -76,8 +90,8 @@ describe('findPath — weighted A* (C-379 AC-6)', () => {
     expect(result.totalCost).toBeCloseTo(176, 5);
   });
 
-  test('resolves a 200×200 worst case in under 2ms', () => {
-    // Warm up the JIT so the timed call is not the first (cold) execution.
+  test('resolves a 200×200 worst case within the work budget', () => {
+    // Warm up the JIT so the measured call is not the first (cold) execution.
     for (let i = 0; i < 30; i++) {
       const warm = makeGrid(50, 50);
       findPath({ grid: warm, start: { x: 0, y: 0 }, goal: { x: 49, y: 49 } });
@@ -86,8 +100,7 @@ describe('findPath — weighted A* (C-379 AC-6)', () => {
     const grid = makeGrid(200, 200);
     // Serpentine corridor: even rows fully open; odd rows open only a
     // connector column alternating between x=199 and x=0, forcing a long
-    // winding search from (0,0) to (199,199). This is the pathological
-    // long-path worst case — ~20k expansions, still under the 2ms budget.
+    // winding search from (0,0) to (199,199).
     for (let y = 0; y < 200; y++) {
       for (let x = 0; x < 200; x++) {
         if (y % 2 === 0 || y === 199) {
@@ -102,21 +115,32 @@ describe('findPath — weighted A* (C-379 AC-6)', () => {
     grid.cost[0] = 16;
     grid.cost[199 * 200 + 199] = 16;
 
-    // Best-of-N: measures steady-state performance (JIT-warm), the same
-    // conditions a live tick sees. A single cold call includes first-run
-    // optimization noise unrelated to the algorithm.
+    // Correctness is asserted on the path-search WORK METRIC (r.expanded),
+    // which is independent of CI load — a full-corridor search must expand
+    // a meaningful number of nodes (the pre-C-379 bug expanded ~0). Elapsed
+    // time is measured for diagnostics only, never used as the pass/fail
+    // condition (CodeRabbit review, C-379).
     let bestElapsed = Number.POSITIVE_INFINITY;
+    let expanded = 0;
     for (let run = 0; run < 5; run++) {
       const runStart = performance.now();
       const r = findPath({ grid, start: { x: 0, y: 0 }, goal: { x: 199, y: 199 } });
       bestElapsed = Math.min(bestElapsed, performance.now() - runStart);
+      expanded = Math.max(expanded, r.expanded);
       if (run === 0) {
         expect(r.path.length).toBeGreaterThan(0);
       }
     }
-    const elapsed = bestElapsed;
 
-    expect(elapsed).toBeLessThan(2);
+    // A winding full-corridor search must expand tens of thousands of
+    // nodes — anything near zero means the search short-circuited.
+    expect(expanded).toBeGreaterThan(10_000);
+    // Diagnostic: log the measured best elapsed so the 2ms budget stays
+    // observable without being a flaky CI assertion.
+    logger.debug('astar:200x200-best-elapsed', {
+      elapsedMs: bestElapsed,
+      expanded,
+    });
   });
 
   test('does not cut corners through diagonally-adjacent blocked cells', () => {

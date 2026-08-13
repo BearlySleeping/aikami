@@ -4,6 +4,7 @@ import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
 import { logger } from '$logger';
 import type { TerrainLayerEmission } from '../assets/autotile.ts';
 import type { TilemapBand, TilemapData, TilemapLayer } from '../assets/map_loader.ts';
+import { resolveGid } from '../assets/map_loader.ts';
 import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import {
   buildTilemapChunks,
@@ -305,6 +306,11 @@ export const renderTilemap = async (
       continue;
     }
 
+    // A visible layer counts ONCE regardless of how many tilesets it
+    // references — layerCount gates the real-uniform-group return path
+    // (CodeRabbit review, C-379).
+    layerCount += 1;
+
     for (const ts of referencedTilesets) {
       const texture = textureMap.get(ts.image);
       if (!texture) {
@@ -312,18 +318,22 @@ export const renderTilemap = async (
       }
 
       // Build a filtered tilemap for THIS tileset: only the layer, with
-      // every GID that is NOT from this tileset zeroed out (empty tile).
-      // Flip flags ride along — the flips array stays index-parallel to the
-      // zeroed data (C-379 AC-9).
+      // every GID that does NOT resolve to this tileset zeroed out (empty
+      // tile). Resolution goes through the shared resolveGid (highest
+      // firstgid wins), so overlapping tileset ranges follow the SAME
+      // convention as every other GID consumer. Flip flags ride along —
+      // the flips array stays index-parallel to the zeroed data and is
+      // passed through WITHOUT copying (C-379 AC-9, CodeRabbit review).
       const subLayer: TilemapLayer = {
         ...layer,
         data: layer.data.map((gid) => {
           if (gid === 0) {
             return 0;
           }
-          return gid >= ts.firstgid && gid - ts.firstgid < ts.tilecount ? gid : 0;
+          const resolved = resolveGid(gid, tilemap.tilesets);
+          return resolved && resolved.tileset.firstgid === ts.firstgid ? gid : 0;
         }),
-        flips: layer.flips ? [...layer.flips] : undefined,
+        flips: layer.flips,
       };
       const layerTilemap: TilemapData = {
         ...tilemap,
@@ -345,7 +355,6 @@ export const renderTilemap = async (
         bandEntry.container.addChild(result.container.children[0]);
       }
 
-      layerCount += 1;
       bandEntry.chunks.push(...result.chunks);
       allChunks.push(...result.chunks);
     }

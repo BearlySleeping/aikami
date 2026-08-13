@@ -7,7 +7,7 @@
 // handle out-of-bounds coordinates without typed-array exceptions,
 // returning safe default values (blocked / false) at all map edges.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getAllEntities, query, set } from 'bitecs';
 import {
@@ -31,6 +31,10 @@ import {
   resetCollisionGrid,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
+// Namespace import so spyOn can patch the module exports — Bun patches the
+// live bindings, so syncGridPositions (which imports these functions by
+// name) sees the spies too.
+import * as collisionSystemModule from '../systems/collision_system.ts';
 import { syncGridPositions } from '../systems/grid_position_sync_system.ts';
 
 /** Reads the head EID of a spatial-grid cell (0 = empty). */
@@ -513,77 +517,100 @@ describe('syncGridPositions — GridPosition tracks Position (C-379 AC-1)', () =
     resetCollisionGrid();
   });
 
-  const spawnEntity = (eid: number, x: number, y: number, withLink = true): void => {
-    addEntity(world); // assign eid
+  // Returns the eid ACTUALLY allocated by addEntity — never assume a
+  // caller-supplied id (bitecs allocates sequentially; a recycled or
+  // pre-populated world would hand out a different id). The GridPosition
+  // divisor uses TILE_SIZE, the same constant _makeBorderGrid uses
+  // (CodeRabbit review, C-379).
+  const spawnEntity = (x: number, y: number, withLink = true): number => {
+    const eid = addEntity(world);
     addComponent(world, eid, Position);
     addComponent(world, eid, set(Position, { x, y }));
     addComponent(world, eid, GridPosition);
-    addComponent(world, eid, set(GridPosition, { x: Math.floor(x / 32), y: Math.floor(y / 32) }));
+    addComponent(
+      world,
+      eid,
+      set(GridPosition, { x: Math.floor(x / TILE_SIZE), y: Math.floor(y / TILE_SIZE) }),
+    );
     if (withLink) {
       addComponent(world, eid, SpatialLink);
       addComponent(world, eid, set(SpatialLink, { next: 0, prev: 0 }));
       addComponent(world, eid, CollisionData);
       addComponent(world, eid, set(CollisionData, { layer: CollisionLayer.npc, mask: 0 }));
     }
+    return eid;
   };
 
   test('syncs GridPosition from Position after movement across a tile boundary', () => {
     setCollisionGrid(_makeBorderGrid());
-    spawnEntity(1, 32, 32); // tile (1,1)
+    const eid = spawnEntity(32, 32); // tile (1,1)
 
     // Move to (100, 100) → tile (3,3).
-    addComponent(world, 1, set(Position, { x: 100, y: 100 }));
+    addComponent(world, eid, set(Position, { x: 100, y: 100 }));
     syncGridPositions(world);
 
-    expect(GridPosition.x[1]).toBe(3);
-    expect(GridPosition.y[1]).toBe(3);
+    expect(GridPosition.x[eid]).toBe(3);
+    expect(GridPosition.y[eid]).toBe(3);
   });
 
   test('updates the occupancy grid: old cell list no longer contains it', () => {
     setCollisionGrid(_makeBorderGrid());
-    spawnEntity(1, 32, 32); // tile (1,1)
-    insertIntoSpatialGrid(1);
+    const eid = spawnEntity(32, 32); // tile (1,1)
+    insertIntoSpatialGrid(eid);
 
     // Move to tile (3,3).
-    addComponent(world, 1, set(Position, { x: 100, y: 100 }));
+    addComponent(world, eid, set(Position, { x: 100, y: 100 }));
     syncGridPositions(world);
 
     // Old cell (1,1) must be empty; new cell (3,3) must contain the entity.
     expect(spatialGridHeadAt(1, 1)).toBe(0);
-    expect(spatialGridHeadAt(3, 3)).toBe(1);
+    expect(spatialGridHeadAt(3, 3)).toBe(eid);
   });
 
   test('no duplicate insertion when moving within one cell', () => {
     setCollisionGrid(_makeBorderGrid());
-    spawnEntity(1, 32, 32); // tile (1,1)
-    insertIntoSpatialGrid(1);
+    const eid = spawnEntity(32, 32); // tile (1,1)
+    insertIntoSpatialGrid(eid);
 
     // Move within the same cell (33, 33) → still tile (1,1).
-    addComponent(world, 1, set(Position, { x: 33, y: 33 }));
+    addComponent(world, eid, set(Position, { x: 33, y: 33 }));
     syncGridPositions(world);
 
-    expect(GridPosition.x[1]).toBe(1);
-    expect(GridPosition.y[1]).toBe(1);
+    expect(GridPosition.x[eid]).toBe(1);
+    expect(GridPosition.y[eid]).toBe(1);
 
     // Intrusive list integrity: cell (1,1) head is the entity and its
     // next/prev are consistent (single node → next=0, prev=0).
-    expect(spatialGridHeadAt(1, 1)).toBe(1);
-    expect(SpatialLink.next[1]).toBe(0);
-    expect(SpatialLink.prev[1]).toBe(0);
+    expect(spatialGridHeadAt(1, 1)).toBe(eid);
+    expect(SpatialLink.next[eid]).toBe(0);
+    expect(SpatialLink.prev[eid]).toBe(0);
   });
 
-  test('sync is O(moving): a stationary entity stays untouched', () => {
+  test('sync is O(moving): a stationary entity triggers no grid mutation', () => {
     setCollisionGrid(_makeBorderGrid());
-    spawnEntity(1, 32, 32);
-    insertIntoSpatialGrid(1);
+    const eid = spawnEntity(32, 32);
+    insertIntoSpatialGrid(eid);
 
-    // No position change — GridPosition must not be rewritten.
-    syncGridPositions(world);
-    expect(GridPosition.x[1]).toBe(1);
-    expect(GridPosition.y[1]).toBe(1);
+    // Spy on the occupancy-grid mutators: for a stationary entity the sync
+    // must call NEITHER — direct change-gating observation, not just
+    // unchanged coordinates (CodeRabbit review, C-379).
+    const insertSpy = spyOn(collisionSystemModule, 'insertIntoSpatialGrid');
+    const removeSpy = spyOn(collisionSystemModule, 'removeFromSpatialGrid');
+    try {
+      syncGridPositions(world);
+      expect(insertSpy).not.toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+    } finally {
+      insertSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
 
-    // Still a single node in the list — no double insert.
-    expect(spatialGridHeadAt(1, 1)).toBe(1);
-    expect(SpatialLink.next[1]).toBe(0);
+    // GridPosition must not be rewritten.
+    expect(GridPosition.x[eid]).toBe(1);
+    expect(GridPosition.y[eid]).toBe(1);
+
+    // Supplemental: still a single node in the list — no double insert.
+    expect(spatialGridHeadAt(1, 1)).toBe(eid);
+    expect(SpatialLink.next[eid]).toBe(0);
   });
 });

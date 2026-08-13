@@ -16,6 +16,30 @@
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// Default registry action IDs (shared constants)
+//
+// The default townsfolk registry (goap_scheduler_system.ts) assigns these
+// numeric actionIds in order. Consumers that reference a specific action by
+// index — e.g. the NPC spawner attaching a "Go to pub" movement goal — MUST
+// use these constants, never a bare literal (CodeRabbit review, C-379).
+// ---------------------------------------------------------------------------
+
+/** Action ID of the default Idle action (cost 0, no preconditions). */
+export const DEFAULT_ACTION_IDLE = 0;
+
+/** Action ID of the default "Go to pub" movement action. */
+export const DEFAULT_ACTION_GO_TO_PUB = 2;
+
+/** Action ID of the default "Go to workplace" movement action. */
+export const DEFAULT_ACTION_GO_TO_WORKPLACE = 4;
+
+/** Action ID of the default "Pursue target" movement action. */
+export const DEFAULT_ACTION_PURSUE_TARGET = 7;
+
+/** Action ID of the default "Combat — move to range" movement action. */
+export const DEFAULT_ACTION_COMBAT_MOVE = 10;
+
+// ---------------------------------------------------------------------------
 // StaticActionDefinition — single action in the registry
 // ---------------------------------------------------------------------------
 

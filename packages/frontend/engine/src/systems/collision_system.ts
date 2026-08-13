@@ -151,8 +151,14 @@ export const setTerrainCellCost = (gx: number, gy: number, cost: number): void =
     return;
   }
   const index = gy * _terrain.width + gx;
-  _terrain.cost[index] = Math.max(0, Math.min(255, Math.round(cost)));
-  _terrain.blocksSight[index] = cost === 0 ? 1 : 0;
+  // Compute the clamped, rounded terrain cost ONCE and store it — the
+  // Uint8Array would otherwise wrap out-of-range values (256 → 0 =
+  // impassable, 320 → 64 = artificially cheap). blocksSight derives from
+  // the SAME stored value so the two grids stay consistent (CodeRabbit
+  // review, C-379).
+  const stored = Math.max(0, Math.min(255, Math.round(cost)));
+  _terrain.cost[index] = stored;
+  _terrain.blocksSight[index] = stored === 0 ? 1 : 0;
 };
 
 /**
@@ -293,7 +299,12 @@ export const initializeSpatialGrid = (width: number, height: number): void => {
   // cost oracle so LOS checks see terrain walls (C-379 — walls are no
   // longer entities in the spatial grid).
   setBresenhamGrid(_spatialGrid, width, height);
-  setBresenhamTerrain(_terrain?.cost, _terrain?.width ?? width, _terrain?.height ?? height);
+  setBresenhamTerrain(
+    _terrain?.cost,
+    _terrain?.blocksSight,
+    _terrain?.width ?? width,
+    _terrain?.height ?? height,
+  );
 };
 
 /**

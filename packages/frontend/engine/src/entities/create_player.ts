@@ -12,6 +12,7 @@ import { Position } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { Velocity } from '../components/velocity.ts';
+import { VisionVisible } from '../components/vision_visible.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
 import { getTerrainTileSize } from '../systems/collision_system.ts';
 import { PLAYER_COLLISION_MASK } from '../systems/movement_system.ts';
@@ -83,6 +84,14 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
       mask: PLAYER_COLLISION_MASK,
     }),
   );
+
+  // C-379 AC-2: the player is a vision TARGET. SpatialVisionSystem's
+  // dynamic-actor index scans VisionVisible (the "CAN be seen" marker)
+  // plus GridPosition — without VisionVisible the player can never be
+  // marked visible, so observer NPCs could never notice them. Zero mask =
+  // invisible until an observer's cone covers them (CodeRabbit review).
+  addComponent(world, entityId, VisionVisible);
+  addComponent(world, entityId, set(VisionVisible, { visibleByMask: 0 }));
 
   addComponent(world, entityId, Visual);
   addComponent(

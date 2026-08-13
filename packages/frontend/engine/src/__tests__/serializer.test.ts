@@ -47,6 +47,15 @@ const _resetComponentArrays = (): void => {
   CombatStats.initiative.length = 0;
   Velocity.x.length = 0;
   Velocity.y.length = 0;
+  // C-379 AC-10: PathFollow is runtime-only and must never leak into a
+  // snapshot — reset every module-level array so each test starts clean
+  // (CodeRabbit review, C-379).
+  PathFollow.waypoints.length = 0;
+  PathFollow.index.length = 0;
+  PathFollow.length.length = 0;
+  PathFollow.speed.length = 0;
+  PathFollow.repathAtMs.length = 0;
+  PathFollow.arriveRadius.length = 0;
 };
 
 /**
@@ -308,15 +317,23 @@ describe('AC-1: serializeWorld produces valid payload', () => {
       initiative: 10,
     });
 
-    // Add Velocity (ephemeral)
-    addComponent(world, eid, Velocity);
-    set(Velocity, { x: 10, y: -5 });
+    // Add Velocity (ephemeral) through the supported bitecs API so the
+    // values are ACTUALLY present in the SoA arrays the serializer reads
+    // (a bare `addComponent` + discarded `set()` proxy wrote nothing — the
+    // exclusion test was vacuous; CodeRabbit review, C-379).
+    addComponent(world, eid, set(Velocity, { x: 10, y: -5 }));
+
+    // Prove the setup populated the module-level arrays — if Velocity were
+    // added to PERSISTENT_COMPONENTS, this assertion would now fail.
+    expect(Velocity.x[eid]).toBe(10);
+    expect(Velocity.y[eid]).toBe(-5);
 
     const payload = serializeWorld(world);
     const snapshot = JSON.parse(payload);
 
     // Velocity should NOT appear in components
     expect(snapshot.components.Velocity).toBeUndefined();
+    expect(Object.keys(snapshot.components)).not.toContain('Velocity');
 
     // But persistent components should still be present
     expect(snapshot.components.Position).toBeDefined();
@@ -337,23 +354,36 @@ describe('AC-1: serializeWorld produces valid payload', () => {
       initiative: 10,
     });
 
-    // Attach a live PathFollow (runtime-only — a companion mid-route).
-    addComponent(world, eid, PathFollow);
-    set(PathFollow, {
-      waypoints: new Float32Array([100, 200, 200, 200]),
-      index: 1,
-      length: 2,
-      speed: 80,
-      repathAtMs: 0,
-      arriveRadius: 6,
-    });
+    // Attach a live PathFollow (runtime-only — a companion mid-route)
+    // through the supported bitecs API so the values are ACTUALLY present
+    // in the SoA arrays the serializer reads (CodeRabbit review, C-379).
+    addComponent(
+      world,
+      eid,
+      set(PathFollow, {
+        waypoints: new Float32Array([100, 200, 200, 200]),
+        index: 1,
+        length: 2,
+        speed: 80,
+        repathAtMs: 0,
+        arriveRadius: 6,
+      }),
+    );
+
+    // Prove the setup populated the module-level arrays — if PathFollow
+    // were added to PERSISTENT_COMPONENTS, the snapshot key assertion
+    // below would now fail (this is the AC-10 watch point made real).
+    expect(PathFollow.waypoints[eid]).toBeDefined();
+    expect(PathFollow.index[eid]).toBe(1);
 
     const payload = serializeWorld(world);
     const snapshot = JSON.parse(payload);
 
-    // PathFollow must never leak into a save snapshot (AC-10 watch point:
-    // runtime-only, excluded from PERSISTENT_COMPONENTS).
+    // PathFollow must never leak into a save snapshot: no PathFollow key
+    // and no stray top-level waypoints key (AC-10 watch point: runtime-
+    // only, excluded from PERSISTENT_COMPONENTS).
     expect(snapshot.components.PathFollow).toBeUndefined();
+    expect(Object.keys(snapshot.components)).not.toContain('PathFollow');
     expect(snapshot.components.waypoints).toBeUndefined();
 
     // Persistent components unaffected.

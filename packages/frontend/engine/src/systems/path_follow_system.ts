@@ -22,13 +22,6 @@ import { Velocity } from '../components/velocity.ts';
 const PATH_FOLLOW_QUERY_TERMS = [Position, PathFollow];
 
 /**
- * Converts an entity's waypoint buffer to a path request.
- *
- * Not a public API — the system reads the component directly; consumers
- * write the component via `addComponent(world, eid, set(PathFollow, {...}))`.
- */
-
-/**
  * Returns true when the entity has a PathFollow component with a live path.
  *
  * World-aware: uses bitECS hasComponent so a component removed from THIS
@@ -86,6 +79,7 @@ export const updatePathFollow = (world: World, deltaMs: number): void => {
     if (length <= 0 || index >= length) {
       addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
       removeComponent(world, eid, PathFollow);
+      PathFollow.repathAtMs[eid] = 0;
       continue;
     }
 
@@ -93,6 +87,7 @@ export const updatePathFollow = (world: World, deltaMs: number): void => {
     if (!waypoints) {
       addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
       removeComponent(world, eid, PathFollow);
+      PathFollow.repathAtMs[eid] = 0;
       continue;
     }
 
@@ -111,13 +106,30 @@ export const updatePathFollow = (world: World, deltaMs: number): void => {
       // Reached this waypoint — advance.
       PathFollow.index[eid] = index + 1;
       if (index + 1 >= length) {
-        // Final waypoint reached — stop.
+        // Final waypoint reached — stop and detach.
         addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
         removeComponent(world, eid, PathFollow);
+        // Clear the SoA repath slot so a stale deadline written by another
+        // provider (party-follow) cannot gate a recycled eid (CodeRabbit
+        // review, C-379).
+        PathFollow.repathAtMs[eid] = 0;
         continue;
       }
-      // Continue toward the next waypoint on the following frame.
-      addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+      // Intermediate waypoint reached — steer toward the NEXT waypoint in
+      // the same frame instead of writing zero velocity (the old stall-a-
+      // frame-at-every-waypoint behaviour desynced facing and added a
+      // frame of idle at each corner; CodeRabbit review, C-379).
+      const nextIndex = index + 1;
+      const nextX = waypoints[nextIndex * 2];
+      const nextY = waypoints[nextIndex * 2 + 1];
+      const ndx = nextX - pos.x;
+      const ndy = nextY - pos.y;
+      const ndist = Math.sqrt(ndx * ndx + ndy * ndy) || 1;
+      addComponent(
+        world,
+        eid,
+        set(Velocity, { x: (ndx / ndist) * speed, y: (ndy / ndist) * speed }),
+      );
       continue;
     }
 

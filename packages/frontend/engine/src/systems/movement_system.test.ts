@@ -513,6 +513,38 @@ describe('movement_system — axis-independent wall sliding', () => {
       expect(pos.x).toBe(160);
       expect(pos.y).toBe(130);
     });
+
+    // C-379 AC-3 negative control: an enemy whose mask EXCLUDES the player
+    // layer must NOT be blocked by a player-occupied cell — collision
+    // decisions use the MOVER's mask, never a fixed player mask (CodeRabbit
+    // review, C-379).
+    it('enemy with walls-only mask is NOT blocked by the player (AC-3 negative control)', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // Player occupies tile (5,5) with layer player.
+      placeGridEntity(9005, 5, 5, CollisionLayer.player);
+
+      const enemy = addEntity(world);
+      addComponent(world, enemy, Position);
+      addComponent(world, enemy, set(Position, { x: 160, y: 130 }));
+      addComponent(world, enemy, Velocity);
+      addComponent(world, enemy, set(Velocity, { x: 0, y: 60 }));
+      addComponent(world, enemy, CollisionData);
+      addComponent(
+        world,
+        enemy,
+        set(CollisionData, {
+          layer: CollisionLayer.enemy,
+          mask: CollisionLayer.wall, // explicitly excludes player
+        }),
+      );
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, enemy, Position);
+      // Mask excludes player → the player cell is passable → moves through.
+      expect(pos.x).toBe(160);
+      expect(pos.y).toBe(190);
+    });
   });
 
   describe('clampSpawnToWalkable (C-378 restore freeze)', () => {

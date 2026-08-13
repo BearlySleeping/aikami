@@ -1752,8 +1752,13 @@ describe('C-379 AC-9 — flip flags + GID convention + multi-tileset layers', ()
   });
 
   it('flipped tiles never become spuriously solid in the collision grid', async () => {
-    // Tileset: tile 1 walkable, tile 2 solid. Layer uses GID 1 (walkable)
-    // and GID 2 flipped horizontally (still tile 2 → solid).
+    // Tileset: tile 1 walkable, tile 2 solid. Layer: the LAST cell is GID
+    // 1 flipped horizontally — a WALKABLE tile. Pre-fix, the unmasked
+    // 0x80000001 was an unknown GID and failed closed to SOLID (invisible
+    // wall); post-fix the flip bits are masked at parse, so it resolves to
+    // tile 1 → walkable. Cell 78 is a plain GID 2 → genuinely solid, so the
+    // grid still has a real blocker to assert against (CodeRabbit review,
+    // C-379).
     const raw = createTestMap({
       tilesets: [
         {
@@ -1773,7 +1778,7 @@ describe('C-379 AC-9 — flip flags + GID convention + multi-tileset layers', ()
           name: 'ground',
           width: 10,
           height: 8,
-          data: [...new Array(79).fill(1), 0x80000002],
+          data: [...new Array(78).fill(1), 2, 0x80000001],
           visible: true,
           type: 'tilelayer',
         },
@@ -1793,9 +1798,12 @@ describe('C-379 AC-9 — flip flags + GID convention + multi-tileset layers', ()
     const grid = buildCollisionGrid(tilemap, packConfig, { solidityLayers: ['ground'] });
     expect(grid).toBeDefined();
     if (grid) {
-      // Only the last cell (flipped GID 2 → still tile 2 → solid) blocks.
-      expect(grid[79]).toBe(true);
-      expect(grid[78]).toBe(false);
+      // Plain GID 2 → solid.
+      expect(grid[78]).toBe(true);
+      // Flipped WALKABLE tile 1 → masked to tile 1 → NOT solid. This is
+      // the corrected behavior: pre-fix the unknown high GID failed closed
+      // to solid and produced an invisible wall.
+      expect(grid[79]).toBe(false);
       expect(grid.filter(Boolean).length).toBe(1);
     }
   });

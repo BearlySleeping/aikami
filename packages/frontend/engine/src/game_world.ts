@@ -315,6 +315,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The entity ID of the player entity (set from worker ENTITY_CREATED). */
   private _playerEntityId = 0;
 
+  /**
+   * Player's VisionVisible.visibleByMask, forwarded from the worker in
+   * STATE_UPDATE and exposed on the debug bridge (C-379 AC-2 E2E).
+   */
+  private _playerVisibleByMask = 0;
+
   /** NPC metadata keyed by entity ID (populated from NPC spawn events). */
   private _npcMeta = new Map<number, NpcMetaEntry>();
 
@@ -1146,6 +1152,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._lastKnownTickCount = ack.tickCount;
     }
 
+    // C-379 AC-2: forward the player's vision mask onto the debug bridge
+    // so E2E can assert the vision system actually marks the player visible.
+    if (typeof message.playerVisibleByMask === 'number') {
+      this._playerVisibleByMask = message.playerVisibleByMask;
+      if (typeof window !== 'undefined') {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | Record<string, unknown>
+          | undefined;
+        if (debug) {
+          debug.playerVisibleByMask = message.playerVisibleByMask;
+        }
+      }
+    }
+
     // Re-emit events through the bridge
     const events = message.events as GameEvent[] | undefined;
     if (events) {
@@ -1796,16 +1816,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     /**
      * Resolves a keyboard key to a movement direction.
      *
-     * C-379 AC-8: consults the CURRENT keybindings (localStorage read per
-     * call) via `keyToDirection`, then falls back to the legacy arrow
-     * aliases. Returns undefined for non-movement keys.
+     * C-379 AC-8: legacy arrow keys are checked FIRST — they are
+     * unconditional aliases for the base directions, so a rebind can never
+     * shadow them. `keyToDirection` (the current localStorage bindings) is
+     * consulted only when no legacy arrow alias exists (CodeRabbit review,
+     * C-379). Returns undefined for non-movement keys.
      */
     const keyToMovementDirection = (key: string): 'up' | 'down' | 'left' | 'right' | undefined => {
-      const bound = keyToDirection(key);
-      if (bound) {
-        return bound;
+      const legacy = LegacyArrowDirection[key];
+      if (legacy) {
+        return legacy;
       }
-      return LegacyArrowDirection[key];
+      return keyToDirection(key);
     };
 
     const updateVelocity = () => {
@@ -2797,10 +2819,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // C-180: Expose player world coordinates for E2E collision testing.
       // Playwright reads window.__AIKAMI_DEBUG__.playerPosition to verify
       // that the spatial grid bitmask collision clamps movement at walls.
+      // C-379: also exposes playerEid (so E2E can exclude the player from
+      // NPC-movement assertions) and playerVisibleByMask (AC-2 — the
+      // player's VisionVisible.visibleByMask, forwarded from the worker).
       if (eid === this._playerEntityId && typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ = {
           playerX: x,
           playerY: y,
+          playerEid: eid,
+          playerVisibleByMask: this._playerVisibleByMask,
         };
       }
 

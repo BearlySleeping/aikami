@@ -117,14 +117,26 @@ export const buildTerrainGridFromChannel = (options: {
 
   const baseDef = terrainDefs.get(baseTerrainName);
   const unknownTerrains = new Set<string>();
+  // Terrain ids whose declared movementCost exceeds the representable range.
+  // Warned once per value (not per cell) so high-cost walkable terrain cannot
+  // silently wrap into impassable (256 → 0) or artificially cheap (320 → 64)
+  // costs in the Uint8Array (CodeRabbit review, C-379).
+  const overflowWarned = new Set<string>();
 
   for (let i = 0; i < cellCount; i++) {
     const id = terrain[i] ?? '';
     const resolved = id === '' ? baseTerrainName : id;
-    const def = terrainDefs.get(resolved) ?? baseDef;
+    const def = terrainDefs.get(resolved);
 
+    // Record EVERY missing resolved id — including when the base terrain
+    // exists (the base def is still used as the fallback below, but the
+    // unknown explicit id must be reported; C-378 failure recovery).
     if (def === undefined) {
       unknownTerrains.add(resolved);
+    }
+    const effectiveDef = def ?? baseDef;
+
+    if (effectiveDef === undefined) {
       // Unknown terrain → base walkability (C-378 failure recovery); with no
       // base def either, fail open (walkable) rather than creating phantom walls.
       cost[i] = TERRAIN_COST_WALKABLE;
@@ -132,15 +144,29 @@ export const buildTerrainGridFromChannel = (options: {
       continue;
     }
 
-    if (!def.isWalkable) {
+    if (!effectiveDef.isWalkable) {
       cost[i] = 0;
       blocksSight[i] = 1;
       continue;
     }
 
-    const movementCost = def.movementCost ?? 1.0;
-    cost[i] = Math.max(1, Math.round(movementCost * TERRAIN_COST_SCALE));
-    blocksSight[i] = def.blocksSight === true ? 1 : 0;
+    const movementCost = effectiveDef.movementCost ?? 1.0;
+    const scaled = Math.round(movementCost * TERRAIN_COST_SCALE);
+    // Cap at 255: Uint8Array assignment would otherwise wrap (256 → 0 =
+    // impassable, 320 → 64 = artificially cheap). Minimum walkable stays 1.
+    const capped = Math.max(1, Math.min(255, scaled));
+    if (scaled > 255 && !overflowWarned.has(resolved)) {
+      overflowWarned.add(resolved);
+      logger.warn('buildTerrainGridFromChannel:cost-overflow', {
+        terrain: resolved,
+        movementCost,
+        scaled,
+        max: 255,
+        hint: 'Cost capped at 255 — declare a lower movementCost for finer granularity.',
+      });
+    }
+    cost[i] = capped;
+    blocksSight[i] = effectiveDef.blocksSight === true ? 1 : 0;
   }
 
   if (unknownTerrains.size > 0) {

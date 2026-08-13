@@ -60,7 +60,10 @@ import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { registerVisionObserverObservers } from '../components/vision_observer.ts';
-import { registerVisionVisibleObservers } from '../components/vision_visible.ts';
+import {
+  registerVisionVisibleObservers,
+  VisionVisible,
+} from '../components/vision_visible.ts';
 import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
@@ -1125,6 +1128,11 @@ const tickLoop = (): void => {
         cameraX: camera.x,
         cameraY: camera.y,
         zoom,
+        // C-379 AC-2: forward the player's vision mask so the main thread
+        // can expose it on the debug bridge — E2E asserts the vision
+        // system actually marks the player visible (CodeRabbit review).
+        playerVisibleByMask:
+          playerEntityId > 0 ? (VisionVisible.visibleByMask[playerEntityId] ?? 0) : 0,
         ack: {
           tickCount,
           lastProcessedInputSequence: _lastProcessedInputSequence,
@@ -1228,6 +1236,10 @@ const tickLoop = (): void => {
         cameraX: camera.x,
         cameraY: camera.y,
         zoom,
+        // C-379 AC-2: forward the player's vision mask (see shared-memory
+        // branch above) so the debug bridge can assert visibility.
+        playerVisibleByMask:
+          playerEntityId > 0 ? (VisionVisible.visibleByMask[playerEntityId] ?? 0) : 0,
         ack: {
           tickCount,
           lastProcessedInputSequence: _lastProcessedInputSequence,

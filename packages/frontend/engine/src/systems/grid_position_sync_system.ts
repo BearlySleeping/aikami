@@ -16,7 +16,7 @@
 // initial Position), but every subsequent change goes through here.
 
 import type { World } from 'bitecs';
-import { addComponent, query, set } from 'bitecs';
+import { addComponent, hasComponent, query, set } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import { Position } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
@@ -60,8 +60,11 @@ export const syncGridPositions = (world: World): void => {
       continue;
     }
 
-    const hasSpatialLink =
-      SpatialLink.next[eid] !== undefined || SpatialLink.prev[eid] !== undefined;
+    // bitECS component-existence check, NOT raw SoA next/prev values: a
+    // recycled eid whose SpatialLink slots still hold stale pointers from
+    // a previous entity must not be treated as linked (CodeRabbit review,
+    // C-379). Matches the CollisionData guard in movement_system.
+    const hasSpatialLink = hasComponent(world, eid, SpatialLink);
 
     const newGx = Math.floor(posX / tileSize);
     const newGy = Math.floor(posY / tileSize);

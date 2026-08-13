@@ -59,7 +59,12 @@ export const registerPathFollowObservers = (world: World): void => {
     world,
     onGet(PathFollow),
     (eid: number): PathFollowData => ({
-      waypoints: PathFollow.waypoints[eid],
+      // Empty Float32Array fallback for entities that have the component
+      // but no stored waypoint buffer (e.g. a fresh component before the
+      // first set) — consumers can always iterate waypoints safely. Stored
+      // buffers are preserved for entities that have them (CodeRabbit
+      // review, C-379).
+      waypoints: PathFollow.waypoints[eid] ?? new Float32Array(0),
       index: PathFollow.index[eid] ?? 0,
       length: PathFollow.length[eid] ?? 0,
       speed: PathFollow.speed[eid] ?? 0,

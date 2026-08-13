@@ -74,8 +74,12 @@ const _ensureCapacity = (cellCount: number): void => {
     return;
   }
   _capacity = cellCount;
-  _heap = new Int32Array(cellCount);
-  _heapF = new Float64Array(cellCount);
+  // The heap can hold MORE than one entry per cell: every g-score
+  // improvement pushes a duplicate node id, and stale entries are only
+  // skipped on pop (lazy deletion). Allocate 8× so the search's bounded
+  // pushes never overflow; the per-cell arrays stay at cellCount.
+  _heap = new Int32Array(cellCount * 8);
+  _heapF = new Float64Array(cellCount * 8);
   _gScore = new Float64Array(cellCount);
   _cameFrom = new Int32Array(cellCount);
   _closed = new Uint8Array(cellCount);

@@ -29,6 +29,7 @@ import { TurnOrder } from '../components/turn_order.ts';
 import { ObserverState, VisionObserver } from '../components/vision_observer.ts';
 import { VisionVisible } from '../components/vision_visible.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
+import { DEFAULT_ACTION_GO_TO_PUB } from '../math/goap/action_registry.ts';
 import { WorldStateBit } from '../math/goap/world_state_bits.ts';
 import { getTerrainTileSize } from './collision_system.ts';
 
@@ -436,33 +437,44 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   // the GOAP movement executor request paths (goal cell → A* → PathFollow)
   // so villagers actually walk rather than standing frozen at spawn. The
   // agent starts hungry with money so the "Go to pub" movement action
-  // (registry actionId 2) stays valid — the scheduler keeps it selected and
-  // the movement executor drives a wander destination.
+  // (DEFAULT_ACTION_GO_TO_PUB) stays valid — the scheduler keeps it
+  // selected and the movement executor drives a wander destination.
+  // `wanders` (default true) opts a static NPC out of locomotion: no
+  // movement action and no hungry/money world-state bits (CodeRabbit
+  // review, C-379).
+  const wanders = _getBoolProperty(spawnPoint.properties, 'wanders', true);
   addComponent(world, eid, GoapAgent);
   addComponent(
     world,
     eid,
     set(GoapAgent, {
-      currentState: WorldStateBit.IsHungry | WorldStateBit.HasMoney,
+      currentState: wanders ? WorldStateBit.IsHungry | WorldStateBit.HasMoney : 0,
       currentGoal: 0,
-      currentActionId: 2, // "Go to pub" — a movement action with a destination
+      currentActionId: wanders ? DEFAULT_ACTION_GO_TO_PUB : -1,
       targetEntityId: 0,
     }),
   );
 
   // ── C-379 AC-2: NPCs are vision observers — they can see the player
-  // once the player carries GridPosition. Default: idle patrol cone.
-  addComponent(world, eid, VisionObserver);
-  addComponent(
-    world,
-    eid,
-    set(VisionObserver, {
-      fovRadius: 6,
-      fovAngle: Math.PI / 2,
-      lookDirection: 0,
-      stateMask: ObserverState.idle,
-    }),
-  );
+  // once the player carries GridPosition. Default: idle patrol cone. Only
+  // NPCs that need perception get an observer (`perception` property,
+  // default true — map authors can opt a prop-like NPC out). VisionVisible
+  // is added unconditionally so any NPC can be SEEN (CodeRabbit review,
+  // C-379).
+  const needsPerception = _getBoolProperty(spawnPoint.properties, 'perception', true);
+  if (needsPerception) {
+    addComponent(world, eid, VisionObserver);
+    addComponent(
+      world,
+      eid,
+      set(VisionObserver, {
+        fovRadius: 6,
+        fovAngle: Math.PI / 2,
+        lookDirection: 0,
+        stateMask: ObserverState.idle,
+      }),
+    );
+  }
   addComponent(world, eid, VisionVisible);
   addComponent(world, eid, set(VisionVisible, { visibleByMask: 0 }));
 

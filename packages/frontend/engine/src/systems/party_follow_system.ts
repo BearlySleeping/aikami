@@ -104,6 +104,15 @@ export const updatePartyFollow = (world: World, playerEid: number): void => {
       continue;
     }
 
+    // Repath backoff — a failed request (impassable slot cell or
+    // unreachable goal) set a future deadline; do not re-request every
+    // tick while it is pending. The deadline is a timestamp, so a stale
+    // value simply expires (CodeRabbit review, C-379).
+    const deadline = PathFollow.repathAtMs[eid] ?? 0;
+    if (deadline > 0 && Date.now() < deadline) {
+      continue;
+    }
+
     const fromX = GridPosition.x[eid];
     const fromY = GridPosition.y[eid];
     if (fromX === undefined || fromY === undefined) {
