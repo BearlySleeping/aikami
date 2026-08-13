@@ -14,6 +14,7 @@ import {
   type ConfigState,
   configService,
   fetchOpenRouterModels,
+  getOllamaRuntimeEndpoints,
   PROVIDER_ENDPOINTS,
   TEXT_PROVIDERS,
 } from '$services';
@@ -148,42 +149,50 @@ class TextTabViewModel
   async initialize(): Promise<void> {
     await configService.load();
 
-    // Auto-detect Ollama: if it's running locally, default to ollama provider.
-    // Runs even when provider is already ollama to fill in missing URL/model.
+    // Auto-detect Ollama: probe the runtime-configured text engine (C-389)
+    // instead of a hardcoded localhost port. No engine configured → skip.
     const keys = this.savedKeys;
     const hasNoKeys = Object.values(keys).every((k) => !k);
     const isOllamaProvider = configService.state.text.provider === 'ollama';
     if (hasNoKeys || isOllamaProvider) {
-      try {
-        const res = await fetch('http://localhost:11434/api/tags', {
-          signal: AbortSignal.timeout(2000),
-        });
-        if (res.ok) {
-          let needsSave = false;
-          if (!isOllamaProvider) {
-            configService.setTextProvider('ollama');
-            needsSave = true;
+      const ollamaTagsUrl = getOllamaRuntimeEndpoints().url;
+      if (ollamaTagsUrl) {
+        try {
+          const res = await fetch(ollamaTagsUrl, {
+            signal: AbortSignal.timeout(2000),
+          });
+          if (res.ok) {
+            let needsSave = false;
+            if (!isOllamaProvider) {
+              configService.setTextProvider('ollama');
+              needsSave = true;
+            }
+            const textUrl = this.config.connections.find(
+              (c) => (c.capability ?? 'text') === 'text' && c.provider === 'ollama',
+            )?.baseUrl;
+            if (!textUrl) {
+              const ollamaBase = getOllamaRuntimeEndpoints()
+                .chatTestUrl?.replace(/\/api\/chat$/, '')
+                .replace(/\/+$/, '');
+              if (ollamaBase) {
+                this.setTextUrl(ollamaBase);
+                needsSave = true;
+              }
+            }
+            if (
+              !configService.state.preferredModel ||
+              configService.state.preferredModel.startsWith('openrouter/')
+            ) {
+              // No default model — user must configure via Connections
+              needsSave = true;
+            }
+            if (needsSave) {
+              await configService.save();
+            }
           }
-          const textUrl = this.config.connections.find(
-            (c) => (c.capability ?? 'text') === 'text' && c.provider === 'ollama',
-          )?.baseUrl;
-          if (!textUrl) {
-            this.setTextUrl('http://localhost:11434/v1');
-            needsSave = true;
-          }
-          if (
-            !configService.state.preferredModel ||
-            configService.state.preferredModel.startsWith('openrouter/')
-          ) {
-            // No default model — user must configure via Connections
-            needsSave = true;
-          }
-          if (needsSave) {
-            await configService.save();
-          }
+        } catch {
+          // Ollama not running — keep defaults
         }
-      } catch {
-        // Ollama not running — keep defaults
       }
     }
 

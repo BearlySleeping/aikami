@@ -30,11 +30,12 @@ export const OPENROUTER_ATTRIBUTION_HEADERS = {
   'X-Title': 'Aikami',
 } as const;
 
-/** Well-known chat-completions base URLs for local providers. */
-export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {
-  ollama: 'http://localhost:11434',
-  ooba: 'http://localhost:5000/v1',
-} as const;
+/** Well-known chat-completions base URLs for local providers.
+ *  Kept empty: local endpoints resolve at runtime from config.json (C-389)
+ *  via the `getDefaultEndpoint` option — the bundle never embeds a
+ *  hardcoded engine URL.
+ */
+export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {} as const;
 
 /**
  * Ollama VRAM-eviction payload params (C-056 lesson): release the model

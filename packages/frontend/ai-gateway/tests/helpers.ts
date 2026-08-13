@@ -126,7 +126,12 @@ export const createJsonFetchMock = (options?: {
 
 /** A mixed-mode gateway config fixture: text offline + image byok + voice offline. */
 export const mixedModeConfig = (): AiGatewayModeConfig => ({
-  text: { mode: 'offline', provider: 'ollama', model: 'llama3' },
+  text: {
+    mode: 'offline',
+    provider: 'ollama',
+    model: 'llama3',
+    endpoint: 'http://10.0.0.5:8080/v1',
+  },
   image: { mode: 'byok', provider: 'comfyui', endpoint: 'https://images.example.com' },
   voice: { mode: 'offline', provider: 'kokoro' },
   serviceActivated: false,

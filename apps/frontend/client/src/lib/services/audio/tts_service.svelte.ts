@@ -4,17 +4,28 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { VoiceInfo } from '$types';
+import type { TtsBackend, VoiceInfo } from '$types';
+import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
+import { voiceModelService } from './voice_model_service.svelte.ts';
 
-/** Lifecycle status of the native Kokoro WebGPU TTS engine. */
-export type TtsStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
+/** Lifecycle status of the native Kokoro TTS engine. */
+export type TtsStatus =
+  | 'uninitialized'
+  | 'initializing'
+  | 'ready'
+  | 'error'
+  | 'not-downloaded'
+  | 'disabled';
 
 export type TtsOptions = BaseFrontendClassOptions;
 
 export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** Lifecycle status of the native Kokoro WebGPU engine. */
   readonly status: TtsStatus;
+
+  /** Which synthesis backend is active (C-389 AC-6). */
+  readonly backend: TtsBackend;
 
   /** Error message when status is 'error'. */
   readonly errorMessage: string | null;
@@ -44,9 +55,9 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   loadVoices(): Promise<void>;
 
   /**
-   * Checks whether a Kokoro REST API server is reachable at localhost:8880.
-   * If found, future {@link synthesize} calls will use the REST API
-   * instead of the WebGPU worker (faster + higher quality).
+   * Checks whether a server-mode TTS endpoint is reachable at the
+   * runtime-configured URL (C-389 AC-7/AC-8). Never probes localhost
+   * blindly — when no `voice.tts.url` is configured this is a no-op.
    */
   checkKokoroServer(): Promise<void>;
 
@@ -171,6 +182,7 @@ type WordBoundary = {
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
   status: TtsStatus = $state('uninitialized');
   errorMessage: string | null = $state(null);
+  backend: TtsBackend = $state('unavailable');
   isPlaying = $state(false);
   isSynthesizing = $state(false);
   currentWordIndex = $state(-1);
@@ -178,8 +190,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   voices: VoiceInfo[] = $state([]);
   selectedVoice = $state('af_heart');
 
-  private _worker: Worker | null = null; // WebGPU kokoro-js worker (C-131)
-  private _kokoroServerUrl = '/api/voice'; // Discovered Kokoro server URL
+  private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
+  private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _abortController: AbortController | undefined;
   private currentAudio: HTMLAudioElement | null = null;
 
@@ -190,7 +202,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private sourceNodes: AudioBufferSourceNode[] = [];
   private rafId: ReturnType<typeof requestAnimationFrame> | undefined;
 
-  /** Whether a running Kokoro REST API server was detected on localhost:8880. */
+  /** Whether a server-mode TTS endpoint was detected (C-389 AC-8). */
   isKokoroServerAvailable = $state(false);
 
   isDemoMode(): boolean {
@@ -198,8 +210,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   async loadVoices(): Promise<void> {
+    const baseUrl = this._kokoroServerUrl;
+    if (!baseUrl) {
+      return;
+    }
     try {
-      const response = await fetch('/api/voice/v1/voices');
+      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`);
       if (!response.ok) {
         this.error('loadVoices:fetch-failed', { status: response.status });
         return;
@@ -395,18 +411,46 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Step 1: Check for a running Kokoro REST API server (docker / local dev)
-    await this.checkKokoroServer();
+    // C-389: resolve the runtime engine config first — TTS mode and the
+    // server URL come from config.json, never from a baked-in default.
+    await runtimeConfigService.loadConfig();
+    const mode = runtimeConfigService.getVoiceTtsMode();
+    const serverUrl = runtimeConfigService.getVoiceTtsUrl();
 
-    if (this.isKokoroServerAvailable) {
-      // Server detected — synthesize() will fetch full WAV audio from it.
-      // No worker needed.
-      this.status = 'ready';
-      this.debug('initialize:kokoro-server-ready', { url: this._kokoroServerUrl });
+    // AC (voice.tts.mode = disabled): TTS is off; nothing is probed.
+    if (mode === 'disabled') {
+      this.status = 'disabled';
+      this.backend = 'unavailable';
+      this.info('initialize:disabled');
       return;
     }
 
-    // Step 2: Fall back to browser-native WebGPU worker (C-131)
+    // Server mode: probe ONLY the configured URL (AC-7 — no blind
+    // localhost probing). Unreachable → fall through to browser TTS.
+    if (mode === 'server' && serverUrl) {
+      this._kokoroServerUrl = serverUrl.replace(/\/+$/, '');
+      await this.checkKokoroServer();
+      if (this.isKokoroServerAvailable) {
+        this.status = 'ready';
+        this.backend = 'server';
+        this.debug('initialize:server-ready', { url: this._kokoroServerUrl });
+        return;
+      }
+      this.warn('initialize:server-unreachable', { url: this._kokoroServerUrl });
+      this._kokoroServerUrl = undefined;
+    }
+
+    // Browser mode: the voice model must have been downloaded explicitly
+    // (AC-4b — never implicit). No model → report not-downloaded and stop.
+    const modelState = await voiceModelService.checkStatus();
+    if (modelState.status !== 'ready') {
+      this.status = 'not-downloaded';
+      this.backend = 'unavailable';
+      this.info('initialize:model-not-downloaded', { modelState: modelState.status });
+      return;
+    }
+
+    // Spawn the worker and load the model from the pre-warmed local cache.
     this.status = 'initializing';
     this.errorMessage = null;
 
@@ -418,6 +462,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this._worker.onmessage = (event: MessageEvent) => {
         const payload = event.data as {
           type: 'ready' | 'complete' | 'error';
+          backend?: 'webgpu' | 'wasm';
           pcmData?: Float32Array;
           sampleRate?: number;
           message?: string;
@@ -426,7 +471,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         switch (payload.type) {
           case 'ready':
             this.status = 'ready';
-            this.debug('initialize:ready');
+            this.backend = payload.backend ?? 'wasm';
+            this.info('initialize:ready', { backend: this.backend });
             break;
 
           case 'complete':
@@ -446,7 +492,10 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
             break;
 
           case 'error':
-            this.error('kokoro:worker-error', { message: payload.message });
+            this.status = 'error';
+            this.backend = 'unavailable';
+            this.errorMessage = payload.message ?? 'Kokoro worker error';
+            this.error('kokoro:worker-error', { message: this.errorMessage });
             break;
 
           default:
@@ -456,15 +505,49 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       this._worker.onerror = (error: ErrorEvent) => {
         this.status = 'error';
+        this.backend = 'unavailable';
         this.errorMessage = error.message || 'Unknown worker error';
         this.error('kokoro:worker-onerror', { message: this.errorMessage });
       };
 
-      this._worker.postMessage({ action: 'initialize' });
+      // Vendored ORT WASM lives in the app's static assets (C-389).
+      const baseHref =
+        typeof document !== 'undefined'
+          ? document.baseURI
+          : typeof location !== 'undefined'
+            ? location.href
+            : undefined;
+      const wasmPath = baseHref ? new URL('/ort/', baseHref).href : '/ort/';
+      this._worker.postMessage({
+        action: 'initialize',
+        wasmPath,
+        device: (await this._preferWebGpu()) ? 'webgpu' : 'wasm',
+        modelId: 'onnx-community/Kokoro-82M-ONNX',
+        revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
+      });
     } catch (error: unknown) {
       this.status = 'error';
+      this.backend = 'unavailable';
       this.errorMessage = error instanceof Error ? error.message : 'Failed to spawn Kokoro worker';
       this.error('initialize:failed', error);
+    }
+  }
+
+  /** Quick WebGPU capability gate (AC-6): adapter request must not hang. */
+  private async _preferWebGpu(): Promise<boolean> {
+    try {
+      const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
+        .gpu;
+      if (!gpu?.requestAdapter) {
+        return false;
+      }
+      const adapter = await Promise.race([
+        gpu.requestAdapter(),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 2000)),
+      ]);
+      return adapter !== undefined && adapter !== null;
+    } catch {
+      return false;
     }
   }
 
@@ -475,16 +558,32 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Path 1: Kokoro REST server (docker / local dev) — fetch full WAV and play
-    if (this.isKokoroServerAvailable && this._kokoroServerUrl) {
+    // AC-4b: never download the model implicitly. If the voice model has
+    // not been downloaded, synthesis is a no-op and the UI directs the
+    // user to the download control.
+    if (this.status === 'not-downloaded') {
+      this.debug('synthesize:not-downloaded', {
+        hint: 'Download the voice model from Settings → Audio first.',
+      });
+      return;
+    }
+
+    if (this.status === 'disabled') {
+      this.debug('synthesize:disabled');
+      return;
+    }
+
+    // Path 1: server mode (config-gated URL — C-389 AC-8)
+    if (this.backend === 'server' && this.isKokoroServerAvailable && this._kokoroServerUrl) {
       await this._synthesizeViaServer({ text, voice });
       return;
     }
 
-    // Path 2: WebGPU worker (C-131) — browser-native fallback
+    // Path 2: browser worker (WebGPU or WASM — C-389 AC-6)
     if (!this._worker || this.status !== 'ready') {
       this.debug('synthesize:not-ready', {
         status: this.status,
+        backend: this.backend,
         hasWorker: !!this._worker,
       });
       return;
@@ -589,6 +688,10 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }): Promise<ArrayBuffer | undefined> {
     const { text, voice, signal } = options;
 
+    if (!this._kokoroServerUrl) {
+      return undefined;
+    }
+
     const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -615,36 +718,38 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   /** @inheritdoc */
   async checkKokoroServer(): Promise<void> {
-    // Try the voice microservice first (Vite proxy /api/voice → voice service → Kokoro).
-    // This is the same endpoint /dev/voice uses — handles Docker/binary Kokoro internally.
-    const urls = ['/api/voice', 'http://localhost:8880', 'http://127.0.0.1:8880'];
+    // C-389 AC-7: never blind-probe ports. Only the runtime-configured
+    // server URL is checked, and only when one is present.
+    const url = this._kokoroServerUrl;
+    if (!url) {
+      this.isKokoroServerAvailable = false;
+      this.debug('checkKokoroServer:no-url-configured');
+      return;
+    }
 
-    for (const url of urls) {
-      try {
-        const response = await fetch(`${url}/v1/audio/speech`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: 'test',
-            voice: 'af_heart',
-          }),
-          signal: AbortSignal.timeout(5000),
-        });
+    try {
+      const response = await fetch(`${url}/v1/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: 'test',
+          voice: 'af_heart',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
 
-        if (response.ok || response.status === 422) {
-          this._kokoroServerUrl = url;
-          this.isKokoroServerAvailable = true;
-          this.debug('checkKokoroServer:found', { url });
-          return;
-        }
-      } catch {
-        // Server not reachable at this URL — try next
+      if (response.ok || response.status === 422) {
+        this.isKokoroServerAvailable = true;
+        this.debug('checkKokoroServer:found', { url });
+        return;
       }
+    } catch {
+      // Server not reachable at the configured URL.
     }
 
     this.isKokoroServerAvailable = false;
-    this.debug('checkKokoroServer:not-found');
+    this.debug('checkKokoroServer:not-found', { url });
   }
 
   async playAudioBuffer(options: { pcmData: Float32Array; sampleRate: number }): Promise<void> {

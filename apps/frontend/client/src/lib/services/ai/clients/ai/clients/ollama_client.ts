@@ -77,7 +77,9 @@ class OllamaClient implements FrontendAiInterface {
    * @param options - Ollama client configuration.
    */
   constructor(options: OllamaClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '');
+    // C-389: no baked-in engine URL. The caller resolves baseUrl from the
+    // runtime config; an empty URL fails fast instead of probing localhost.
+    this.baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
     this.model = options.model ?? 'llama3';
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.defaultOptions = {

@@ -57,10 +57,10 @@ const voiceConfig = $derived(viewModel.config.voice);
           type="text"
           class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
           placeholder={voiceConfig.provider === 'voicevox'
-            ? 'http://localhost:50021'
+            ? 'http://<host>:<port>'
             : voiceConfig.provider === 'kokoro'
-              ? 'http://localhost:8880'
-              : 'http://localhost:8080'}
+              ? 'http://<host>:<port>'
+              : 'http://<host>:<port>'}
           value={voiceConfig.url ?? ''}
           oninput={(e: Event) =>
             viewModel.setField('voice', 'url', (e.target as HTMLInputElement).value)}

@@ -38,6 +38,7 @@ import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/
 import { configService } from '$lib/services/config/config_service.svelte.ts';
 import {
   aiSettingsService,
+  getOllamaRuntimeEndpoints,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   ttsService,
@@ -151,6 +152,9 @@ class AiGatewayService
         text: ({ signal }) =>
           detectTextAvailability({
             hasCloudConfig: () => this._hasCloudTextConfig(),
+            // C-389: native fallback probes the runtime-configured engine.
+            // (`?.` keeps detection safe when no engine is configured.)
+            nativeUrl: getOllamaRuntimeEndpoints()?.url,
             signal,
           }),
         image: ({ signal }) =>

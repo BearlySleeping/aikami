@@ -6,6 +6,8 @@
 // registry with response parsers — no provider-specific branching in
 // application code.
 
+import { runtimeConfigService } from './runtime_config_service.svelte.ts';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -188,11 +190,31 @@ export const PROVIDER_MODEL_FETCH: Record<string, ModelFetchConfig> = {
   ollama: {
     auth: { location: 'header', name: '' },
     chatTestOpenAiCompat: false,
-    chatTestUrl: 'http://localhost:11434/api/chat',
-    url: 'http://localhost:11434/api/tags',
+    // URL/chatTestUrl are runtime-resolved (C-389) — no baked-in endpoint.
+    chatTestUrl: '',
+    url: '',
     parseResponse: parseModelsArray,
   },
 } as const;
+
+/**
+ * Resolves the Ollama endpoints from the runtime engine config (C-389).
+ * Returns empty values when no text engine is configured — callers must
+ * skip the fetch instead of probing a hardcoded localhost port.
+ */
+export const getOllamaRuntimeEndpoints = (): {
+  url?: string;
+  chatTestUrl?: string;
+} => {
+  const base = runtimeConfigService.getTextUrl()?.replace(/\/+$/, '').replace(/\/v1$/, '');
+  if (!base) {
+    return {};
+  }
+  return {
+    url: `${base}/api/tags`,
+    chatTestUrl: `${base}/api/chat`,
+  };
+};
 
 /**
  * Fetches available models from a provider using its registry config.

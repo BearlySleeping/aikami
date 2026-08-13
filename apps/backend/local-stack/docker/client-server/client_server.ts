@@ -10,7 +10,7 @@ import { existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { serve } from 'bun';
 
-const ROOT = '/app/build';
+const ROOT = process.env.CLIENT_ROOT ?? '/app/build';
 const PORT = Number(process.env.CLIENT_PORT ?? 3000);
 const HOST = process.env.CLIENT_HOST ?? '0.0.0.0';
 
@@ -58,6 +58,11 @@ serve({
       // Hashed assets can be cached aggressively.
       if (pathname.startsWith('/_app/')) {
         headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+      }
+      // The runtime engine config must never be cached — a topology change
+      // must take effect without a hard reload (C-389).
+      if (pathname === '/config.json') {
+        headers['Cache-Control'] = 'no-store';
       }
       return new Response(Bun.file(filePath), { headers });
     }

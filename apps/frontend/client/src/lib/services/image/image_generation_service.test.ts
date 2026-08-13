@@ -18,6 +18,7 @@ mock.module(CONFIG_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+import { runtimeConfigService } from '$services';
 import {
   ImageGenerationService,
   type ImageGenerationServiceInterface,
@@ -44,6 +45,10 @@ const MOCK_OBJECT_INFO = {
 const _realFetch = globalThis.fetch;
 
 beforeAll(() => {
+  // C-389: the image engine base URL resolves from the runtime config at
+  // call time — stub it so tests exercise the ComfyUI fetch paths.
+  (runtimeConfigService as unknown as { getImageUrl: () => string | undefined }).getImageUrl = () =>
+    'http://localhost:8188';
   // Stash and restore on entry
   globalThis.fetch = _realFetch;
   // Stub URL.createObjectURL for Bun test environment

@@ -4,13 +4,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$services';
-
-/** Base URL of the local ComfyUI instance. */
-const COMFY_BASE_URL = (import.meta.env.PUBLIC_IMAGE_URL ?? 'http://localhost:8188').replace(
-  /\/+$/,
-  '',
-);
+import { configService, runtimeConfigService } from '$services';
 
 /** Descriptor for a ComfyUI checkpoint/model returned by the checkpoints endpoint. */
 export type CheckpointInfo = {
@@ -95,12 +89,19 @@ export class ImageGenerationService
   implements ImageGenerationServiceInterface
 {
   private isDemo: boolean;
-  private _baseUrl: string;
 
   constructor(options: ImageGenerationOptions) {
     super(options);
     this.isDemo = options.isDemo ?? false;
-    this._baseUrl = COMFY_BASE_URL;
+  }
+
+  /**
+   * Base URL of the image engine, resolved at runtime from config.json
+   * (C-389). Undefined when no engine is configured — generation reports
+   * unavailable rather than probing a baked-in default.
+   */
+  private get _baseUrl(): string | undefined {
+    return runtimeConfigService.getImageUrl()?.replace(/\/+$/, '');
   }
 
   checkpoints: CheckpointInfo[] = $state([]);
@@ -165,7 +166,14 @@ export class ImageGenerationService
     }
 
     try {
-      const response = await fetch(`${this._baseUrl}/object_info`);
+      const baseUrl = this._baseUrl;
+      if (!baseUrl) {
+        this.error('loadCheckpoints:not-configured', {
+          hint: 'Set image.url in config.json — see the "Configure your local engines" docs page.',
+        });
+        return;
+      }
+      const response = await fetch(`${baseUrl}/object_info`);
       if (!response.ok) {
         this.error('loadCheckpoints:fetch-failed', { status: response.status });
         return;
@@ -230,6 +238,13 @@ export class ImageGenerationService
     const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
 
     try {
+      const baseUrl = this._baseUrl;
+      if (!baseUrl) {
+        this.error('generateImage:not-configured', {
+          hint: 'Set image.url in config.json — see the "Configure your local engines" docs page.',
+        });
+        throw new Error('Image engine is not configured (image.url missing from config.json)');
+      }
       this.generationProgress = 5;
 
       // Step 1 — queue the prompt
@@ -253,7 +268,7 @@ export class ImageGenerationService
 
       // Step 3 — fetch the image blob to bypass CORP restrictions
       const imageUrl =
-        `${this._baseUrl}/view?filename=${encodeURIComponent(imageRef.filename)}` +
+        `${baseUrl}/view?filename=${encodeURIComponent(imageRef.filename)}` +
         `&subfolder=${encodeURIComponent(imageRef.subfolder ?? '')}&type=output`;
 
       const blob = await this._fetchBlob(imageUrl);
@@ -413,7 +428,11 @@ export class ImageGenerationService
   }
 
   private async _post<TResponse>(path: string, body: unknown): Promise<TResponse> {
-    const response = await fetch(`${this._baseUrl}${path}`, {
+    const baseUrl = this._baseUrl;
+    if (!baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
+    const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -431,7 +450,11 @@ export class ImageGenerationService
     path: string,
     controller: AbortController,
   ): Promise<Record<string, TResponse>> {
-    const response = await fetch(`${this._baseUrl}${path}`, {
+    const baseUrl = this._baseUrl;
+    if (!baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
+    const response = await fetch(`${baseUrl}${path}`, {
       method: 'GET',
       signal: controller.signal,
     });

@@ -55,7 +55,9 @@ class ComfyUiClient implements FrontendAiInterface {
       );
     }
 
-    this.baseUrl = (options.baseUrl ?? 'http://localhost:8188').replace(/\/+$/, '');
+    // C-389: no baked-in engine URL. The caller resolves baseUrl from the
+    // runtime config; an empty URL fails fast instead of probing localhost.
+    this.baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
     this.timeoutMs = options.timeoutMs ?? 60000;
     this.outputFormat = options.outputFormat ?? 'png';
   }

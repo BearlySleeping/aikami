@@ -15,6 +15,7 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  getOllamaRuntimeEndpoints,
   IMAGE_PROVIDERS,
   PROVIDER_ENDPOINTS,
   PROVIDER_MODEL_FETCH,
@@ -110,7 +111,6 @@ export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {};
 // ---------------------------------------------------------------------------
 
 const TEST_TIMEOUT_MS = 15_000;
-const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
 
 /**
  * Local providers that get a live probe + web setup guide when selected.
@@ -795,7 +795,16 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
+      const ollamaUrl = getOllamaRuntimeEndpoints().url;
+      if (!ollamaUrl) {
+        this.localProviderStatus = {
+          checking: false,
+          ok: false,
+          error: 'No Ollama endpoint configured — set text.url in config.json',
+        };
+        return;
+      }
+      const response = await fetch(ollamaUrl, { signal: controller.signal });
       const elapsed = Math.round(performance.now() - startMs);
 
       if (response.ok) {
@@ -841,7 +850,15 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
+      const ollamaUrl = getOllamaRuntimeEndpoints().url;
+      if (!ollamaUrl) {
+        this.testResults = {
+          ...this.testResults,
+          [id]: { ok: false, latencyMs: 0, error: 'No Ollama endpoint configured' },
+        };
+        return;
+      }
+      const response = await fetch(ollamaUrl, { signal: controller.signal });
       const elapsed = Math.round(performance.now() - startMs);
 
       if (!response.ok) {
@@ -955,12 +972,21 @@ class ConnectionManagerViewModel
   // ── Private: draft connection test helpers ────────────────────────────
 
   private async _testDraftOllama(startMs: number): Promise<void> {
-    this.debug('_testDraftOllama:fetch', { url: OLLAMA_TAGS_URL });
+    const ollamaUrl = getOllamaRuntimeEndpoints().url;
+    if (!ollamaUrl) {
+      this.draftTestResult = {
+        ok: false,
+        latencyMs: 0,
+        error: 'No Ollama endpoint configured — set text.url in config.json',
+      };
+      return;
+    }
+    this.debug('_testDraftOllama:fetch', { url: ollamaUrl });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
+      const response = await fetch(ollamaUrl, { signal: controller.signal });
       const elapsed = Math.round(performance.now() - startMs);
       this.debug('_testDraftOllama:response', { status: response.status, elapsed });
 

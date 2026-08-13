@@ -8,7 +8,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
-import { audioService, musicPlayerService } from '$services';
+import { audioService, musicPlayerService, ttsService, voiceModelService } from '$services';
+import type { VoiceModelState } from '$types';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -42,6 +43,26 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   /** Test SFX playback. */
   testHitSfx(): Promise<void>;
   stopAll(): void;
+
+  // ── Voice model download control (C-389 AC-4c) ────────────────────────
+
+  /** Lifecycle of the on-demand voice model download. */
+  readonly voiceModelState: VoiceModelState;
+  /** Total download size as a human label (e.g. "88.6 MB"). */
+  readonly voiceModelSizeLabel: string;
+  /** 0–100 download progress. */
+  readonly voiceModelProgress: number;
+  /** Which TTS backend is active (browser webgpu/wasm, server, disabled). */
+  readonly ttsBackendLabel: string;
+  /** TTS status label for the settings UI. */
+  readonly ttsStatusLabel: string;
+
+  /** Starts (or joins) the explicit voice model download. */
+  downloadVoiceModel(): Promise<void>;
+  /** Cancels an in-flight download. */
+  cancelVoiceModelDownload(): void;
+  /** Deletes the cached voice model. */
+  deleteVoiceModel(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -66,6 +87,9 @@ class SettingsAudioViewModel
   private _pollInterval: ReturnType<typeof setInterval> | undefined;
 
   override async initialize(): Promise<void> {
+    // Refresh the voice-model download state on open (C-389 AC-4c).
+    void voiceModelService.checkStatus();
+    void ttsService.initialize().catch(() => {});
     // Poll audioService every ~200ms to keep the display in sync
     this._pollInterval = setInterval(() => {
       this.masterVolume = audioService.masterVolume;
@@ -127,6 +151,76 @@ class SettingsAudioViewModel
   stopAll(): void {
     audioService.stopAll();
     this.feedback = 'All audio stopped.';
+  }
+
+  // ── Voice model download control (C-389 AC-4c) ────────────────────────
+
+  get voiceModelState(): VoiceModelState {
+    return voiceModelService.state;
+  }
+
+  get voiceModelSizeLabel(): string {
+    const bytes = voiceModelService.totalBytes;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  get voiceModelProgress(): number {
+    const state = voiceModelService.state;
+    if (state.status === 'downloading') {
+      return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
+    }
+    if (state.status === 'verifying') {
+      return 100;
+    }
+    return 0;
+  }
+
+  get ttsBackendLabel(): string {
+    switch (ttsService.backend) {
+      case 'webgpu':
+        return 'Browser (WebGPU)';
+      case 'wasm':
+        return 'Browser (WASM — speech will be slower)';
+      case 'server':
+        return 'Local server';
+      default:
+        return 'Unavailable';
+    }
+  }
+
+  get ttsStatusLabel(): string {
+    switch (ttsService.status) {
+      case 'ready':
+        return 'Ready';
+      case 'initializing':
+        return 'Initializing…';
+      case 'not-downloaded':
+        return 'Voice model not downloaded';
+      case 'disabled':
+        return 'Disabled (voice.tts.mode)';
+      case 'error':
+        return 'Error';
+      default:
+        return 'Idle';
+    }
+  }
+
+  async downloadVoiceModel(): Promise<void> {
+    await voiceModelService.download();
+    // Re-initialize TTS now that the model exists.
+    if (voiceModelService.state.status === 'ready' && ttsService.status === 'not-downloaded') {
+      (ttsService as unknown as { status: string }).status = 'uninitialized';
+      await ttsService.initialize().catch(() => {});
+    }
+  }
+
+  cancelVoiceModelDownload(): void {
+    voiceModelService.cancel();
+  }
+
+  async deleteVoiceModel(): Promise<void> {
+    await voiceModelService.deleteModel();
+    (ttsService as unknown as { status: string }).status = 'uninitialized';
   }
 }
 

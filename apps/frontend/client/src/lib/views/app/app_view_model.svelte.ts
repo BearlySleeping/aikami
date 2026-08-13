@@ -19,6 +19,7 @@ import {
   emulatorSeedService,
   onboardingService,
   routerService,
+  runtimeConfigService,
   updaterService,
 } from '$services';
 import type { ClientHookData } from '$types';
@@ -111,6 +112,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     //    API key / model from .env) so text providers are available before
     //    the start screen checks for them.
     await aiSettingsService.loadFromVault();
+
+    // 0b. Resolve the runtime engine config (C-389) — config.json beside
+    //    index.html, Tauri app config dir, or dev-only defaults. Loaded
+    //    early so first engine requests target the configured hosts.
+    await runtimeConfigService.loadConfig();
 
     // 1. Wire router into SvelteKit primitives.
     routerService.initialize({ goto, page });

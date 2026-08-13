@@ -18,6 +18,7 @@ afterAll(() => {
   delete (globalThis as Record<string, unknown>).cancelAnimationFrame;
 });
 
+import { runtimeConfigService } from '$services';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
 import type { AudioQueuePlayerInterface } from './audio_queue_player';
 import type { PixiTextureInjectorInterface } from './pixi_texture_injector';
@@ -28,6 +29,11 @@ import {
   type StreamOrchestratorOptions,
   type TextStreamConnection,
 } from './stream_orchestrator_service.svelte';
+
+// C-389: the server-TTS endpoint resolves from the runtime config at call
+// time — stub it so the Direct Kokoro HTTP suite exercises the real fetch.
+(runtimeConfigService as unknown as { getVoiceTtsUrl: () => string | undefined }).getVoiceTtsUrl =
+  () => 'http://localhost:8089';
 
 // Default fetch mock — tests override per describe() block as needed.
 // Silences "ConnectionRefused" noise from Kokoro dispatch in tests that

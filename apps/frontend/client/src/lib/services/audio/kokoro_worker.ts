@@ -2,19 +2,33 @@
 
 /**
  * Dedicated Web Worker wrapping the 82M Kokoro TTS model for native,
- * zero-setup text-to-speech in the browser via WebGPU.
+ * zero-setup text-to-speech in the browser via WebGPU or WASM.
+ *
+ * C-389 changes:
+ * - `env.allowLocalModels` is inverted to `true` and `localModelPath` points
+ *   at `/models/` — the explicit voice-model download pre-warms the
+ *   transformers Cache Storage under those keys, so initialization loads
+ *   fully offline (no HuggingFace request after the first explicit download).
+ * - ORT WASM binaries are vendored into the app's static assets (`/ort/`)
+ *   instead of a CDN, so no network is required for the WASM fallback and
+ *   the Tauri CSP never needs a CDN entry.
+ * - The worker reports which backend it actually used (`webgpu` | `wasm`)
+ *   so the TTS service can surface honest degraded-speech state (AC-6).
  *
  * Communicates with the main thread through postMessage actions:
  * - `initialize` — configure ONNX runtime and load the Kokoro model
  * - `synthesize` — run text through the tokenizer + forward pass, return PCM
  *
- * Contract: C-131
+ * Contracts: C-131, C-389
  */
 
 import { env } from '@huggingface/transformers';
 
-// Disable local model fallback — all model weights are fetched from HuggingFace CDN
-env.allowLocalModels = false;
+// Local models enabled — weights come from the app-controlled cache
+// (pre-warmed by the explicit download control), not the HF CDN.
+env.allowLocalModels = true;
+// transformers.js resolves `/models/{repo}/{file}` cache keys first.
+env.localModelPath = '/models/';
 
 // ---------------------------------------------------------------------------
 // Worker-scoped state
@@ -22,6 +36,7 @@ env.allowLocalModels = false;
 
 type KokoroSession = Awaited<ReturnType<typeof import('kokoro-js').KokoroTTS.from_pretrained>>;
 let session: KokoroSession | null = null;
+let activeBackend: 'webgpu' | 'wasm' = 'wasm';
 
 // ---------------------------------------------------------------------------
 // Message types
@@ -29,6 +44,14 @@ let session: KokoroSession | null = null;
 
 type InitializeMessage = {
   action: 'initialize';
+  /** Absolute URL prefix for the vendored ORT WASM binaries (ends in '/'). */
+  wasmPath: string;
+  /** Preferred device; WebGPU falls back to WASM when unavailable. */
+  device: 'webgpu' | 'wasm';
+  /** HF model id — pinned by the main thread. */
+  modelId: string;
+  /** Pinned revision, never `main`. */
+  revision: string;
 };
 
 type SynthesizeMessage = {
@@ -41,6 +64,8 @@ type WorkerMessage = InitializeMessage | SynthesizeMessage;
 
 type InitializeResponse = {
   type: 'ready';
+  /** Which backend actually loaded. */
+  backend: 'webgpu' | 'wasm';
 };
 
 type SynthesizeResponse = {
@@ -55,31 +80,59 @@ type ErrorResponse = {
 };
 
 // ---------------------------------------------------------------------------
+// Backend detection
+// ---------------------------------------------------------------------------
+
+/** True when a WebGPU adapter can actually be requested. */
+const hasWebGpu = async (): Promise<boolean> => {
+  try {
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
+      .gpu;
+    if (!gpu?.requestAdapter) {
+      return false;
+    }
+    const adapter = await Promise.race([
+      gpu.requestAdapter(),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
+    ]);
+    return adapter !== undefined && adapter !== null;
+  } catch {
+    // Headless CI, blocklisted driver, or adapter request failure — treat
+    // WebGPU as absent rather than letting the promise hang.
+    return false;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
-const handleInitialize = async (): Promise<void> => {
+const handleInitialize = async (message: InitializeMessage): Promise<void> => {
   try {
-    // Dynamically import ONNX Runtime WebGPU backend — configures the
-    // execution provider before Kokoro attempts to create its session.
+    const { wasmPath, device, modelId, revision } = message;
+
+    // Configure the ONNX runtime WebGPU backend before Kokoro creates its
+    // session. WASM binaries are vendored (C-389) — never a CDN.
     const ort = await import('onnxruntime-web/webgpu');
+    ort.env.wasm.wasmPaths = wasmPath;
 
-    // Set WASM paths to a CDN so the WASM SIMD binaries are fetched
-    // without requiring a local copy in the static directory.
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.0/dist/';
+    // Decide the effective backend: WebGPU when requested and available,
+    // WASM otherwise (single-threaded since COEP was dropped — C-389).
+    const useWebGpu = device === 'webgpu' && (await hasWebGpu());
 
-    // Dynamically import Kokoro after ORT is configured
     const { KokoroTTS } = await import('kokoro-js');
 
-    session = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', {
+    session = await KokoroTTS.from_pretrained(modelId, {
       dtype: 'q8',
-      device: 'webgpu',
+      device: useWebGpu ? 'webgpu' : 'wasm',
+      revision,
       // @ts-expect-error — enableGraphCapture is passed through to ONNX
       // runtime but may not be in kokoro-js TS types.
-      enableGraphCapture: true,
+      ...(useWebGpu ? { enableGraphCapture: true } : {}),
     });
+    activeBackend = useWebGpu ? 'webgpu' : 'wasm';
 
-    const response: InitializeResponse = { type: 'ready' };
+    const response: InitializeResponse = { type: 'ready', backend: activeBackend };
     self.postMessage(response);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown initialization error';
@@ -140,7 +193,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
 
   switch (data.action) {
     case 'initialize':
-      handleInitialize();
+      handleInitialize(data);
       break;
 
     case 'synthesize':
