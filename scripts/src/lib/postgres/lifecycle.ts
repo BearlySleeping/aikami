@@ -300,12 +300,19 @@ export const cmdStartForeground = (root: string = repoRoot()): number => {
   console.log(`Starting postgres on 127.0.0.1:${POSTGRES_PORT} (data: ${dataDir(root)})...`);
   // postgres → stderr → tee: written to the log file AND the pane.
   // Closing the pane (bun herdr:stop postgres) kills postgres with a clean
-  // fast shutdown.
+  // fast shutdown. Paths are passed as positional args (never interpolated
+  // into the shell string) and pipefail makes the exit status reflect
+  // postgres failures rather than tee success.
   const res = spawnSync(
     'bash',
     [
       '-c',
-      `postgres -D '${dataDir(root)}' -p ${POSTGRES_PORT} -h 127.0.0.1 -k '${runDir(root)}' 2>&1 | tee -a '${logFile(root)}'`,
+      `set -o pipefail; postgres -D "$1" -p "$2" -h 127.0.0.1 -k "$3" 2>&1 | tee -a "$4"`,
+      'postgres-start',
+      dataDir(root),
+      String(POSTGRES_PORT),
+      runDir(root),
+      logFile(root),
     ],
     { stdio: 'inherit' },
   );
@@ -340,7 +347,11 @@ export const cmdReset = (options: { yes: boolean; root?: string }): number => {
     return 1;
   }
   if (isRunning(root)) {
-    cmdStop(root);
+    const stopStatus = cmdStop(root);
+    if (stopStatus !== 0) {
+      console.error('❌ postgres failed to stop — refusing to delete the data directory');
+      return stopStatus;
+    }
   }
   rmSync(resolve(root, '.postgres'), { recursive: true, force: true });
   console.log('✓ removed .postgres/');

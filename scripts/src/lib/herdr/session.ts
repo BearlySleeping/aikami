@@ -1081,7 +1081,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
           const port = resolveReadyPort(service, mode, offset);
           if (servicePane) {
-            const state = await assessServicePane(servicePane.pane_id, port);
+            const state = await assessServicePane(servicePane.pane_id, port, svc.readyCheck);
             if (state === 'crashed') {
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
               await herdr([

@@ -112,7 +112,7 @@ describe('stale postmaster.pid handling', () => {
   it('clears a stale pid file whose process is gone', () => {
     const root = makeTempRoot();
     try {
-      writeFileUnder(root, '.postgres/data/postmaster.pid', '999999\n...\n');
+      writeFileUnder(root, '.postgres/data/postmaster.pid', `${Number.MAX_SAFE_INTEGER}\n...\n`);
       expect(clearStalePid(root)).toBe(true);
       expect(existsSync(join(dataDir(root), 'postmaster.pid'))).toBe(false);
     } finally {
