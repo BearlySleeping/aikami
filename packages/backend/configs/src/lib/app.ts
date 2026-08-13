@@ -1,4 +1,6 @@
 // packages/backend/configs/src/lib/app.ts
+
+import { EMULATOR_PORTS } from '@aikami/constants';
 import {
   type AppOptions,
   cert,
@@ -14,6 +16,13 @@ import {
   isEmulatorMode,
   isRunningOnCloudRun,
 } from './environment.ts';
+
+// Set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts for
+// contract-scoped pipeline runs — same offset formula as
+// packages/shared/constants/src/lib/development_ports.ts's
+// contractPortOffset(), so this lands on the identical value independently.
+// 0 for a manual, non-contract run.
+const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
 /**
  * Parses the Firebase service account JSON string and fixes private key newlines.
@@ -48,10 +57,17 @@ const parseServiceAccount = (serviceAccountString: string): ServiceAccount => {
 const getEmulatorOptions = (projectId: string): AppOptions => {
   logger.debug('- Running in emulator mode. Setting projectId to satisfy Admin SDK requirements.');
 
-  // Set emulator hosts for Firebase Admin SDK
+  // Set emulator hosts for Firebase Admin SDK. When running inside the
+  // Functions emulator, Firebase itself already sets these correctly
+  // (offset-aware, since firestack.config.ts's emulatorPorts already shift
+  // with the same offset) — the `||` fallback only kicks in for code that
+  // imports getApp() outside that emulator process (scripts, tests).
   process.env.FIREBASE_AUTH_EMULATOR_HOST =
-    process.env.FIREBASE_AUTH_EMULATOR_HOST || 'localhost:9098';
-  process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8081';
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ||
+    `localhost:${EMULATOR_PORTS.auth + emulatorPortOffset}`;
+  process.env.FIRESTORE_EMULATOR_HOST =
+    process.env.FIRESTORE_EMULATOR_HOST ||
+    `localhost:${EMULATOR_PORTS.firestore + emulatorPortOffset}`;
   process.env.GCLOUD_PROJECT = projectId;
 
   return { projectId, storageBucket: `${projectId}.firebasestorage.app` };

@@ -223,7 +223,7 @@ const _waitForCanvas = async (page: Page, timeout = 20_000): Promise<void> => {
  * Case-level `searchParams` are merged on top and can override defaults.
  */
 const _buildUrl = (suites: { route: string; searchParams?: Record<string, string> }): string => {
-  const base = `http://localhost:${EMULATOR_PORTS.client}${suites.route}`;
+  const base = `http://localhost:${EMULATOR_PORTS.client + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}${suites.route}`;
 
   // Default: always request screenshot mode so the page suppresses
   // overlays, HUD, and extraneous UI that would contaminate visual diffs.

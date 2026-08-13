@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
 import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
-import { playAlarm } from './alarm.ts';
+import { playAlarm, playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import {
@@ -1508,6 +1508,7 @@ export const runContractPipeline = async (options: {
     // worktree cleanup, then rethrow so the launcher surfaces the real error.
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`\n❌ Pipeline crashed: ${msg}`);
+    playError();
     try {
       manifest.blockedReason = `Infrastructure failure: ${msg.slice(0, 1500)}`;
       manifest = transition({ manifest, next: 'blocked' });

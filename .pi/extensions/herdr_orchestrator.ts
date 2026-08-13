@@ -19,15 +19,18 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { contractPortOffset } from '../../packages/shared/constants/src/index.ts';
 import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
 import {
   type AikamiMode,
   ALL_SERVICES,
+  currentContractId,
   type DevService,
   findWorkspace,
   getWorkspaceTabNames,
   isPortReady,
   listServices,
+  resolveReadyPort,
   restartServices,
   SERVICE_DEFS,
   startServices,
@@ -841,11 +844,18 @@ export default function (pi: ExtensionAPI) {
       'Use herdr_session restart <service> to stop+start (e.g. restart client after the coder added new routes).',
       'Use herdr_session read <service> to capture log output from a running service.',
       'Use herdr_session list to see all managed services and their status.',
+      'If start fails with a port already in use (e.g. a leftover process from a crashed prior run), retry with force: true — it kills whatever is bound to the target port first, then starts normally. Only known dev-tool processes (node/bun/vite/firebase/...) are ever killed.',
     ],
     parameters: Type.Object({
       action: Type.String({ enum: ['start', 'stop', 'restart', 'status', 'read', 'list'] }),
       service: Type.Optional(Type.String({ enum: [...ALL_SERVICES] })),
       lines: Type.Optional(Type.Number({ default: 100 })),
+      force: Type.Optional(
+        Type.Boolean({
+          description:
+            'start only: kill whatever is already bound to the target port before starting.',
+        }),
+      ),
     }),
     async execute(_id, params, signal, _onUpdate, _ctx) {
       const svc = params.service ? SERVICE_DEFS[params.service as DevService] : undefined;
@@ -906,11 +916,14 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          // Check if already running
+          const offset = contractPortOffset(currentContractId());
+
+          // Check if already running (skip when forcing — we're about to
+          // kill whatever's there anyway).
           const wsId = await findWorkspace(workspaceLabel);
-          if (wsId) {
+          if (wsId && !params.force) {
             const tabNames = await getWorkspaceTabNames(wsId);
-            const port = svc.readyPort?.(mode);
+            const port = resolveReadyPort(params.service as DevService, mode, offset);
             if (tabNames.includes(svc.name) && port && (await isPortReady(port))) {
               return {
                 content: [{ type: 'text', text: `✅ ${svc.name} already running (port :${port})` }],
@@ -920,7 +933,12 @@ export default function (pi: ExtensionAPI) {
           }
 
           _onUpdate?.({
-            content: [{ type: 'text', text: `Starting ${svc.name}...` }],
+            content: [
+              {
+                type: 'text',
+                text: params.force ? `Starting ${svc.name} (force)...` : `Starting ${svc.name}...`,
+              },
+            ],
             details: {},
           });
 
@@ -929,8 +947,9 @@ export default function (pi: ExtensionAPI) {
               mode,
               services: [params.service as DevService],
               projectRoot: process.cwd(),
+              forcePorts: params.force,
             });
-            const port = svc.readyPort?.(mode);
+            const port = resolveReadyPort(params.service as DevService, mode, offset);
             return {
               content: [
                 { type: 'text', text: `✅ ${svc.name} running${port ? ` (port :${port})` : ''}` },
@@ -971,7 +990,11 @@ export default function (pi: ExtensionAPI) {
               services: [params.service as DevService],
               projectRoot: process.cwd(),
             });
-            const port = svc.readyPort?.(mode);
+            const port = resolveReadyPort(
+              params.service as DevService,
+              mode,
+              contractPortOffset(currentContractId()),
+            );
             return {
               content: [
                 { type: 'text', text: `✅ ${svc.name} restarted${port ? ` (port :${port})` : ''}` },

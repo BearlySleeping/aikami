@@ -34,13 +34,7 @@ const CODE_STORAGE_KEY = 'aikami-device-link-code';
  */
 const CODE_TTL_MS = 5 * 60 * 1000;
 
-export type LinkStatus =
-  | 'missing-code'
-  | 'signed-out'
-  | 'confirm'
-  | 'linking'
-  | 'linked'
-  | 'error';
+export type LinkStatus = 'missing-code' | 'signed-out' | 'confirm' | 'linking' | 'linked' | 'error';
 
 export type LinkViewModelInterface = BaseViewModelInterface & {
   readonly status: LinkStatus;
@@ -77,9 +71,7 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
   get handoffUrl(): string | undefined {
     // URL-encode so codes containing &, #, ? survive the deep-link round trip
     // and urlMatchesCode (which decodes via URLSearchParams) can match them.
-    return this._code
-      ? `aikami://auth-callback?code=${encodeURIComponent(this._code)}`
-      : undefined;
+    return this._code ? `aikami://auth-callback?code=${encodeURIComponent(this._code)}` : undefined;
   }
 
   override async initialize(): Promise<void> {
