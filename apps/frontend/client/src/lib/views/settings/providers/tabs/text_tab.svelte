@@ -103,7 +103,7 @@ const { viewModel }: Props = $props();
         <input
           type="text"
           class="input input-bordered font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
-          placeholder="http://localhost:11434"
+          placeholder="http://<host>:<port>"
           value={viewModel.textUrl}
           oninput={(e: Event) => viewModel.setTextUrl((e.target as HTMLInputElement).value)}
         >

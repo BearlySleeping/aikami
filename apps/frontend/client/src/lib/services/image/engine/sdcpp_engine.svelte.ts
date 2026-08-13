@@ -50,9 +50,11 @@ type SdCppJob = {
 /**
  * sd-server engine adapter.
  *
- * Base URL: PUBLIC_SDCPP_URL ?? PUBLIC_IMAGE_URL ?? http://localhost:8188
- * (both engines bind 8188 mutually exclusively per C-390; the override only
- * matters when sd-server runs on a different port).
+ * Base URL: resolved from the runtime config chain (C-389) —
+ * localStorage → Tauri file → ./config.json → dev-only PUBLIC_IMAGE_URL
+ * default, or the Vite `/api/image` proxy in emulator. Both engines bind
+ * 8188 mutually exclusively per C-390; no baked-in localhost literal
+ * (C-389 AC-1) — an unconfigured engine reports unavailable.
  *
  * Transport:
  * - POST /sdcpp/v1/img_gen   → create a job (returns job id)
@@ -84,10 +86,13 @@ export class SdCppEngine implements ImageEngineClient {
   private _inFlight = false;
 
   constructor(baseUrl?: string) {
-    this._baseUrl = (baseUrl ?? resolveImageBaseUrl('sdcpp')).replace(/\/+$/, '');
+    this._baseUrl = (baseUrl ?? resolveImageBaseUrl('sdcpp'))?.replace(/\/+$/, '') ?? '';
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this._baseUrl) {
+      return false; // C-389: no engine configured — never probe a hardcoded host
+    }
     try {
       const response = await fetch(`${this._baseUrl}/sdapi/v1/sd-models`, {
         method: 'GET',
@@ -100,6 +105,9 @@ export class SdCppEngine implements ImageEngineClient {
   }
 
   async listModels(): Promise<readonly ImageModelInfo[]> {
+    if (!this._baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
     const response = await fetch(`${this._baseUrl}/sdapi/v1/sd-models`, {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
@@ -120,6 +128,10 @@ export class SdCppEngine implements ImageEngineClient {
     callbacks?: ImageEngineCallbacks,
   ): Promise<ImageGenerationResult> {
     const { signal, onProgress } = callbacks ?? {};
+
+    if (!this._baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
 
     if (this._inFlight) {
       throw new Error(
@@ -490,7 +502,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * timeout aborts with TimeoutError so the poll loop can distinguish them.
  */
 const withRequestTimeout = (signal?: AbortSignal): AbortSignal =>
-  signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+    : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
 const isTimeoutError = (error: unknown): boolean =>
   error instanceof DOMException

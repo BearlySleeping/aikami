@@ -160,5 +160,94 @@ const { viewModel }: Props = $props();
         {/if}
       </div>
     </div>
+    <!-- Voice Model card (C-389 AC-4c) -->
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title">🗣️ Speech (Voice Model)</h2>
+        <p class="text-base-content/60 text-sm">
+          Browser TTS runs fully offline once the Kokoro voice model is downloaded. The download is
+          explicit — nothing is fetched until you press the button.
+        </p>
+
+        <div class="divider"></div>
+
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content/70">Backend</span>
+            <span class="badge badge-outline font-mono text-xs">{viewModel.ttsBackendLabel}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content/70">Status</span>
+            <span class="badge badge-outline font-mono text-xs">{viewModel.ttsStatusLabel}</span>
+          </div>
+
+          {#if viewModel.voiceModelState.status === 'not-downloaded'}
+            <div class="alert alert-info py-2 text-sm">
+              <span>
+                The voice model is not downloaded yet. Size:
+                <strong>{viewModel.voiceModelSizeLabel}</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary w-full"
+              onclick={() => viewModel.downloadVoiceModel()}
+            >
+              ⬇ Download voice model ({viewModel.voiceModelSizeLabel})
+            </button>
+          {:else if viewModel.voiceModelState.status === 'downloading'}
+            <div class="w-full">
+              <progress
+                class="progress progress-primary w-full"
+                value={viewModel.voiceModelProgress}
+                max="100"
+              ></progress>
+              <p class="text-xs text-base-content/60 mt-1 font-mono">
+                Downloading… {viewModel.voiceModelProgress}%
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline btn-error w-full"
+              onclick={() => viewModel.cancelVoiceModelDownload()}
+            >
+              ⏹ Cancel download
+            </button>
+          {:else if viewModel.voiceModelState.status === 'verifying'}
+            <div class="flex items-center gap-2 text-sm">
+              <span class="loading loading-spinner loading-sm"></span>
+              Verifying checksum…
+            </div>
+          {:else if viewModel.voiceModelState.status === 'error'}
+            <div class="alert alert-error py-2 text-sm">
+              <span>{viewModel.voiceModelState.message}</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary w-full"
+              onclick={() => viewModel.downloadVoiceModel()}
+            >
+              ⬇ Retry download
+            </button>
+          {:else if viewModel.voiceModelState.status === 'ready'}
+            <div class="alert alert-success py-2 text-sm">
+              <span>✓ Voice model ready — speech works offline.</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline btn-error w-full"
+              onclick={() => viewModel.deleteVoiceModel()}
+            >
+              🗑 Delete voice model
+            </button>
+          {/if}
+
+          <p class="label-text-alt text-base-content/50 px-1">
+            Without WebGPU the WASM backend is used and speech will be slower. The model download is
+            resumable and verifies a checksum before use.
+          </p>
+        </div>
+      </div>
+    </div>
   </div>
 </BaseViewModelContainer>

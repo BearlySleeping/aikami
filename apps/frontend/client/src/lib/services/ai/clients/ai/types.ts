@@ -204,7 +204,7 @@ export type GeminiClientOptions = {
  * Options for the OllamaClient constructor.
  */
 export type OllamaClientOptions = {
-  /** Ollama server base URL. Default: 'http://localhost:11434'. */
+  /** Ollama server base URL (resolved from runtime config — C-389). */
   baseUrl?: string;
   /** Model name. Default: 'llama3'. */
   model?: string;
@@ -222,7 +222,7 @@ export type OllamaClientOptions = {
  * Options for the ComfyUiClient constructor.
  */
 export type ComfyUiClientOptions = {
-  /** ComfyUI server base URL. Default: 'http://localhost:8188'. */
+  /** ComfyUI server base URL (resolved from runtime config — C-389). */
   baseUrl?: string;
 };
 

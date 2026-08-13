@@ -14,8 +14,11 @@ export const DETECTION_TIMEOUT_MS = 3_000;
 /** Default Ollama Vite dev-proxy path (same-origin, no CORS). */
 export const DEFAULT_OLLAMA_PROXY_PATH = '/api/text/';
 
-/** Default native Ollama tags endpoint (Tauri / relaxed-CSP contexts). */
-export const DEFAULT_OLLAMA_NATIVE_URL = 'http://localhost:11434/api/tags';
+/** Default native Ollama tags endpoint (Tauri / relaxed-CSP contexts).
+ *  Resolved at runtime by the caller (C-389) — the SPA bundle must not
+ *  embed a hardcoded engine URL.
+ */
+export const DEFAULT_OLLAMA_NATIVE_URL = '';
 
 /** Default ComfyUI object_info ping path via the Vite dev proxy. */
 export const DEFAULT_COMFYUI_PING_URL = '/api/image/object_info';
@@ -122,30 +125,32 @@ export const detectTextAvailability = async (options?: {
     // Proxy unavailable — fall through to native ping.
   }
 
-  // Fallback: native fetch to localhost (CORS-limited in browser,
-  // works in Tauri / Electron due to relaxed CSP)
-  try {
-    const remaining = Math.max(0, deadline - Date.now());
-    const response = await fetchWithTimeout({
-      url: nativeUrl,
-      timeoutMs: remaining,
-      fetchFn,
-      signal,
-    });
-    if (response.ok) {
-      const body = (await response.json()) as { models?: unknown[] };
-      const modelCount = Array.isArray(body.models) ? body.models.length : 0;
-      return {
-        capability: 'text',
-        available: true,
-        mode: 'offline',
-        provider: 'ollama',
-        detail: `Ollama reachable natively (${modelCount} models)`,
-        checkedAt: nowIso(),
-      };
+  // Fallback: native fetch to the runtime-configured text engine
+  // (CORS-limited in browser, works in Tauri / Electron due to relaxed CSP).
+  if (nativeUrl) {
+    try {
+      const remaining = Math.max(0, deadline - Date.now());
+      const response = await fetchWithTimeout({
+        url: nativeUrl,
+        timeoutMs: remaining,
+        fetchFn,
+        signal,
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { models?: unknown[] };
+        const modelCount = Array.isArray(body.models) ? body.models.length : 0;
+        return {
+          capability: 'text',
+          available: true,
+          mode: 'offline',
+          provider: 'ollama',
+          detail: `Ollama reachable natively (${modelCount} models)`,
+          checkedAt: nowIso(),
+        };
+      }
+    } catch {
+      // CORS rejection or connection refused — expected in browser mode.
     }
-  } catch {
-    // CORS rejection or connection refused — expected in browser mode.
   }
 
   return {

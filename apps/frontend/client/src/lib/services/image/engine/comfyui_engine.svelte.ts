@@ -39,8 +39,11 @@ const DOWNLOADING_FRACTION = 0.95;
 /**
  * ComfyUI engine adapter.
  *
- * Talks the native ComfyUI HTTP API on the base URL (PUBLIC_IMAGE_URL,
- * default http://localhost:8188, or the Vite `/api/image` proxy in emulator):
+ * Talks the native ComfyUI HTTP API on the base URL (resolved from the
+ * runtime config chain — C-389: localStorage → Tauri file → ./config.json
+ * → dev-only PUBLIC_IMAGE_URL default, or the Vite `/api/image` proxy in
+ * emulator). No baked-in localhost default (C-389 AC-1): an unconfigured
+ * engine reports unavailable instead of probing a hardcoded host.
  * - POST /prompt            → queue a workflow
  * - GET  /history/{id}      → poll for the output image
  * - GET  /view?filename=…   → fetch image bytes (bypasses CORP)
@@ -70,10 +73,13 @@ export class ComfyUiEngine implements ImageEngineClient {
   private readonly _baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this._baseUrl = (baseUrl ?? resolveImageBaseUrl('comfyui')).replace(/\/+$/, '');
+    this._baseUrl = (baseUrl ?? resolveImageBaseUrl('comfyui'))?.replace(/\/+$/, '') ?? '';
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this._baseUrl) {
+      return false; // C-389: no engine configured — never probe a hardcoded host
+    }
     try {
       const response = await fetch(`${this._baseUrl}/object_info`, {
         method: 'GET',
@@ -86,6 +92,9 @@ export class ComfyUiEngine implements ImageEngineClient {
   }
 
   async listModels(): Promise<readonly ImageModelInfo[]> {
+    if (!this._baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
     const response = await fetch(`${this._baseUrl}/object_info`, {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
@@ -119,6 +128,10 @@ export class ComfyUiEngine implements ImageEngineClient {
     callbacks?: ImageEngineCallbacks,
   ): Promise<ImageGenerationResult> {
     const { signal, onProgress } = callbacks ?? {};
+
+    if (!this._baseUrl) {
+      throw new Error('Image engine is not configured (image.url missing from config.json)');
+    }
 
     // ── Validate + sanitise request ────────────────────────────────────
     const sanitised = this._sanitiseRequest(request);
@@ -362,9 +375,7 @@ export class ComfyUiEngine implements ImageEngineClient {
             .map((m) => String(m[1] ?? ''))
             .filter(Boolean)
             .join('; ');
-          throw new Error(
-            `ComfyUI generation failed: ${errorText || 'workflow reported failure'}`,
-          );
+          throw new Error(`ComfyUI generation failed: ${errorText || 'workflow reported failure'}`);
         }
 
         const outputs = entry?.outputs;

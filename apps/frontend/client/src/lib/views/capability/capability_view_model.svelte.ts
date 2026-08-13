@@ -19,6 +19,7 @@ import {
   configService,
   IMAGE_PROVIDERS,
   routerService,
+  runtimeConfigService,
   VOICE_PROVIDERS,
 } from '$services';
 import type { Connection, ConnectionCapability } from '$types';
@@ -403,23 +404,28 @@ class CapabilityViewModel
     }
 
     // 2. Seed connections for currently detected providers.
+    //    Base URLs come from the runtime engine config (C-389) — never
+    //    baked-in localhost literals. Detection only reports 'detected'
+    //    when the runtime-configured endpoint answered.
     if (result.textStatus === 'detected' && result.textProviderId === 'ollama') {
+      const textBaseUrl = runtimeConfigService.getTextUrl();
       this._seedConnection({
         capability: 'text',
         provider: 'ollama',
         name: 'Ollama (local)',
         model: result.textModelName ?? '',
-        baseUrl: 'http://localhost:11434/v1',
+        baseUrl: textBaseUrl ?? '',
       });
     }
 
     if (result.imageStatus === 'detected') {
+      const imageBaseUrl = runtimeConfigService.getImageUrl();
       this._seedConnection({
         capability: 'image',
         provider: 'comfyui',
         name: 'ComfyUI (local)',
         model: '',
-        baseUrl: 'http://localhost:8188',
+        baseUrl: imageBaseUrl ?? '',
         imageOptions: { ...DEFAULT_IMAGE_OPTIONS },
       });
     }
