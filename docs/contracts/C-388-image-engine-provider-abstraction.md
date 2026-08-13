@@ -21,18 +21,20 @@ created_at: "2026-08-13"
 | **Target** | `apps/frontend/client/src/lib/services/image/`, `apps/frontend/client/src/lib/services/ai/clients/ai/` — image generation provider layer |
 | **Priority** | P1 — blocks C-390 (the bundled stack cannot ship sd-server until the client can talk to it), and fixes a live quality bug (negative prompts are discarded). |
 | **Dependencies** | None. Independently mergeable — the de-duplication alone is a net win even if sd-server is never enabled. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → image-engine selection page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior — two independent ComfyUI implementations exist and neither uses the other.**
-  1. `apps/frontend/client/src/lib/services/ai/clients/ai/clients/comfyui_client.ts:32` — `ComfyUiClient implements FrontendAiInterface`, declares `capabilities.image`, and builds a ComfyUI graph at lines 181–216 (`KSampler`, `CheckpointLoaderSimple`, `EmptyLatentImage`, 2× `CLIPTextEncode`, `VAEDecode`, `SaveImage`).
-  2. `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts` — the service the UI actually calls. It **bypasses `FrontendAiInterface` entirely** and re-implements the same thing: `_buildWorkflow` (`:287`), `POST /prompt` (`:236`), `GET /object_info` (`:168`), `GET /history/{promptId}` (`:377`), `GET /view?filename=…` (`:256`).
+- **Current behavior — four independent ComfyUI implementations exist and none uses another.**
+  1. `apps/frontend/client/src/lib/services/ai/clients/ai/clients/comfyui_client.ts:32` — `ComfyUiClient implements FrontendAiInterface`, declares `capabilities.image`, and builds a ComfyUI graph at lines 170–230 (`KSampler`, `CheckpointLoaderSimple`, `EmptyLatentImage`, 2× `CLIPTextEncode`, `VAEDecode`, `SaveImage`).
+  2. `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts` — the service the persona/gateway paths call. It **bypasses `FrontendAiInterface` entirely** and re-implements the same thing: `_buildWorkflow` (`:287`), `POST /prompt` (`:236`), `GET /object_info` (`:168`), `GET /history/{promptId}` (`:377`), `GET /view?filename=…` (`:256`).
+  3. `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` — the dev sandbox image UI (`routes/(dev)/dev/image`). It bypasses the service too: `_buildTxt2ImgWorkflow` / `_buildImg2ImgWorkflow`, `_executeWorkflow` (`POST /api/image/prompt`), `_uploadImage` (`POST /api/image/upload/image`), `GET /api/image/history/{id}`.
+  4. `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts:600-714` — the user-facing persona-creation route (`routes/personas/create`). `_editAvatarImage` repeats the same upload → workflow → queue → poll → view cycle against `/api/image/*`.
 
-  Adding sd-server naively produces a third and fourth copy.
+  Adding sd-server naively produces a fifth and sixth copy. The contract's own integration hook (run the dev sandbox image route against sd-server) is unreachable unless the view-model copies are collapsed too.
 
 - **Verified quality bug — the negative prompt is computed and then discarded.**
   `prompt_compiler.ts` implements a 17-pattern negative-extraction pipeline (`NEGATIVE_EXTRACTION_PATTERNS`, `:16`) and returns `{ positive, negative }` (`:144`). `contextual_trigger_service.svelte.ts:55` propagates both. But `image_generation_service.generateImage()` accepts only `{ prompt, checkpoint }` (`:224`), and `_buildWorkflow` hardcodes the negative node:
@@ -55,7 +57,7 @@ created_at: "2026-08-13"
 
 - **Known gaps**: no engine-selection mechanism, no progress reporting for sd-server, no capability introspection so the UI can hide unsupported controls.
 
-- **Baseline tests**: `image_generation_service.test.ts` and `prompt_compiler.test.ts` must pass before starting; run `bun moon run client:test`.
+- **Baseline tests**: `image_generation_service.test.ts`, `image_view_model.test.ts`, and `persona_create_view_model.test.ts` must pass before starting; run `bun moon run client:test`. (There is no `prompt_compiler.test.ts` in the repo.)
 
 ## User Outcome
 
@@ -75,19 +77,25 @@ negative prompt the style profile already computes.
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
 | Provider interface + capability flags | `.../ai/types.ts:14`, `frontend_ai_interface.ts` | modify (extend for image) |
-| ComfyUI graph construction | `comfyui_client.ts:181-216` | reuse — becomes the ComfyUI adapter body |
-| Duplicate ComfyUI implementation | `image_generation_service.svelte.ts:168,236,256,287,377` | **replace** — delete, delegate to the adapter |
+| ComfyUI graph construction | `comfyui_client.ts:170-230` | reuse — becomes the ComfyUI adapter body |
+| Duplicate ComfyUI implementations | `image_generation_service.svelte.ts:168,236,256,287,377`, `image_view_model.svelte.ts`, `persona_create_view_model.svelte.ts:600-714` | **replace** — delete all three, delegate to the adapter |
 | Reactive UI state surface | `image_generation_service.svelte.ts` | reuse — same public interface, new internals |
 | Prompt compilation (positive + negative) | `prompt_compiler.ts` | reuse unchanged |
 | Checkpoint persistence | `image_generation_service.svelte.ts:190` | reuse |
+| Dev-sandbox ComfyUI transport | `image_view_model.svelte.ts` (`_executeWorkflow`, `_buildTxt2ImgWorkflow`, `_buildImg2ImgWorkflow`, `_uploadImage`) | **replace** — delegate to the engine abstraction; delete the private transport |
+| Persona avatar-edit transport | `persona_create_view_model.svelte.ts:600-714` (`_editAvatarImage`) | **replace** — delegate via `initImage` + `denoise`; delete the private transport |
+| Legacy shared image schema | `packages/shared/schemas/src/lib/media/image_generation.ts` (`ImageGenerationRequestSchema`, `ImageGenerationProviderInterface`, `ProviderCapabilities`) | leave — unused legacy (DALL·E-era, OpenAI-flavoured `size`/`style`/`quality`); do not reuse or delete here |
+| AI gateway image adapter | `packages/frontend/ai-gateway/src/lib/image_adapter.ts` (C-320 `createDelegatingImageAdapter`) | leave — boundary unchanged; it delegates to `imageGenerationService.generateImage` |
 
 ## Overview
 
-Collapse the two ComfyUI implementations into one adapter behind a new
+Collapse the four ComfyUI implementations into one adapter behind a new
 `ImageEngineClient` abstraction, add a second adapter for sd-server, extend
 the image options type so it can carry everything both engines accept, and
 turn `image_generation_service` into a thin reactive wrapper that delegates to
-whichever engine is selected. Engine choice is configuration-driven with
+whichever engine is selected. The dev sandbox image view and the persona
+avatar-edit path delegate through the same abstraction instead of carrying
+their own ComfyUI transports. Engine choice is configuration-driven with
 auto-detection as the default.
 
 ## Design Reference
@@ -127,6 +135,16 @@ directly onto the existing `generationProgress` / `generationStatus` surface.
   `FrontendAiInterface` (which also covers dialogue, TTS, and structured
   generation) to carry image-only concerns like masks and LoRA arrays. Define
   a separate `ImageEngineClient` and let `ComfyUiClient` compose it.
+- **`ImageOptions` stays for the wide interface.**
+  `FrontendAiInterface.generateImage(prompt, options?: ImageOptions)` keeps
+  the five-field `ImageOptions` — the other implementers (openai, gemini,
+  ollama, local-tts, mock) are out of scope. The image path uses the new
+  `ImageGenerationRequest`; `ImageOptions` is superseded there, not deleted.
+- **View models delegate; they do not transport.** `image_view_model.svelte.ts`
+  and `persona_create_view_model.svelte.ts` keep their view-model interfaces
+  but drop their private ComfyUI transports and workflow builders. All
+  generation and uploads go through the engine abstraction so the sandbox and
+  the persona route honour the engine toggle.
 - **Capabilities are per-engine and queried by the UI**, not discovered by
   failing a request. A control the active engine cannot honour must not be
   rendered.
@@ -160,7 +178,8 @@ type ImageEngineCapabilities = {
   progress: boolean;
 };
 
-/** Replaces the five-field ImageOptions in .../ai/types.ts. */
+/** Supersedes the five-field ImageOptions in the image path (.../ai/types.ts);
+ *  FrontendAiInterface.generateImage keeps ImageOptions for the other providers. */
 type ImageGenerationRequest = {
   positivePrompt: string;
   negativePrompt?: string;
@@ -205,8 +224,19 @@ type ImageEngineClient = {
 };
 ```
 
+**Base URL resolution**: both adapters resolve their base URL from
+`PUBLIC_IMAGE_URL` (default `http://localhost:8188`; in emulator dev this is
+the Vite proxy path `/api/image` → `localhost:8188`, see
+`apps/frontend/client/vite.config.ts`). Per C-390 the bundled sd-server also
+binds `8188` (the two engines are mutually exclusive defaults), so the
+sd-server adapter reuses the same base URL; a `PUBLIC_SDCPP_URL` override is
+only needed when sd-server runs on a different port.
+
 TypeBox schemas for the persisted engine preference go in
-`packages/shared/schemas/`; derived types in `packages/shared/types/`.
+`packages/shared/schemas/`; derived types in `packages/shared/types/`. The new
+request/result/capability types are client-local transport types (single-app,
+per Pillar 2); the legacy shared `media/image_generation.ts` schema is left
+untouched.
 
 ## Quality Requirements
 
@@ -234,6 +264,8 @@ TypeBox schemas for the persisted engine preference go in
   - Engine factory with `auto` detection and explicit override.
   - Extending the options type and threading `negativePrompt` from `prompt_compiler` through to the engine.
   - Rewriting `image_generation_service.svelte.ts` internals while preserving its public interface.
+  - Rewiring `image_view_model.svelte.ts` and `persona_create_view_model.svelte.ts` to delegate generation and image upload to the engine abstraction, deleting their private ComfyUI transports and workflow builders (required for AC-1 and for the sd-server integration hook).
+  - Engine selector + capability-gated controls in the dev sandbox image view (`routes/(dev)/dev/image`), which is where AC-5 is exercised.
   - Cancellation and progress for both engines.
 - **Out of Scope:**
   - Any Docker, compose, or model-download work — that is C-390.
@@ -257,7 +289,11 @@ duplicate. Kept as one contract.
 ### AC-1: Single ComfyUI implementation
 **Given** the repo after this contract
 **When** searching for ComfyUI graph node names (`CheckpointLoaderSimple`, `KSampler`) outside of tests
-**Then** exactly one non-test source file contains them, and `image_generation_service.svelte.ts` contains no `class_type`, `/prompt`, `/object_info`, `/history`, or `/view` string literals.
+**Then** exactly one non-test source file contains them, and none of
+`image_generation_service.svelte.ts`, `image_view_model.svelte.ts`, or
+`persona_create_view_model.svelte.ts` contains a `class_type`, `/prompt`,
+`/object_info`, `/history`, `/view`, or `/api/image` ComfyUI transport literal
+(all four current copies are collapsed into the single adapter).
 
 ### AC-2: Negative prompt reaches the engine
 **Given** a style profile whose compiled prompt yields a non-empty `negative`
@@ -266,7 +302,7 @@ duplicate. Kept as one contract.
 
 ### AC-3: Engine toggle changes the wire protocol
 **Given** `PUBLIC_IMAGE_ENGINE=sdcpp`
-**When** `generateImage` is called
+**When** `generateImage` is called (directly or via the dev sandbox / persona avatar-edit view models)
 **Then** the request targets the `/sdcpp/v1` family and no ComfyUI endpoint is contacted; **and** with `PUBLIC_IMAGE_ENGINE=comfyui` the inverse holds.
 
 ### AC-4: Auto-detection prefers sd-server and degrades cleanly
@@ -275,8 +311,8 @@ duplicate. Kept as one contract.
 
 ### AC-5: Capabilities gate the UI
 **Given** the active engine reports `capabilities.mask === false`
-**When** the image controls render
-**Then** the mask control is not offered, and no request is ever sent carrying a field the active engine does not declare support for.
+**When** the dev sandbox image controls render (engine selector + generation options)
+**Then** the mask control is not offered, and no request is ever sent carrying a field the active engine does not declare support for. The capability query drives the view-model's exposed control list; a view-model test asserts unsupported controls are absent and the adapter test asserts unsupported fields are stripped before dispatch.
 
 ### AC-6: Cancellation stops the engine
 **Given** a generation is in flight
@@ -296,9 +332,9 @@ duplicate. Kept as one contract.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | grep assertion in `image_generation_service.test.ts` | N/A | Filled during verification |
+| AC-1 | Unit | grep assertion over non-test source (in `image_engine_factory.test.ts` or `image_generation_service.test.ts`) + updated `image_view_model.test.ts` / `persona_create_view_model.test.ts` | N/A | Filled during verification |
 | AC-2 | Unit | `image_generation_service.test.ts` — asserts outgoing body for both engines | `/game/...` | Filled during verification |
-| AC-3 | Unit | `image_engine_factory.test.ts` | N/A | Filled during verification |
+| AC-3 | Unit | `image_engine_factory.test.ts` + view-model tests asserting the sandbox/persona paths honour the toggle | N/A | Filled during verification |
 | AC-4 | Unit | `image_engine_factory.test.ts` — four probe permutations | N/A | Filled during verification |
 | AC-5 | Unit | `image_engine_capabilities.test.ts` | N/A | Filled during verification |
 | AC-6 | Unit | `sdcpp_engine.test.ts`, `comfyui_engine.test.ts` | N/A | Filled during verification |
@@ -307,7 +343,7 @@ duplicate. Kept as one contract.
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:test`, `bun moon run client:typecheck`
-- Integration: with a real `sd-server` on `:8188`, run the dev sandbox image route and confirm a generation completes end to end.
+- Integration: with a real `sd-server` bound to `:8188` (the C-390 bundled default — both engines bind 8188 mutually exclusively), run the dev sandbox image route and confirm a generation completes end to end.
 - E2E / Visual:
     - **Functional**: N/A — no new user-facing route; covered by unit tests with mocked transports.
     - **Visual**: N/A — output pixels depend on the model and are not deterministic across engines.
@@ -315,6 +351,7 @@ duplicate. Kept as one contract.
 **Watch Points**:
 - ComfyUI returns `ckpt_name` as a **nested** array (`[["a.safetensors", …]]`) — `:180` already handles this; do not regress it during the move.
 - ComfyUI's `/view` fetch exists to dodge CORP restrictions (`:254`); sd-server returns image data inline, so the sd-server adapter must not reintroduce a second fetch hop.
+- The two view models' img2img paths upload via ComfyUI's `POST /upload/image` and then reference the returned filename. `ImageGenerationRequest.initImage` is inline base64 — the ComfyUI adapter must absorb the upload (base64 → `/upload/image`) and the view models must pass their existing `inputImageDataUrl` / blob directly instead of uploading first.
 - sd-server's OpenAI family (`/v1/images/generations`) is synchronous and exposes no progress. Using it would silently break AC-7 — use `/sdcpp/v1`.
 
 ## Implementation Sequence
@@ -330,6 +367,7 @@ duplicate. Kept as one contract.
 - **Engine disappears mid-session**: a generation started against an engine that then dies must reject with a typed error and flip `isReady` to `false`, not hang on the poll loop. Bound total poll time.
 - **sd-server single-slot queue**: sd-server processes one job at a time. Two concurrent `generate()` calls must queue client-side or the second must be rejected with a clear message — do not fire both and interleave polls.
 - **Legacy checkpoint key collision**: a user who previously selected a ComfyUI checkpoint and then switches to sd-server must not have that id sent to sd-server. Namespacing must land in the same change as the engine toggle.
+- **Port 8188 is shared by both engines**: per C-390, sd-server and ComfyUI are mutually exclusive defaults on the same port, so `PUBLIC_IMAGE_URL` serves both; the engine id selects the protocol. If a user runs sd-server elsewhere, `PUBLIC_SDCPP_URL` overrides it — the two adapters never share a live socket.
 - **`denoise` without `initImage`**: meaningless and rejected by some backends — strip it in the adapter rather than forwarding.
 - **Base64 payload size**: reference images and masks are sent inline. Cap the encoded size and fail fast with a readable error rather than letting the request stall.
 - **`prompt_compiler` returns comma-joined tags** — sd-server expects a plain prompt string, which is compatible, but do not re-tokenise or re-order.
