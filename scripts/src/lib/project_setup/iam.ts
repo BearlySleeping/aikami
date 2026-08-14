@@ -80,6 +80,10 @@ const RUNTIME_ROLES: Array<{ role: string; why: string }> = [
     role: 'roles/firebase.admin',
     why: 'Firebase Admin SDK permissions (token/session-cookie verification) — usually pre-granted',
   },
+  {
+    role: 'roles/iam.serviceAccountTokenCreator',
+    why: 'Admin SDK createCustomToken signs JWTs via IAM (iam.serviceAccounts.signBlob) — required for device-link handoff tokens',
+  },
 ];
 
 /**
@@ -90,6 +94,21 @@ const RUNTIME_ROLES: Array<{ role: string; why: string }> = [
 const SERVICE_ACCOUNT_USER_ROLE = {
   role: 'roles/iam.serviceAccountUser',
   why: 'act as the runtime SA when deploying Cloud Run services',
+} as const;
+
+/**
+ * Roles the default CLOUD FUNCTIONS runtime SA needs. 2nd-gen Cloud
+ * Functions run as the project's compute default SA
+ * (`<projectNumber>-compute@developer.gserviceaccount.com`) unless a
+ * serviceAccount is set on the function — so this separate grant is what
+ * actually fixes `createCustomToken` in the deployed callables (auth,
+ * poll_device_handoff), which sign JWTs through IAM
+ * (`iam.serviceAccounts.signBlob`). The firebase-adminsdk runtime SA gets
+ * its own tokenCreator via {@link RUNTIME_ROLES} above.
+ */
+const FUNCTIONS_RUNTIME_SA_ROLE = {
+  role: 'roles/iam.serviceAccountTokenCreator',
+  why: 'Cloud Functions runtime SA (compute default) signs custom tokens via Admin SDK createCustomToken (iam.serviceAccounts.signBlob)',
 } as const;
 
 /** Project-level IAM bindings where `memberEmail` appears. */
@@ -242,6 +261,26 @@ export const setupIam = async (
     }
   }
 
+  // Cloud Functions default runtime SA = compute default SA
+  // (<projectNumber>-compute@developer.gserviceaccount.com). Resolved
+  // dynamically so it stays correct if the project number ever changes.
+  const { out: projectNumberRaw } = await run([
+    'gcloud',
+    'projects',
+    'describe',
+    projectId,
+    '--format=value(projectNumber)',
+    '--quiet',
+  ]);
+  const projectNumber = projectNumberRaw.trim();
+  if (!/^\d+$/.test(projectNumber)) {
+    console.log(fmt.err(`Could not resolve project number for ${projectId} (got "${projectNumber}")`));
+    checks.push({ name: 'Functions runtime SA: project number', status: 'error' });
+    return { checks };
+  }
+  const functionsRuntimeSaEmail = `${projectNumber}-compute@developer.gserviceaccount.com`;
+  console.log(`  Functions runtime SA: ${functionsRuntimeSaEmail}`);
+
   // ── Caller permission check ─────────────────────────────────────────
   const { code: policyCode } = await run([
     'gcloud',
@@ -282,6 +321,12 @@ export const setupIam = async (
       why: SERVICE_ACCOUNT_USER_ROLE.why,
       member: deploySaEmail,
       resource: { serviceAccount: runtimeSaEmail },
+    },
+    {
+      role: FUNCTIONS_RUNTIME_SA_ROLE.role,
+      why: FUNCTIONS_RUNTIME_SA_ROLE.why,
+      member: functionsRuntimeSaEmail,
+      resource: 'project',
     },
   ];
 

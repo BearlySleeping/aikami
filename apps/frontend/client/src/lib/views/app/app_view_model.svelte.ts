@@ -17,7 +17,6 @@ import {
   appService,
   authService,
   emulatorSeedService,
-  onboardingService,
   routerService,
   updaterService,
 } from '$services';
@@ -202,21 +201,20 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   /**
    * Handles route transition logic for the offline-first SPA.
    *
-   * In the offline-first flow (C-119, C-121), all routes are public. There
-   * are no login/register pages and no authenticated-required routes. This
-   * guard is intentionally minimal — it only runs onboarding checks for
-   * authenticated users.
+   * Intentionally performs NO navigation. A sign-in (or an existing session)
+   * must never yank the user away from the page they're on: the /link
+   * device-handoff page has to stay put until the desktop app confirms the
+   * handoff, and after a normal sign-in the user expects to remain on the
+   * start menu. Character creation is reached on demand via "Start New Game"
+   * (start_view_model's _proceedWithPack) — the previous auto-redirect to
+   * /personas/create fired on every route/auth change for persona-less users
+   * and was removed because it interrupted flows like the device link.
    */
   private async _handleRouteTransitions(
     _route: RouteName | undefined,
-    user: CurrentUser | undefined,
+    _user: CurrentUser | undefined,
   ): Promise<void> {
-    if (!user) {
-      return;
-    }
-
-    // Run onboarding checks for authenticated users (e.g., missing providers).
-    await onboardingService.redirectIfNeeded();
+    // No-op — see doc comment above.
   }
 }
 

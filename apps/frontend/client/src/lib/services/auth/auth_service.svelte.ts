@@ -334,6 +334,16 @@ export class AuthService
       ): response is SocialSignInResponse<'failed'> => response.status === 'failed';
 
       if (isFailed(response)) {
+        // The SDK can report failure (e.g. auth/popup-closed-by-user after
+        // the COOP grace timer, or the popup being dismissed) even though
+        // Firebase actually completed the sign-in — recover from the SDK
+        // state before surfacing an error so the app-level session matches
+        // reality and flows like the /link handoff can proceed.
+        const signedIn = await this._auth.getAuthUser();
+        if (signedIn) {
+          await this.setAuthUser(signedIn);
+          return { status: 'exitingUser', payload: signedIn };
+        }
         this.error('socialSignIn:failed', response.payload);
         this.showSnackbar({
           text: `Sign-in failed: ${response.payload.message ?? response.payload.code ?? 'Unknown error'}`,
@@ -342,12 +352,16 @@ export class AuthService
         return response;
       }
 
-      const isExitingUser = (
-        response: SocialSignInResponse,
-      ): response is SocialSignInResponse<'exitingUser'> => response.status === 'exitingUser';
-
-      if (isExitingUser(response)) {
-        await this.setAuthUser(response.payload);
+      // Popup succeeded — hydrate app state from the actual Firebase user
+      // regardless of the newUser/exitingUser classification. A `newUser`
+      // response (first-time Google account, or getAdditionalUserInfo()
+      // returning null) carries RegisterData, not a FirebaseUser, and was
+      // previously dropped here — leaving currentUser undefined even though
+      // Firebase had already signed the user in. auth.currentUser is the
+      // authoritative source (mirrors the hub's auth service).
+      const user = await this._auth.getAuthUser();
+      if (user) {
+        await this.setAuthUser(user);
       }
 
       return response;
@@ -597,6 +611,21 @@ export class AuthService
   setIsChangingAuthState(value: boolean): void {
     this.log('setIsChangingAuthState', value);
     this._isChangingAuthState = value;
+
+    if (value) {
+      return;
+    }
+
+    // Re-hydrate from the SDK once the changing window closes: the
+    // onIdTokenChanged listener drops auth events while the flag is set (a
+    // popup/redirect completing mid-change is the common case), so without
+    // this the app state could stay stale even though Firebase signed in.
+    void this._auth
+      .getAuthUser()
+      .then((user) => (user ? this.setAuthUser(user) : undefined))
+      .catch((error) =>
+        this.debug('setIsChangingAuthState:re-sync-failed', { error: String(error) }),
+      );
   }
 
   async registerUser(registerForm: RegisterForm): Promise<boolean> {
