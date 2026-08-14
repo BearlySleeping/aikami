@@ -159,7 +159,11 @@ const NAMESPACE_PARAMS = Type.Object({
       {},
       {
         additionalProperties: true,
-        description: 'Arguments for the chosen action, as named in its [bracketed] parameter list.',
+        description:
+          "Arguments for the chosen action, as a NESTED object — e.g. " +
+          '{ "action": "review_decision", "params": { "decision": "merge", "summary": "..." } }. ' +
+          'Do NOT put the action\'s own fields (decision, summary, etc.) at the top level ' +
+          'alongside `action` — they must be inside this `params` object or they are silently dropped.',
       },
     ),
   ),
@@ -179,7 +183,11 @@ export const registerNamespace = (pi: ExtensionAPI, options: NamespaceOptions): 
   pi.registerTool({
     name: options.name,
     label: options.label,
-    description: `${options.description}\n\nActions:\n${_buildActionIndex(options.actions)}`,
+    description:
+      `${options.description}\n\n` +
+      "🔴 Call shape: { action: \"<name>\", params: { ...that action's fields } } — " +
+      'the fields below are ALWAYS nested inside `params`, never alongside `action`.\n\n' +
+      `Actions:\n${_buildActionIndex(options.actions)}`,
     ...(options.promptSnippet ? { promptSnippet: options.promptSnippet } : {}),
     ...(options.promptGuidelines ? { promptGuidelines: options.promptGuidelines } : {}),
     parameters: NAMESPACE_PARAMS,
@@ -200,9 +208,32 @@ export const registerNamespace = (pi: ExtensionAPI, options: NamespaceOptions): 
         } as AgentToolResult<unknown>;
       }
 
+      // 🔴 Models sometimes flatten the call — { action, ...fields } instead
+      // of { action, params: { ...fields } } — despite the schema and prose
+      // both saying to nest. Because `NAMESPACE_PARAMS` allows additional
+      // top-level properties (needed so the outer schema doesn't reject a
+      // flat call outright), that flattened form used to sail through this
+      // dispatcher with `rawParams.params` silently `undefined`, defaulting
+      // to `{}`, and fail deep inside the action's OWN schema with a message
+      // ("must have required properties x, y") that gives no hint the real
+      // problem is the nesting — so a model reading its own error and
+      // retrying never converges. Recover the flattened shape here instead:
+      // prefer a genuinely nested `params`, and only fall back to "the rest
+      // of rawParams" when nothing was nested.
+      const { action: _actionKey, params: nestedParams, ...flatRest } = rawParams as Record<
+        string,
+        unknown
+      >;
+      const hasNested =
+        nestedParams !== undefined &&
+        typeof nestedParams === 'object' &&
+        nestedParams !== null &&
+        Object.keys(nestedParams).length > 0;
+      const rawActionParams = hasNested ? nestedParams : flatRest;
+
       // Apply schema defaults so actions can rely on them exactly as they
       // would when registered standalone.
-      const params = Value.Default(action.parameters, rawParams.params ?? {});
+      const params = Value.Default(action.parameters, rawActionParams);
 
       if (!Value.Check(action.parameters, params)) {
         const expected = summarizeSchema(action.parameters);
@@ -213,7 +244,8 @@ export const registerNamespace = (pi: ExtensionAPI, options: NamespaceOptions): 
               text:
                 `❌ Invalid params for ${options.name}.${action.action}: ` +
                 `${_formatErrors(action.parameters, params)}.\n` +
-                `Expected: ${expected || '(no parameters)'}`,
+                `Expected (nested under "params"): ${expected || '(no parameters)'}\n` +
+                `Call shape: { "action": "${action.action}", "params": { ... } }`,
             },
           ],
           isError: true,
