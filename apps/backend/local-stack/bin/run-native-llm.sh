@@ -13,7 +13,8 @@
 set -euo pipefail
 
 MODEL_DIR="$(pwd)/models/llm"
-PORT="${LLM_PORT:-8080}"
+# Port from packages/shared/constants development_ports.ts (C-390 AC-11).
+PORT="${LLM_PORT:-11434}"
 # Bind to loopback by default; set LLM_HOST=0.0.0.0 to expose on the network.
 HOST="${LLM_HOST:-127.0.0.1}"
 

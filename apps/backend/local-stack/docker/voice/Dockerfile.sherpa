@@ -40,16 +40,16 @@ COPY entrypoint.sh /entrypoint.sh
 COPY tts_server.py /tts_server.py
 RUN chmod +x /entrypoint.sh
 
-# Model store — grant the runtime user ownership so the bind-mounted
-# ./models/tts and ./models/stt remain writable (see VOICE_UID/VOICE_GID).
+# Model store — grant the runtime user ownership so the shared model volume
+# (or the MODELS_PATH bind mount) remains writable (see VOICE_UID/VOICE_GID).
 RUN mkdir -p /models/tts /models/stt \
     && chown -R "$VOICE_UID:$VOICE_GID" /models /entrypoint.sh
 
-ENV TTS_PORT=6006 \
-    STT_PORT=6007 \
+ENV TTS_PORT=8089 \
+    STT_PORT=8087 \
     ENABLE_STT=false
 
-EXPOSE 6006 6007
+EXPOSE 8089 8087
 
 USER aikami-voice
 ENTRYPOINT ["/entrypoint.sh"]

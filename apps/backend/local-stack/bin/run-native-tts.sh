@@ -9,7 +9,8 @@ set -euo pipefail
 MODEL_DIR="$(pwd)/models/tts"
 KOKORO_DIR="${MODEL_DIR}/kokoro-multi-lang-v1_0"
 KOKORO_TARBALL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2"
-PORT="${TTS_PORT:-6006}"
+# Port from packages/shared/constants development_ports.ts (C-390 AC-11).
+PORT="${TTS_PORT:-8089}"
 # tts_server.py lives in the sibling docker/voice tree
 TTS_SERVER="$(cd "$(dirname "$0")/.." && pwd)/docker/voice/tts_server.py"
 

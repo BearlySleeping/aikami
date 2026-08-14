@@ -11,20 +11,24 @@ tags:
 
 project:
   name: 'local-stack'
-  description: 'Orchestration package for local AI engines (Docker Compose profiles, Ultimate single container, and Native Host Binary modes).'
+  description: 'Orchestration package for local AI engines (compose profiles, backend overrides, model fetcher, and Native Host Binary modes).'
   channel: '#backend'
   owner: 'Backend Team'
 
-dependsOn: []
+dependsOn:
+  - 'constants'
 
 fileGroups:
   configs:
-    - 'docker-compose*.yml'
+    - 'compose*.yaml'
+    - '.env.example'
     - 'Dockerfile*'
+    - 'docker/**/Dockerfile*'
     - 'package.json'
     - 'moon.yml'
   binaries:
     - 'bin/**/*'
+    - 'stack/**/*'
 
 tasks:
   # Docker builds are heavy/host-dependent — keep them out of `moon ci`
@@ -43,26 +47,31 @@ tasks:
   test:
     command: 'bun run test'
 
+  lint:
+    command: 'bun run lint'
+    options:
+      runInCI: true
+
   up:
     command: 'docker compose up -d'
     options:
       cache: false
       runInCI: false
 
-  up-full:
-    command: 'docker compose --profile full up -d'
+  up-cpu:
+    command: 'docker compose -f compose.yaml -f compose.cpu.yaml up -d'
     options:
       cache: false
       runInCI: false
 
-  up-voice:
-    command: 'docker compose --profile voice up -d'
+  up-cuda:
+    command: 'docker compose -f compose.yaml -f compose.cuda.yaml up -d'
     options:
       cache: false
       runInCI: false
 
-  up-lite:
-    command: 'docker compose -f docker-compose.lite.yml up -d'
+  fetch-models:
+    command: 'bun stack/fetch_models.ts'
     options:
       cache: false
       runInCI: false

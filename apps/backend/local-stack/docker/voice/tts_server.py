@@ -18,7 +18,7 @@ from pathlib import Path
 
 import sherpa_onnx
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 6006
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8089
 # Container layout by default; override with KOKORO_DIR for host runs.
 MODEL_DIR = Path(os.environ.get("KOKORO_DIR", "/models/tts/kokoro-multi-lang-v1_0"))
 

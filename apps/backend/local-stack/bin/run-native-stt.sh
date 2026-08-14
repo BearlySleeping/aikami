@@ -11,7 +11,8 @@ set -euo pipefail
 MODEL_DIR="$(pwd)/models/stt"
 MODEL_NAME="sherpa-onnx-moonshine-tiny-en-int8"
 MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
-PORT="${STT_PORT:-6007}"
+# Port from packages/shared/constants development_ports.ts (C-390 AC-11).
+PORT="${STT_PORT:-8087}"
 
 # Verify the sherpa-onnx binary is installed on the host BEFORE downloading
 # any model — don't pull gigabytes of weights for a server that can't run.

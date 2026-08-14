@@ -1,0 +1,47 @@
+# apps/backend/local-stack/compose.models-path.yaml
+#
+# AC-13: use a pre-existing models/ tree (bind mount) instead of the shared
+# named volume. The Migration & Rollback promise requires the original tree
+# to be left untouched — this override mounts it read-write in place and the
+# fetcher verifies/imports into it without moving or deleting anything.
+#
+# Activate by appending to COMPOSE_FILE in .env (colon on POSIX, semicolon
+# on Windows):
+#   COMPOSE_FILE=compose.yaml:compose.models-path.yaml
+#   MODELS_PATH=/absolute/path/to/models
+#
+# Compose merges volume entries by their container target, so each service
+# keeps its other mounts and only the /models mount is replaced.
+
+services:
+  model-fetcher:
+    environment:
+      # AC-13: never chown the user's host bind tree — the fetcher leaves
+      # ownership untouched (Migration & Rollback promise).
+      MODELS_CHOWN: "0"
+    volumes:
+      - type: bind
+        source: "${MODELS_PATH}"
+        target: /models
+      - type: bind
+        source: ./stack
+        target: /app/stack
+        read_only: true
+
+  text:
+    volumes:
+      - type: bind
+        source: "${MODELS_PATH}"
+        target: /models
+
+  image:
+    volumes:
+      - type: bind
+        source: "${MODELS_PATH}"
+        target: /models
+
+  voice:
+    volumes:
+      - type: bind
+        source: "${MODELS_PATH}"
+        target: /models
