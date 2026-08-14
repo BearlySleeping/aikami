@@ -70,6 +70,7 @@ export * from './lib/local_ai/hardware_profile.ts';
 export * from './lib/local_ai/model_manifest.ts';
 export * from './lib/local_ai/stack_backend.ts';
 export * from './lib/local_ai/stack_plan.ts';
+export * from './lib/local_ai/stt.ts';
 export * from './lib/media/image_engine.ts';
 export * from './lib/media/image_style_profile.ts';
 export * from './lib/media/music.ts';

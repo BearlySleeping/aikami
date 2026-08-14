@@ -14,6 +14,10 @@
  *     pinned digest in models.manifest.json; a corrupt file is re-fetched.
  *   - Profile-scoped: only modalities enabled via COMPOSE_PROFILES are
  *     fetched (text → text, image → image, voice → tts, stt → stt).
+ *   - STT tier-scoped (C-393): the stt profile fetches exactly the selected
+ *     streaming + batch models plus the Silero VAD entry, gated by the
+ *     STT_STREAM_MODEL / STT_BATCH_MODEL envs (default: minimal tier).
+ *     An explicit --entry request bypasses the tier filter.
  *   - Non-fatal: a failed download for one modality does not change the exit
  *     status (0) as long as the enabled modalities were attempted, so one
  *     dead mirror cannot prevent unrelated engines from starting.
@@ -68,6 +72,48 @@ export const PROFILE_MODALITY: Readonly<Record<string, readonly Modality[]>> = {
 } as const;
 
 export const ALL_MODALITIES: readonly Modality[] = ['text', 'image', 'tts', 'stt'] as const;
+
+// C-393: STT model tiers. The stt profile must NOT download every tier —
+// selecting a tier means fetching exactly the VAD model plus the entries
+// for the chosen streaming + batch models (Watch Point: “the fetcher
+// downloads every entry of a modality”). Values are manifest targetPaths.
+export const STT_VAD_ENTRY_ID = 'stt-silero-vad';
+export const DEFAULT_STT_STREAM_MODEL = 'stt/sherpa-onnx-moonshine-tiny-en-int8';
+export const DEFAULT_STT_BATCH_MODEL = 'stt/whisper-tiny/ggml-tiny.bin';
+
+/**
+ * Filters manifest entries to the STT tier selection.
+ *
+ * The Silero VAD model is mandatory; the streaming and batch entries are
+ * matched by targetPath (exact, or a directory prefix for archive entries).
+ * When an env is unset the shipped default (minimal tier) is used.
+ */
+export const selectSttEntries = (options: {
+  entries: readonly ManifestEntry[];
+  streamModel?: string;
+  batchModel?: string;
+}): ManifestEntry[] => {
+  const { entries } = options;
+  // Empty strings (compose interpolation of an unset var) mean "use the
+  // shipped default" just like undefined.
+  const stream =
+    options.streamModel && options.streamModel.length > 0
+      ? options.streamModel
+      : DEFAULT_STT_STREAM_MODEL;
+  const batch =
+    options.batchModel && options.batchModel.length > 0
+      ? options.batchModel
+      : DEFAULT_STT_BATCH_MODEL;
+  const matches =
+    (value: string): ((entry: ManifestEntry) => boolean) =>
+    (entry) =>
+      entry.targetPath === value || entry.targetPath.startsWith(`${value}/`);
+  return entries.filter(
+    (entry) =>
+      entry.modality === 'stt' &&
+      (entry.id === STT_VAD_ENTRY_ID || matches(stream)(entry) || matches(batch)(entry)),
+  );
+};
 
 /**
  * Parses and validates the manifest JSON.
@@ -424,6 +470,10 @@ export const run = async (options: {
   entryId?: string;
   /** Explicit entry ids to fetch — limits the run to exactly these planned models. */
   entryIds?: readonly string[];
+  /** C-393 STT tier selection (overrides STT_STREAM_MODEL env). */
+  sttStreamModel?: string;
+  /** C-393 STT tier selection (overrides STT_BATCH_MODEL env). */
+  sttBatchModel?: string;
   onProgress?: (options: { entryId: string; received: number; expected: number }) => void;
 }): Promise<number> => {
   const manifestPath = options.manifestPath ?? join(import.meta.dir, 'models.manifest.json');
@@ -474,11 +524,24 @@ export const run = async (options: {
 
   await mkdir(modelsDir, { recursive: true });
 
+  // C-393: the stt profile is tier-selected by STT_STREAM_MODEL / STT_BATCH_MODEL
+  // (defaults: minimal tier). An explicit --entry / entryIds request bypasses
+  // the tier filter — the caller asked for exactly those models.
+  const explicitEntryFilter = options.entryId || options.entryIds;
+  const sttSelection = new Set(
+    selectSttEntries({
+      entries: manifest.entries,
+      streamModel: options.sttStreamModel ?? process.env.STT_STREAM_MODEL ?? undefined,
+      batchModel: options.sttBatchModel ?? process.env.STT_BATCH_MODEL ?? undefined,
+    }).map((entry) => entry.id),
+  );
+
   const selectedEntries = manifest.entries.filter(
     (entry) =>
       enabledModalities.has(entry.modality) &&
       (!options.entryId || entry.id === options.entryId) &&
-      (!options.entryIds || options.entryIds.includes(entry.id)),
+      (!options.entryIds || options.entryIds.includes(entry.id)) &&
+      (explicitEntryFilter || entry.modality !== 'stt' || sttSelection.has(entry.id)),
   );
 
   if (selectedEntries.length === 0) {

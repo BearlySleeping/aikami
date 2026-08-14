@@ -129,7 +129,7 @@ edit `.env` directly.
 | `text` | llama.cpp server (`/v1`) | Qwen2.5-1.5B Q4_K_M (CPU default) |
 | `image` | sd-server | FLUX.1-schnell Q4_K |
 | `voice` | sherpa-onnx Kokoro TTS | Kokoro-82M |
-| `stt` | sherpa-onnx Moonshine STT (same container) | Moonshine tiny |
+| `stt` | sherpa-onnx Moonshine streaming + whisper.cpp batch (same container) | Moonshine tiny + whisper tiny + Silero VAD (minimal tier) |
 | `web` | the web client container | — |
 
 The model fetcher is **profile-scoped**: `COMPOSE_PROFILES=text` downloads
@@ -139,6 +139,69 @@ only the text model. Enable what you need:
 # .env
 COMPOSE_PROFILES=text,image,voice,stt,web
 ```
+
+> ⚠️ **STT is opt-in (C-393 AC-7).** The shipped defaults do **not** start
+> the STT service: `.env.example` lists `COMPOSE_PROFILES=text,image,voice`
+> and `ENABLE_STT=false`. To enable speech-to-text, add `stt` to
+> `COMPOSE_PROFILES` **and** set `ENABLE_STT=true`. A microphone-adjacent
+> service that starts unasked would be a privacy problem.
+
+### Speech-to-text (STT)
+
+The `stt` profile runs two engines inside the same voice container:
+
+| Protocol | Endpoint | Engine | Use case |
+|---|---|---|---|
+| Streaming | `WS 127.0.0.1:8087/v1/stream` | sherpa-onnx Moonshine + Silero VAD | Push-to-talk, hands-free; partial hypotheses while speaking |
+| Batch | `POST 127.0.0.1:8087/v1/audio/transcriptions` | whisper.cpp | Recorded clips, imported audio; OpenAI-compatible |
+| Introspection | `GET 127.0.0.1:8087/v1/capabilities` | — | Engines, models, languages, VAD, `wordTimestamps` |
+| Readiness | `GET 127.0.0.1:8087/health` | — | 200 healthy / 503 naming the missing model file |
+
+The streaming protocol is defined in
+`packages/shared/schemas/src/lib/local_ai/stt.ts` (the wire contract C-359
+codes against):
+
+- **Audio format is fixed**: 16 kHz mono 16-bit PCM (`pcm_s16le`), 32000
+  bytes/sec. Resampling is the client's job; the server rejects anything
+  else with `error: bad-audio-format`.
+- Client → server: `{"type":"start","protocolVersion":1,"language"?}`
+  (JSON text frame), then binary frames of raw PCM, then
+  `{"type":"stop"}`.
+- Server → client: `ready`, `speech-start`, `partial`*, `final`,
+  `speech-end`, `error`. VAD runs **server-side** — the client never infers
+  endpointing.
+- **Moonshine is English-only.** Requesting another language returns
+  `error: unsupported-language` pointing at the batch endpoint; the service
+  never transcribes non-English audio as garbled English. whisper.cpp
+  covers ~99 languages for batch.
+- The engine behind each protocol is env-selected
+  (`STT_STREAM_ENGINE`, `STT_BATCH_ENGINE`) — the seam for a future
+  licensed CrisperWhisper provider with word-level timestamps.
+
+**Privacy posture**: audio is processed in memory only — it is **never
+written to disk, never logged, and never leaves the machine**. The service
+binds `127.0.0.1` on the host, and websocket connections are rejected when
+the `Origin` header is not on the allowlist (`STT_ALLOWED_ORIGINS`) so a
+random web page cannot open a socket to your local transcription service.
+There is no debug audio dump, not even behind a flag.
+
+**Model tiers** (C-393): the fetcher downloads exactly the selected tier
+plus the Silero VAD model — not every entry of the modality:
+
+| Tier | `STT_STREAM_MODEL` | `STT_BATCH_MODEL` |
+|---|---|---|
+| minimal (shipped default) | `stt/sherpa-onnx-moonshine-tiny-en-int8` | `stt/whisper-tiny/ggml-tiny.bin` |
+| default | `stt/sherpa-onnx-moonshine-base-en-int8` | `stt/whisper-base/ggml-base.bin` |
+| accuracy | `stt/sherpa-onnx-moonshine-base-en-int8` | `stt/whisper-small/ggml-small.bin` |
+
+Set the envs in `.env` to select a tier. The minimal tier is shipped as the
+default because it is the only one that reliably meets the 300 ms
+first-partial latency budget on CPU.
+
+VAD tuning (all optional): `STT_VAD_THRESHOLD` (default 0.5),
+`STT_VAD_MIN_SPEECH_MS` (250), `STT_VAD_MIN_SILENCE_MS` (500),
+`STT_VAD_MAX_SPEECH_MS` (30000 — a too-long utterance is capped with a
+`final`, then a new segment starts).
 
 ### Advanced: Ollama and ComfyUI
 
@@ -239,10 +302,16 @@ engine on a Mac is CPU-only and slow. On Darwin the supported setup is:
    ```bash
    ./bin/run-native-llm.sh   # llama-server on 11434 (or shimmy if present)
    ./bin/run-native-tts.sh   # sherpa-onnx Kokoro TTS on 8089
-   ./bin/run-native-stt.sh   # sherpa-onnx Moonshine STT on 8087
+   ./bin/run-native-stt.sh   # C-393 STT service on 8087 (Moonshine streaming + whisper.cpp batch)
    ```
    Each downloads its default model on first run. The native path and the
-   containerised path expose **identical endpoints** (same ports).
+   containerised path expose **identical endpoints** (same ports, same
+   protocol). `run-native-stt.sh` needs `pip install sherpa-onnx` on the
+   host; batch transcription additionally needs the whisper.cpp
+   `whisper-server` binary (`brew` provides `whisper-cli`, but the server
+   is a source build with `-DWHISPER_BUILD_SERVER=ON` — see the script
+   header). Without it the streaming service still runs and reports batch
+   unavailable via `/v1/capabilities`.
 2. Only the optional web client is containerised:
    ```bash
    COMPOSE_PROFILES=web docker compose up -d
@@ -262,7 +331,12 @@ provides no Metal passthrough for the engines.
   other's health. `docker compose ps` shows meaningful per-service state.
 - **Missing model**: a service whose model file is absent starts and then
   fails its own health check — the health message names the missing file, and
-  the other engines are unaffected.
+  the other engines are unaffected. With the `stt` profile enabled, the voice
+  health check covers BOTH the TTS port (8089) and the STT port (8087) — a
+  dead batch process cannot hide behind a healthy TTS.
+- **STT observability**: logs cover connection lifecycle, model load,
+  language, and decode duration. **Transcript text is never logged** — it is
+  user speech content (AC-8).
 - **Offline**: once images and models are cached, the whole stack starts with
   networking disabled. A missing model disables only its own service.
 - **Warm start**: an already-provisioned stack reaches all-healthy in well
@@ -293,6 +367,11 @@ bun moon run local-stack:lint
 | Ports match `development_ports.ts`, loopback binds, no 8080 | AC-11 |
 | Native launchers present, executable, port-defaulted (explicit Darwin branch) | AC-12 |
 | `MODELS_PATH` bind mount render + health | AC-13 |
+| STT off by default (`.env.example` defaults, no STT port render) | C-393 AC-7 |
+| STT manifest tiers + no weights COPYed into the image | C-393 AC-11 |
+| STT live wire contract (`stt_service.test.ts`: partials+final, VAD, batch, capabilities, language, format, origin) | C-393 AC-1..AC-9 (live) |
+| Audio never persisted / transcript never logged (container fs + log grep) | C-393 AC-8 (live) |
+| Missing STT model → unhealthy naming the file (throwaway container) | C-393 AC-10 (live) |
 
 ## Container security
 

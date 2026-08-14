@@ -5,9 +5,16 @@
 # sherpa-onnx-offline-websocket-server) — no PyTorch, no CUDA, no heavy
 # Python ML stack at runtime.
 #
+# C-393: the same container also builds whisper.cpp's `whisper-server`
+# (batch STT) from source at pinned tag v1.9.2 — the OpenAI-compatible
+# batch endpoint (POST /v1/audio/transcriptions) is proxied from
+# stt_server.py to it on an internal port. Build-time only: cmake/g++/git
+# are removed after the build so the runtime image stays lean.
+#
 # Models are bind-mounted from the host at /models/tts and /models/stt
 # (see docker-compose.yml). docker/voice/entrypoint.sh auto-downloads the
-# default Kokoro TTS model on first start.
+# default Kokoro TTS model on first start; STT models come from the C-390
+# model fetcher into the shared volume (AC-11 — no weights in any layer).
 #
 # The container runs as a dedicated non-root user. The model store is made
 # writable through a configurable UID/GID: default 1000:1000 (the typical
@@ -21,23 +28,46 @@
 FROM python:3.11-slim
 
 ARG SHERPA_ONNX_VERSION=1.13.4
+ARG WHISPER_CPP_VERSION=v1.9.2
 ARG VOICE_UID=1000
 ARG VOICE_GID=1000
 
 # curl/tar/bzip2 are needed by entrypoint.sh (model downloads + STT archive
 # extraction). sherpa-onnx is manylinux — prebuilt wheels, no compilation.
+# whisper.cpp is compiled from source at the pinned tag (C-393 AC-3).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         tar \
         bzip2 \
+        make \
+        cmake \
+        g++ \
+        git \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir "sherpa-onnx==${SHERPA_ONNX_VERSION}" \
+    && git clone --depth 1 --branch "${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \
+    && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DWHISPER_BUILD_EXAMPLES=ON \
+        -DWHISPER_BUILD_SERVER=ON \
+        -DWHISPER_BUILD_TESTS=OFF \
+        -DWHISPER_SDL2=OFF \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DGGML_NATIVE=OFF \
+    && cmake --build /tmp/whisper.cpp/build --target whisper-server --config Release -j"$(nproc)" \
+    && install -m 0755 /tmp/whisper.cpp/build/bin/whisper-server /usr/local/bin/whisper-server \
+    && rm -rf /tmp/whisper.cpp \
+    && apt-get purge -y cmake g++ git make \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid "$VOICE_GID" aikami-voice \
     && useradd --uid "$VOICE_UID" --gid "$VOICE_GID" --create-home --shell /usr/sbin/nologin aikami-voice
 
 # Entrypoint: model auto-download + TTS/STT server supervisor
 COPY entrypoint.sh /entrypoint.sh
 COPY tts_server.py /tts_server.py
+COPY stt_server.py /stt_server.py
 RUN chmod +x /entrypoint.sh
 
 # Model store — grant the runtime user ownership so the shared model volume
@@ -47,6 +77,7 @@ RUN mkdir -p /models/tts /models/stt \
 
 ENV TTS_PORT=8089 \
     STT_PORT=8087 \
+    WHISPER_PORT=8091 \
     ENABLE_STT=false
 
 EXPOSE 8089 8087

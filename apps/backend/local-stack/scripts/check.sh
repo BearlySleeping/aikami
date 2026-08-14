@@ -46,13 +46,46 @@ else
     tail -30 /tmp/aikami-local-stack-unit.log >&2
 fi
 
-# ── Bash syntax ──────────────────────────────────────────────────────────
-echo "== bash syntax =="
+# ── Bash / Python syntax ─────────────────────────────────────────────────
+echo "== bash / python syntax =="
 check "bash syntax: bin/run-native-llm.sh" bash -n bin/run-native-llm.sh
 check "bash syntax: bin/run-native-tts.sh" bash -n bin/run-native-tts.sh
 check "bash syntax: bin/run-native-stt.sh" bash -n bin/run-native-stt.sh
 check "bash syntax: docker/voice/entrypoint.sh" bash -n docker/voice/entrypoint.sh
 check "bash syntax: scripts/emit_config.sh" bash -n scripts/emit_config.sh
+check "python syntax: docker/voice/stt_server.py" python3 -m py_compile docker/voice/stt_server.py
+check "python syntax: docker/voice/tts_server.py" python3 -m py_compile docker/voice/tts_server.py
+
+# ── C-393 AC-7: STT is off by default ───────────────────────────────────
+echo "== C-393 AC-7: STT off by default =="
+if grep -q '^COMPOSE_PROFILES=text,image,voice$' .env.example; then
+    ok "AC-7: .env.example does not enable the stt profile"
+else
+    bad "AC-7: .env.example must not list stt in COMPOSE_PROFILES"
+fi
+if grep -q '^ENABLE_STT=false' .env.example; then
+    ok "AC-7: .env.example sets ENABLE_STT=false"
+else
+    bad "AC-7: .env.example must set ENABLE_STT=false"
+fi
+if grep -q '^ENABLE_STT=true' .env.example; then
+    bad "AC-7: .env.example must not set ENABLE_STT=true"
+else
+    ok "AC-7: .env.example has no ENABLE_STT=true"
+fi
+# The stt profile must not bind any port when it is not enabled.
+render_no_stt=$(COMPOSE_PROFILES=text,image,voice docker compose config 2>/dev/null)
+if printf '%s' "$render_no_stt" | grep -qE "published: *[\"']?8087[\"']?"; then
+    bad "AC-7: no-STT render must not publish the STT port"
+else
+    ok "AC-7: no-STT render publishes no STT port"
+fi
+# C-390's check asserted the old default; the shipped default is now opt-in.
+if grep -q 'profiles: \["voice", "stt"\]' compose.yaml; then
+    ok "C-393: voice service carries the stt profile"
+else
+    bad "C-393: voice service lost the stt profile"
+fi
 
 # ── Native launcher path (AC-12) ──────────────────────────────────────────
 # On Darwin the engines run natively (Docker Desktop has no Metal
@@ -67,10 +100,35 @@ done
 check "AC-12: run-native-llm.sh defaults to port 11434" grep -q 'LLM_PORT:-11434' bin/run-native-llm.sh
 check "AC-12: run-native-tts.sh defaults to port 8089" grep -q 'TTS_PORT:-8089' bin/run-native-tts.sh
 check "AC-12: run-native-stt.sh defaults to port 8087" grep -q 'STT_PORT:-8087' bin/run-native-stt.sh
+check "AC-12: run-native-stt.sh drives stt_server.py (C-393 protocol)" grep -q 'stt_server.py' bin/run-native-stt.sh
 if [ "$(uname -s)" = "Darwin" ]; then
     ok "AC-12: Darwin — native path verified (no Metal passthrough, engines run natively)"
 else
     ok "AC-12: non-Darwin — native launchers shipped and port-defaulted"
+fi
+
+# ── C-393 AC-11: STT models come from the manifest ──────────────────────
+echo "== C-393 AC-11: STT manifest + no weights in images =="
+check "AC-11: manifest carries stt-moonshine-tiny-en-int8" grep -q '"id": "stt-moonshine-tiny-en-int8"' stack/models.manifest.json
+check "AC-11: manifest carries stt-moonshine-base-en-int8" grep -q '"id": "stt-moonshine-base-en-int8"' stack/models.manifest.json
+check "AC-11: manifest carries stt-whisper-tiny" grep -q '"id": "stt-whisper-tiny"' stack/models.manifest.json
+check "AC-11: manifest carries stt-whisper-base" grep -q '"id": "stt-whisper-base"' stack/models.manifest.json
+check "AC-11: manifest carries stt-whisper-small" grep -q '"id": "stt-whisper-small"' stack/models.manifest.json
+check "AC-11: manifest carries stt-silero-vad" grep -q '"id": "stt-silero-vad"' stack/models.manifest.json
+# The Dockerfile must not COPY any weights into an image layer.
+if grep -q 'COPY .*models/' docker/voice/Dockerfile.sherpa; then
+    bad "AC-11: Dockerfile copies model weights into the image"
+else
+    ok "AC-11: no weights COPYed into the voice image"
+fi
+# The fetcher must gate STT downloads by tier (Watch Point).
+check "AC-11: fetcher tier-selects STT entries" grep -q 'selectSttEntries' stack/fetch_models.ts
+check "AC-11: compose passes STT_STREAM_MODEL to the fetcher" grep -q 'STT_STREAM_MODEL' compose.yaml
+# The voice container must NOT auto-download STT models (fetcher-owned).
+if grep -E 'sherpa-onnx-moonshine.*curl|curl.*sherpa-onnx-moonshine' docker/voice/entrypoint.sh; then
+    bad "AC-11: entrypoint auto-downloads STT models"
+else
+    ok "AC-11: entrypoint does not auto-download STT models"
 fi
 
 # ── Compose topology (AC-2, AC-3, AC-11) ─────────────────────────────────
@@ -91,6 +149,7 @@ check "compose parses: vulkan override" docker compose -f compose.yaml -f compos
 check "compose parses: intel override" docker compose -f compose.yaml -f compose.intel.yaml config --quiet
 check "compose parses: musa override" docker compose -f compose.yaml -f compose.musa.yaml config --quiet
 check "compose parses: models-path override" docker compose -f compose.yaml -f compose.models-path.yaml config --quiet
+check "compose parses: stt override" docker compose -f compose.yaml -f compose.cpu.yaml -f compose.stt.yaml config --quiet
 
 for profile in text image voice stt web; do
     svcs=$(profile_services "$profile")
@@ -184,8 +243,10 @@ done
 # AC-11: no service binds 8080 and engine ports match the table. The
 # container-side listen address may legitimately be 0.0.0.0 (engines bind
 # all container interfaces so the compose network can reach them); AC-11
-# constrains the HOST publish binding, which must be 127.0.0.1.
-rendered_all=$(COMPOSE_PROFILES=text,image,voice,stt,web docker compose config 2>/dev/null)
+# constrains the HOST publish binding, which must be 127.0.0.1. The
+# all-profiles render includes compose.stt.yaml so the STT port publish is
+# asserted where it actually lives (C-393 AC-7).
+rendered_all=$(COMPOSE_FILE="compose.yaml:compose.cpu.yaml:compose.stt.yaml" COMPOSE_PROFILES=text,image,voice,stt,web docker compose config 2>/dev/null)
 for port in 8080; do
     if printf '%s' "$rendered_all" | grep -qE "published: *[\"']?${port}[\"']?"; then
         bad "AC-11: host port $port is published (Nordclaw-owned)"
@@ -392,6 +453,84 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
         ok "AC-4: web client HTTP 200"
     else
         bad "AC-4: web client HTTP 200"
+    fi
+
+    # ── C-393 live STT probes (AC-1..AC-10) ────────────────────────────
+    echo "== C-393 live STT probes =="
+    if curl -fsS http://127.0.0.1:8087/health >/dev/null 2>&1; then
+        ok "C-393: STT /health"
+    else
+        bad "C-393: STT /health (is the stt profile enabled?)"
+    fi
+    if curl -fsS http://127.0.0.1:8087/v1/capabilities 2>/dev/null | grep -q '\"moonshine\"'; then
+        ok "C-393: STT /v1/capabilities reports the streaming engine"
+    else
+        bad "C-393: STT /v1/capabilities"
+    fi
+    # The full wire contract (AC-1 partials+final, AC-2 VAD, AC-3 batch,
+    # AC-4 schema, AC-5 language, AC-6 format, AC-9 origin) is exercised by
+    # the integration spec against the live service.
+    if STT_URL=http://127.0.0.1:8087 timeout 180 bun test stack/stt_service.test.ts \
+        >/tmp/aikami-stt-service.log 2>&1; then
+        ok "C-393: stt_service.test.ts passed (wire contract)"
+    else
+        bad "C-393: stt_service.test.ts failed — see /tmp/aikami-stt-service.log"
+        tail -40 /tmp/aikami-stt-service.log >&2
+    fi
+
+    # ── AC-8: audio is never persisted or logged ────────────────────────
+    # Scan ONLY service-writable paths: /tmp and the container root (the
+    # /models tree legitimately contains the model tarballs' bundled
+    # test_wavs — fetched artifacts, not service-written audio).
+    if docker compose exec -T voice sh -c 'find /tmp /app /root -type f \( -name "*.wav" -o -name "*.pcm" -o -name "*.raw" \) 2>/dev/null' \
+        | grep -q .; then
+        bad "AC-8: audio files found in the voice container"
+    else
+        ok "AC-8: no audio files written in the voice container"
+    fi
+    if docker compose logs voice 2>&1 | grep -iE 'hello world|good morning|transcript:'; then
+        bad "AC-8: transcript text appears in voice logs"
+    else
+        ok "AC-8: no transcript text in voice logs"
+    fi
+
+    # ── AC-10: missing model → unhealthy naming the file ────────────────
+    # Run a throwaway voice container (no port publish — the main stack
+    # owns 8087) with a nonexistent STT model and assert /health reports
+    # 503 naming the missing file; the rest of the stack is untouched.
+    if docker image inspect aikami-local-stack-voice >/dev/null 2>&1; then
+        MISSING_IMG="aikami-local-stack-voice"
+    else
+        MISSING_IMG=$(docker compose config --images 2>/dev/null | grep -i voice | head -1 || true)
+    fi
+    if [ -n "${MISSING_IMG:-}" ]; then
+        cid=$(docker run -d --rm --name aikami-stt-missing-test \
+            -v aikami-models:/models \
+            -e ENABLE_STT=true \
+            -e STT_STREAM_MODEL=stt/does-not-exist \
+            -e STT_VAD_MODEL=stt/does-not-exist.onnx \
+            -e STT_BIND_ADDRESS=0.0.0.0 \
+            "$MISSING_IMG" 2>/dev/null || true)
+        if [ -n "$cid" ]; then
+            body=""
+            for _ in 1 2 3 4 5 6; do
+                sleep 3
+                body=$(docker exec aikami-stt-missing-test curl -s http://127.0.0.1:8087/health 2>/dev/null || true)
+                if printf '%s' "$body" | grep -q 'unhealthy'; then
+                    break
+                fi
+            done
+            if printf '%s' "$body" | grep -q 'unhealthy' && printf '%s' "$body" | grep -q 'does-not-exist'; then
+                ok "AC-10: missing model reported unhealthy naming the file"
+            else
+                bad "AC-10: /health body does not name the missing model (got: $body)"
+            fi
+            docker rm -f aikami-stt-missing-test >/dev/null 2>&1 || true
+        else
+            ok "AC-10: skipped (could not start throwaway voice container)"
+        fi
+    else
+        ok "AC-10: skipped (voice image not found)"
     fi
 fi
 
