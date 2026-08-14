@@ -1,0 +1,91 @@
+# apps/backend/local-stack/docker/sd-server/Dockerfile.cpu
+#
+# CPU sd-server image for the Aikami local stack (C-390). Upstream
+# stable-diffusion.cpp publishes no CPU image (the published set is exactly
+# master-cuda, master-cuda-spark, master-musa, master-sycl, master-vulkan),
+# so we build the CPU variant from a pinned upstream revision and publish it
+# as ghcr.io/aikami/aikami-sd-server:cpu.
+#
+# The runtime image ships only the sd-server binary (plus the tiny sd-cli
+# wrapper) — no build toolchain, no model weights (AC-5). Models are mounted
+# from the shared aikami-models volume at /models/image/.
+#
+# ── Build context ──────────────────────────────────────────────────────────
+# This directory (docker/sd-server) — contains only this Dockerfile; the
+# upstream source is cloned inside the build stage at the pinned revision.
+#
+# Pinned revision: de298c225bed97c3f9026b73cd7b71e7879bd41b (2026-08-14,
+# matches the master-vulkan image the compose overrides pull).
+
+ARG UBUNTU_VERSION=24.04
+
+FROM ubuntu:${UBUNTU_VERSION} AS build
+
+ARG SD_CPP_REVISION=de298c225bed97c3f9026b73cd7b71e7879bd41b
+
+# sd-server embeds the web UI at build time, so the build image needs
+# Node/pnpm — same recipe as upstream's docker/Dockerfile.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        cmake \
+        ca-certificates \
+        curl \
+        gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource-repo.gpg.key \
+    && gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource-repo.gpg.key \
+    && rm /tmp/nodesource-repo.gpg.key \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g pnpm@10.15.1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /sd.cpp
+
+RUN git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git . \
+    && git fetch --depth 1 origin ${SD_CPP_REVISION} \
+    && git checkout ${SD_CPP_REVISION}
+
+RUN cmake . -B ./build \
+    -DSD_BUILD_SHARED_LIBS=ON \
+    -DGGML_NATIVE=OFF \
+    -DSD_BUILD_SHARED_GGML_LIB=ON \
+    -DGGML_BACKEND_DL=ON \
+    -DGGML_CPU_ALL_VARIANTS=ON \
+    -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+    -DCMAKE_INSTALL_RPATH='$ORIGIN'
+RUN cmake --build ./build --config Release --parallel
+
+FROM ubuntu:${UBUNTU_VERSION} AS runtime
+
+# Non-root runtime user (mirrors the voice container's VOICE_UID/VOICE_GID
+# pattern — configurable at build time).
+ARG SD_UID=1000
+ARG SD_GID=1000
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid "${SD_GID}" aikami-sd \
+    && useradd --uid "${SD_UID}" --gid "${SD_GID}" --create-home --shell /usr/sbin/nologin aikami-sd
+
+COPY --from=build /sd.cpp/build/bin /sd.cpp/bin
+# The compose `image` service overrides the entrypoint to run /sd-server with
+# an explicit command (listen ip/port/model); /sd-cli remains the default,
+# mirroring upstream so the same compose command works for owned and
+# upstream images alike.
+RUN printf '#!/bin/sh\nexec /sd.cpp/bin/sd-cli "$@"\n' > /sd-cli \
+    && printf '#!/bin/sh\nexec /sd.cpp/bin/sd-server "$@"\n' > /sd-server \
+    && chmod +x /sd-cli /sd-server \
+    && chown -R "${SD_UID}:${SD_GID}" /sd.cpp
+
+# The model volume is mounted here read-only by the engines; no weights are
+# baked into this image (AC-5).
+RUN mkdir -p /models/image && chown -R "${SD_UID}:${SD_GID}" /models
+
+USER aikami-sd
+ENTRYPOINT ["/sd-cli"]

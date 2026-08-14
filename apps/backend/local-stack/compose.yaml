@@ -1,0 +1,233 @@
+# apps/backend/local-stack/compose.yaml
+#
+# Aikami local AI stack — publishable compose topology (C-390).
+#
+# Modality → Compose profile; backend → Compose override file. All variation
+# lives in .env, which Compose reads automatically:
+#
+#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_FILE=compose.yaml:compose.cuda.yaml
+#
+# The user's runtime command is therefore plain `docker compose up -d` with
+# no flags. Override files carry the `deploy` device reservations and the
+# backend-specific image tags; this base file carries everything invariant.
+#
+# Hardware backends (override files): cpu, cuda, rocm, vulkan, intel, musa.
+# 'metal' deliberately has no compose override — on macOS the setup emits the
+# native plan (bin/run-native-*.sh) and only the web client is containerised,
+# because Docker Desktop provides no Metal passthrough.
+#
+# Ports (from packages/shared/constants/src/lib/development_ports.ts):
+#   text=11434  image=8188  voice=8089  stt=8087  web=5274
+# Host 8080 is abandoned — it belongs to Nordclaw's Firestore emulator.
+
+name: aikami-local-stack
+
+x-model-volume: &model-volume
+  # Named volume by default; MODELS_PATH selects a bind mount instead (AC-13).
+  type: volume
+  source: aikami-models
+  target: /models
+  volume:
+    nocopy: true
+
+services:
+  # ── One-shot model fetcher (AC-6/AC-7) ────────────────────────────────
+  # Populates the shared model volume from models.manifest.json with SHA-256
+  # verification and Range-based resume. Exits 0 even when individual
+  # downloads fail (non-fatal) so one dead mirror cannot block other engines.
+  # Engines wait on its successful exit via
+  # depends_on: { condition: service_completed_successfully } — a health
+  # check cannot run on an exited container, so this is the correct gate.
+  model-fetcher:
+    profiles: ["text", "image", "voice", "stt"]
+    # Built from docker/fetcher: the upstream oven/bun image lacks bzip2, which
+    # fetch_models.ts needs to extract the Kokoro/Moonshine .tar.bz2 archives
+    # (AC-6/AC-7 production path). No `image:` key — same pattern as voice/web;
+    # the published ghcr.io/aikami/aikami-model-fetcher image is produced by
+    # publish-local-stack.yml for users who prefer a prebuilt image.
+    build:
+      context: ./docker/fetcher
+      dockerfile: Dockerfile
+    command:
+      - /bin/sh
+      - -c
+      - |
+        bun /app/stack/fetch_models.ts
+    environment:
+      COMPOSE_PROFILES: "${COMPOSE_PROFILES:-}"
+      MODELS_PATH: /models
+      AIKAMI_ACCEPT_LICENSES: "${AIKAMI_ACCEPT_LICENSES:-}"
+      TEXT_MODEL: "${TEXT_MODEL:-}"
+      IMAGE_MODEL: "${IMAGE_MODEL:-}"
+      # Named-volume path: hand the populated tree to the engine uid (voice
+      # runs as 1000) so non-root engines can write /models. The
+      # compose.models-path.yaml override sets this to 0 to keep the user's
+      # host bind tree untouched (AC-13).
+      MODELS_CHOWN: "${MODELS_CHOWN:-1}"
+    volumes:
+      - *model-volume
+      # The fetcher source ships in the repo tree; mount it read-only so the
+      # image never has to be rebuilt when the manifest changes.
+      - ./stack:/app/stack:ro
+    restart: "no"
+
+  # ── Text engine — llama.cpp server (OpenAI-compatible /v1) ─────────────
+  text:
+    profiles: ["text"]
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:87ee5d122fe7645ce3ae169aa1b5b0633e4e392b0d90459c4aee06fbaaf101ff
+    ports:
+      - "127.0.0.1:${TEXT_PORT:-11434}:11434"
+    command:
+      - --model
+      - /models/text/${TEXT_MODEL:-qwen2.5-1.5b-instruct-q4_k_m.gguf}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "11434"
+      - --threads
+      - "${TEXT_THREADS:--1}"
+    volumes:
+      - *model-volume
+    depends_on:
+      model-fetcher:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -fsS http://127.0.0.1:11434/health >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Image engine — stable-diffusion.cpp sd-server (AC-4 model list) ────
+  # Upstream publishes no CPU sd-server image, so the base file resolves to
+  # our built aikami-sd-server:cpu (AC-3); backend overrides swap in the
+  # published leejet variants. The sd.cpp images ship `/sd-cli` as their
+  # entrypoint, so the command must run `/sd-server` explicitly (verified
+  # 2026-08-14).
+  image:
+    profiles: ["image"]
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/aikami}/aikami-sd-server:cpu
+    ports:
+      - "127.0.0.1:${IMAGE_PORT:-8188}:8188"
+    command:
+      - /sd-server
+      - --listen-ip
+      - 0.0.0.0
+      - --listen-port
+      - "8188"
+      - --model
+      - /models/image/${IMAGE_MODEL:-flux1-schnell-q4_k.gguf}
+    volumes:
+      - *model-volume
+    depends_on:
+      model-fetcher:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -fsS http://127.0.0.1:8188/sdapi/v1/sd-models >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Voice engine — sherpa-onnx (TTS /v1/audio/speech, optional STT ws) ─
+  voice:
+    profiles: ["voice", "stt"]
+    build:
+      context: ./docker/voice
+      dockerfile: Dockerfile.sherpa
+    ports:
+      - "127.0.0.1:${TTS_PORT:-8089}:8089"
+      - "127.0.0.1:${STT_PORT:-8087}:8087"
+    environment:
+      TTS_PORT: "8089"
+      STT_PORT: "8087"
+      ENABLE_STT: "${ENABLE_STT:-false}"
+      # The voice container reads its models from the shared volume (the
+      # fetcher pre-populates it); the entrypoint skips its own download when
+      # the model directory is already present.
+      KOKORO_DIR: "/models/tts/kokoro-multi-lang-v1_0"
+      STT_DIR: "/models/stt/sherpa-onnx-moonshine-tiny-en-int8"
+    volumes:
+      - *model-volume
+    depends_on:
+      model-fetcher:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - |
+          curl -fsS http://127.0.0.1:8089/health >/dev/null 2>&1 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Web client — prebuilt SPA behind nginx (opt-in `web` profile) ──────
+  # Tauri users and dist-servers start no client container. The runtime
+  # engine config is mounted as /usr/share/nginx/html/config.json (AC-9) so
+  # one image works across any topology with zero rebuild.
+  web:
+    profiles: ["web"]
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5274}:5274"
+    volumes:
+      - type: bind
+        source: "${CLIENT_CONFIG:-./.build/client/config.json}"
+        target: /usr/share/nginx/html/config.json
+        read_only: true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5274/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Advanced: Ollama (drop-in on the text port) ────────────────────────
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama@sha256:acc1d61dc30525ecbe11c811462637f474ce9b1c8db80321d1cee81e3ffc7894
+    ports:
+      - "127.0.0.1:${TEXT_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -fsS http://127.0.0.1:11434/ >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Advanced: ComfyUI (drop-in on the image port) ──────────────────────
+  comfyui:
+    profiles: ["comfyui"]
+    image: yanwk/comfyui-boot:cu130-slim-v2@sha256:32efcc9d6d5ea9d6b73794cd658c9c09524ba932f7aa105580003c9b69d30bbc
+    ports:
+      - "127.0.0.1:${IMAGE_PORT:-8188}:8188"
+    volumes:
+      - comfyui-models:/workspace/app/models
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -fsS http://127.0.0.1:8188/system_stats >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  aikami-models:
+    name: aikami-models
+  ollama-models:
+    name: aikami-ollama-models
+  comfyui-models:
+    name: aikami-comfyui-models

@@ -1,0 +1,31 @@
+# apps/backend/local-stack/compose.rocm.yaml
+#
+# AMD ROCm backend. No ROCm sd-server image is published upstream, so the
+# image engine inherits the Vulkan image (AC-1b) — ROCm is text-only here.
+# ROCm images are linux/amd64 only; there is no ARM ROCm path.
+#
+# .env:
+#   COMPOSE_FILE=compose.yaml:compose.rocm.yaml
+#   COMPOSE_PROFILES=text,image,voice,stt,web
+#
+# Device mapping: ROCm uses the host's /dev/kfd + /dev/dri (AMD GPU), not
+# the NVIDIA toolkit's gpu capability.
+
+services:
+  text:
+    image: ghcr.io/ggml-org/llama.cpp:server-rocm@sha256:437a9b8c695b7575f225a8018e96f785b044ccfeef94d409950a04e60969ad05
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+
+  image:
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:306a437e2c1ee6c9d0fe3954606f085484edeab4e87b3c531b1169551a59205b
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render

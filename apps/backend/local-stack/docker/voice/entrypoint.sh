@@ -3,12 +3,18 @@
 # Entrypoint for the sherpa-onnx voice container.
 #
 # Starts the Kokoro TTS OpenAI-compatible server (/v1/audio/speech) on
-# $TTS_PORT (6006). If ENABLE_STT=true, additionally downloads a Moonshine
-# STT model and starts an offline STT websocket server on $STT_PORT (6007).
+# $TTS_PORT (8089). If ENABLE_STT=true, additionally starts an offline STT
+# websocket server on $STT_PORT (8087).
 #
-# Models live under /models (bind-mounted from apps/backend/local-stack/models):
-#   /models/tts/kokoro-multi-lang-v1_0  (TTS, auto-downloaded)
-#   /models/stt/sherpa-onnx-moonshine-tiny-en-int8  (STT, auto-downloaded when enabled)
+# Models live under /models (the shared aikami-models volume or the MODELS_PATH
+# bind mount, populated by the model fetcher):
+#   /models/tts/kokoro-multi-lang-v1_0  (TTS)
+#   /models/stt/sherpa-onnx-moonshine-tiny-en-int8  (STT)
+#
+# The fetcher pre-populates the volume with checksum-verified downloads; the
+# auto-download branch below remains as a fallback for the standalone
+# container and the native path, and is skipped when the model directory is
+# already present.
 set -euo pipefail
 
 MODELS_DIR="/models"
@@ -16,11 +22,19 @@ KOKORO_DIR="${KOKORO_DIR:-$MODELS_DIR/tts/kokoro-multi-lang-v1_0}"
 KOKORO_TARBALL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2"
 TTS_MODEL="${TTS_MODEL:-$KOKORO_DIR/model.onnx}"
 TTS_VOICES="${TTS_VOICES:-$KOKORO_DIR/voices.bin}"
-TTS_PORT="${TTS_PORT:-6006}"
-STT_PORT="${STT_PORT:-6007}"
+TTS_PORT="${TTS_PORT:-8089}"
+STT_PORT="${STT_PORT:-8087}"
 ENABLE_STT="${ENABLE_STT:-false}"
 
-mkdir -p "$MODELS_DIR/tts" "$MODELS_DIR/stt"
+# The fetcher pre-populates the shared volume with checksum-verified
+# downloads (and, on the named-volume path, chowns it to the engine uid); the
+# mkdirs below are defensive only — they must not hard-fail when a directory
+# already exists but is unwritable (e.g. a MODELS_PATH bind owned by another
+# uid), or the container would crash-loop.
+mkdir -p "$MODELS_DIR/tts" 2>/dev/null || true
+if [ "$ENABLE_STT" = "true" ]; then
+    mkdir -p "$MODELS_DIR/stt" 2>/dev/null || true
+fi
 
 # ── TTS: skip the download only when the complete model directory exists
 #    (model.onnx + voices.bin + tokens.txt + espeak-ng-data); fetch to a

@@ -13,7 +13,7 @@
 //   8081        Aikami     Firebase emulator (firestore)
 //   8085        Nordclaw   Firebase emulator (pubsub)
 //   8086        Aikami     Firebase emulator (pubsub)
-//   8087-8092   Aikami     Backend services (voice=8089)
+//   8087-8092   Aikami     Backend services (voice=8089, stt=8087)
 //   9099        Nordclaw   Firebase emulator (auth)
 //   9098        Aikami     Firebase emulator (auth)
 //   9199        Nordclaw   Firebase emulator (storage)
@@ -26,7 +26,7 @@
 //   Within each project range, even ports = emulator mode, odd = staging,
 //   offset +4 = production.
 //
-//   Aikami apps:  client=5274  voice=8089  postgres=5433
+//   Aikami apps:  client=5274  voice=8089  stt=8087  postgres=5433
 
 // ── Firebase Emulator (unique for Aikami) ────────────────────────────────
 
@@ -50,6 +50,7 @@ export const EMULATOR_PORTS = {
   site: 5280,
   hub: 5276,
   voice: 8089,
+  stt: 8087,
   image: 8188,
   text: 11434,
   // Local PostgreSQL (C-387). Emulator-only — there is no local Postgres in
@@ -62,6 +63,7 @@ export const STAGING_PORTS = {
   site: 5281,
   hub: 5275,
   voice: 8088,
+  stt: 8086,
   image: 8187,
   text: 11433,
 } as const;
@@ -71,6 +73,7 @@ export const PRODUCTION_PORTS = {
   site: 5282,
   hub: 5279,
   voice: 8092,
+  stt: 8090,
   image: 8193,
   text: 11435,
 } as const;

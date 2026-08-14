@@ -1,0 +1,116 @@
+# .github/workflows/update-compose-digests.yml
+#
+# Weekly digest-pin refresh for the local stack (C-390 Watch Points).
+#
+# Pinned digests go stale: upstream publishes new images and — for
+# stable-diffusion.cpp — force-moves the rolling `master-*` tags, silently
+# swapping the engine underneath an unpinned user. This job re-resolves the
+# current digests for every upstream image the compose topology references
+# and opens a PR bumping them, so the pins stay fresh without un-pinning.
+#
+# The PR is intentionally not auto-merged: a human (or the smoke test in CI)
+# confirms the new digests still satisfy the health probes.
+
+name: Update Compose Digests
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Re-resolve pinned digests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Re-resolve digests and patch compose files
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+
+          # Map of upstream reference -> file:image-key. Keys are the image
+          # tags as written in the compose files (minus digest).
+          declare -A IMAGES=(
+            [ghcr.io/ggml-org/llama.cpp:server]="compose.yaml:compose.cpu.yaml"
+            [ghcr.io/ggml-org/llama.cpp:server-cuda]="compose.cuda.yaml"
+            [ghcr.io/ggml-org/llama.cpp:server-rocm]="compose.rocm.yaml"
+            [ghcr.io/ggml-org/llama.cpp:server-vulkan]="compose.vulkan.yaml"
+            [ghcr.io/ggml-org/llama.cpp:server-intel]="compose.intel.yaml"
+            [ghcr.io/ggml-org/llama.cpp:server-musa]="compose.musa.yaml"
+            [ghcr.io/leejet/stable-diffusion.cpp:master-cuda]="compose.cuda.yaml"
+            [ghcr.io/leejet/stable-diffusion.cpp:master-vulkan]="compose.rocm.yaml:compose.vulkan.yaml"
+            [ghcr.io/leejet/stable-diffusion.cpp:master-musa]="compose.musa.yaml"
+            [ghcr.io/leejet/stable-diffusion.cpp:master-sycl]="compose.intel.yaml"
+            [ollama/ollama:latest]="compose.yaml"
+            [yanwk/comfyui-boot:cu130-slim-v2]="compose.yaml"
+          )
+
+          changed=0
+          for ref in "${!IMAGES[@]}"; do
+            digest=$(docker manifest inspect "$ref" 2>/dev/null \
+              | grep -o '"digest": *"sha256:[a-f0-9]*"' | head -1 | cut -d'"' -f4)
+            if [ -z "$digest" ]; then
+              echo "WARN: could not resolve $ref"
+              continue
+            fi
+            # Full reference with digest, e.g. ref@sha256:...
+            full="${ref}@${digest}"
+            for file in ${IMAGES[$ref]//:/ }; do
+              if grep -q "${ref}@" "$file"; then
+                echo "up-to-date: $ref in $file"
+              elif grep -q "$ref" "$file"; then
+                sed -i "s|${ref}|${full}|g" "$file"
+                echo "bumped: $ref -> $digest in $file"
+                changed=1
+              else
+                echo "WARN: ${ref} not found in $file"
+              fi
+            done
+          done
+
+          if [ "$changed" -eq 0 ]; then
+            echo "no-digest-changes"
+          else
+            echo "digest-changes"
+          fi
+
+      - name: Render smoke test
+        working-directory: apps/backend/local-stack
+        run: |
+          set -euo pipefail
+          for backend in cpu cuda rocm vulkan intel musa; do
+            COMPOSE_FILE="compose.yaml:compose.$backend.yaml" \
+            COMPOSE_PROFILES=text,image,voice,stt,web docker compose config --quiet
+          done
+
+      - name: Create or update the digest-bump PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No digest changes; nothing to PR."
+            exit 0
+          fi
+          branch="chore/compose-digests-$(date +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add apps/backend/local-stack
+          git commit -m "chore(local-stack): refresh pinned compose digests"
+          git push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore(local-stack): refresh pinned compose digests" \
+            --body "Weekly digest-pin refresh for the C-390 local stack. Verify the updated digests still pass the local-stack smoke test before merging." \
+            --label "dependencies" || true
