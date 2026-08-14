@@ -372,11 +372,25 @@ export const runInit = async (options: CliOptions): Promise<number> => {
   }
 
   // ── Optional fetcher chaining (--fetch, off by default) ───────────────
+  // Chain C-390's fetcher against EXACTLY the planned models: same manifest
+  // path, the planned modalities as profiles, the licences the plan already
+  // surfaced as accepted (use-restricted entries were shown in the plan),
+  // and the plan's manifestId list. The fetcher downloads only these ids —
+  // never the default profiles or the full manifest.
   if (options.fetch) {
     // biome-ignore lint/suspicious/noConsole: CLI output
     console.log('Running the model fetcher (--fetch)...');
     const { run } = await import('./fetch_models.ts');
-    return await run({});
+    return await run({
+      manifestPath: options.manifestPath,
+      profiles: plan.modalities.join(','),
+      acceptLicenses:
+        plan.models
+          .filter((model) => model.requiresAcknowledgement)
+          .map((model) => model.license)
+          .join(',') || undefined,
+      entryIds: plan.models.map((model) => model.manifestId),
+    });
   }
 
   return 0;
@@ -407,10 +421,15 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       case '--no-color':
         options.noColor = true;
         break;
-      case '--backend':
-        options.backend = next() as StackBackend;
+      case '--backend': {
+        // `auto` means “decide from the detected profile” — it must not
+        // reach planning as a literal backend because selectBackend() and
+        // renderEnv() cannot resolve it. Map it to undefined (no override).
+        const raw = next();
+        options.backend = raw === undefined || raw === 'auto' ? undefined : (raw as StackBackend);
         i += 1;
         break;
+      }
       case '--modalities':
         options.modalities = (next() ?? '')
           .split(',')

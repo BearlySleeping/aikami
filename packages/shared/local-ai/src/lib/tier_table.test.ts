@@ -14,6 +14,20 @@ describe('TIER_TABLE', () => {
   test('starts at cpu with zero usable bytes', () => {
     expect(tierForUsable(0)).toBe('cpu');
   });
+
+  const Gib = 1024 * 1024 * 1024;
+
+  test('exactly 4 GiB usable reaches the 8gb tier', () => {
+    expect(tierForUsable(4 * Gib)).toBe('8gb');
+  });
+
+  test('exactly 10 GiB usable reaches the 16gb tier', () => {
+    expect(tierForUsable(10 * Gib)).toBe('16gb');
+  });
+
+  test('one byte below 10 GiB remains in the 8gb tier', () => {
+    expect(tierForUsable(10 * Gib - 1)).toBe('8gb');
+  });
 });
 
 describe('usableBytesForProfile', () => {
@@ -44,6 +58,18 @@ describe('usableBytesForProfile', () => {
       ramMb: 16384,
       unifiedMemory: false,
     });
+    expect(usable).toBe(Math.floor(16384 * 1024 * 1024 * 0.5));
+  });
+
+  test('NVIDIA profile with vramMb 0 falls back to unified-memory sizing on system RAM', () => {
+    const usable = usableBytesForProfile({
+      gpuVendor: 'nvidia',
+      vramMb: 0,
+      ramMb: 16384,
+      unifiedMemory: false,
+    });
+    // A 0-MiB VRAM report (probe failed / driverless) must not size models
+    // against 0 usable bytes — fall back to the RAM calculation.
     expect(usable).toBe(Math.floor(16384 * 1024 * 1024 * 0.5));
   });
 });

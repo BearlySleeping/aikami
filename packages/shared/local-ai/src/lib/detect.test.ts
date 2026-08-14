@@ -147,7 +147,9 @@ describe('Apple detection (AC-4)', () => {
       table: {
         commands: [
           { command: 'sysctl', args: ['hw.memsize'], result: ok('17179869184\n') },
-          { command: 'sysctl', args: ['hw.ncpu'], result: ok('10\n') },
+          // -n prints the value, but a host may echo the key anyway — the
+          // fixture proves detect() extracts digits instead of parsing the line.
+          { command: 'sysctl', args: ['-n', 'hw.ncpu'], result: ok('hw.ncpu: 10\n') },
         ],
         files: [],
         statfs: [{ path: '.', result: { freeBytes: 1 << 40 } }],
@@ -176,7 +178,16 @@ describe('Windows detection', () => {
             ],
             result: ok('17179869184\n'),
           },
-          { command: 'nproc', args: [], result: ok('16\n') },
+          // win32 cores come from PowerShell, not nproc (which doesn't exist).
+          {
+            command: 'powershell',
+            args: [
+              '-NoProfile',
+              '-Command',
+              '(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors',
+            ],
+            result: ok('16\n'),
+          },
         ],
         files: [],
         statfs: [{ path: '.', result: { freeBytes: 1 << 40 } }],

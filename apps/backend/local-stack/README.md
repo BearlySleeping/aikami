@@ -5,9 +5,14 @@ speech-to-text engines plus an optional web client — with **two commands and
 no Python, no CUDA toolkit install, no model hunting, and no source build**.
 
 ```
-cp .env.example .env
+bun run stack init
 docker compose up -d
 ```
+
+`stack init` detects your hardware, picks a backend and model tier, shows
+the full download plan, and writes `.env` — it is the only way `.env` is
+created (there is no `.env.example` copy step, so nothing ever asks you to
+overwrite a hand-edited file).
 
 This is the publishable topology (C-390): one `compose.yaml` whose
 **profiles select modalities**, and whose **override files select the
@@ -88,7 +93,9 @@ The wizard (C-391) is a thin CLI over the portable planning core in
   download, free disk, licences, and bound ports are printed before anything
   is written. Declining writes nothing; a re-run diffs the existing `.env` and
   requires confirmation before overwriting (the old file is backed up).
-- **Flags** — `--yes`, `--backend <auto|cpu|cuda|rocm|vulkan|intel|musa|metal>`,
+- **Flags** — `--yes`, `--backend <auto|cpu|cuda|rocm|vulkan|intel|musa|metal>`
+  (default `auto` = detect from the hardware profile, exactly like omitting the
+  flag; only an explicit non-auto value overrides planning),
   `--modalities <a,b,c>`, `--tier <auto|cpu|8gb|16gb>`, `--json` (full profile
   + plan as a schema-valid document), `--fetch` (chain C-390's fetcher), and
   `--env-path` / `--manifest-path` for scripts.

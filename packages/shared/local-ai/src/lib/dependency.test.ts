@@ -15,10 +15,14 @@ const PACKAGE_ROOT = join(import.meta.dir, '..', '..');
 const SRC_DIR = join(PACKAGE_ROOT, 'src');
 
 const NODE_BUILTIN_PATTERNS = [
-  /from\s+['"]node:child_process['"]/,
-  /from\s+['"]node:fs['"]/,
-  /from\s+['"]node:os['"]/,
-  /from\s+['"]node:path['"]/,
+  // Match the builtin and every subpath (node:fs, node:fs/promises, ...)
+  // and the Bun runtime module (bun, bun:test) — anything that would make
+  // the core non-portable outside Bun/Node.
+  /from\s+['"]node:child_process(?:['"]|\/)/,
+  /from\s+['"]node:fs(?:['"]|\/)/,
+  /from\s+['"]node:os(?:['"]|\/)/,
+  /from\s+['"]node:path(?:['"]|\/)/,
+  /from\s+['"]bun(?:['"]|:)/,
 ];
 
 const listTsFiles = (dir: string): string[] =>
@@ -46,7 +50,12 @@ describe('AC-0 — package boundary', () => {
   });
 
   test('no source file imports Node builtins in its public graph', () => {
-    const sources = listTsFiles(SRC_DIR).filter((file) => !file.endsWith('.test.ts'));
+    // Test-support files (unit tests and the shared contract-suite harness)
+    // are excluded: they legitimately import bun:test and are never part of
+    // the public graph shipped to Tauri/Node consumers.
+    const sources = listTsFiles(SRC_DIR).filter(
+      (file) => !file.endsWith('.test.ts') && !file.endsWith('.contract_suite.ts'),
+    );
     for (const file of sources) {
       const source = readFileSync(file, 'utf8');
       for (const pattern of NODE_BUILTIN_PATTERNS) {

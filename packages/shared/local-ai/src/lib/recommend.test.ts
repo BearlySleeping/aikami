@@ -179,6 +179,41 @@ describe('AC-3 — tier selection respects usable VRAM, not total', () => {
   });
 });
 
+describe('tierOverride — explicit tier pinning (--tier)', () => {
+  test('tierOverride cpu on a 24 GB VRAM profile selects the CPU-tier model without a nominal-tier warning', () => {
+    const plan = recommend({
+      profile: profile({
+        gpu: { vendor: 'nvidia', name: 'RTX 4090', vramMb: 24576, unifiedMemory: false },
+        gpuPassthroughReady: true,
+      }),
+      modalities: ['text'],
+      manifest: MANIFEST,
+      tierOverride: 'cpu',
+    });
+    // 24 GB is nominally 16gb, but the override pins selection to the cpu
+    // tier (Qwen 1.5B) and suppresses the top-tier fallback warning.
+    expect(pickText(plan)).toBe('text-qwen2.5-1.5b-instruct-q4km');
+    expect(plan.warnings.some((w) => w.includes('nominal') || w.includes('tight fit'))).toBe(false);
+  });
+});
+
+describe('backendOverride metal on a non-macOS host', () => {
+  test('emits the expected warning while setting nativeEngines to true', () => {
+    const plan = recommend({
+      profile: profile({
+        gpu: { vendor: 'nvidia', name: 'RTX 4070', vramMb: 12288, unifiedMemory: false },
+        gpuPassthroughReady: true,
+      }),
+      modalities: ['text'],
+      manifest: MANIFEST,
+      backendOverride: 'metal',
+    });
+    expect(plan.backend).toBe('metal');
+    expect(plan.nativeEngines).toBe(true);
+    expect(plan.warnings.some((w) => w.includes('--backend metal requested'))).toBe(true);
+  });
+});
+
 describe('AC-2 — NVIDIA detection selects the matching CUDA image', () => {
   test('CUDA 12 driver → backend cuda, cudaMajor 12', () => {
     const plan = recommend({

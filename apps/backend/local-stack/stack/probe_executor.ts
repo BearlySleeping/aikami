@@ -57,7 +57,10 @@ const runProbe = (
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      // The close handler resolves with the timeout reason.
+      // Settle immediately — do not wait for the close event, which may lag
+      // behind the kill (or never fire if the child is a zombie). The settled
+      // guard in the close handler below makes this the single resolution.
+      settle({ ok: false, reason: 'timeout', detail: `killed by SIGKILL after ${timeoutMs}ms` });
     }, timeoutMs);
 
     child.stdout.setEncoding('utf8');

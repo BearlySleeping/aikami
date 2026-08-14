@@ -127,123 +127,153 @@ export const detectHardware = async (options: DetectOptions): Promise<HardwarePr
     unifiedMemory = true;
   }
 
-  // ── NVIDIA ────────────────────────────────────────────────────────────
-  const nvidia = await probe(executor, 'nvidia-smi', [
-    '--query-gpu=name,memory.total,driver_version',
-    '--format=csv,noheader',
-  ]);
-  if (nvidia.ok) {
-    const parsed = parseNvidiaSmi(nvidia.stdout);
-    if (parsed.vramMb !== undefined || parsed.name !== undefined) {
-      gpuVendor = 'nvidia';
-      gpuName = parsed.name;
-      vramMb = parsed.vramMb;
-      cudaMajor = parsed.cudaMajor;
-    }
-  }
-
-  // ── AMD ───────────────────────────────────────────────────────────────
-  if (gpuVendor === 'none') {
-    const rocm = await probe(executor, 'rocm-smi', ['--showmeminfo', 'vram']);
-    if (rocm.ok && rocm.stdout.includes('vram')) {
-      gpuVendor = 'amd';
-      const vramMatch = rocm.stdout.match(/vram\s*\(.*\)\s*:\s*(\d+)/i);
-      if (vramMatch) {
-        vramMb = Number(vramMatch[1]);
-      }
-    }
-  }
-
-  // ── Vulkan (Intel Arc / iGPU / unknown GPU) ───────────────────────────
-  if (gpuVendor === 'none') {
-    const vulkan = await probe(executor, 'vulkaninfo', ['--summary']);
-    if (vulkan.ok) {
-      const summary = vulkan.stdout.toLowerCase();
-      if (summary.includes('nvidia')) {
-        gpuVendor = 'nvidia';
-        unifiedMemory = false;
-      } else if (summary.includes('amd') || summary.includes('advanced micro devices')) {
-        gpuVendor = 'amd';
-      } else if (summary.includes('intel')) {
-        gpuVendor = 'intel';
-        unifiedMemory = true;
-      } else {
-        // A generic Vulkan device with no vendor match — treat as intel/iGPU
-        // (universal fallback) rather than assuming a dGPU.
-        gpuVendor = 'intel';
-        unifiedMemory = true;
-      }
-    }
-  }
-
-  // ── RAM ───────────────────────────────────────────────────────────────
-  if (platform === 'linux') {
-    const meminfo = await executor.readTextFile('/proc/meminfo');
-    if (meminfo.ok) {
-      ramMb = parseProcMeminfo(meminfo.stdout);
-    }
-  } else if (platform === 'darwin') {
-    const memsize = await probe(executor, 'sysctl', ['hw.memsize']);
-    if (memsize.ok) {
-      ramMb = parseSysctlMemsize(memsize.stdout);
-    }
-  } else {
-    // win32: prefer PowerShell CIM; wmic is deprecated on Windows 11.
-    const cim = await probe(executor, 'powershell', [
-      '-NoProfile',
-      '-Command',
-      '(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory',
-    ]);
-    if (cim.ok) {
-      ramMb = parseWinTotalMemory(cim.stdout);
-    } else {
-      const wmic = await probe(executor, 'wmic', [
-        'ComputerSystem',
-        'get',
-        'TotalPhysicalMemory',
-        '/value',
-      ]);
-      if (wmic.ok) {
-        ramMb = parseWinTotalMemory(wmic.stdout);
-      }
-    }
-  }
-
-  // ── Cores ─────────────────────────────────────────────────────────────
-  if (platform === 'linux' || platform === 'win32') {
-    const nproc = await probe(executor, 'nproc', []);
-    if (nproc.ok) {
-      cores = Number.parseInt(nproc.stdout.trim(), 10) || 0;
-    }
-  } else {
-    const ncpu = await probe(executor, 'sysctl', ['hw.ncpu']);
-    if (ncpu.ok) {
-      cores = Number.parseInt(ncpu.stdout.trim(), 10) || 0;
-    }
-  }
-
-  // ── Disk (volume backing the target path) ─────────────────────────────
   let freeDiskBytes = 0;
-  const statfs = await executor.statfs(diskPath ?? '.');
-  if ('freeBytes' in statfs) {
-    freeDiskBytes = statfs.freeBytes;
-  }
 
-  // ── Container runtime + GPU passthrough ───────────────────────────────
-  const docker = await probe(executor, 'docker', ['info']);
-  const podman = await probe(executor, 'podman', ['info']);
-  if (docker.ok) {
-    containerRuntime = 'docker';
-    gpuPassthroughReady = docker.stdout.toLowerCase().includes('nvidia');
-  } else if (podman.ok) {
-    containerRuntime = 'podman';
-    gpuPassthroughReady = podman.stdout.toLowerCase().includes('nvidia');
-  }
+  // Independent probe groups run concurrently: GPU vendor detection (a
+  // sequential fallback chain — AMD/Vulkan only probed when nothing matched),
+  // RAM, cores, disk, and the container runtime. The runtime probe
+  // short-circuits: podman is only probed when the docker probe fails.
+  await Promise.all([
+    (async () => {
+      // ── NVIDIA ────────────────────────────────────────────────────────
+      const nvidia = await probe(executor, 'nvidia-smi', [
+        '--query-gpu=name,memory.total,driver_version',
+        '--format=csv,noheader',
+      ]);
+      if (nvidia.ok) {
+        const parsed = parseNvidiaSmi(nvidia.stdout);
+        if (parsed.vramMb !== undefined || parsed.name !== undefined) {
+          gpuVendor = 'nvidia';
+          gpuName = parsed.name;
+          vramMb = parsed.vramMb;
+          cudaMajor = parsed.cudaMajor;
+        }
+      }
 
-  if (gpuVendor === 'nvidia' && !gpuPassthroughReady && vramMb !== undefined) {
-    // AC-12: GPU present but toolkit absent is caught in recommend();
-    // detection itself stays factual (the profile carries no warnings).
-  }
+      // ── AMD ───────────────────────────────────────────────────────────
+      if (gpuVendor === 'none') {
+        const rocm = await probe(executor, 'rocm-smi', ['--showmeminfo', 'vram']);
+        if (rocm.ok && rocm.stdout.includes('vram')) {
+          gpuVendor = 'amd';
+          const vramMatch = rocm.stdout.match(/vram\s*\(.*\)\s*:\s*(\d+)/i);
+          if (vramMatch) {
+            vramMb = Number(vramMatch[1]);
+          }
+        }
+      }
+
+      // ── Vulkan (Intel Arc / iGPU / unknown GPU) ───────────────────────
+      if (gpuVendor === 'none') {
+        const vulkan = await probe(executor, 'vulkaninfo', ['--summary']);
+        if (vulkan.ok) {
+          const summary = vulkan.stdout.toLowerCase();
+          if (summary.includes('nvidia')) {
+            gpuVendor = 'nvidia';
+            unifiedMemory = false;
+          } else if (summary.includes('amd') || summary.includes('advanced micro devices')) {
+            gpuVendor = 'amd';
+          } else if (summary.includes('intel')) {
+            gpuVendor = 'intel';
+            unifiedMemory = true;
+          } else {
+            // A generic Vulkan device with no vendor match — treat as intel/iGPU
+            // (universal fallback) rather than assuming a dGPU.
+            gpuVendor = 'intel';
+            unifiedMemory = true;
+          }
+        }
+      }
+    })(),
+
+    (async () => {
+      // ── RAM ───────────────────────────────────────────────────────────
+      if (platform === 'linux') {
+        const meminfo = await executor.readTextFile('/proc/meminfo');
+        if (meminfo.ok) {
+          ramMb = parseProcMeminfo(meminfo.stdout);
+        }
+      } else if (platform === 'darwin') {
+        const memsize = await probe(executor, 'sysctl', ['hw.memsize']);
+        if (memsize.ok) {
+          ramMb = parseSysctlMemsize(memsize.stdout);
+        }
+      } else {
+        // win32: prefer PowerShell CIM; wmic is deprecated on Windows 11.
+        const cim = await probe(executor, 'powershell', [
+          '-NoProfile',
+          '-Command',
+          '(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory',
+        ]);
+        if (cim.ok) {
+          ramMb = parseWinTotalMemory(cim.stdout);
+        } else {
+          const wmic = await probe(executor, 'wmic', [
+            'ComputerSystem',
+            'get',
+            'TotalPhysicalMemory',
+            '/value',
+          ]);
+          if (wmic.ok) {
+            ramMb = parseWinTotalMemory(wmic.stdout);
+          }
+        }
+      }
+    })(),
+
+    (async () => {
+      // ── Cores ─────────────────────────────────────────────────────────
+      if (platform === 'linux') {
+        const nproc = await probe(executor, 'nproc', []);
+        if (nproc.ok) {
+          const digits = nproc.stdout.match(/\d+/)?.[0];
+          cores = digits ? Number.parseInt(digits, 10) || 0 : 0;
+        }
+      } else if (platform === 'darwin') {
+        // `-n` prints just the value; some hosts still echo the key —
+        // extract digits, never parse the whole line.
+        const ncpu = await probe(executor, 'sysctl', ['-n', 'hw.ncpu']);
+        if (ncpu.ok) {
+          const digits = ncpu.stdout.match(/\d+/)?.[0];
+          cores = digits ? Number.parseInt(digits, 10) || 0 : 0;
+        }
+      } else {
+        // win32: `nproc` does not exist — use PowerShell's CIM query.
+        const cpuCount = await probe(executor, 'powershell', [
+          '-NoProfile',
+          '-Command',
+          '(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors',
+        ]);
+        if (cpuCount.ok) {
+          const digits = cpuCount.stdout.match(/\d+/)?.[0];
+          cores = digits ? Number.parseInt(digits, 10) || 0 : 0;
+        }
+      }
+    })(),
+
+    (async () => {
+      // ── Disk (volume backing the target path) ─────────────────────────
+      const statfs = await executor.statfs(diskPath ?? '.');
+      if ('freeBytes' in statfs) {
+        freeDiskBytes = statfs.freeBytes;
+      }
+    })(),
+
+    (async () => {
+      // ── Container runtime + GPU passthrough ───────────────────────────
+      // podman is only probed when docker is unavailable (short-circuit).
+      const docker = await probe(executor, 'docker', ['info']);
+      if (docker.ok) {
+        containerRuntime = 'docker';
+        gpuPassthroughReady = docker.stdout.toLowerCase().includes('nvidia');
+      } else {
+        const podman = await probe(executor, 'podman', ['info']);
+        if (podman.ok) {
+          containerRuntime = 'podman';
+          gpuPassthroughReady = podman.stdout.toLowerCase().includes('nvidia');
+        }
+      }
+    })(),
+  ]);
 
   return {
     platform,

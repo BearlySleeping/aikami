@@ -34,7 +34,7 @@ const MANIFEST = JSON.stringify({
       file: 'Qwen2.5-1.5B-Instruct-Q4_K_M.gguf',
       targetPath: 'text/qwen2.5-1.5b-instruct-q4_k_m.gguf',
       bytes: 986_048_768,
-      sha256: 'a',
+      sha256: 'a'.repeat(64),
     },
     {
       id: 'image-sd15-pruned-q4_0',
@@ -48,7 +48,7 @@ const MANIFEST = JSON.stringify({
       file: 'stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf',
       targetPath: 'image/stable-diffusion-v1-5-pruned-emaonly-q4_0.gguf',
       bytes: 1_566_768_416,
-      sha256: 'b',
+      sha256: 'b'.repeat(64),
     },
     {
       id: 'tts-kokoro-82m',
@@ -60,7 +60,7 @@ const MANIFEST = JSON.stringify({
       url: 'https://example.com/kokoro.tar.bz2',
       targetPath: 'tts/kokoro-multi-lang-v1_0',
       bytes: 349_418_188,
-      sha256: 'c',
+      sha256: 'c'.repeat(64),
     },
   ],
 });
@@ -82,7 +82,7 @@ const HUGE_MANIFEST = JSON.stringify({
       targetPath: 'text/m.gguf',
       // 2^53 bytes — larger than free space on any real volume.
       bytes: 9_007_199_254_740_992,
-      sha256: 'a',
+      sha256: 'a'.repeat(64),
     },
   ],
 });
@@ -131,8 +131,27 @@ describe('AC-6 — insufficient disk fails before writing', () => {
 describe('AC-7 — plan is shown before anything is written', () => {
   test('--yes writes the .env with the full plan visible', async () => {
     const base = await baseOptions();
-    const code = await runInit(base);
+    const out: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    const stub = (chunk: string): boolean => {
+      out.push(String(chunk));
+      return true;
+    };
+    process.stdout.write = stub as typeof process.stdout.write;
+    let code: number;
+    try {
+      code = await runInit(base);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
     expect(code).toBe(0);
+    // The rendered plan must be printed before the write: its heading and
+    // every selected model id appear on stdout (AC-7 plan-first).
+    const rendered = out.join('');
+    expect(rendered).toContain('Aikami local stack — plan');
+    expect(rendered).toContain('text-qwen2.5-1.5b-instruct-q4km');
+    expect(rendered).toContain('image-sd15-pruned-q4_0');
+    expect(rendered).toContain('tts-kokoro-82m');
     const content = await readFile(base.envPath, 'utf8');
     expect(content).toContain('COMPOSE_PROFILES=text,image,voice,stt');
     expect(content).toContain('COMPOSE_FILE=');
@@ -198,7 +217,12 @@ describe('AC-11 — platform-correct separator', () => {
       platform: 'linux',
       arch: 'x64',
     });
-    const plan = recommend({ profile, modalities: ['text'], manifest });
+    const plan = recommend({
+      profile,
+      modalities: ['text'],
+      manifest,
+      backendOverride: 'cpu',
+    });
 
     const linuxEnv = renderEnv({ profile, plan, manifest });
     expect(linuxEnv).toContain('COMPOSE_FILE=compose.yaml:compose.cpu.yaml');

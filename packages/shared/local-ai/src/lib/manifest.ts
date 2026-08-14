@@ -27,7 +27,11 @@ export const parseManifest = (raw: string): ModelManifest => {
   }
   const checked = Value.Check(ModelManifestSchema, parsed);
   if (!checked) {
-    throw new Error('manifest does not match the C-390 models.manifest.json schema');
+    // TypeBox 1.3.12 reports errors as an array; the first error's
+    // instancePath identifies the failing field (e.g. /entries/0/sha256).
+    const firstError = [...Value.Errors(ModelManifestSchema, parsed)][0];
+    const detail = firstError ? ` (${firstError.instancePath || '/'}: ${firstError.message})` : '';
+    throw new Error(`manifest does not match the C-390 models.manifest.json schema${detail}`);
   }
   return parsed as ModelManifest;
 };

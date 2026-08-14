@@ -34,6 +34,14 @@ export type FixtureTable = {
 };
 
 /**
+ * Structural argument comparison: same length, same value per position.
+ * join(' ') is ambiguous (["a b", "c"] and ["a", "b c"] collide), so
+ * compare the vectors element-wise.
+ */
+const sameArgs = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+
+/**
  * Builds a fixture-replay executor. Every probe returns the matching fixture
  * result; an unmatched probe resolves to a not-found ProbeResult so a
  * missing fixture behaves like a missing binary rather than throwing.
@@ -55,7 +63,7 @@ export const createFixtureExecutor = (options: {
   return {
     async run(command, args) {
       const fixture = table.commands.find(
-        (entry) => entry.command === command && (entry.args ?? []).join(' ') === args.join(' '),
+        (entry) => entry.command === command && sameArgs(entry.args ?? [], [...args]),
       );
       return fixture?.result ?? fallback;
     },

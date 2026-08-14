@@ -422,6 +422,8 @@ export const run = async (options: {
   profiles?: string;
   acceptLicenses?: string;
   entryId?: string;
+  /** Explicit entry ids to fetch — limits the run to exactly these planned models. */
+  entryIds?: readonly string[];
   onProgress?: (options: { entryId: string; received: number; expected: number }) => void;
 }): Promise<number> => {
   const manifestPath = options.manifestPath ?? join(import.meta.dir, 'models.manifest.json');
@@ -474,7 +476,9 @@ export const run = async (options: {
 
   const selectedEntries = manifest.entries.filter(
     (entry) =>
-      enabledModalities.has(entry.modality) && (!options.entryId || entry.id === options.entryId),
+      enabledModalities.has(entry.modality) &&
+      (!options.entryId || entry.id === options.entryId) &&
+      (!options.entryIds || options.entryIds.includes(entry.id)),
   );
 
   if (selectedEntries.length === 0) {

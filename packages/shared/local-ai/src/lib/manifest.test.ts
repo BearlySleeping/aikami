@@ -18,7 +18,7 @@ const MANIFEST_JSON = JSON.stringify({
       file: 'model.gguf',
       targetPath: 'text/qwen.gguf',
       bytes: 986048768,
-      sha256: 'abc',
+      sha256: 'a'.repeat(64),
     },
   ],
 });
@@ -43,6 +43,177 @@ describe('parseManifest', () => {
     expect(() =>
       parseManifest(JSON.stringify({ schemaVersion: 1, entries: [{ id: 'x' }] })),
     ).toThrow(/does not match/);
+  });
+
+  test('rejects a file entry without a source (no url and no repo coordinates)', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'text-no-source',
+              modality: 'text',
+              tier: 'cpu',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'file',
+              targetPath: 'text/m.gguf',
+              bytes: 100,
+              sha256: 'a'.repeat(64),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('rejects a file entry with partial repo coordinates', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'text-partial-repo',
+              modality: 'text',
+              tier: 'cpu',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'file',
+              repo: 'owner/repo',
+              revision: 'rev',
+              targetPath: 'text/m.gguf',
+              bytes: 100,
+              sha256: 'a'.repeat(64),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('rejects an archive entry without a url', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'voice-no-url',
+              modality: 'tts',
+              tier: 'any',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'archive',
+              targetPath: 'tts/kokoro',
+              bytes: 100,
+              sha256: 'a'.repeat(64),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('rejects negative bytes', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'text-negative-bytes',
+              modality: 'text',
+              tier: 'cpu',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'file',
+              repo: 'owner/repo',
+              revision: 'rev',
+              file: 'm.gguf',
+              targetPath: 'text/m.gguf',
+              bytes: -1,
+              sha256: 'a'.repeat(64),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('rejects a non-integer byte count', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'text-float-bytes',
+              modality: 'text',
+              tier: 'cpu',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'file',
+              repo: 'owner/repo',
+              revision: 'rev',
+              file: 'm.gguf',
+              targetPath: 'text/m.gguf',
+              bytes: 1.5,
+              sha256: 'a'.repeat(64),
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('rejects a sha256 that is not 64 hex characters', () => {
+    expect(() =>
+      parseManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          entries: [
+            {
+              id: 'text-bad-sha',
+              modality: 'text',
+              tier: 'cpu',
+              license: 'Apache-2.0',
+              requiresAcknowledgement: false,
+              kind: 'file',
+              repo: 'owner/repo',
+              revision: 'rev',
+              file: 'm.gguf',
+              targetPath: 'text/m.gguf',
+              bytes: 100,
+              sha256: 'zz-not-hex',
+            },
+          ],
+        }),
+      ),
+    ).toThrow(/does not match/);
+  });
+
+  test('accepts a file entry with a direct url (no repo coordinates)', () => {
+    const raw = JSON.stringify({
+      schemaVersion: 1,
+      entries: [
+        {
+          id: 'text-url-only',
+          modality: 'text',
+          tier: 'cpu',
+          license: 'Apache-2.0',
+          requiresAcknowledgement: false,
+          kind: 'file',
+          url: 'https://example.com/model.gguf',
+          targetPath: 'text/m.gguf',
+          bytes: 100,
+          sha256: 'a'.repeat(64),
+        },
+      ],
+    });
+    const manifest = parseManifest(raw);
+    expect(manifest.entries[0]?.id).toBe('text-url-only');
   });
 });
 

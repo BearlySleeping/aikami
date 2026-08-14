@@ -48,6 +48,10 @@ const MANIFEST_MODALITY: Readonly<Record<StackModality, string | undefined>> = {
 
 const TIER_ORDER: readonly Extract<TierLabel, 'cpu' | '8gb' | '16gb'>[] = ['16gb', '8gb', 'cpu'];
 
+/** Warning text when no container runtime was detected. */
+const NO_RUNTIME_WARNING =
+  'No container runtime detected (docker or podman). The stack needs one to run engines; install Docker before `docker compose up`.';
+
 /** Converts a size to a human "X.X GB" string for rationale lines. */
 const formatGb = (bytes: number): string => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 
@@ -81,9 +85,17 @@ const selectEntry = (options: {
   }
 
   // Any-tier entries (tiny voice/stt archives) are always eligible and are
-  // the natural pick for their modality when nothing bigger fits.
+  // the natural pick for their modality when nothing bigger fits. A sole
+  // oversized any-tier entry must warn exactly like the fallback path below,
+  // so the user learns about the tight fit before the download starts.
   const anyEntry = entries.find((entry) => entry.tier === 'any');
   if (anyEntry && (entries.length === 1 || anyEntry.bytes <= usableBytes)) {
+    if (anyEntry.bytes > usableBytes) {
+      return {
+        entry: anyEntry,
+        warning: `${options.profileName} model ${anyEntry.id} (${formatGb(anyEntry.bytes)}) does not comfortably fit ${formatGb(usableBytes)} usable — selecting it anyway as the smallest available.`,
+      };
+    }
     return { entry: anyEntry };
   }
 
@@ -126,6 +138,16 @@ const selectBackend = (options: {
   const { profile, override } = options;
   const warnings: string[] = [];
 
+  // The container-runtime warning applies to EVERY container-based backend
+  // (cpu/cuda/rocm/vulkan/intel/musa), not only CPU-only profiles: a CUDA
+  // pick with no docker/podman would fail at `up` just the same. Metal is
+  // the native runtime and never needs the warning.
+  const warnIfNoRuntime = (backend: StackPlan['backend']): void => {
+    if (backend !== 'metal' && profile.containerRuntime === 'none') {
+      warnings.push(NO_RUNTIME_WARNING);
+    }
+  };
+
   if (override) {
     if (override === 'cuda' && profile.gpu.vendor !== 'nvidia' && profile.platform !== 'win32') {
       warnings.push(
@@ -137,6 +159,7 @@ const selectBackend = (options: {
         '--backend metal requested on a non-macOS host — native launchers will not run here.',
       );
     }
+    warnIfNoRuntime(override);
     return { backend: override, warnings };
   }
 
@@ -144,30 +167,34 @@ const selectBackend = (options: {
     return { backend: 'metal', warnings };
   }
 
+  let backend: StackPlan['backend'];
   switch (profile.gpu.vendor) {
     case 'nvidia': {
       if (!profile.gpuPassthroughReady) {
         warnings.push(
           'NVIDIA GPU detected but the NVIDIA Container Toolkit is not wired into the container runtime — GPU containers would fail at `up`. Falling back to CPU. Install the toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html',
         );
-        return { backend: 'cpu', warnings };
+        backend = 'cpu';
+      } else {
+        backend = 'cuda';
       }
-      return { backend: 'cuda', warnings };
+      break;
     }
     case 'amd':
-      return { backend: 'rocm', warnings };
+      backend = 'rocm';
+      break;
     case 'intel':
-      return { backend: 'vulkan', warnings };
+      backend = 'vulkan';
+      break;
     case 'apple':
-      return { backend: 'metal', warnings };
+      backend = 'metal';
+      break;
     case 'none':
-      if (profile.containerRuntime === 'none') {
-        warnings.push(
-          'No container runtime detected (docker or podman). The stack needs one to run engines; install Docker before `docker compose up`.',
-        );
-      }
-      return { backend: 'cpu', warnings };
+      backend = 'cpu';
+      break;
   }
+  warnIfNoRuntime(backend);
+  return { backend, warnings };
 };
 
 /**

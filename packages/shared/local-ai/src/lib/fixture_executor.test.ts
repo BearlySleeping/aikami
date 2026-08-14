@@ -106,28 +106,37 @@ describe('AC-0c — shared contract suite against the fixture adapter', () => {
               result: { ok: false, reason: 'not-found' },
             },
             {
-              command: 'sh',
-              args: ['-c', 'echo boom >&2; exit 3'],
+              command: process.execPath,
+              args: ['-e', 'console.error("boom"); process.exit(3)'],
               result: { ok: false, reason: 'failed', detail: 'boom' },
             },
             {
-              command: 'sh',
-              args: ['-c', 'sleep 5'],
+              command: process.execPath,
+              args: ['-e', 'setTimeout(() => {}, 5000)'],
               result: { ok: false, reason: 'timeout', detail: 'killed' },
             },
             {
-              command: 'printf',
-              args: ['%s', '  RTX 4090, 24564 MiB, 570.00  \nSecond line  \n'],
+              command: process.execPath,
+              args: [
+                '-e',
+                'process.stdout.write(process.argv[1])',
+                '  RTX 4090, 24564 MiB, 570.00  \nSecond line  \n',
+              ],
               result: ok('  RTX 4090, 24564 MiB, 570.00  \nSecond line  \n'),
             },
           ],
           files: [
-            { path: '/fixture/untouched.txt', result: ok('content\n') },
-            { path: '/proc/1/mem', result: { ok: false, reason: 'denied' } },
+            {
+              // The contract suite reads its own file for the
+              // readTextFile case — replay it from a fixture.
+              path: `${import.meta.dir}/probe_executor.contract_suite.ts`,
+              result: ok('content\n'),
+            },
+            { path: '/fixture/denied.txt', result: { ok: false, reason: 'denied' } },
           ],
           statfs: [{ path: '/fixture', result: { freeBytes: 123 } }],
         },
       }),
-    canSpawn: false,
+    permissionDeniedPath: '/fixture/denied.txt',
   });
 });

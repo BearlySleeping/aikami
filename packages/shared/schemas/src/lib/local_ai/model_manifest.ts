@@ -20,23 +20,47 @@ export const ManifestEntryTierSchema = Type.Union([
   Type.Literal('any'),
 ]);
 
-export const ModelManifestEntrySchema = Type.Object({
-  id: Type.String(),
-  modality: ManifestEntryModalitySchema,
-  tier: ManifestEntryTierSchema,
-  license: Type.String(),
-  requiresAcknowledgement: Type.Boolean(),
-  kind: Type.Union([Type.Literal('file'), Type.Literal('archive')]),
-  /** file kind: HuggingFace repo (repo/revision/file) or direct url override */
-  repo: Type.Optional(Type.String()),
-  revision: Type.Optional(Type.String()),
-  file: Type.Optional(Type.String()),
-  /** archive kind: direct download url */
-  url: Type.Optional(Type.String()),
-  targetPath: Type.String(),
-  bytes: Type.Number(),
-  sha256: Type.String(),
-});
+/**
+ * Source discriminated by kind. A `file` entry must declare either a direct
+ * `url` or the full HuggingFace repo coordinates (repo + revision + file);
+ * an `archive` entry must declare a direct `url`. Extra properties are
+ * tolerated (e.g. a file with both url and repo coords), but a source that
+ * satisfies none of the variants fails validation.
+ */
+const ManifestEntrySourceSchema = Type.Union([
+  Type.Object({
+    kind: Type.Literal('file'),
+    /** file kind: HuggingFace repo (repo/revision/file) or direct url override */
+    repo: Type.String(),
+    revision: Type.String(),
+    file: Type.String(),
+    url: Type.Optional(Type.String()),
+  }),
+  Type.Object({
+    kind: Type.Literal('file'),
+    /** file kind: direct url override */
+    url: Type.String(),
+  }),
+  Type.Object({
+    kind: Type.Literal('archive'),
+    /** archive kind: direct download url */
+    url: Type.String(),
+  }),
+]);
+
+export const ModelManifestEntrySchema = Type.Intersect([
+  Type.Object({
+    id: Type.String(),
+    modality: ManifestEntryModalitySchema,
+    tier: ManifestEntryTierSchema,
+    license: Type.String(),
+    requiresAcknowledgement: Type.Boolean(),
+    targetPath: Type.String(),
+    bytes: Type.Integer({ minimum: 0 }),
+    sha256: Type.String({ pattern: '^[0-9a-fA-F]{64}$' }),
+  }),
+  ManifestEntrySourceSchema,
+]);
 
 export const ModelManifestSchema = Type.Object({
   schemaVersion: Type.Literal(1),

@@ -105,6 +105,9 @@ describe('AC-0c — shared contract suite against the Bun/CLI adapter', () => {
   runProbeExecutorContractSuite({
     label: 'bun/cli',
     factory: () => probeExecutor,
-    canSpawn: true,
+    // /proc/1/mem is the only universally-denied read on Linux; on other
+    // platforms the adapter has no deterministic denial and the test is
+    // skipped (capability-gated in the suite).
+    permissionDeniedPath: process.platform === 'linux' ? '/proc/1/mem' : undefined,
   });
 });
