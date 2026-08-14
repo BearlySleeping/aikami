@@ -1,0 +1,16 @@
+# apps/backend/local-stack/compose.musa.yaml
+#
+# Moore Threads MUSA backend. Both engines publish MUSA builds; the sd-server
+# master-musa tag is a distinct hardware target (like master-cuda-spark), so
+# it is only ever selected by this override — never auto-detected.
+#
+# .env:
+#   COMPOSE_FILE=compose.yaml:compose.musa.yaml
+#   COMPOSE_PROFILES=text,image,voice,stt,web
+
+services:
+  text:
+    image: ghcr.io/ggml-org/llama.cpp:server-musa@sha256:8b597fc8ba155bfdbca4ae553f3f5753ac5de1028ee5acb407fb6205b8702bc1
+
+  image:
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-musa@sha256:bbbb8a6820e9e14bb7d552deccef6085993dff2c0f318a98a422d5f9cae955d7

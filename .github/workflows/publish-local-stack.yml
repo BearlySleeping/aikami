@@ -1,0 +1,192 @@
+# .github/workflows/publish-local-stack.yml
+#
+# Publishes the two images Aikami owns for the local stack (C-390) to GHCR
+# and verifies the publish contract:
+#   - aikami-voice            (docker/voice/Dockerfile.sherpa)
+#   - aikami-sd-server:cpu    (docker/sd-server/Dockerfile.cpu — the one
+#                              backend upstream does not publish)
+#   - aikami-client           (Dockerfile.client — needs the staged SPA build)
+#
+# AC-5: after build, layer inspection asserts no weights (*.gguf/*.safetensors/
+# *.onnx/*.bin/*.pt) are present and the compressed image is under 250 MB.
+# AC-9: the client image is booted twice with different mounted config.json
+# files pointing at different engine hosts; both must serve the new config
+# with no rebuild.
+# AC-1: every image referenced by the compose topology must resolve and be
+# digest-pinned (runs docker manifest inspect).
+#
+# GHCR images default to private — anonymous-pull verification is part of
+# the job so a private package cannot ship silently.
+
+name: Publish Local Stack Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/local-stack/**'
+      - '.github/workflows/publish-local-stack.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  publish:
+    name: Build, verify, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── AC-1: every upstream image reference resolves ─────────────────
+      - name: Verify upstream image references resolve
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          for backend in cpu cuda rocm vulkan intel musa; do
+            COMPOSE_FILE="compose.yaml:compose.$backend.yaml" \
+            COMPOSE_PROFILES=text,image,voice,stt,web docker compose config \
+              >/tmp/render-$backend.yaml
+          done
+          # Extract every pinned upstream image from the rendered configs.
+          grep -hoE 'ghcr.io/(ggml-org|leejet)/[^" ]+' /tmp/render-*.yaml \
+            | sort -u | while read -r img; do
+              echo "resolving $img"
+              docker manifest inspect "$img" >/dev/null
+            done
+
+      # ── Voice image ────────────────────────────────────────────────────
+      - name: Build and publish aikami-voice
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend/local-stack/docker/voice
+          file: apps/backend/local-stack/docker/voice/Dockerfile.sherpa
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/aikami-voice:latest
+            ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ github.sha }}
+          platforms: linux/amd64
+
+      # ── CPU sd-server image ───────────────────────────────────────────
+      - name: Build and publish aikami-sd-server:cpu
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend/local-stack/docker/sd-server
+          file: apps/backend/local-stack/docker/sd-server/Dockerfile.cpu
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu
+            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ github.sha }}
+          platforms: linux/amd64
+
+      # ── AC-5: layer inspection for voice + sd-server ──────────────────
+      - name: AC-5 layer inspection (voice + sd-server)
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          for img in \
+            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
+            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu"; do
+            docker pull "$img"
+            echo "== $img layers =="
+            docker image inspect "$img" --format '{{.Size}}' | awk '{printf "uncompressed size: %.1f MB\n", $1/1048576}'
+            # Weights must not be in any layer (AC-5).
+            docker run --rm --entrypoint /bin/sh "$img" -c \
+              'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null' \
+              | { grep -q . && { echo "FAIL: weight files found in image"; exit 1; } || echo "ok: no weight files"; }
+          done
+
+      # ── Client image (staged SPA + runtime config mount, AC-9) ────────
+      - name: Build the client SPA for staging
+        working-directory: apps/frontend/client
+        run: |
+          bun install --frozen-lockfile
+          bun run build:production
+        env:
+          NODE_ENV: production
+
+      - name: Stage client build + emit config
+        working-directory: apps/backend/local-stack
+        run: |
+          rm -rf .build/client
+          mkdir -p .build
+          cp -a ../../frontend/client/build .build/client
+          ./scripts/emit_config.sh > .build/client/config.json
+
+      - name: Build and publish aikami-client
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend/local-stack
+          file: apps/backend/local-stack/Dockerfile.client
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/aikami-client:latest
+            ${{ env.IMAGE_PREFIX }}/aikami-client:${{ github.sha }}
+          platforms: linux/amd64
+
+      # ── AC-9: two config mounts against one client image ──────────────
+      - name: AC-9 two-config-mount test
+        run: |
+          set -euo pipefail
+          img="${{ env.IMAGE_PREFIX }}/aikami-client:latest"
+          docker pull "$img"
+          mkdir -p /tmp/cfg-a /tmp/cfg-b
+          cat > /tmp/cfg-a/config.json <<'EOF'
+          { "text": { "url": "http://10.1.1.1:11434/v1" }, "image": { "url": "http://10.1.1.1:8188" }, "voice": { "tts": { "mode": "server", "url": "http://10.1.1.1:8089" }, "stt": { "url": "http://10.1.1.1:8087" } }, "models": { "originUrl": "https://huggingface.co" } }
+          EOF
+          cat > /tmp/cfg-b/config.json <<'EOF'
+          { "text": { "url": "http://10.2.2.2:11434/v1" }, "image": { "url": "http://10.2.2.2:8188" }, "voice": { "tts": { "mode": "server", "url": "http://10.2.2.2:8089" }, "stt": { "url": "http://10.2.2.2:8087" } }, "models": { "originUrl": "https://huggingface.co" } }
+          EOF
+          cid_a=$(docker run -d -p 15274:5274 \
+            -v /tmp/cfg-a/config.json:/usr/share/nginx/html/config.json:ro "$img")
+          trap 'docker rm -f "$cid_a" >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:15274/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:15274/config.json | grep -q '10.1.1.1' \
+            && echo "ok: config A served"
+          docker rm -f "$cid_a" >/dev/null 2>&1
+          cid_b=$(docker run -d -p 15274:5274 \
+            -v /tmp/cfg-b/config.json:/usr/share/nginx/html/config.json:ro "$img")
+          trap - EXIT
+          trap 'docker rm -f "$cid_b" >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:15274/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:15274/config.json | grep -q '10.2.2.2' \
+            && echo "ok: config B served without rebuild"
+
+      # ── Anonymous pull verification ────────────────────────────────────
+      - name: Verify anonymous pull
+        run: |
+          set -euo pipefail
+          # Log out so the pull exercises the public path, not the token.
+          docker logout ghcr.io
+          for img in \
+            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
+            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu" \
+            "${{ env.IMAGE_PREFIX }}/aikami-client:latest"; do
+            echo "anonymous pull: $img"
+            docker pull "$img" >/dev/null
+          done

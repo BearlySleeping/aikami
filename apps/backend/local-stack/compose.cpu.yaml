@@ -1,0 +1,18 @@
+# apps/backend/local-stack/compose.cpu.yaml
+#
+# CPU backend — explicit override for the default configuration. The base
+# compose.yaml already resolves to the CPU images with no device reservation;
+# this file exists so COMPOSE_FILE=compose.yaml:compose.cpu.yaml is a valid
+# documented preset (check.sh renders it and asserts the same result as the
+# base file alone).
+#
+# .env:
+#   COMPOSE_FILE=compose.yaml:compose.cpu.yaml
+#   COMPOSE_PROFILES=text,image,voice,stt,web
+
+services:
+  text:
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:87ee5d122fe7645ce3ae169aa1b5b0633e4e392b0d90459c4aee06fbaaf101ff
+
+  image:
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/aikami}/aikami-sd-server:cpu

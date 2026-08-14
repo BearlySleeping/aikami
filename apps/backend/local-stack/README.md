@@ -1,235 +1,257 @@
-# Aikami Local Stack — Docker & Native Binary Orchestration
+# Aikami Local Stack
 
-Orchestration package for the **local AI engine stack**: text (LLM), image
-(ComfyUI), voice (sherpa-onnx TTS/STT) and the client UI — either as
-containerized services or as lightweight native host binaries (no Docker /
-PyTorch / CUDA overhead).
-
-The client is **built on the host** and its static output is staged into
-`.build/client/` (git-ignored) — only the local-stack tree enters a build
-context, never the monorepo source.
+Run the full Aikami AI stack on your own machine — text, image, voice, and
+speech-to-text engines plus an optional web client — with **two commands and
+no Python, no CUDA toolkit install, no model hunting, and no source build**.
 
 ```
-apps/backend/local-stack/
-├── moon.yml                        # Moon project definition
-├── package.json                    # Task scripts for Moon / Bun
-├── README.md                       # This file
-├── docker-compose.yml              # Profile-based modular multi-container stack
-├── docker-compose.lite.yml         # Minimal client-only compose configuration
-├── Dockerfile.client               # Lightweight client UI container (nginx SPA)
-├── Dockerfile.ultimate             # Single all-in-one container (Models + Runtimes + Client)
-├── bin/                            # Native Host Binary Mode Launchers (No-Docker)
-│   ├── run-native-tts.sh           # sherpa-onnx Kokoro TTS (HTTP /v1/audio/speech, :6006)
-│   ├── run-native-stt.sh           # sherpa-onnx Moonshine STT (websocket, :6007)
-│   └── run-native-llm.sh           # shimmy / llama.cpp LLM (OpenAI-compatible, :8080)
-├── docker/
-│   ├── voice/
-│   │   ├── Dockerfile.sherpa       # Lightweight C++ STT/TTS container
-│   │   └── entrypoint.sh           # Model auto-download + server supervisor
-│   ├── scripts/
-│   │   └── entrypoint-ultimate.sh  # Auto-model downloader & multi-process supervisor
-│   ├── client-server/              # Bun static server used by the Ultimate container
-│   └── client/                     # nginx SPA config
-└── models/                         # Git-ignored local model store
-    ├── llm/  image/  tts/  stt/
+cp .env.example .env
+docker compose up -d
 ```
+
+This is the publishable topology (C-390): one `compose.yaml` whose
+**profiles select modalities**, and whose **override files select the
+hardware backend**. All variation lives in `.env`; the runtime command never
+changes.
 
 ---
 
 ## Quick start
 
-All commands run from `apps/backend/local-stack/`, or via Moon/Bun from the
-repo root:
+1. **Clone the repo.**
 
-| What | Command |
-| --- | --- |
-| Build the client SPA (host, production mode) | `bun run build:client` |
-| Client image + run | `bun run build:client:docker` / `docker compose up -d` |
-| Client + voice | `docker compose --profile voice up -d` |
-| Everything (GPU) | `docker compose --profile full up -d` |
-| Minimal client-only stack | `docker compose -f docker-compose.lite.yml up -d` |
-| Ultimate single container | `bun run build:ultimate` |
-| Native TTS (no Docker) | `bash bin/run-native-tts.sh` |
-| Native STT (no Docker) | `bash bin/run-native-stt.sh` |
-| Native LLM (no Docker) | `bash bin/run-native-llm.sh` |
+   ```bash
+   git clone https://github.com/BearlySleeping/aikami.git
+   cd aikami/apps/backend/local-stack
+   ```
 
-Moon equivalents (repo root):
+2. **Pick your hardware.** Copy the example env and set the two variables
+   that matter (everything else has a working default):
 
-```bash
-bun moon run local-stack:build-client   # host-side SPA build (production mode)
-bun moon run local-stack:up             # client only
-bun moon run local-stack:up-full        # full profile
-bun moon run local-stack:up-voice       # voice profile
-bun moon run local-stack:up-lite        # lite compose file
-bun moon run local-stack:run-native-voice
-```
+   ```bash
+   cp .env.example .env
+   # .env:
+   #   COMPOSE_PROFILES=text,image,voice,stt
+   #   COMPOSE_FILE=compose.yaml:compose.cpu.yaml
+   ```
 
-> **Prerequisite:** `bun run build:client` (or `build:client:docker`) must run
-> before any `docker compose ... up --build`, because it builds the SPA and
-> stages it into `.build/client/`. The compose services that pull prebuilt
-> images (text/image/voice) work immediately.
+   | Backend | `.env` COMPOSE_FILE | When |
+   |---|---|---|
+   | CPU | `compose.yaml:compose.cpu.yaml` | Any machine; slow but works everywhere |
+   | NVIDIA CUDA | `compose.yaml:compose.cuda.yaml` | Needs the NVIDIA Container Toolkit |
+   | AMD ROCm | `compose.yaml:compose.rocm.yaml` | linux/amd64 only; image engine uses Vulkan |
+   | Vulkan (universal GPU) | `compose.yaml:compose.vulkan.yaml` | AMD non-ROCm, Intel Arc, iGPUs |
+   | Intel / SYCL | `compose.yaml:compose.intel.yaml` | Intel Arc / recent integrated graphics |
+   | Moore Threads MUSA | `compose.yaml:compose.musa.yaml` | MUSA GPUs |
 
-### Endpoints
+3. **Start the stack.**
 
-| Service | Container | Host | Protocol |
-| --- | --- | --- | --- |
-| Client UI | `aikami-app` | http://localhost:3000 | HTTP (SPA) |
-| Text (LLM) | `text-engine` | http://localhost:8080/v1 | OpenAI-compatible |
-| Image (ComfyUI) | `image-engine` | http://localhost:8188 | HTTP |
-| Voice TTS | `voice-engine` | http://localhost:6006 | HTTP `/v1/audio/speech` |
-| Voice STT | `voice-engine` | ws://localhost:6007 | WebSocket (`ENABLE_STT=true`) |
+   ```bash
+   docker compose up -d
+   ```
 
-### Services & profiles
+   The first start pulls the engine images and downloads the models you
+   enabled (checksum-verified, resumable — see [Models](#models)). Subsequent
+   starts are near-instant.
 
-| Service | Image | Profile | Purpose |
-| --- | --- | --- | --- |
-| `aikami-app` | built (`Dockerfile.client`) | always | SvelteKit SPA served by nginx |
-| `text-engine` | `ghcr.io/michael-a-kuykendall/shimmy:latest` | `text`, `full` | llama.cpp OpenAI-compatible LLM server |
-| `image-engine` | `comfyui/comfyui:latest` | `vision`, `full` | Headless ComfyUI image generation |
-| `voice-engine` | built (`docker/voice/Dockerfile.sherpa`) | `voice`, `full` | sherpa-onnx Kokoro TTS (HTTP) + Moonshine STT (websocket) |
+4. **Point the client at it.** The web client (`web` profile) reads a runtime
+   `config.json` — it is generated by `./scripts/emit_config.sh` and served by
+   the container. Desktop (Tauri) users configure the same file. The engine
+   ports match the project's allocation table, so the shipped client defaults
+   work without extra configuration:
 
-**GPU:** `text-engine` and `image-engine` request NVIDIA GPUs through the
-compose `deploy` schema. Install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-on the host. To run CPU-only, remove the `deploy:` blocks.
+   | Service | Port |
+   |---|---|
+   | text (OpenAI-compatible `/v1`) | `11434` |
+   | image (sd-server `/sdcpp/v1` + `/sdapi/v1`) | `8188` |
+   | voice (TTS `/v1/audio/speech`) | `8089` |
+   | stt (websocket) | `8087` |
+   | web client | `5274` |
 
----
-
-## Building the client (host-side)
-
-The client is a static SPA; its engine endpoints are baked at build time via
-`PUBLIC_*` env vars. `bun run build:client` builds with **production mode**
-(`build:production` → `.env.production`, i.e. live Firebase cloud sync),
-stages the output into `.build/client/`, and defaults the engine URLs to the
-compose stack's host-mapped ports:
-
-| Env var | Default |
-| --- | --- |
-| `PUBLIC_OLLAMA_BASE_URL` (from `LLM_ENDPOINT`) | `http://localhost:8080/v1` |
-| `PUBLIC_IMAGE_URL` (from `IMAGE_ENDPOINT`) | `http://localhost:8188` |
-| `PUBLIC_VOICE_URL` (from `VOICE_ENDPOINT`) | `http://localhost:6006` |
-
-Overrides:
-
-```bash
-# Emulator mode (local Firebase emulators) instead of live cloud sync
-CLIENT_MODE=emulator bun run build:client
-
-# Point at a different LLM endpoint
-LLM_ENDPOINT=http://text-engine:8080/v1 bun run build:client
-```
-
-> Only `PUBLIC_*` variables are exposed to the client bundle (Vite
-> `envPrefix: ['PUBLIC_']`) — non-public env never leaks into the SPA.
+> **Ports are deliberate.** `11434` and `8188` are what the Tauri CSP already
+> whitelists, and the client's Ollama provider defaults to `11434`. Host
+> `8080` is *not* used — it belongs to Nordclaw's Firestore emulator.
 
 ---
 
-## Docker modes
+## Modalities (profiles)
 
-### 1. Modular compose stack (`docker-compose.yml`)
+`COMPOSE_PROFILES` is a comma-separated list of:
 
-Profile-based; each engine is an isolated container. Recommended dev setup.
+| Profile | Starts | Model downloaded |
+|---|---|---|
+| `text` | llama.cpp server (`/v1`) | Qwen2.5-1.5B Q4_K_M (CPU default) |
+| `image` | sd-server | FLUX.1-schnell Q4_K |
+| `voice` | sherpa-onnx Kokoro TTS | Kokoro-82M |
+| `stt` | sherpa-onnx Moonshine STT (same container) | Moonshine tiny |
+| `web` | the web client container | — |
 
-```bash
-bun run build:client:docker     # build SPA + client image
-docker compose --profile full up -d
-docker compose logs -f
-docker compose --profile full down
-```
-
-### 2. Lite client-only (`docker-compose.lite.yml`)
-
-Runs just the client against engines already running on the host (e.g. via
-`herdr` or the native launchers).
+The model fetcher is **profile-scoped**: `COMPOSE_PROFILES=text` downloads
+only the text model. Enable what you need:
 
 ```bash
-bun run build:client:docker
-docker compose -f docker-compose.lite.yml up -d
+# .env
+COMPOSE_PROFILES=text,image,voice,stt,web
 ```
 
-### 3. Ultimate single container (`Dockerfile.ultimate`)
+### Advanced: Ollama and ComfyUI
 
-One image bundling shimmy (LLM), sherpa-onnx (TTS/STT) and the prebuilt
-client. The entrypoint downloads default models into `/models` on first start
-and supervises all processes.
+Both are available as drop-in alternatives on the **same ports**:
 
 ```bash
-bun run build:ultimate    # host SPA build + stage + image build
-
-docker run --rm -p 3000:3000 -p 8080:8080 -p 6006:6006 -p 6007:6007 \
-  -v "$(pwd)/models:/models" \
-  aikami-ultimate
+COMPOSE_PROFILES=text,ollama      # Ollama replaces llama.cpp on 11434
+COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on 8188
 ```
 
-Environment toggles: `ENABLE_VOICE` / `ENABLE_STT` / `ENABLE_TEXT` (default
-`true`), model paths under `/models`. The LLM only starts when
-`/models/llm/model.gguf` exists. The container runs as the image's
-unprivileged `shimmy` user (uid 999) — when bind-mounting host models, make
-sure they are writable by uid 999 (`chown -R 999:999 ./models`), or omit the
-mount so the container downloads into its own store.
+> ⚠️ sd-server and ComfyUI are mutually exclusive on `8188`. A user running
+> both must override one in `.env` (`IMAGE_PORT`).
 
 ---
 
-## Native Host Binary Mode (no Docker)
+## Backends (override files)
 
-For CPU-bound voice workloads the C++ sherpa-onnx binaries run **directly on
-the host** — no containers, no PyTorch, no CUDA image layers.
+The backend override files carry the hardware-specific image tags and the
+`deploy` device reservations. Details:
 
-Prerequisites: `python3` with `sherpa-onnx` installed (`pip install sherpa-onnx`
-— provides the native STT binaries and the Python TTS bindings) and
-optionally `llama.cpp` (`llama-server`) for the LLM.
+- **CUDA** (`compose.cuda.yaml`) requires the [NVIDIA Container
+  Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+  Without it you get a confusing error from the `deploy` block — the smoke
+  test detects and explains it. CUDA 13 hosts can swap text to
+  `server-cuda13` (see the digest-bump workflow; no separate override ships
+  for it).
+- **ROCm** (`compose.rocm.yaml`) is text-only: no ROCm sd-server image is
+  published, so the image engine inherits the **Vulkan** image
+  (`master-vulkan`). ROCm images are `linux/amd64` only.
+- **Vulkan** is the universal GPU fallback — one override covers AMD
+  (non-ROCm), Intel Arc, and integrated GPUs.
+- **Metal / macOS** has no override. See [macOS](#macos--the-native-path).
 
-```bash
-bash bin/run-native-tts.sh   # Kokoro TTS  → http://localhost:6006/v1/audio/speech
-bash bin/run-native-stt.sh   # Moonshine   → ws://localhost:6007
-bash bin/run-native-llm.sh   # llama-server → http://localhost:8080/v1
-```
-
-Each launcher auto-downloads its default model into `models/` on first run and
-fails with installation hints when the host binary is missing.
+Every upstream image is **pinned by digest** (`@sha256:…`). For
+stable-diffusion.cpp the rolling `master-*` tags have no immutable
+alternative — the digest is what actually pins the engine, and a scheduled
+job ([`update-compose-digests.yml`](../../../.github/workflows/update-compose-digests.yml))
+opens a PR to refresh the pins weekly.
 
 ---
 
 ## Models
 
-Model weights are **never committed** (`models/.gitignore` ignores `*.gguf`,
-`*.safetensors`, `*.onnx`, `*.bin`, `*.pt`, archives and caches) and are
-excluded from every build context. They are auto-downloaded on first start:
+All weights live in a shared named volume `aikami-models`, populated by a
+one-shot **model fetcher** (a Bun script, `stack/fetch_models.ts`) that is:
 
-- **TTS:** Kokoro-82M multilingual (k2-fsa tarball with `model.onnx`,
-  `voices.bin`, `tokens.txt`, `espeak-ng-data`) → `models/tts/kokoro-multi-lang-v1_0/`
-- **STT:** Moonshine tiny int8 (sherpa-onnx tarball) → `models/stt/`
-- **LLM:** drop a `model.gguf` into `models/llm/` (native launcher offers an
-  auto-download default)
+- **Checksum-verified** — every artifact is SHA-256 checked against
+  `stack/models.manifest.json`; a corrupt file is re-fetched.
+- **Resumable** — an interrupted download leaves a `.part` file that the next
+  run continues with a Range request.
+- **Idempotent** — a second run downloads nothing.
+- **Non-fatal** — a failed download for one modality does not block the
+  others; their own health checks report the missing model.
 
-Bind mounts: `models/llm` → text-engine `/models`, `models/tts` + `models/stt`
-→ voice-engine `/models/tts` + `/models/stt`, `models/image` → ComfyUI
-`/app/models`.
+### Use-restricted models
+
+SD 1.5 is CreativeML **OpenRAIL-M** (use-restricted, not OSI-approved). The
+fetcher will not download it unless you explicitly accept the licence:
+
+```bash
+# .env
+AIKAMI_ACCEPT_LICENSES=CreativeML OpenRAIL-M
+```
+
+Without the flag, the fetcher prints the licence name/URL and skips it — the
+rest of the stack still downloads normally.
+
+### Adding a model
+
+1. Add an entry to `stack/models.manifest.json` with the pinned HF revision
+   and the file's SHA-256 (and byte size).
+2. Set `TEXT_MODEL` / `IMAGE_MODEL` in `.env` to the manifest entry's
+   `targetPath` filename.
+
+`docker compose down` keeps the volume. **`docker compose down -v` deletes
+every downloaded model** — multiple gigabytes vanish silently. Re-run
+`docker compose up -d` to re-fetch.
+
+### Existing model trees (migration)
+
+If you already have a `models/` tree from the old stack, bind-mount it
+instead of the volume — nothing is moved or deleted:
+
+```bash
+# .env
+COMPOSE_FILE=compose.yaml:compose.models-path.yaml
+MODELS_PATH=/absolute/path/to/models
+```
 
 ---
 
-## Notes & known limitations
+## macOS — the native path
 
-- The compose `version: "3.8"` key is legacy — modern Compose v2 ignores it
-  with a warning and uses the full spec.
-- All build contexts are self-contained (`apps/backend/local-stack` and
-  `docker/voice`); the monorepo never enters a context. The root
-  `.dockerignore` remains as a safety net for direct repo-root `docker build`
-  invocations.
-- `text-engine` shimmy serves an OpenAI-compatible API; the client's Ollama
-  provider talks to it via `/v1`.
-- The Ultimate image pins the shimmy base to an immutable digest and installs
-  Bun from a checksum-verified release artifact (`curl | bash` is never used).
-- Voice containers run as non-root users: the sherpa container uses a
-  configurable `VOICE_UID`/`VOICE_GID` (default 1000:1000 — the typical host
-  user) so the bind-mounted `./models` tree stays writable; override with
-  `--build-arg VOICE_UID=$(id -u) VOICE_GID=$(id -g)` when your host user
-  differs. (Rootless podman maps container UIDs into a subuid range — the
-  bind-mounted model store then needs matching host permissions.)
+**Docker Desktop on macOS provides no Metal passthrough.** A containerised
+engine on a Mac is CPU-only and slow. On Darwin the supported setup is:
 
-## References
+1. Run the engines **natively** with the launchers in `bin/`:
+   ```bash
+   ./bin/run-native-llm.sh   # llama-server on 11434 (or shimmy if present)
+   ./bin/run-native-tts.sh   # sherpa-onnx Kokoro TTS on 8089
+   ./bin/run-native-stt.sh   # sherpa-onnx Moonshine STT on 8087
+   ```
+   Each downloads its default model on first run. The native path and the
+   containerised path expose **identical endpoints** (same ports).
+2. Only the optional web client is containerised:
+   ```bash
+   COMPOSE_PROFILES=web docker compose up -d
+   ```
 
-- Container config patterns follow `examples/Marinara-Engine`
-  (multi-stage builds, entrypoint supervision, env-driven config) and the
-  hub's prebuilt-output pattern.
-- sherpa-onnx docs: https://k2-fsa.github.io/sherpa/onnx/
-- shimmy: https://github.com/Michael-A-Kuykendall/shimmy
+The smoke test verifies the native launchers' ports and defaults on every
+platform; on Darwin it exercises the full native path rather than reporting a
+false container pass.
+
+---
+
+## Health, observability, offline
+
+- Every service declares a **health check**; engines wait on the fetcher with
+  `depends_on: { condition: service_completed_successfully }` and on each
+  other's health. `docker compose ps` shows meaningful per-service state.
+- **Missing model**: a service whose model file is absent starts and then
+  fails its own health check — the health message names the missing file, and
+  the other engines are unaffected.
+- **Offline**: once images and models are cached, the whole stack starts with
+  networking disabled. A missing model disables only its own service.
+- **Warm start**: an already-provisioned stack reaches all-healthy in well
+  under 20 s on CPU with models present.
+
+## Smoke tests
+
+```bash
+bun moon run local-stack:test      # static renders + unit tests (no docker pull)
+LOCAL_STACK_LIVE=1 bun moon run local-stack:test   # + real health probes (AC-4)
+bun moon run local-stack:lint
+```
+
+`scripts/check.sh` asserts every machine-checkable acceptance criterion:
+
+| Check | AC |
+|---|---|
+| Manifest resolution loop (every pinned image resolves) | AC-1 |
+| Per-backend render assertions (6 backends) | AC-1b |
+| Profile isolation (each modality starts exactly its services) | AC-2 |
+| CUDA override → CUDA image + NVIDIA reservation; base → CPU, none | AC-3 |
+| Real health probes (`/health`, model list, TTS audio, web 200) | AC-4 (live) |
+| No weights in image layers, 250 MB budget | AC-5 (publish workflow) |
+| Fetcher unit tests (idempotent/resumable/verified/non-fatal) | AC-6 |
+| Fetcher acknowledgement gate unit tests | AC-7 |
+| Two config mounts against one client image | AC-9 (publish workflow) |
+| Removed artifacts absent + no task references | AC-10 |
+| Ports match `development_ports.ts`, loopback binds, no 8080 | AC-11 |
+| Native-path launcher ports on every platform, full path on Darwin | AC-12 |
+| `MODELS_PATH` bind mount render + health | AC-13 |
+
+## Container security
+
+- All containers run **non-root** (nginx `USER nginx`; sherpa
+  `VOICE_UID`/`VOICE_GID`; sd-server `SD_UID`/`SD_GID` — all configurable at
+  build time).
+- No `curl | bash` anywhere. Every downloaded artifact is digest-verified.
+- Engines bind `127.0.0.1` on the host by default, never `0.0.0.0`.
+- No model weights are baked into any image layer (AC-5).

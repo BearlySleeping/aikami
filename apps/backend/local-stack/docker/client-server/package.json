@@ -1,9 +1,0 @@
-{
-  "name": "aikami-ultimate-client",
-  "private": true,
-  "license": "MIT",
-  "type": "module",
-  "scripts": {
-    "start": "bun run client_server.ts"
-  }
-}

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "text-qwen2.5-1.5b-instruct-q4km",
+      "modality": "text",
+      "tier": "cpu",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
+      "revision": "9eadc66189c7641e1ddd226b8267a9119b2ce2d4",
+      "file": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+      "targetPath": "text/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "bytes": 986048768,
+      "sha256": "1adf0b11065d8ad2e8123ea110d1ec956dab4ab038eab665614adba04b6c3370"
+    },
+    {
+      "id": "text-qwen2.5-7b-instruct-q4km",
+      "modality": "text",
+      "tier": "8gb",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
+      "revision": "8911e8a47f92bac19d6f5c64a2e2095bd2f7d031",
+      "file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+      "targetPath": "text/qwen2.5-7b-instruct-q4_k_m.gguf",
+      "bytes": 4683074240,
+      "sha256": "65b8fcd92af6b4fefa935c625d1ac27ea29dcb6ee14589c55a8f115ceaaa1423"
+    },
+    {
+      "id": "text-mistral-nemo-12b-instruct-q4km",
+      "modality": "text",
+      "tier": "16gb",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "bartowski/Mistral-Nemo-Instruct-2407-GGUF",
+      "revision": "a2dd64a0a76ea1bdb2bb6ab6fa5496b003c7c908",
+      "file": "Mistral-Nemo-Instruct-2407-Q4_K_M.gguf",
+      "targetPath": "text/mistral-nemo-instruct-2407-q4_k_m.gguf",
+      "bytes": 7477208192,
+      "sha256": "7c1a10d202d8788dbe5628dc962254d10654c853cae6aaeca0618f05490d4a46"
+    },
+    {
+      "id": "image-flux1-schnell-q4k",
+      "modality": "image",
+      "tier": "8gb",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "leejet/FLUX.1-schnell-gguf",
+      "revision": "c7f665ddaf9f197ff493f41fc211f5480f5f19ac",
+      "file": "flux1-schnell-q4_k.gguf",
+      "targetPath": "image/flux1-schnell-q4_k.gguf",
+      "bytes": 6884606880,
+      "sha256": "619697cc4c2bf587416aa1afa98d474a44c80eb4e3a3f64ea8f99ab0ed9adb7a"
+    },
+    {
+      "id": "image-sd15-pruned-q4_0",
+      "modality": "image",
+      "tier": "cpu",
+      "license": "CreativeML OpenRAIL-M",
+      "requiresAcknowledgement": true,
+      "kind": "file",
+      "repo": "second-state/stable-diffusion-v1-5-GGUF",
+      "revision": "031b5f5df991f511b3f5fa8fed6d99048ababb69",
+      "file": "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+      "targetPath": "image/stable-diffusion-v1-5-pruned-emaonly-q4_0.gguf",
+      "bytes": 1566768416,
+      "sha256": "b8944e9fe0b69b36ae1b5bb0185b3a7b8ef14347fe0fa9af6c64c4829022261f"
+    },
+    {
+      "id": "tts-kokoro-82m",
+      "modality": "tts",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "archive",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2",
+      "targetPath": "tts/kokoro-multi-lang-v1_0",
+      "bytes": 349418188,
+      "sha256": "c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046"
+    },
+    {
+      "id": "stt-moonshine-tiny-en-int8",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "archive",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-tiny-en-int8.tar.bz2",
+      "targetPath": "stt/sherpa-onnx-moonshine-tiny-en-int8",
+      "bytes": 107600538,
+      "sha256": "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2"
+    }
+  ]
+}

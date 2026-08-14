@@ -1,0 +1,96 @@
+---
+title: Run Aikami Locally
+description: Get the full local AI stack running on your machine in two commands — text, image, voice, and speech-to-text engines with no Python, no CUDA toolkit, and no model hunting.
+---
+
+Aikami's local AI stack runs entirely on your machine — text (llama.cpp),
+image (stable-diffusion.cpp), voice (sherpa-onnx Kokoro TTS), and
+speech-to-text (sherpa-onnx Moonshine) — behind one Compose topology whose
+**profiles select modalities** and whose **override files select your
+hardware backend**. Two commands is the whole story:
+
+```bash
+cd apps/backend/local-stack
+cp .env.example .env
+docker compose up -d
+```
+
+## Pick your hardware
+
+All variation lives in `.env`; the runtime command never changes. Set the
+two variables that matter:
+
+```bash
+# .env
+COMPOSE_PROFILES=text,image,voice,stt
+COMPOSE_FILE=compose.yaml:compose.cuda.yaml   # see the table
+```
+
+| Backend | COMPOSE_FILE | When |
+|---|---|---|
+| CPU | `compose.yaml:compose.cpu.yaml` | Any machine; slow but works everywhere |
+| NVIDIA CUDA | `compose.yaml:compose.cuda.yaml` | Needs the NVIDIA Container Toolkit |
+| AMD ROCm | `compose.yaml:compose.rocm.yaml` | linux/amd64 only; image engine uses Vulkan |
+| Vulkan | `compose.yaml:compose.vulkan.yaml` | Universal GPU fallback (AMD, Intel Arc, iGPUs) |
+| Intel / SYCL | `compose.yaml:compose.intel.yaml` | Intel Arc / recent integrated graphics |
+| Moore Threads MUSA | `compose.yaml:compose.musa.yaml` | MUSA GPUs |
+
+The first start pulls the engine images and downloads the models you enabled
+(checksum-verified and resumable). Everything after that starts in seconds.
+
+## What you get
+
+| Service | Port | API |
+|---|---|---|
+| text | `11434` | OpenAI-compatible `/v1` |
+| image | `8188` | sd-server `/sdcpp/v1` + `/sdapi/v1` |
+| voice (TTS) | `8089` | `/v1/audio/speech` |
+| stt | `8087` | websocket |
+| web client (optional) | `5274` | static SPA |
+
+These ports match Aikami's allocation table (`development_ports.ts`), so the
+Tauri desktop app's CSP and defaults keep working with no client change. The
+engines bind `127.0.0.1` only.
+
+## Connecting the client
+
+The SPA reads engine endpoints from a runtime `config.json` — see
+[Configure Your Local Engines](/guides/configure-local-engines). The local
+stack generates it automatically (`./scripts/emit_config.sh`) and the web
+container serves it with `no-store`, so topology changes apply immediately.
+
+## macOS: the native path
+
+**Docker on macOS has no Metal passthrough** — a containerised engine on a
+Mac is CPU-only and slow. On Darwin, run the engines natively:
+
+```bash
+cd apps/backend/local-stack
+./bin/run-native-llm.sh   # llama-server on 11434
+./bin/run-native-tts.sh   # sherpa-onnx Kokoro TTS on 8089
+./bin/run-native-stt.sh   # sherpa-onnx Moonshine STT on 8087
+```
+
+Only the optional web client is containerised (`COMPOSE_PROFILES=web docker
+compose up -d`). The native path exposes the same ports as the containers.
+
+## Models and licences
+
+- Models live in the `aikami-models` named volume, populated by a
+  checksum-verified, resumable fetcher that is **profile-scoped** — enabling
+  only `text` never downloads image or voice weights.
+- SD 1.5 is **CreativeML OpenRAIL-M** (use-restricted). The fetcher skips it
+  unless you opt in with `AIKAMI_ACCEPT_LICENSES=CreativeML OpenRAIL-M` in
+  `.env`; Apache/MIT models (Qwen, FLUX.1-schnell, Kokoro, Moonshine)
+  download freely.
+- `docker compose down` keeps models. `docker compose down -v` deletes them
+  all — see the local-stack README before running that.
+
+## More
+
+- Full setup, troubleshooting, offline mode, and the smoke-test matrix:
+  `apps/backend/local-stack/README.md`.
+- Engine configuration from the client side:
+  [Configure Your Local Engines](/guides/configure-local-engines).
+- Image engine choice:
+  [Image Engine Selection](/guides/image-engine-selection).

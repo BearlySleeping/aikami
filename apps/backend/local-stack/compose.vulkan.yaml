@@ -1,0 +1,15 @@
+# apps/backend/local-stack/compose.vulkan.yaml
+#
+# Vulkan backend — the universal GPU fallback. Published for both engines;
+# covers AMD (non-ROCm), Intel Arc, and integrated GPUs in one override.
+#
+# .env:
+#   COMPOSE_FILE=compose.yaml:compose.vulkan.yaml
+#   COMPOSE_PROFILES=text,image,voice,stt,web
+
+services:
+  text:
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:be04f50201092935fdd080fd5389208c8e823b4d51bcfbb44bfa4b8a788d4bd7
+
+  image:
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:306a437e2c1ee6c9d0fe3954606f085484edeab4e87b3c531b1169551a59205b

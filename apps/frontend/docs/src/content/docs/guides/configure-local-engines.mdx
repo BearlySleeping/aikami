@@ -31,11 +31,11 @@ Every field is optional. `null` and absent mean "not configured".
 ```jsonc
 // config.json — served beside index.html
 {
-  "text":  { "url": "http://localhost:8080/v1", "model": "qwen3-4b-instruct" },
+  "text":  { "url": "http://localhost:11434/v1", "model": "qwen3-4b-instruct" },
   "image": { "url": "http://localhost:8188", "engine": "auto" },
   "voice": {
-    "tts": { "mode": "browser", "url": null },
-    "stt": { "url": null }
+    "tts": { "mode": "server", "url": "http://localhost:8089" },
+    "stt": { "url": "http://localhost:8087" }
   },
   "models": { "originUrl": "https://huggingface.co" }
 }
@@ -52,7 +52,9 @@ Every field is optional. `null` and absent mean "not configured".
 | `models.originUrl` | Base origin for one-time model asset downloads (Kokoro weights). |
 
 The local stack's `bun run build:client` writes this file automatically into
-the staged output, so `docker compose up` works with no manual step.
+the staged output, so `docker compose up` works with no manual step. The
+engine ports above follow the C-390 allocation table (`development_ports.ts`)
+— text `11434`, image `8188`, voice `8089`, STT `8087`, web `5274`.
 
 ## Serving the built app standalone
 
@@ -61,12 +63,17 @@ static file server that supports SPA fallback (unknown routes → `index.html`)
 and drop a `config.json` beside `index.html`:
 
 ```bash
-# example — the local stack's tiny Bun server (SPA fallback included)
-CLIENT_ROOT=./build CLIENT_PORT=3000 bun \
-  apps/backend/local-stack/docker/client-server/client_server.ts
+# example — serve the built SPA with a static server on the web port
+bunx serve build -l 5274
 ```
 
-No Node server, no Docker, no SvelteKit runtime.
+or run the local-stack web container:
+
+```bash
+cd apps/backend/local-stack && docker compose --profile web up -d
+```
+
+No Node server, no SvelteKit runtime required.
 
 ## Speech: browser TTS and the voice model
 
