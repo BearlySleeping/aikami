@@ -10,15 +10,27 @@ speech-to-text (sherpa-onnx Moonshine) — behind one Compose topology whose
 hardware backend**. Two commands is the whole story:
 
 ```bash
+bun run stack init     # detects your hardware, recommends models, writes .env
 cd apps/backend/local-stack
-cp .env.example .env
 docker compose up -d
+```
+
+`stack init` (C-391) probes your GPU, RAM, disk, and container runtime,
+recommends a backend and model tier, shows the full download plan (sizes,
+total, free disk, licences, ports) before writing anything, and produces a
+`.env` matched to your machine — no manual editing, no needing to know what
+CUDA 12 vs 13 means or which quantisation fits your VRAM. It is fully
+scriptable:
+
+```bash
+bun run stack init --yes --backend cuda --modalities text,voice
+bun run stack init --yes --json   # full profile + plan for CI assertions
 ```
 
 ## Pick your hardware
 
-All variation lives in `.env`; the runtime command never changes. Set the
-two variables that matter:
+All variation lives in `.env`; the runtime command never changes. `stack
+init` sets the two variables that matter — or set them by hand:
 
 ```bash
 # .env
@@ -34,6 +46,7 @@ COMPOSE_FILE=compose.yaml:compose.cuda.yaml   # see the table
 | Vulkan | `compose.yaml:compose.vulkan.yaml` | Universal GPU fallback (AMD, Intel Arc, iGPUs) |
 | Intel / SYCL | `compose.yaml:compose.intel.yaml` | Intel Arc / recent integrated graphics |
 | Moore Threads MUSA | `compose.yaml:compose.musa.yaml` | MUSA GPUs |
+| Metal (macOS) | `compose.yaml` (native engines) | Apple Silicon — no GPU passthrough |
 
 The first start pulls the engine images and downloads the models you enabled
 (checksum-verified and resumable). Everything after that starts in seconds.

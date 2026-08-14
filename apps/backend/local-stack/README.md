@@ -5,9 +5,14 @@ speech-to-text engines plus an optional web client — with **two commands and
 no Python, no CUDA toolkit install, no model hunting, and no source build**.
 
 ```
-cp .env.example .env
+bun run stack init
 docker compose up -d
 ```
+
+`stack init` detects your hardware, picks a backend and model tier, shows
+the full download plan, and writes `.env` — it is the only way `.env` is
+created (there is no `.env.example` copy step, so nothing ever asks you to
+overwrite a hand-edited file).
 
 This is the publishable topology (C-390): one `compose.yaml` whose
 **profiles select modalities**, and whose **override files select the
@@ -22,27 +27,23 @@ changes.
 
    ```bash
    git clone https://github.com/BearlySleeping/aikami.git
-   cd aikami/apps/backend/local-stack
+   cd aikami
    ```
 
-2. **Pick your hardware.** Copy the example env and set the two variables
-   that matter (everything else has a working default):
+2. **Detect your hardware and generate the `.env` (C-391).** The wizard
+   probes your GPU, RAM, disk, and container runtime, recommends a backend
+   and model tier, shows the full download plan, and writes `.env` — no
+   manual editing, no needing to know what CUDA 12 vs 13 means:
 
    ```bash
-   cp .env.example .env
-   # .env:
-   #   COMPOSE_PROFILES=text,image,voice,stt
-   #   COMPOSE_FILE=compose.yaml:compose.cpu.yaml
+   bun run stack init
    ```
 
-   | Backend | `.env` COMPOSE_FILE | When |
-   |---|---|---|
-   | CPU | `compose.yaml:compose.cpu.yaml` | Any machine; slow but works everywhere |
-   | NVIDIA CUDA | `compose.yaml:compose.cuda.yaml` | Needs the NVIDIA Container Toolkit |
-   | AMD ROCm | `compose.yaml:compose.rocm.yaml` | linux/amd64 only; image engine uses Vulkan |
-   | Vulkan (universal GPU) | `compose.yaml:compose.vulkan.yaml` | AMD non-ROCm, Intel Arc, iGPUs |
-   | Intel / SYCL | `compose.yaml:compose.intel.yaml` | Intel Arc / recent integrated graphics |
-   | Moore Threads MUSA | `compose.yaml:compose.musa.yaml` | MUSA GPUs |
+   Non-interactive (CI / power users):
+
+   ```bash
+   bun run stack init --yes --backend cuda --modalities text,voice
+   ```
 
 3. **Start the stack.**
 
@@ -71,6 +72,51 @@ changes.
 > **Ports are deliberate.** `11434` and `8188` are what the Tauri CSP already
 > whitelists, and the client's Ollama provider defaults to `11434`. Host
 > `8080` is *not* used — it belongs to Nordclaw's Firestore emulator.
+
+---
+
+## What `stack init` does
+
+The wizard (C-391) is a thin CLI over the portable planning core in
+`packages/shared/local-ai` (`@aikami/local-ai`):
+
+- **Detection** — probes `nvidia-smi`, `rocm-smi`, `vulkaninfo`, `/proc/meminfo`,
+  `sysctl`, `docker info` / `podman info`, and the target volume's free disk.
+  Every probe is capped at 1 s and non-fatal; with no GPU tooling it reports
+  `cpu` and still writes a valid `.env`.
+- **Recommendation** — maps the profile + your chosen modalities onto
+  `models.manifest.json` entries using the tier table. Usable VRAM is 70% of
+  reported for dedicated GPUs and 50% of total memory for unified-memory
+  systems; a model is only selected when its size fits usable memory, and the
+  largest tier that fits comfortably wins.
+- **Plan first** — backend, per-model sizes with one-line rationale, total
+  download, free disk, licences, and bound ports are printed before anything
+  is written. Declining writes nothing; a re-run diffs the existing `.env` and
+  requires confirmation before overwriting (the old file is backed up).
+- **Flags** — `--yes`, `--backend <auto|cpu|cuda|rocm|vulkan|intel|musa|metal>`
+  (default `auto` = detect from the hardware profile, exactly like omitting the
+  flag; only an explicit non-auto value overrides planning),
+  `--modalities <a,b,c>`, `--tier <auto|cpu|8gb|16gb>`, `--json` (full profile
+  + plan as a schema-valid document), `--fetch` (chain C-390's fetcher), and
+  `--env-path` / `--manifest-path` for scripts.
+
+## Backend reference
+
+| Backend | `.env` COMPOSE_FILE | When |
+|---|---|---|
+| CPU | `compose.yaml:compose.cpu.yaml` | Any machine; slow but works everywhere |
+| NVIDIA CUDA | `compose.yaml:compose.cuda.yaml` | Needs the NVIDIA Container Toolkit |
+| AMD ROCm | `compose.yaml:compose.rocm.yaml` | linux/amd64 only; image engine uses Vulkan |
+| Vulkan (universal GPU) | `compose.yaml:compose.vulkan.yaml` | AMD non-ROCm, Intel Arc, iGPUs |
+| Intel / SYCL | `compose.yaml:compose.intel.yaml` | Intel Arc / recent integrated graphics |
+| Moore Threads MUSA | `compose.yaml:compose.musa.yaml` | MUSA GPUs |
+| Metal (macOS) | `compose.yaml` (native engines) | Apple Silicon — no GPU passthrough |
+
+If you prefer to hand-edit, the variables that matter are
+`COMPOSE_PROFILES` and `COMPOSE_FILE` (everything else has a working
+default). `stack init` writes exactly these two plus the model paths it
+selected. To change hardware after `init`, re-run it (it diffs and asks) or
+edit `.env` directly.
 
 ---
 

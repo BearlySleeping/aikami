@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Local AI",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/types": ["../types/src/index.ts"],
+      "@aikami/types/*": ["../types/src/lib/*"],
+      "@aikami/schemas": ["../schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../schemas/src/lib/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js"]
+}

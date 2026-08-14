@@ -13,6 +13,7 @@
     "up:cpu": "docker compose -f compose.yaml -f compose.cpu.yaml up -d",
     "up:cuda": "docker compose -f compose.yaml -f compose.cuda.yaml up -d",
     "fetch-models": "bun stack/fetch_models.ts",
+    "init": "bun stack/init.ts",
     "down": "docker compose down",
     "logs": "docker compose logs -f",
     "build": "bun run build:client && docker compose build",
@@ -25,7 +26,10 @@
     "run:native-llm": "bash bin/run-native-llm.sh"
   },
   "dependencies": {
-    "@aikami/constants": "workspace:*"
+    "@aikami/constants": "workspace:*",
+    "@aikami/local-ai": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*"
   },
   "devDependencies": {}
 }

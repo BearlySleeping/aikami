@@ -1,0 +1,19 @@
+{
+  "name": "@aikami/local-ai",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "Portable planning core for the local AI engine stack (C-391): hardware detection, tiered model recommendation, and the ProbeExecutor seam. No dependency on the stack project and no Node/Bun-only imports in the public entry point.",
+  "scripts": {
+    "test": "bun test",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings"
+  },
+  "dependencies": {
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*"
+  },
+  "devDependencies": {}
+}
