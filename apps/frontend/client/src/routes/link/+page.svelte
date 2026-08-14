@@ -3,7 +3,7 @@
 import LinkView from '$lib/views/link/link_view.svelte';
 import { getLinkViewModel } from '$lib/views/link/link_view_model.svelte';
 
-const viewModel = getLinkViewModel({ className: 'LinkViewModel' });
+const viewModel = getLinkViewModel({ className: 'LinkViewModel', startWithLoadingView: true });
 </script>
 
 <LinkView {viewModel} />

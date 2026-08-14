@@ -10,6 +10,7 @@ use hex;
 use reqwest::Url;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -312,6 +313,18 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
+            // Register the aikami:// URL scheme in the OS at runtime. The
+            // deep-link plugin only registers schemes via the installer
+            // otherwise, so launching the release binary without installing
+            // (bun run tauri:run) leaves aikami:// unhandled and the browser
+            // tab's device-link redirect fails with "scheme does not have a
+            // registered handler". register_all() covers the uninstalled
+            // case (plugin docs); on macOS it's a no-op/unsupported and on
+            // Linux it needs xdg-mime, so failures are logged, never fatal.
+            if let Err(err) = app.deep_link().register_all() {
+                eprintln!("deep-link: register_all failed: {err}");
+            }
+
             // C-389: write the default runtime config on first run so the
             // webview resolves engine URLs from the app config directory.
             if let Err(e) = write_default_config(app.handle()) {

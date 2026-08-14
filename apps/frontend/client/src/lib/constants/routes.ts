@@ -19,6 +19,16 @@ export const routes = {
     routeId: '/',
     type: 'public',
   },
+  link: {
+    getPath: () => '/link',
+    queryParameters: undefined as
+      | undefined
+      | {
+          code?: string;
+        },
+    routeId: '/link',
+    type: 'public',
+  },
   capability: {
     getPath: () => '/capability',
     queryParameters: undefined as
