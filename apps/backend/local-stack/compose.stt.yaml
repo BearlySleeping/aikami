@@ -1,0 +1,23 @@
+# apps/backend/local-stack/compose.stt.yaml
+#
+# C-393 STT port override — adds the STT port publish to the voice service.
+#
+# The base compose.yaml deliberately does NOT publish the STT port: AC-7
+# requires that the default stack binds no STT port. Docker Compose cannot
+# conditionally publish a port per-profile, so enabling STT means adding this
+# override to COMPOSE_FILE (documented in .env.example):
+#
+#   COMPOSE_FILE=compose.yaml:compose.cpu.yaml:compose.stt.yaml
+#
+# Everything else about the STT service (the streaming server, whisper.cpp
+# batch engine, health check) is defined in the base file and activated by
+# the `stt` profile + ENABLE_STT=true.
+#
+# Port: 8087 (emulator) / 8086 (staging) / 8090 (production) — from
+# packages/shared/constants development_ports.ts (C-390 AC-11). The host
+# publish is loopback-only, like every engine.
+
+services:
+  voice:
+    ports:
+      - "127.0.0.1:${STT_PORT:-8087}:8087"

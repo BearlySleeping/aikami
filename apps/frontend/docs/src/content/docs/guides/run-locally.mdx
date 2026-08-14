@@ -5,9 +5,10 @@ description: Get the full local AI stack running on your machine in two commands
 
 Aikami's local AI stack runs entirely on your machine — text (llama.cpp),
 image (stable-diffusion.cpp), voice (sherpa-onnx Kokoro TTS), and
-speech-to-text (sherpa-onnx Moonshine) — behind one Compose topology whose
-**profiles select modalities** and whose **override files select your
-hardware backend**. Two commands is the whole story:
+speech-to-text (sherpa-onnx Moonshine streaming + whisper.cpp batch) —
+behind one Compose topology whose **profiles select modalities** and whose
+**override files select your hardware backend**. Two commands is the whole
+story:
 
 ```bash
 bun run stack init     # detects your hardware, recommends models, writes .env
@@ -35,8 +36,15 @@ init` sets the two variables that matter — or set them by hand:
 ```bash
 # .env
 COMPOSE_PROFILES=text,image,voice,stt
-COMPOSE_FILE=compose.yaml:compose.cuda.yaml   # see the table
+COMPOSE_FILE=compose.yaml:compose.cuda.yaml:compose.stt.yaml   # see the table
 ```
+
+> **Speech-to-text is opt-in.** A microphone-adjacent service must not
+> start unasked, so the shipped defaults start text, image, and voice only.
+> Enabling `stt` requires all three of: `stt` in `COMPOSE_PROFILES`,
+> `ENABLE_STT=true`, and `compose.stt.yaml` in `COMPOSE_FILE` (the base
+> file never publishes the STT port). `stack init` wires all three
+> automatically when you include the stt modality.
 
 | Backend | COMPOSE_FILE | When |
 |---|---|---|
@@ -58,12 +66,28 @@ The first start pulls the engine images and downloads the models you enabled
 | text | `11434` | OpenAI-compatible `/v1` |
 | image | `8188` | sd-server `/sdcpp/v1` + `/sdapi/v1` |
 | voice (TTS) | `8089` | `/v1/audio/speech` |
-| stt | `8087` | websocket |
+| stt (streaming) | `8087` | `WS /v1/stream` (16 kHz mono PCM) |
+| stt (batch) | `8087` | `POST /v1/audio/transcriptions` (OpenAI-compatible) |
+| stt (introspection) | `8087` | `GET /v1/capabilities`, `GET /health` |
 | web client (optional) | `5274` | static SPA |
 
 These ports match Aikami's allocation table (`development_ports.ts`), so the
 Tauri desktop app's CSP and defaults keep working with no client change. The
 engines bind `127.0.0.1` only.
+
+### Speech-to-text wire contract
+
+Streaming audio is always **16 kHz mono 16-bit PCM** (resampling is the
+client's job). A session is: `{"type":"start","protocolVersion":1,"audio":{...}}`
+(text frame — `audio` declares the fixed 16 kHz mono 16-bit PCM format) →
+binary PCM frames → `{"type":"stop"}`; the server replies with
+`ready`, `speech-start`, `partial`*, `final`, `speech-end`, and `error`
+events. VAD runs server-side (Silero) so the client never infers
+endpointing. Moonshine is English-only — requesting another language returns
+`unsupported-language` and points at the batch endpoint, which covers ~99
+languages via whisper.cpp. The full protocol (schemas, error codes, model
+tiers, privacy posture) is documented in
+[`apps/backend/local-stack/README.md`](https://github.com/BearlySleeping/aikami/blob/dev/apps/backend/local-stack/README.md).
 
 ## Connecting the client
 
@@ -81,11 +105,14 @@ Mac is CPU-only and slow. On Darwin, run the engines natively:
 cd apps/backend/local-stack
 ./bin/run-native-llm.sh   # llama-server on 11434
 ./bin/run-native-tts.sh   # sherpa-onnx Kokoro TTS on 8089
-./bin/run-native-stt.sh   # sherpa-onnx Moonshine STT on 8087
+./bin/run-native-stt.sh   # STT on 8087 — Moonshine streaming + whisper.cpp batch
 ```
 
 Only the optional web client is containerised (`COMPOSE_PROFILES=web docker
-compose up -d`). The native path exposes the same ports as the containers.
+compose up -d`). The native path exposes the same ports and the same
+protocol as the containers. `run-native-stt.sh` needs `pip install
+sherpa-onnx` on the host; batch transcription additionally needs the
+whisper.cpp `whisper-server` binary (the script header documents the build).
 
 ## Models and licences
 

@@ -94,6 +94,72 @@
       "targetPath": "stt/sherpa-onnx-moonshine-tiny-en-int8",
       "bytes": 107600538,
       "sha256": "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2"
+    },
+    {
+      "id": "stt-moonshine-base-en-int8",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "archive",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-base-en-int8.tar.bz2",
+      "targetPath": "stt/sherpa-onnx-moonshine-base-en-int8",
+      "bytes": 250807309,
+      "sha256": "21870cecaa2e44e4e2bf63e02d1072bed183ccd10284871353bd9d24dad14e5e"
+    },
+    {
+      "id": "stt-whisper-tiny",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-tiny.bin",
+      "targetPath": "stt/whisper-tiny/ggml-tiny.bin",
+      "bytes": 77691713,
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+    },
+    {
+      "id": "stt-whisper-base",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-base.bin",
+      "targetPath": "stt/whisper-base/ggml-base.bin",
+      "bytes": 147951465,
+      "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
+    },
+    {
+      "id": "stt-whisper-small",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-small.bin",
+      "targetPath": "stt/whisper-small/ggml-small.bin",
+      "bytes": 487601967,
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+    },
+    {
+      "id": "stt-silero-vad",
+      "modality": "stt",
+      "tier": "any",
+      "license": "MIT",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+      "targetPath": "stt/silero_vad.onnx",
+      "bytes": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
     }
   ]
 }
