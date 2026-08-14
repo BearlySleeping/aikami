@@ -2,7 +2,7 @@
 id: C-393
 title: "Speech-to-Text Backend Service (sherpa-onnx streaming + whisper.cpp batch)"
 source: "user request — 'also setup contract for speech to text setup (for backend)'"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -18,10 +18,10 @@ created_at: "2026-08-13"
 | Field | Value |
 |---|---|
 | **Source** | Local-stack engine review, 2026-08-13. C-390 provisions an `stt` compose profile and port but leaves the service itself undefined. This contract makes it real: engine choice, wire protocol, models, and the API surface C-359 will consume. |
-| **Target** | `apps/backend/local-stack/docker/voice/`, the `stt` compose profile, `stack/models.manifest.json`, `packages/shared/{schemas,types}/` |
+| **Target** | `apps/backend/local-stack/docker/voice/`, `compose.yaml` (healthcheck + profile wiring), `.env.example` (STT-off default), `bin/run-native-stt.sh`, `stack/models.manifest.json`, `packages/shared/{schemas,types}/` |
 | **Priority** | P2 — no consumer exists until C-359 (Speech Input and Hands-Free Play). Land it before that work starts, not before. |
 | **Dependencies** | C-390 (compose topology, `stt` profile, port constant, model manifest and fetcher). C-389 reserves `voice.stt.url` in the runtime client config. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the voice section of "Run Aikami locally"; internal → the STT API contract that C-359 codes against |
 | **Contract version** | 2.0.0 |
@@ -30,12 +30,12 @@ created_at: "2026-08-13"
 
 - **Nothing in the client consumes STT today.** A search across `apps/frontend/client/src` and `packages/frontend` for `whisper`, `SpeechRecognition`, `transcrib`, and `moonshine` returns only unrelated matches (export formatters, test fixtures). C-359 is the intended consumer and is still `not_started`. This is greenfield, and the API surface is therefore free to be designed rather than retrofitted.
 
-- **The infrastructure is half-present but undefined.** `apps/backend/local-stack/docker/voice/entrypoint.sh` already supports `ENABLE_STT` (default `false` in `docker-compose.yml`), and the current README documents a Moonshine tiny int8 model downloaded into `models/stt/` and a websocket server on `6007`. But there is no health check, no model manifest entry, no documented protocol, no language handling, no VAD, and no smoke test. It is a placeholder, not a service.
+- **The infrastructure is half-present but undefined.** `apps/backend/local-stack/docker/voice/entrypoint.sh` already supports `ENABLE_STT` (default `false` in `compose.yaml`), and the README documents a Moonshine tiny int8 model in `models/stt/` with a websocket server on `8087`. But the compose healthcheck probes only the TTS port, the manifest holds just the tiny Moonshine entry (no whisper.cpp, no tier variants), and there is no documented protocol, no language handling, no VAD, and no smoke test. It is a placeholder, not a service.
 
 - **C-390 provisions the slot without filling it.** It adds an `stt` compose profile, an `stt` port constant, and the model-store plumbing. It explicitly leaves the engine and API definition out of scope.
 
 - **The two candidate engines solve different problems, and picking one is wrong.**
-  - **sherpa-onnx / Moonshine** (MIT) — streaming websocket, tiny, shares the C++ binary already used for TTS, produces partial hypotheses as the user speaks. Right for push-to-talk and hands-free.
+  - **sherpa-onnx / Moonshine** (MIT) — websocket transport, tiny, shares the sherpa-onnx runtime already used for TTS, can produce partial hypotheses via incremental decode of the audio-so-far. Right for push-to-talk and hands-free.
   - **whisper.cpp** (MIT, ggml) — batch, OpenAI-compatible `POST /v1/audio/transcriptions`, better accuracy, wide language coverage. Right for transcribing a recorded clip or an imported audio file.
 
   A hands-free RPG needs the first; anything file-based needs the second.
@@ -71,6 +71,8 @@ final result — with no cloud service, no API key, and no Python.
 | Compose profile + port | C-390 `stt` profile and port constant | reuse |
 | Runtime client config slot | C-389 `voice.stt.url` | reuse |
 | Non-root container posture | `VOICE_UID` / `VOICE_GID` pattern | reuse |
+| Compose health check | `compose.yaml` voice healthcheck (TTS port only) | modify — cover the STT endpoint too (Watch Points) |
+| Shipped default config | `.env.example` (`COMPOSE_PROFILES` lists `stt`, `ENABLE_STT=true`) | modify — STT must be opt-in; AC-7 must hold against the shipped defaults |
 
 ## Overview
 
@@ -125,9 +127,18 @@ plus a container, not a redesign.
 ## Architecture Directives
 
 - **Reuse the sherpa container; do not add a third voice image.** Streaming
-  STT and TTS are the same binary and the same model store. whisper.cpp is a
+  STT and TTS share the container and the model store. whisper.cpp is a
   separate process and may be a separate container behind the same profile,
   but must not duplicate the model volume.
+- **The streaming endpoint is a new server, not the bundled binary.** The
+  shipped `sherpa-onnx-offline-websocket-server` speaks its own
+  config/`done`/`final_result` protocol, emits no partial hypotheses for
+  offline Moonshine, and has no VAD events — it cannot satisfy AC-1/AC-2.
+  The streaming endpoint is a small custom server in the voice container
+  (same stdlib pattern as `tts_server.py`) wrapping sherpa-onnx's
+  `OfflineRecognizer` (Moonshine) plus Silero VAD, supervised by the
+  existing `entrypoint.sh`. Only then is the protocol defined in this
+  contract the protocol actually on the wire.
 - **Ship no weights in any image.** STT models come from C-390's manifest
   fetcher into the shared volume, like every other model.
 - **The batch endpoint must be OpenAI-shaped**, accepting `multipart/form-data`
@@ -235,7 +246,8 @@ definition rather than two hand-synced copies.
 - **In Scope:**
   - Streaming websocket protocol: message types, audio format, versioning, error codes.
   - OpenAI-compatible batch `POST /v1/audio/transcriptions`.
-  - `GET /v1/capabilities` and a health check wired into the compose profile.
+  - `GET /v1/capabilities` and a health check wired into the compose profile — extended so the voice healthcheck covers the STT endpoint, not just TTS.
+  - Flipping the shipped defaults to STT-off: `.env.example` currently ships `stt` in `COMPOSE_PROFILES` and `ENABLE_STT=true`; the shipped default must be opt-in (AC-7).
   - Silero VAD with speech-start/speech-end events.
   - Manifest entries and tiers for Moonshine and whisper.cpp models.
   - Engine selection env vars leaving a seam for licensed providers.
@@ -275,7 +287,7 @@ does not serve. The client work **is** separable and is C-359.
 ### AC-3: Batch endpoint is OpenAI-compatible
 **Given** the STT profile running
 **When** a WAV file is posted as `multipart/form-data` to `POST /v1/audio/transcriptions` with a `file` field
-**Then** the response matches OpenAI's transcription shape, and an unmodified OpenAI-compatible client library succeeds against it.
+**Then** the response matches OpenAI's transcription shape, and an unmodified OpenAI-compatible client succeeds against it — e.g. the official `openai` npm SDK's `client.audio.transcriptions.create()` with the same `file`/`model`/`response_format` args pointed at the local endpoint.
 
 ### AC-4: Capabilities are introspectable
 **Given** the service running
@@ -293,7 +305,7 @@ does not serve. The client work **is** separable and is C-359.
 **Then** the service responds `error: bad-audio-format` stating the expected format, rather than producing nonsense transcripts.
 
 ### AC-7: Off by default
-**Given** the default stack configuration
+**Given** the default stack configuration — i.e. the shipped `.env.example`, which must not list `stt` in `COMPOSE_PROFILES` and must not set `ENABLE_STT=true`
 **When** `docker compose up -d` runs without the `stt` profile
 **Then** no STT service starts, no STT port is bound, and no STT model is downloaded.
 
@@ -346,7 +358,9 @@ does not serve. The client work **is** separable and is C-359.
     - **Visual**: N/A.
 
 **Watch Points**:
-- **The port must fit the allocated range.** `development_ports.ts` documents `8087–8092` for Aikami backend services, with `8088`/`8089`/`8092` already taken by voice across the three modes. STT needs an emulator/staging/production triple inside a range that is nearly full — resolve the allocation with C-390 rather than inventing a number outside the table.
+- **Ports are already allocated — use them.** C-390 put STT at `8087` (emulator) / `8086` (staging) / `8090` (production) in `development_ports.ts`; compose and native scripts must not invent anything outside that. Caveat: staging `8086` numerically coincides with the Aikami pubsub emulator port — different modes, so they only collide when both run on one host. That is C-390's pre-existing allocation and is not re-litigated here.
+- **Default-tier model must be reconciled with the shipped stack.** `compose.yaml` (`STT_DIR`), `entrypoint.sh`, and `bin/run-native-stt.sh` all reference `sherpa-onnx-moonshine-tiny-en-int8`, while this contract's default tier is Moonshine base int8. Re-point those references to the chosen default tier, or the shipped stack silently serves a different tier than the ACs test. The 300 ms first-partial budget is far easier to meet with tiny than with base — if base cannot hit it on CPU, ship tiny as the default and keep base as a higher tier.
+- **The fetcher downloads every entry of a modality; there is no tier filter.** `TEXT_MODEL`/`IMAGE_MODEL` only select which file the engine loads — the fetcher itself fetches all entries of an enabled modality. Adding whisper.cpp `tiny`/`base`/`small` plus Moonshine base as STT entries means the `stt` profile downloads all of them unless an entry-selection mechanism is added (`STT_STREAM_MODEL`/`STT_BATCH_MODEL` wired into the fetcher, or an explicit `--entry` list). Size the manifest accordingly or gate by tier.
 - **Moonshine is English-only.** Treating it as multilingual is the single most likely design mistake here; AC-5 exists specifically to prevent it.
 - **Websocket through nginx** needs `Upgrade`/`Connection` header forwarding. If STT is ever proxied via the client container's nginx, `docker/client/nginx.conf` must be updated or connections fail with a confusing 400.
 - **VAD aggressiveness is a real tuning knob.** Too sensitive truncates slow speakers mid-sentence; too lax makes hands-free feel unresponsive. Expose it as an env var rather than hardcoding, and record the chosen default and why.
@@ -373,14 +387,14 @@ does not serve. The client work **is** separable and is C-359.
 - **Silence-only input**: must produce an empty `final`, not an error and not a hallucinated sentence. Whisper models are known to hallucinate on silence — VAD gating is the mitigation, and this case needs a test.
 - **The privacy posture must be written down.** Users are handing a microphone to a local service; "we do not persist audio" belongs in the README, backed by AC-8, not assumed from the architecture.
 
-## Open Questions
+## Open Questions — Resolved at Critique (2026-08-14)
 
-Must be resolved before status becomes `approved`:
+These were open in the draft; each is resolved below from codebase evidence, so approval is not gated on them.
 
-- One container running both engines, or two containers behind one profile? One keeps the model volume and supervision simple and matches the existing `entrypoint.sh`; two isolates a whisper.cpp crash from TTS. Proposed: one, extending the existing supervisor, revisited if stability suffers.
-- Which port triple for STT, given `8087–8092` is nearly exhausted? This must be settled jointly with C-390's port work rather than independently.
-- Should the batch endpoint accept formats other than WAV (mp3, ogg, webm)? Browser `MediaRecorder` produces webm/opus by default, so C-359 will either transcode client-side or need server-side decoding. Deciding now avoids a painful retrofit — proposed: accept WAV only in this contract, and record webm/opus as a known C-359 dependency.
-- Is `wordTimestamps` worth a licensed CrisperWhisper provider later, or is sentence-level timing sufficient for everything C-359 wants? Answering shapes how much the seam needs to carry.
+- **One container or two?** **Resolved: one.** C-390's implemented topology already hosts STT inside the `voice` service (`profiles: ["voice", "stt"]`, same image, same model volume) and the existing `entrypoint.sh` supervises both processes. Revisit only if whisper.cpp crash stability demands isolation.
+- **Port triple?** **Resolved: 8087 / 8086 / 8090** (emulator/staging/production) — already allocated in `packages/shared/constants/src/lib/development_ports.ts` by C-390. See Watch Points for the staging-8086/pubsub coincidence note.
+- **Batch formats?** **Resolved: WAV only in this contract.** Browser `MediaRecorder` produces webm/opus by default, so C-359 transcodes client-side (Web Audio → PCM/WAV) before posting; server-side webm/opus decoding is recorded as a known C-359 dependency and is out of scope here.
+- **`wordTimestamps`?** **Resolved: sentence-level timing suffices for C-359.** The seam stays as designed — the `wordTimestamps: false` field plus the `STT_STREAM_ENGINE`/`STT_BATCH_ENGINE` env values — so a future licensed CrisperWhisper provider can report `true` without a protocol change.
 
 ## Amendments
 
