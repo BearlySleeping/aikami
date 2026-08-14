@@ -173,6 +173,27 @@ describe('registerNamespace', () => {
     expect(result.content[0]?.text).toContain('Invalid params');
   });
 
+  test('recovers a flattened call — fields alongside `action` instead of nested under `params`', async () => {
+    const { tool } = build();
+    const flat = { action: 'echo', message: 'hi', times: 2 } as unknown as Parameters<
+      typeof tool.execute
+    >[1];
+    const result = await tool.execute('t1', flat);
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toBe('hix2');
+  });
+
+  test('prefers a genuinely nested `params` over stray top-level fields', async () => {
+    const { tool } = build();
+    const mixed = {
+      action: 'echo',
+      params: { message: 'nested', times: 3 },
+      message: 'flat-should-be-ignored',
+    } as unknown as Parameters<typeof tool.execute>[1];
+    const result = await tool.execute('t1', mixed);
+    expect(result.content[0]?.text).toBe('nestedx3');
+  });
+
   test('a failing action never sees invalid params', async () => {
     let seen: unknown;
     const strict = defineAction({
