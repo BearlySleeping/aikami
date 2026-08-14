@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/backend/local-stack/`, `packages/shared/constants/src/lib/development_ports.ts`, `.github/workflows/` |
 | **Priority** | P1 — the stack is currently non-functional (it references a container image that does not exist) and cannot be published. |
 | **Dependencies** | C-389 (runtime engine config — without it the client image is not publishable). C-388 (sd-server client adapter — without it the default image engine is unreachable). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → "Run Aikami locally" page in `apps/frontend/docs/src/content/docs/`, plus `apps/backend/local-stack/README.md` |
 | **Contract version** | 2.0.0 |
@@ -72,10 +72,10 @@ CUDA toolkit install, no model hunting, and no source build.
 |---|---|---|
 | Voice container | `docker/voice/Dockerfile.sherpa`, `entrypoint.sh` | reuse — becomes the STT host and optional server TTS |
 | SPA nginx config | `docker/client/nginx.conf` | modify — add `config.json` mount and `no-store` |
-| Native launchers | `bin/run-native-*.sh` | reuse — promoted to the macOS path |
+| Native launchers | `bin/run-native-*.sh` | reuse — promoted to the macOS path; default ports move to the allocation table (`LLM_PORT=11434`, `TTS_PORT=8089`) |
 | Compose topology | `docker-compose.yml` | **replace** |
 | Lite compose | `docker-compose.lite.yml` | **delete** — a profile expresses this |
-| Ultimate image | `Dockerfile.ultimate`, `docker/scripts/entrypoint-ultimate.sh`, `docker/client-server/` | **delete** — incompatible with per-backend builds |
+| Ultimate image | `Dockerfile.ultimate`, `docker/scripts/entrypoint-ultimate.sh`, `docker/client-server/` | **delete** — incompatible with per-backend builds. Note: `scripts/check.sh` currently hosts C-389's AC-10 static-serve/config-swap check via `docker/client-server/client_server.ts`; port that assertion into the container-level AC-9 test when check.sh is rewritten so the runtime-config guarantee stays asserted after deletion. Local `dist/` serving (its only other role) is replaced by the web-client container or a documented `bunx serve build` fallback in the README |
 | Port allocation | `packages/shared/constants/src/lib/development_ports.ts` | modify — add STT, reuse existing text/image/voice ports |
 | Stack smoke test | `scripts/check.sh` | modify — real health assertions |
 
@@ -112,6 +112,14 @@ Ollama provider already defaults to `11434`. Changing engines while keeping
 ports means the desktop app needs no CSP change for text and image, and Ollama
 remains a drop-in alternative on the same port. Host `8080` is abandoned — it
 belongs to Nordclaw.
+
+The same ports must be used by every path that talks to the engines, not just
+compose: `scripts/emit_config.sh` defaults (currently `text.url =
+http://localhost:8080/v1`, voice `6006`) move to `11434` / `8089`, and the
+native launchers (`bin/run-native-llm.sh` defaults `LLM_PORT=8080`,
+`bin/run-native-tts.sh` defaults `TTS_PORT=6006`) move to the same table
+ports, so the macOS native path (AC-12) and the containerised path expose
+identical endpoints to the client.
 
 **Only build what upstream does not publish.** All registry facts below were
 verified against the live registries on 2026-08-13.
@@ -190,7 +198,10 @@ before performance is even considered.
   users start no client container.
 - **Every service declares a health check**, and dependent services use
   `depends_on: { condition: service_healthy }` so the client never renders
-  against a half-started engine.
+  against a half-started engine. The one-shot model fetcher is the exception:
+  engines wait for it with `depends_on: { condition: service_completed_successfully }`
+  — a health check cannot run on a container that has already exited, and the
+  fetcher's exit-0 contract keeps that gate from blocking other engines.
 - **macOS gets no GPU containers.** Docker Desktop provides no Metal
   passthrough; a containerised engine on macOS is CPU-only and slow. On Darwin
   the setup emits a **native plan** using `bin/run-native-*.sh`, and only the
@@ -198,7 +209,12 @@ before performance is even considered.
   README rather than discovered by users.
 - **The model fetcher is idempotent, resumable, and checksum-verified.**
   Re-running it after a partial download resumes; a digest mismatch re-fetches
-  rather than proceeding.
+  rather than proceeding. It is **profile-scoped**: it fetches only the
+  modalities the user enabled via `COMPOSE_PROFILES` — a `text`-only install
+  never downloads image or voice weights. Per-model failures are recorded and
+  **non-fatal**: the fetcher exits 0 as long as the enabled modalities were
+  attempted, so one failed download cannot prevent unrelated engines from
+  starting (their own health checks report the missing model).
 - **Use-restricted models require explicit acknowledgement.** SD 1.5 is
   OpenRAIL-M; the fetcher must print the licence and require an explicit opt-in
   flag or env var before downloading it. Apache/MIT models download freely.
@@ -236,6 +252,8 @@ before performance is even considered.
 
 ```ts
 /** Hardware backend → compose override file + upstream image tags. */
+// 'metal' deliberately has no compose override — on Darwin the setup emits the
+// native plan (bin/run-native-*.sh) and only the web client is containerised.
 type StackBackend = 'cpu' | 'cuda' | 'rocm' | 'vulkan' | 'metal';
 
 /** Modalities the user opted into; maps 1:1 onto compose profiles. */
@@ -269,7 +287,7 @@ Layout:        /models/{text,image,tts,stt}/…
 
 ## Migration & Rollback
 
-- **Old data compatibility**: the existing `models/` bind-mount tree (`models/{llm,image,tts,stt}`) holds any weights a user already downloaded. Provide a one-time import that moves them into the named volume, or support the bind mount as an alternative `MODELS_PATH`.
+- **Old data compatibility**: the existing `models/` bind-mount tree (`models/{llm,image,tts,stt}`) holds any weights a user already downloaded. Provide a one-time import that moves them into the named volume, or support the bind mount as an alternative `MODELS_PATH` (AC-13 makes the `MODELS_PATH` path mandatory and machine-checkable).
 - **Migration**: `docker-compose.yml` → `compose.yaml` is a rename plus rewrite; the old file is deleted, not left alongside. `moon.yml` and `package.json` task names are updated in the same change.
 - **Rollback**: the previous compose file is recoverable from git; no persistent state is destroyed by rolling back, because the model volume is not schema-versioned.
 - **Feature flag or kill switch**: N/A — the entire stack is opt-in developer tooling.
@@ -336,10 +354,10 @@ mergeable and is therefore C-391.
 **When** their layers are inspected
 **Then** no file matching `*.gguf`, `*.safetensors`, `*.onnx`, `*.bin`, or `*.pt` is present, and neither image exceeds 250 MB compressed.
 
-### AC-6: The fetcher is idempotent, resumable, and verified
+### AC-6: The fetcher is idempotent, resumable, profile-scoped, and verified
 **Given** a partially downloaded model
 **When** the fetcher runs again
-**Then** it resumes rather than restarting, verifies SHA-256 on completion, and a second full run downloads nothing; **and** a corrupted file is detected and re-fetched rather than used.
+**Then** it resumes rather than restarting, verifies SHA-256 on completion, and a second full run downloads nothing; **and** a corrupted file is detected and re-fetched rather than used; **and** with `COMPOSE_PROFILES=text` it downloads no image/voice/stt models; **and** a failed download for one modality does not change the exit status (0) as long as the enabled modalities were attempted.
 
 ### AC-7: Use-restricted models require acknowledgement
 **Given** a manifest entry with `requiresAcknowledgement: true` (SD 1.5)
@@ -364,29 +382,35 @@ mergeable and is therefore C-391.
 ### AC-11: Ports match the allocation table
 **Given** the rendered compose config
 **When** host port mappings are compared against `development_ports.ts`
-**Then** text is `11434`, image is `8188`, voice is `8089`, STT matches the newly added constant, no service binds `8080`, and every engine binds `127.0.0.1` rather than `0.0.0.0`.
+**Then** text is `11434`, image is `8188`, voice is `8089`, STT matches the newly added constant, the web client binds an Aikami-allocated port from `development_ports.ts` (not the Nordclaw `3000–3009` range), no service binds `8080`, and every engine binds `127.0.0.1` rather than `0.0.0.0`.
 
 ### AC-12: macOS gets an honest path
 **Given** the README and `scripts/check.sh` on Darwin
 **When** a user follows the documented setup
 **Then** they are directed to the native launchers for the engines, told explicitly that Docker on macOS has no Metal passthrough, and the smoke test verifies the native path rather than reporting a false pass.
 
+### AC-13: Existing model trees keep working via MODELS_PATH
+**Given** a user with a pre-existing `models/` tree from the old stack and `MODELS_PATH` set to that directory
+**When** the stack starts
+**Then** the engines mount `MODELS_PATH` instead of the named volume, an engine whose model file is present reaches `healthy`, and the original tree is left untouched (no move, no delete) — the Migration & Rollback promise is machine-checkable.
+
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
 | AC-1 | Integration | `scripts/check.sh` — manifest resolution loop | N/A | Filled during verification |
 | AC-1b | Integration | `scripts/check.sh` — per-backend render assertions | N/A | Filled during verification |
-| AC-2 | Integration | `scripts/check.sh` — `docker compose config --profile` per modality | N/A | Filled during verification |
+| AC-2 | Integration | `scripts/check.sh` — `docker compose --profile <modality> config` per modality | N/A | Filled during verification |
 | AC-3 | Integration | `scripts/check.sh` — rendered-config assertions | N/A | Filled during verification |
 | AC-4 | Integration | `scripts/check.sh` — health probes | N/A | Filled during verification |
 | AC-5 | Integration | CI image-inspection step | N/A | Filled during verification |
-| AC-6 | Unit | `stack/fetch_models.test.ts` | N/A | Filled during verification |
-| AC-7 | Unit | `stack/fetch_models.test.ts` | N/A | Filled during verification |
+| AC-6 | Unit | `apps/backend/local-stack/stack/fetch_models.test.ts` | N/A | Filled during verification |
+| AC-7 | Unit | `apps/backend/local-stack/stack/fetch_models.test.ts` | N/A | Filled during verification |
 | AC-8 | Manual | documented in the PR with network disabled | N/A | Filled during verification |
 | AC-9 | Integration | CI — two config mounts against one image | N/A | Filled during verification |
 | AC-10 | Unit | repo-structure assertion in `local-stack` tests | N/A | Filled during verification |
-| AC-11 | Unit | `stack/ports.test.ts` against `development_ports.ts` | N/A | Filled during verification |
+| AC-11 | Unit | `apps/backend/local-stack/stack/ports.test.ts` against `development_ports.ts` | N/A | Filled during verification |
 | AC-12 | Manual | Darwin run documented in the PR | N/A | Filled during verification |
+| AC-13 | Integration | `scripts/check.sh` — `MODELS_PATH` mount + health assertion | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run local-stack:test`, `bun moon run local-stack:lint`
@@ -427,13 +451,13 @@ mergeable and is therefore C-391.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolution status — the struck items are resolved; the remaining items are implementation-verifiable or already covered by ACs, so none blocks approval:
 
 - ~~**Does `leejet/stable-diffusion.cpp` publish `sd-server` images?**~~ **Resolved 2026-08-13** — yes, to `ghcr.io/leejet/stable-diffusion.cpp`. The complete published tag set is exactly five: `master-cuda`, `master-cuda-spark`, `master-musa`, `master-sycl`, `master-vulkan`. **No CPU tag and no ROCm tag**, so a CPU image is in scope for us to build, and AMD routes through Vulkan.
 - ~~**No official Vulkan `llama-server` image exists.**~~ **Resolved 2026-08-13 — this was wrong.** `ghcr.io/ggml-org/llama.cpp:server-vulkan` exists, as do `server-intel`, `server-rocm`, and `server-cuda13`. The docs page omits several of them; the registry is the authority. No custom llama.cpp build is needed for any backend.
 - **Does the container's default entrypoint run `sd-server` or `sd-cli`?** The upstream images build both. If the default is the CLI, every image service needs an explicit `command:` override. Verify before Phase 3.
 - **Does the pinned sd-server digest expose `/sdcpp/v1/jobs/{id}`?** C-388's progress and cancellation ACs depend on it. Because the tags are rolling, this must be re-verified whenever the digest is bumped — make it an assertion in the smoke test, not a one-time check.
-- **Named volume or bind mount as the default model store?** Volumes are cleaner and permission-safe; bind mounts let users drop in their own checkpoints without a container. Proposed: volume by default, `MODELS_PATH` documented as the bind-mount override.
+- ~~**Named volume or bind mount as the default model store?**~~ **Resolved in AC-13** — volume by default, `MODELS_PATH` is a required, machine-checkable bind-mount alternative.
 - **Do we ship SD 1.5 at all**, given it is OpenRAIL-M rather than Apache/MIT, or is FLUX.1-schnell the only image model and low-VRAM users simply get CPU-slow generation? This is a licensing-posture decision, not a technical one.
 
 ## Amendments
