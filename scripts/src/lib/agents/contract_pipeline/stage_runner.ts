@@ -26,6 +26,12 @@ const sleep = async (milliseconds: number): Promise<void> =>
 const NUDGE_AFTER_IDLE_MS = 2 * 60 * 1000;
 /** Maximum nudges before allowing continuous idle to reach the idle timeout. */
 const MAX_NUDGES = 3;
+/** After idle timeout, detect truly dead processes within this grace period before slow-poll. */
+const DEAD_CHECK_GRACE_MS = 5 * 1000;
+/** Maximum relaunch attempts when worker process dies unexpectedly. */
+const MAX_RELAUNCHES = 2;
+/** Slow-poll interval after idle timeout (longer to avoid herdr spam). */
+const SLOW_POLL_MS = 30_000;
 
 /** Return the worker role for a model-driven stage. */
 export const roleForStage = (stage: ContractPipelineStage): ContractWorkerRole => {
@@ -144,6 +150,8 @@ export const runStage = async (options: {
   const startedAt = Date.now();
   let idleMs = 0;
   let nudgesSent = 0;
+  let relaunches = 0;
+  let lastWorkerCheckFailed = false;
 
   while (true) {
     const result = readStageResult({
@@ -164,14 +172,43 @@ export const runStage = async (options: {
 
     let isWorking = true;
     if (options.checkAgentWorking) {
-      isWorking = await options.checkAgentWorking(paneId).catch(() => true);
+      isWorking = await options.checkAgentWorking(paneId).catch(() => {
+        lastWorkerCheckFailed = true;
+        return true;
+      });
     }
     if (isWorking) {
       idleMs = 0;
+      lastWorkerCheckFailed = false;
       continue;
     }
 
     idleMs += pollIntervalMs;
+
+    // Detect truly dead worker (idle + check works + reports dead)
+    if (!lastWorkerCheckFailed && idleMs >= DEAD_CHECK_GRACE_MS && relaunches < MAX_RELAUNCHES) {
+      console.warn(
+        `⚠️  ${role} process dead (attempt ${options.attempt}/${options.attempt + MAX_RELAUNCHES - relaunches}). Relaunching...`,
+      );
+      relaunches += 1;
+      idleMs = 0;
+      const { paneId: newPaneId } = await options.launchWorker({
+        runId: options.runId,
+        resultPath,
+        delivery: 'direct_prompt',
+        prompt: options.feedback?.trim()
+          ? `Resume the ${role} stage for ${options.runId}. Check CONTRACT_PIPELINE_RESULT_PATH first — if valid, ONLY call contract_stage_complete with that status. Otherwise continue work.`
+          : '',
+        contractPath: options.contractPath,
+        role,
+        stage: options.stage,
+        attempt: options.attempt,
+        userMessage: '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
+      });
+      // Relaunch succeeded — continue polling
+      continue;
+    }
+
     if (idleMs >= NUDGE_AFTER_IDLE_MS && nudgesSent < MAX_NUDGES && options.nudgeWorker) {
       nudgesSent += 1;
       idleMs = 0;
@@ -191,18 +228,50 @@ export const runStage = async (options: {
     }
   }
 
-  // ── Idle timeout fired — keep polling for late result ──
-  // The worker may still be working (agent_status can report 'idle'
-  // between LLM turns even though pi is still running). Instead of
-  // giving up, switch to slow polling and wait for the result file
-  // up to the hard timeout.
-  //
-  // 🔴 OVERRIDE: if the worker eventually writes a valid result,
-  // it overrides the idle timeout. Only the hard wall-clock cap
-  // is terminal.
-  const slowPollMs = 30_000;
+  // ── Idle timeout fired — check if worker is truly dead ──
+  let workerIsDead = false;
+  if (options.checkAgentWorking) {
+    const checkResult = await options.checkAgentWorking(paneId).catch(() => true);
+    workerIsDead = !checkResult && !lastWorkerCheckFailed;
+  }
+
+  if (workerIsDead && relaunches < MAX_RELAUNCHES) {
+    console.warn(
+      `⚠️  ${role} process dead after idle timeout. Final relaunch (${relaunches + 1}/${MAX_RELAUNCHES})...`,
+    );
+    relaunches += 1;
+    idleMs = 0;
+    await options.launchWorker({
+      runId: options.runId,
+      resultPath,
+      delivery: 'direct_prompt',
+      prompt: `Resume the ${role} stage for ${options.runId}. Check CONTRACT_PIPELINE_RESULT_PATH — if valid, call contract_stage_complete with that status. Otherwise continue.`,
+      contractPath: options.contractPath,
+      role,
+      stage: options.stage,
+      attempt: options.attempt,
+      userMessage: '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
+    });
+    // Give relaunch 30s to produce a result
+    const finalDeadline = Date.now() + 30_000;
+    while (Date.now() < finalDeadline) {
+      const recovered = readStageResult({
+        resultPath,
+        runId: options.runId,
+        role,
+        attempt: options.attempt,
+      });
+      if (recovered) {
+        console.log(`✅ Recovered ${role} result after relaunch: ${recovered.status}`);
+        return { result: recovered, paneId };
+      }
+      await sleep(SLOW_POLL_MS);
+    }
+  }
+
+  // ── Slow recovery polling — keep trying until hard timeout ──
   console.warn(
-    `⚠️  ${role} idle timeout reached. Switching to recovery polling (every ${slowPollMs / 1000}s) until hard timeout...`,
+    `⚠️  ${role} idle timeout reached. Switching to recovery polling (every ${SLOW_POLL_MS / 1000}s) until hard timeout...`,
   );
 
   while (Date.now() - startedAt < options.hardTimeoutMs) {
@@ -216,7 +285,7 @@ export const runStage = async (options: {
       console.log(`✅ Recovered ${role} result after idle timeout: ${recovered.status}`);
       return { result: recovered, paneId };
     }
-    await sleep(slowPollMs);
+    await sleep(SLOW_POLL_MS);
   }
 
   // ── Hard timeout — truly terminal ───────────────────────
@@ -235,7 +304,7 @@ export const runStage = async (options: {
     stage: role,
     attempt: options.attempt,
     status: 'blocked',
-    summary: `Worker unresponsive for ${Math.round(options.hardTimeoutMs / 60_000)} min — hard timeout reached.`,
+    summary: `Worker unresponsive for ${Math.round(options.hardTimeoutMs / 60_000)} min — hard timeout reached after ${relaunches} relaunch(es).`,
     findings: ['No valid contract_stage_complete result was produced before hard timeout.'],
     filesTouched: [],
     evidence: [],

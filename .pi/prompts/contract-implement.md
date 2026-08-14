@@ -18,7 +18,7 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 
 ## Phase 0: Preflight
 
-1. **Verify clean workspace**: 🔴 You run inside an isolated Git Worktree at `.pi/workspaces/` — `git` commands resolve correctly within the worktree. Use git:
+1. **Verify clean workspace**: 🔴 You run inside an isolated Git Worktree at `~/.herdr/worktrees/<repo>/` — `git` commands resolve correctly within the worktree. Use git:
    ```bash
    git status
    git log -1 --format="%H %s"
@@ -45,7 +45,7 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 
 4. **Read the contract** fully: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
 
-5. **Check dependencies**: every contract in Dependencies must exist and have status `verified` or `completed`. If not, stop — build the dependency first.
+5. **Check dependencies**: every contract in Dependencies must exist. Status should ideally be `verified` or `completed`; `implemented` is acceptable (merged PR with evidence). Only stop if a dependency is `blocked` or `draft`.
 
 6. **Read PROGRESS.md** — check in-progress/completed. If picking next: read INDEX.md for priority (INDEX.md is READ-ONLY).
 

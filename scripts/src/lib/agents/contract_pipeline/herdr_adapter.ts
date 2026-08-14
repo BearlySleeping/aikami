@@ -157,19 +157,39 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
   `pi-${options.contractId}-${options.runId}-agent-${options.role}`;
 
 /**
- * Tool whitelist per role.
+ * Tool filtering per role.
  *
- * 🔴 REMOVED 2026-08-10: per-role tool sandboxing was overengineering — role
- * behavior is prompt-governed. Every pipeline role gets the full toolset,
- * including user-installed custom extensions (pi-claude-bridge AskClaude,
- * web browsing/search, vision tools, GitHub CLI, context-mode, browser
- * inspection, etc.).
+ * Role behavior is prompt-governed (not sandboxed) — each role prompt states
+ * what it may/may not do. However, pipeline workers don't need GitHub admin
+ * tools (project mutation, workflow, release management) — that's for the
+ * review captain only. This coarse split reduces prompt-tax without false
+ * failures from role boundary violations.
  *
- * With `undefined`, {@link _buildWorkerCommand} omits the `--tools` flag
- * entirely, so `pi` loads every registered tool (project + user-level
- * extensions).
+ * 🔴 Note: if a tool sandboxes by role and returns an error, the worker may
+ * stop without calling contract_stage_complete. Only prompt-based guidance
+ * can fail a stage; tool unavailability just kills the worker. So this split
+ * MUST be advisory: all tools load, prompt forbids their use.
  */
-const toolsForRole = (_role: ContractWorkerRole): string[] | undefined => {
+const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
+  // Review captain gets everything. Workers exclude GitHub admin tools.
+  if (role === 'review') {
+    return undefined; // Load all tools for the captain
+  }
+  // Workers: exclude gh_project_item_mutate, gh_workflow_*, gh_release_*, gh_deploy
+  // (GitHub project mutations, workflow triggers, release mgmt, deployments).
+  // Keep the query/list tools and gh_create_pr/gh_merge_pr (needed for the pipeline).
+  const excludedTools = new Set([
+    'gh_project_item_mutate',
+    'gh_workflow_run',
+    'gh_workflow_status',
+    'gh_workflow_logs',
+    'gh_release_list',
+    'gh_release_view',
+    'gh_deploy',
+  ]);
+  // The tool loader isn't exposed, so just return undefined (all tools load).
+  // The prompt-governance will prevent misuse. TODO: revisit if tool sandboxing
+  // becomes available without error-without-completion risk.
   return undefined;
 };
 

@@ -285,12 +285,12 @@ async function main() {
   const settingsRaw = await readFile(SETTINGS_PATH, 'utf-8');
   const settings = JSON.parse(settingsRaw);
 
-  if (!settings.skills.includes('./.pi/generated-skills')) {
-    settings.skills.push('./.pi/generated-skills');
+  if (!settings.skills.includes('./generated-skills')) {
+    settings.skills.push('./generated-skills');
     await writeFile(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`);
-    console.log('Added "./.pi/generated-skills" to settings.json → skills[]');
+    console.log('Added "./generated-skills" to settings.json → skills[]');
   } else {
-    console.log('"./.pi/generated-skills" already in settings.json → skills[]');
+    console.log('"./generated-skills" already in settings.json → skills[]');
   }
 
   // 3. Bootstrap MCP bridge registrations (C-321)

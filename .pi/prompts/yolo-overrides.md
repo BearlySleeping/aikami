@@ -19,7 +19,7 @@ At the start of this session, you were given a state JSON object. Always check i
 
 **If `autofixCycle >= maxAutofixCycles`:** You are in the FINAL autofix cycle.
 - If autofix still fails after this cycle, DO NOT loop again.
-- Instead, call `contract_review_decision` with `change` and note in the summary
+- Instead, call `contract_review_decision` with `reject` and note in the summary
   that the autofix limit was hit.
 - The orchestrator will degrade to manual review mode.
 

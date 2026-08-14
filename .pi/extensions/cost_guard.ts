@@ -67,6 +67,35 @@ export default function (pi: ExtensionAPI) {
         `[COST GUARD] Hard limit $${hardCap.toFixed(2)} reached. Spend: $${sessionCost.toFixed(2)}. Session frozen.`,
         'error',
       );
+      // For contract pipeline workers: write a blocked result before shutdown
+      const role = process.env.CONTRACT_PIPELINE_ROLE;
+      const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
+      if (role && resultPath) {
+        try {
+          const { writeStageResult } = await import('../../scripts/src/lib/agents/contract_pipeline/stage_result.ts');
+          const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
+          const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
+          if (runId && attempt >= 1) {
+            writeStageResult({
+              resultPath,
+              result: {
+                runId,
+                stage: role,
+                attempt,
+                status: 'blocked',
+                summary: `Cost guard hard limit reached ($${hardCap.toFixed(2)}). Pipeline stopped.`,
+                findings: ['Cost limit exceeded before stage completion.'],
+                filesTouched: [],
+                evidence: [],
+                contractHash: '',
+                diffHash: '',
+              },
+            });
+          }
+        } catch {
+          // If we can't write the result, still shut down
+        }
+      }
       ctx.shutdown();
     }
   });
@@ -115,14 +144,18 @@ export default function (pi: ExtensionAPI) {
         'warning',
       );
 
-      pi.sendUserMessage(
-        `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
+      const role = process.env.CONTRACT_PIPELINE_ROLE;
+      const message = role
+        ? `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
+          `🔴 Contract pipeline ${role}: CALL contract_stage_complete NOW with your current status.\n` +
+          `Do not start new work. Summarize what you have and call the completion tool.`
+        : `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
           `Wrap up IMMEDIATELY:\n` +
           `1. Stop invoking tools — no more reads, searches, or shell commands.\n` +
-          `2. Deliver your final analysis, diagnosis, or implementation plan based on what you have.\n` +
-          `3. End with "## Unexamined Areas & Next Steps" listing what you'd investigate with more budget.`,
-        { deliverAs: 'steer' },
-      );
+          `2. Deliver your final analysis based on what you have.\n` +
+          `3. End with "## Unexamined Areas & Next Steps" listing what remains.`;
+
+      pi.sendUserMessage(message, { deliverAs: 'steer' });
     }
   });
 }

@@ -1,7 +1,7 @@
 ---
 name: contract-implementer
 description: >-
-  Implements Aikami features from contract specifications in docs/contracts/ (docs/ is a separate repo cloned inside main, gitignored).
+  Implements Aikami features from contract specifications in docs/contracts/ (tracked in git).
   Flow: plan → implement → QA (sandbox + E2E + visual) → validate → docs → handoff. Use when implementing features
   defined in docs/contracts/*.md. PROGRESS.md is auto-generated via `bun knowledge:sync`; INDEX.md is read-only;
   execution reports live at the bottom of individual contract files.
@@ -111,7 +111,7 @@ Two working modes are supported when running a contract pipeline:
 
 | Mode | Command | Description |
 |---|---|---|
-| **Worktree** (default) | `bun run contract C-370` | Creates isolated `.pi/workspaces/` worktree for background agents |
+| **Worktree** (default) | `bun run contract C-370` | Creates isolated `~/.herdr/worktrees/<repo>/` worktree for background agents |
 | **Root** | `bun run contract C-370 --root` | Starts on branch `contract/C-370` in the repo root before launching pipeline |
 | **Root + dirty** | `bun run contract C-370 --root --dirty` | Switches branch carrying uncommitted changes over |
 

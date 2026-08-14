@@ -127,6 +127,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       filesTouched: Type.Array(Type.String(), { default: [] }),
       evidence: Type.Array(Type.String(), { default: [] }),
     }),
+    // 🔴 Note: contract_review_decision accepts only approve|merge|change|reject. The YOLO
+    // prompt mistakenly mentions `blocked` — that review tool must use `reject` instead.
     async execute(_toolCallId, params) {
       // Derive runId from CONTRACT_PIPELINE_RUN_ID, with fallback from RESULT_PATH.
       // The result path contains the run ID: .../.pi/contract-runs/run-XXXX/stages/...
