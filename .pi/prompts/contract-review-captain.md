@@ -71,13 +71,23 @@ Only in READY mode, when the user explicitly asks you to apply fixes:
 
 1. Read CodeRabbit comments/findings via `gh_pr_comments` or MCP tools
 2. For each fixable issue: read the file, apply `edit`, commit + push
-3. Comment `@coderabbitai review` to re-trigger
 
 ```bash
 git add -A
 git commit --no-verify -m "fix: apply CodeRabbit auto-fixes — {description}"
 git push origin HEAD
 ```
+
+🔴 **Do NOT comment `@coderabbitai review` (or otherwise re-trigger a review)
+after applying fixes, even if the user's request also said "and merge" or
+implied a re-check.** CodeRabbit reviews are quota-limited — spending one to
+re-check comments you just fixed from its own prior review is a waste, not a
+safety net. Push the fix and stop there unless the user explicitly asks you
+to re-request a review in those words ("re-review", "trigger CodeRabbit
+again", "ask CodeRabbit to check"). If they asked you to "implement the
+comments and merge," applying the fixes and proceeding toward merge (per
+your profile's merge rules) is the complete task — a second review is not
+part of it.
 
 ## Universal Rules
 

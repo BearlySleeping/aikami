@@ -16,13 +16,35 @@ export const readContractStatus = (contractPath: string): string => {
  * straight to `main` (see `contract_sync.ts`'s `commitContractContent`) can
  * compute the new content without an intermediate disk write to the root
  * checkout's working tree.
+ *
+ * Also updates the YAML frontmatter `status:` field when present, so the two
+ * status sources ({@link readContractStatus}'s metadata table and
+ * `contract_resolver.ts`'s frontmatter read) never drift apart the way C-391
+ * did — approved via the table while its frontmatter still said `draft`.
  */
 export const withUpdatedStatus = (content: string, status: string): string => {
-  const pattern = /\|\s*\*\*Status\*\*\s*\|\s*[^|\n]+\s*\|/;
-  if (!pattern.test(content)) {
+  const tablePattern = /\|\s*\*\*Status\*\*\s*\|\s*[^|\n]+\s*\|/;
+  if (!tablePattern.test(content)) {
     throw new Error('Contract status row not found');
   }
-  return content.replace(pattern, `| **Status** | ${status} |`);
+  let updated = content.replace(tablePattern, `| **Status** | ${status} |`);
+
+  const frontmatterMatch = updated.match(/^---\n([\s\S]*?)\n---\n/);
+  if (frontmatterMatch) {
+    const statusLinePattern = /^status:\s*\S+\s*$/m;
+    if (statusLinePattern.test(frontmatterMatch[1])) {
+      const updatedFrontmatter = frontmatterMatch[1].replace(
+        statusLinePattern,
+        `status: ${status}`,
+      );
+      updated =
+        updated.slice(0, frontmatterMatch.index) +
+        `---\n${updatedFrontmatter}\n---\n` +
+        updated.slice(frontmatterMatch.index! + frontmatterMatch[0].length);
+    }
+  }
+
+  return updated;
 };
 
 /** Atomically update the contract metadata status on disk. */
