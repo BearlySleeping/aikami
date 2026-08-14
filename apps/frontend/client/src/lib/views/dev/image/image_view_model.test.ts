@@ -1,132 +1,89 @@
 // apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
+//
+// ImageViewModel — C-388 AC-5 (capability-gated controls) + delegation.
+//
+// Contract: C-388 Image Engine Provider Abstraction
+
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
 
 // ---------------------------------------------------------------------------
-// Mock imageGenerationService before importing the ViewModel
+// Mock the $services barrel before importing the ViewModel
 // ---------------------------------------------------------------------------
 
 let mockCheckpoints: Array<{ id: string; description: string }> = [];
 let mockSelectedCheckpoint = '';
-let mockGenerateImageCalls: Array<{ prompt: string; checkpoint?: string }> = [];
+let mockEngineId: string | undefined;
+let mockCapabilities: Record<string, boolean> | undefined = {};
+let mockGenerateImageCalls: Array<Record<string, unknown>> = [];
+let mockRefreshEngineCalled = false;
 let loadCheckpointsCalled = false;
 
-const _MOCK_SVC =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts';
-
-const _createServiceStub = () => {
-  const handler = {
-    get(_target: Record<string, unknown>, prop: string) {
-      if (!(prop in _target)) {
-        _target[prop] = mock(() => {});
+mock.module('$lib/services/index.ts', () => ({
+  imageGenerationService: {
+    get checkpoints() {
+      return mockCheckpoints;
+    },
+    get selectedCheckpoint(): string {
+      return mockSelectedCheckpoint;
+    },
+    set selectedCheckpoint(value: string) {
+      mockSelectedCheckpoint = value;
+    },
+    get engineId(): string | undefined {
+      return mockEngineId;
+    },
+    get capabilities(): Record<string, boolean> | undefined {
+      return mockCapabilities;
+    },
+    get isAutoDetect(): boolean {
+      return mockEngineId === undefined;
+    },
+    loadCheckpoints: mock(async (): Promise<void> => {
+      loadCheckpointsCalled = true;
+      mockCheckpoints = [
+        { id: 'sd_xl_base_1.0', description: 'SDXL Base 1.0' },
+        { id: 'sd_xl_turbo', description: 'SDXL Turbo' },
+      ];
+      if (!mockSelectedCheckpoint) {
+        mockSelectedCheckpoint = 'sd_xl_base_1.0';
       }
-      return _target[prop];
-    },
-  };
-  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-};
-
-const _setupBarrelMock = () => {
-  mock.module(_MOCK_SVC, () => ({
-    // Test-specific override
-    imageGenerationService: {
-      get checkpoints() {
-        return mockCheckpoints;
+    }),
+    refreshEngine: mock(async (): Promise<void> => {
+      mockRefreshEngineCalled = true;
+    }),
+    setEngine: mock(async (_engine: string): Promise<void> => {
+      mockEngineId = _engine;
+      mockRefreshEngineCalled = true;
+    }),
+    generateImage: mock(
+      async (options: Record<string, unknown>): Promise<{ url: string; isDemo: boolean }> => {
+        mockGenerateImageCalls.push(options);
+        return { url: 'blob:mock-url', isDemo: false };
       },
-      get selectedCheckpoint(): string {
-        return mockSelectedCheckpoint;
-      },
-      set selectedCheckpoint(value: string) {
-        mockSelectedCheckpoint = value;
-      },
-      loadCheckpoints: mock(async (): Promise<void> => {
-        loadCheckpointsCalled = true;
-        mockCheckpoints = [
-          { id: 'sd_xl_base_1.0', description: 'SDXL Base 1.0' },
-          { id: 'sd_xl_turbo', description: 'SDXL Turbo' },
-        ];
-        if (!mockSelectedCheckpoint) {
-          mockSelectedCheckpoint = 'sd_xl_base_1.0';
-        }
-      }),
-      generateImage: mock(
-        async (options: {
-          prompt: string;
-          checkpoint?: string;
-        }): Promise<{ url: string; isDemo: boolean }> => {
-          mockGenerateImageCalls.push(options);
-          return { url: 'https://example.com/img.png', isDemo: true };
-        },
-      ),
-      isDemoMode: mock((): boolean => true),
+    ),
+    releaseResultUrl: mock((_url: string): void => {}),
+    cancel: mock(() => {}),
+    isDemoMode: mock((): boolean => true),
+  },
+  // Other services the ViewModel imports
+  compileImagePrompt: mock(() => ({ positive: '', negative: '' })),
+  styleProfileService: {
+    get profiles() {
+      return [];
     },
-    // All other services get Proxy stubs (prevents cross-test contamination)
-    aiService: _createServiceStub(),
-    AIService: class {},
-    SentenceBoundaryChunker: class {},
-    streamOrchestratorService: _createServiceStub(),
-    textGenerationService: _createServiceStub(),
-    TextGenerationService: class {},
-    analyticService: _createServiceStub(),
-    AnalyticService: class {},
-    appService: _createServiceStub(),
-    AppService: class {},
-    audioContextManager: _createServiceStub(),
-    AudioContextManager: class {},
-    audioQueuePlayer: _createServiceStub(),
-    AudioQueuePlayer: class {},
-    ttsService: _createServiceStub(),
-    TtsService: class {},
-    authService: _createServiceStub(),
-    AuthService: class {},
-    personaCreationService: _createServiceStub(),
-    PersonaCreationService: class {},
-    characterService: _createServiceStub(),
-    CharacterService: class {},
-    personaCreationTextStreamService: _createServiceStub(),
-    PersonaCreationTextStreamService: class {},
-    chatService: _createServiceStub(),
-    contextBuilder: _createServiceStub(),
-    conversationStorage: _createServiceStub(),
-    npcChatService: _createServiceStub(),
-    configService: _createServiceStub(),
-    ConfigService: class {},
-    diceService: _createServiceStub(),
-    DiceService: class {},
-    ExpressionAssetResolver: class {},
-    setPendingGameLoad: mock(() => {}),
-    consumePendingGameLoad: mock(() => undefined),
-    gameSaveService: _createServiceStub(),
-    GameSaveService: class {},
-    gameStateService: _createServiceStub(),
-    GameStateService: class {},
-    ImageGenerationService: class {},
-    npcService: _createServiceStub(),
-    NpcService: class {},
-    onboardingService: _createServiceStub(),
-    personaService: _createServiceStub(),
-    preferenceService: _createServiceStub(),
-    // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
-    PreferenceService: class {
-      static create() {
-        return {};
-      }
+    get activeProfileId() {
+      return '';
     },
-    aiSettingsService: _createServiceStub(),
-    AISettingsService: class {},
-    storageService: _createServiceStub(),
-    StorageService: class {},
-    routerService: _createServiceStub(),
-    pixiTextureInjector: _createServiceStub(),
-    compileImagePrompt: mock(() => ({ positive: '', negative: '' })),
-    styleProfileService: _createServiceStub(),
-    __esModule: true,
-  }));
-};
-
-_setupBarrelMock();
+    setActiveProfile: mock(() => {}),
+    get activeProfile() {
+      return undefined;
+    },
+  },
+  __esModule: true,
+}));
 
 import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
 
@@ -135,120 +92,184 @@ const getImageViewModel = async (): Promise<ImageViewModelInterface> => {
   return mod.getImageViewModel({ className: 'ImageViewModel' });
 };
 
-describe('ImageViewModel — C-076 Checkpoints', () => {
+describe('ImageViewModel — C-388 engine abstraction', () => {
   beforeEach(() => {
     mockCheckpoints = [];
     mockSelectedCheckpoint = '';
+    mockEngineId = 'comfyui';
+    mockCapabilities = {
+      negativePrompt: true,
+      seed: true,
+      sampler: true,
+      initImage: true,
+      mask: false,
+      referenceImages: false,
+      controlNet: false,
+      lora: false,
+      cancel: true,
+      progress: true,
+    };
     mockGenerateImageCalls = [];
+    mockRefreshEngineCalled = false;
     loadCheckpointsCalled = false;
-    _setupBarrelMock();
   });
 
-  // ── AC-2: ViewModel Bridging & Initialization ─────────────────────────
+  // ── Checkpoint bridging (preserved) ────────────────────────────────
 
-  describe('AC-2: checkpoint bridging', () => {
-    test('getImageViewModel should return a ViewModel instance', async () => {
-      const viewModel = await getImageViewModel();
-      expect(viewModel).toBeDefined();
-      expect(viewModel.prompt).toBe('');
-    });
-
-    test('checkpoints getter should return empty array before load', async () => {
-      const viewModel = await getImageViewModel();
-      expect(viewModel.checkpoints).toEqual([]);
-    });
-
-    test('initialize should call loadCheckpoints and populate checkpoints', async () => {
-      const viewModel = await getImageViewModel();
-      expect(viewModel.checkpoints).toEqual([]);
-
-      await viewModel.initialize();
-
-      expect(loadCheckpointsCalled).toBe(true);
-      expect(viewModel.checkpoints.length).toBe(2);
-      expect(viewModel.checkpoints[0].id).toBe('sd_xl_base_1.0');
-    });
-
-    test('initialize should set default selectedCheckpoint when none is set', async () => {
-      const viewModel = await getImageViewModel();
-      await viewModel.initialize();
-
-      expect(viewModel.selectedCheckpoint).toBe('sd_xl_base_1.0');
-    });
-
-    test('selectedCheckpoint getter should proxy to service', async () => {
-      const viewModel = await getImageViewModel();
-      mockSelectedCheckpoint = 'sd_xl_turbo';
-
-      expect(viewModel.selectedCheckpoint).toBe('sd_xl_turbo');
-    });
-
-    test('selectedCheckpoint setter should proxy to service', async () => {
-      const viewModel = await getImageViewModel();
-      viewModel.selectedCheckpoint = 'dreamshaper_xl';
-
-      expect(mockSelectedCheckpoint).toBe('dreamshaper_xl');
-      expect(viewModel.selectedCheckpoint).toBe('dreamshaper_xl');
-    });
+  test('checkpoints getter should return empty array before load', async () => {
+    const viewModel = await getImageViewModel();
+    expect(viewModel.checkpoints).toEqual([]);
   });
 
-  // ── AC-4: Generation Payload Inclusion (via ViewModel) ────────────────
+  test('initialize should call loadCheckpoints and populate checkpoints', async () => {
+    const viewModel = await getImageViewModel();
+    await viewModel.initialize();
+    expect(loadCheckpointsCalled).toBe(true);
+    expect(viewModel.checkpoints.length).toBe(2);
+  });
 
-  describe('AC-4: generate passes checkpoint via ViewModel', () => {
-    test('generate does not call imageGenerationService.generateImage (uses ComfyUI workflow)', async () => {
-      const viewModel = await getImageViewModel();
-      viewModel.prompt = 'a dragon';
+  test('selectedCheckpoint getter/setter proxies to service', async () => {
+    const viewModel = await getImageViewModel();
+    mockSelectedCheckpoint = 'sd_xl_turbo';
+    expect(viewModel.selectedCheckpoint).toBe('sd_xl_turbo');
 
-      // ViewModel.generate() uses internal ComfyUI workflow, not
-      // imageGenerationService.generateImage. The mock's generateImage
-      // should NOT be called.
-      await viewModel.generate();
-      // The test confirms the ViewModel calls the ComfyUI path, not
-      // the mock's generateImage helper.
-    });
+    viewModel.selectedCheckpoint = 'dreamshaper_xl';
+    expect(mockSelectedCheckpoint).toBe('dreamshaper_xl');
+  });
 
-    test('generate should set isGenerating to true during generation', async () => {
-      const viewModel = await getImageViewModel();
-      viewModel.prompt = 'a dragon';
+  // ── Engine selector (C-388) ────────────────────────────────────────
 
-      expect(viewModel.isGenerating).toBe(false);
+  test('engineId exposes the active engine', async () => {
+    const viewModel = await getImageViewModel();
+    expect(viewModel.engineId).toBe('comfyui');
+  });
 
-      const generatePromise = viewModel.generate();
-      expect(viewModel.isGenerating).toBe(true);
+  test('setEngine delegates to the service', async () => {
+    const viewModel = await getImageViewModel();
+    await viewModel.setEngine('sdcpp');
+    expect(mockEngineId).toBe('sdcpp');
+    expect(mockRefreshEngineCalled).toBe(true);
+  });
 
-      await generatePromise;
-      expect(viewModel.isGenerating).toBe(false);
-    });
+  // ── AC-5: capabilities gate the control list ───────────────────────
 
-    test('generate should clear results on start', async () => {
-      const viewModel = await getImageViewModel();
-      viewModel.prompt = 'a dragon';
+  test('AC-5: mask control absent when capabilities.mask is false', async () => {
+    mockCapabilities = { ...mockCapabilities, mask: false };
+    const viewModel = await getImageViewModel();
+    expect(viewModel.availableControls).not.toContain('mask');
+  });
 
-      await viewModel.generate();
-      // After generate(), results is set (to whatever _executeWorkflow returned)
-      // In test env with no ComfyUI, _executeWorkflow will throw; results stays empty
-    });
+  test('AC-5: mask control present when capabilities.mask is true', async () => {
+    mockCapabilities = { ...mockCapabilities, mask: true };
+    const viewModel = await getImageViewModel();
+    expect(viewModel.availableControls).toContain('mask');
+  });
 
-    test('generate should not call service when prompt is empty', async () => {
-      const viewModel = await getImageViewModel();
-      viewModel.prompt = '  ';
+  test('AC-5: negativePrompt/seed/sampler present when supported', async () => {
+    const viewModel = await getImageViewModel();
+    expect(viewModel.availableControls).toContain('negativePrompt');
+    expect(viewModel.availableControls).toContain('seed');
+    expect(viewModel.availableControls).toContain('sampler');
+    expect(viewModel.availableControls).not.toContain('lora');
+    expect(viewModel.availableControls).not.toContain('referenceImages');
+  });
 
-      await viewModel.generate();
+  test('AC-5: availableControls empty when no engine resolved', async () => {
+    mockEngineId = undefined;
+    mockCapabilities = undefined;
+    const viewModel = await getImageViewModel();
+    expect(viewModel.availableControls).toEqual([]);
+  });
 
-      expect(mockGenerateImageCalls.length).toBe(0);
-      expect(viewModel.isGenerating).toBe(false);
-    });
+  // ── Generation delegation (no private ComfyUI transport) ───────────
 
-    test('cancel should set isGenerating to false', async () => {
-      const viewModel = await getImageViewModel();
+  test('generate delegates to imageGenerationService with negative prompt', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.prompt = 'a dragon';
+    viewModel.negativePrompt = 'bad anatomy, bad hands';
+    viewModel.width = 768;
+    viewModel.height = 1024;
+    viewModel.steps = 25;
+    viewModel.cfg = 8.0;
+    viewModel.sampler = 'dpmpp_2m';
+    viewModel.seed = 42;
 
-      // Artificially set isGenerating (simulating mid-generation)
-      viewModel.isGenerating = true;
-      expect(viewModel.isGenerating).toBe(true);
+    await viewModel.generate();
 
-      viewModel.cancel();
+    expect(mockGenerateImageCalls.length).toBe(1);
+    const call = mockGenerateImageCalls[0];
+    expect(call.prompt).toBe('a dragon');
+    expect(call.negativePrompt).toBe('bad anatomy, bad hands');
+    expect(call.width).toBe(768);
+    expect(call.height).toBe(1024);
+    expect(call.steps).toBe(25);
+    expect(call.cfgScale).toBe(8.0);
+    expect(call.sampler).toBe('dpmpp_2m');
+    expect(call.seed).toBe(42);
+    expect(viewModel.results).toEqual(['blob:mock-url']);
+  });
 
-      expect(viewModel.isGenerating).toBe(false);
-    });
+  test('generate passes initImage + denoise for img2img paths', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.prompt = 'x';
+    viewModel.inputImageDataUrl = 'data:image/png;base64,AAA=';
+    viewModel.editPrompt = 'make it blue';
+    viewModel.editDenoise = 0.6;
+
+    await viewModel.editImage();
+
+    expect(mockGenerateImageCalls.length).toBe(1);
+    expect(mockGenerateImageCalls[0].initImage).toBe('data:image/png;base64,AAA=');
+    expect(mockGenerateImageCalls[0].denoise).toBe(0.6);
+  });
+
+  test('generateExpressions runs sequentially with initImage', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.inputImageDataUrl = 'data:image/png;base64,BBB=';
+
+    // Stub the 500 ms inter-expression delay so the 8 calls complete fast.
+    const originalSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((handler: () => void) => {
+      handler();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+
+    try {
+      await viewModel.generateExpressions();
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+
+    // 8 expressions × 1 call each
+    expect(mockGenerateImageCalls.length).toBe(8);
+    for (const call of mockGenerateImageCalls) {
+      expect(call.initImage).toBe('data:image/png;base64,BBB=');
+      expect(call.denoise).toBe(0.45);
+    }
+    expect(Object.keys(viewModel.expressionResults).length).toBe(8);
+  });
+
+  test('generate does not call service when prompt is empty', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.prompt = '  ';
+    await viewModel.generate();
+    expect(mockGenerateImageCalls.length).toBe(0);
+  });
+
+  test('cancel should set isGenerating to false', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.isGenerating = true;
+    viewModel.cancel();
+    expect(viewModel.isGenerating).toBe(false);
+  });
+
+  // ── Compile pipeline preserved ─────────────────────────────────────
+
+  test('compilePrompt still runs the style profile pipeline', async () => {
+    const viewModel = await getImageViewModel();
+    viewModel.prompt = 'heroic knight';
+    viewModel.compilePrompt();
+    // No crash; summary may be empty when no profile is active
+    expect(typeof viewModel.compiledTagsSummary).toBe('string');
   });
 });

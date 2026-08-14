@@ -1,0 +1,92 @@
+---
+title: Configure Your Local Engines
+description: Point Aikami at your local text, image, and voice engines by editing one config.json — no rebuild required.
+---
+
+Aikami resolves its local engine endpoints at **runtime** from a `config.json`
+file served beside the app. The SPA bundle itself is topology-agnostic — it
+contains no engine URLs — so changing a port, running the engines on another
+host, or switching image engines is a config edit, not a rebuild.
+
+## Where the config comes from
+
+The app resolves engine settings in this order (first match wins):
+
+1. **`localStorage` override** — developer escape hatch, dev builds only.
+2. **Tauri app config directory** — the desktop app writes a default
+   `config.json` on first run and reads it from there.
+3. **`GET ./config.json`** — a file served beside `index.html` by whatever
+   hosts the app (nginx container, `bun` static server, Firebase Hosting).
+4. **Compile-time `PUBLIC_*` defaults** — dev server only.
+5. **No engine URL** — engine-dependent features report unavailable, and the
+   rest of the app works normally.
+
+A missing or malformed config is never fatal: the app falls back down the
+chain and logs a single warning.
+
+## The config file
+
+Every field is optional. `null` and absent mean "not configured".
+
+```jsonc
+// config.json — served beside index.html
+{
+  "text":  { "url": "http://localhost:8080/v1", "model": "qwen3-4b-instruct" },
+  "image": { "url": "http://localhost:8188", "engine": "auto" },
+  "voice": {
+    "tts": { "mode": "browser", "url": null },
+    "stt": { "url": null }
+  },
+  "models": { "originUrl": "https://huggingface.co" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `text.url` | Base URL of an Ollama-compatible text engine. |
+| `text.model` | Default model id used by the app. |
+| `image.url` | Base URL of the image engine (ComfyUI-style `/object_info` API). |
+| `voice.tts.mode` | `browser` (in-app Kokoro TTS), `server` (external TTS endpoint), or `disabled`. |
+| `voice.tts.url` | Server-mode TTS endpoint; `POST {url}/v1/audio/speech` is called. |
+| `voice.stt.url` | Reserved for speech input (future). |
+| `models.originUrl` | Base origin for one-time model asset downloads (Kokoro weights). |
+
+The local stack's `bun run build:client` writes this file automatically into
+the staged output, so `docker compose up` works with no manual step.
+
+## Serving the built app standalone
+
+A production build in `build/` is a plain static site. Serve it with any
+static file server that supports SPA fallback (unknown routes → `index.html`)
+and drop a `config.json` beside `index.html`:
+
+```bash
+# example — the local stack's tiny Bun server (SPA fallback included)
+CLIENT_ROOT=./build CLIENT_PORT=3000 bun \
+  apps/backend/local-stack/docker/client-server/client_server.ts
+```
+
+No Node server, no Docker, no SvelteKit runtime.
+
+## Speech: browser TTS and the voice model
+
+Browser TTS runs **fully offline** after a one-time, explicit model download.
+Open **Settings → Audio → Speech**, press **Download voice model** (the size
+is shown before you commit), and the Kokoro weights are fetched once,
+checksum-verified, and cached. After that, no network is needed — even inside
+the desktop app.
+
+- **WebGPU** is used when available. Without WebGPU the app falls back to the
+  slower WASM backend and tells you so.
+- The model download is cancellable and deletable from the same screen.
+- To use an external TTS server instead, set
+  `voice.tts.mode: "server"` with `voice.tts.url`.
+
+## Gotchas
+
+- `config.json` is served with `Cache-Control: no-store` by the bundled
+  servers, so topology changes apply immediately. If you use a custom static
+  host, make sure it does the same, or users may need a hard reload.
+- The model cache uses the browser Cache API, which is only available on
+  secure origins. `http://localhost` counts as secure; a LAN IP over plain
+  HTTP does not — the cache silently fails there.

@@ -77,7 +77,9 @@ class OllamaClient implements FrontendAiInterface {
    * @param options - Ollama client configuration.
    */
   constructor(options: OllamaClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '');
+    // C-389: no baked-in engine URL. The caller resolves baseUrl from the
+    // runtime config; an empty URL fails fast instead of probing localhost.
+    this.baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
     this.model = options.model ?? 'llama3';
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.defaultOptions = {
@@ -85,6 +87,21 @@ class OllamaClient implements FrontendAiInterface {
       topP: options.defaultOptions?.topP ?? 0.9,
       maxTokens: options.defaultOptions?.maxTokens ?? 2048,
     };
+  }
+
+  /**
+   * Guards every network operation against an unconfigured engine (C-389
+   * CR): with no base URL, `${this.baseUrl}/api/...` would silently become a
+   * same-origin relative fetch. Throw the established connection error so
+   * healthCheck reports unavailable and callers see a clear message.
+   */
+  private _assertConfigured(): void {
+    if (!this.baseUrl) {
+      throw new OllamaConnectionError(
+        '',
+        new Error('Ollama is not configured (text.url missing from config.json)'),
+      );
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -254,6 +271,8 @@ class OllamaClient implements FrontendAiInterface {
     prompt: string,
     context?: Array<{ role: string; content: string }>,
   ): AsyncGenerator<string, void, undefined> {
+    this._assertConfigured();
+
     const body: Record<string, unknown> = {
       model: this.model,
       prompt,
@@ -353,6 +372,8 @@ class OllamaClient implements FrontendAiInterface {
    * POST to Ollama's local API.
    */
   private async post<TResponse>(path: string, body: unknown): Promise<TResponse> {
+    this._assertConfigured();
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -388,6 +409,8 @@ class OllamaClient implements FrontendAiInterface {
    * GET from Ollama's local API.
    */
   private async get<TResponse>(path: string): Promise<TResponse> {
+    this._assertConfigured();
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 

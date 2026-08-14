@@ -66,6 +66,12 @@ const _createSvcStub = () => {
 
 mock.module('$services', () => ({
   ..._createSvcStub(),
+  // C-389: engine URLs resolve from the runtime config at call time.
+  runtimeConfigService: {
+    getTextUrl: () => undefined,
+    getImageUrl: () => undefined,
+    getVoiceTtsUrl: () => undefined,
+  },
   capabilityService: {
     detect: mock(async () => ({ ..._detectResult })),
     detectText: mock(async () => _detectResult.textStatus),

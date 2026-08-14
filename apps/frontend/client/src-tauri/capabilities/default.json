@@ -15,7 +15,12 @@
     "process:allow-restart",
     {
       "identifier": "http:allow-fetch",
-      "allow": [{ "url": "http://localhost:11434/**" }, { "url": "http://localhost:8188/**" }]
+      "allow": [
+        { "url": "http://localhost:11434/**" },
+        { "url": "http://localhost:8188/**" },
+        { "url": "http://localhost:8089/**" },
+        { "url": "http://localhost:6006/**" }
+      ]
     },
     {
       "identifier": "fs:allow-mkdir",

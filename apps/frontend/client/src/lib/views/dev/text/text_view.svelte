@@ -83,7 +83,7 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
                 <input
                   type="text"
                   class="input input-bordered input-sm w-full font-mono text-xs"
-                  placeholder="http://localhost:11434"
+                  placeholder="http://<host>:<port>"
                   bind:value={viewModel.endpoint}
                   disabled={viewModel.isGenerating}
                 >

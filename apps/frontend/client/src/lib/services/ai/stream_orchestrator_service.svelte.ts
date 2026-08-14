@@ -4,6 +4,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { runtimeConfigService } from '$services';
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationMessage } from '../chat/context_builder.ts';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
@@ -42,9 +43,6 @@ type KokoroRequest = {
   // biome-ignore lint/style/useNamingConvention: API contract field name
   response_format: 'wav';
 };
-
-/** Endpoint for the headless Kokoro container. */
-const KOKORO_SPEECH_URL = `${import.meta.env.PUBLIC_VOICE_URL ?? 'http://localhost:8089'}/v1/audio/speech`;
 
 // ---------------------------------------------------------------------------
 // StreamOrchestrator
@@ -295,6 +293,13 @@ export class StreamOrchestrator
     sentenceIndex: number,
     signal: AbortSignal,
   ): Promise<void> {
+    // Server-mode TTS only (C-389). Browser TTS is handled by ttsService.
+    const voiceTtsUrl = runtimeConfigService.getVoiceTtsUrl();
+    if (!voiceTtsUrl) {
+      this.debug('_dispatchToKokoro:not-configured');
+      return;
+    }
+    const speechUrl = `${voiceTtsUrl.replace(/\/+$/, '')}/v1/audio/speech`;
     try {
       const payload: KokoroRequest = {
         model: 'tts-1',
@@ -306,7 +311,7 @@ export class StreamOrchestrator
 
       this.debug('_dispatchToKokoro', { sentenceIndex, sentenceLength: sentence.length });
 
-      const response = await fetch(KOKORO_SPEECH_URL, {
+      const response = await fetch(speechUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
