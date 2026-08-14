@@ -12,6 +12,8 @@
     "verbatimModuleSyntax": true,
     "paths": {
       "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/local-ai": ["../../../packages/shared/local-ai/src/index.ts"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
       "@aikami/types": ["../../../packages/shared/types/src/index.ts"]
     }
   },

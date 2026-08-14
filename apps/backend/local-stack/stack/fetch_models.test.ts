@@ -273,6 +273,34 @@ describe('AC-6 — profile scoping', () => {
     expect(Bun.file(join(dir, 'image/bad.bin')).exists()).resolves.toBe(false);
     await rm(dir, { recursive: true, force: true });
   });
+
+  it('entryIds limits the run to exactly the planned models (C-391 --fetch)', async () => {
+    const dir = await makeTmpDir();
+    const manifestPath = join(dir, 'models.manifest.json');
+    const planned = makeEntry({ id: 'planned', targetPath: 'text/planned.bin' });
+    const unplanned = makeEntry({
+      id: 'unplanned',
+      modality: 'image',
+      targetPath: 'image/unplanned.bin',
+    });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ schemaVersion: 1, entries: [planned, unplanned] }),
+    );
+    // Profiles include both modalities, but entryIds pins the fetch to the
+    // planned model only — the unplanned entry must NOT be downloaded even
+    // though its profile is enabled.
+    const code = await run({
+      manifestPath,
+      modelsDir: dir,
+      profiles: 'text,image',
+      entryIds: ['planned'],
+    });
+    expect(code).toBe(0);
+    expect(Bun.file(join(dir, 'text/planned.bin')).exists()).resolves.toBe(true);
+    expect(Bun.file(join(dir, 'image/unplanned.bin')).exists()).resolves.toBe(false);
+    await rm(dir, { recursive: true, force: true });
+  });
 });
 
 describe('AC-7 — use-restricted models require acknowledgement', () => {

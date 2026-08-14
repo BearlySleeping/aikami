@@ -49,6 +49,12 @@
     },
     "apps/backend/local-stack": {
       "name": "@aikami/local-stack",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/local-ai": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+      },
     },
     "apps/backend/text": {
       "name": "@aikami/text",
@@ -364,6 +370,13 @@
     "packages/shared/constants": {
       "name": "@aikami/constants",
     },
+    "packages/shared/local-ai": {
+      "name": "@aikami/local-ai",
+      "dependencies": {
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+      },
+    },
     "packages/shared/logger": {
       "name": "@aikami/logger",
       "dependencies": {
@@ -482,6 +495,8 @@
     "@aikami/hub": ["@aikami/hub@workspace:apps/frontend/hub"],
 
     "@aikami/image": ["@aikami/image@workspace:apps/backend/image"],
+
+    "@aikami/local-ai": ["@aikami/local-ai@workspace:packages/shared/local-ai"],
 
     "@aikami/local-stack": ["@aikami/local-stack@workspace:apps/backend/local-stack"],
 

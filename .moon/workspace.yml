@@ -27,6 +27,7 @@ projects:
   logger: "packages/shared/logger"
   utils: "packages/shared/utils"
   mocks: "packages/shared/mocks"
+  local-ai: "packages/shared/local-ai"
 
   # Backend Packages
   backend-chat: "packages/backend/chat"

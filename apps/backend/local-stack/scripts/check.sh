@@ -244,6 +244,45 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
         | sort -u)
 fi
 
+# ── C-391 `stack init` (AC-8, AC-10) ──────────────────────────────────
+# AC-8: `init --yes` completes without prompting in a non-TTY invocation
+# and writes a valid .env. AC-10: the generated .env renders with
+# `docker compose config` (the full boot happens in CI / LOCAL_STACK_LIVE).
+echo "== stack init (C-391) =="
+# Private temp dir: keeps the generated .env and the init log out of the
+# predictable /tmp path, and the EXIT trap removes them on every exit path
+# (success, failure, or set -e abort) without leaving a world-readable log.
+INIT_TMP="$(mktemp -d)"
+trap 'rm -rf "${INIT_TMP:-}"' EXIT
+INIT_ENV="$INIT_TMP/.env"
+INIT_LOG="$INIT_TMP/init.out"
+if timeout 60 bun stack/init.ts --yes --no-color --env-path "$INIT_ENV" >"$INIT_LOG" 2>&1; then
+    ok "AC-8: stack init --yes runs non-interactively (exit 0)"
+else
+    bad "AC-8: stack init --yes failed — see $INIT_LOG"
+    tail -30 "$INIT_LOG" >&2
+fi
+if [ -f "$INIT_ENV" ] && grep -q '^COMPOSE_PROFILES=' "$INIT_ENV" \
+    && grep -q '^COMPOSE_FILE=' "$INIT_ENV"; then
+    ok "AC-8: generated .env carries COMPOSE_PROFILES and COMPOSE_FILE"
+else
+    bad "AC-8: generated .env missing required keys"
+fi
+if command -v docker >/dev/null 2>&1; then
+    COMPOSE_LINE="$(grep '^COMPOSE_FILE=' "$INIT_ENV" | cut -d= -f2)"
+    PROFILES_LINE="$(grep '^COMPOSE_PROFILES=' "$INIT_ENV" | cut -d= -f2)"
+    # Render the generated configuration from the local-stack project dir,
+    # loading the generated env file so compose interpolates the same
+    # variables (model paths, ports) the wizard wrote.
+    if COMPOSE_FILE="$COMPOSE_LINE" COMPOSE_PROFILES="$PROFILES_LINE" docker compose --env-file "$INIT_ENV" config --quiet 2>/dev/null; then
+        ok "AC-10: generated .env renders with docker compose config"
+    else
+        bad "AC-10: generated .env does not render (docker available)"
+    fi
+else
+    ok "AC-10: docker unavailable — boot render deferred to CI"
+fi
+
 # ── AC-9 contract support: the published client image must serve runtime
 #    config mounts (the two-mount container test lives in the publish
 #    workflow — publish-local-stack.yml — which actually boots the image;

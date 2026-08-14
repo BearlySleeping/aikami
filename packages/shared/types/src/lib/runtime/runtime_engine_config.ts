@@ -3,8 +3,8 @@
 // Derived runtime engine config types (C-389). The TypeBox schema in
 // `@aikami/schemas` is the single source of truth; these types are inferred
 // via `Static<>` so runtime validation and TypeScript stay in lockstep.
-import type { Static } from 'typebox';
-import {
+
+import type {
   ImageEngineSchema,
   RuntimeEngineConfigSchema,
   RuntimeImageConfigSchema,
@@ -15,6 +15,7 @@ import {
   RuntimeVoiceTtsConfigSchema,
   TtsModeSchema,
 } from '@aikami/schemas';
+import type { Static } from 'typebox';
 
 export type RuntimeEngineConfig = Static<typeof RuntimeEngineConfigSchema>;
 export type RuntimeTextConfig = Static<typeof RuntimeTextConfigSchema>;
