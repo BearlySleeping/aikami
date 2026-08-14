@@ -93,8 +93,17 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
 
     if (!this._code) {
       this.status = 'missing-code';
+      this._showLoadingView = false;
       await super.initialize();
       return;
+    }
+
+    // If the user is already signed in, transition to the confirmation state
+    // NOW (deterministically) so the loading view never flashes the sign-in
+    // button — the $effect below stays as the reactive path for sign-ins
+    // that happen while the page is open.
+    if (authService.isLoggedIn) {
+      this.status = 'confirm';
     }
 
     // When auth is ready and the user is signed in, transition to an explicit
@@ -111,6 +120,10 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
         this.status = 'confirm';
       });
     });
+
+    // Auth is resolved and the initial status is known — reveal the page
+    // (startWithLoadingView keeps the loading view up until this point).
+    this._showLoadingView = false;
 
     await super.initialize();
   }
