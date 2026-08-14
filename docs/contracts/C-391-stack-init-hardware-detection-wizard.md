@@ -2,7 +2,7 @@
 id: C-391
 title: "`stack init` — Hardware Detection, Modality Selection, and Model Recommendation"
 source: "user request — 'a recommended model for text, image, voice, speech based on the computer/user preference... most optimal and easiest for the user to setup'"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
