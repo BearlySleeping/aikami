@@ -334,35 +334,38 @@ const commitContentToMain = (options: {
       }
 
       // Make the commit durable locally BEFORE attempting the push — a CAS
-      // update (only moves if local main is still exactly at baseCommit, the
-      // overwhelmingly common case). This is what lets a push failure below
-      // report a genuine partial success ("committed, not yet pushed")
-      // instead of leaving the commit orphaned and unreferenced.
-      let localRefMoved = false;
+      // update against `baseCommit`, which only succeeds when local `main`
+      // already happens to equal it. That holds whenever `repoRoot` was
+      // already fully caught up with `origin/main` before this run started,
+      // but NOT in general: `baseCommit` comes from `origin/main` (see
+      // `readMainRef`), and another writer (a human, or another pipeline)
+      // may have pushed straight to `origin/main` without this checkout ever
+      // fetching/merging it — in which case this CAS fails, expected, and is
+      // silently skipped. It exists only to let a push failure below report
+      // a genuine partial success ("committed, not yet pushed"); the
+      // common-case sync of the local ref + working tree is handled
+      // unconditionally after a successful push, below, where we know for a
+      // fact what `origin/main` now is instead of guessing.
+      let localRefMovedPrePush = false;
       try {
         runGit(`update-ref refs/heads/main ${newCommit} ${baseCommit}`, {
           cwd: repoRoot,
           timeoutMs: 5000,
         });
-        localRefMoved = true;
+        localRefMovedPrePush = true;
       } catch {
-        // Local main moved between our read and here (another concurrent
-        // writer in this same repoRoot) — vanishingly rare given the whole
-        // build above takes milliseconds. Don't force it: forcing would
-        // silently discard whatever local main now points to. The push
-        // below still targets the right parent either way.
+        // Local main isn't at baseCommit — see comment above.
       }
 
       // 🔴 Must happen immediately after moving the ref, regardless of push
-      // outcome — and BEFORE the push, not after. Moving refs/heads/main
-      // without this repoints HEAD (when repoRoot is on main) out from under
-      // the real index, so `git status` starts comparing the old index
-      // against the new HEAD and reports a phantom diff on this exact path,
-      // independent of whatever the working tree file already contains. Only
-      // relevant when repoRoot is actually on main; a no-op (see
-      // refreshWorkingCopyIfSafe) otherwise, which is the common case this
-      // module exists to make safe.
-      if (localRefMoved) {
+      // outcome. Moving refs/heads/main without this repoints HEAD (when
+      // repoRoot is on main) out from under the real index, so `git status`
+      // starts comparing the old index against the new HEAD and reports a
+      // phantom diff on this exact path, independent of whatever the working
+      // tree file already contains. Only relevant when repoRoot is actually
+      // on main; a no-op (see refreshWorkingCopyIfSafe) otherwise, which is
+      // the common case this module exists to make safe.
+      if (localRefMovedPrePush) {
         refreshWorkingCopyIfSafe({ repoRoot, relPath });
       }
 
@@ -376,18 +379,35 @@ const commitContentToMain = (options: {
           // retry pattern as an optimistic-concurrency database write.
           continue;
         }
-        // Not a race (or retries exhausted): the commit already exists
-        // locally (refs/heads/main was updated above, best-effort) — this
-        // is a genuine partial success, not a failure to retry blindly.
+        // Not a race (or retries exhausted). Only a genuine partial success
+        // ("committed locally, not pushed") when the pre-push local ref move
+        // above actually landed — otherwise the commit exists solely as a
+        // dangling object nothing local points at yet.
         return {
           ok: true,
-          committed: true,
-          message: [
-            `Contract committed to main locally, but the push failed: ${msg.slice(0, 300)}`,
-            'Push when convenient:',
-            '  git push origin main',
-          ].join('\n'),
+          committed: localRefMovedPrePush,
+          message: localRefMovedPrePush
+            ? [
+                `Contract committed to main locally, but the push failed: ${msg.slice(0, 300)}`,
+                'Push when convenient:',
+                '  git push origin main',
+              ].join('\n')
+            : `Contract push to main failed and was not committed locally: ${msg.slice(0, 300)}`,
         };
+      }
+
+      // Push succeeded — origin/main is now definitively `newCommit`. Force
+      // the local ref to match (a plain fast-forward is always safe here;
+      // we just confirmed origin has exactly this commit, and `readMainRef`
+      // fetched it) regardless of whether the speculative pre-push CAS
+      // above landed, then refresh the working copy.
+      if (!localRefMovedPrePush) {
+        try {
+          runGit(`update-ref refs/heads/main ${newCommit}`, { cwd: repoRoot, timeoutMs: 5000 });
+        } catch {
+          // Best-effort only — never let this fail the sync.
+        }
+        refreshWorkingCopyIfSafe({ repoRoot, relPath });
       }
 
       return { ok: true, message: `Contract pushed to main: ${relPath}`, committed: true };

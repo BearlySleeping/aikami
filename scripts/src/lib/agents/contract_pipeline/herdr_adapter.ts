@@ -870,10 +870,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
             `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
             '',
             '🔴 RETRY CHECK: Before doing any work, verify whether you already completed this stage:',
-            '1. Check if the result file exists at the path in CONTRACT_PIPELINE_RESULT_PATH',
-            '2. If it already has a valid status (passed/changes_requested/blocked), just call',
-            '   `contract_stage_complete` with that same status. Do NOT redo work.',
-            '3. Only do new work if no valid result exists yet.',
+            '1. Check if the result file exists AT THE EXACT PATH in the CONTRACT_PIPELINE_RESULT_PATH',
+            "   env var for THIS attempt — not a previous attempt's file sitting in the same directory.",
+            '2. If it exists there with status `passed` or `changes_requested`, that is real completed',
+            '   work product — just call `contract_stage_complete` with that same status. Do NOT redo work.',
+            "3. A previous attempt's `blocked` result does NOT satisfy this check, even if you find one:",
+            '   `blocked` reflects an external precondition (contract status, missing dependency, service',
+            '   down, etc.) that may have changed since. Re-run the Preflight checks fresh and only report',
+            '   `blocked` again if the condition still actually holds right now.',
+            '4. Otherwise, do new work.',
           ].join('\n')
         : isInteractiveWriter
           ? [
