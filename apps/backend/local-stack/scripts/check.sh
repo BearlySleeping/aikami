@@ -223,6 +223,68 @@ else
     bad "AC-13: MODELS_PATH bind mount not rendered"
 fi
 
+# ── C-392: dev engine services converge on the local stack ───────────────
+# AC-2: the dev engines run the shipped engines by construction — the three
+# herdr dev services delegate to THIS compose file (the only topology in the
+# repo), so dev and user image identity cannot drift. Assert the delegation
+# and the expected engine shapes.
+echo "== C-392 dev engine convergence (AC-2, AC-6, AC-7) =="
+for app in text image voice; do
+    if grep -q 'local-stack' "../$app/scripts/start.ts"; then
+        ok "AC-2: $app/scripts/start.ts delegates to the local-stack compose topology"
+    else
+        bad "AC-2: $app/scripts/start.ts does not delegate to the local-stack compose topology"
+    fi
+done
+if render "compose.yaml" text | grep -q "ghcr.io/ggml-org/llama.cpp:server@sha256"; then
+    ok "AC-2: text profile resolves to llama-server (digest-pinned)"
+else
+    bad "AC-2: text profile does not resolve to llama-server"
+fi
+if render "compose.yaml" image | grep -q "aikami-sd-server"; then
+    ok "AC-2: image profile resolves to sd-server"
+else
+    bad "AC-2: image profile does not resolve to sd-server"
+fi
+if render "compose.yaml" voice | grep -q "Dockerfile.sherpa"; then
+    ok "AC-2: voice profile builds the sherpa-onnx image"
+else
+    bad "AC-2: voice profile does not build the sherpa-onnx image"
+fi
+
+# AC-6: one model store — no weights are TRACKED under apps/backend/*/src/.
+# Untracked leftovers from the pre-C-392 ComfyUI tree (git-ignored) are a
+# migration concern (stack/migrate_models.ts), not a repo invariant; the
+# converged dev services must not write weights here.
+if git ls-files ../text/src ../image/src ../voice/src 2>/dev/null \
+    | grep -iE '\.(gguf|safetensors|ckpt|bin|pth|pt|onnx)$' | grep -q .; then
+    bad "AC-6: model weights tracked under apps/backend/{text,image,voice}/src/"
+else
+    ok "AC-6: no model weights tracked under apps/backend/{text,image,voice}/src/"
+fi
+# And the dev scripts must not reference the retired per-service stores.
+if grep -rq 'src/models\|cache/ollama' ../text/scripts ../image/scripts ../voice/scripts 2>/dev/null; then
+    bad "AC-6: dev scripts still reference the retired per-service model stores"
+else
+    ok "AC-6: dev scripts do not reference the retired per-service model stores"
+fi
+
+# AC-7: the advanced engines (Ollama/ComfyUI) remain one compose profile
+# away via the opt-in herdr services text-ollama / image-comfyui.
+for profile in ollama comfyui; do
+    svcs=$(profile_services "$profile")
+    if [ "$svcs" = "$profile" ]; then
+        ok "AC-7: advanced profile '$profile' starts exactly: $svcs"
+    else
+        bad "AC-7: advanced profile '$profile' expected [$profile], got [$svcs]"
+    fi
+done
+if grep -q 'dev:ollama' ../text/package.json && grep -q 'dev:comfyui' ../image/package.json; then
+    ok "AC-7: herdr advanced services wired (dev:ollama / dev:comfyui scripts)"
+else
+    bad "AC-7: herdr advanced service scripts missing"
+fi
+
 # AC-1: every upstream image reference resolves and carries a digest. Run the
 # manifest loop when docker registry access is available (network-dependent —
 # skip quietly in offline CI by default; LOCAL_STACK_LIVE=1 forces it).

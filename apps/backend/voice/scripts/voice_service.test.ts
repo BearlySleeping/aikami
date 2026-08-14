@@ -1,7 +1,13 @@
 // apps/backend/voice/scripts/voice_service.test.ts
-// Integration tests for the Kokoro TTS voice synthesis service.
+// Integration tests for the sherpa-onnx voice synthesis service (C-392).
 // Checks if herdr voice is active; if not, spawns it, waits for readiness,
-// runs health/model/synthesis checks, and stops only if started by us.
+// runs health/synthesis checks, and stops only if started by us.
+//
+// Protocol (sherpa-onnx):
+//   readiness: GET  /health          — /v1/voices is gone (sherpa does not
+//                                      expose it; the pre-C-392 test probed
+//                                      it to discover voice names)
+//   synthesize: POST /v1/audio/speech
 //
 // Usage:
 //   bun test scripts/voice_service.test.ts
@@ -19,41 +25,31 @@ const ROOT = resolve(PROJECT_DIR, '../../..');
 
 // ── Constants ───────────────────────────────────────────────
 
-const KOKORO_PORT = 8089;
-const BASE_URL = `http://127.0.0.1:${KOKORO_PORT}`;
+const VOICE_PORT = 8089;
+const BASE_URL = `http://127.0.0.1:${VOICE_PORT}`;
 const POLL_INTERVAL_MS = 3000;
 const STARTUP_TIMEOUT_MS = 180_000;
-
-// ── Types ───────────────────────────────────────────────────
-
-type VoiceEntry = {
-  id: string;
-};
+const DEFAULT_VOICE = 'af_heart';
 
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
-let voicesAvailable: VoiceEntry[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
 /**
- * Check if Kokoro is reachable and serving.
- * Tries /v1/voices (lists actual Kokoro voice names like af_heart).
+ * Check if sherpa-onnx is reachable and serving.
+ * GET /health is the readiness probe (the compose healthcheck uses it).
  */
 const isReady = async (): Promise<{ ok: boolean; detail: string }> => {
   try {
-    const response = await fetch(`${BASE_URL}/v1/voices`, {
+    const response = await fetch(`${BASE_URL}/health`, {
       signal: AbortSignal.timeout(5000),
     });
     if (response.ok) {
-      const data = (await response.json()) as { voices?: VoiceEntry[] };
-      if (Array.isArray(data.voices)) {
-        const voiceCount = data.voices.length;
-        return { ok: true, detail: `/v1/voices OK — ${voiceCount} voice(s)` };
-      }
+      return { ok: true, detail: '/health OK' };
     }
-    return { ok: false, detail: `/v1/voices returned ${response.status}` };
+    return { ok: false, detail: `/health returned ${response.status}` };
   } catch (err) {
     const message = (err as Error).message;
     if (
@@ -92,40 +88,40 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
         wasEverReachable &&
         (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
       ) {
-        throw new Error('Kokoro crashed after becoming reachable — check herdr tab logs');
+        throw new Error('sherpa-onnx crashed after becoming reachable — check herdr tab logs');
       }
       console.log(`  ... ${result.detail}`);
       lastDetail = result.detail;
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-  throw new Error(`Kokoro did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`);
+  throw new Error(
+    `sherpa-onnx did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`,
+  );
 };
 
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
   // Service startup already handled in top-level await if needed
-  // This hook is now just a placeholder for test framework lifecycle
 }, STARTUP_TIMEOUT_MS + 30_000);
 
 afterAll(async () => {
   if (!startedByUs) {
-    console.log('○ Kokoro was already running — leaving it alone');
+    console.log('○ voice was already running — leaving it alone');
     return;
   }
 
   console.log('  Stopping voice service...');
   await $`bun run herdr:stop voice`.cwd(ROOT).nothrow();
-  console.log('✓ Kokoro stopped');
+  console.log('✓ voice stopped');
 });
 
-// ── Top-level await: Discover voices for skip logic ─────────
+// ── Top-level await: ensure service is ready ────────────────
 
-// Ensure service is ready and discover available voices before test registration
 const ready = await isReady();
 if (!ready.ok) {
-  console.log('○ Kokoro not running — starting via herdr for prerequisite discovery...');
+  console.log('○ voice not running — starting via herdr for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
@@ -137,96 +133,65 @@ if (!ready.ok) {
   }
 
   startedByUs = true;
-  console.log('  Waiting for Kokoro to become ready...');
+  console.log('  Waiting for sherpa-onnx to become ready...');
   await waitForReady(STARTUP_TIMEOUT_MS);
 } else {
-  console.log(`✓ Kokoro already running (${ready.detail})`);
-}
-
-// Now discover voices
-try {
-  const voicesResponse = await fetch(`${BASE_URL}/v1/voices`, {
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (voicesResponse.ok) {
-    const voicesData = (await voicesResponse.json()) as { voices?: VoiceEntry[] };
-    voicesAvailable = voicesData.voices ?? [];
-  }
-} catch (err) {
-  console.warn('  ⚠ Failed to discover voices:', (err as Error).message);
-}
-
-if (voicesAvailable.length === 0) {
-  console.warn('  ⚠ No voices available — synthesis test will be skipped');
+  console.log(`✓ voice already running (${ready.detail})`);
 }
 
 // ── Tests ───────────────────────────────────────────────────
 
-describe('Kokoro TTS voice service', () => {
-  test('/v1/voices lists available Kokoro voices', async () => {
-    const response = await fetch(`${BASE_URL}/v1/voices`, {
+describe('sherpa-onnx voice service', () => {
+  test('/health reports readiness', async () => {
+    const response = await fetch(`${BASE_URL}/health`, {
       signal: AbortSignal.timeout(5000),
     });
 
     expect(response.ok).toBe(true);
-    const data = (await response.json()) as { voices?: VoiceEntry[] };
-    expect(data.voices).toBeArray();
-    const voices = data.voices ?? [];
-
-    console.log(`  ${voices.length} voice(s) available`);
-    for (const voice of voices.slice(0, 8)) {
-      console.log(`    • ${voice.id}`);
-    }
-    if (voices.length > 8) {
-      console.log(`    … and ${voices.length - 8} more`);
-    }
+    console.log(`  /health: ${response.status}`);
   });
 
-  test.skipIf(voicesAvailable.length === 0)(
-    '/v1/audio/speech synthesizes WAV audio (super lite)',
-    async () => {
-      const voice = voicesAvailable[0].id;
-      const text = 'OK';
+  test('/v1/audio/speech synthesizes WAV audio (super lite)', async () => {
+    const voice = DEFAULT_VOICE;
+    const text = 'OK';
 
-      console.log(`  Voice:   ${voice}`);
-      console.log(`  Text:    "${text}"`);
+    console.log(`  Voice:   ${voice}`);
+    console.log(`  Text:    "${text}"`);
 
-      const t0 = Date.now();
-      const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice,
-          response_format: 'wav',
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
+    const t0 = Date.now();
+    const response = await fetch(`${BASE_URL}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text,
+        voice,
+        response_format: 'wav',
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => '');
-        throw new Error(`Synthesis failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`);
-      }
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      throw new Error(`Synthesis failed (HTTP ${response.status}):\n${errorBody.slice(0, 300)}`);
+    }
 
-      const buffer = await response.arrayBuffer();
-      const wallMs = Date.now() - t0;
+    const buffer = await response.arrayBuffer();
+    const wallMs = Date.now() - t0;
 
-      expect(buffer.byteLength).toBeGreaterThan(0);
+    expect(buffer.byteLength).toBeGreaterThan(0);
 
-      // WAV header check: "RIFF" at offset 0 and "WAVE" FourCC at bytes 8-11
-      const headerRiff = new Uint8Array(buffer.slice(0, 4));
-      const riff = new TextDecoder().decode(headerRiff);
-      expect(riff).toBe('RIFF');
+    // WAV header check: "RIFF" at offset 0 and "WAVE" FourCC at bytes 8-11
+    const headerRiff = new Uint8Array(buffer.slice(0, 4));
+    const riff = new TextDecoder().decode(headerRiff);
+    expect(riff).toBe('RIFF');
 
-      const headerWave = new Uint8Array(buffer.slice(8, 12));
-      const wave = new TextDecoder().decode(headerWave);
-      expect(wave).toBe('WAVE');
+    const headerWave = new Uint8Array(buffer.slice(8, 12));
+    const wave = new TextDecoder().decode(headerWave);
+    expect(wave).toBe('WAVE');
 
-      console.log(`  Size:    ${buffer.byteLength} bytes`);
-      console.log(`  Format:  ${riff}...${wave} (valid WAV)`);
-      console.log(`  Wall:    ${wallMs}ms`);
-    },
-    60_000,
-  );
+    console.log(`  Size:    ${buffer.byteLength} bytes`);
+    console.log(`  Format:  ${riff}...${wave} (valid WAV)`);
+    console.log(`  Wall:    ${wallMs}ms`);
+  }, 60_000);
 });

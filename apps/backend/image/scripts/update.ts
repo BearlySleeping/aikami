@@ -1,26 +1,20 @@
 // apps/backend/image/scripts/update.ts
-// Pulls the latest ComfyUI base image and rebuilds the custom Docker image.
+// Pulls the engine images used by the image compose profile (C-392).
+// Delegates to the local-stack topology — there is no per-service image
+// anymore.
 
+import { resolve } from 'node:path';
 import { $ } from 'bun';
 
-const BASE_IMAGE = 'yanwk/comfyui-boot:cu130-slim-v2';
-const CUSTOM_TAG = 'aikami-image:latest';
+const COMPOSE_DIR = resolve(import.meta.dir, '../../local-stack');
 
-console.log('🖼️  Updating image service...');
+console.log('🖼️  Updating image service images...');
+console.log('  docker compose --profile image pull');
 
-console.log(`📥 Pulling base image: ${BASE_IMAGE}`);
-const pullExit = await $`podman pull ${BASE_IMAGE}`.nothrow();
-if (pullExit.exitCode !== 0) {
-  console.error('❌ Failed to pull base image.');
-  process.exit(1);
-}
-console.log('✅ Base image pulled.');
-
-console.log(`🔨 Building custom image: ${CUSTOM_TAG}`);
-const buildExit = await $`podman build -t ${CUSTOM_TAG} --pull .`.nothrow();
-if (buildExit.exitCode !== 0) {
-  console.error('❌ Build failed.');
+const pull = await $`docker compose --profile image pull`.cwd(COMPOSE_DIR).nothrow();
+if (pull.exitCode !== 0) {
+  console.error('❌ Failed to pull image profile images.');
   process.exit(1);
 }
 
-console.log('✅ Image service updated.');
+console.log('✅ Image service images updated.');

@@ -109,16 +109,26 @@ services:
   image:
     profiles: ["image"]
     image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/aikami}/aikami-sd-server:cpu
+    # The sd.cpp images ship /sd-cli as their ENTRYPOINT; sd-server must be
+    # selected explicitly or the engine boots the CLI and errors on the
+    # first argument. (C-392 verified on leejet/stable-diffusion.cpp
+    # master-vulkan; the C-390 "verified" comment missed this.) The command
+    # is therefore flags-only — no leading binary.
+    entrypoint: /sd-server
     ports:
       - "127.0.0.1:${IMAGE_PORT:-8188}:8188"
     command:
-      - /sd-server
       - --listen-ip
       - 0.0.0.0
       - --listen-port
       - "8188"
       - --model
       - /models/image/${IMAGE_MODEL:-flux1-schnell-q4_k.gguf}
+      # refresh_lora_cache recursively walks this dir on every job; with no
+      # --lora-model-dir sd-server defaults to the container root and dies
+      # with EPERM when it reaches /proc/1/map_files (C-392 verified).
+      - --lora-model-dir
+      - /models/image
     volumes:
       - *model-volume
     depends_on:

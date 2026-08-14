@@ -1,7 +1,12 @@
 // apps/backend/text/scripts/text_service.test.ts
-// Integration tests for the Ollama text inference service.
+// Integration tests for the llama-server text inference service (C-392).
 // Checks if herdr text is active; if not, spawns it, waits for readiness,
 // runs health/model/generation checks, and stops only if started by us.
+//
+// Protocol (llama-server, OpenAI-compatible):
+//   readiness:  GET  /health
+//   model list: GET  /v1/models
+//   generate:   POST /v1/chat/completions
 //
 // Usage:
 //   bun test scripts/text_service.test.ts
@@ -19,55 +24,54 @@ const ROOT = resolve(PROJECT_DIR, '../../..');
 
 // ── Constants ───────────────────────────────────────────────
 
-const OLLAMA_PORT = 11434;
-const BASE_URL = `http://127.0.0.1:${OLLAMA_PORT}`;
+// Base port is 11434 (AC-3). A host with a system-wide Ollama service on
+// 11434 cannot free the port without admin rights; TEXT_PORT overrides the
+// probe port AND starts the compose profile directly on the override (the
+// same `docker compose --profile text` invocation herdr runs).
+const DEFAULT_PORT = 11434;
+const LLAMA_PORT = Number(process.env.TEXT_PORT ?? DEFAULT_PORT);
+const BASE_URL = `http://127.0.0.1:${LLAMA_PORT}`;
+const LOCAL_STACK_DIR = resolve(ROOT, 'apps/backend/local-stack');
 const POLL_INTERVAL_MS = 2000;
-const STARTUP_TIMEOUT_MS = 120_000;
+const STARTUP_TIMEOUT_MS = 180_000;
 
 // ── Types ───────────────────────────────────────────────────
 
-type TagEntry = {
-  name: string;
-  model: string;
-  modified_at: string;
-  size: number;
+type ModelEntry = {
+  id: string;
 };
 
-type TagsResponse = {
-  models: TagEntry[];
+type ModelListResponse = {
+  data: ModelEntry[];
 };
 
-type GenerateResponse = {
-  response: string;
-  done: boolean;
-  total_duration?: number;
-  load_duration?: number;
-  prompt_eval_count?: number;
-  eval_count?: number;
-  error?: string;
+type ChatCompletionResponse = {
+  choices?: Array<{ message?: { content?: string } }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  error?: { message?: string };
 };
 
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
-let modelsAvailable: TagEntry[] = [];
+let modelsAvailable: ModelEntry[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
 /**
- * Check if Ollama is reachable and serving.
- * Ollama responds with "Ollama is running" at GET /.
+ * Check if llama-server is reachable and serving.
+ * GET /health returns 200 once the server is ready (Ollama's root banner
+ * and /api/tags are gone — the pre-C-392 endpoints do not exist here).
  */
 const isReady = async (): Promise<{ ok: boolean; detail: string }> => {
   try {
-    const response = await fetch(BASE_URL, {
+    const response = await fetch(`${BASE_URL}/health`, {
       signal: AbortSignal.timeout(3000),
     });
-    const text = await response.text();
-    if (response.ok && text.includes('Ollama is running')) {
-      return { ok: true, detail: '/ OK — Ollama is running' };
+    if (response.ok) {
+      return { ok: true, detail: '/health OK' };
     }
-    return { ok: false, detail: `/ returned ${response.status}: ${text.slice(0, 80)}` };
+    return { ok: false, detail: `/health returned ${response.status}` };
   } catch (err) {
     const message = (err as Error).message;
     if (
@@ -107,7 +111,7 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
         (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
       ) {
         throw new Error(
-          'Ollama crashed after becoming reachable — check herdr tab logs for the error',
+          'llama-server crashed after becoming reachable — check herdr tab logs for the error',
         );
       }
       console.log(`  ... ${result.detail}`);
@@ -115,58 +119,74 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-  throw new Error(`Ollama did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`);
+  throw new Error(
+    `llama-server did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`,
+  );
 };
 
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
   // Service startup already handled in top-level await if needed
-  // This hook is now just a placeholder for test framework lifecycle
 }, STARTUP_TIMEOUT_MS + 30_000);
 
 afterAll(async () => {
   if (!startedByUs) {
-    console.log('○ Ollama was already running — leaving it alone');
+    console.log('○ text was already running — leaving it alone');
     return;
   }
 
   console.log('  Stopping text service...');
-  await $`bun run herdr:stop text`.cwd(ROOT).nothrow();
-  console.log('✓ Ollama stopped');
+  if (LLAMA_PORT !== DEFAULT_PORT) {
+    await $`TEXT_PORT=${LLAMA_PORT} docker compose --profile text down`
+      .cwd(LOCAL_STACK_DIR)
+      .nothrow();
+  } else {
+    await $`bun run herdr:stop text`.cwd(ROOT).nothrow();
+  }
+  console.log('✓ text stopped');
 });
 
 // ── Top-level await: Discover models for skip logic ─────────
 
-// Ensure service is ready and discover available models before test registration
 const ready = await isReady();
 if (!ready.ok) {
-  console.log('○ Ollama not running — starting via herdr for prerequisite discovery...');
+  console.log('○ text not running — starting for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
-  const startResult = await $`bun run herdr:start text`.cwd(ROOT).nothrow();
+  let startResult: { exitCode: number; stderr: { toString(): string } };
+  if (LLAMA_PORT !== DEFAULT_PORT) {
+    // Port override: a system service holds the base port — start the
+    // compose profile directly on the override port.
+    console.log(`  Starting compose profile text on :${LLAMA_PORT} (TEXT_PORT override)`);
+    startResult = await $`TEXT_PORT=${LLAMA_PORT} docker compose --profile text up -d`
+      .cwd(LOCAL_STACK_DIR)
+      .nothrow();
+  } else {
+    startResult = await $`bun run herdr:start text`.cwd(ROOT).nothrow();
+  }
 
   if (startResult.exitCode !== 0) {
-    console.error('herdr start failed:', startResult.stderr.toString());
-    throw new Error('Failed to start text service via herdr');
+    console.error('start failed:', startResult.stderr?.toString());
+    throw new Error('Failed to start text service');
   }
 
   startedByUs = true;
-  console.log('  Waiting for Ollama to become ready...');
+  console.log('  Waiting for llama-server to become ready...');
   await waitForReady(STARTUP_TIMEOUT_MS);
 } else {
-  console.log(`✓ Ollama already running (${ready.detail})`);
+  console.log(`✓ text already running (${ready.detail})`);
 }
 
 // Now discover models
 try {
-  const tagsResponse = await fetch(`${BASE_URL}/api/tags`, {
+  const modelsResponse = await fetch(`${BASE_URL}/v1/models`, {
     signal: AbortSignal.timeout(10_000),
   });
-  if (tagsResponse.ok) {
-    const tagsData = (await tagsResponse.json()) as TagsResponse;
-    modelsAvailable = tagsData.models ?? [];
+  if (modelsResponse.ok) {
+    const modelsData = (await modelsResponse.json()) as ModelListResponse;
+    modelsAvailable = modelsData.data ?? [];
   }
 } catch (err) {
   console.warn('  ⚠ Failed to discover models:', (err as Error).message);
@@ -174,56 +194,51 @@ try {
 
 if (modelsAvailable.length === 0) {
   console.warn('  ⚠ No models available — generation test will be skipped');
-  console.warn('    Pull a model first: bun run download:model qwen3.5:4b');
+  console.warn('    Fetch models first: cd apps/backend/local-stack && bun run fetch-models');
 }
 
 // ── Tests ───────────────────────────────────────────────────
 
-describe('Ollama text inference service', () => {
-  test('health endpoint responds with "Ollama is running"', async () => {
-    const response = await fetch(BASE_URL, {
+describe('llama-server text inference service', () => {
+  test('/health reports readiness', async () => {
+    const response = await fetch(`${BASE_URL}/health`, {
       signal: AbortSignal.timeout(5000),
     });
 
     expect(response.ok).toBe(true);
-    const text = await response.text();
-    expect(text).toInclude('Ollama is running');
-    console.log('  /:', text.trim());
+    console.log(`  /health: ${response.status}`);
   });
 
-  test('/api/tags lists available models', async () => {
-    const response = await fetch(`${BASE_URL}/api/tags`, {
+  test('/v1/models lists available models', async () => {
+    const response = await fetch(`${BASE_URL}/v1/models`, {
       signal: AbortSignal.timeout(5000),
     });
 
     expect(response.ok).toBe(true);
-    const data = (await response.json()) as TagsResponse;
-    expect(data.models).toBeArray();
+    const data = (await response.json()) as ModelListResponse;
+    expect(data.data).toBeArray();
 
-    console.log(`  ${data.models.length} model(s) found`);
-    for (const model of data.models) {
-      expect(model.name).toBeString();
-      const sizeMb = ((model.size ?? 0) / (1024 * 1024)).toFixed(0);
-      console.log(`    • ${model.name} (${sizeMb} MB)`);
+    console.log(`  ${data.data.length} model(s) found`);
+    for (const model of data.data) {
+      expect(model.id).toBeString();
+      console.log(`    • ${model.id}`);
     }
   });
 
   test.skipIf(modelsAvailable.length === 0)(
-    '/api/generate returns a response (super lite)',
+    '/v1/chat/completions returns a response (super lite)',
     async () => {
-      // Prefer smallest model for fast test
-      const sorted = [...modelsAvailable].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
-      const model = sorted[0].name;
-
-      console.log(`  Model:   ${model} (${(sorted[0].size / (1024 * 1024)).toFixed(0)} MB)`);
+      const model = modelsAvailable[0]?.id as string;
+      console.log(`  Model:   ${model}`);
 
       const t0 = Date.now();
-      const response = await fetch(`${BASE_URL}/api/generate`, {
+      const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model,
-          prompt: 'Say "OK"',
+          messages: [{ role: 'user', content: 'Say "OK"' }],
+          max_tokens: 16,
           stream: false,
         }),
         signal: AbortSignal.timeout(60_000),
@@ -237,25 +252,47 @@ describe('Ollama text inference service', () => {
         );
       }
 
-      const data = (await response.json()) as GenerateResponse;
+      const data = (await response.json()) as ChatCompletionResponse;
 
-      if (data.error) {
-        throw new Error(`Model '${model}' error: ${data.error}`);
+      if (data.error?.message) {
+        throw new Error(`Model '${model}' error: ${data.error.message}`);
       }
 
-      expect(data.response).toBeString();
-      expect(data.response.length).toBeGreaterThan(0);
-      expect(data.done).toBe(true);
+      const content = data.choices?.[0]?.message?.content ?? '';
+      expect(content.length).toBeGreaterThan(0);
 
-      console.log(`  Output:  "${data.response.trim()}"`);
+      console.log(`  Output:  "${content.trim()}"`);
       console.log(`  Wall:    ${wallMs}ms`);
-      if (data.total_duration !== undefined) {
-        console.log(`  Server:  ${(data.total_duration / 1_000_000).toFixed(0)}ms`);
-      }
-      if (data.eval_count !== undefined) {
-        console.log(`  Tokens:  ${data.eval_count} generated`);
+      if (data.usage) {
+        console.log(`  Tokens:  ${data.usage.total_tokens ?? '?'} total`);
       }
     },
     120_000,
   );
+
+  test('check_health names the endpoint when the wrong engine answers', async () => {
+    // Serve a fake Ollama banner on a random port — llama-server's /health
+    // is absent there, so the probe must fail naming the endpoint + engine.
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        const url = new URL(req.url);
+        if (url.pathname === '/') {
+          return new Response('Ollama is running', { status: 200 });
+        }
+        return new Response('not found', { status: 404 });
+      },
+    });
+    try {
+      const run = await $`bun run scripts/check_health.ts --port ${server.port}`
+        .cwd(PROJECT_DIR)
+        .nothrow();
+      expect(run.exitCode).not.toBe(0);
+      const out = run.stdout.toString() + run.stderr.toString();
+      expect(out).toContain('/health');
+      expect(out).toContain('llama-server');
+    } finally {
+      server.stop();
+    }
+  }, 30_000);
 });

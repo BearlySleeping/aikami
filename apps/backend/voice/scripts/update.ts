@@ -1,17 +1,20 @@
 // apps/backend/voice/scripts/update.ts
-// Pulls the latest Kokoro TTS image.
+// Pulls the engine images used by the voice compose profile (C-392).
+// Delegates to the local-stack topology — there is no per-service image
+// anymore.
 
+import { resolve } from 'node:path';
 import { $ } from 'bun';
 
-const BASE_IMAGE = 'hwdsl2/kokoro-server:latest';
+const COMPOSE_DIR = resolve(import.meta.dir, '../../local-stack');
 
-console.log('🔊 Updating voice service...');
+console.log('🔊 Updating voice service images...');
+console.log('  docker compose --profile voice pull');
 
-console.log(`📥 Pulling image: ${BASE_IMAGE}`);
-const pullExit = await $`podman pull ${BASE_IMAGE}`.nothrow();
-if (pullExit.exitCode !== 0) {
-  console.error('❌ Failed to pull image.');
+const pull = await $`docker compose --profile voice pull`.cwd(COMPOSE_DIR).nothrow();
+if (pull.exitCode !== 0) {
+  console.error('❌ Failed to pull voice profile images.');
   process.exit(1);
 }
 
-console.log('✅ Voice service updated.');
+console.log('✅ Voice service images updated.');

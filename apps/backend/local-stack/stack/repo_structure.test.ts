@@ -7,11 +7,22 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
+
+/** True when a path is tracked by git (untracked local weights are a migration concern, not a repo invariant). */
+const isTracked = (path: string): boolean => {
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', '--', path], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 describe('AC-10 — removed artifacts are absent', () => {
   const forbidden = [
@@ -76,6 +87,79 @@ describe('compose topology invariants', () => {
   it('no image reference is pinned to :latest', async () => {
     const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
     expect(compose).not.toMatch(/image:\s*[^\s]+:latest\b/);
+  });
+});
+
+describe('C-392 — dev engine services converge on the local stack (AC-1, AC-9)', () => {
+  it('no per-service Dockerfile remains in text/image/voice', () => {
+    for (const app of ['text', 'image', 'voice']) {
+      expect(existsSync(join(ROOT, `../${app}/Dockerfile`))).toBe(false);
+    }
+  });
+
+  it('compose.yaml is the only container topology — the stale docker-compose.yml is gone', () => {
+    expect(existsSync(join(ROOT, 'compose.yaml'))).toBe(true);
+    expect(existsSync(join(ROOT, 'docker-compose.yml'))).toBe(false);
+  });
+
+  it('the duplicated model downloaders are absent from text and image', () => {
+    expect(existsSync(join(ROOT, '../text/scripts/download_model.ts'))).toBe(false);
+    expect(existsSync(join(ROOT, '../image/scripts/download_model.ts'))).toBe(false);
+    expect(existsSync(join(ROOT, '../image/scripts/download_models.ts'))).toBe(false);
+  });
+
+  it('no package.json or moon.yml in text/image references the removed downloaders', async () => {
+    for (const app of ['text', 'image']) {
+      const pkg = await readFile(join(ROOT, `../${app}/package.json`), 'utf8');
+      const moon = await readFile(join(ROOT, `../${app}/moon.yml`), 'utf8');
+      for (const needle of [
+        'download_model',
+        'download_models',
+        'download:model',
+        'models:download',
+      ]) {
+        expect(pkg).not.toContain(needle);
+        expect(moon).not.toContain(needle);
+      }
+    }
+  });
+
+  it('no model weights are tracked under apps/backend/{text,image,voice}/src/', async () => {
+    // Scoped to git-tracked files: untracked leftovers from the pre-C-392
+    // ComfyUI tree (git-ignored) are handled by the migration script, not
+    // by repo assertions — the dev services must not WRITE weights here.
+    const weightExtensions = ['.gguf', '.safetensors', '.ckpt', '.bin', '.pth', '.pt', '.onnx'];
+    const offenders: string[] = [];
+    for (const app of ['text', 'image', 'voice']) {
+      const srcDir = join(ROOT, `../${app}/src`);
+      if (!existsSync(srcDir)) {
+        continue;
+      }
+      const walk = async (dir: string): Promise<void> => {
+        for (const entry of await readdir(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walk(full);
+          } else if (
+            entry.isFile() &&
+            weightExtensions.some((ext) => entry.name.toLowerCase().endsWith(ext)) &&
+            (await isTracked(full))
+          ) {
+            offenders.push(full);
+          }
+        }
+      };
+      await walk(srcDir);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the dev start scripts delegate to the local-stack compose topology', async () => {
+    for (const app of ['text', 'image', 'voice']) {
+      const start = await readFile(join(ROOT, `../${app}/scripts/start.ts`), 'utf8');
+      expect(start).toContain('local-stack');
+      expect(start).toContain('compose');
+    }
   });
 });
 

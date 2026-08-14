@@ -1,16 +1,31 @@
 // apps/backend/image/scripts/generate_avatar.ts
-// biome-ignore-all lint/style/useNamingConvention: Property names must match ComfyUI API field names (snake_case and PascalCase)
-// Submit a txt2img prompt to the ComfyUI API and retrieve the output.
+// Avatar generation CLI for the image dev engine (C-392).
+//
+// The default image service is sd-server (stable-diffusion.cpp) from the
+// C-390 local-stack compose profile. The pre-C-392 CLI submitted a ComfyUI
+// graph and polled /api/history; sd-server exposes a job-based native API:
+//
+//   POST /sdcpp/v1/img_gen            → create a job
+//   GET  /sdcpp/v1/jobs/{id}          → poll state (queued/generating/completed)
+//   GET  /sdapi/v1/sd-models          → model listing
+//
+// The job payload carries the image inline (base64) — no second fetch hop.
+//
+// CLI surface is preserved (AC-5): --steps, --cfg, --seed, --width,
+// --height, --checkpoint all keep working; only the transport changed.
+// --checkpoint maps to the sd-server `model` field (the GGUF file name
+// under /models/image/, e.g. flux1-schnell-q4_k.gguf).
 //
 // Usage:
-//   bun run scripts/generate_avatar.ts                          # default prompt
-//   bun run scripts/generate_avatar.ts "a knight in armor"      # custom prompt
-//   bun run scripts/generate_avatar.ts --steps 20 --cfg 7.5     # tuning
+//   bun run generate:avatar "an elven ranger, pixel art"
+//   bun run generate:avatar "a knight" --steps 20 --cfg 7 --seed 42 \
+//     --width 512 --height 512 --checkpoint flux1-schnell-q4_k.gguf
 
+// biome-ignore-all lint/style/useNamingConvention: sd-server API uses snake_case fields
 import { mkdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const COMFYUI = 'http://localhost:8188';
+const SD_SERVER = 'http://127.0.0.1:8188';
 
 // ── Configuration ────────────────────────────────────────────────────────
 
@@ -26,7 +41,9 @@ type GenerationOptions = {
 };
 
 /**
- * Parse CLI arguments into generation options.
+ * Parse CLI arguments into generation options. The pre-C-392 flag surface
+ * (--steps/--cfg/--seed/--width/--height/--checkpoint) is preserved; the
+ * default checkpoint now names the shared-store GGUF used by sd-server.
  */
 const parseOptions = (): GenerationOptions => {
   const args = process.argv.slice(2);
@@ -34,7 +51,7 @@ const parseOptions = (): GenerationOptions => {
 
   const getArg = (flag: string, fallback: string): string => {
     const idx = args.indexOf(flag);
-    return idx !== -1 && args[idx + 1] ? args[idx + 1] : fallback;
+    return idx !== -1 && args[idx + 1] ? (args[idx + 1] as string) : fallback;
   };
 
   return {
@@ -49,172 +66,178 @@ const parseOptions = (): GenerationOptions => {
     steps: Number.parseInt(getArg('--steps', '20'), 10),
     cfg: Number.parseFloat(getArg('--cfg', '7')),
     seed: Number.parseInt(getArg('--seed', String(Math.floor(Math.random() * 99999999999))), 10),
-    checkpoint: getArg('--checkpoint', 'pixel-art/illustriousPixelart_v6SeriesV60.safetensors'),
+    checkpoint: getArg('--checkpoint', 'flux1-schnell-q4_k.gguf'),
   };
 };
 
-// ── Workflow Builder ─────────────────────────────────────────────────────
+// ── API Types ────────────────────────────────────────────────────────────
 
-/**
- * Build a minimal txt2img workflow for ComfyUI.
- *
- * Node IDs:
- *   1 — CheckpointLoaderSimple
- *   2 — CLIPTextEncode (positive)
- *   3 — CLIPTextEncode (negative)
- *   4 — EmptyLatentImage
- *   5 — KSampler
- *   6 — VAEDecode
- *   7 — SaveImage
- */
-type ComfyUIWorkflow = Record<string, unknown>;
+type SdCppJobState = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
 
-const buildWorkflow = (options: GenerationOptions): ComfyUIWorkflow => ({
-  '1': {
-    inputs: { ckpt_name: options.checkpoint },
-    class_type: 'CheckpointLoaderSimple',
-  },
-  '2': {
-    inputs: { text: options.prompt, clip: ['1', 1] },
-    class_type: 'CLIPTextEncode',
-  },
-  '3': {
-    inputs: { text: options.negativePrompt, clip: ['1', 1] },
-    class_type: 'CLIPTextEncode',
-  },
-  '4': {
-    inputs: { width: options.width, height: options.height, batch_size: 1 },
-    class_type: 'EmptyLatentImage',
-  },
-  '5': {
-    inputs: {
-      seed: options.seed,
-      steps: options.steps,
-      cfg: options.cfg,
-      sampler_name: 'euler',
-      scheduler: 'normal',
-      denoise: 1,
-      model: ['1', 0],
-      positive: ['2', 0],
-      negative: ['3', 0],
-      latent_image: ['4', 0],
-    },
-    class_type: 'KSampler',
-  },
-  '6': {
-    inputs: { samples: ['5', 0], vae: ['1', 2] },
-    class_type: 'VAEDecode',
-  },
-  '7': {
-    inputs: { images: ['6', 0], filename_prefix: 'aikami_avatar' },
-    class_type: 'SaveImage',
-  },
-});
+type SdCppJob = {
+  id?: string;
+  state?: SdCppJobState;
+  status?: SdCppJobState;
+  progress?: number;
+  width?: number;
+  height?: number;
+  image?: string;
+  images?: readonly unknown[];
+  data?: readonly { b64_json?: string; url?: string; image?: string }[];
+  message?: string;
+  error?: string;
+};
 
 // ── API Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Submit a workflow and return the prompt ID.
+ * Submit a txt2img job to sd-server and return the raw response.
  */
-const queuePrompt = async (workflow: ComfyUIWorkflow): Promise<string> => {
-  const body = JSON.stringify({ prompt: workflow });
-  const response = await fetch(`${COMFYUI}/api/prompt`, {
+const submitJob = async (options: GenerationOptions): Promise<SdCppJob> => {
+  const body = {
+    prompt: options.prompt,
+    negative_prompt: options.negativePrompt,
+    width: options.width,
+    height: options.height,
+    sample_steps: options.steps,
+    txt_cfg: options.cfg,
+    seed: options.seed,
+    batch_count: 1,
+    model: options.checkpoint,
+  };
+
+  const response = await fetch(`${SD_SERVER}/sdcpp/v1/img_gen`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body,
-    signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Failed to queue prompt: ${response.status} — ${text}`);
+    throw new Error(`Failed to submit job: ${response.status} — ${text.slice(0, 300)}`);
   }
 
-  const data = await response.json();
-  if (!data.prompt_id) {
-    throw new Error('No prompt_id in response');
-  }
-
-  return data.prompt_id as string;
+  return (await response.json()) as SdCppJob;
 };
 
 /**
- * Poll the history endpoint until the prompt completes.
+ * Extract a job id, tolerating builds that nest it or return inline images.
  */
-type HistoryOutput = {
-  filename: string;
-  subfolder: string;
-  type: string;
+const extractJobId = (job: SdCppJob): string | undefined => {
+  if (job.id && job.id.length > 0) {
+    return job.id;
+  }
+  const nested = (job as unknown as Record<string, unknown>).job;
+  if (nested && typeof nested === 'object') {
+    const nestedId = (nested as Record<string, unknown>).id;
+    if (typeof nestedId === 'string') {
+      return nestedId;
+    }
+  }
+  return undefined;
 };
 
-type HistoryEntry = {
-  outputs: Record<string, { images: HistoryOutput[] }>;
-  status: {
-    status_str: string;
-    completed: boolean;
-  };
-};
+/**
+ * Poll a job until it reaches a terminal state, bounded by a wall-clock
+ * deadline (the poll request itself can take up to 10s per iteration, so a
+ * fixed iteration count would not bound wall time).
+ */
+const waitForJob = async (jobId: string): Promise<SdCppJob> => {
+  const url = `${SD_SERVER}/sdcpp/v1/jobs/${jobId}`;
+  const deadline = Date.now() + 180_000;
+  let poll = 0;
 
-const waitForCompletion = async (promptId: string): Promise<HistoryEntry> => {
-  const url = `${COMFYUI}/api/history/${promptId}`;
-
-  for (let i = 0; i < 120; i++) {
+  while (Date.now() < deadline) {
+    poll++;
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
-      throw new Error(`History fetch failed: ${response.status}`);
+      throw new Error(`Job poll failed: ${response.status}`);
     }
 
-    const data = (await response.json()) as Record<string, HistoryEntry>;
-    const entry = data[promptId];
+    const job = (await response.json()) as SdCppJob;
+    const state = job.state ?? job.status ?? 'queued';
 
-    if (entry) {
-      const status = entry.status?.status_str ?? 'unknown';
-      if (entry.status?.completed) {
-        return entry;
-      }
-
-      // Progress indicator
-      process.stdout.write(`\r  Status: ${status} (${i + 1}s)`);
-
-      // Check for errors
-      if (status === 'error') {
-        throw new Error('Generation failed — check ComfyUI logs');
-      }
+    if (state === 'completed') {
+      return job;
+    }
+    if (state === 'failed' || state === 'cancelled') {
+      throw new Error(`Generation ${state}: ${(job.message ?? job.error ?? '').trim()}`);
     }
 
-    await new Promise((r) => setTimeout(r, 1000));
+    const progress = typeof job.progress === 'number' ? ` ${job.progress}%` : ` (poll ${poll})`;
+    process.stdout.write(`\r  Status: ${state}${progress}`);
+
+    await new Promise((r) => setTimeout(r, Math.max(0, Math.min(1000, deadline - Date.now()))));
   }
 
-  throw new Error('Generation timed out after 120s');
+  throw new Error('Generation timed out after 180s');
 };
 
 /**
- * Download an output image from ComfyUI.
+ * Recursively find an inline image payload (data URL or base64) in a job.
  */
-const downloadImage = async (output: HistoryOutput, outputDir: string): Promise<string> => {
-  const params = new URLSearchParams({
-    filename: output.filename,
-    subfolder: output.subfolder,
-    type: output.type,
-  });
-
-  const response = await fetch(`${COMFYUI}/api/view?${params}`, {
-    signal: AbortSignal.timeout(30_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to download image: ${response.status}`);
+const extractImage = (payload: unknown): string | undefined => {
+  if (typeof payload === 'string') {
+    return payload.startsWith('data:') || payload.length >= 64 ? payload : undefined;
+  }
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
   }
 
-  const destDir = resolve(import.meta.dirname, '../src/output', outputDir);
+  const obj = payload as Record<string, unknown>;
+
+  if (Array.isArray(obj.data)) {
+    for (const item of obj.data) {
+      const found = extractImage(item);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  if (Array.isArray(obj.images)) {
+    for (const item of obj.images) {
+      const found = extractImage(item);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  for (const key of ['image', 'b64_json', 'output', 'result']) {
+    const found = extractImage(obj[key]);
+    if (found) {
+      return found;
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * Decode a base64 or data-URL image payload and write it to disk.
+ */
+const saveImage = async (imageData: string, outputDir: string): Promise<string> => {
+  const base64 = imageData.startsWith('data:') ? (imageData.split(',')[1] ?? '') : imageData;
+  const bytes = Buffer.from(base64, 'base64');
+
+  // Fail loudly on a bad payload instead of writing garbage: sd-server may
+  // echo a long prompt/id under one of the scanned fields, which decodes to
+  // short meaningless bytes that would otherwise be reported as success.
+  const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  if (bytes.length < 8 || !bytes.subarray(0, 4).equals(PNG_MAGIC)) {
+    throw new Error(
+      `Decoded payload is not a PNG (${bytes.length} bytes) — sd-server returned an unexpected field`,
+    );
+  }
+
+  const destDir = resolve(import.meta.dir, '../src/output', outputDir);
   mkdirSync(destDir, { recursive: true });
-
-  const destPath = resolve(destDir, output.filename);
-  await Bun.write(destPath, response);
-
+  const destPath = resolve(destDir, 'avatar.png');
+  await Bun.write(destPath, bytes);
   return destPath;
 };
 
@@ -223,7 +246,7 @@ const downloadImage = async (output: HistoryOutput, outputDir: string): Promise<
 const main = async (): Promise<void> => {
   const options = parseOptions();
 
-  console.log('🎨 ComfyUI Avatar Generator\n');
+  console.log('🎨 sd-server Avatar Generator\n');
   console.log(`  Prompt:   ${options.prompt}`);
   console.log(`  Negative: ${options.negativePrompt}`);
   console.log(`  Size:     ${options.width}×${options.height}`);
@@ -232,41 +255,44 @@ const main = async (): Promise<void> => {
   console.log(`  Model:    ${options.checkpoint}`);
   console.log();
 
-  // ── Submit workflow ───────────────────────────────
+  // ── Submit job ───────────────────────────────────
   process.stdout.write('  Submitting...');
-  const workflow = buildWorkflow(options);
-  const promptId = await queuePrompt(workflow);
-  process.stdout.write(` prompt_id=${promptId}\n`);
+  const job = await submitJob(options);
 
-  // ── Wait for completion ────────────────────────────
+  const inline = extractImage(job);
+  if (inline) {
+    const path = await saveImage(inline, 'inline');
+    const size = statSync(path).size;
+    console.log(` inline image received`);
+    console.log(`✓ ${path}  ${(size / 1024).toFixed(1)}KB`);
+    console.log(`  Seed: ${options.seed}  (reuse with --seed ${options.seed})`);
+    return;
+  }
+
+  const jobId = extractJobId(job);
+  if (!jobId) {
+    throw new Error('sd-server did not return a job id or image');
+  }
+  process.stdout.write(` job_id=${jobId}\n`);
+
+  // ── Wait for completion ──────────────────────────
   console.log('  Generating...');
-  const history = await waitForCompletion(promptId);
+  const completed = await waitForJob(jobId);
   process.stdout.write('\n');
 
-  // ── Download output ────────────────────────────────
-  const outputs = history.outputs;
-  const outputNodes = Object.keys(outputs);
-
-  if (outputNodes.length === 0) {
-    console.error('✗ No output images found');
+  // ── Extract + save output ────────────────────────
+  const imageData = extractImage(completed);
+  if (!imageData) {
+    console.error('✗ Job completed without an image payload');
     process.exit(1);
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  let totalBytes = 0;
+  const path = await saveImage(imageData, timestamp);
+  const size = statSync(path).size;
+  console.log(`✓ avatar.png  ${(size / 1024).toFixed(1)}KB`);
 
-  for (const nodeId of outputNodes) {
-    const images = outputs[nodeId].images;
-    for (const img of images) {
-      const path = await downloadImage(img, timestamp);
-      const size = statSync(path).size;
-      totalBytes += size;
-      console.log(`✓ ${img.filename}  ${(size / 1024).toFixed(1)}KB`);
-    }
-  }
-
-  console.log(`\nSaved to: src/output/${timestamp}/`);
-  console.log(`Total:    ${(totalBytes / 1024).toFixed(1)}KB`);
+  console.log(`\nSaved to: src/output/${timestamp}/avatar.png`);
   console.log(`Seed:     ${options.seed}  (reuse with --seed ${options.seed})`);
 };
 
