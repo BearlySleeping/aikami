@@ -1,17 +1,20 @@
 # @aikami/image
 
-Headless ComfyUI image generation microservice using the `yanwk/comfyui-boot:cu130-slim-v2` Docker image.
+Headless image generation microservice. The dev engine is **sd-server**
+(stable-diffusion.cpp) from the C-390 local-stack compose topology — the same
+engine the published stack ships (C-392). ComfyUI remains available as an
+opt-in advanced service.
 
 ## Use Case
 
-- Provides a containerized ComfyUI API for AI image generation
-- Exposes `/system_stats` and ComfyUI REST endpoints on port 8188
-- Models and caches persisted in `src/` directory (bind-mounted into container)
+- Provides an image generation API on port 8188
+- Dev service delegates to `apps/backend/local-stack/compose.yaml` (profile `image`)
+- Model weights live in the shared `aikami-models` store, not in this tree
 
 ## Where It's Used
 
-- Image generation workflows in the PWA and backend functions
-- Managed by the herdr orchestrator alongside voice, emulators, and client
+- Avatar / image generation workflows in the PWA and backend functions
+- Managed by the herdr orchestrator alongside voice, text, emulators, and client
 
 ## Installation
 
@@ -21,38 +24,36 @@ This is a workspace package managed by moon. Install via:
 bun install
 ```
 
-## Dependencies
-
-None — container-only microservice.
-
 ## Tasks
 
-| Task            | Command                             | Description                         |
-| --------------- | ----------------------------------- | ----------------------------------- |
-| `dev`           | `bun run dev:docker`                | Start ComfyUI container with GPU    |
-| `test:image`    | `bun run scripts/check_health.ts`   | Health check via /system_stats      |
-| `download:model`| `bun run download:model sd15`       | Download SD 1.5 checkpoint          |
-| `models:download`| `bun run models:download <url>`    | Idempotent streaming model download |
-| `generate:avatar`| `bun run generate:avatar`          | Generate pixel art character avatar |
-| `typecheck`     | `true`                              | No TypeScript source to check       |
-| `format`        | `true`                              | No source to format                 |
-| `lint`          | `true`                              | No source to lint                   |
-| `fix`           | `true`                              | No source to fix                    |
+| Task             | Command                              | Description                                        |
+|------------------|--------------------------------------|----------------------------------------------------|
+| `dev`            | `bun run dev:docker`                 | Start sd-server via compose (profile `image`)      |
+| `dev:comfyui`    | `bun run dev:docker comfyui`         | Start opt-in ComfyUI (advanced, same port)         |
+| `test:image`     | `bun run scripts/check_health.ts`    | Health check → GET /sdapi/v1/sd-models             |
+| `generate:avatar`| `bun run scripts/generate_avatar.ts` | Generate a character avatar via /sdcpp/v1/img_gen  |
+| `update`         | `bun run scripts/update.ts`          | `docker compose --profile image pull`              |
+| `lint`           | `bun run lint`                       | Biome lint of `scripts/`                           |
+| `fix`            | `bun run fix`                        | Biome autofix + format of `scripts/`               |
+
+> Lint/format use Biome (repo convention): `bun run lint` / `bun run fix`; full validation: `bun moon run :validate`.
 
 ## Usage
 
 ```bash
-# Start the container via herdr
+# Start the engine via herdr
 bun herdr:start image
 
-# Download a model for image generation
-bun run models:download "https://..."
-
-# Check health
+# Check health (GET /sdapi/v1/sd-models — same probe the client uses)
 bun run test:image
 
 # Generate a pixel art avatar
 bun run generate:avatar "an elven ranger, pixel art"
+bun run generate:avatar "a knight" --steps 20 --cfg 7 --seed 42 \
+  --width 512 --height 512 --checkpoint flux1-schnell-q4_k.gguf
+
+# Fetch the model into the shared store first (C-390 manifest fetcher)
+(cd apps/backend/local-stack && bun run fetch-models)
 
 # Stop
 bun herdr:stop image
@@ -60,88 +61,64 @@ bun herdr:stop image
 
 ## Directory Layout
 
-```
+```text
 apps/backend/image/
 ├── scripts/
-│   ├── check_health.ts     # Health check → /system_stats
-│   └── download_model.ts   # Model downloader (SD 1.5, custom URLs)
-├── src/                    # ComfyUI data — mounted into container (git-ignored)
-│   ├── cache/              # HuggingFace, Torch, config caches
-│   ├── custom_nodes/       # ComfyUI custom nodes
-│   ├── input/              # Input images
-│   ├── models/             # Checkpoints, LoRAs, VAEs
-│   ├── output/             # Generated images
-│   └── user/               # ComfyUI user profile + workflows
-├── Dockerfile
-├── package.json
-├── moon.yml
-└── tsconfig.json
+│   ├── check_health.ts     # Health check → GET /sdapi/v1/sd-models
+│   ├── generate_avatar.ts  # Avatar CLI → POST /sdcpp/v1/img_gen + job poll
+│   ├── start.ts            # Compose delegation (profile: image | comfyui)
+│   └── update.ts           # docker compose pull
+└── src/                    # Legacy ComfyUI data tree (retired, git-ignored)
+    └── output/             # Generated images from generate_avatar
 ```
 
-## Architecture — Container Setup
+No `Dockerfile` — the container definition lives in
+`apps/backend/local-stack/compose.yaml` (C-390), the only topology in the repo.
 
-### Image
+## Architecture — Engine Setup
 
-`yanwk/comfyui-boot:cu130-slim-v2` — ComfyUI with CUDA 13.0, Python 3.13,
-PyTorch 2.12, ComfyUI-Manager 4.x. Slim variant starts lean; custom nodes
-and models are mounted from local directories.
+### Engine
 
-### Podman Run Flags
+`aikami-sd-server` (CPU) or the published `leejet/stable-diffusion.cpp`
+variants (CUDA/ROCm/…, selected by the compose backend override) — sd-server.
+Readiness and model listing are `GET /sdapi/v1/sd-models`; generation is
+`POST /sdcpp/v1/img_gen` with job polling via `GET /sdcpp/v1/jobs/{id}`. The
+job payload carries the image inline (base64) — no second fetch hop.
 
-| Flag / Mount | Purpose |
-|---|---|
-| `--pull=newer` | Always check for a newer image tag before starting |
-| `--device nvidia.com/gpu=all` | Pass NVIDIA GPU through to the container via CDI |
-| `--security-opt label=disable` | Disable SELinux label enforcement (required for bind mounts on some systems) |
-| `-p 8188:8188` | Expose ComfyUI on host port 8188 |
-| `--rm` | Auto-remove container on stop (no stale state) |
-| `--name aikami-image-dev` | Fixed container name for herdr orchestration |
+### Model Store
 
-### Volume Mounts
+The compose `image` profile mounts the shared `aikami-models` volume at
+`/models` and starts sd-server with `--model /models/image/<GGUF>`. Models
+are fetched once by C-390's manifest-driven fetcher
+(`apps/backend/local-stack/stack/fetch_models.ts`) — the per-service
+downloaders were removed in C-392.
 
-Every mount maps a local directory under `src/` into the container to
-persist state between restarts and share files without rebuilding:
+### Opt-in Advanced: ComfyUI
 
-| Host (`src/…`) | Container | Why |
-|---|---|---|
-| `cache/` | `/root/.cache` | Python pip/wheel cache, avoids reinstalling deps on restart |
-| `cache/dot-config/` | `/root/.config` | ComfyUI user config files |
-| `cache/huggingface/` | `/root/.cache/huggingface/hub` | HuggingFace model downloads (huge — git-ignored) |
-| `cache/torch/` | `/root/.cache/torch/hub` | PyTorch Hub cache |
-| `models/` | `/root/ComfyUI/models` | Checkpoints, LoRAs, VAEs, embeddings (git-ignored) |
-| `input/` | `/root/ComfyUI/input` | Input images for img2img workflows |
-| `output/` | `/root/ComfyUI/output` | Generated images (git-ignored) |
-| `user/` | `/root/ComfyUI/user` | Workflows, settings, Manager config (tracked) |
-| `custom_nodes/` | `/root/ComfyUI/custom_nodes` | Custom node Python packages (recreated by image) |
+`bun herdr:start image-comfyui` starts ComfyUI on the same port 8188 via the
+compose `comfyui` profile. It is mutually exclusive with the default `image`
+service (herdr refuses to start both). Existing ComfyUI checkpoints from the
+legacy `src/models/` tree can be copied into the shared store:
 
-### Environment Variables
+```bash
+cd apps/backend/local-stack && bun run stack/migrate_models.ts
+```
 
-| Variable | Value | Purpose |
-|---|---|---|
-| `CLI_ARGS` | `--fast` | Enable fp8 matrix math on Ada Lovelace+ GPUs (RTX 4090). Speeds up inference ~2× at minor quality trade-off |
-| `HF_XET_HIGH_PERFORMANCE` | `1` | Use HuggingFace Hub's Rust-backed high-performance transfer (faster model downloads on stable connections) |
+### generate_avatar CLI
 
-### Scripts
+The CLI surface is preserved from the pre-C-392 ComfyUI version (AC-5):
+`--steps`, `--cfg`, `--seed`, `--width`, `--height`, `--checkpoint` all keep
+working. `--checkpoint` maps to the sd-server `model` field (the GGUF file
+name under `/models/image/`, default `flux1-schnell-q4_k.gguf`). Output PNGs
+are saved to `src/output/<timestamp>/avatar.png`.
 
-| Script | What it does |
-|---|---|
-| `scripts/check_health.ts` | Hits `/system_stats` to verify container is up and GPU is detected |
-| `scripts/download_model.ts` | Legacy single-model downloader (SD 1.5) |
-| `scripts/download_models.ts` | Idempotent streaming downloader with progress bar. Config array in-file documents known pixel-art models |
-| `scripts/generate_avatar.ts` | Submits a txt2img prompt to ComfyUI API, polls for completion, downloads the PNG. Supports `--steps`, `--cfg`, `--seed`, `--width`, `--height`, `--checkpoint` |
-
-### Reproducibility
+## Reproducibility
 
 A fresh clone on another machine needs only:
 
 ```bash
-cd apps/backend/image
-bun run dev                        # starts container with same GPU mounts
-bun run models:download "URL"      # pulls checkpoint into src/models/
-bun run generate:avatar "prompt"   # generates first image
+bun herdr:start image                # starts compose profile image
+(cd apps/backend/local-stack && bun run fetch-models)   # first model fetch
+bun run test:image                   # verifies sd-server model list
+bun run generate:avatar "prompt"     # generates first image
 ```
-
-Config files (`user/__manager/config.ini`, `user/default/comfy.settings.json`)
-are tracked in git so ComfyUI Manager security level and UI settings are
-identical across machines.
-

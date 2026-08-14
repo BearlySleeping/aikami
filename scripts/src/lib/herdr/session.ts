@@ -14,6 +14,8 @@
 //     voice           → bun run dev
 //     image           → bun run dev
 //     text            → bun run dev
+//     text-ollama     → bun run dev:ollama (opt-in advanced, :11434)
+//     image-comfyui   → bun run dev:comfyui (opt-in advanced, :8188)
 //     postgres        → bun run scripts/src/lib/postgres/lifecycle.ts start --foreground
 //     preview-client  → bun run scripts/src/lib/ops/preview_client.ts
 //     preview-hub     → bun run scripts/src/lib/ops/preview_hub.ts
@@ -67,6 +69,8 @@ export type DevService =
   | 'voice'
   | 'image'
   | 'text'
+  | 'text-ollama'
+  | 'image-comfyui'
   | 'postgres'
   | 'preview-client'
   | 'site'
@@ -147,6 +151,11 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => PORTS[mode].hub,
   },
+  // C-392: the voice/image/text dev engines delegate to the C-390
+  // local-stack compose topology (apps/backend/local-stack/compose.yaml) via
+  // each project's scripts/start.ts — the same file the published stack
+  // ships, so dev and user engines cannot drift. voice → sherpa-onnx :8089,
+  // image → sd-server :8188, text → llama-server :11434.
   voice: {
     name: 'voice',
     command: () => 'bun run dev',
@@ -164,6 +173,22 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
+  },
+  // C-392 advanced, opt-in engines — Ollama and ComfyUI stay one command
+  // away via the local-stack compose profiles. Both share a port with the
+  // default engine of their modality, so they are mutually exclusive with it
+  // (assertNoPortConflicts refuses to start both). Kept OUT of ALL_SERVICES.
+  'text-ollama': {
+    name: 'text-ollama',
+    command: () => 'bun run dev:ollama',
+    cwd: (root) => resolve(root, 'apps/backend/text'),
+    readyPort: (mode) => PORTS[mode].text,
+  },
+  'image-comfyui': {
+    name: 'image-comfyui',
+    command: () => 'bun run dev:comfyui',
+    cwd: (root) => resolve(root, 'apps/backend/image'),
+    readyPort: (mode) => PORTS[mode].image,
   },
   // Local PostgreSQL (C-387) — a real engine matching production, Nix-provided.
   // Runs the lifecycle script in foreground mode so the pane stays alive and
@@ -230,13 +255,29 @@ export const ALL_SERVICES: DevService[] = [
 
 /**
  * All valid service names — superset of ALL_SERVICES. Used for CLI validation
- * and `herdr:list` so `postgres` is fully manageable even though it is NOT in
- * the `all` group (C-387 keeps it opt-in: `bun herdr:start postgres`).
+ * and `herdr:list`. postgres (C-387) and the C-392 advanced engines
+ * (text-ollama, image-comfyui) are fully manageable even though they are NOT
+ * in the `all` group.
  */
-export const KNOWN_SERVICES: DevService[] = [...ALL_SERVICES, 'postgres'];
+export const KNOWN_SERVICES: DevService[] = [
+  ...ALL_SERVICES,
+  'postgres',
+  'text-ollama',
+  'image-comfyui',
+];
+
+/** Map a workspace tab label back to a known service key, or undefined. */
+const serviceFromTabLabel = (label: string): DevService | undefined => {
+  if (label === 'pi') {
+    return 'preview-client';
+  }
+  return (KNOWN_SERVICES as readonly string[]).includes(label) ? (label as DevService) : undefined;
+};
 /** Services whose ports vary per contract — dev servers with a Firebase-
  *  adjacent port that collides across concurrent contract pipelines.
- *  voice/image/text stay on shared base ports (heavy singleton backends). */
+ *  voice/image/text stay on shared base ports (heavy singleton backends);
+ *  the C-392 advanced engines (text-ollama, image-comfyui) stay on the same
+ *  shared base ports as their modality. */
 const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site', 'firebase']);
 
 /** Resolve a service's ready port, shifted by a contract's port offset
@@ -280,6 +321,58 @@ export const expandServices = (inputs: ServiceInput[]): DevService[] => {
     return [...ALL_SERVICES];
   }
   return [...new Set(inputs.filter((s) => s !== 'all') as DevService[])];
+};
+
+/**
+ * Refuse to start two services that bind the same ready port (C-392 AC-7
+ * watch point). The default engines and their advanced alternates share a
+ * port — text/text-ollama on 11434, image/image-comfyui on 8188 — and
+ * starting both would produce a confusing bind error instead of a clear
+ * message. This is the one permitted herdr start-flow addition; the
+ * SERVICE_DEFS shape and the offset mechanism are untouched.
+ *
+ * @throws Error when two requested services resolve to the same port.
+ */
+export const assertNoPortConflicts = (
+  services: readonly DevService[],
+  mode: AikamiMode,
+  offset: number,
+): void => {
+  const portOwners = new Map<number, string>();
+  for (const service of services) {
+    const port = resolveReadyPort(service, mode, offset);
+    if (port === undefined) {
+      continue;
+    }
+    const owner = portOwners.get(port);
+    if (owner !== undefined && owner !== service) {
+      throw new Error(
+        `Cannot start ${owner} and ${service} together: both bind :${port}. ` +
+          `They are mutually exclusive (text↔text-ollama on 11434, ` +
+          `image↔image-comfyui on 8188). Start one, or stop the other first.`,
+      );
+    }
+    portOwners.set(port, service);
+  }
+};
+
+/**
+ * Validate port conflicts across the requested services plus any services
+ * already running in an existing workspace (C-392 AC-7 watch point). Reusing
+ * a workspace that already runs e.g. image-comfyui must refuse starting
+ * `image` with the same clear message as starting both together, instead of
+ * producing a confusing bind error later.
+ */
+export const assertNoRunningServiceConflicts = (
+  services: readonly DevService[],
+  runningTabLabels: readonly string[],
+  mode: AikamiMode,
+  offset: number,
+): void => {
+  const runningServices = runningTabLabels
+    .map(serviceFromTabLabel)
+    .filter((s): s is DevService => s !== undefined);
+  assertNoPortConflicts([...new Set([...runningServices, ...services])], mode, offset);
 };
 
 // ── Workspace naming ───────────────────────────────────────
@@ -911,7 +1004,23 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     throw new Error(`No services specified. Use: ${KNOWN_SERVICES.join(', ')}, all`);
   }
 
+  // C-392 AC-7: refuse mutually exclusive engine pairs (text/text-ollama,
+  // image/image-comfyui) before any tab is created.
+  assertNoPortConflicts(services, mode, offset);
+
   await ensureServer();
+
+  const existingWsId = await findWorkspace(workspaceLabel);
+
+  // C-392 AC-7: when a workspace already exists (and is not being
+  // force-recreated), its running tabs own the engine ports too. Reusing a
+  // workspace that runs e.g. image-comfyui must refuse `herdr:start image`
+  // with the same clear message as starting both together, not a confusing
+  // bind error.
+  if (existingWsId && !force) {
+    const existingTabNames = await getWorkspaceTabNames(existingWsId);
+    assertNoRunningServiceConflicts(services, existingTabNames, mode, offset);
+  }
 
   // ── Force-ports: kill whatever's squatting on our target ports first ──
   // Distinct from `force` (which recreates the whole workspace) — this only
@@ -928,8 +1037,6 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
       }),
     );
   }
-
-  const existingWsId = await findWorkspace(workspaceLabel);
 
   // ── Mode mismatch guard: force-recreate workspace if requested ──
   if (force && existingWsId) {

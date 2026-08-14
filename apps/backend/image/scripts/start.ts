@@ -1,35 +1,73 @@
 // apps/backend/image/scripts/start.ts
-// Starts the ComfyUI container via Podman with GPU passthrough and CORS enabled.
-// Replaces the inline shell command in package.json dev:docker.
+// Dev engine launcher for the image modality (C-392).
+//
+// Delegates to the C-390 local-stack compose topology instead of owning a
+// container definition: `docker compose --profile <profile> up` against
+// apps/backend/local-stack/compose.yaml — the same file the published stack
+// ships, so the dev engine cannot drift from the user engine.
+//
+//   default profile  → "image"   → sd-server (stable-diffusion.cpp) on :8188
+//   `bun run dev:comfyui`        → "comfyui" → opt-in advanced ComfyUI on :8188
+//
+// image and image-comfyui share :8188 and are mutually exclusive — herdr
+// refuses to start both (see scripts/src/lib/herdr/session.ts).
+//
+// Runs in the foreground so the herdr pane stays alive streaming logs. On
+// teardown (SIGINT/SIGTERM, or compose exiting on its own) it runs
+// `docker compose down` so containers never leak between herdr sessions.
 
-import { $ } from 'bun';
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 
-const IMAGE = 'yanwk/comfyui-boot:cu130-slim-v2';
-const CONTAINER_NAME = 'aikami-image-dev';
-const PORT = '8188';
+const COMPOSE_DIR = resolve(import.meta.dir, '../../local-stack');
+const PROFILE = Bun.argv[2] ?? 'image';
+const COMPOSE_ARGS = ['compose', '--profile', PROFILE, 'up'];
 
-// Ensure cache and mount directories exist
-await $`mkdir -p src/cache/huggingface src/cache/torch src/cache/dot-config src/models/checkpoints src/input src/output src/user src/custom_nodes`;
+const log = (message: string): void => console.log(`[image] ${message}`);
 
-// Remove any previous container
-await $`docker rm -f ${CONTAINER_NAME} 2>/dev/null`.nothrow();
+let tearingDown = false;
 
-// Start ComfyUI with GPU, CORS, and model volume mounts
-await $`podman run --rm \
-  --name ${CONTAINER_NAME} \
-  --pull=newer \
-  --device nvidia.com/gpu=all \
-  --security-opt label=disable \
-  -p ${PORT}:8188 \
-  -v ./src/cache:/root/.cache \
-  -v ./src/cache/dot-config:/root/.config \
-  -v ./src/models:/root/ComfyUI/models \
-  -v ./src/cache/huggingface:/root/.cache/huggingface/hub \
-  -v ./src/cache/torch:/root/.cache/torch/hub \
-  -v ./src/input:/root/ComfyUI/input \
-  -v ./src/output:/root/ComfyUI/output \
-  -v ./src/user:/root/ComfyUI/user \
-  -v ./src/custom_nodes:/root/ComfyUI/custom_nodes \
-  -e CLI_ARGS='--fast --enable-cors-header' \
-  -e HF_XET_HIGH_PERFORMANCE=1 \
-  ${IMAGE}`;
+/**
+ * Tear down the compose topology. Idempotent — `docker compose down` is a
+ * no-op when nothing is up. Runs on SIGINT/SIGTERM (herdr closes the pane)
+ * and when `up` exits on its own.
+ */
+const teardown = (): void => {
+  if (tearingDown) {
+    return;
+  }
+  tearingDown = true;
+  log(`stopping compose profile "${PROFILE}" (docker compose down)`);
+  const down = spawn('docker', ['compose', '--profile', PROFILE, 'down'], {
+    cwd: COMPOSE_DIR,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  down.on('close', (code) => process.exit(code ?? 0));
+  down.on('error', (error) => {
+    console.error(`[image] docker compose down failed: ${error.message}`);
+    process.exit(1);
+  });
+};
+
+process.on('SIGINT', teardown);
+process.on('SIGTERM', teardown);
+
+const child = spawn('docker', COMPOSE_ARGS, {
+  cwd: COMPOSE_DIR,
+  stdio: 'inherit',
+  env: process.env,
+});
+
+child.on('error', (error) => {
+  console.error(`[image] failed to run docker compose: ${error.message}`);
+  console.error('  Is Docker (or a docker-compatible runtime) installed and running?');
+  process.exit(1);
+});
+
+child.on('close', (code) => {
+  if (!tearingDown) {
+    log(`docker compose exited with code ${code ?? 'unknown'} — tearing down`);
+    teardown();
+  }
+});

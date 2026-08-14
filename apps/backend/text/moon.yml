@@ -11,7 +11,7 @@ tags:
 
 project:
   name: 'text'
-  description: 'Local Ollama LLM text generation container — Docker-only, no Bun source.'
+  description: 'Local llama-server LLM text generation engine via the local-stack compose topology (C-392) — container-only, no Bun source.'
   channel: '#backend'
   owner: 'Backend Team'
 

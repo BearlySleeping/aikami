@@ -1,7 +1,12 @@
 // apps/backend/image/scripts/image_service.test.ts
-// Integration tests for the ComfyUI image generation service.
+// Integration tests for the sd-server image generation service (C-392).
 // Checks if herdr image is active; if not, spawns it, waits for readiness,
 // runs health/model/generation checks, and stops only if started by us.
+//
+// Protocol (sd-server / stable-diffusion.cpp):
+//   readiness + models: GET  /sdapi/v1/sd-models  (same probe the C-388
+//                        client engine and the compose healthcheck use)
+//   generate:           POST /sdcpp/v1/img_gen → GET /sdcpp/v1/jobs/{id}
 //
 // Usage:
 //   bun test scripts/image_service.test.ts
@@ -19,52 +24,48 @@ const ROOT = resolve(PROJECT_DIR, '../../..');
 
 // ── Constants ───────────────────────────────────────────────
 
-const COMFYUI_PORT = 8188;
-const BASE_URL = `http://127.0.0.1:${COMFYUI_PORT}`;
+const SD_SERVER_PORT = 8188;
+const BASE_URL = `http://127.0.0.1:${SD_SERVER_PORT}`;
 const POLL_INTERVAL_MS = 3000;
-const STARTUP_TIMEOUT_MS = 300_000; // ComfyUI boot is slow (model loading)
+const STARTUP_TIMEOUT_MS = 300_000; // sd-server boot can be slow (model loading)
 
 // ── Types ───────────────────────────────────────────────────
 
-type SystemStats = {
-  system?: Record<string, unknown>;
-  devices?: Array<{ name: string; type: string }>;
+type SdModelEntry = {
+  title?: string;
+  model_name?: string;
 };
 
-type ObjectInfo = Record<string, unknown>;
+type SdCppJobState = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
 
-type PromptResponse = {
-  prompt_id: string;
+type SdCppJob = {
+  id?: string;
+  state?: SdCppJobState;
+  status?: SdCppJobState;
+  progress?: number;
+  image?: string;
+  images?: readonly unknown[];
+  data?: readonly { b64_json?: string; url?: string; image?: string }[];
+  message?: string;
   error?: string;
-  node_errors?: Record<string, unknown>;
-};
-
-type HistoryEntry = {
-  outputs: Record<string, { images: Array<{ filename: string; subfolder: string; type: string }> }>;
-  status: {
-    status_str: string;
-    completed: boolean;
-  };
 };
 
 // ── State ───────────────────────────────────────────────────
 
 let startedByUs = false;
-let checkpointsAvailable: string[] = [];
+let modelsAvailable: SdModelEntry[] = [];
 
 // ── Readiness ───────────────────────────────────────────────
 
 const isReady = async (): Promise<{ ok: boolean; detail: string }> => {
   try {
-    const response = await fetch(`${BASE_URL}/system_stats`, {
+    const response = await fetch(`${BASE_URL}/sdapi/v1/sd-models`, {
       signal: AbortSignal.timeout(5000),
     });
     if (response.ok) {
-      const data = (await response.json()) as SystemStats;
-      const deviceInfo = data.devices?.[0]?.name ?? 'unknown';
-      return { ok: true, detail: `/system_stats OK — device: ${deviceInfo}` };
+      return { ok: true, detail: '/sdapi/v1/sd-models OK' };
     }
-    return { ok: false, detail: `/system_stats returned ${response.status}` };
+    return { ok: false, detail: `/sdapi/v1/sd-models returned ${response.status}` };
   } catch (err) {
     const message = (err as Error).message;
     if (
@@ -103,40 +104,40 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
         wasEverReachable &&
         (result.detail.includes('refused') || result.detail.includes('Unable to connect'))
       ) {
-        throw new Error('ComfyUI crashed after becoming reachable — check herdr tab logs');
+        throw new Error('sd-server crashed after becoming reachable — check herdr tab logs');
       }
       console.log(`  ... ${result.detail}`);
       lastDetail = result.detail;
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
-  throw new Error(`ComfyUI did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`);
+  throw new Error(
+    `sd-server did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`,
+  );
 };
 
 // ── Lifecycle ───────────────────────────────────────────────
 
 beforeAll(async () => {
   // Service startup already handled in top-level await if needed
-  // This hook is now just a placeholder for test framework lifecycle
 }, STARTUP_TIMEOUT_MS + 60_000);
 
 afterAll(async () => {
   if (!startedByUs) {
-    console.log('○ ComfyUI was already running — leaving it alone');
+    console.log('○ image was already running — leaving it alone');
     return;
   }
 
   console.log('  Stopping image service...');
   await $`bun run herdr:stop image`.cwd(ROOT).nothrow();
-  console.log('✓ ComfyUI stopped');
+  console.log('✓ image stopped');
 });
 
-// ── Top-level await: Discover checkpoints for skip logic ────
+// ── Top-level await: Discover models for skip logic ────────
 
-// Ensure service is ready and discover available checkpoints before test registration
 const ready = await isReady();
 if (!ready.ok) {
-  console.log('○ ComfyUI not running — starting via herdr for prerequisite discovery...');
+  console.log('○ image not running — starting via herdr for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
 
@@ -148,203 +149,195 @@ if (!ready.ok) {
   }
 
   startedByUs = true;
-  console.log('  Waiting for ComfyUI to become ready (may take minutes)...');
+  console.log('  Waiting for sd-server to become ready (may take minutes)...');
   await waitForReady(STARTUP_TIMEOUT_MS);
 } else {
-  console.log(`✓ ComfyUI already running (${ready.detail})`);
+  console.log(`✓ image already running (${ready.detail})`);
 }
 
-// Now discover checkpoints
+// Now discover models
 try {
-  const infoResponse = await fetch(`${BASE_URL}/object_info`, {
+  const modelsResponse = await fetch(`${BASE_URL}/sdapi/v1/sd-models`, {
     signal: AbortSignal.timeout(10_000),
   });
-  if (infoResponse.ok) {
-    const infoData = (await infoResponse.json()) as ObjectInfo;
-    const loader = infoData.CheckpointLoaderSimple as {
-      input?: { required?: { ckpt_name?: [string[]] } };
-    };
-    checkpointsAvailable = loader?.input?.required?.ckpt_name?.[0] ?? [];
+  if (modelsResponse.ok) {
+    const modelsData = (await modelsResponse.json()) as SdModelEntry[];
+    modelsAvailable = Array.isArray(modelsData) ? modelsData : [];
   }
 } catch (err) {
-  console.warn('  ⚠ Failed to discover checkpoints:', (err as Error).message);
+  console.warn('  ⚠ Failed to discover models:', (err as Error).message);
 }
 
-if (checkpointsAvailable.length === 0) {
-  console.warn('  ⚠ No checkpoints available — generation test will be skipped');
-  console.warn('    Download models first: bun run download:model');
+if (modelsAvailable.length === 0) {
+  console.warn('  ⚠ No models available — generation test will be skipped');
+  console.warn('    Fetch models first: cd apps/backend/local-stack && bun run fetch-models');
 }
+
+// ── Helpers ─────────────────────────────────────────────────
+
+/**
+ * Recursively find an inline image payload (base64 or data URL) in a job.
+ */
+const extractImage = (payload: unknown): string | undefined => {
+  if (typeof payload === 'string') {
+    return payload.startsWith('data:') || payload.length >= 64 ? payload : undefined;
+  }
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const obj = payload as Record<string, unknown>;
+
+  if (Array.isArray(obj.data)) {
+    for (const item of obj.data) {
+      const found = extractImage(item);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  if (Array.isArray(obj.images)) {
+    for (const item of obj.images) {
+      const found = extractImage(item);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  for (const key of ['image', 'b64_json', 'output', 'result']) {
+    const found = extractImage(obj[key]);
+    if (found) {
+      return found;
+    }
+  }
+
+  return undefined;
+};
 
 // ── Tests ───────────────────────────────────────────────────
 
-describe('ComfyUI image generation service', () => {
-  test('/system_stats returns device and system info', async () => {
-    const response = await fetch(`${BASE_URL}/system_stats`, {
+describe('sd-server image generation service', () => {
+  test('/sdapi/v1/sd-models returns the loaded model list', async () => {
+    const response = await fetch(`${BASE_URL}/sdapi/v1/sd-models`, {
       signal: AbortSignal.timeout(5000),
     });
 
     expect(response.ok).toBe(true);
-    const data = (await response.json()) as SystemStats;
-    expect(data.system).toBeDefined();
+    const data = (await response.json()) as SdModelEntry[];
+    expect(data).toBeArray();
 
-    console.log(`  System:  ${JSON.stringify(data.system)}`);
-    if (data.devices && data.devices.length > 0) {
-      for (const device of data.devices) {
-        console.log(`  Device:  ${device.name} (${device.type})`);
-      }
+    console.log(`  ${data.length} model(s) loaded`);
+    for (const model of data.slice(0, 5)) {
+      console.log(`    • ${model.model_name ?? model.title ?? 'unknown'}`);
     }
   });
 
-  test('/object_info lists available nodes and checkpoints', async () => {
-    const response = await fetch(`${BASE_URL}/object_info`, {
-      signal: AbortSignal.timeout(5000),
-    });
-
-    expect(response.ok).toBe(true);
-    const data = (await response.json()) as ObjectInfo;
-
-    // Check for key node types
-    expect(data.CheckpointLoaderSimple).toBeDefined();
-    expect(data.KSampler).toBeDefined();
-    expect(data.VAEDecode).toBeDefined();
-
-    // Extract checkpoint names
-    const loader = data.CheckpointLoaderSimple as {
-      input?: { required?: { ckpt_name?: [string[]] } };
-    };
-    const checkpoints: string[] = loader?.input?.required?.ckpt_name?.[0] ?? [];
-    console.log(`  ${Object.keys(data).length} node types registered`);
-    console.log(`  ${checkpoints.length} checkpoint(s) available`);
-    for (const ckpt of checkpoints.slice(0, 5)) {
-      console.log(`    • ${ckpt}`);
-    }
-    if (checkpoints.length > 5) {
-      console.log(`    … and ${checkpoints.length - 5} more`);
-    }
-  });
-
-  test.skipIf(checkpointsAvailable.length === 0)(
-    '/api/prompt generates an image (super lite)',
+  test.skipIf(modelsAvailable.length === 0)(
+    '/sdcpp/v1/img_gen generates an image (super lite)',
     async () => {
-      const checkpoint = checkpointsAvailable[0];
-      console.log(`  Checkpoint: ${checkpoint}`);
-
-      // Minimal workflow: 1 step, 64×64, seed 42
-      const workflow = {
-        '1': {
-          inputs: { ckpt_name: checkpoint },
-          class_type: 'CheckpointLoaderSimple',
-        },
-        '2': {
-          inputs: { text: 'test', clip: ['1', 1] },
-          class_type: 'CLIPTextEncode',
-        },
-        '3': {
-          inputs: { text: '', clip: ['1', 1] },
-          class_type: 'CLIPTextEncode',
-        },
-        '4': {
-          inputs: { width: 64, height: 64, batch_size: 1 },
-          class_type: 'EmptyLatentImage',
-        },
-        '5': {
-          inputs: {
-            seed: 42,
-            steps: 1,
-            cfg: 1,
-            sampler_name: 'euler',
-            scheduler: 'normal',
-            denoise: 1,
-            model: ['1', 0],
-            positive: ['2', 0],
-            negative: ['3', 0],
-            latent_image: ['4', 0],
-          },
-          class_type: 'KSampler',
-        },
-        '6': {
-          inputs: { samples: ['5', 0], vae: ['1', 2] },
-          class_type: 'VAEDecode',
-        },
-        '7': {
-          inputs: { images: ['6', 0], filename_prefix: 'aikami_test' },
-          class_type: 'SaveImage',
-        },
-      };
-
-      // Submit
+      // Minimal job: 1 step, 64×64, seed 42.
       const t0 = Date.now();
-      const promptResponse = await fetch(`${BASE_URL}/api/prompt`, {
+      const submitResponse = await fetch(`${BASE_URL}/sdcpp/v1/img_gen`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: workflow }),
-        signal: AbortSignal.timeout(10_000),
+        body: JSON.stringify({
+          prompt: 'a red pixel',
+          width: 64,
+          height: 64,
+          sample_steps: 1,
+          txt_cfg: 1,
+          seed: 42,
+          batch_count: 1,
+        }),
+        signal: AbortSignal.timeout(30_000),
       });
 
-      if (!promptResponse.ok) {
-        const errorBody = await promptResponse.text();
+      if (!submitResponse.ok) {
+        const errorBody = await submitResponse.text();
         throw new Error(
-          `Prompt submission failed (HTTP ${promptResponse.status}):\n${errorBody.slice(0, 300)}`,
+          `Job submission failed (HTTP ${submitResponse.status}):\n${errorBody.slice(0, 300)}`,
         );
       }
 
-      const promptData = (await promptResponse.json()) as PromptResponse;
-      expect(promptData.prompt_id).toBeString();
+      const job = (await submitResponse.json()) as SdCppJob;
 
-      if (promptData.error) {
-        throw new Error(`Prompt error: ${JSON.stringify(promptData.error)}`);
+      const inline = extractImage(job);
+      if (inline) {
+        expect(inline.length).toBeGreaterThan(0);
+        console.log(`  Output:   inline image (${(inline.length / 1024).toFixed(1)} KB base64)`);
+        console.log(`  Wall:     ${Date.now() - t0}ms`);
+        return;
       }
 
-      const promptId = promptData.prompt_id;
-      console.log(`  Prompt:   ${promptId}`);
+      const jobId = job.id ?? (job as unknown as { job?: { id?: string } }).job?.id;
+      expect(jobId).toBeString();
+      console.log(`  Job:      ${jobId}`);
 
       // Poll for completion
-      const historyUrl = `${BASE_URL}/api/history/${promptId}`;
-      let entry: HistoryEntry | undefined;
-
+      let completed: SdCppJob | undefined;
       for (let i = 0; i < 120; i++) {
-        const histResponse = await fetch(historyUrl, {
+        const pollResponse = await fetch(`${BASE_URL}/sdcpp/v1/jobs/${jobId}`, {
           signal: AbortSignal.timeout(5000),
         });
 
-        if (!histResponse.ok) {
-          throw new Error(`History fetch failed: ${histResponse.status}`);
+        if (!pollResponse.ok) {
+          throw new Error(`Job poll failed: ${pollResponse.status}`);
         }
 
-        const histData = (await histResponse.json()) as Record<string, HistoryEntry>;
-        entry = histData[promptId];
+        const polled = (await pollResponse.json()) as SdCppJob;
+        const state = polled.state ?? polled.status ?? 'queued';
 
-        if (entry) {
-          if (entry.status.completed) {
-            break;
-          }
-          if (entry.status.status_str === 'error') {
-            throw new Error('Generation failed — check ComfyUI logs');
-          }
+        if (state === 'completed') {
+          completed = polled;
+          break;
+        }
+        if (state === 'failed' || state === 'cancelled') {
+          throw new Error(`Job ${state}: ${(polled.message ?? polled.error ?? '').trim()}`);
         }
 
         await new Promise((r) => setTimeout(r, 1000));
       }
 
-      if (!entry) {
+      if (!completed) {
         throw new Error('Generation timed out after 120s');
       }
 
-      const wallMs = Date.now() - t0;
-      expect(entry.status.completed).toBe(true);
+      const image = extractImage(completed);
+      expect(image).toBeDefined();
 
-      // Verify output
-      const outputNodeIds = Object.keys(entry.outputs);
-      expect(outputNodeIds.length).toBeGreaterThan(0);
-
-      const images = entry.outputs[outputNodeIds[0]].images;
-      expect(images.length).toBeGreaterThan(0);
-      expect(images[0].filename).toBeString();
-      expect(images[0].filename.length).toBeGreaterThan(0);
-
-      console.log(`  Output:   ${images[0].filename}`);
-      console.log(`  Wall:     ${wallMs}ms`);
+      console.log(
+        `  Output:   inline image (${((image?.length ?? 0) / 1024).toFixed(1)} KB base64)`,
+      );
+      console.log(`  Wall:     ${Date.now() - t0}ms`);
     },
     180_000,
   );
+
+  test('check_health names the endpoint when the wrong engine answers', async () => {
+    // Serve a fake ComfyUI /system_stats on a random port — sd-server's
+    // /sdapi/v1/sd-models is absent there, so the probe must fail naming
+    // the endpoint + engine.
+    const server = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        const url = new URL(req.url);
+        if (url.pathname === '/system_stats') {
+          return Response.json({ system: { os: 'mock' } }, { status: 200 });
+        }
+        return new Response('not found', { status: 404 });
+      },
+    });
+    try {
+      const run = await $`bun run scripts/check_health.ts --port ${server.port}`
+        .cwd(PROJECT_DIR)
+        .nothrow();
+      expect(run.exitCode).not.toBe(0);
+      const out = run.stdout.toString() + run.stderr.toString();
+      expect(out).toContain('/sdapi/v1/sd-models');
+      expect(out).toContain('sd-server');
+    } finally {
+      server.stop();
+    }
+  }, 30_000);
 });

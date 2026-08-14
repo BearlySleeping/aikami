@@ -11,7 +11,7 @@ tags:
 
 project:
   name: 'image'
-  description: 'Headless ComfyUI image generation container — Docker-only, no Bun source.'
+  description: 'Local sd-server (stable-diffusion.cpp) image generation engine via the local-stack compose topology (C-392) — container-only, no Bun source.'
   channel: '#backend'
   owner: 'Backend Team'
 
