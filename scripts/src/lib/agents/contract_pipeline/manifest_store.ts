@@ -105,6 +105,7 @@ export const acquireLock = async (options: {
       try {
         const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
           currentStage?: string;
+          lastUpdated?: string;
         };
         if (raw.currentStage && isTerminalStage(raw.currentStage as ContractPipelineStage)) {
           // Run is in a terminal state — orphaned lock. Break it.
@@ -113,6 +114,18 @@ export const acquireLock = async (options: {
           );
           removeFile(path);
           return;
+        }
+        // Check if manifest hasn't been updated in 2+ hours — hung orchestrator
+        if (raw.lastUpdated) {
+          const lastUpdate = new Date(raw.lastUpdated).getTime();
+          const staleMsThreshold = 2 * 60 * 60 * 1000; // 2 hours
+          if (Date.now() - lastUpdate > staleMsThreshold) {
+            console.log(
+              `🔓 Breaking stale lock for ${existing.contractId} (run ${existing.runId} — last update ${Math.round((Date.now() - lastUpdate) / 1000 / 60)} min ago).`,
+            );
+            removeFile(path);
+            return;
+          }
         }
       } catch {
         // Manifest unreadable — fall through to workspace check.
