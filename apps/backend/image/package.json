@@ -3,10 +3,10 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "lint": "true",
-    "format": "true",
+    "lint": "bunx biome check scripts",
+    "format": "bunx biome format --write scripts",
+    "fix": "bunx biome check --write scripts",
     "typecheck": "true",
-    "fix": "true",
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
     "dev:comfyui": "bun run scripts/start.ts comfyui",

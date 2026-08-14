@@ -27,12 +27,16 @@ bun install
 ## Tasks
 
 | Task             | Command                              | Description                                     |
+|------------------|--------------------------------------|-------------------------------------------------|
 | `dev`            | `bun run dev:docker`                 | Start llama-server via compose (profile `text`) |
 | `dev:ollama`     | `bun run dev:docker ollama`          | Start opt-in Ollama (advanced, same port)       |
 | `test:text`      | `bun run scripts/check_health.ts`    | Health check → GET /health                      |
 | `test:generate`  | `bun run scripts/test_generate.ts`   | Generation via /v1/chat/completions             |
 | `update`         | `bun run scripts/update.ts`          | `docker compose --profile text pull`            |
-| `typecheck`/`lint`/`fix` | `true`                       | No TypeScript source to check                   |
+| `lint`           | `bun run lint`                       | Biome lint of `scripts/`                        |
+| `fix`            | `bun run fix`                        | Biome autofix + format of `scripts/`            |
+
+> Lint/format use Biome (repo convention): `bun run lint` / `bun run fix`; full validation: `bun moon run :validate`.
 
 ## Usage
 
@@ -48,7 +52,7 @@ bun run test:generate "Hello!"
 bun run test:generate --model qwen2.5-1.5b-instruct-q4_k_m "Write a haiku"
 
 # Fetch the model into the shared store first (C-390 manifest fetcher)
-cd apps/backend/local-stack && bun run fetch-models
+(cd apps/backend/local-stack && bun run fetch-models)
 
 # Stop
 bun herdr:stop text
@@ -56,7 +60,7 @@ bun herdr:stop text
 
 ## Directory Layout
 
-```
+```text
 apps/backend/text/
 ├── scripts/
 │   ├── check_health.ts     # Health check → GET /health (llama-server)
@@ -91,10 +95,12 @@ downloaders (those were removed in C-392).
 
 `bun herdr:start text-ollama` starts Ollama on the same port 11434 via the
 compose `ollama` profile. It is mutually exclusive with the default `text`
-service (herdr refuses to start both). Ollama-pulled models from the legacy
-`src/cache/ollama/` tree remain usable only through this service — Ollama's
-content-addressed blobs are not GGUF files and cannot be handed to
-llama-server. Migrate ComfyUI checkpoints (not Ollama) with:
+service (herdr refuses to start both). Ollama keeps its store in the
+`aikami-ollama-models` named volume, so blobs from the retired legacy
+`src/cache/ollama/` tree are not mounted automatically — copy them into that
+volume manually if you want to reuse them. Ollama's content-addressed blobs
+are not GGUF files and cannot be handed to llama-server. Migrate ComfyUI
+checkpoints (not Ollama) with:
 
 ```bash
 cd apps/backend/local-stack && bun run stack/migrate_models.ts
@@ -106,6 +112,6 @@ A fresh clone on another machine needs only:
 
 ```bash
 bun herdr:start text                 # starts compose profile text
-cd apps/backend/local-stack && bun run fetch-models   # first model fetch
+(cd apps/backend/local-stack && bun run fetch-models)   # first model fetch
 bun run test:text                    # verifies llama-server /health
 ```

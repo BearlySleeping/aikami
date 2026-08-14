@@ -34,6 +34,7 @@ describe('isWeightFile', () => {
     expect(isWeightFile('model.ckpt')).toBe(true);
     expect(isWeightFile('model.gguf')).toBe(true);
     expect(isWeightFile('model.bin')).toBe(true);
+    expect(isWeightFile('model.pt')).toBe(true);
     expect(isWeightFile('model.pth')).toBe(true);
   });
 

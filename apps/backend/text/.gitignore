@@ -3,6 +3,8 @@
 # Model weights live in the shared aikami-models store, fetched via the
 # C-390 manifest-driven fetcher:
 #   cd apps/backend/local-stack && bun run fetch-models
-# The legacy Ollama tree (src/cache/ollama) was retired — Ollama blobs are
-# content-addressed and remain usable only via the opt-in text-ollama
-# service. Nothing in this project is expected to be ignored anymore.
+# The legacy Ollama tree (src/cache/ollama) was retired. The opt-in
+# text-ollama service keeps its store in the aikami-ollama-models named
+# volume, so legacy blobs are NOT auto-reused — copy them into that volume
+# manually if you want them back. Nothing in this project is expected to be
+# ignored anymore.

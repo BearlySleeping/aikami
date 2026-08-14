@@ -27,12 +27,16 @@ bun install
 ## Tasks
 
 | Task             | Command                              | Description                                        |
+|------------------|--------------------------------------|----------------------------------------------------|
 | `dev`            | `bun run dev:docker`                 | Start sd-server via compose (profile `image`)      |
 | `dev:comfyui`    | `bun run dev:docker comfyui`         | Start opt-in ComfyUI (advanced, same port)         |
 | `test:image`     | `bun run scripts/check_health.ts`    | Health check → GET /sdapi/v1/sd-models             |
 | `generate:avatar`| `bun run scripts/generate_avatar.ts` | Generate a character avatar via /sdcpp/v1/img_gen  |
 | `update`         | `bun run scripts/update.ts`          | `docker compose --profile image pull`              |
-| `typecheck`/`lint`/`fix` | `true`                       | No TypeScript source to check                      |
+| `lint`           | `bun run lint`                       | Biome lint of `scripts/`                           |
+| `fix`            | `bun run fix`                        | Biome autofix + format of `scripts/`               |
+
+> Lint/format use Biome (repo convention): `bun run lint` / `bun run fix`; full validation: `bun moon run :validate`.
 
 ## Usage
 
@@ -49,7 +53,7 @@ bun run generate:avatar "a knight" --steps 20 --cfg 7 --seed 42 \
   --width 512 --height 512 --checkpoint flux1-schnell-q4_k.gguf
 
 # Fetch the model into the shared store first (C-390 manifest fetcher)
-cd apps/backend/local-stack && bun run fetch-models
+(cd apps/backend/local-stack && bun run fetch-models)
 
 # Stop
 bun herdr:stop image
@@ -57,7 +61,7 @@ bun herdr:stop image
 
 ## Directory Layout
 
-```
+```text
 apps/backend/image/
 ├── scripts/
 │   ├── check_health.ts     # Health check → GET /sdapi/v1/sd-models
@@ -114,7 +118,7 @@ A fresh clone on another machine needs only:
 
 ```bash
 bun herdr:start image                # starts compose profile image
-cd apps/backend/local-stack && bun run fetch-models   # first model fetch
+(cd apps/backend/local-stack && bun run fetch-models)   # first model fetch
 bun run test:image                   # verifies sd-server model list
 bun run generate:avatar "prompt"     # generates first image
 ```

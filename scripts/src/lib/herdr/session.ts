@@ -265,6 +265,14 @@ export const KNOWN_SERVICES: DevService[] = [
   'text-ollama',
   'image-comfyui',
 ];
+
+/** Map a workspace tab label back to a known service key, or undefined. */
+const serviceFromTabLabel = (label: string): DevService | undefined => {
+  if (label === 'pi') {
+    return 'preview-client';
+  }
+  return (KNOWN_SERVICES as readonly string[]).includes(label) ? (label as DevService) : undefined;
+};
 /** Services whose ports vary per contract — dev servers with a Firebase-
  *  adjacent port that collides across concurrent contract pipelines.
  *  voice/image/text stay on shared base ports (heavy singleton backends);
@@ -346,6 +354,25 @@ export const assertNoPortConflicts = (
     }
     portOwners.set(port, service);
   }
+};
+
+/**
+ * Validate port conflicts across the requested services plus any services
+ * already running in an existing workspace (C-392 AC-7 watch point). Reusing
+ * a workspace that already runs e.g. image-comfyui must refuse starting
+ * `image` with the same clear message as starting both together, instead of
+ * producing a confusing bind error later.
+ */
+export const assertNoRunningServiceConflicts = (
+  services: readonly DevService[],
+  runningTabLabels: readonly string[],
+  mode: AikamiMode,
+  offset: number,
+): void => {
+  const runningServices = runningTabLabels
+    .map(serviceFromTabLabel)
+    .filter((s): s is DevService => s !== undefined);
+  assertNoPortConflicts([...new Set([...runningServices, ...services])], mode, offset);
 };
 
 // ── Workspace naming ───────────────────────────────────────
@@ -983,6 +1010,18 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
 
   await ensureServer();
 
+  const existingWsId = await findWorkspace(workspaceLabel);
+
+  // C-392 AC-7: when a workspace already exists (and is not being
+  // force-recreated), its running tabs own the engine ports too. Reusing a
+  // workspace that runs e.g. image-comfyui must refuse `herdr:start image`
+  // with the same clear message as starting both together, not a confusing
+  // bind error.
+  if (existingWsId && !force) {
+    const existingTabNames = await getWorkspaceTabNames(existingWsId);
+    assertNoRunningServiceConflicts(services, existingTabNames, mode, offset);
+  }
+
   // ── Force-ports: kill whatever's squatting on our target ports first ──
   // Distinct from `force` (which recreates the whole workspace) — this only
   // clears the ports, so it's safe to use even when the workspace/tabs
@@ -998,8 +1037,6 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
       }),
     );
   }
-
-  const existingWsId = await findWorkspace(workspaceLabel);
 
   // ── Mode mismatch guard: force-recreate workspace if requested ──
   if (force && existingWsId) {

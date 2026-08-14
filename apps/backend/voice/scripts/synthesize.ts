@@ -11,6 +11,10 @@
 //   bun run test:speech                          # default "Hello world"
 //   bun run test:speech "Welcome to Aikami"      # custom text
 //   bun run test:speech "Hello" af_bella          # custom text + voice
+//
+// Environment overrides (documented alongside TTS_PORT):
+//   TTS_HOST  — engine host (default localhost)
+//   TTS_PORT  — engine port (default 8089)
 
 const HOST = process.env.TTS_HOST ?? 'localhost';
 const PORT = process.env.TTS_PORT ?? '8089';

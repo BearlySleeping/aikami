@@ -139,12 +139,17 @@ const extractJobId = (job: SdCppJob): string | undefined => {
 };
 
 /**
- * Poll a job until it reaches a terminal state.
+ * Poll a job until it reaches a terminal state, bounded by a wall-clock
+ * deadline (the poll request itself can take up to 10s per iteration, so a
+ * fixed iteration count would not bound wall time).
  */
 const waitForJob = async (jobId: string): Promise<SdCppJob> => {
   const url = `${SD_SERVER}/sdcpp/v1/jobs/${jobId}`;
+  const deadline = Date.now() + 180_000;
+  let poll = 0;
 
-  for (let i = 0; i < 180; i++) {
+  while (Date.now() < deadline) {
+    poll++;
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10_000),
     });
@@ -163,10 +168,10 @@ const waitForJob = async (jobId: string): Promise<SdCppJob> => {
       throw new Error(`Generation ${state}: ${(job.message ?? job.error ?? '').trim()}`);
     }
 
-    const progress = typeof job.progress === 'number' ? ` ${job.progress}%` : ` (${i + 1}s)`;
+    const progress = typeof job.progress === 'number' ? ` ${job.progress}%` : ` (poll ${poll})`;
     process.stdout.write(`\r  Status: ${state}${progress}`);
 
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, Math.max(0, Math.min(1000, deadline - Date.now()))));
   }
 
   throw new Error('Generation timed out after 180s');
@@ -218,6 +223,16 @@ const extractImage = (payload: unknown): string | undefined => {
 const saveImage = async (imageData: string, outputDir: string): Promise<string> => {
   const base64 = imageData.startsWith('data:') ? (imageData.split(',')[1] ?? '') : imageData;
   const bytes = Buffer.from(base64, 'base64');
+
+  // Fail loudly on a bad payload instead of writing garbage: sd-server may
+  // echo a long prompt/id under one of the scanned fields, which decodes to
+  // short meaningless bytes that would otherwise be reported as success.
+  const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  if (bytes.length < 8 || !bytes.subarray(0, 4).equals(PNG_MAGIC)) {
+    throw new Error(
+      `Decoded payload is not a PNG (${bytes.length} bytes) — sd-server returned an unexpected field`,
+    );
+  }
 
   const destDir = resolve(import.meta.dir, '../src/output', outputDir);
   mkdirSync(destDir, { recursive: true });

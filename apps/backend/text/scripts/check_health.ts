@@ -22,7 +22,7 @@ const parsePort = (): number => {
   const flag = args.indexOf('--port');
   if (flag !== -1 && args[flag + 1]) {
     const parsed = Number.parseInt(args[flag + 1] as string, 10);
-    if (Number.isFinite(parsed)) {
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
       return parsed;
     }
   }

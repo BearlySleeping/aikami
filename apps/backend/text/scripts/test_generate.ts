@@ -11,7 +11,7 @@
 //   bun run test:generate --model qwen2.5-1.5b-instruct-q4_k_m "Write a haiku"
 //
 // The model name is the GGUF file name served by llama-server; when omitted
-// the smallest model from GET /v1/models is auto-discovered.
+// a model from GET /v1/models is auto-discovered.
 
 const DEFAULT_PORT = 11434;
 const DEFAULT_PROMPT = 'Say hello and introduce yourself in one sentence.';
@@ -49,7 +49,9 @@ const checkHealth = async (port: number): Promise<boolean> => {
 };
 
 /**
- * Auto-discover the smallest available model via /v1/models.
+ * Auto-discover a model via /v1/models. llama-server serves one model per
+ * process, so the shortest id is used only as a deterministic tie-break
+ * (it is not a size ranking).
  */
 const discoverModel = async (port: number): Promise<string | undefined> => {
   try {
@@ -64,7 +66,7 @@ const discoverModel = async (port: number): Promise<string | undefined> => {
     if (models.length === 0) {
       return undefined;
     }
-    // Prefer the smallest id for fast inference.
+    // Deterministic pick: shortest id. Not a size ranking.
     return [...models].sort((a, b) => a.id.length - b.id.length)[0]?.id;
   } catch {
     return undefined;

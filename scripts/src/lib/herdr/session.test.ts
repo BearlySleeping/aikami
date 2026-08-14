@@ -6,6 +6,7 @@ import { posixQuote, which } from '../env/which.ts';
 import {
   ALL_SERVICES,
   assertNoPortConflicts,
+  assertNoRunningServiceConflicts,
   expandServices,
   isPortReady,
   KNOWN_SERVICES,
@@ -138,6 +139,30 @@ describe('C-392 — dev engine services converge on the local stack', () => {
   it('allows offset-aware + engine services together under an offset', () => {
     expect(() =>
       assertNoPortConflicts(['client', 'text', 'image'], 'emulator', 1930),
+    ).not.toThrow();
+  });
+
+  it('refuses reuse of a workspace already running a mutually exclusive engine (image + existing image-comfyui)', () => {
+    expect(() =>
+      assertNoRunningServiceConflicts(['image'], ['image-comfyui'], 'emulator', 0),
+    ).toThrow(/8188|mutually exclusive/);
+  });
+
+  it('refuses reuse of a workspace already running text-ollama when starting text', () => {
+    expect(() => assertNoRunningServiceConflicts(['text'], ['text-ollama'], 'emulator', 0)).toThrow(
+      /11434|mutually exclusive/,
+    );
+  });
+
+  it('allows reuse when existing tabs run distinct-port services', () => {
+    expect(() =>
+      assertNoRunningServiceConflicts(['image'], ['client', 'hub'], 'emulator', 0),
+    ).not.toThrow();
+  });
+
+  it('ignores non-service tab labels (e.g. the pi tab) in the reuse check', () => {
+    expect(() =>
+      assertNoRunningServiceConflicts(['image'], ['pi', 'text'], 'emulator', 0),
     ).not.toThrow();
   });
 });

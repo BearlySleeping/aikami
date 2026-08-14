@@ -26,11 +26,15 @@ bun install
 
 ## Tasks
 
-| Task             | Command                              | Description                          |
-| `dev`            | `bun run dev:docker`                 | Start sherpa-onnx via compose        |
-| `test:speech`    | `bun run scripts/synthesize.ts`      | Synthesize + play (mpv/ffplay/aplay) |
-| `update`         | `bun run scripts/update.ts`          | `docker compose --profile voice pull`|
-| `typecheck`/`lint`/`fix` | `true`                       | No TypeScript source to check        |
+| Task             | Command                              | Description                            |
+|------------------|--------------------------------------|----------------------------------------|
+| `dev`            | `bun run dev:docker`                 | Start sherpa-onnx via compose          |
+| `test:speech`    | `bun run scripts/synthesize.ts`      | Synthesize + play (mpv/ffplay/aplay)   |
+| `update`         | `bun run scripts/update.ts`          | `docker compose --profile voice pull`  |
+| `lint`           | `bun run lint`                       | Biome lint of `scripts/`               |
+| `fix`            | `bun run fix`                        | Biome autofix + format of `scripts/`   |
+
+> Lint/format use Biome (repo convention): `bun run lint` / `bun run fix`; full validation: `bun moon run :validate`.
 
 ## Usage
 
@@ -49,7 +53,7 @@ bun herdr:stop voice
 
 ## Directory Layout
 
-```
+```text
 apps/backend/voice/
 ├── scripts/
 │   ├── synthesize.ts       # /v1/audio/speech smoke test + playback

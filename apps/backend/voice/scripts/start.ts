@@ -34,12 +34,12 @@ const teardown = (): void => {
   }
   tearingDown = true;
   log(`stopping compose profile "${PROFILE}" (docker compose down)`);
-  const down = spawn('docker', ['compose', 'down'], {
+  const down = spawn('docker', ['compose', '--profile', PROFILE, 'down'], {
     cwd: COMPOSE_DIR,
     stdio: 'inherit',
     env: process.env,
   });
-  down.on('close', () => process.exit(0));
+  down.on('close', (code) => process.exit(code ?? 0));
   down.on('error', (error) => {
     console.error(`[voice] docker compose down failed: ${error.message}`);
     process.exit(1);
