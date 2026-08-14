@@ -42,7 +42,7 @@ export const parseServices = (raw: string): DevService[] => {
 
   if (inputs.length === 0) {
     throw new Error(
-      'No services specified. Use: firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)',
+      'No services specified. Use: firebase, client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)',
     );
   }
 
@@ -81,7 +81,7 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   if (!serviceArg) {
     console.error(
       'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force] [--force-ports]\n' +
-        '  services:      firebase, client, hub, voice, image, text, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
+        '  services:      firebase, client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
         '  mode:          emulator | staging | production (default: $AIKAMI_MODE)\n' +
         '  --join:        attach to session after starting\n' +
         '  --force:       kill and recreate if workspace already exists\n' +

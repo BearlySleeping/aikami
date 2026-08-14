@@ -9,10 +9,9 @@
     "fix": "true",
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
+    "dev:comfyui": "bun run scripts/start.ts comfyui",
     "test": "bun test scripts/image_service.test.ts",
     "test:image": "bun run scripts/check_health.ts",
-    "download:model": "bun run scripts/download_model.ts",
-    "models:download": "bun run scripts/download_models.ts",
     "generate:avatar": "bun run scripts/generate_avatar.ts",
     "update": "bun run scripts/update.ts"
   },

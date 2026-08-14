@@ -1,80 +1,95 @@
 // apps/backend/text/scripts/test_generate.ts
-// biome-ignore-all lint/style/useNamingConvention: Property names must match Ollama API field names (snake_case)
-// Test generation script for the Ollama text microservice.
-// Sends a prompt to /api/generate and streams the response.
+// Generation smoke test for the text dev engine (C-392).
+//
+// Talks the OpenAI-compatible /v1/chat/completions surface of llama-server
+// (the C-390 local-stack "text" compose profile). The pre-C-392 service
+// spoke Ollama's /api/generate NDJSON stream; llama-server has no such
+// concept — it takes a GGUF path at startup and serves /v1 instead.
 //
 // Usage:
-//   bun run scripts/test_generate.ts
-//   bun run scripts/test_generate.ts "Explain quantum computing in one sentence"
-//   bun run scripts/test_generate.ts --model llama3.2:3b "Write a haiku"
+//   bun run test:generate "Hello!"
+//   bun run test:generate --model qwen2.5-1.5b-instruct-q4_k_m "Write a haiku"
+//
+// The model name is the GGUF file name served by llama-server; when omitted
+// the smallest model from GET /v1/models is auto-discovered.
 
-const OLLAMA_PORT = 11434;
-const OLLAMA_URL = `http://localhost:${OLLAMA_PORT}`;
+const DEFAULT_PORT = 11434;
 const DEFAULT_PROMPT = 'Say hello and introduce yourself in one sentence.';
 
 // ── Types ──────────────────────────────────────────────────
 
-type GenerateChunk = {
-  response?: string;
-  done: boolean;
-  total_duration?: number;
-  load_duration?: number;
-  prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
-  eval_duration?: number;
-  error?: string;
+type ChatCompletion = {
+  choices?: Array<{ message?: { content?: string } }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  error?: { message?: string };
+};
+
+type ModelList = {
+  data?: Array<{ id: string }>;
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 
 /**
- * Format nanoseconds into a human-readable duration.
+ * Check the llama-server /health endpoint.
  */
-const formatDuration = (ns: number): string => {
-  if (ns < 1000) {
-    return `${ns}ns`;
-  }
-  if (ns < 1_000_000) {
-    return `${(ns / 1000).toFixed(1)}µs`;
-  }
-  if (ns < 1_000_000_000) {
-    return `${(ns / 1_000_000).toFixed(1)}ms`;
-  }
-  return `${(ns / 1_000_000_000).toFixed(2)}s`;
-};
-
-// ── Health Check ───────────────────────────────────────────
-
-const checkHealth = async (): Promise<boolean> => {
+const checkHealth = async (port: number): Promise<boolean> => {
   try {
-    const response = await fetch(OLLAMA_URL, {
+    const response = await fetch(`http://127.0.0.1:${port}/health`, {
       signal: AbortSignal.timeout(10_000),
     });
-    const text = await response.text();
-    return response.ok && text.includes('Ollama is running');
+    return response.ok;
   } catch {
     return false;
   }
 };
 
-// ── Generate ──────────────────────────────────────────────
+/**
+ * Auto-discover the smallest available model via /v1/models.
+ */
+const discoverModel = async (port: number): Promise<string | undefined> => {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/v1/models`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const data = (await response.json()) as ModelList;
+    const models = data.data ?? [];
+    if (models.length === 0) {
+      return undefined;
+    }
+    // Prefer the smallest id for fast inference.
+    return [...models].sort((a, b) => a.id.length - b.id.length)[0]?.id;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
- * Send a prompt to /api/generate and stream the token-by-token response.
- *
- * Prints tokens as they arrive, then reports timing metrics on completion.
+ * Send a prompt to /v1/chat/completions and print the completion.
  */
-const generate = async (options: { model: string; prompt: string }): Promise<void> => {
-  const { model, prompt } = options;
+const generate = async (options: {
+  port: number;
+  model: string;
+  prompt: string;
+}): Promise<void> => {
+  const { port, model, prompt } = options;
+  const url = `http://127.0.0.1:${port}/v1/chat/completions`;
 
-  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      prompt,
-      stream: true,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 256,
+      stream: false,
     }),
     signal: AbortSignal.timeout(300_000),
   });
@@ -84,141 +99,83 @@ const generate = async (options: { model: string; prompt: string }): Promise<voi
     if (response.status === 404) {
       throw new Error(
         `Model '${model}' not found (HTTP 404).\n` +
-          `Pull it first: bun run download:model ${model}\n` +
+          `Fetch it first: cd apps/backend/local-stack && bun run fetch-models\n` +
           `${errorBody ? `Detail: ${errorBody.slice(0, 200)}` : ''}`,
       );
     }
     throw new Error(
-      `Model generation request failed (HTTP ${response.status}).\n` +
+      `Generation request failed (HTTP ${response.status}).\n` +
         `${errorBody ? `Error: ${errorBody.slice(0, 200)}` : 'No error details available.'}`,
     );
   }
 
-  if (!response.body) {
-    throw new Error('Response body is null');
+  const data = (await response.json()) as ChatCompletion;
+
+  if (data.error) {
+    throw new Error(data.error.message ?? 'Generation failed');
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
+  const content = data.choices?.[0]?.message?.content ?? '';
+  console.log('\n──────────────────────────────────────────\n');
+  console.log(content.trim());
   console.log('\n──────────────────────────────────────────\n');
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0) {
-          continue;
-        }
-
-        try {
-          const chunk = JSON.parse(trimmed) as GenerateChunk;
-
-          if (chunk.error) {
-            throw new Error(chunk.error);
-          }
-
-          // Print token as it arrives
-          if (chunk.response) {
-            process.stdout.write(chunk.response);
-          }
-
-          // Report metrics on completion
-          if (chunk.done) {
-            console.log('\n\n──────────────────────────────────────────\n');
-            if (chunk.total_duration !== undefined) {
-              console.log(`  Total:      ${formatDuration(chunk.total_duration)}`);
-            }
-            if (chunk.load_duration !== undefined) {
-              console.log(`  Load:       ${formatDuration(chunk.load_duration)}`);
-            }
-            if (chunk.prompt_eval_count !== undefined) {
-              console.log(
-                `  Prompt:     ${chunk.prompt_eval_count} tokens in ${formatDuration(chunk.prompt_eval_duration ?? 0)}`,
-              );
-            }
-            if (chunk.eval_count !== undefined) {
-              const evalMs = (chunk.eval_duration ?? 0) / 1_000_000;
-              const tps = evalMs > 0 ? ((chunk.eval_count / evalMs) * 1000).toFixed(1) : '?';
-              console.log(
-                `  Generated:  ${chunk.eval_count} tokens in ${formatDuration(chunk.eval_duration ?? 0)} (${tps} tok/s)`,
-              );
-            }
-          }
-        } catch (parseError) {
-          if (!(parseError instanceof SyntaxError)) {
-            throw parseError;
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
+  if (data.usage) {
+    console.log(
+      `  Tokens: ${data.usage.prompt_tokens ?? '?'} in / ${data.usage.completion_tokens ?? '?'} out / ${data.usage.total_tokens ?? '?'} total`,
+    );
   }
-
-  console.log('');
 };
 
 // ── Entry Point ─────────────────────────────────────────────
 
 const main = async (): Promise<void> => {
-  // Parse args: --model <name> [prompt...]
   const args = Bun.argv.slice(2);
   let model = '';
   let prompt = '';
+  let port = DEFAULT_PORT;
 
   const modelIndex = args.indexOf('--model');
   if (modelIndex !== -1 && args[modelIndex + 1]) {
-    model = args[modelIndex + 1];
+    model = args[modelIndex + 1] as string;
     args.splice(modelIndex, 2);
+  }
+  const portIndex = args.indexOf('--port');
+  if (portIndex !== -1 && args[portIndex + 1]) {
+    port = Number.parseInt(args[portIndex + 1] as string, 10) || DEFAULT_PORT;
+    args.splice(portIndex, 2);
   }
 
   prompt = args.join(' ') || DEFAULT_PROMPT;
 
   // ── Health check ──────────────────────────────
-  if (!(await checkHealth())) {
-    console.error(`\n✗ Ollama is not running on port ${OLLAMA_PORT}.`);
+  if (!(await checkHealth(port))) {
+    console.error(`\n✗ llama-server is not running on port ${port}.`);
     console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }
 
   // ── Auto-discover model if not specified ──────
   if (!model) {
-    try {
-      const tagsRes = await fetch(`${OLLAMA_URL}/api/tags`);
-      const tagsData = (await tagsRes.json()) as { models?: Array<{ name: string; size: number }> };
-      const models = tagsData.models ?? [];
-      if (models.length > 0) {
-        // Prefer smallest model for fast inference
-        const sorted = [...models].sort((a, b) => (a.size ?? 0) - (b.size ?? 0));
-        model = sorted[0].name;
-        console.log(`\n  Auto-detected model: ${model}`);
-      } else {
-        console.error('\n✗ No models available. Pull one first:');
-        console.error('  bun run download:model qwen3.5:4b');
-        process.exit(1);
-      }
-    } catch {
-      console.error('\n✗ Failed to discover models. Specify one with --model:');
-      console.error('  bun run test:generate --model qwen3:14b "Hello"');
+    model = (await discoverModel(port)) ?? '';
+    if (!model) {
+      console.error('\n✗ No models available. Fetch one first:');
+      console.error('  cd apps/backend/local-stack && bun run fetch-models');
       process.exit(1);
     }
+    console.log(`\n  Auto-detected model: ${model}`);
   }
 
+  console.log(`  Model:  ${model}`);
   console.log(`  Prompt: "${prompt}"`);
 
-  await generate({ model, prompt });
+  try {
+    await generate({ port, model, prompt });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`\n✗ ${message}`);
+    process.exit(1);
+  }
 };
 
 main();

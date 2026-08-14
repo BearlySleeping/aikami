@@ -5,11 +5,13 @@ import net from 'node:net';
 import { posixQuote, which } from '../env/which.ts';
 import {
   ALL_SERVICES,
+  assertNoPortConflicts,
   expandServices,
   isPortReady,
   KNOWN_SERVICES,
   normalizeService,
   parseHerdrStatus,
+  resolveReadyPort,
   SERVICE_DEFS,
   wrapCommand,
 } from './session.ts';
@@ -76,6 +78,67 @@ socket: /home/sonny/.config/herdr/herdr.sock
 
   it('tolerates empty output', () => {
     expect(parseHerdrStatus('')).toEqual({});
+  });
+});
+
+describe('C-392 — dev engine services converge on the local stack', () => {
+  it('text/image/voice keep their fixed base ports under a contract offset', () => {
+    // C-392 slot: (392 % 200 + 1) * 10 = 1930
+    const offset = 1930;
+    expect(resolveReadyPort('text', 'emulator', offset)).toBe(11434);
+    expect(resolveReadyPort('image', 'emulator', offset)).toBe(8188);
+    expect(resolveReadyPort('voice', 'emulator', offset)).toBe(8089);
+  });
+
+  it('client/hub/site/firebase still shift by the offset', () => {
+    const offset = 1930;
+    expect(resolveReadyPort('client', 'emulator', offset)).toBe(5274 + offset);
+    expect(resolveReadyPort('hub', 'emulator', offset)).toBe(5276 + offset);
+    expect(resolveReadyPort('site', 'emulator', offset)).toBe(5280 + offset);
+    expect(resolveReadyPort('firebase', 'emulator', offset)).toBe(9098 + offset);
+  });
+
+  it('text-ollama and image-comfyui are known services sharing the engine ports', () => {
+    expect(KNOWN_SERVICES).toContain('text-ollama');
+    expect(KNOWN_SERVICES).toContain('image-comfyui');
+    expect(SERVICE_DEFS['text-ollama'].name).toBe('text-ollama');
+    expect(SERVICE_DEFS['image-comfyui'].name).toBe('image-comfyui');
+    expect(SERVICE_DEFS['text-ollama'].readyPort?.('emulator')).toBe(11434);
+    expect(SERVICE_DEFS['image-comfyui'].readyPort?.('emulator')).toBe(8188);
+  });
+
+  it('advanced engines are not in the all group (opt-in only)', () => {
+    expect(ALL_SERVICES).not.toContain('text-ollama');
+    expect(ALL_SERVICES).not.toContain('image-comfyui');
+    expect(expandServices(['all'])).not.toContain('text-ollama');
+    expect(expandServices(['all'])).not.toContain('image-comfyui');
+  });
+
+  it('advanced engines are accepted as service names', () => {
+    expect(normalizeService('text-ollama')).toBe('text-ollama');
+    expect(normalizeService('image-comfyui')).toBe('image-comfyui');
+  });
+
+  it('refuses to start image and image-comfyui together (shared :8188)', () => {
+    expect(() => assertNoPortConflicts(['image', 'image-comfyui'], 'emulator', 0)).toThrow(
+      /8188|mutually exclusive/,
+    );
+  });
+
+  it('refuses to start text and text-ollama together (shared :11434)', () => {
+    expect(() => assertNoPortConflicts(['text', 'text-ollama'], 'emulator', 0)).toThrow(
+      /11434|mutually exclusive/,
+    );
+  });
+
+  it('allows distinct-port services together (image + text)', () => {
+    expect(() => assertNoPortConflicts(['image', 'text'], 'emulator', 0)).not.toThrow();
+  });
+
+  it('allows offset-aware + engine services together under an offset', () => {
+    expect(() =>
+      assertNoPortConflicts(['client', 'text', 'image'], 'emulator', 1930),
+    ).not.toThrow();
   });
 });
 

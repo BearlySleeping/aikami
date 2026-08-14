@@ -1,2 +1,8 @@
-# Ollama cache — model weights, pulled images
-src/cache/
+# apps/backend/text/.gitignore
+# C-392: the text dev engine no longer writes model weights into this tree.
+# Model weights live in the shared aikami-models store, fetched via the
+# C-390 manifest-driven fetcher:
+#   cd apps/backend/local-stack && bun run fetch-models
+# The legacy Ollama tree (src/cache/ollama) was retired — Ollama blobs are
+# content-addressed and remain usable only via the opt-in text-ollama
+# service. Nothing in this project is expected to be ignored anymore.
