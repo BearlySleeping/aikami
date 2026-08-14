@@ -1,0 +1,38 @@
+# packages/shared/local-ai/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'local-ai'
+  - 'shared'
+  - 'library'
+
+project:
+  name: 'local-ai'
+  description: 'Portable planning core for the local AI stack (C-391): hardware detection, tiered model recommendation, ProbeExecutor seam.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'moon.yml'
+  tests:
+    - 'src/**/*.test.ts'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

@@ -17,6 +17,9 @@ project:
 
 dependsOn:
   - 'constants'
+  - 'local-ai'
+  - 'schemas'
+  - 'types'
 
 fileGroups:
   configs:
@@ -81,3 +84,12 @@ tasks:
     options:
       cache: false
       runInCI: false
+
+  init:
+    command: 'bun stack/init.ts'
+    options:
+      cache: false
+      runInCI: false
+      # CLI-only interactive/flag-driven command; never part of `moon ci`.
+      # NB: moon 2.4.6 refuses `moon run` for runInCI:false tasks, so the
+      # root `stack` script drives the package.json `init` script directly.

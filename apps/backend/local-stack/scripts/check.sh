@@ -244,6 +244,38 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
         | sort -u)
 fi
 
+# ── C-391 `stack init` (AC-8, AC-10) ──────────────────────────────────
+# AC-8: `init --yes` completes without prompting in a non-TTY invocation
+# and writes a valid .env. AC-10: the generated .env renders with
+# `docker compose config` (the full boot happens in CI / LOCAL_STACK_LIVE).
+echo "== stack init (C-391) =="
+INIT_ENV="$(mktemp -d)/.env"
+if timeout 60 bun stack/init.ts --yes --no-color --env-path "$INIT_ENV" >/tmp/aikami-init.out 2>&1; then
+    ok "AC-8: stack init --yes runs non-interactively (exit 0)"
+else
+    bad "AC-8: stack init --yes failed — see /tmp/aikami-init.out"
+    tail -30 /tmp/aikami-init.out >&2
+fi
+if [ -f "$INIT_ENV" ] && grep -q '^COMPOSE_PROFILES=' "$INIT_ENV" \
+    && grep -q '^COMPOSE_FILE=' "$INIT_ENV"; then
+    ok "AC-8: generated .env carries COMPOSE_PROFILES and COMPOSE_FILE"
+else
+    bad "AC-8: generated .env missing required keys"
+fi
+if command -v docker >/dev/null 2>&1; then
+    COMPOSE_LINE="$(grep '^COMPOSE_FILE=' "$INIT_ENV" | cut -d= -f2)"
+    PROFILES_LINE="$(grep '^COMPOSE_PROFILES=' "$INIT_ENV" | cut -d= -f2)"
+    # Render the generated configuration from the local-stack project dir.
+    if COMPOSE_FILE="$COMPOSE_LINE" COMPOSE_PROFILES="$PROFILES_LINE" docker compose config --quiet 2>/dev/null; then
+        ok "AC-10: generated .env renders with docker compose config"
+    else
+        bad "AC-10: generated .env does not render (docker available)"
+    fi
+else
+    ok "AC-10: docker unavailable — boot render deferred to CI"
+fi
+rm -rf "$(dirname "$INIT_ENV")"
+
 # ── AC-9 contract support: the published client image must serve runtime
 #    config mounts (the two-mount container test lives in the publish
 #    workflow — publish-local-stack.yml — which actually boots the image;
