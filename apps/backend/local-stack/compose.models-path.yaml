@@ -15,6 +15,10 @@
 
 services:
   model-fetcher:
+    environment:
+      # AC-13: never chown the user's host bind tree — the fetcher leaves
+      # ownership untouched (Migration & Rollback promise).
+      MODELS_CHOWN: "0"
     volumes:
       - type: bind
         source: "${MODELS_PATH}"

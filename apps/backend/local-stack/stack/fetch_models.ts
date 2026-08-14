@@ -362,6 +362,54 @@ export const ensureEntry = async (options: {
 };
 
 /**
+ * Hands the populated models tree to the runtime engine uid (C-390 Edge
+ * Cases). The fetcher runs as root, but the voice container runs as a
+ * non-root user (uid 1000 by default, VOICE_UID/VOICE_GID in
+ * docker/voice/Dockerfile.sherpa). A named volume first written by the root
+ * fetcher is root-owned 755, so the voice entrypoint's mkdir fails and the
+ * container restart-loops. Chown the tree to MODELS_UID:MODELS_GID (default
+ * 1000:1000) so every engine can write/read it. Only meaningful when the
+ * process runs as root (the compose fetcher); on the host (unit tests) the
+ * call is a no-op so a non-root developer is not forced to own the tree.
+ */
+export const chownModels = async (modelsDir: string): Promise<void> => {
+  if (process.env.MODELS_CHOWN === '0') {
+    // AC-13 MODELS_PATH bind mounts are the user's own host tree — never
+    // change its ownership (Migration & Rollback promise).
+    return;
+  }
+  if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+    return;
+  }
+  const uid = Number(process.env.MODELS_UID ?? '1000');
+  const gid = Number(process.env.MODELS_GID ?? '1000');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('chown', ['-R', `${uid}:${gid}`, modelsDir], {
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`chown failed with exit ${code ?? 'unknown'}`));
+        }
+      });
+    });
+    // biome-ignore lint/suspicious/noConsole: container log (standalone script)
+    console.log(`[fetcher] chowned ${modelsDir} to ${uid}:${gid}`);
+  } catch (error) {
+    // Non-fatal: engines that run as root or use a MODELS_PATH bind they own
+    // still work; the voice entrypoint tolerates an unwritable stt dir.
+    // biome-ignore lint/suspicious/noConsole: container log
+    console.warn(
+      `[fetcher] chown ${modelsDir} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+};
+
+/**
  * Runs the fetcher for the enabled profiles.
  *
  * @returns Process exit code — 0 when every enabled modality was attempted
@@ -464,6 +512,9 @@ export const run = async (options: {
       `[fetcher] ${failures.length} model(s) failed (non-fatal): ${failures.join(', ')}`,
     );
   }
+  // Hand the volume to the engine uid so non-root engines (voice, uid 1000)
+  // can mkdir/write under /models instead of crash-looping (C-390 Edge Cases).
+  await chownModels(modelsDir);
   return 0;
 };
 

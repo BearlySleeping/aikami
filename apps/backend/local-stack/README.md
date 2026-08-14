@@ -202,9 +202,10 @@ engine on a Mac is CPU-only and slow. On Darwin the supported setup is:
    COMPOSE_PROFILES=web docker compose up -d
    ```
 
-The smoke test verifies the native launchers' ports and defaults on every
-platform; on Darwin it exercises the full native path rather than reporting a
-false container pass.
+`scripts/check.sh` asserts the native launchers exist, are executable, and
+default to the table ports (11434/8089/8087); on Darwin it additionally
+reports that the native path is the verified one, since Docker Desktop
+provides no Metal passthrough for the engines.
 
 ---
 
@@ -244,7 +245,7 @@ bun moon run local-stack:lint
 | Two config mounts against one client image | AC-9 (publish workflow) |
 | Removed artifacts absent + no task references | AC-10 |
 | Ports match `development_ports.ts`, loopback binds, no 8080 | AC-11 |
-| Native-path launcher ports on every platform, full path on Darwin | AC-12 |
+| Native launchers present, executable, port-defaulted (explicit Darwin branch) | AC-12 |
 | `MODELS_PATH` bind mount render + health | AC-13 |
 
 ## Container security

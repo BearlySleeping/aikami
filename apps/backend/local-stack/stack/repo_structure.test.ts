@@ -54,14 +54,23 @@ describe('compose topology invariants', () => {
   it('every upstream image reference in the base file is digest-pinned', async () => {
     const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
     // Owned images use an env-prefixed name (no digest yet — built/published
-    // by CI); upstream pulls must carry @sha256:.
-    const upstreamLines = compose
-      .split('\n')
-      .filter((line) => /image:\s*(ghcr\.io|ollama|yanwk)/.test(line));
-    expect(upstreamLines.length).toBeGreaterThan(0);
-    for (const line of upstreamLines) {
+    // by CI); every other image: reference must carry @sha256:. The match is
+    // deliberately broad (any image line that is not env-prefixed) so an
+    // unpinned upstream reference — e.g. a bare `oven/bun:1.3` fetcher image —
+    // fails CI instead of silently passing.
+    const imageLines = compose.split('\n').filter((line) => /^\s*image:\s*\S/.test(line));
+    expect(imageLines.length).toBeGreaterThan(0);
+    for (const line of imageLines) {
+      if (/image:\s*\$\{/.test(line)) {
+        continue;
+      }
       expect(line).toMatch(/@sha256:[a-f0-9]{64}/);
     }
+  });
+
+  it('no bare upstream fetcher image reference (oven/bun is built, not pulled unpinned)', async () => {
+    const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
+    expect(compose).not.toMatch(/image:\s*oven\/bun/);
   });
 
   it('no image reference is pinned to :latest', async () => {

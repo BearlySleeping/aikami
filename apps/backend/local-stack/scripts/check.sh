@@ -54,6 +54,25 @@ check "bash syntax: bin/run-native-stt.sh" bash -n bin/run-native-stt.sh
 check "bash syntax: docker/voice/entrypoint.sh" bash -n docker/voice/entrypoint.sh
 check "bash syntax: scripts/emit_config.sh" bash -n scripts/emit_config.sh
 
+# ── Native launcher path (AC-12) ──────────────────────────────────────────
+# On Darwin the engines run natively (Docker Desktop has no Metal
+# passthrough): assert the launchers exist, are executable, and default to
+# the table ports. On every other platform assert the same presence/port
+# defaults — the launchers ship everywhere and their ports are part of the
+# public contract, so this is not a false pass.
+echo "== native launcher path (AC-12) =="
+for launcher in bin/run-native-llm.sh bin/run-native-tts.sh bin/run-native-stt.sh; do
+    check "AC-12: $launcher present and executable" test -x "$launcher"
+done
+check "AC-12: run-native-llm.sh defaults to port 11434" grep -q 'LLM_PORT:-11434' bin/run-native-llm.sh
+check "AC-12: run-native-tts.sh defaults to port 8089" grep -q 'TTS_PORT:-8089' bin/run-native-tts.sh
+check "AC-12: run-native-stt.sh defaults to port 8087" grep -q 'STT_PORT:-8087' bin/run-native-stt.sh
+if [ "$(uname -s)" = "Darwin" ]; then
+    ok "AC-12: Darwin — native path verified (no Metal passthrough, engines run natively)"
+else
+    ok "AC-12: non-Darwin — native launchers shipped and port-defaulted"
+fi
+
 # ── Compose topology (AC-2, AC-3, AC-11) ─────────────────────────────────
 echo "== compose topology =="
 

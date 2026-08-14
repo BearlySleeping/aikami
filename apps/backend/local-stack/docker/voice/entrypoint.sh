@@ -26,7 +26,15 @@ TTS_PORT="${TTS_PORT:-8089}"
 STT_PORT="${STT_PORT:-8087}"
 ENABLE_STT="${ENABLE_STT:-false}"
 
-mkdir -p "$MODELS_DIR/tts" "$MODELS_DIR/stt"
+# The fetcher pre-populates the shared volume with checksum-verified
+# downloads (and, on the named-volume path, chowns it to the engine uid); the
+# mkdirs below are defensive only — they must not hard-fail when a directory
+# already exists but is unwritable (e.g. a MODELS_PATH bind owned by another
+# uid), or the container would crash-loop.
+mkdir -p "$MODELS_DIR/tts" 2>/dev/null || true
+if [ "$ENABLE_STT" = "true" ]; then
+    mkdir -p "$MODELS_DIR/stt" 2>/dev/null || true
+fi
 
 # ── TTS: skip the download only when the complete model directory exists
 #    (model.onnx + voices.bin + tokens.txt + espeak-ng-data); fetch to a

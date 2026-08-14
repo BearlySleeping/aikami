@@ -41,7 +41,14 @@ services:
   # check cannot run on an exited container, so this is the correct gate.
   model-fetcher:
     profiles: ["text", "image", "voice", "stt"]
-    image: oven/bun:1.3
+    # Built from docker/fetcher: the upstream oven/bun image lacks bzip2, which
+    # fetch_models.ts needs to extract the Kokoro/Moonshine .tar.bz2 archives
+    # (AC-6/AC-7 production path). No `image:` key — same pattern as voice/web;
+    # the published ghcr.io/aikami/aikami-model-fetcher image is produced by
+    # publish-local-stack.yml for users who prefer a prebuilt image.
+    build:
+      context: ./docker/fetcher
+      dockerfile: Dockerfile
     command:
       - /bin/sh
       - -c
@@ -53,6 +60,11 @@ services:
       AIKAMI_ACCEPT_LICENSES: "${AIKAMI_ACCEPT_LICENSES:-}"
       TEXT_MODEL: "${TEXT_MODEL:-}"
       IMAGE_MODEL: "${IMAGE_MODEL:-}"
+      # Named-volume path: hand the populated tree to the engine uid (voice
+      # runs as 1000) so non-root engines can write /models. The
+      # compose.models-path.yaml override sets this to 0 to keep the user's
+      # host bind tree untouched (AC-13).
+      MODELS_CHOWN: "${MODELS_CHOWN:-1}"
     volumes:
       - *model-volume
       # The fetcher source ships in the repo tree; mount it read-only so the

@@ -1,7 +1,8 @@
 # .github/workflows/publish-local-stack.yml
 #
-# Publishes the two images Aikami owns for the local stack (C-390) to GHCR
+# Publishes the images Aikami owns for the local stack (C-390) to GHCR
 # and verifies the publish contract:
+#   - aikami-model-fetcher (docker/fetcher/Dockerfile — bzip2-enabled bun)
 #   - aikami-voice            (docker/voice/Dockerfile.sherpa)
 #   - aikami-sd-server:cpu    (docker/sd-server/Dockerfile.cpu — the one
 #                              backend upstream does not publish)
@@ -74,6 +75,18 @@ jobs:
               docker manifest inspect "$img" >/dev/null
             done
 
+      # ── Model-fetcher image (bzip2-enabled bun) ────────────────────────
+      - name: Build and publish aikami-model-fetcher
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend/local-stack/docker/fetcher
+          file: apps/backend/local-stack/docker/fetcher/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:latest
+            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+
       # ── Voice image ────────────────────────────────────────────────────
       - name: Build and publish aikami-voice
         uses: docker/build-push-action@v6
@@ -97,23 +110,6 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ github.sha }}
           platforms: linux/amd64
-
-      # ── AC-5: layer inspection for voice + sd-server ──────────────────
-      - name: AC-5 layer inspection (voice + sd-server)
-        run: |
-          set -euo pipefail
-          cd apps/backend/local-stack
-          for img in \
-            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
-            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu"; do
-            docker pull "$img"
-            echo "== $img layers =="
-            docker image inspect "$img" --format '{{.Size}}' | awk '{printf "uncompressed size: %.1f MB\n", $1/1048576}'
-            # Weights must not be in any layer (AC-5).
-            docker run --rm --entrypoint /bin/sh "$img" -c \
-              'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null' \
-              | { grep -q . && { echo "FAIL: weight files found in image"; exit 1; } || echo "ok: no weight files"; }
-          done
 
       # ── Client image (staged SPA + runtime config mount, AC-9) ────────
       - name: Build the client SPA for staging
@@ -142,6 +138,37 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-client:latest
             ${{ env.IMAGE_PREFIX }}/aikami-client:${{ github.sha }}
           platforms: linux/amd64
+
+      # ── AC-5: layer inspection for voice + sd-server + client ─────────
+      # Runs AFTER all three images are published. AC-5 names aikami-client
+      # and aikami-voice: no weights in any layer, and the compressed image
+      # (sum of registry layer sizes) stays within the 250 MB budget.
+      - name: AC-5 layer inspection (voice + sd-server + client)
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          for img in \
+            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
+            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu" \
+            "${{ env.IMAGE_PREFIX }}/aikami-client:latest"; do
+            docker pull "$img"
+            echo "== $img layers =="
+            size_bytes=$(docker image inspect "$img" --format '{{.Size}}')
+            echo "uncompressed size: $(awk "BEGIN{printf \"%.1f\", $size_bytes/1048576}") MB"
+            # Compressed size = sum of the registry manifest's layer sizes.
+            compressed=$(docker manifest inspect "$img" \
+              | jq '[.layers[].size] | add // 0')
+            echo "compressed size: $(awk "BEGIN{printf \"%.1f\", $compressed/1048576}") MB"
+            if [ "$compressed" -gt 262144000 ]; then
+              echo "FAIL: $img compressed size ${compressed} bytes exceeds the 250 MB budget (AC-5)"
+              exit 1
+            fi
+            echo "ok: $img within the 250 MB compressed budget (AC-5)"
+            # Weights must not be in any layer (AC-5).
+            docker run --rm --entrypoint /bin/sh "$img" -c \
+              'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null' \
+              | { grep -q . && { echo "FAIL: weight files found in image"; exit 1; } || echo "ok: no weight files"; }
+          done
 
       # ── AC-9: two config mounts against one client image ──────────────
       - name: AC-9 two-config-mount test
@@ -184,6 +211,7 @@ jobs:
           # Log out so the pull exercises the public path, not the token.
           docker logout ghcr.io
           for img in \
+            "${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:latest" \
             "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
             "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu" \
             "${{ env.IMAGE_PREFIX }}/aikami-client:latest"; do
