@@ -2,7 +2,7 @@
 id: C-391
 title: "`stack init` — Hardware Detection, Modality Selection, and Model Recommendation"
 source: "user request — 'a recommended model for text, image, voice, speech based on the computer/user preference... most optimal and easiest for the user to setup'"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `packages/shared/local-ai/` (new — portable planning core), `packages/shared/{schemas,types}/`, `apps/backend/local-stack/stack/` (CLI adapter, wizard, `.env` generation) |
 | **Priority** | P1 — without it, C-390 requires hand-editing `.env`, which is the setup cost this whole effort exists to remove. |
 | **Dependencies** | C-390 (the `.env` contract, `models.manifest.json`, and the fetcher must exist first). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the quick-start section of "Run Aikami locally" becomes two commands |
 | **Contract version** | 2.0.0 |
@@ -475,3 +475,107 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Built the `stack init` wizard end-to-end: a new portable planning core in
+`packages/shared/local-ai` (`@aikami/local-ai`) holding the `ProbeExecutor`
+seam, tier table with headroom rules, manifest loader, detection, and the
+pure `recommend()` function; TypeBox schemas + derived types for
+`HardwareProfile`, `StackPlan`, `ModelManifest`, `StackBackend` and
+`StackModality`; and the Bun/CLI adapter, interactive wizard, plan renderer,
+disk guard, atomic `.env` writer with diff/backup, and `--json` in
+`apps/backend/local-stack/stack/`. Wired `bun run stack init` from the repo
+root, added moon tasks, updated the README quick-start and the docs page to
+the two-command form, and added check.sh integration hooks (AC-8/AC-10).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-0 | ✅ | dependency.test.ts asserts package.json deps and no `node:` imports in the public entry graph |
+| AC-0b | ✅ | fixture_executor.test.ts runs detect→recommend against fixtures with zero spawns |
+| AC-0c | ✅ | probe_executor.contract_suite.ts run against both fixture-replay and Bun/CLI adapters |
+| AC-1 | ✅ | detect.test.ts (local-ai + local-stack) — no GPU tooling → vendor none, backend cpu, valid plan |
+| AC-2 | ✅ | stubbed nvidia-smi driver 535→CUDA 12, 580→CUDA 13; backend cuda; TEXT_SERVER_IMAGE extra on cuda13 |
+| AC-3 | ✅ | VRAM table 4/8/12/24 GB — cpu/8gb/16gb(+fallback warning) tiers, shipped-manifest test included |
+| AC-4 | ✅ | Apple 16 GB unified → 50% headroom (8 GB usable), nativeEngines true |
+| AC-5 | ✅ | modalities control models + COMPOSE_PROFILES; voice→tts, web adds none |
+| AC-6 | ✅ | init.test.ts — huge manifest → exit 2, shortfall in GB, no .env written |
+| AC-7 | ✅ | plan printed before confirmation; TTY-stubbed decline writes nothing |
+| AC-8 | ✅ | check.sh --static runs `stack init --yes` non-interactively; root `bun run stack init` verified |
+| AC-9 | ✅ | init.test.ts — re-run diff shown, non-TTY decline leaves file byte-identical |
+| AC-10 | ✅ | check.sh --static: generated .env renders with `docker compose config` (docker compose available via Nix podman shim) |
+| AC-11 | ✅ | env_writer renderEnv — `:` on linux, `;` on win32 |
+| AC-12 | ✅ | detect.test.ts + recommend.test.ts — GPU without toolkit → cpu fallback warning; explicit `--backend cuda` obeys loudly |
+| AC-13 | ✅ | init.test.ts — `--json` stdout is one schema-valid doc (HardwareProfile + StackPlan via Value.Check) |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/local-ai/package.json` | `@aikami/local-ai` package manifest |
+| `packages/shared/local-ai/tsconfig.json` | tsconfig with shared package paths |
+| `packages/shared/local-ai/moon.yml` | moon project (test task) |
+| `packages/shared/local-ai/src/index.ts` | public entry — AC-0 boundary, re-exports types |
+| `packages/shared/local-ai/src/lib/probe_executor.ts` | ProbeExecutor / ProbeResult / StatfsResult seam |
+| `packages/shared/local-ai/src/lib/probe_executor.contract_suite.ts` | shared AC-0c contract suite |
+| `packages/shared/local-ai/src/lib/tier_table.ts` | TIER_TABLE, headroom rules, usableBytesForProfile |
+| `packages/shared/local-ai/src/lib/manifest.ts` | pure manifest parse + executor-seam loader |
+| `packages/shared/local-ai/src/lib/recommend.ts` | pure `recommend()` → StackPlan |
+| `packages/shared/local-ai/src/lib/detect.ts` | detectHardware over ProbeExecutor |
+| `packages/shared/local-ai/src/lib/fixture_executor.ts` | fixture-replay adapter (AC-0b) |
+| `packages/shared/local-ai/src/lib/*.test.ts` | manifest/tier_table/recommend/detect/fixture_executor/dependency tests (48) |
+| `packages/shared/schemas/src/lib/local_ai/*.ts` | HardwareProfile/ModelManifest/StackBackend/StackPlan schemas |
+| `packages/shared/types/src/lib/local_ai/*.ts` | derived Static types |
+| `apps/backend/local-stack/stack/probe_executor.ts` | Bun/CLI adapter (spawn, readTextFile, statfs) |
+| `apps/backend/local-stack/stack/env_writer.ts` | renderEnv, diff, atomic write, backup, CUDA extras |
+| `apps/backend/local-stack/stack/init.ts` | CLI entry: flags, wizard, plan, disk guard, atomic write |
+| `apps/backend/local-stack/stack/init.test.ts` | AC-6/7/9/11/13 tests (6) |
+| `apps/backend/local-stack/stack/detect.test.ts` | AC-1/2/12 + Bun adapter contract suite |
+| `apps/backend/local-stack/stack/recommend.test.ts` | AC-3/4/5 against shipped manifest |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | export local_ai schemas |
+| `packages/shared/types/src/index.ts` | export local_ai types |
+| `.moon/workspace.yml` | register `local-ai` project |
+| `apps/backend/local-stack/package.json` | deps on local-ai/schemas/types; `init` script |
+| `apps/backend/local-stack/tsconfig.json` | paths for local-ai/schemas/types |
+| `apps/backend/local-stack/moon.yml` | dependsOn local-ai/schemas/types; `init` task (runInCI:false) |
+| `apps/backend/local-stack/scripts/check.sh` | C-391 AC-8/AC-10 integration hooks |
+| `apps/backend/local-stack/README.md` | quick-start rewritten to `bun run stack init` + backend table + what-it-does |
+| `apps/frontend/docs/src/content/docs/guides/run-locally.mdx` | quick-start updated to two commands |
+| `package.json` | root `stack` script |
+| `bun.lock` | workspace dep links for local-ai |
+
+### Deviations from Spec
+
+- **Root `stack` script drives package.json directly, not `moon run`.** The
+  contract Phase 4 prescribes `"stack": "bun moon run local-stack:init --"`,
+  but moon 2.4.6 refuses to run `runInCI:false` tasks even for explicit
+  `moon run` (verified: the pre-existing `up`, `fetch-models`, `build` tasks
+  fail identically in the base repo). Kept `runInCI: false` in moon.yml per
+  spec (CI exclusion) and wired the root script to
+  `bun run --cwd apps/backend/local-stack init --`, matching the repo's
+  existing convention for CI-excluded commands. The moon.yml `init` task
+  still exists per spec. Recommend an Amendment to Phase 4 wording if
+  `moon run` execution is required.
+- **`TEXT_SERVER_IMAGE` for CUDA 13 hosts** is emitted into `.env` as the
+  documented `server-cuda13` swap, matching C-390's README guidance (no
+  separate override ships); C-390's compose.cuda.yaml is not edited.
+
+### Test Results
+
+- Unit (local-ai): 48/48 pass (0 failures)
+- Unit (local-stack): 58/58 pass (0 failures)
+- Integration (check.sh --static incl. AC-8/AC-10): 57 pass, 0 failures
+- Baseline: 0 pre-existing failures in affected projects; `scripts:` project
+  has pre-existing typecheck/lint failures at the base commit
+  (`contract_pipeline` code in 37513488) unrelated to this contract —
+  aggregate `validate()` reports `:fix`/`:typecheck` failures only from that
+  untouched project.
