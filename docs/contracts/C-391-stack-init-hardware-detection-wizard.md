@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `packages/shared/local-ai/` (new — portable planning core), `packages/shared/{schemas,types}/`, `apps/backend/local-stack/stack/` (CLI adapter, wizard, `.env` generation) |
 | **Priority** | P1 — without it, C-390 requires hand-editing `.env`, which is the setup cost this whole effort exists to remove. |
 | **Dependencies** | C-390 (the `.env` contract, `models.manifest.json`, and the fetcher must exist first). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the quick-start section of "Run Aikami locally" becomes two commands |
 | **Contract version** | 2.0.0 |
@@ -98,6 +98,15 @@ margin plus what the desktop compositor already holds) so the recommendation
 does not assume an idle GPU. On Apple Silicon, unified memory is shared with
 the OS — treat usable as a fraction of total, not the whole.
 
+**Headroom rule (baked into the tier table, tuneable constants):** usable VRAM
+= 70% of reported VRAM for dedicated GPUs; usable memory = 50% of total RAM
+for unified-memory systems (Apple Silicon, iGPUs). A manifest entry is
+eligible for a profile only when its file size ≤ usable VRAM/memory. The tier
+thresholds themselves live **in code** as a typed constant in `@aikami/local-ai`
+(`TIER_TABLE: { minUsableBytes, tier }[]`), not in C-390's manifest — the
+manifest is C-390's and is out of scope to edit; its per-entry `tier` labels
+(`cpu` / `8gb` / `16gb` / `any`) are the vocabulary the table maps onto.
+
 Guiding principle: **recommend the largest model that fits comfortably, not
 the largest that fits.** A model that just barely fits produces the slow,
 swapping experience described in the Problem section, which reads to the user
@@ -142,7 +151,7 @@ bun run stack init --yes --backend cuda --modalities text,voice --tier auto
 
   | Guarantee | Requirement |
   |---|---|
-  | Signature | `run(command: string, args: readonly string[], opts: { timeoutMs: number }): Promise<ProbeResult>` |
+  | Signature | `run(command: string, args: readonly string[], options: { timeoutMs: number }): Promise<ProbeResult>` |
   | No shell | The command and args are passed as a fixed array. An adapter must never build or evaluate a shell string. |
   | Never throws | A missing binary, a non-zero exit, a timeout, and a permission denial all resolve to a `ProbeResult` with `ok: false` and a discriminated `reason`. Rejection is reserved for adapter bugs. |
   | Honours the timeout | The promise settles within `timeoutMs`; the child process is killed, not merely abandoned. |
@@ -242,10 +251,17 @@ type StackPlan = {
 };
 ```
 
-Note that `StackBackend` and `StackModality` are introduced by C-390 inside
-`local-stack`. This contract **moves them into `packages/shared/types/`** so
-the planning core can reference them without depending on the stack project,
-and updates C-390's consumers to import from there.
+Note that `StackBackend` and `StackModality` are specified in C-390's design
+reference and their value sets are instantiated in `apps/backend/local-stack/.env.example`
+(`COMPOSE_FILE` backends and `COMPOSE_PROFILES` modalities), but C-390 shipped **no
+TS types** for them — its consumers read `.env`/compose directly. This contract
+**introduces the TS types in `packages/shared/types/`** (derived from the
+`.env.example` value sets: backend `'cpu' | 'cuda' | 'rocm' | 'vulkan' | 'intel' |
+'musa' | 'metal'`, modality `'text' | 'image' | 'voice' | 'stt' | 'web' | 'ollama'
+| 'comfyui'` — `'metal'` kept from the C-390 design for the native macOS plan, and
+`'intel' | 'musa'` per the shipped override files) so the planning core can
+reference them without depending on the stack project, and updates C-390's
+consumers to import from there.
 
 ## Quality Requirements
 
@@ -270,7 +286,7 @@ and updates C-390's consumers to import from there.
 - **In Scope:**
   - New `packages/shared/local-ai` package holding the portable planning core, with schemas and types placed per repo convention.
   - The `ProbeExecutor` interface and its documented contract, plus two adapters: Bun/CLI and fixture-replay.
-  - Relocating `StackBackend` / `StackModality` out of `local-stack` into `packages/shared/types/`.
+  - Introducing `StackBackend` / `StackModality` types in `packages/shared/types/` (per C-390's design reference and `.env.example` value sets) and repointing any C-390 consumers.
   - Hardware detection across Linux, macOS, and Windows/WSL2.
   - Pure recommendation function mapping profile + modalities → backend + models.
   - Interactive wizard with full non-interactive flag coverage.
@@ -313,7 +329,7 @@ functional without it.
 **Then** every case resolves (never rejects) with the correct `reason`, a hanging process settles within `timeoutMs` and is killed rather than abandoned, and `stdout` is returned byte-faithfully with no trimming or colour stripping.
 
 ### AC-1: Detection degrades to CPU without error
-**Given** a machine with no GPU tooling on `PATH` (no `nvidia-smi`, `rocm-smi`, or `vulkaninfo`)
+**Given** a Linux (or native Windows) machine with no GPU tooling on `PATH` (no `nvidia-smi`, `rocm-smi`, or `vulkaninfo`) — on macOS the Apple probe always succeeds and is covered by AC-4
 **When** `stack init --yes` runs
 **Then** it completes with exit status 0, reports `gpu.vendor === 'none'` and `backend === 'cpu'`, and writes a valid `.env`.
 
@@ -323,14 +339,14 @@ functional without it.
 **Then** `backend === 'cuda'` and `cudaMajor === 12`; **and** with a CUDA 13 driver, `cudaMajor === 13` — so C-390 selects `server-cuda` versus `server-cuda13` correctly.
 
 ### AC-3: Tier selection respects usable VRAM, not total
-**Given** stubbed profiles at 4, 8, 12, and 24 GB VRAM
+**Given** stubbed profiles at 4, 8, 12, and 24 GB VRAM and the headroom rule from the Design Reference (usable = 70% of reported VRAM for dedicated GPUs)
 **When** the text model is recommended for each
-**Then** each selection's file size leaves the defined headroom margin, and no selection assumes the full reported VRAM is free.
+**Then** each selection's file size is ≤ 70% of reported VRAM, the selection is the largest manifest tier whose entry fits within usable VRAM, and no selection assumes the full reported VRAM is free — 4 GB → `cpu` tier (Qwen 1.5B), 8 GB → `8gb` tier (Qwen 7B), 12 GB → `8gb` tier unless a 16 GB-tier entry fits within 8.4 GB usable (top-tier fallback warns), 24 GB → `16gb` tier.
 
 ### AC-4: Unified memory is not treated as VRAM
 **Given** an Apple Silicon profile with 16 GB unified memory
 **When** the plan is computed
-**Then** the recommendation is based on a documented fraction of total memory rather than all 16 GB, and `nativeEngines === true`.
+**Then** the recommendation is based on the headroom rule (usable = 50% of total memory, i.e. 8 GB usable for a 16 GB machine) rather than all 16 GB, and `nativeEngines === true`.
 
 ### AC-5: Modality selection controls the download set
 **Given** `--modalities text`
@@ -368,9 +384,14 @@ functional without it.
 **Then** `COMPOSE_FILE` uses `;` as its separator, and `:` on Linux and macOS.
 
 ### AC-12: Missing GPU passthrough is caught, not assumed
-**Given** an NVIDIA GPU present but the NVIDIA Container Toolkit absent
+**Given** an NVIDIA GPU present but the NVIDIA Container Toolkit absent, and no explicit `--backend` flag
 **When** the plan is computed
-**Then** `gpuPassthroughReady === false`, a warning naming the missing toolkit and its install URL appears in the plan, and the backend falls back to `cpu` rather than generating a configuration that fails at `up`.
+**Then** `gpuPassthroughReady === false`, a warning naming the missing toolkit and its install URL appears in the plan, and the backend falls back to `cpu` rather than generating a configuration that fails at `up`. An explicit `--backend cuda` still obeys (Edge Cases: user overrides) with a loud warning.
+
+### AC-13: `--json` output is complete and stable
+**Given** `stack init --yes --json` on a machine with known hardware
+**When** the command completes
+**Then** stdout is a single JSON document containing the full `HardwareProfile` and `StackPlan` (schema-validated against the TypeBox schemas in `packages/shared/schemas/`), suitable for CI assertions and bug reports.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -387,12 +408,13 @@ functional without it.
 | AC-7 | Unit | `stack/init.test.ts` — output-order snapshot | N/A | Filled during verification |
 | AC-8 | Integration | `scripts/check.sh` — non-TTY invocation | N/A | Filled during verification |
 | AC-9 | Unit | `stack/init.test.ts` — byte-identical assertion | N/A | Filled during verification |
-| AC-10 | Integration | `scripts/check.sh` — generated-`.env` boot | N/A | Filled during verification |
+| AC-10 | Integration | `scripts/check.sh` — generated-`.env` boot | CI: `stack init --yes` (CPU) → `docker compose config` + boot | Filled during verification |
 | AC-11 | Unit | `stack/init.test.ts` — both platforms | N/A | Filled during verification |
 | AC-12 | Unit | `stack/detect.test.ts` — stubbed `docker info` | N/A | Filled during verification |
+| AC-13 | Unit | `stack/init.test.ts` — `--json` schema validation | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun moon run local-stack:test`, `bun moon run local-stack:typecheck`
+- Moon Task: `bun moon run local-ai:test`, `bun moon run local-ai:typecheck`, `bun moon run local-stack:test`, `bun moon run local-stack:typecheck`
 - Integration: CI runs `stack init --yes` on the Linux runner (no GPU) and boots the resulting configuration with the smallest text model.
 - E2E / Visual:
     - **Functional**: N/A — CLI only, covered by unit and integration tests.
@@ -400,6 +422,7 @@ functional without it.
 
 **Watch Points**:
 - `nvidia-smi` exists inside WSL2 but reports differently from native Linux, and GPU passthrough there depends on the Windows-side driver. Test WSL2 explicitly rather than assuming Linux behaviour.
+- `wmic` is deprecated on Windows 11. The RAM probe must prefer PowerShell CIM (`Get-CimInstance Win32_ComputerSystem`) and fall back to `wmic` only on older hosts — a probe that fails must degrade to `ramMb: 0` + warning, never crash.
 - `vulkaninfo` can hang without a display. Enforce the per-probe timeout and never let it block.
 - `nvidia-smi` reports **total** VRAM, not free. A machine mid-game or running another model has far less available. The headroom margin is what protects against this.
 - Multi-GPU machines report multiple rows. Pick the largest single device — the engines default to one device, and summing VRAM across cards would badly over-recommend.
@@ -410,11 +433,11 @@ functional without it.
 
 ## Implementation Sequence
 
-1. **Phase 0 (Package)**: scaffold `packages/shared/local-ai`; define `ProbeExecutor` and its shared contract test suite; relocate `StackBackend` / `StackModality` into `packages/shared/types/` and repoint C-390's consumers.
+1. **Phase 0 (Package)**: scaffold `packages/shared/local-ai`; define `ProbeExecutor` and its shared contract test suite; introduce `StackBackend` / `StackModality` types in `packages/shared/types/` (from C-390's design reference / `.env.example`) and repoint any C-390 consumers.
 2. **Phase 1 (Detection)**: probe modules in the core, written only against `ProbeExecutor`; the Bun/CLI and fixture-replay adapters; `HardwareProfile`; tests against fixtures captured from real machines.
 3. **Phase 2 (Recommendation)**: pure `(profile, modalities, manifest) → StackPlan` with the tier table and headroom rules; table-driven tests. Still no I/O in the core.
 4. **Phase 3 (Wizard)**: prompts, flags, plan rendering, disk check, atomic `.env` write, re-run diff — all in `local-stack`, consuming the core.
-5. **Phase 4 (Integration)**: wire `bun run stack init` into `package.json` and `moon.yml`; rewrite the README quick-start to two commands.
+5. **Phase 4 (Integration)**: wire the CLI entry into `apps/backend/local-stack/package.json` (script `init`) and `apps/backend/local-stack/moon.yml` (task `init`, `runInCI: false`), and add a root `package.json` script `"stack": "bun moon run local-stack:init --"` so `bun run stack init` resolves from the repo root — the form the README quick-start promises; rewrite the README quick-start to two commands.
 6. **Phase 5 (Validation)**: `bun moon run local-ai:test`, `bun moon run local-stack:test`, `:typecheck`, `:lint`, plus the CI generated-`.env` boot.
 
 ## Edge Cases & Gotchas
@@ -427,13 +450,13 @@ functional without it.
 - **Rootless podman** maps container uids into a subuid range, which changes model-volume permissions. Detect podman and note it in the plan.
 - **`init` run inside a container** (some users will try): detection sees the container's view, not the host's. Detect and refuse.
 
-## Open Questions
+## Resolved Decisions
 
-Must be resolved before status becomes `approved`:
+Formerly open questions — resolved at review (2026-08-14) with the proposals below; real-hardware calibration of the headroom margins is tracked as a follow-up, not a blocker:
 
-- What headroom margin? Proposed: recommend a model whose file size is at most 70% of reported VRAM for dedicated GPUs, and at most 50% of total memory for unified-memory systems. Both need validation on real hardware before they are baked into the tier table.
-- Should `init` offer to run the fetcher immediately on confirmation, or always require a second command? Chaining is friendlier; separating keeps a multi-gigabyte download from being an accidental side effect of a configuration command. Proposed: separate by default, `--fetch` to chain.
-- Should the tier table live in `models.manifest.json` (data, editable without code changes) or in the recommendation module (code, type-checked)? Proposed: thresholds in the manifest, matching logic in code.
+- **Headroom margin: 70% of reported VRAM for dedicated GPUs, 50% of total memory for unified-memory systems.** Adopted as tuneable constants in `@aikami/local-ai`'s tier table (see Design Reference). The percentage is an engineering default that keeps the recommendation honest against a busy desktop; AC-3/AC-4 assert the invariant so a future recalibration is a one-line constant change plus a test update. Real-hardware validation (multiple GPU generations, busy-desktop VRAM deltas) is a documented follow-up outside this contract.
+- **Fetcher chaining: separate by default, `--fetch` to chain.** `init` never downloads; a multi-gigabyte download must never be an accidental side effect of a configuration command. The `--fetch` flag is optional and off by default.
+- **Tier table location: thresholds in code, vocabulary in the manifest.** `TIER_TABLE` (min usable bytes → tier) lives in `@aikami/local-ai` as a typed, tested constant; C-390's manifest keeps its per-entry `tier` labels and is not edited by this contract (Out of Scope: "the manifest is C-390's").
 
 ## Amendments
 
