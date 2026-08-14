@@ -60,6 +60,11 @@ services:
       AIKAMI_ACCEPT_LICENSES: "${AIKAMI_ACCEPT_LICENSES:-}"
       TEXT_MODEL: "${TEXT_MODEL:-}"
       IMAGE_MODEL: "${IMAGE_MODEL:-}"
+      # C-393: STT entries are tier-selected — only the chosen streaming +
+      # batch models (plus the Silero VAD model) are fetched, not every
+      # entry of the modality.
+      STT_STREAM_MODEL: "${STT_STREAM_MODEL:-}"
+      STT_BATCH_MODEL: "${STT_BATCH_MODEL:-}"
       # Named-volume path: hand the populated tree to the engine uid (voice
       # runs as 1000) so non-root engines can write /models. The
       # compose.models-path.yaml override sets this to 0 to keep the user's
@@ -142,7 +147,12 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ── Voice engine — sherpa-onnx (TTS /v1/audio/speech, optional STT ws) ─
+  # ── Voice engine — sherpa-onnx (TTS /v1/audio/speech, optional STT) ───
+  # C-393: with the `stt` profile, the same container hosts the streaming
+  # websocket + capabilities + health + batch proxy (stt_server.py) on
+  # $STT_PORT and the whisper.cpp batch engine on the internal $WHISPER_PORT
+  # (never published). STT is opt-in: ENABLE_STT defaults false (AC-7) and
+  # the `stt` profile is not part of the shipped COMPOSE_PROFILES.
   voice:
     profiles: ["voice", "stt"]
     build:
@@ -150,16 +160,29 @@ services:
       dockerfile: Dockerfile.sherpa
     ports:
       - "127.0.0.1:${TTS_PORT:-8089}:8089"
-      - "127.0.0.1:${STT_PORT:-8087}:8087"
     environment:
       TTS_PORT: "8089"
       STT_PORT: "8087"
+      WHISPER_PORT: "8091"
       ENABLE_STT: "${ENABLE_STT:-false}"
       # The voice container reads its models from the shared volume (the
       # fetcher pre-populates it); the entrypoint skips its own download when
       # the model directory is already present.
       KOKORO_DIR: "/models/tts/kokoro-multi-lang-v1_0"
-      STT_DIR: "/models/stt/sherpa-onnx-moonshine-tiny-en-int8"
+      # C-393 engine + tier selection (manifest targetPaths under /models).
+      STT_STREAM_ENGINE: "${STT_STREAM_ENGINE:-moonshine}"
+      STT_BATCH_ENGINE: "${STT_BATCH_ENGINE:-whisper-cpp}"
+      STT_STREAM_MODEL: "${STT_STREAM_MODEL:-stt/sherpa-onnx-moonshine-tiny-en-int8}"
+      STT_BATCH_MODEL: "${STT_BATCH_MODEL:-stt/whisper-tiny/ggml-tiny.bin}"
+      STT_VAD_MODEL: "${STT_VAD_MODEL:-stt/silero_vad.onnx}"
+      STT_ALLOWED_ORIGINS: "${STT_ALLOWED_ORIGINS:-http://localhost:5274,http://127.0.0.1:5274,tauri://localhost,http://tauri.localhost,https://tauri.localhost}"
+      # The container must accept WS from the compose network; the host
+      # publish binding above is loopback-only (AC-11).
+      STT_BIND_ADDRESS: "0.0.0.0"
+      STT_VAD_THRESHOLD: "${STT_VAD_THRESHOLD:-0.5}"
+      STT_VAD_MIN_SPEECH_MS: "${STT_VAD_MIN_SPEECH_MS:-250}"
+      STT_VAD_MIN_SILENCE_MS: "${STT_VAD_MIN_SILENCE_MS:-500}"
+      STT_VAD_MAX_SPEECH_MS: "${STT_VAD_MAX_SPEECH_MS:-30000}"
     volumes:
       - *model-volume
     depends_on:
@@ -172,6 +195,9 @@ services:
         - -c
         - |
           curl -fsS http://127.0.0.1:8089/health >/dev/null 2>&1 || exit 1
+          if [ "${ENABLE_STT:-false}" = "true" ]; then
+            curl -fsS http://127.0.0.1:8087/health >/dev/null 2>&1 || exit 1
+          fi
       interval: 10s
       timeout: 5s
       retries: 12

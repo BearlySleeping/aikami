@@ -57,6 +57,7 @@ export * from './lib/local_ai/hardware_profile.ts';
 export * from './lib/local_ai/model_manifest.ts';
 export * from './lib/local_ai/stack_backend.ts';
 export * from './lib/local_ai/stack_plan.ts';
+export * from './lib/local_ai/stt.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/media/audio_track_catalog.ts';
 export * from './lib/media/image_engine.ts';

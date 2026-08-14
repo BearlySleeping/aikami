@@ -3,18 +3,25 @@
 # Entrypoint for the sherpa-onnx voice container.
 #
 # Starts the Kokoro TTS OpenAI-compatible server (/v1/audio/speech) on
-# $TTS_PORT (8089). If ENABLE_STT=true, additionally starts an offline STT
-# websocket server on $STT_PORT (8087).
+# $TTS_PORT (8089). If ENABLE_STT=true, additionally starts the C-393 STT
+# service on $STT_PORT (8087):
+#   - stt_server.py  — WS /v1/stream streaming (Moonshine + Silero VAD),
+#     GET /v1/capabilities, GET /health, and the OpenAI-compatible batch
+#     proxy POST /v1/audio/transcriptions
+#   - whisper-server — whisper.cpp batch engine on the INTERNAL $WHISPER_PORT
+#     (8091, never published) that the proxy forwards to
 #
 # Models live under /models (the shared aikami-models volume or the MODELS_PATH
 # bind mount, populated by the model fetcher):
-#   /models/tts/kokoro-multi-lang-v1_0  (TTS)
-#   /models/stt/sherpa-onnx-moonshine-tiny-en-int8  (STT)
+#   /models/tts/kokoro-multi-lang-v1_0                      (TTS)
+#   /models/stt/<STT_STREAM_MODEL>  Moonshine streaming     (STT)
+#   /models/stt/<STT_BATCH_MODEL>   whisper.cpp batch model (STT)
+#   /models/stt/<STT_VAD_MODEL>     Silero VAD              (STT)
 #
-# The fetcher pre-populates the volume with checksum-verified downloads; the
-# auto-download branch below remains as a fallback for the standalone
-# container and the native path, and is skipped when the model directory is
-# already present.
+# STT models are fetched ONLY by the C-390 model fetcher (AC-11) — the
+# auto-download branch below is TTS-only. A missing STT model is not fatal:
+# stt_server.py reports unhealthy on /health naming the missing file (AC-10)
+# and streaming sessions get error model-not-loaded.
 set -euo pipefail
 
 MODELS_DIR="/models"
@@ -24,7 +31,19 @@ TTS_MODEL="${TTS_MODEL:-$KOKORO_DIR/model.onnx}"
 TTS_VOICES="${TTS_VOICES:-$KOKORO_DIR/voices.bin}"
 TTS_PORT="${TTS_PORT:-8089}"
 STT_PORT="${STT_PORT:-8087}"
+WHISPER_PORT="${WHISPER_PORT:-8091}"
 ENABLE_STT="${ENABLE_STT:-false}"
+
+# C-393 engine/model selection — values are manifest targetPaths (relative
+# to the models volume). STT_BATCH_MODEL is only used when STT_BATCH_ENGINE
+# is whisper-cpp (the seam for a future licensed provider).
+STT_STREAM_ENGINE="${STT_STREAM_ENGINE:-moonshine}"
+STT_BATCH_ENGINE="${STT_BATCH_ENGINE:-whisper-cpp}"
+STT_STREAM_MODEL="${STT_STREAM_MODEL:-stt/sherpa-onnx-moonshine-tiny-en-int8}"
+STT_BATCH_MODEL="${STT_BATCH_MODEL:-stt/whisper-tiny/ggml-tiny.bin}"
+STT_VAD_MODEL="${STT_VAD_MODEL:-stt/silero_vad.onnx}"
+
+export STT_STREAM_ENGINE STT_BATCH_ENGINE STT_STREAM_MODEL STT_BATCH_MODEL STT_VAD_MODEL
 
 # The fetcher pre-populates the shared volume with checksum-verified
 # downloads (and, on the named-volume path, chowns it to the engine uid); the
@@ -54,25 +73,31 @@ fi
 echo "[voice] Starting Kokoro TTS server on port $TTS_PORT ..."
 python3 /tts_server.py "$TTS_PORT" &
 
-# ── STT (optional): Moonshine offline websocket server ────────────────────
+# ── STT (optional): C-393 streaming + batch servers ─────────────────────
 if [ "$ENABLE_STT" = "true" ]; then
-    STT_DIR="$MODELS_DIR/stt/sherpa-onnx-moonshine-tiny-en-int8"
-    if [ ! -d "$STT_DIR" ]; then
-        echo "[voice] Moonshine STT model missing — downloading ..."
-        curl -fSL -o /tmp/moonshine.tar.bz2 \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-tiny-en-int8.tar.bz2"
-        tar xjf /tmp/moonshine.tar.bz2 -C "$MODELS_DIR/stt"
-        rm -f /tmp/moonshine.tar.bz2
+    echo "[voice] STT enabled: stream=$STT_STREAM_ENGINE ($STT_STREAM_MODEL), batch=$STT_BATCH_ENGINE ($STT_BATCH_MODEL)"
+
+    # Batch engine: whisper.cpp whisper-server on the internal port. Not
+    # published to the host; stt_server.py proxies /v1/audio/transcriptions
+    # to it. Missing binary (native host without whisper.cpp) is tolerated —
+    # capabilities report batch unavailable.
+    if [ "$STT_BATCH_ENGINE" = "whisper-cpp" ] && command -v whisper-server >/dev/null 2>&1; then
+        echo "[voice] Starting whisper.cpp batch server on 127.0.0.1:$WHISPER_PORT ..."
+        # Print flags default off in whisper-server, so transcript text never
+        # reaches any log (AC-8); the log file carries model-load lines only.
+        whisper-server \
+            --host 127.0.0.1 \
+            --port "$WHISPER_PORT" \
+            --model "/models/$STT_BATCH_MODEL" \
+            --threads "${STT_WHISPER_THREADS:-4}" \
+            --no-gpu \
+            > /tmp/whisper-server.log 2>&1 &
+    elif [ "$STT_BATCH_ENGINE" = "whisper-cpp" ]; then
+        echo "[voice] whisper-server binary not found — batch endpoint will report unavailable"
     fi
 
-    echo "[voice] Starting Moonshine STT websocket server on port $STT_PORT ..."
-    sherpa-onnx-offline-websocket-server \
-        --port="$STT_PORT" \
-        --moonshine-preprocessor="$STT_DIR/preprocess.onnx" \
-        --moonshine-encoder="$STT_DIR/encode.int8.onnx" \
-        --moonshine-uncached-decoder="$STT_DIR/uncached_decode.int8.onnx" \
-        --moonshine-cached-decoder="$STT_DIR/cached_decode.int8.onnx" \
-        --tokens="$STT_DIR/tokens.txt" &
+    echo "[voice] Starting STT streaming server on port $STT_PORT ..."
+    python3 /stt_server.py "$STT_PORT" &
 fi
 
 # Keep the container alive and surface logs
