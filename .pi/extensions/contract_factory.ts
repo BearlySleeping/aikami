@@ -26,6 +26,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from '../../scripts/src/lib/herdr/worktree';
+import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -269,559 +270,510 @@ export default function (pi: ExtensionAPI) {
   // Tool 1: contract_scan_backlog                           │
   // ─────────────────────────────────────────────────────────┘
 
-  pi.registerTool({
-    name: 'contract_scan_backlog',
-    label: 'Contract: Scan Backlog',
-    description:
-      'Scan docs/TODO.md for available backlog items. Shows stable IDs (C-312), titles, priorities, and whether a contract already exists.',
-    promptSnippet: 'Use contract_scan_backlog to see what TODO items need contracts.',
-    promptGuidelines: [
-      'Use this to discover pending items before generating contracts.',
-      'Items with existing contracts are marked with file paths.',
-      'Use the stable ID from this output with contract_generate.',
+  registerNamespace(pi, {
+    name: 'contract',
+    label: 'Contract Factory',
+    description: 'Create contracts from the backlog and manage their isolated Git worktrees.',
+    actions: [
+      defineAction({
+        action: 'backlog',
+        summary: 'List available docs/TODO.md items with their stable IDs',
+
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+          const { items, errors } = _parseBacklog(ctx.cwd);
+
+          if (items.length === 0) {
+            const msg =
+              errors.length > 0
+                ? `Backlog parse errors:\n${errors.map((e) => `- ${e}`).join('\n')}`
+                : 'No items found in docs/TODO.md.';
+            return { content: [{ type: 'text', text: msg }], details: {} };
+          }
+
+          const pending = items.filter((i) => !i.alreadyGenerated && i.status !== 'completed');
+          const existing = items.filter((i) => i.alreadyGenerated);
+
+          const lines = [`**docs/TODO.md Backlog Scan** (${items.length} items)\n`];
+
+          if (pending.length > 0) {
+            lines.push(`### Pending (${pending.length})\n`);
+            for (const item of pending) {
+              lines.push(`🔴 \`${item.id}\` — **${item.title}** (${item.priority}, ${item.phase})`);
+            }
+          }
+
+          const PromotionIcons: Record<string, string> = {
+            sandbox: '🧪',
+            integrated: '🔗',
+            release_verified: '🚀',
+          };
+
+          if (existing.length > 0) {
+            lines.push(`\n### Already Generated (${existing.length})\n`);
+            for (const item of existing) {
+              const promoIcon = item.promotion ? (PromotionIcons[item.promotion] ?? '') : '';
+              const promoStr = item.promotion ? ` [${promoIcon} ${item.promotion}]` : ' [—]';
+              const archivedTag = item.isArchived ? ' 📦 archived' : '';
+              lines.push(`✅ \`${item.id}\` — ${item.title}${promoStr}${archivedTag}`);
+            }
+          }
+
+          lines.push(`\nGenerate: \`contract_generate\` with the ID (e.g. \`C-312\`).`);
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { pendingCount: pending.length, existingCount: existing.length },
+          };
+        },
+      }),
+      defineAction({
+        action: 'generate',
+        summary: 'Generate a draft contract shell from a TODO item',
+
+        parameters: Type.Object({
+          featureCode: Type.String({
+            description:
+              'Stable backlog ID from docs/TODO.md (e.g. "C-312"). Use contract_scan_backlog to discover available IDs.',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+          const cwd = ctx.cwd;
+          const { items } = _parseBacklog(cwd);
+          const item = items.find((i) => i.id === params.featureCode);
+
+          if (!item) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `❌ ID \`${params.featureCode}\` not found in docs/TODO.md.`,
+                    '',
+                    `Run \`contract_scan_backlog\` to see available IDs.`,
+                    `If this is a raw request (not from TODO.md), use the /contract-create prompt instead.`,
+                  ].join('\n'),
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          if (item.alreadyGenerated && item.existingContractPath) {
+            if (item.isArchived) {
+              // Contract exists in archived/ — warn but proceed to generate new v2 draft
+              console.warn(
+                `📦 Contract ${item.id} exists in archived/. Generating a new v2 draft.`,
+                `Archived: ${item.existingContractPath}`,
+              );
+              // Fall through to generate a new active contract
+            } else {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: [
+                      `⚠️ Contract for \`${item.id}\` already exists.`,
+                      `File: \`${item.existingContractPath}\``,
+                      '',
+                      'Delete it first if you want to regenerate from scratch.',
+                      'Or edit the existing contract directly.',
+                    ].join('\n'),
+                  },
+                ],
+                details: { alreadyExists: true, filePath: item.existingContractPath },
+              };
+            }
+          }
+
+          // Load the canonical template
+          const template = _loadTemplate(cwd);
+
+          // Extract clean single-line values from the backlog item.
+          // Multi-line fields from TODO.md are truncated to first line.
+          const firstLine = (text: string): string => (text ?? '').split('\n')[0]?.trim() ?? '';
+
+          const priority = item.priority || 'P2';
+          const priorityJustification = item.phase || '';
+          const rawTarget = firstLine(item.target);
+          const rawOutcome = firstLine(item.outcome);
+          const rawDeps = item.dependencies || '—';
+
+          // Step 1: Only substitute {FEATURE_CODE} and {TITLE} globally.
+          // These appear in the H1 heading — no template hints use these exact tokens.
+          let filled = template
+            .replace(/\{FEATURE_CODE\}/g, item.id)
+            .replace(/\{TITLE\}/g, item.title)
+            .replace(/\{source\}/g, 'todo')
+            .replace(/\{created_at\}/g, new Date().toISOString());
+
+          // Step 2: Rewrite Metadata table rows using structured markdown matching.
+          // Replaces the ENTIRE row (including display hints like P{0|1|2|3})
+          // with clean values from the backlog item. Avoids corrupting template
+          // hint syntax that happens to use the same brace notation.
+          const replaceRow = (label: string, value: string): void => {
+            // Match the entire table row: pipe, bold label, pipe, cell content, ending pipe.
+            // Use [^\n]* instead of [^|]* to handle escaped pipes inside the cell
+            // (e.g. P{0\|1\|2\|3} in the template priority hint).
+            filled = filled.replace(
+              new RegExp(`\\|\\s*\\*\\*${label}\\*\\*\\s*\\|[^\n]*\\|`),
+              `| **${label}** | ${value} |`,
+            );
+          };
+
+          replaceRow('Source', `TODO.md — ${item.phase}`);
+          replaceRow('Target', `${rawTarget || 'TBD'} — TBD`);
+          replaceRow('Priority', `${priority} — ${priorityJustification}`);
+          replaceRow('Dependencies', rawDeps);
+          replaceRow('Status', 'draft');
+          replaceRow('Promotion', '—');
+          replaceRow('Contract version', '2.0.0');
+          replaceRow('Docs Impact', 'TBD');
+
+          // Step 3: Fill Overview section with the item's outcome.
+          filled = filled.replace(
+            /\{2-4 sentences describing what this task is[^}]*\}/,
+            rawOutcome || item.title,
+          );
+
+          // Step 4: Fill Problem & Baseline evidence marker with a brief placeholder.
+          filled = filled.replace(
+            /\{what is broken or missing today[^}]*\}/,
+            `${item.title} — see TODO.md for details.`,
+          );
+
+          // All other {placeholders} remain — the linter catches them, the
+          // Contract Writer fills them during /contract-create.
+
+          // Build file path
+          const fileName = _buildFileName(item.id, item.title);
+          const contractsDir = resolve(cwd, CONTRACTS_DIR);
+
+          if (!existsSync(contractsDir)) {
+            mkdirSync(contractsDir, { recursive: true });
+          }
+
+          const filePath = resolve(contractsDir, fileName);
+          writeFileSync(filePath, filled);
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ Draft contract generated: \`${item.id}\``,
+                  `**${item.title}**`,
+                  `File: \`docs/contracts/${fileName}\``,
+                  `Priority: ${priority} | Status: draft | Template: v2.0.0`,
+                  item.isArchived
+                    ? `\n📦 Old v1 contract is archived at \`${item.existingContractPath}\` — this is a fresh v2 draft.`
+                    : '',
+                  '',
+                  `Next steps:`,
+                  `1. Use \`/contract-create\` to complete the draft with codebase inspection`,
+                  `2. Use \`/contract-critique\` for adversarial review`,
+                  `3. After approval, use \`/contract-implement\` to implement`,
+                ].join('\n'),
+              },
+            ],
+            details: {
+              featureCode: item.id,
+              fileName,
+              priority,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'workspace_create',
+        summary: 'Provision an isolated worktree for a contract task',
+
+        parameters: Type.Object({
+          taskId: Type.String({
+            description:
+              'Unique task or contract ID (e.g. "C-312" or "contract-writer-xyz"). ' +
+              'Used to generate a sanitized workspace directory name.',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+          const cwd = ctx.cwd;
+          const sanitized = sanitizeBranchName(params.taskId);
+
+          // Check for an existing herdr-native worktree for this task.
+          const existing = (await listWorktrees(cwd)).find((w) => w.branch === `task/${sanitized}`);
+          if (existing) {
+            // Existing (possibly incomplete) worktree — retry bootstrap so a
+            // previous failure is not silently reported as ready.
+            let installed = false;
+            try {
+              const r = await bootstrapWorktree({ checkoutPath: existing.path, repoRoot: cwd });
+              installed = r.installed;
+            } catch {
+              installed = false;
+            }
+            const existingId = (() => {
+              try {
+                return getGitHeadCommit(existing.path);
+              } catch {
+                return 'unknown';
+              }
+            })();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `⚠️ Worktree already exists: \`${existing.path}\``,
+                    `Branch: \`${existing.branch}\``,
+                    `HEAD: \`${existingId}\``,
+                    installed ? '' : '⚠️  bootstrap incomplete — dependencies may be missing.',
+                    '',
+                    'Use this existing worktree or run `bun herdr:task rm <id>` if you need a fresh one.',
+                  ].join('\n'),
+                },
+              ],
+              details: {
+                path: existing.path,
+                branchName: existing.branch,
+                headCommit: existingId,
+                alreadyExists: true,
+                bootstrapped: installed,
+              },
+            };
+          }
+
+          // Create the herdr-native worktree (checkout + workspace in one call).
+          const w = await createWorktree({
+            slug: params.taskId,
+            repoRoot: cwd,
+          });
+          // If bootstrap fails, remove the newly created worktree so a retry
+          // starts clean instead of finding a half-provisioned checkout.
+          let installed = false;
+          try {
+            const r = await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
+            installed = r.installed;
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            await removeWorktree({
+              workspaceId: w.workspaceId,
+              checkoutPath: w.checkoutPath,
+              branch: w.branch,
+              repoRoot: cwd,
+            }).catch(() => {});
+            throw new Error(`Worktree bootstrap failed (${message}) — created worktree removed.`);
+          }
+          const headCommit = getGitHeadCommit(w.checkoutPath);
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ herdr worktree created: \`${w.checkoutPath}\``,
+                  `Branch: \`${w.branch}\``,
+                  `Workspace: \`${w.workspaceId}\` (label aikami-task-${sanitized})`,
+                  `HEAD: \`${headCommit}\``,
+                  installed ? '' : '⚠️  bun install failed — run `bun install` manually.',
+                  '',
+                  // --no-focus is used at creation: the checkout is NOT the
+                  // agent's active cwd. Use it explicitly for all file/command ops.
+                  'Use `w.checkoutPath` as the working directory for subsequent file and command operations.',
+                  'Use `contract_workspace_checkpoint` to save progress snapshots.',
+                  'Use `contract_workspace_complete` when the task is done.',
+                  'Ship a PR with `bun herdr:task pr <id>` (or the task_pr tool).',
+                ].join('\n'),
+              },
+            ],
+            details: {
+              path: w.checkoutPath,
+              branchName: w.branch,
+              headCommit,
+              workspaceId: w.workspaceId,
+              alreadyExists: false,
+              bootstrapped: installed,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'workspace_checkpoint',
+        summary: 'Commit current worktree state with a message',
+
+        parameters: Type.Object({
+          workspacePath: Type.String({
+            description:
+              'Absolute path to the Git Worktree directory (returned by contract_workspace_create).',
+          }),
+          message: Type.String({
+            description:
+              'Human-readable milestone description (e.g. "Agent milestone: Added auth service").',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const headCommit = (() => {
+            try {
+              return runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
+                cwd: params.workspacePath,
+              });
+            } catch {
+              // No changes to commit — return current HEAD.
+              return getGitHeadCommit(params.workspacePath);
+            }
+          })();
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ Checkpoint saved.`,
+                  `HEAD: \`${headCommit}\``,
+                  `Message: "${params.message}"`,
+                ].join('\n'),
+              },
+            ],
+            details: { headCommit, message: params.message },
+          };
+        },
+      }),
+      defineAction({
+        action: 'workspace_complete',
+        summary: 'Finalize a worktree and return its branch name',
+
+        parameters: Type.Object({
+          workspacePath: Type.String({
+            description: 'Absolute path to the Git Worktree directory.',
+          }),
+          message: Type.String({
+            description:
+              'Final commit message (e.g. "Feat: Completed contract pipeline task C-312").',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+          let headCommit: string;
+          try {
+            headCommit = runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
+              cwd: params.workspacePath,
+            });
+          } catch {
+            // No changes to commit — use current HEAD.
+            headCommit = getGitHeadCommit(params.workspacePath);
+          }
+
+          let branchName = 'unknown';
+          try {
+            branchName = runGit('rev-parse --abbrev-ref HEAD', {
+              cwd: params.workspacePath,
+            });
+          } catch {
+            // Non-fatal.
+          }
+
+          const rootDir = ctx.cwd;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ Worktree finalized.`,
+                  `Branch: \`${branchName}\``,
+                  `HEAD: \`${headCommit}\``,
+                  `Message: "${params.message}"`,
+                  '',
+                  'To push for PR creation from the worktree:',
+                  `  git push -u origin ${branchName}`,
+                  '',
+                  `Root workspace: \`${rootDir}\``,
+                ].join('\n'),
+              },
+            ],
+            details: {
+              headCommit,
+              branchName,
+              workspacePath: params.workspacePath,
+              rootDir,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'workspace_list',
+        summary: 'List all active worktrees',
+
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+          const cwd = ctx.cwd;
+          const out = runGit('worktree list --porcelain', { cwd });
+          const entries = out
+            .split('\n')
+            .filter((l) => l.startsWith('worktree '))
+            .map((l) => l.slice('worktree '.length).trim())
+            .filter((p) => p !== cwd);
+          const items: {
+            path: string;
+            headCommit: string;
+            branchName: string;
+            description: string;
+          }[] = [];
+
+          for (const wsPath of entries) {
+            try {
+              const headCommit = getGitHeadCommit(wsPath);
+              const branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
+              const desc = runGit('log -1 --format=%s', { cwd: wsPath });
+              items.push({ path: wsPath, headCommit, branchName, description: desc.trim() });
+            } catch {
+              // Skip non-worktree directories
+            }
+          }
+
+          if (items.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No active Git Worktrees.' }],
+              details: { workspaces: [] },
+            };
+          }
+
+          const lines = [`**Active Worktrees** (${items.length})\n`];
+          for (const item of items) {
+            const shortPath = basename(item.path);
+            lines.push(
+              `🔹 \`${item.branchName}\` (${item.headCommit.slice(0, 12)}) — ${shortPath}`,
+            );
+            if (item.description) {
+              lines.push(`   ${item.description.slice(0, 80)}`);
+            }
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { workspaces: items },
+          };
+        },
+      }),
     ],
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      const { items, errors } = _parseBacklog(ctx.cwd);
-
-      if (items.length === 0) {
-        const msg =
-          errors.length > 0
-            ? `Backlog parse errors:\n${errors.map((e) => `- ${e}`).join('\n')}`
-            : 'No items found in docs/TODO.md.';
-        return { content: [{ type: 'text', text: msg }], details: {} };
-      }
-
-      const pending = items.filter((i) => !i.alreadyGenerated && i.status !== 'completed');
-      const existing = items.filter((i) => i.alreadyGenerated);
-
-      const lines = [`**docs/TODO.md Backlog Scan** (${items.length} items)\n`];
-
-      if (pending.length > 0) {
-        lines.push(`### Pending (${pending.length})\n`);
-        for (const item of pending) {
-          lines.push(`🔴 \`${item.id}\` — **${item.title}** (${item.priority}, ${item.phase})`);
-        }
-      }
-
-      const PromotionIcons: Record<string, string> = {
-        sandbox: '🧪',
-        integrated: '🔗',
-        release_verified: '🚀',
-      };
-
-      if (existing.length > 0) {
-        lines.push(`\n### Already Generated (${existing.length})\n`);
-        for (const item of existing) {
-          const promoIcon = item.promotion ? (PromotionIcons[item.promotion] ?? '') : '';
-          const promoStr = item.promotion ? ` [${promoIcon} ${item.promotion}]` : ' [—]';
-          const archivedTag = item.isArchived ? ' 📦 archived' : '';
-          lines.push(`✅ \`${item.id}\` — ${item.title}${promoStr}${archivedTag}`);
-        }
-      }
-
-      lines.push(`\nGenerate: \`contract_generate\` with the ID (e.g. \`C-312\`).`);
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { pendingCount: pending.length, existingCount: existing.length },
-      };
-    },
   });
 
   // ─────────────────────────────────────────────────────────┐
   // Tool 2: contract_generate                               │
   // ─────────────────────────────────────────────────────────┘
 
-  pi.registerTool({
-    name: 'contract_generate',
-    label: 'Contract: Generate from Backlog',
-    description:
-      'Generate a draft contract shell from a docs/TODO.md item. ' +
-      'Uses docs/contracts/TEMPLATE.md as the canonical template — never an embedded copy. ' +
-      'Fills known fields from the backlog; marks unknowns as TBD. ' +
-      'Use contract_scan_backlog first to discover available IDs.',
-    promptSnippet: 'Use contract_generate to create a draft contract from a TODO.md item.',
-    promptGuidelines: [
-      'Run contract_scan_backlog first to find the ID.',
-      'If the contract already exists, it will NOT be overwritten.',
-      'Generated contracts are DRAFT shells — the Contract Writer completes them.',
-      'Uses TEMPLATE.md v2.0.0 for the contract structure.',
-    ],
-    parameters: Type.Object({
-      featureCode: Type.String({
-        description:
-          'Stable backlog ID from docs/TODO.md (e.g. "C-312"). Use contract_scan_backlog to discover available IDs.',
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const cwd = ctx.cwd;
-      const { items } = _parseBacklog(cwd);
-      const item = items.find((i) => i.id === params.featureCode);
-
-      if (!item) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `❌ ID \`${params.featureCode}\` not found in docs/TODO.md.`,
-                '',
-                `Run \`contract_scan_backlog\` to see available IDs.`,
-                `If this is a raw request (not from TODO.md), use the /contract-create prompt instead.`,
-              ].join('\n'),
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      if (item.alreadyGenerated && item.existingContractPath) {
-        if (item.isArchived) {
-          // Contract exists in archived/ — warn but proceed to generate new v2 draft
-          console.warn(
-            `📦 Contract ${item.id} exists in archived/. Generating a new v2 draft.`,
-            `Archived: ${item.existingContractPath}`,
-          );
-          // Fall through to generate a new active contract
-        } else {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: [
-                  `⚠️ Contract for \`${item.id}\` already exists.`,
-                  `File: \`${item.existingContractPath}\``,
-                  '',
-                  'Delete it first if you want to regenerate from scratch.',
-                  'Or edit the existing contract directly.',
-                ].join('\n'),
-              },
-            ],
-            details: { alreadyExists: true, filePath: item.existingContractPath },
-          };
-        }
-      }
-
-      // Load the canonical template
-      const template = _loadTemplate(cwd);
-
-      // Extract clean single-line values from the backlog item.
-      // Multi-line fields from TODO.md are truncated to first line.
-      const firstLine = (text: string): string => (text ?? '').split('\n')[0]?.trim() ?? '';
-
-      const priority = item.priority || 'P2';
-      const priorityJustification = item.phase || '';
-      const rawTarget = firstLine(item.target);
-      const rawOutcome = firstLine(item.outcome);
-      const rawDeps = item.dependencies || '—';
-
-      // Step 1: Only substitute {FEATURE_CODE} and {TITLE} globally.
-      // These appear in the H1 heading — no template hints use these exact tokens.
-      let filled = template
-        .replace(/\{FEATURE_CODE\}/g, item.id)
-        .replace(/\{TITLE\}/g, item.title)
-        .replace(/\{source\}/g, 'todo')
-        .replace(/\{created_at\}/g, new Date().toISOString());
-
-      // Step 2: Rewrite Metadata table rows using structured markdown matching.
-      // Replaces the ENTIRE row (including display hints like P{0|1|2|3})
-      // with clean values from the backlog item. Avoids corrupting template
-      // hint syntax that happens to use the same brace notation.
-      const replaceRow = (label: string, value: string): void => {
-        // Match the entire table row: pipe, bold label, pipe, cell content, ending pipe.
-        // Use [^\n]* instead of [^|]* to handle escaped pipes inside the cell
-        // (e.g. P{0\|1\|2\|3} in the template priority hint).
-        filled = filled.replace(
-          new RegExp(`\\|\\s*\\*\\*${label}\\*\\*\\s*\\|[^\n]*\\|`),
-          `| **${label}** | ${value} |`,
-        );
-      };
-
-      replaceRow('Source', `TODO.md — ${item.phase}`);
-      replaceRow('Target', `${rawTarget || 'TBD'} — TBD`);
-      replaceRow('Priority', `${priority} — ${priorityJustification}`);
-      replaceRow('Dependencies', rawDeps);
-      replaceRow('Status', 'draft');
-      replaceRow('Promotion', '—');
-      replaceRow('Contract version', '2.0.0');
-      replaceRow('Docs Impact', 'TBD');
-
-      // Step 3: Fill Overview section with the item's outcome.
-      filled = filled.replace(
-        /\{2-4 sentences describing what this task is[^}]*\}/,
-        rawOutcome || item.title,
-      );
-
-      // Step 4: Fill Problem & Baseline evidence marker with a brief placeholder.
-      filled = filled.replace(
-        /\{what is broken or missing today[^}]*\}/,
-        `${item.title} — see TODO.md for details.`,
-      );
-
-      // All other {placeholders} remain — the linter catches them, the
-      // Contract Writer fills them during /contract-create.
-
-      // Build file path
-      const fileName = _buildFileName(item.id, item.title);
-      const contractsDir = resolve(cwd, CONTRACTS_DIR);
-
-      if (!existsSync(contractsDir)) {
-        mkdirSync(contractsDir, { recursive: true });
-      }
-
-      const filePath = resolve(contractsDir, fileName);
-      writeFileSync(filePath, filled);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ Draft contract generated: \`${item.id}\``,
-              `**${item.title}**`,
-              `File: \`docs/contracts/${fileName}\``,
-              `Priority: ${priority} | Status: draft | Template: v2.0.0`,
-              item.isArchived
-                ? `\n📦 Old v1 contract is archived at \`${item.existingContractPath}\` — this is a fresh v2 draft.`
-                : '',
-              '',
-              `Next steps:`,
-              `1. Use \`/contract-create\` to complete the draft with codebase inspection`,
-              `2. Use \`/contract-critique\` for adversarial review`,
-              `3. After approval, use \`/contract-implement\` to implement`,
-            ].join('\n'),
-          },
-        ],
-        details: {
-          featureCode: item.id,
-          fileName,
-          priority,
-        },
-      };
-    },
-  });
-
   // ─────────────────────────────────────────────────────────┐
   // Tool 3: contract_workspace_create                       │
   // ─────────────────────────────────────────────────────────┘
-
-  pi.registerTool({
-    name: 'contract_workspace_create',
-    label: 'Contract: Create Workspace',
-    description:
-      'Provision an isolated herdr-native Git Worktree for a contract task. ' +
-      'Creates a worktree under ~/.herdr/worktrees/<repo>/ (outside the repo) ' +
-      'on branch task/<id>, opens it as a herdr workspace grouped with the repo, ' +
-      'and bootstraps it (direnv, seeds, bun install). Returns the checkout path, ' +
-      'branch name, and herdr workspace id. Use BEFORE writing files or running ' +
-      'compilation tools in a contract task. ' +
-      'For interactive development, use `bun run contract C-XXX --root` instead — ' +
-      'it works directly in the repo root without a worktree.',
-    promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated Git Worktree.',
-    promptGuidelines: [
-      'Call this before any file mutations or build steps in a contract pipeline.',
-      'Use the returned branch_name for reference.',
-      'Checkouts live in ~/.herdr/worktrees/<repo>/ and are opened as herdr workspaces (aikami-task-<id>).',
-      'The checkout is NOT your active working directory (created with --no-focus) — use the returned path (w.checkoutPath) for every file and command operation.',
-      'Clean up with `bun herdr:task rm <id>` or `bun run workspace:cleanup`.',
-      'For local interactive development, prefer `bun run contract C-XXX --root` which switches the branch directly in the repo root instead of creating a worktree.',
-    ],
-    parameters: Type.Object({
-      taskId: Type.String({
-        description:
-          'Unique task or contract ID (e.g. "C-312" or "contract-writer-xyz"). ' +
-          'Used to generate a sanitized workspace directory name.',
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const cwd = ctx.cwd;
-      const sanitized = sanitizeBranchName(params.taskId);
-
-      // Check for an existing herdr-native worktree for this task.
-      const existing = (await listWorktrees(cwd)).find((w) => w.branch === `task/${sanitized}`);
-      if (existing) {
-        // Existing (possibly incomplete) worktree — retry bootstrap so a
-        // previous failure is not silently reported as ready.
-        let installed = false;
-        try {
-          const r = await bootstrapWorktree({ checkoutPath: existing.path, repoRoot: cwd });
-          installed = r.installed;
-        } catch {
-          installed = false;
-        }
-        const existingId = (() => {
-          try {
-            return getGitHeadCommit(existing.path);
-          } catch {
-            return 'unknown';
-          }
-        })();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `⚠️ Worktree already exists: \`${existing.path}\``,
-                `Branch: \`${existing.branch}\``,
-                `HEAD: \`${existingId}\``,
-                installed ? '' : '⚠️  bootstrap incomplete — dependencies may be missing.',
-                '',
-                'Use this existing worktree or run `bun herdr:task rm <id>` if you need a fresh one.',
-              ].join('\n'),
-            },
-          ],
-          details: {
-            path: existing.path,
-            branchName: existing.branch,
-            headCommit: existingId,
-            alreadyExists: true,
-            bootstrapped: installed,
-          },
-        };
-      }
-
-      // Create the herdr-native worktree (checkout + workspace in one call).
-      const w = await createWorktree({
-        slug: params.taskId,
-        repoRoot: cwd,
-      });
-      // If bootstrap fails, remove the newly created worktree so a retry
-      // starts clean instead of finding a half-provisioned checkout.
-      let installed = false;
-      try {
-        const r = await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
-        installed = r.installed;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        await removeWorktree({
-          workspaceId: w.workspaceId,
-          checkoutPath: w.checkoutPath,
-          branch: w.branch,
-          repoRoot: cwd,
-        }).catch(() => {});
-        throw new Error(`Worktree bootstrap failed (${message}) — created worktree removed.`);
-      }
-      const headCommit = getGitHeadCommit(w.checkoutPath);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ herdr worktree created: \`${w.checkoutPath}\``,
-              `Branch: \`${w.branch}\``,
-              `Workspace: \`${w.workspaceId}\` (label aikami-task-${sanitized})`,
-              `HEAD: \`${headCommit}\``,
-              installed ? '' : '⚠️  bun install failed — run `bun install` manually.',
-              '',
-              // --no-focus is used at creation: the checkout is NOT the
-              // agent's active cwd. Use it explicitly for all file/command ops.
-              'Use `w.checkoutPath` as the working directory for subsequent file and command operations.',
-              'Use `contract_workspace_checkpoint` to save progress snapshots.',
-              'Use `contract_workspace_complete` when the task is done.',
-              'Ship a PR with `bun herdr:task pr <id>` (or the task_pr tool).',
-            ].join('\n'),
-          },
-        ],
-        details: {
-          path: w.checkoutPath,
-          branchName: w.branch,
-          headCommit,
-          workspaceId: w.workspaceId,
-          alreadyExists: false,
-          bootstrapped: installed,
-        },
-      };
-    },
-  });
 
   // ─────────────────────────────────────────────────────────┐
   // Tool 4: contract_workspace_checkpoint                   │
   // ─────────────────────────────────────────────────────────┘
 
-  pi.registerTool({
-    name: 'contract_workspace_checkpoint',
-    label: 'Contract: Workspace Checkpoint',
-    description:
-      'Commit the current working state in a Git Worktree with a descriptive ' +
-      'message. Stages all changes and commits them.',
-    promptSnippet: 'Use contract_workspace_checkpoint to record an agent milestone.',
-    promptGuidelines: [
-      'Call after completing a successful partial step (test passes, build succeeds).',
-      'Messages should identify what was accomplished (e.g. "Service layer complete").',
-      'This triggers `git add -A && git commit` — Moonrepo pre-commit hooks will run.',
-    ],
-    parameters: Type.Object({
-      workspacePath: Type.String({
-        description:
-          'Absolute path to the Git Worktree directory (returned by contract_workspace_create).',
-      }),
-      message: Type.String({
-        description:
-          'Human-readable milestone description (e.g. "Agent milestone: Added auth service").',
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const headCommit = (() => {
-        try {
-          return runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
-            cwd: params.workspacePath,
-          });
-        } catch {
-          // No changes to commit — return current HEAD.
-          return getGitHeadCommit(params.workspacePath);
-        }
-      })();
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ Checkpoint saved.`,
-              `HEAD: \`${headCommit}\``,
-              `Message: "${params.message}"`,
-            ].join('\n'),
-          },
-        ],
-        details: { headCommit, message: params.message },
-      };
-    },
-  });
-
   // ─────────────────────────────────────────────────────────┐
   // Tool 5: contract_workspace_complete                     │
   // ─────────────────────────────────────────────────────────┘
 
-  pi.registerTool({
-    name: 'contract_workspace_complete',
-    label: 'Contract: Complete Workspace',
-    description:
-      'Finalize an isolated worktree: commit all changes and return the branch ' +
-      'name for PR creation. Does NOT push or clean up — that step is manual or ' +
-      'handled by the pipeline orchestrator.',
-    promptSnippet: 'Use contract_workspace_complete when a task reaches its definition of done.',
-    promptGuidelines: [
-      'Call after all tests/verifications pass.',
-      'Returns the branch name and HEAD commit needed for PR creation.',
-      'The worktree persists until you run `bun workspace:cleanup`.',
-    ],
-    parameters: Type.Object({
-      workspacePath: Type.String({
-        description: 'Absolute path to the Git Worktree directory.',
-      }),
-      message: Type.String({
-        description: 'Final commit message (e.g. "Feat: Completed contract pipeline task C-312").',
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      let headCommit: string;
-      try {
-        headCommit = runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
-          cwd: params.workspacePath,
-        });
-      } catch {
-        // No changes to commit — use current HEAD.
-        headCommit = getGitHeadCommit(params.workspacePath);
-      }
-
-      let branchName = 'unknown';
-      try {
-        branchName = runGit('rev-parse --abbrev-ref HEAD', {
-          cwd: params.workspacePath,
-        });
-      } catch {
-        // Non-fatal.
-      }
-
-      const rootDir = ctx.cwd;
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ Worktree finalized.`,
-              `Branch: \`${branchName}\``,
-              `HEAD: \`${headCommit}\``,
-              `Message: "${params.message}"`,
-              '',
-              'To push for PR creation from the worktree:',
-              `  git push -u origin ${branchName}`,
-              '',
-              `Root workspace: \`${rootDir}\``,
-            ].join('\n'),
-          },
-        ],
-        details: {
-          headCommit,
-          branchName,
-          workspacePath: params.workspacePath,
-          rootDir,
-        },
-      };
-    },
-  });
-
   // ─────────────────────────────────────────────────────────┐
   // Tool 6: contract_workspace_list                         │
   // ─────────────────────────────────────────────────────────┘
-
-  pi.registerTool({
-    name: 'contract_workspace_list',
-    label: 'Contract: List Workspaces',
-    description:
-      'List all active herdr-native + legacy Git Worktrees (git worktree list --porcelain).',
-    promptSnippet: 'Use contract_workspace_list to inspect active agent workspaces.',
-    promptGuidelines: [
-      'Use for diagnostics — find orphaned or incomplete workspaces.',
-      'Returns workspace path, branch name, and HEAD commit for each.',
-    ],
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
-      const cwd = ctx.cwd;
-      const out = runGit('worktree list --porcelain', { cwd });
-      const entries = out
-        .split('\n')
-        .filter((l) => l.startsWith('worktree '))
-        .map((l) => l.slice('worktree '.length).trim())
-        .filter((p) => p !== cwd);
-      const items: { path: string; headCommit: string; branchName: string; description: string }[] =
-        [];
-
-      for (const wsPath of entries) {
-        try {
-          const headCommit = getGitHeadCommit(wsPath);
-          const branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
-          const desc = runGit('log -1 --format=%s', { cwd: wsPath });
-          items.push({ path: wsPath, headCommit, branchName, description: desc.trim() });
-        } catch {
-          // Skip non-worktree directories
-        }
-      }
-
-      if (items.length === 0) {
-        return {
-          content: [{ type: 'text', text: 'No active Git Worktrees.' }],
-          details: { workspaces: [] },
-        };
-      }
-
-      const lines = [`**Active Worktrees** (${items.length})\n`];
-      for (const item of items) {
-        const shortPath = basename(item.path);
-        lines.push(`🔹 \`${item.branchName}\` (${item.headCommit.slice(0, 12)}) — ${shortPath}`);
-        if (item.description) {
-          lines.push(`   ${item.description.slice(0, 80)}`);
-        }
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { workspaces: items },
-      };
-    },
-  });
 }

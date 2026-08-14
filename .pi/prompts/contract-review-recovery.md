@@ -25,6 +25,10 @@ scratch with worse tools. Default to **diagnose → hand off**, not
    — be specific: name the exact files/functions involved, the exact
    behavior that's wrong, and what a correct fix looks like. A vague summary
    wastes the implementer's next attempt as badly as no summary at all.
+   If you consulted `AskClaude` or gathered more than fits in `summary`
+   (4096 chars), put the full detail — the AskClaude transcript, extended
+   root-cause notes — in the `details` param. Both are handed to the
+   implementer; `summary` doesn't need to repeat what `details` already says.
 
 ### When you may fix it yourself instead
 

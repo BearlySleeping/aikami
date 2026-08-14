@@ -25,7 +25,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
+import { findBash, posixQuote, which } from './which';
 
 // ── Mode → project map ──────────────────────────────────────────────────
 // 🔴 Keep in sync with:
@@ -45,19 +46,12 @@ let _hasDirenv: boolean | undefined;
 /**
  * True when the `direnv` binary is on PATH. Cached after the first call
  * (neither the binary nor the PATH is expected to change mid-process).
- * Node-safe: uses Bun.which when running under Bun, otherwise scans PATH.
+ * Runtime-agnostic — `which` works identically under Bun and Node, which
+ * matters because pi extensions import this module and pi runs under Node.
  */
 export const hasDirenv = (): boolean => {
   if (_hasDirenv === undefined) {
-    if (typeof Bun !== 'undefined' && Bun.which) {
-      _hasDirenv = Boolean(Bun.which('direnv'));
-    } else {
-      const exe = process.platform === 'win32' ? 'direnv.exe' : 'direnv';
-      _hasDirenv = (process.env.PATH ?? '')
-        .split(delimiter)
-        .filter(Boolean)
-        .some((dir) => existsSync(join(dir, exe)));
-    }
+    _hasDirenv = which('direnv') !== null;
   }
   return _hasDirenv;
 };
@@ -92,23 +86,20 @@ export const resolveAikamiEnv = (root: string): AikamiEnv => {
   return { mode: mode as AikamiEnv['mode'], projectId, isEmulator: mode === 'emulator' };
 };
 
-const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
-
-const bashPath = (): string =>
-  typeof Bun !== 'undefined' && Bun.which ? (Bun.which('bash') ?? 'bash') : 'bash';
-
 /**
  * Wrap a command so it runs inside the flake devShell via
  * `direnv exec <cwd> bash -c '<command>'` when direnv is available.
- * When it isn't, return the command unchanged — the caller's own PATH/env
- * (manual tool installs, .env.local fallback) is assumed.
+ * When it isn't — or when there is no bash to hand it to — return the command
+ * unchanged; the caller's own PATH/env (manual tool installs, .env.local
+ * fallback) is assumed.
  *
  * Mirrors herdr/session.ts `wrapCommand`, minus the interactive
  * echo/read trailer — safe for headless worker panes.
  */
 export const direnvExecCommand = (command: string, cwd: string): string => {
-  if (!hasDirenv()) {
+  const bash = findBash();
+  if (!hasDirenv() || !bash) {
     return command;
   }
-  return `direnv exec ${shellQuote(cwd)} ${shellQuote(bashPath())} -c ${shellQuote(command)}`;
+  return `direnv exec ${posixQuote(cwd)} ${posixQuote(bash)} -c ${posixQuote(command)}`;
 };

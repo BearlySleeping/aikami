@@ -31,6 +31,7 @@ import {
   resolveAikamiEnv,
 } from '../../scripts/src/lib/env/direnv_detect';
 import { runSync } from './lib/process_runner.ts';
+import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const VALID_MODES = ['emulator', 'staging', 'production'] as const;
 
@@ -262,124 +263,94 @@ function addSecretKey(secretKey: string): string {
 
 export default function (pi: ExtensionAPI) {
   // ── direnv_status ───────────────────────────────────────────────────
-  pi.registerTool({
-    name: 'direnv_status',
-    label: 'Direnv: Environment Status',
-    description:
-      'Read Aikami direnv environment: mode (emulator/dev/prod), GCP project, ' +
-      'Nix shell status, Playwright config, secrets state, and shell shortcuts.',
-    promptSnippet:
-      'Use direnv_status to check the current environment before operations that depend on mode.',
-    promptGuidelines: [
-      'Use direnv_status at the start of a session to understand the environment.',
-      'Use direnv_status before deploying or switching contexts.',
-      'All pi tools inherit the direnv environment — AIKAMI_MODE, AIKAMI_PROJECT_ID are always set.',
-    ],
-    parameters: Type.Object({}),
-    async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
-      const report = buildStatusReport();
-      const env = resolveAikamiEnv(getRoot());
-      return {
-        content: [{ type: 'text', text: report }],
-        details: {
-          mode: getEnv('AIKAMI_MODE') || env.mode,
-          projectId: getEnv('AIKAMI_PROJECT_ID') || env.projectId,
-          // Derive from the resolved mode value so staging → false and
-          // emulator → true consistently with `mode`/`projectId`.
-          isEmulator: (getEnv('AIKAMI_MODE') || env.mode) === 'emulator',
-          nixReady: getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined,
+  registerNamespace(pi, {
+    name: 'direnv',
+    label: 'Direnv Environment',
+    description: 'Inspect and change the Aikami direnv environment (mode, Nix packages, secrets).',
+    actions: [
+      defineAction({
+        action: 'status',
+        summary: 'Show mode, GCP project, Nix shell and secrets',
+
+        parameters: Type.Object({}),
+        async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
+          const report = buildStatusReport();
+          const env = resolveAikamiEnv(getRoot());
+          return {
+            content: [{ type: 'text', text: report }],
+            details: {
+              mode: getEnv('AIKAMI_MODE') || env.mode,
+              projectId: getEnv('AIKAMI_PROJECT_ID') || env.projectId,
+              // Derive from the resolved mode value so staging → false and
+              // emulator → true consistently with `mode`/`projectId`.
+              isEmulator: (getEnv('AIKAMI_MODE') || env.mode) === 'emulator',
+              nixReady: getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined,
+            },
+          };
         },
-      };
-    },
+      }),
+      defineAction({
+        action: 'switch_mode',
+        summary: 'Switch between emulator, staging and production',
+
+        parameters: Type.Object({
+          mode: Type.String({
+            description: 'Target mode',
+            enum: VALID_MODES as unknown as string[],
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const result = await switchMode(params.mode);
+          return {
+            content: [{ type: 'text', text: result }],
+            details: { mode: getEnv('AIKAMI_MODE') },
+          };
+        },
+      }),
+      defineAction({
+        action: 'add_package',
+        summary: 'Add a Nix package to flake.nix and reload',
+
+        parameters: Type.Object({
+          packageName: Type.String({
+            description:
+              "Nix package name (e.g. 'python3', 'jq', 'ffmpeg', 'imagemagick'). Use nixpkgs naming.",
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const result = addNixPackage(params.packageName);
+          return {
+            content: [{ type: 'text', text: result }],
+            details: { packageName: params.packageName },
+          };
+        },
+      }),
+      defineAction({
+        action: 'add_secret',
+        summary: 'Register a new secret key in secrets.sh',
+
+        parameters: Type.Object({
+          secretKey: Type.String({
+            description:
+              "Secret key name in UPPER_SNAKE_CASE (e.g. 'OPENAI_API_KEY', 'STRIPE_SECRET')",
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const result = addSecretKey(params.secretKey);
+          return {
+            content: [{ type: 'text', text: result }],
+            details: { secretKey: params.secretKey },
+          };
+        },
+      }),
+    ],
   });
 
   // ── direnv_switch_mode ──────────────────────────────────────────────
-  pi.registerTool({
-    name: 'direnv_switch_mode',
-    label: 'Direnv: Switch Mode',
-    description:
-      'Switch Aikami environment mode (emulator, staging, production). ' +
-      'Updates .env.local and reloads direnv so all env vars refresh.',
-    promptSnippet:
-      'Use direnv_switch_mode to change between emulator, staging, and production environments.',
-    promptGuidelines: [
-      'Prefer emulator mode for local development and testing.',
-      'Switch to staging/production before deploying to live Firebase.',
-      'After switching, firestore_query and service_logs will automatically target the new project.',
-    ],
-    parameters: Type.Object({
-      mode: Type.String({
-        description: 'Target mode',
-        enum: VALID_MODES as unknown as string[],
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = await switchMode(params.mode);
-      return {
-        content: [{ type: 'text', text: result }],
-        details: { mode: getEnv('AIKAMI_MODE') },
-      };
-    },
-  });
 
   // ── direnv_add_package ──────────────────────────────────────────────
-  pi.registerTool({
-    name: 'direnv_add_package',
-    label: 'Direnv: Add Nix Package',
-    description:
-      'Add a package to flake.nix devShell and reload direnv. ' +
-      'Use when the LLM needs a CLI tool not yet in the Nix environment ' +
-      '(e.g., python3, jq, ffmpeg, imagemagick). ' +
-      'After adding, the package is available immediately.',
-    promptSnippet:
-      'Use direnv_add_package to install missing CLI tools via Nix into the project devShell.',
-    promptGuidelines: [
-      'If a command is not found (python3, ffmpeg, jq, etc.), add it to flake.nix via direnv_add_package instead of asking the user.',
-      'After adding, the package will be available in subsequent pi.exec() calls.',
-      'Common nixpkgs package names: python3, jq, ffmpeg, imagemagick, curl, wget, git.',
-    ],
-    parameters: Type.Object({
-      packageName: Type.String({
-        description:
-          "Nix package name (e.g. 'python3', 'jq', 'ffmpeg', 'imagemagick'). Use nixpkgs naming.",
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = addNixPackage(params.packageName);
-      return {
-        content: [{ type: 'text', text: result }],
-        details: { packageName: params.packageName },
-      };
-    },
-  });
 
   // ── direnv_add_secret ───────────────────────────────────────────────
-  pi.registerTool({
-    name: 'direnv_add_secret',
-    label: 'Direnv: Add Secret Key',
-    description:
-      'Register a new secret key in _AIKAMI_SECRET_KEYS list in ' +
-      'scripts/direnv/secrets.sh. After adding, the secret will be ' +
-      'pulled from GCP Secret Manager on next direnv load.',
-    promptSnippet:
-      'Use direnv_add_secret when a new API key or credential needs to be managed via GSM.',
-    promptGuidelines: [
-      'Secret keys should be UPPER_SNAKE_CASE (e.g., OPENAI_API_KEY).',
-      'After adding, the user must create the secret in GCP Secret Manager.',
-    ],
-    parameters: Type.Object({
-      secretKey: Type.String({
-        description: "Secret key name in UPPER_SNAKE_CASE (e.g. 'OPENAI_API_KEY', 'STRIPE_SECRET')",
-      }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = addSecretKey(params.secretKey);
-      return {
-        content: [{ type: 'text', text: result }],
-        details: { secretKey: params.secretKey },
-      };
-    },
-  });
 
   // ── Auto-inject: session start env banner ───────────────────────────
   pi.on('session_start', async (_event, _ctx) => {

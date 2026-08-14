@@ -92,18 +92,56 @@ async function readStream(
     return;
   }
   const decoder = new TextDecoder();
-  for await (const chunk of stream) {
-    onChunk(decoder.decode(chunk as Buffer, { stream: true }));
+  try {
+    for await (const chunk of stream) {
+      onChunk(decoder.decode(chunk as Buffer, { stream: true }));
+    }
+  } catch {
+    // A spawn failure (ENOENT) or a killed process group tears the pipes down
+    // mid-read, surfacing as ERR_STREAM_PREMATURE_CLOSE. That is not a caller
+    // error: it just means there is no more output. Swallow it so the
+    // completion promise still RESOLVES with the exit code — callers treat
+    // runCommand as non-throwing and do not wrap it in try/catch.
   }
 }
 
-// ── Async run ─────────────────────────────────────────────────────
+// ── Streaming run ─────────────────────────────────────────────────
 
-export async function runCommand(
+/**
+ * Live handle on a running child process.
+ *
+ * `runCommand` waits for the exit code; a handle instead lets the caller
+ * observe output as it arrives — which is what long-running tools need in
+ * order to stream progress through pi's `onUpdate` callback rather than
+ * blocking a turn silently for minutes.
+ */
+export type CommandHandle = {
+  readonly pid: number | undefined;
+  /** Resolves when the process exits, is killed, or times out. Never rejects. */
+  readonly completion: Promise<RunCommandResult>;
+  /** Interleaved stdout+stderr captured so far. */
+  output(): string;
+  stdout(): string;
+  stderr(): string;
+  /** True until the process exits. */
+  running(): boolean;
+  /** Exit code once exited; undefined while still running. */
+  exitCode(): number | null | undefined;
+  /** SIGTERM the process group, escalating to SIGKILL after the grace period. */
+  kill(force?: boolean): void;
+};
+
+/**
+ * Spawns a command and returns immediately with a live handle.
+ *
+ * Same deadlock-safety as runCommand: own process group, stdin closed, both
+ * pipes drained continuously, whole tree killed on timeout.
+ */
+export function startCommand(
   command: string,
   args: string[] = [],
   options: RunCommandOptions = {},
-): Promise<RunCommandResult> {
+): CommandHandle {
   const startTime = Date.now();
   const timeoutMs = options.timeoutMs ?? options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBuffer = options.maxBufferBytes ?? MAX_BUFFER_BYTES;
@@ -116,16 +154,25 @@ export async function runCommand(
 
   let stdout = '';
   let stderr = '';
+  let combined = '';
   let killed = false;
+  let finished = false;
+  let exitCode: number | null | undefined;
 
   const appendStdout = (text: string) => {
     if (stdout.length < maxBuffer) {
       stdout += text;
     }
+    if (combined.length < maxBuffer) {
+      combined += text;
+    }
   };
   const appendStderr = (text: string) => {
     if (stderr.length < maxBuffer) {
       stderr += text;
+    }
+    if (combined.length < maxBuffer) {
+      combined += text;
     }
   };
 
@@ -133,34 +180,30 @@ export async function runCommand(
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
-    // Run in its own process group (via setsid) so killProcessTree /
-    // killProcessTreeForce can terminate the whole tree via `-pid`.
+    // Own process group (via setsid) so the whole tree can be killed by -pid.
     detached: true,
   });
 
-  // Close stdin immediately — prevents CLI tools from hanging on prompts
+  // Close stdin immediately — prevents CLI tools from hanging on prompts.
   child.stdin?.end();
 
-  // Read stdout/stderr in background
   const readPromise = Promise.all([
     readStream(child.stdout, appendStdout),
     readStream(child.stderr, appendStderr),
   ]);
 
-  // ── Timeout handling ──────────────────────────────────────────
   let timeoutHandle: NodeJS.Timeout | undefined;
   let escalateHandle: NodeJS.Timeout | undefined;
-  let finished = false;
 
-  const onTimeout = () => {
+  const terminate = (reason?: string) => {
     if (finished) {
       return;
     }
     killed = true;
-    appendStderr(`\n[Process timed out after ${timeoutMs / 1000}s]`);
+    if (reason) {
+      appendStderr(`\n[${reason}]`);
+    }
     killProcessTree(child.pid);
-
-    // Escalate to SIGKILL after grace period
     escalateHandle = setTimeout(() => {
       if (!finished) {
         killProcessTreeForce(child.pid);
@@ -168,47 +211,80 @@ export async function runCommand(
     }, SIGTERM_GRACE_MS);
   };
 
-  // ── AbortSignal / Pi cancellation ────────────────────────────
+  const onTimeout = () => terminate(`Process timed out after ${timeoutMs / 1000}s`);
+  const onAbort = () => terminate('Process cancelled');
+
   if (options.signal) {
     if (options.signal.aborted) {
-      onTimeout();
+      onAbort();
     } else {
-      options.signal.addEventListener('abort', onTimeout, { once: true });
+      options.signal.addEventListener('abort', onAbort, { once: true });
     }
   }
 
-  // ── Timeout timer ────────────────────────────────────────────
   if (!killed) {
     timeoutHandle = setTimeout(onTimeout, timeoutMs);
   }
 
-  // ── Wait for exit ────────────────────────────────────────────
-  const exitCode = await new Promise<number | null>((resolve) => {
-    child.once('exit', (code) => resolve(code));
-    child.once('error', (err) => {
-      appendStderr(`\n[Failed to start process: ${err.message}]`);
-      resolve(null);
+  const completion = (async (): Promise<RunCommandResult> => {
+    const code = await new Promise<number | null>((resolve) => {
+      child.once('exit', (exit) => resolve(exit));
+      child.once('error', (err) => {
+        appendStderr(`\n[Failed to start process: ${err.message}]`);
+        resolve(null);
+      });
     });
-  });
-  finished = true;
+    finished = true;
+    exitCode = code;
 
-  // Clean up timers
-  clearTimeout(timeoutHandle);
-  clearTimeout(escalateHandle);
-  if (options.signal) {
-    options.signal.removeEventListener('abort', onTimeout);
-  }
+    clearTimeout(timeoutHandle);
+    clearTimeout(escalateHandle);
+    options.signal?.removeEventListener('abort', onAbort);
 
-  // Ensure stream reading completes
-  await readPromise;
+    // Let the pipes finish draining so no trailing output is lost.
+    await readPromise;
+
+    return {
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      code,
+      killed,
+      durationMs: Date.now() - startTime,
+    };
+  })();
 
   return {
-    stdout: stdout.trim(),
-    stderr: stderr.trim(),
-    code: exitCode,
-    killed,
-    durationMs: Date.now() - startTime,
+    pid: child.pid,
+    completion,
+    output: () => combined,
+    stdout: () => stdout,
+    stderr: () => stderr,
+    running: () => !finished,
+    exitCode: () => exitCode,
+    kill: (force = false) => {
+      if (force) {
+        killProcessTreeForce(child.pid);
+        return;
+      }
+      terminate('Killed by request');
+    },
   };
+}
+
+// ── Async run ─────────────────────────────────────────────────────
+
+/**
+ * Runs a command to completion.
+ *
+ * Thin wrapper over startCommand — the spawn, drain, timeout and kill logic
+ * lives in exactly one place so the blocking and streaming paths cannot drift.
+ */
+export async function runCommand(
+  command: string,
+  args: string[] = [],
+  options: RunCommandOptions = {},
+): Promise<RunCommandResult> {
+  return startCommand(command, args, options).completion;
 }
 
 // ── Sync run (for simple gh/git calls) ────────────────────────────

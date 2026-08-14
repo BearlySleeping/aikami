@@ -48,11 +48,6 @@ export default function (pi: ExtensionAPI) {
     label: 'Moon: Detect Affected',
     description:
       'Detects affected projects via moon query --affected. Run BEFORE validation to know which projects changed.',
-    promptSnippet:
-      'Use moon_detect_affected before running tests or deploying to discover which projects changed.',
-    promptGuidelines: [
-      'Use moon_detect_affected when you need to know which packages changed before running tests or deploying.',
-    ],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
       const result = await runCommand('bun', ['moon', 'query', 'projects', '--affected'], {
@@ -126,11 +121,6 @@ export default function (pi: ExtensionAPI) {
       'Format: <project>:<task> (e.g. client:fix, functions:typecheck).',
     promptSnippet:
       'Use moon_run_task to execute moon tasks like build, test, lint. NEVER use for :dev/:preview — use herdr_session instead.',
-    promptGuidelines: [
-      'Use moon_run_task to run monorepo tasks through the moon orchestrator instead of calling bun directly.',
-      '🔴 NEVER call moon_run_task for a :dev or :preview target — these are long-running servers that will hang pi forever.',
-      'To start a dev server, use herdr_session start <service> instead. herdr handles long-running processes correctly.',
-    ],
     parameters: Type.Object({
       target: Type.String({
         description:
@@ -206,7 +196,6 @@ export default function (pi: ExtensionAPI) {
     name: 'moon_list_projects',
     label: 'Moon: List Projects',
     description: 'List all monorepo projects registered in moon with tags and deps.',
-    promptSnippet: 'Use moon_list_projects to understand the monorepo workspace structure.',
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal, _onUpdate, _ctx) {
       const result = await runCommand('bun', ['moon', 'query', 'projects'], {
@@ -237,13 +226,6 @@ export default function (pi: ExtensionAPI) {
       'Use at END of feature, not during development. No test-runner string — moon handles caching.',
     promptSnippet:
       'Use validate at the end of a feature to run fix+typecheck+build+test on all affected projects.',
-    promptGuidelines: [
-      'Call validate at the end of a development task — not during writing code.',
-      'validate runs fix+typecheck on all affected projects (moon caches unchanged projects).',
-      'If fix+typecheck pass, optionally run build then test.',
-      'Pass test=true to also run unit/E2E tests after build passes.',
-      'The direnv environment (AIKAMI_MODE) is already loaded — no need to check mode.',
-    ],
     parameters: Type.Object({
       test: Type.Optional(
         Type.Boolean({
@@ -374,15 +356,6 @@ export default function (pi: ExtensionAPI) {
       'Runs blackbox integration tests against local emulators + dev servers. ' +
       'Starts/stops emulators and dev servers automatically. ' +
       'Suites: schema-check, functions, client, site, docs, cross-service.',
-    promptSnippet: 'Use blackbox_test to run full-stack blackbox integration tests locally.',
-    promptGuidelines: [
-      'Use blackbox_test after making backend changes that affect multiple services.',
-      "Use blackbox_test suites=['functions'] to run only function tests (faster).",
-      'Ensure emulator is running first: firebase_emulator start.',
-      'Blackbox tests start/stop their own dev servers — no need to pre-start.',
-      'Use noCrossService=true to skip multi-service flow tests during rapid iteration.',
-      'Current mode from direnv: emulator=local, staging/production=live GCP. Blackbox tests require emulator mode.',
-    ],
     parameters: Type.Object({
       suites: Type.Optional(
         Type.Array(Type.String(), {

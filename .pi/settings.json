@@ -15,7 +15,7 @@
     "npm:pi-cache-optimizer"
   ],
   "extensions": ["./extensions"],
-  "skills": ["./skills", "./generated-skills", "./.pi/generated-skills"],
+  "skills": ["./skills", "./generated-skills"],
   "prompts": ["./prompts"],
   "powerline": {
     "welcome": false

@@ -77,6 +77,15 @@ export type ContractReviewDecision = {
   runId: string;
   decision: ReviewDecision;
   summary: string;
+  /**
+   * Optional long-form context for the implementer's next attempt — e.g. an
+   * AskClaude consultation, root-cause notes, a suggested fix approach.
+   * `summary` stays short (it's also used as `blockedReason` on `reject`);
+   * `details` exists so the captain isn't forced to compress a real diagnosis
+   * into 4096 characters. Only consumed on `change`, folded into the
+   * implementer's feedback — see verifierFeedback() in orchestrator.ts.
+   */
+  details?: string;
   diffHash: string;
   contractChanged: boolean;
   createdAt: string;
@@ -116,7 +125,6 @@ export type StageAttempt = {
   endTime?: string;
   result?: ContractStageResult;
   usage?: StageUsage;
-  feedbackPath?: string;
 };
 
 /** Durable v3 manifest stored under .pi/contract-runs/<runId>/. */
@@ -142,6 +150,19 @@ export type RunManifest = {
   workspaceId?: string;
   pipelinePaneId?: string;
   reviewPaneId?: string;
+  /**
+   * Whether the review captain actually received its initial task text.
+   * False (or a legacy-undefined that predates this field) means the pane may
+   * be idling at an empty prompt — the only condition under which a resume is
+   * allowed to type into the human-shared review pane.
+   */
+  reviewTaskDelivered?: boolean;
+  /**
+   * ISO timestamp of the one resume nudge this run is permitted. Set even
+   * when the guard refuses to send, so a crash-loop cannot retry the injection
+   * on every restart — see the C-390 incident in review_pane.ts.
+   */
+  reviewResumeNudgedAt?: string;
   /** herdr-native worktree: workspace id (== pipeline workspace in worktree mode). */
   worktreeWorkspaceId?: string;
   /** herdr-native worktree: absolute checkout path (~/.herdr/worktrees/<repo>/...). */

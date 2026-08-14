@@ -16,6 +16,22 @@
  */
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
+
+/** The four pipeline stages, used to validate the role handed over by env. */
+const WORKER_ROLES: readonly ContractWorkerRole[] = ['writer', 'critic', 'implementer', 'verifier'];
+
+/**
+ * Reads CONTRACT_PIPELINE_ROLE and narrows it to a known stage.
+ *
+ * The env var is set by whoever spawned this worker, so it is untrusted
+ * input: an unrecognised value must not be written into a stage result as if
+ * it were a real stage.
+ */
+const _pipelineRole = (): ContractWorkerRole | undefined => {
+  const raw = process.env.CONTRACT_PIPELINE_ROLE;
+  return WORKER_ROLES.find((role) => role === raw);
+};
 
 /** Convert model-registry cost (per 1M tokens) to per-token cost. */
 const PER_MILLION = 1_000_000;
@@ -68,11 +84,13 @@ export default function (pi: ExtensionAPI) {
         'error',
       );
       // For contract pipeline workers: write a blocked result before shutdown
-      const role = process.env.CONTRACT_PIPELINE_ROLE;
+      const role = _pipelineRole();
       const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
       if (role && resultPath) {
         try {
-          const { writeStageResult } = await import('../../scripts/src/lib/agents/contract_pipeline/stage_result.ts');
+          const { writeStageResult } = await import(
+            '../../scripts/src/lib/agents/contract_pipeline/stage_result.ts'
+          );
           const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
           const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
           if (runId && attempt >= 1) {

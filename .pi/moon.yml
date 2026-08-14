@@ -31,6 +31,14 @@ fileGroups:
     - 'scripts/update_skills.ts'
 
 tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      mergeArgs: 'replace'
+
   typecheck:
     command: 'bun run typecheck'
     inputs:

@@ -63,6 +63,15 @@ export const runStage = async (options: {
   hardTimeoutMs: number;
   pollIntervalMs?: number;
   feedback?: string;
+  /**
+   * Status the orchestrator ALREADY recorded in the run manifest for attempt
+   * `attempt - 1` of this stage, when it has one.
+   *
+   * 🔴 This is what separates the two situations the retry safeguard below
+   * cannot otherwise tell apart. See its comment for why `passed` here must
+   * block adoption.
+   */
+  previousAttemptRecordedStatus?: ContractStageResult['status'];
   /** True for the interactive writer stage (direct draft). The agent waits
    *  for the user's description in the chat — loadRolePrompt gets the wait
    *  instructions and the task brief path. */
@@ -92,7 +101,35 @@ export const runStage = async (options: {
   // 🔴 RETRY SAFEGUARD: check previous attempt's result file too.
   // If the worker finished after the orchestrator timed out, the previous
   // attempt's result file will be valid. Adopt it and skip re-work.
-  if (options.attempt > 1) {
+  //
+  // 🔴 …but ONLY when the orchestrator did not already act on that result.
+  //
+  // Two situations produce "attempt N, and attempt N-1's file says passed",
+  // and they need opposite handling:
+  //
+  //   (a) LATE WORKER — attempt N-1 hard-timed-out, the orchestrator recorded
+  //       `blocked`, and the worker then finished and overwrote the file with
+  //       a real `passed`. Re-running would throw away completed work.
+  //       ADOPT. This is the case the safeguard was written for.
+  //
+  //   (b) DELIBERATE NEW ROUND — attempt N-1 genuinely passed, the
+  //       orchestrator consumed it, the verifier or review captain then asked
+  //       for changes, and the pipeline came back for another pass.
+  //       MUST NOT ADOPT.
+  //
+  // Adopting in case (b) is what broke run-mssulnwd-C-390: implement-2's
+  // result was copied forward into implement-3, -4, -5 and -6 byte for byte
+  // (only `attempt` differed), so the implementer was never launched again.
+  // Every round instantly "passed", the verifier re-found the same defects,
+  // and the run burned four implement→verify→review cycles in 45 seconds
+  // without a single line of code changing. The review captain's handoff —
+  // and the user's request to pass Claude's comments to the implementer —
+  // could not possibly take effect, because no implementer ever ran.
+  //
+  // The manifest is the discriminator: a `passed` there means the pipeline
+  // already moved on, so this attempt is a new round and must do real work.
+  const previousAlreadyConsumed = options.previousAttemptRecordedStatus === 'passed';
+  if (options.attempt > 1 && !previousAlreadyConsumed) {
     const prevPath = join(
       options.runDirectory,
       'stages',
@@ -203,7 +240,8 @@ export const runStage = async (options: {
         role,
         stage: options.stage,
         attempt: options.attempt,
-        userMessage: '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
+        userMessage:
+          '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
       });
       // Relaunch succeeded — continue polling
       continue;

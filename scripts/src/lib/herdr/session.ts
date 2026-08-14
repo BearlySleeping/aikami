@@ -46,6 +46,14 @@ import { resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
+import {
+  killPid,
+  killPortUnsafe,
+  pidsOnPort,
+  processAgeSeconds,
+  processName,
+} from '../env/process_info';
+import { findBash, posixQuote } from '../env/which';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -627,81 +635,49 @@ const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
     socket.once('error', () => settle(false));
   });
 
-/** Kill any process occupying a port so the next bind succeeds deterministically. */
-export const killPort = (port: number): Promise<void> =>
-  new Promise((resolveK) => {
-    // First, identify the PID listening on the port
-    const lsofProc = spawn('lsof', ['-ti', `tcp:${port}`], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
+/**
+ * Process names we're willing to kill to free a port — our own dev servers.
+ * Anything else holding the port is someone else's and stays untouched.
+ */
+const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase'];
 
-    let pidOutput = '';
-    lsofProc.stdout?.on('data', (chunk) => {
-      pidOutput += chunk.toString();
-    });
+/** True when a port holder is one of our dev servers rather than a bystander. */
+export const isKillableProcess = (name: string): boolean =>
+  KILLABLE_PROCESSES.some((candidate) => name.toLowerCase().includes(candidate));
 
-    lsofProc.on('close', (code) => {
-      if (code !== 0 || !pidOutput.trim()) {
-        // Port not in use or lsof unavailable — nothing to kill
-        resolveK();
-        return;
-      }
+/**
+ * Kill any process occupying a port so the next bind succeeds deterministically.
+ *
+ * Identity is checked before killing: an unrelated process gets a warning and
+ * is left alone. Platform differences (lsof/ps/kill vs netstat/tasklist/
+ * taskkill) live in env/process_info.ts — this is the policy, not the plumbing.
+ */
+export const killPort = async (port: number): Promise<void> => {
+  const pids = await pidsOnPort(port);
 
-      const pid = pidOutput.trim().split('\n')[0];
-      if (pid === undefined || !/^\d+$/.test(pid)) {
-        resolveK();
-        return;
-      }
+  if (pids.length === 0) {
+    // No lookup tool, or genuinely nothing listening. `fuser -k` is the POSIX
+    // last resort — it kills without an identity check, so it only runs when
+    // we could not identify a holder at all (no-op on Windows).
+    await killPortUnsafe(port);
+    return;
+  }
 
-      // Verify the process is one we expect (node, bun, vite, uwsgi, etc.)
-      // by checking its command line. If it's unrelated, don't kill it.
-      const psProc = spawn('ps', ['-p', pid, '-o', 'comm='], {
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-
-      let psOutput = '';
-      psProc.stdout?.on('data', (chunk) => {
-        psOutput += chunk.toString();
-      });
-
-      psProc.on('close', (psCode) => {
-        if (psCode !== 0) {
-          // Process already gone or ps failed
-          resolveK();
-          return;
-        }
-
-        const comm = psOutput.trim().toLowerCase();
-        const expectedProcs = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase'];
-        const isExpected = expectedProcs.some((name) => comm.includes(name));
-
-        if (!isExpected) {
-          // Port is occupied by an unrelated process — don't kill it
-          console.warn(
-            `Port ${port} is busy with unrelated process (PID ${pid}, ${comm}). Not killing.`,
-          );
-          resolveK();
-          return;
-        }
-
-        // Safe to kill — it's one of our dev server processes
-        const killProc = spawn('kill', [pid], { stdio: 'ignore' });
-        killProc.on('close', () => {
-          resolveK();
-        });
-        killProc.on('error', () => resolveK());
-      });
-    });
-
-    lsofProc.on('error', () => {
-      // lsof not available — fall back to fuser (less safe, but original behavior)
-      const fuserProc = spawn('fuser', ['-k', '-n', 'tcp', String(port)], {
-        stdio: 'ignore',
-      });
-      fuserProc.on('close', () => resolveK());
-      fuserProc.on('error', () => resolveK());
-    });
-  });
+  for (const pid of pids) {
+    const name = await processName(pid);
+    if (name === undefined) {
+      // Already exited between the lookup and now — nothing to do.
+      continue;
+    }
+    if (!isKillableProcess(name)) {
+      console.warn(
+        `Port ${port} is busy with unrelated process (PID ${pid}, ${name}). Not killing.`,
+      );
+      continue;
+    }
+    await killPid(pid);
+  }
+};
 
 // ── Direnv wrapper ─────────────────────────────────────────
 
@@ -711,37 +687,72 @@ export const killPort = (port: number): Promise<void> =>
  * fallback contract (manual tool installs + .env.local).
  */
 
-/**
- * Resolved once via Bun.which (our process's PATH), not left as a bare
- * `bash` for the pane's shell to look up. On Windows, herdr panes default to
- * Nushell, whose PATH doesn't include Git's `usr\bin` — a bare `bash` there
- * fails with "Command `bash` not found" even though it's installed and on
- * *our* PATH. Falls back to the bare name if not found at all (unlikely —
- * `bun run setup` requires git, which ships bash on every platform it runs
- * on), so the error is still legible instead of silently vanishing.
- */
-const bashPath = (): string => Bun.which('bash') ?? 'bash';
+/** Keeps a crashed service's output on screen instead of closing the pane. */
+const PANE_TRAILER = '=== Stopped. Press Enter to close ===';
 
 /**
- * Wraps a command for a herdr pane. `direnv exec .` loads the flake devShell
- * env (bun/jdk/chromium/etc. from flake.nix) before running — but on a
- * machine without direnv (e.g. Windows without WSL+Nix, per `bun run setup`'s
- * recommended-path check), that prefix isn't just a no-op, it's a hard
- * "command not found" that kills the pane before the real command ever runs.
- * Skip it there; the caller is responsible for their own PATH/env in that case
- * (e.g. MOON_TOOLCHAIN_FORCE_GLOBALS, manually installed tools).
+ * Wraps a command for a herdr pane, in descending order of fidelity:
+ *
+ *   1. bash + direnv — `direnv exec .` loads the flake devShell (bun, jdk,
+ *      chromium … from flake.nix) before running the command.
+ *   2. bash, no direnv — on a machine without direnv (Windows without
+ *      WSL+Nix, per `bun run setup`'s recommended-path check) the prefix is
+ *      not a harmless no-op, it's a "command not found" that kills the pane
+ *      before the real command runs. Drop it; the caller owns their PATH/env
+ *      (manual tool installs, MOON_TOOLCHAIN_FORCE_GLOBALS, .env.local).
+ *   3. Windows without bash — `cmd /c "… & pause"`. cmd.exe is always
+ *      present, and `pause` gives the same keep-the-pane-open behavior.
+ *   4. Anything else — run bare in the pane's own shell. The pane closes on
+ *      exit, but the command still runs.
+ *
+ * `bash` is passed as an absolute path (see `findBash`) because herdr panes
+ * default to Nushell on Windows, whose PATH does not include Git's bash.
  */
 export const wrapCommand = (command: string): string => {
-  // Single-quoted so a Windows path like `C:\Program Files\Git\...\bash.exe`
-  // survives Nushell's own tokenizing (its default pane shell on Windows) —
-  // unquoted, the space in "Program Files" would split it into two args.
-  const bash = `'${bashPath()}'`;
-  const prefix = hasDirenv() ? `direnv exec . ${bash} -c` : `${bash} -c`;
-  return `${prefix} '${command}; echo; echo "=== Stopped. Press Enter to close ==="; read'`;
+  const bash = findBash();
+  if (bash) {
+    const script = `${command}; echo; echo "${PANE_TRAILER}"; read`;
+    // Quoted so a Windows path like `C:\Program Files\Git\bin\bash.exe`
+    // survives Nushell's tokenizing — unquoted, the space in "Program Files"
+    // would split it into two args.
+    const prefix = hasDirenv() ? `direnv exec . ${posixQuote(bash)} -c` : `${posixQuote(bash)} -c`;
+    return `${prefix} ${posixQuote(script)}`;
+  }
+
+  // cmd.exe has no escape for a literal `"` inside a `/c "…"` string, so only
+  // take this path when the command has none (every SERVICE_DEFS command
+  // does). Otherwise fall through to running it bare.
+  if (process.platform === 'win32' && !command.includes('"')) {
+    return `cmd /c "${command} & pause"`;
+  }
+
+  return command;
 };
 
-/** Shell process names that indicate an idle pane with no active command. */
-const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
+/**
+ * Shell process names that indicate an idle pane with no active command.
+ * Includes the Windows set (herdr panes default to Nushell there, and
+ * pwsh/cmd are the other two a developer may have configured) — without
+ * them, an idle Windows pane reads as "busy" forever and the caller waits
+ * out its full timeout instead of sending the command.
+ */
+export const SHELL_NAMES = new Set([
+  'fish',
+  'bash',
+  'zsh',
+  'sh',
+  'dash',
+  // Windows — matched case-insensitively against the process name, with any
+  // `.exe` suffix stripped by `isIdleShellName`.
+  'nu',
+  'pwsh',
+  'powershell',
+  'cmd',
+]);
+
+/** True when a pane's foreground process name is just an idle shell. */
+export const isIdleShellName = (name: string): boolean =>
+  SHELL_NAMES.has(name.toLowerCase().replace(/\.exe$/, ''));
 
 /**
  * How old (seconds) a foreground process must be before a closed port counts
@@ -755,84 +766,6 @@ type PaneProcessInfo = {
       foreground_processes: { name: string; pid: number }[];
     };
   };
-};
-
-/** Elapsed seconds since a PID started (`ps -o etimes=` or `ps -o etime=` fallback), or undefined. */
-const processAgeSeconds = async (pid: number): Promise<number | undefined> => {
-  // Try GNU/Linux etimes (seconds) first
-  const etimesOut = await new Promise<string>((res) => {
-    const p = spawn('ps', ['-o', 'etimes=', '-p', String(pid)], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    let o = '';
-    p.stdout?.on('data', (d) => {
-      o += String(d);
-    });
-    p.on('close', () => res(o));
-    p.on('error', () => res(''));
-  });
-  const etimesVal = Number.parseInt(etimesOut.trim(), 10);
-  if (Number.isFinite(etimesVal)) {
-    return etimesVal;
-  }
-
-  // Fallback to BSD/macOS etime ([[dd-]hh:]mm:ss format)
-  const etimeOut = await new Promise<string>((res) => {
-    const p = spawn('ps', ['-o', 'etime=', '-p', String(pid)], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    let o = '';
-    p.stdout?.on('data', (d) => {
-      o += String(d);
-    });
-    p.on('close', () => res(o));
-    p.on('error', () => res(''));
-  });
-
-  // Parse [[dd-]hh:]mm:ss into total seconds
-  const parts = etimeOut.trim().split(/[-:]/);
-  if (parts.length === 0) {
-    return undefined;
-  }
-
-  let totalSeconds = 0;
-  if (parts.length === 2) {
-    // mm:ss
-    const [mm, ss] = parts.map((s) => Number.parseInt(s, 10));
-    if (Number.isFinite(mm) && Number.isFinite(ss) && mm !== undefined && ss !== undefined) {
-      totalSeconds = mm * 60 + ss;
-    }
-  } else if (parts.length === 3) {
-    // hh:mm:ss
-    const [hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
-    if (
-      Number.isFinite(hh) &&
-      Number.isFinite(mm) &&
-      Number.isFinite(ss) &&
-      hh !== undefined &&
-      mm !== undefined &&
-      ss !== undefined
-    ) {
-      totalSeconds = hh * 3600 + mm * 60 + ss;
-    }
-  } else if (parts.length === 4) {
-    // dd-hh:mm:ss
-    const [dd, hh, mm, ss] = parts.map((s) => Number.parseInt(s, 10));
-    if (
-      Number.isFinite(dd) &&
-      Number.isFinite(hh) &&
-      Number.isFinite(mm) &&
-      Number.isFinite(ss) &&
-      dd !== undefined &&
-      hh !== undefined &&
-      mm !== undefined &&
-      ss !== undefined
-    ) {
-      totalSeconds = dd * 86400 + hh * 3600 + mm * 60 + ss;
-    }
-  }
-
-  return totalSeconds > 0 ? totalSeconds : undefined;
 };
 
 /**
@@ -859,7 +792,7 @@ const assessServicePane = async (
     return 'booting';
   }
 
-  const real = procs.filter((p) => !SHELL_NAMES.has(p.name));
+  const real = procs.filter((p) => !isIdleShellName(p.name));
   if (real.length === 0) {
     // Only shells left → the wrapped command already exited (crash / stopped)
     return 'crashed';

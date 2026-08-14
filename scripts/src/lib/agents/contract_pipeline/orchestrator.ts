@@ -5,8 +5,8 @@ import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
-import { commitAll, pushBranch, runGit } from '../git_worktree.ts';
-import { playAlarm, playError } from './alarm.ts';
+import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
+import { playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
@@ -32,6 +32,7 @@ import {
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
+import { chimeOnFirstResponse } from './review_alarm.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import { MAX_VERIFY_LOOPS, resolveNextStage, transition } from './state_machine.ts';
 import type {
@@ -86,7 +87,7 @@ const findPreviousRuns = (options: { contractId: string; cwd: string }): string 
   return undefined;
 };
 
-const verifierFeedback = (options: {
+export const verifierFeedback = (options: {
   manifest: RunManifest;
   attempt: number;
 }): string | undefined => {
@@ -99,24 +100,27 @@ const verifierFeedback = (options: {
   const prevVerify = [...options.manifest.attempts]
     .reverse()
     .find((c) => c.role === 'verifier' && c.result);
-  // 🔴 If this implement attempt was triggered by the fallback-recovery
-  // review captain bouncing the run back with `change`, its diagnosis
-  // (often the product of consulting AskClaude/Opus for a second opinion)
-  // is the most current, most specific signal available — more specific
-  // than the stale verifier findings that already exhausted the loop once.
-  // Without this, `contract_review_decision`'s `summary` was written to the
+  // 🔴 If this implement attempt was triggered by a review captain bouncing
+  // the run back with `change` — from fallback recovery OR from a live
+  // human-in-the-loop review session — its diagnosis (often the product of
+  // consulting AskClaude/Opus for a second opinion) is the most current,
+  // most specific signal available — more specific than the stale verifier
+  // findings that already exhausted the loop once. Without this,
+  // `contract_review_decision`'s `summary`/`details` were written to the
   // manifest and then never read again — the captain's diagnosis was
   // discarded and the implementer re-ran blind on the same old findings.
-  const reviewFeedback =
-    options.manifest.reviewDecision?.decision === 'change'
-      ? options.manifest.reviewDecision.summary
-      : undefined;
+  const reviewChange = options.manifest.reviewDecision?.decision === 'change';
+  const reviewFeedback = reviewChange ? options.manifest.reviewDecision?.summary : undefined;
+  const reviewDetails = reviewChange ? options.manifest.reviewDecision?.details : undefined;
   if (!prevVerify?.result && !reviewFeedback) {
     return undefined;
   }
   const parts: string[] = [];
   if (reviewFeedback) {
-    parts.push('## Review Captain diagnosis (fallback recovery)', reviewFeedback, '');
+    parts.push('## Review Captain diagnosis', reviewFeedback, '');
+    if (reviewDetails) {
+      parts.push('### Additional context from the review captain', reviewDetails, '');
+    }
   }
   if (prevVerify?.result) {
     parts.push(prevVerify.result.summary);
@@ -184,6 +188,7 @@ const readReviewDecision = (path: string, runId: string): ContractReviewDecision
       typeof value.decision !== 'string' ||
       !validDecisions.includes(value.decision) ||
       typeof value.summary !== 'string' ||
+      (value.details !== undefined && typeof value.details !== 'string') ||
       typeof value.diffHash !== 'string' ||
       typeof value.contractChanged !== 'boolean' ||
       typeof value.createdAt !== 'string'
@@ -883,6 +888,12 @@ export const runContractPipeline = async (options: {
             : IDLE_TIMEOUT_MS,
           hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
           feedback,
+          // Lets runStage tell a late-finishing worker (adopt) apart from a
+          // deliberate new round after verifier/review feedback (must re-run).
+          // See the RETRY SAFEGUARD comment in stage_runner.ts.
+          previousAttemptRecordedStatus: manifest.attempts.find(
+            (a) => a.stage === stage && a.attempt === attempt - 1,
+          )?.result?.status,
           interactiveWriter: interactiveStage,
           launchWorker: (req) => adapter.launchWorker(req),
           checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
@@ -1176,19 +1187,57 @@ export const runContractPipeline = async (options: {
           unlinkSync(reviewPath);
         }
 
-        // Reconnect to live pane on resume — only when no decision is pending.
+        // Set when a review pane is spawned below; cancelled once the decision
+        // lands so the detached poller stops shelling out to herdr.
+        let chime: { cancel: () => void } | undefined;
+
+        // Reconnect to a live pane on resume — only when no decision is pending.
+        //
+        // 🔴 Reattaching is SILENT by default. The captain does not need to be
+        // told the orchestrator is back: it was given `reviewDecisionPath` in
+        // its original prompt and the orchestrator simply polls that file, so
+        // a resume changes nothing on the captain's side. The nudge that used
+        // to be sent here carried no information and cost a user their
+        // half-typed message (C-390 — see review_pane.ts).
+        //
+        // The one case that genuinely needs a message is a captain that never
+        // received its task at all (`_sendTaskText` bailed before the crash).
+        // That is recorded, not guessed, and even then the send is gated on an
+        // empty composer and capped at one attempt per run.
         if (!existingDecision && manifest.reviewPaneId) {
           const alive = await adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false);
-          if (alive) {
-            if (manifest.reviewDecision === undefined) {
-              await adapter.sendReviewMessage({
-                paneId: manifest.reviewPaneId,
-                message: `Pipeline resumed. Your session was preserved — continue from where you left off. Branch \`${headBranch ?? 'unknown'}\` is still pushed.`,
-              });
-            }
-          } else {
+          if (!alive) {
             manifest.reviewPaneId = undefined;
             writeManifest({ manifest, cwd: options.repoRoot });
+          } else if (manifest.reviewDecision === undefined) {
+            const needsTask = manifest.reviewTaskDelivered === false;
+            const alreadyNudged = manifest.reviewResumeNudgedAt !== undefined;
+            if (needsTask && !alreadyNudged) {
+              // Recorded BEFORE the send: a crash between send and persist
+              // must not license a second injection on the next resume.
+              manifest.reviewResumeNudgedAt = new Date().toISOString();
+              writeManifest({ manifest, cwd: options.repoRoot });
+              const delivered = await adapter.sendReviewMessage({
+                paneId: manifest.reviewPaneId,
+                message: `Review contract run ${manifest.runId}. Present the verified status from the manifest. Do NOT re-run tests. Your LAST action MUST call contract_review_decision.`,
+              });
+              manifest.reviewTaskDelivered = delivered;
+              writeManifest({ manifest, cwd: options.repoRoot });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `Review pane re-tasked on resume (delivered=${delivered}).`,
+              });
+            } else {
+              console.log(
+                `🔗 Reattached to review pane ${manifest.reviewPaneId} — waiting for the decision (no message sent).`,
+              );
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: 'Reattached to live review pane (silent — captain already tasked).',
+              });
+            }
           }
         }
         if (existingDecision) {
@@ -1239,11 +1288,18 @@ export const runContractPipeline = async (options: {
                 prUrl: undefined,
                 headBranch,
                 baseBranch,
+                // Measured, never inferred: a blocked review reaches here with
+                // `headBranch` falling back to the local worktree branch, which
+                // reconciliation never pushed. Telling the captain it is pushed
+                // sends it chasing a branch that isn't on origin (C-390).
+                branchPushed: headBranch
+                  ? remoteBranchExists({ branchName: headBranch, repoRoot: options.repoRoot })
+                  : false,
                 profile: isYolo ? 'yolo' : 'ready',
                 autofixCycle: manifest.autofixCycles + 1,
                 maxAutofixCycles: MAX_AUTOFIX_CYCLES,
               });
-          manifest.reviewPaneId = await adapter.startReview({
+          const started = await adapter.startReview({
             prompt,
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
@@ -1256,11 +1312,34 @@ export const runContractPipeline = async (options: {
             blockedReview: isBlockedReview,
             useWorktreeCwd: isYolo || isBlockedReview,
           });
-          // 🔔 Review spawned — chime regardless of pipeline outcome (clean
-          // pass or blocked review). Delayed + fire-and-forget so the pane
-          // renders first and the pipeline never blocks on audio.
-          playAlarm();
+          manifest.reviewPaneId = started.paneId;
+          manifest.reviewTaskDelivered = started.taskDelivered;
+          manifest.reviewResumeNudgedAt = undefined;
           writeManifest({ manifest, cwd: options.repoRoot });
+
+          // 🔔 Chime when the captain FINISHES its first response, not when
+          // the pane spawns. Spawn-time was minutes too early — pi was still
+          // booting, so the alarm called the user to a pane with nothing on
+          // it. Detached: the orchestrator blocks in waitForReviewDecision
+          // immediately below, so this can never be awaited.
+          //
+          // YOLO reviews are autonomous (create PR → autofix → merge without
+          // the user), so they get no chime — only a pane that wants a human
+          // should ring one.
+          if (!isYolo) {
+            const chimePaneId = started.paneId;
+            chime = chimeOnFirstResponse({
+              getStatus: () => adapter.getAgentStatus(chimePaneId),
+              isPaneAlive: () => adapter.isPaneAlive(chimePaneId).catch(() => true),
+              onOutcome: (outcome) => {
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Review first response: ${outcome}.`,
+                });
+              },
+            });
+          }
         }
 
         let decision: ContractReviewDecision;
@@ -1286,6 +1365,12 @@ export const runContractPipeline = async (options: {
             continue;
           }
           throw e;
+        } finally {
+          // Runs on the `continue` above too. The captain has either answered
+          // or vanished; either way nobody needs the chime now, and leaving
+          // the poller running would spawn a herdr probe every 1.5s for the
+          // remainder of its 20-minute timeout.
+          chime?.cancel();
         }
         manifest.reviewDecision = decision;
         if (!manifest.reviewPaneId) {
