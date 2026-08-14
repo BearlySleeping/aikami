@@ -16,6 +16,12 @@ import {
 
 const check = (schema: unknown, value: unknown): boolean => Value.Check(schema as never, value);
 
+const VALID_START = {
+  type: 'start',
+  protocolVersion: 1,
+  audio: { sampleRate: 16000, channels: 1, encoding: 'pcm_s16le' },
+} as const;
+
 const VALID_CAPABILITIES = {
   streaming: {
     available: true,
@@ -87,13 +93,11 @@ describe('SttCapabilitiesSchema (AC-4)', () => {
 
 describe('SttClientMessageSchema', () => {
   test('accepts a start message', () => {
-    expect(check(SttClientMessageSchema, { type: 'start', protocolVersion: 1 })).toBe(true);
+    expect(check(SttClientMessageSchema, { ...VALID_START })).toBe(true);
   });
 
   test('accepts a start message with language', () => {
-    expect(
-      check(SttClientMessageSchema, { type: 'start', language: 'de', protocolVersion: 1 }),
-    ).toBe(true);
+    expect(check(SttClientMessageSchema, { ...VALID_START, language: 'de' })).toBe(true);
   });
 
   test('accepts a stop message', () => {
@@ -104,12 +108,25 @@ describe('SttClientMessageSchema', () => {
     expect(check(SttClientMessageSchema, { type: 'pause' })).toBe(false);
   });
 
+  test('rejects a start without the required audio format', () => {
+    expect(check(SttClientMessageSchema, { type: 'start', protocolVersion: 1 })).toBe(false);
+  });
+
+  test('rejects a start declaring a non-16k audio format', () => {
+    expect(
+      check(SttClientMessageSchema, {
+        ...VALID_START,
+        audio: { sampleRate: 44100, channels: 2, encoding: 'pcm_s16le' },
+      }),
+    ).toBe(false);
+  });
+
   test('rejects a start without protocolVersion', () => {
     expect(check(SttClientMessageSchema, { type: 'start' })).toBe(false);
   });
 
   test('rejects protocolVersion 2', () => {
-    expect(check(SttClientMessageSchema, { type: 'start', protocolVersion: 2 })).toBe(false);
+    expect(check(SttClientMessageSchema, { ...VALID_START, protocolVersion: 2 })).toBe(false);
   });
 });
 

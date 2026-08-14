@@ -15,7 +15,9 @@ voice container (docker/voice/entrypoint.sh), serving:
 Wire contract (shared schemas in packages/shared/schemas/src/lib/local_ai/
 stt.ts — the service emits exactly those JSON shapes):
 
-  Client → server (text frames): {"type":"start","protocolVersion":1,"language"?}
+  Client → server (text frames): {"type":"start","protocolVersion":1,
+                                 "audio":{"sampleRate":16000,"channels":1,
+                                           "encoding":"pcm_s16le"},"language"?}
                                  {"type":"stop"}
   Client → server (binary frames): raw 16 kHz mono 16-bit PCM (pcm_s16le)
   Server → client (text frames): ready | speech-start | partial | final |
@@ -63,6 +65,9 @@ from pathlib import Path
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 SAMPLE_RATE = 16000
 BYTES_PER_SECOND = SAMPLE_RATE * 2  # 16-bit mono
+# Bounded trailing window for partial decodes (~2 s of audio): partial
+# hypotheses stay cheap as the utterance grows (long-utterance Edge Case).
+PARTIAL_WINDOW_SAMPLES = SAMPLE_RATE * 2
 
 # whisper.cpp's language list (~99 languages, ISO 639-1 codes). Moonshine is
 # English-only (AC-5); the batch engine covers the rest.
@@ -267,9 +272,12 @@ class VadPipeline:
             self._maybe_partial()
         # Completed utterances (VAD detected silence long enough).
         while not self._detector.empty():
+            # Finalize BEFORE pop(): sherpa-onnx's VoiceActivityDetector
+            # invalidates the front() reference on pop(), so read the
+            # segment (samples/start) while it is still valid.
             segment = self._detector.front
-            self._detector.pop()
             self._finalize(segment)
+            self._detector.pop()
 
     def _decode(self, samples: list[float]) -> str:
         """Run the offline recognizer over the given samples (thread-safe).
@@ -299,7 +307,10 @@ class VadPipeline:
             return
         self._last_decode_ms = now
         self._last_partial_len_marker = len(self._buffer)
-        text = self._decode(self._buffer)
+        # Decode only a bounded trailing window — partial hypotheses concern
+        # the most recent audio, and decoding the whole utterance grows
+        # unboundedly with utterance length (long-utterance Edge Case).
+        text = self._decode(self._buffer[-PARTIAL_WINDOW_SAMPLES:])
         if text:
             self._on_event({"type": "partial", "text": text, "atMs": _now_ms()})
 
@@ -361,6 +372,7 @@ class SttModels:
         self.vad_model = _env_str("STT_VAD_MODEL", DEFAULT_VAD_MODEL)
         self.stream_engine = _env_str("STT_STREAM_ENGINE", "moonshine")
         self.batch_engine = _env_str("STT_BATCH_ENGINE", "whisper-cpp")
+        self.whisper_port = _env_int("WHISPER_PORT", 8091)
         self.recognizer = None
         self.vad = None
         self.missing: list[str] = []
@@ -444,8 +456,19 @@ class SttModels:
             print(f"[stt] VAD loaded from {vad_path}", flush=True)
 
     def batch_available(self) -> bool:
-        """The batch model file exists (the whisper server is supervised by entrypoint)."""
-        return Path(self._path(self.batch_model)).exists()
+        """True only when the whisper.cpp batch server is reachable.
+
+        Probes the internal WHISPER_PORT so /v1/capabilities and /health
+        reflect process liveness, not just the model file's presence — a
+        stopped or missing whisper-server must report batch unavailable.
+        """
+        if not Path(self._path(self.batch_model)).exists():
+            return False
+        try:
+            with socket.create_connection(("127.0.0.1", self.whisper_port), timeout=0.5):
+                return True
+        except OSError:
+            return False
 
     def batch_model_name(self) -> str:
         return Path(self.batch_model).name
@@ -612,6 +635,31 @@ class SttHandler(BaseHTTPRequestHandler):
                 ws.send_close(1002)
                 return
 
+            # AC-6: the client must declare the audio format it will stream
+            # (wire contract). Reject a missing or mismatched declaration
+            # before any audio is accepted — the format is fixed, so only
+            # 16 kHz mono 16-bit PCM passes.
+            audio = start_msg.get("audio")
+            if not isinstance(audio, dict) or audio != {
+                "sampleRate": SAMPLE_RATE,
+                "channels": 1,
+                "encoding": "pcm_s16le",
+            }:
+                ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "code": "bad-audio-format",
+                            "message": (
+                                "start message must declare the audio format "
+                                '{"sampleRate": 16000, "channels": 1, "encoding": "pcm_s16le"}'
+                            ),
+                        }
+                    )
+                )
+                ws.send_close(1002)
+                return
+
             # AC-5: Moonshine is English-only — report, never mis-transcribe.
             language = start_msg.get("language")
             if language and language.lower() not in ("en", "english"):
@@ -664,8 +712,12 @@ class SttHandler(BaseHTTPRequestHandler):
             )
 
             # AC-6: validate the audio format on the fly (16k mono s16le).
-            audio_start = 0
-            bytes_received = 0
+            # Sliding-window byte-rate guard: only sustained OVER-delivery is
+            # rejected. Pauses, muted clients, and stalls are valid — VAD
+            # handles endpointing — so there is no under-delivery floor.
+            rate_window_ms = 1000
+            rate_window_start = _now_ms()
+            rate_window_bytes = 0
 
             while True:
                 message = ws.read_message()
@@ -695,33 +747,29 @@ class SttHandler(BaseHTTPRequestHandler):
                     return
 
                 now = _now_ms()
-                if audio_start == 0:
-                    audio_start = now
-                bytes_received += len(payload)
-                # Sample-rate plausibility over the audio clock (AC-6): a
-                # stream that delivers far more (or far less) than 32000
-                # bytes per second is not 16 kHz mono 16-bit PCM. The floor
-                # lets a real-time client burst a few hundred ms before
-                # judging; the ±30% window tolerates network jitter while
-                # still rejecting e.g. 44.1k stereo (~5.5× the rate).
-                elapsed = (now - audio_start) / 1000.0
-                if elapsed >= 0.5:
-                    expected_min = BYTES_PER_SECOND * elapsed * 0.7
-                    expected_max = BYTES_PER_SECOND * elapsed * 1.3
-                    if bytes_received < expected_min or bytes_received > expected_max:
+                rate_window_bytes += len(payload)
+                # Reject only when a full window delivered more than 16 kHz
+                # mono 16-bit PCM allows (~32000 B/s) plus the ±30% jitter
+                # tolerance — e.g. 44.1k stereo is ~5.5× the rate.
+                if now - rate_window_start >= rate_window_ms:
+                    window_elapsed = (now - rate_window_start) / 1000.0
+                    measured = rate_window_bytes / window_elapsed
+                    if measured > BYTES_PER_SECOND * 1.3:
                         self._stream_error(
                             ws,
                             "bad-audio-format",
                             (
                                 f"expected 16 kHz mono 16-bit PCM "
-                                f"(32000 bytes/sec), measured ~{int(bytes_received / elapsed)} bytes/sec"
+                                f"(32000 bytes/sec), measured ~{int(measured)} bytes/sec"
                             ),
                         )
                         return
+                    rate_window_start = now
+                    rate_window_bytes = 0
 
                 samples = [
-                    struct.unpack_from("<h", payload, i)[0] / 32768.0
-                    for i in range(0, len(payload), 2)
+                    value / 32768.0
+                    for value in struct.unpack(f"<{len(payload) // 2}h", payload)
                 ]
                 pipeline.accept(samples)
 

@@ -143,8 +143,11 @@ COMPOSE_PROFILES=text,image,voice,stt,web
 > ⚠️ **STT is opt-in (C-393 AC-7).** The shipped defaults do **not** start
 > the STT service: `.env.example` lists `COMPOSE_PROFILES=text,image,voice`
 > and `ENABLE_STT=false`. To enable speech-to-text, add `stt` to
-> `COMPOSE_PROFILES` **and** set `ENABLE_STT=true`. A microphone-adjacent
-> service that starts unasked would be a privacy problem.
+> `COMPOSE_PROFILES`, set `ENABLE_STT=true`, **and** include
+> `compose.stt.yaml` in `COMPOSE_FILE` (the base file never publishes the
+> STT port, so without the override port 8087 stays unbound). A
+> microphone-adjacent service that starts unasked would be a privacy
+> problem.
 
 ### Speech-to-text (STT)
 
@@ -164,9 +167,9 @@ codes against):
 - **Audio format is fixed**: 16 kHz mono 16-bit PCM (`pcm_s16le`), 32000
   bytes/sec. Resampling is the client's job; the server rejects anything
   else with `error: bad-audio-format`.
-- Client → server: `{"type":"start","protocolVersion":1,"language"?}`
-  (JSON text frame), then binary frames of raw PCM, then
-  `{"type":"stop"}`.
+- Client → server: `{"type":"start","protocolVersion":1,"audio":{...}}`
+  (JSON text frame — `audio` declares the fixed 16 kHz mono 16-bit PCM
+  format), then binary frames of raw PCM, then `{"type":"stop"}`.
 - Server → client: `ready`, `speech-start`, `partial`*, `final`,
   `speech-end`, `error`. VAD runs **server-side** — the client never infers
   endpointing.
@@ -304,7 +307,10 @@ engine on a Mac is CPU-only and slow. On Darwin the supported setup is:
    ./bin/run-native-tts.sh   # sherpa-onnx Kokoro TTS on 8089
    ./bin/run-native-stt.sh   # C-393 STT service on 8087 (Moonshine streaming + whisper.cpp batch)
    ```
-   Each downloads its default model on first run. The native path and the
+   The LLM and TTS launchers download their default models on first run;
+   `run-native-stt.sh` does **not** — STT models are provisioned by the
+   model fetcher (like the containerised path), so run the fetcher first or
+   the script exits with a fetch hint. The native path and the
    containerised path expose **identical endpoints** (same ports, same
    protocol). `run-native-stt.sh` needs `pip install sherpa-onnx` on the
    host; batch transcription additionally needs the whisper.cpp

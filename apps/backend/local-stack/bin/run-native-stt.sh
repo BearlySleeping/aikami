@@ -23,14 +23,18 @@
 #       #   cmake -B build -DWHISPER_BUILD_SERVER=ON && cmake --build build --target whisper-server
 #       #   ln -s "$PWD/build/bin/whisper-server" /usr/local/bin/
 #
-# Models live in ./models/stt (downloaded here when absent, or via the
-# stack/model fetcher). Model selection mirrors the container:
+# Models live in ./models/stt and are provisioned by the stack/model
+# fetcher — this script never downloads them; it verifies the files exist
+# and exits with a fetch hint when a model is missing. Model selection
+# mirrors the container:
 #   STT_STREAM_MODEL / STT_BATCH_MODEL / STT_VAD_MODEL (manifest targetPaths).
 set -euo pipefail
 
 # Ports from packages/shared/constants development_ports.ts (C-390 AC-11).
 PORT="${STT_PORT:-8087}"
-WHISPER_PORT="${WHISPER_PORT:-8091}"
+# Export so stt_server.py's batch proxy reads the SAME internal port the
+# whisper-server was launched on (it defaults to 8091 on its own).
+export WHISPER_PORT="${WHISPER_PORT:-8091}"
 BIND="${STT_BIND_ADDRESS:-127.0.0.1}"
 
 # C-393 model selection (manifest targetPaths, mirror the container defaults).
@@ -70,18 +74,31 @@ if command -v whisper-server >/dev/null 2>&1; then
         echo "  (fetch it with: bun stack/fetch_models.ts --entry stt-whisper-tiny)"
     else
         echo "Starting whisper.cpp batch server on 127.0.0.1:$WHISPER_PORT ..."
-        WHISPER_PORT="$WHISPER_PORT" \
+        WHISPER_LOG="$(mktemp "${TMPDIR:-/tmp}/whisper-server.XXXXXX.log")"
         whisper-server \
             --host 127.0.0.1 \
             --port "$WHISPER_PORT" \
             --model "$BATCH_FILE" \
             --threads "${STT_WHISPER_THREADS:-4}" \
             --no-gpu \
-            > /tmp/whisper-server.log 2>&1 &
+            > "$WHISPER_LOG" 2>&1 &
+        WHISPER_PID=$!
     fi
 else
     echo "⚠ whisper-server not found on the host — batch endpoint unavailable (streaming still works)"
 fi
 
+# Keep the background whisper-server alive while stt_server.py runs and
+# clean it up (plus its unique temp log) when the script exits — an exec
+# handoff would orphan the batch process once the STT server stopped.
+cleanup() {
+    if [ -n "${WHISPER_PID:-}" ]; then
+        kill "$WHISPER_PID" 2>/dev/null || true
+        wait "$WHISPER_PID" 2>/dev/null || true
+    fi
+    rm -f "${WHISPER_LOG:-}"
+}
+trap cleanup EXIT
+
 echo "Starting native STT server on $BIND:$PORT ..."
-exec python3 "$(dirname "$0")/../docker/voice/stt_server.py" "$PORT"
+python3 "$(dirname "$0")/../docker/voice/stt_server.py" "$PORT"

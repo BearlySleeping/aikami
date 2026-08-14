@@ -16,6 +16,7 @@ cd "$(dirname "$0")/.."
 
 fail=0
 pass=0
+skip_count=0
 
 ok() {
     pass=$((pass + 1))
@@ -25,6 +26,13 @@ ok() {
 bad() {
     fail=$((fail + 1))
     echo "FAIL - $1"
+}
+
+# A check that could not run (missing image, container could not start) is
+# NOT a pass — reserve ok for a completed assertion.
+skip() {
+    skip_count=$((skip_count + 1))
+    echo "skip - $1"
 }
 
 check() {
@@ -58,7 +66,11 @@ check "python syntax: docker/voice/tts_server.py" python3 -m py_compile docker/v
 
 # ── C-393 AC-7: STT is off by default ───────────────────────────────────
 echo "== C-393 AC-7: STT off by default =="
-if grep -q '^COMPOSE_PROFILES=text,image,voice$' .env.example; then
+# The shipped default must not enable the stt profile — assert the absence
+# of `stt` rather than an exact full profile list so unrelated default
+# profiles can change without breaking this check.
+if grep -q '^COMPOSE_PROFILES=' .env.example \
+    && ! grep -qE '^COMPOSE_PROFILES=.*\bstt\b' .env.example; then
     ok "AC-7: .env.example does not enable the stt profile"
 else
     bad "AC-7: .env.example must not list stt in COMPOSE_PROFILES"
@@ -73,8 +85,11 @@ if grep -q '^ENABLE_STT=true' .env.example; then
 else
     ok "AC-7: .env.example has no ENABLE_STT=true"
 fi
-# The stt profile must not bind any port when it is not enabled.
-render_no_stt=$(COMPOSE_PROFILES=text,image,voice docker compose config 2>/dev/null)
+# The stt profile must not bind any port when it is not enabled. Pin
+# COMPOSE_FILE explicitly so ambient .env values (e.g. a developer's
+# COMPOSE_FILE that includes compose.stt.yaml) cannot leak the STT port
+# into the no-STT render.
+render_no_stt=$(COMPOSE_FILE="compose.yaml:compose.cpu.yaml" COMPOSE_PROFILES=text,image,voice docker compose config 2>/dev/null)
 if printf '%s' "$render_no_stt" | grep -qE "published: *[\"']?8087[\"']?"; then
     bad "AC-7: no-STT render must not publish the STT port"
 else
@@ -527,16 +542,16 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
             fi
             docker rm -f aikami-stt-missing-test >/dev/null 2>&1 || true
         else
-            ok "AC-10: skipped (could not start throwaway voice container)"
+            skip "AC-10: throwaway voice container could not start (no assertion made)"
         fi
     else
-        ok "AC-10: skipped (voice image not found)"
+        skip "AC-10: voice image not found (no assertion made)"
     fi
 fi
 
 echo
 if [ "$fail" -ne 0 ]; then
-    echo "❌ local-stack checks failed: $fail failure(s), $pass pass"
+    echo "❌ local-stack checks failed: $fail failure(s), $pass pass, $skip_count skipped"
     exit 1
 fi
-echo "✅ local-stack checks passed: $pass pass, 0 failures"
+echo "✅ local-stack checks passed: $pass pass, $skip_count skipped, 0 failures"

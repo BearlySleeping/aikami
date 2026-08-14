@@ -39,12 +39,12 @@ COMPOSE_PROFILES=text,image,voice,stt
 COMPOSE_FILE=compose.yaml:compose.cuda.yaml:compose.stt.yaml   # see the table
 ```
 
-> **Speech-to-text is opt-in.** The shipped defaults start text, image, and
-> voice only. Enabling `stt` requires all three of: `stt` in
-> `COMPOSE_PROFILES`, `ENABLE_STT=true`, and `compose.stt.yaml` in
-> `COMPOSE_FILE` (the base file never publishes the STT port — a
-> microphone-adjacent service must start unasked). `stack init` wires all
-> three automatically when you include the stt modality.
+> **Speech-to-text is opt-in.** A microphone-adjacent service must not
+> start unasked, so the shipped defaults start text, image, and voice only.
+> Enabling `stt` requires all three of: `stt` in `COMPOSE_PROFILES`,
+> `ENABLE_STT=true`, and `compose.stt.yaml` in `COMPOSE_FILE` (the base
+> file never publishes the STT port). `stack init` wires all three
+> automatically when you include the stt modality.
 
 | Backend | COMPOSE_FILE | When |
 |---|---|---|
@@ -78,8 +78,9 @@ engines bind `127.0.0.1` only.
 ### Speech-to-text wire contract
 
 Streaming audio is always **16 kHz mono 16-bit PCM** (resampling is the
-client's job). A session is: `{"type":"start","protocolVersion":1}` (text
-frame) → binary PCM frames → `{"type":"stop"}`; the server replies with
+client's job). A session is: `{"type":"start","protocolVersion":1,"audio":{...}}`
+(text frame — `audio` declares the fixed 16 kHz mono 16-bit PCM format) →
+binary PCM frames → `{"type":"stop"}`; the server replies with
 `ready`, `speech-start`, `partial`*, `final`, `speech-end`, and `error`
 events. VAD runs server-side (Silero) so the client never infers
 endpointing. Moonshine is English-only — requesting another language returns

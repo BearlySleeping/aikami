@@ -10,10 +10,11 @@
 //   - Audio is always 16 kHz mono 16-bit PCM (`pcm_s16le`). Resampling is
 //     the client's job; the server rejects anything that does not match
 //     (AC-6).
-//   - `WS {stt}/v1/stream` — client sends `start` (JSON text frame), then
-//     binary frames of raw PCM, then `stop`; the server replies with
-//     `ready`, `speech-start`, `partial`*, `final`, `speech-end`, and
-//     `error` events (AC-1/AC-2).
+//   - `WS {stt}/v1/stream` — client sends `start` (JSON text frame,
+//     declaring the audio format it will stream), then binary frames of
+//     raw PCM, then `stop`; the server replies with `ready`,
+//     `speech-start`, `partial`*, `final`, `speech-end`, and `error`
+//     events (AC-1/AC-2).
 //   - `POST {stt}/v1/audio/transcriptions` — OpenAI-compatible batch
 //     endpoint served by whisper.cpp (AC-3).
 //   - `GET {stt}/v1/capabilities` — introspection (AC-4).
@@ -80,9 +81,15 @@ export const SttErrorCodeSchema = Type.Union([
 ]);
 export type SttErrorCode = Type.Static<typeof SttErrorCodeSchema>;
 
-/** Client → server: begin a streaming session. */
+/** Client → server: begin a streaming session.
+ *
+ * `audio` is required — the client declares the format it will stream so
+ * the server can reject a mismatch before accepting any audio (AC-6). The
+ * only accepted value is the fixed 16 kHz mono 16-bit PCM format.
+ */
 export const SttClientStartMessageSchema = Type.Object({
   type: Type.Literal('start'),
+  audio: SttAudioFormatSchema,
   language: Type.Optional(Type.String()),
   protocolVersion: Type.Literal(1),
 });

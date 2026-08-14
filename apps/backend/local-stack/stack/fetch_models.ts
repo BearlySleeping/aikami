@@ -108,11 +108,25 @@ export const selectSttEntries = (options: {
     (value: string): ((entry: ManifestEntry) => boolean) =>
     (entry) =>
       entry.targetPath === value || entry.targetPath.startsWith(`${value}/`);
-  return entries.filter(
-    (entry) =>
-      entry.modality === 'stt' &&
-      (entry.id === STT_VAD_ENTRY_ID || matches(stream)(entry) || matches(batch)(entry)),
+  const sttEntries = entries.filter((entry) => entry.modality === 'stt');
+  const selected = sttEntries.filter(
+    (entry) => entry.id === STT_VAD_ENTRY_ID || matches(stream)(entry) || matches(batch)(entry),
   );
+  // Warn when a configured selector matches no manifest entry — the fetcher
+  // would silently skip the requested model (Watch Point: tier selection).
+  if (!sttEntries.some(matches(stream))) {
+    // biome-ignore lint/suspicious/noConsole: container log (standalone script)
+    console.warn(
+      `[fetcher] STT_STREAM_MODEL '${stream}' matches no manifest entry — streaming model will not be fetched`,
+    );
+  }
+  if (!sttEntries.some(matches(batch))) {
+    // biome-ignore lint/suspicious/noConsole: container log (standalone script)
+    console.warn(
+      `[fetcher] STT_BATCH_MODEL '${batch}' matches no manifest entry — batch model will not be fetched`,
+    );
+  }
+  return selected;
 };
 
 /**

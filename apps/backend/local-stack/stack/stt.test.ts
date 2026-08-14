@@ -191,16 +191,20 @@ describe('C-393 — fetcher STT tier scoping (run)', () => {
       sttBatchModel: 'stt/whisper-tiny/ggml-tiny.bin',
     });
     expect(code).toBe(0);
-    expect(Bun.file(join(dir, 'stt/sherpa-onnx-moonshine-tiny-en-int8')).exists()).resolves.toBe(
+    await expect(
+      Bun.file(join(dir, 'stt/sherpa-onnx-moonshine-tiny-en-int8')).exists(),
+    ).resolves.toBe(true);
+    await expect(Bun.file(join(dir, 'stt/silero_vad.onnx')).exists()).resolves.toBe(true);
+    await expect(Bun.file(join(dir, 'stt/whisper-tiny/ggml-tiny.bin')).exists()).resolves.toBe(
       true,
     );
-    expect(Bun.file(join(dir, 'stt/silero_vad.onnx')).exists()).resolves.toBe(true);
-    expect(Bun.file(join(dir, 'stt/whisper-tiny/ggml-tiny.bin')).exists()).resolves.toBe(true);
     // Other tiers must NOT be fetched.
-    expect(Bun.file(join(dir, 'stt/sherpa-onnx-moonshine-base-en-int8')).exists()).resolves.toBe(
+    await expect(
+      Bun.file(join(dir, 'stt/sherpa-onnx-moonshine-base-en-int8')).exists(),
+    ).resolves.toBe(false);
+    await expect(Bun.file(join(dir, 'stt/whisper-base/ggml-base.bin')).exists()).resolves.toBe(
       false,
     );
-    expect(Bun.file(join(dir, 'stt/whisper-base/ggml-base.bin')).exists()).resolves.toBe(false);
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -219,7 +223,12 @@ describe('C-393 — fetcher STT tier scoping (run)', () => {
       entryIds: ['stt-whisper-base'],
     });
     expect(code).toBe(0);
-    expect(Bun.file(join(dir, 'stt/whisper-base/ggml-base.bin')).exists()).resolves.toBe(true);
+    await expect(Bun.file(join(dir, 'stt/whisper-base/ggml-base.bin')).exists()).resolves.toBe(
+      true,
+    );
+    // Explicit entries bypass the tier filter — the VAD model is not part
+    // of the explicit request and must NOT be fetched.
+    await expect(Bun.file(join(dir, 'stt/silero_vad.onnx')).exists()).resolves.toBe(false);
     await rm(dir, { recursive: true, force: true });
   });
 });

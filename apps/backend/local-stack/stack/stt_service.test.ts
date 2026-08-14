@@ -20,6 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
+import { connect as tcpConnect } from 'node:net';
 import { join } from 'node:path';
 import { SttCapabilitiesSchema, type SttServerMessage } from '@aikami/schemas';
 import type { SttCapabilities } from '@aikami/types';
@@ -56,6 +57,14 @@ const parseWav = (bytes: Uint8Array): { sampleRate: number; channels: number; pc
   if (bitsPerSample !== 16) {
     throw new Error(`fixture is not 16-bit: ${bitsPerSample}`);
   }
+  // The wire contract fixes the audio format to 16 kHz mono (AC-6) — a
+  // fixture that does not match cannot exercise the service correctly.
+  if (sampleRate !== SAMPLE_RATE) {
+    throw new Error(`fixture sample rate is not ${SAMPLE_RATE} Hz: ${sampleRate}`);
+  }
+  if (channels !== 1) {
+    throw new Error(`fixture is not mono: ${channels} channels`);
+  }
   // Walk RIFF chunks to find 'data' regardless of the header layout.
   let offset = 12;
   let pcm: Uint8Array = new Uint8Array(0);
@@ -71,7 +80,25 @@ const parseWav = (bytes: Uint8Array): { sampleRate: number; channels: number; pc
   return { sampleRate, channels, pcm };
 };
 
-const fixture = existsSync(FIXTURE) ? parseWav(readFileSync(FIXTURE)) : null;
+// Parsed lazily and defensively: a malformed fixture must not crash module
+// import (the live suite skips when STT_URL is unavailable). Tests that
+// need the fixture fail with the existing per-test “fixture missing” path.
+let fixture: {
+  sampleRate: number;
+  channels: number;
+  pcm: Uint8Array;
+  wav: Uint8Array;
+} | null = null;
+if (existsSync(FIXTURE)) {
+  try {
+    const bytes = readFileSync(FIXTURE);
+    fixture = { ...parseWav(bytes), wav: bytes };
+  } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: visible warning when the live fixture is malformed
+    console.warn(`C-393 fixture parse failed: ${String(error)}`);
+    fixture = null;
+  }
+}
 
 /**
  * Streams PCM chunks over a websocket at real-time pace (the server
@@ -107,7 +134,14 @@ const streamWav = (options: {
 
     ws.onopen = async () => {
       try {
-        ws.send(JSON.stringify({ type: 'start', protocolVersion: 1, ...start }));
+        ws.send(
+          JSON.stringify({
+            type: 'start',
+            protocolVersion: 1,
+            audio: { sampleRate: 16000, channels: 1, encoding: 'pcm_s16le' },
+            ...start,
+          }),
+        );
         const lead = Math.floor((BYTES_PER_SECOND * leadSilenceMs) / 1000 / 2) * 2;
         for (let i = 0; i < lead; i += chunkBytes) {
           sendPcm(new Uint8Array(Math.min(chunkBytes, lead - i)));
@@ -224,6 +258,10 @@ describe.skipIf(!reachable)('C-393 STT service (live)', () => {
         expect(editDistance(actual, expected)).toBeLessThanOrEqual(
           Math.max(3, expected.length / 3),
         );
+        // Keyword guard alongside edit distance: the transcript must retain
+        // the salient words, not merely approximate the sentence length.
+        expect(actual).toContain('hello');
+        expect(actual).toContain('recognition');
       }),
     30000,
   );
@@ -285,17 +323,47 @@ describe.skipIf(!reachable)('C-393 STT service (live)', () => {
   );
 
   it('AC-9: a cross-origin websocket connection is rejected before audio', async () => {
-    // Assert the HTTP layer of the handshake: a websocket upgrade request
-    // with a disallowed Origin must be answered 403 before any audio flows.
-    // Headers via Headers.set — HTTP header names are canonical caps.
-    const headers = new Headers();
-    headers.set('Origin', 'http://evil.example.com');
-    headers.set('Upgrade', 'websocket');
-    headers.set('Connection', 'Upgrade');
-    headers.set('Sec-WebSocket-Key', 'dGhlIHNhbXBsZSBub25jZQ==');
-    headers.set('Sec-WebSocket-Version', '13');
-    const response = await fetch(`${STT_URL}/v1/stream`, { headers });
-    expect(response.status).toBe(403);
+    // Real socket upgrade: connect to /v1/stream with a disallowed Origin
+    // and assert the handshake is refused with HTTP 403 before any audio
+    // is accepted (fetch with websocket headers never performs an upgrade).
+    const url = new URL(STT_URL);
+    const status = await new Promise<string>((resolve, reject) => {
+      const socket = tcpConnect(Number(url.port), url.hostname);
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        reject(new Error('AC-9 socket timed out'));
+      });
+      socket.on('connect', () => {
+        socket.write(
+          [
+            'GET /v1/stream HTTP/1.1',
+            `Host: ${url.host}`,
+            'Upgrade: websocket',
+            'Connection: Upgrade',
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+            'Sec-WebSocket-Version: 13',
+            'Origin: http://evil.example.com',
+            '',
+            '',
+          ].join('\r\n'),
+        );
+      });
+      let data = '';
+      socket.on('data', (chunk: Buffer) => {
+        data += chunk.toString('utf8');
+        if (data.includes('\r\n\r\n')) {
+          socket.destroy();
+          resolve(data.split('\r\n')[0] ?? '');
+        }
+      });
+      socket.on('error', reject);
+      socket.on('close', () => {
+        if (!data) {
+          reject(new Error('AC-9 socket closed before a response'));
+        }
+      });
+    });
+    expect(status).toContain('403');
   });
 
   it('AC-3: batch endpoint returns an OpenAI-shaped transcription', async () => {
@@ -303,11 +371,7 @@ describe.skipIf(!reachable)('C-393 STT service (live)', () => {
       throw new Error(`fixture missing: ${FIXTURE}`);
     }
     const form = new FormData();
-    form.append(
-      'file',
-      new Blob([fixture.pcm.buffer as ArrayBuffer], { type: 'audio/wav' }),
-      'utterance.wav',
-    );
+    form.append('file', new Blob([fixture.wav], { type: 'audio/wav' }), 'utterance.wav');
     form.append('model', 'whisper-1');
     form.append('response_format', 'json');
     const response = await fetch(`${STT_URL}/v1/audio/transcriptions`, {
