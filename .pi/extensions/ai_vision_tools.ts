@@ -73,13 +73,6 @@ export default function (pi: ExtensionAPI) {
       'back a plain-text description of what is visible. Uses the shared ' +
       'VLM client — respects VLM_PROVIDER, VLM_MODEL, and OPENROUTER_API_KEY ' +
       'environment variables. Optimises the image before sending.',
-    promptSnippet: 'Use ai_describe_image to get an AI description of a screenshot or image.',
-    promptGuidelines: [
-      'Use when you need to understand what is visible in an image without looking at it yourself.',
-      'Useful for batch screenshot analysis, visual QA, or when the model does not support image attachments.',
-      'Pass a prompt to focus the description on specific aspects (layout, color, text, etc.).',
-      'The image is automatically optimised (Lanczos resize + PNG8) before sending.',
-    ],
     parameters: Type.Object({
       imagePath: Type.String({
         description: 'Absolute or relative path to the image file (PNG or WebP).',
@@ -156,15 +149,6 @@ export default function (pi: ExtensionAPI) {
       'and get back a score (0-100) plus a review explaining what matches and ' +
       'what does not. Uses the shared VLM client — respects VLM_PROVIDER, ' +
       'VLM_MODEL, and OPENROUTER_API_KEY env vars.',
-    promptSnippet: 'Use ai_validate_image to check if a screenshot matches expected visual output.',
-    promptGuidelines: [
-      'Use for visual QA — give a clear expectation of what the image should show.',
-      'Example expectation: "The login page should have a centered form with email field, password field, and a blue Sign In button."',
-      'The tool returns a score (0-100), a detailed review, and a list of specific issues.',
-      'Score >= 80 means the expectation is considered met.',
-      'The image is automatically optimised before sending.',
-      'Results are cached — re-running with the same image + expectation uses the cached result.',
-    ],
     parameters: Type.Object({
       imagePath: Type.String({
         description: 'Absolute or relative path to the image file (PNG or WebP).',

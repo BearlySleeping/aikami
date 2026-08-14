@@ -5,7 +5,13 @@ import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from '
 import { dirname, join, relative } from 'node:path';
 import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
 import { getScriptsEnv } from '../../env/scripts_env';
-import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
+import {
+  ensureServer,
+  findWorkspace,
+  herdr,
+  herdrJson,
+  isIdleShellName,
+} from '../../herdr/session.ts';
 import {
   bootstrapWorktree,
   createWorktree,
@@ -16,6 +22,7 @@ import {
 import { remoteBranchExists, runGit } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
 import { getContractModelForRole, getContractThinkingForRole } from './models.ts';
+import { canSendToReviewPane, readComposer } from './review_pane.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 import { PIPELINE_BASE_BRANCH } from './types.ts';
 
@@ -50,7 +57,6 @@ const sleep = async (milliseconds: number): Promise<void> =>
 const AGENT_READY_TIMEOUT_MS = 120_000;
 const MAX_SEND_ATTEMPTS = 5;
 const SHELL_READY_TIMEOUT_MS = 90_000;
-const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
 
 type PaneProcessInfoResult = {
   result: { process_info: { foreground_processes: Array<{ name: string }> } };
@@ -59,13 +65,13 @@ type PaneProcessInfoResult = {
 const isShellIdle = async (paneId: string): Promise<boolean> => {
   const info = await herdrJson<PaneProcessInfoResult>(['pane', 'process-info', '--pane', paneId]);
   const procs = info?.result.process_info.foreground_processes;
-  return procs ? procs.every((c) => SHELL_NAMES.has(c.name)) : false;
+  return procs ? procs.every((c) => isIdleShellName(c.name)) : false;
 };
 
 const isCommandRunning = async (paneId: string): Promise<boolean> => {
   const info = await herdrJson<PaneProcessInfoResult>(['pane', 'process-info', '--pane', paneId]);
   const procs = info?.result.process_info.foreground_processes;
-  return procs ? procs.some((c) => !SHELL_NAMES.has(c.name)) : false;
+  return procs ? procs.some((c) => !isIdleShellName(c.name)) : false;
 };
 
 const waitForShellReady = async (paneId: string): Promise<boolean> => {
@@ -195,6 +201,17 @@ const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
 
 // ── Adapter interface ───────────────────────────────────────
 
+/** Outcome of spawning the review pane. */
+export type ReviewStartResult = {
+  paneId: string;
+  /**
+   * Whether the initial task text actually reached the captain. False means
+   * the pane exists but is sitting at an empty prompt — the ONLY case where
+   * the orchestrator may type into the review pane on a later resume.
+   */
+  taskDelivered: boolean;
+};
+
 export type ContractHerdrAdapterInterface = {
   initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }>;
   getWorkspaceId(): string;
@@ -215,8 +232,14 @@ export type ContractHerdrAdapterInterface = {
      *  status review. Passed explicitly — never inferred from yolo. */
     blockedReview?: boolean;
     useWorktreeCwd?: boolean;
-  }): Promise<string>;
-  sendReviewMessage(options: { paneId: string; message: string }): Promise<void>;
+  }): Promise<ReviewStartResult>;
+  /** Guarded write to the human-shared review pane. Resolves false when the
+   *  guard refused (agent busy, or the user has unsent text). */
+  sendReviewMessage(options: { paneId: string; message: string }): Promise<boolean>;
+  /** Herdr `agent_status` for a pane, or undefined when unreported. */
+  getAgentStatus(paneId: string): Promise<string | undefined>;
+  /** Visible terminal snapshot, or null when the read failed. */
+  readPaneText(paneId: string): Promise<string | null>;
 };
 
 // ── Implementation ──────────────────────────────────────────
@@ -577,6 +600,36 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return panes?.result.panes.find((p) => p.pane_id === paneId)?.agent_status;
   }
 
+  /** Public read of Herdr's `agent_status`, or undefined when unreported. */
+  async getAgentStatus(paneId: string): Promise<string | undefined> {
+    return this._getAgentStatus(paneId).catch(() => undefined);
+  }
+
+  /**
+   * Visible terminal snapshot of a pane, or null when the read failed.
+   * Callers treat null as "unknown" and must fail safe — see
+   * {@link hasPendingUserInput}.
+   */
+  async readPaneText(paneId: string): Promise<string | null> {
+    try {
+      const result = await herdr([
+        'pane',
+        'read',
+        paneId,
+        '--source',
+        'visible',
+        '--format',
+        'text',
+      ]);
+      if (result.code !== 0) {
+        return null;
+      }
+      return result.stdout;
+    } catch {
+      return null;
+    }
+  }
+
   private async _waitForAgentStatus(o: {
     paneId: string;
     statuses: readonly string[];
@@ -599,8 +652,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    * Send task text to a pane, with retry if the prompt is not acknowledged.
    * Text is sent ONCE (never re-sent — duplicates would fill the input buffer).
    * Only Enter is retried with exponential backoff.
+   *
+   * @returns whether the text was actually delivered. A `false` here is what
+   *   lets the caller distinguish "the agent has its task" from "the agent is
+   *   sitting at an empty prompt" — the only situation in which nudging the
+   *   review pane later is legitimate.
    */
-  private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
+  private async _sendTaskText(options: { paneId: string; text: string }): Promise<boolean> {
     // Double-idle check: two consecutive idle observations are much stronger
     // evidence that pi's input handler is truly ready. If agent_status is
     // unavailable (pi doesn't report it to herdr), fall back to a fixed delay.
@@ -624,7 +682,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         break;
       }
       console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
-      return;
+      return false;
     }
 
     // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
@@ -643,6 +701,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
       await sleep(delay);
     }
+    return true;
   }
 
   /** JSON mode (no PTY): headless AND not an interactive writer.
@@ -927,7 +986,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
      *  yolo-overrides.md's merge-fallback note) — not worth the risk when
      *  there's no code to inspect yet. */
     useWorktreeCwd?: boolean;
-  }): Promise<string> {
+  }): Promise<ReviewStartResult> {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
     }
@@ -1013,7 +1072,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     const paneId = tab.result.root_pane.pane_id;
     await runPaneCommand({ paneId, command });
-    await this._sendTaskText({
+    const taskDelivered = await this._sendTaskText({
       paneId,
       text: options.blockedReview
         ? `Review contract run ${this._runId}. RECOVERY MODE: the pipeline is blocked — diagnose the failure from the manifest and findings, then recover it (push/PR creation, small fix) or hand off with a precise summary. Do NOT re-run the verifier's tests. Your LAST action MUST call contract_review_decision.`
@@ -1021,11 +1080,50 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
           ? `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`
           : `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
     });
-    return paneId;
+    return { paneId, taskDelivered };
   }
 
-  async sendReviewMessage(options: { paneId: string; message: string }): Promise<void> {
-    await this._sendTaskText({ paneId: options.paneId, text: options.message });
+  /**
+   * Type into the review pane — the ONE pane a human shares with us.
+   *
+   * 🔴 Unlike worker panes this is never unconditional. The C-390 incident
+   * (see review_pane.ts) appended a resume nudge to a half-typed user message
+   * and submitted the pair. Guards, in order:
+   *
+   *   1. Re-read `agent_status` + the visible composer immediately before
+   *      sending; abort unless the pane is settled AND the composer is empty.
+   *   2. Send ONE Enter, not the four-press launch-time storm — a human pane
+   *      has no PTY race to defeat, and extra Enters commit stray keystrokes.
+   *   3. Re-check the composer between text and Enter, so a user who starts
+   *      typing inside the race window is not submitted on top of.
+   *
+   * @returns whether the message was actually delivered.
+   */
+  async sendReviewMessage(options: { paneId: string; message: string }): Promise<boolean> {
+    const gate = canSendToReviewPane({
+      status: await this.getAgentStatus(options.paneId),
+      paneText: await this.readPaneText(options.paneId),
+    });
+    if (!gate.ok) {
+      console.log(`⏭️  Skipped review-pane message — ${gate.reason}.`);
+      return false;
+    }
+    // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
+    await runHerdr(['pane', 'send-text', options.paneId, ` ${options.message}`]);
+    await sleep(Math.min(Math.max(500, options.message.length * 2), 2000));
+
+    // Last-moment re-check: between the gate above and this Enter the user
+    // may have started typing, which send-text would have prefixed. Bail out
+    // WITHOUT pressing Enter and let the human clear the line themselves —
+    // an uncommitted composer is recoverable, a submitted mashup is not.
+    const after = await this.readPaneText(options.paneId);
+    const composer = readComposer(after ?? '');
+    if (composer.found && composer.text !== '' && !composer.text.includes(options.message.trim())) {
+      console.log('⏭️  Review-pane composer changed mid-send — not pressing Enter.');
+      return false;
+    }
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+    return true;
   }
 
   async isWorkerActive(paneId: string): Promise<boolean> {

@@ -27,6 +27,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 
+# learned command durations (lib/duration_cache.ts) — machine-local timings
+cache/
+
 # IntelliJ based IDEs
 .idea
 

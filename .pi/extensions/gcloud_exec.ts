@@ -43,6 +43,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
 import { smartTruncate } from './lib/output_filter';
+import { runCommand } from './lib/process_runner.ts';
 
 type Mode = 'staging' | 'production';
 
@@ -161,29 +162,6 @@ export default function (pi: ExtensionAPI) {
       'with the correct project id and per-mode service-account credentials resolved ' +
       "and injected automatically — no reliance on the ambient shell's gcloud config or " +
       'personal login. Use this instead of running `gcloud` directly.',
-    promptSnippet:
-      "Use gcloud_exec for any gcloud command against Aikami's GCP projects — it resolves " +
-      'the right project id and credentials for the mode automatically.',
-    promptGuidelines: [
-      'ALWAYS use gcloud_exec instead of running `gcloud` directly in the shell — a bare ' +
-        '`gcloud` call may hit the wrong project or your personal login instead of the ' +
-        "mode's dedicated service account.",
-      "mode defaults to AIKAMI_MODE when that's 'staging' or 'production'; if AIKAMI_MODE " +
-        "is 'emulator' or unset, mode must be passed explicitly — gcloud has no meaning " +
-        'for the emulator.',
-      'Pass command WITHOUT the leading "gcloud" word, e.g. ' +
-        '"run services describe client --region=europe-west1" — a leading "gcloud" is ' +
-        'tolerated and stripped automatically. --project and --quiet are added ' +
-        'automatically unless the command already includes them.',
-      'Destructive-looking commands (delete/remove/destroy/undeploy/revoke/purge/disable) ' +
-        'are blocked until confirm: true is passed — surface that requirement to the user ' +
-        'and let them decide, rather than setting confirm: true yourself.',
-      'Use dryRun: true first for anything unfamiliar, high-stakes, or destructive, to see ' +
-        'the fully-resolved command (project, credentials, final args) before it can ' +
-        'actually run anything.',
-      'For Aikami service logs specifically, prefer service_logs — it already routes to ' +
-        'the right gcloud/firestack invocation with sensible defaults (--tail, --since, etc).',
-    ],
     parameters: Type.Object({
       mode: Type.Optional(
         Type.String({
@@ -352,7 +330,7 @@ export default function (pi: ExtensionAPI) {
 
       const rawTimeout = params.timeout ?? DefaultTimeout;
       const timeout = Math.min(Math.max(rawTimeout, 1), 600_000);
-      const result = await pi.exec(
+      const result = await runCommand(
         'env',
         [
           `GOOGLE_APPLICATION_CREDENTIALS=${keyPath}`,
@@ -360,7 +338,7 @@ export default function (pi: ExtensionAPI) {
           'gcloud',
           ...finalArgs,
         ],
-        { signal, timeout },
+        { signal, timeoutMs: timeout },
       );
 
       const stdout = result.stdout ?? '';

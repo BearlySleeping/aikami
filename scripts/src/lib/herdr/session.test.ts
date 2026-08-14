@@ -1,6 +1,8 @@
 // scripts/src/lib/herdr/session.test.ts
 import { describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import net from 'node:net';
+import { posixQuote, which } from '../env/which.ts';
 import {
   ALL_SERVICES,
   expandServices,
@@ -9,6 +11,7 @@ import {
   normalizeService,
   parseHerdrStatus,
   SERVICE_DEFS,
+  wrapCommand,
 } from './session.ts';
 
 describe('parseHerdrStatus', () => {
@@ -124,5 +127,61 @@ describe('isPortReady protocol probe (C-387)', () => {
     const port = (server.address() as net.AddressInfo).port;
     await new Promise<void>((res) => server.close(() => res()));
     expect(await isPortReady(port, 'tcp')).toBe(false);
+  });
+});
+
+describe('wrapCommand', () => {
+  it('wraps in bash with the keep-open trailer on a machine that has bash', () => {
+    const wrapped = wrapCommand('bun run dev');
+    expect(wrapped).toContain('bash');
+    expect(wrapped).toContain('bun run dev');
+    expect(wrapped).toContain('Press Enter to close');
+  });
+
+  it('passes bash as an absolute path, not a bare name', () => {
+    // herdr panes default to Nushell on Windows, whose PATH lacks Git's bash.
+    const wrapped = wrapCommand('bun run dev');
+    expect(wrapped).not.toMatch(/(^|\s)'?bash'? -c/);
+  });
+
+  it('survives a command containing a single quote', () => {
+    // The old `'${command}'` interpolation broke out of its own quoting here.
+    const wrapped = wrapCommand(`echo it's fine`);
+    expect(wrapped).toContain(String.raw`it'\''s`);
+  });
+});
+
+describe('posixQuote', () => {
+  it('quotes a plain value', () => {
+    expect(posixQuote('bun run dev')).toBe(`'bun run dev'`);
+  });
+
+  it('escapes embedded single quotes', () => {
+    expect(posixQuote(`it's`)).toBe(String.raw`'it'\''s'`);
+  });
+
+  it('quotes a Windows path with spaces as one argument', () => {
+    expect(posixQuote(String.raw`C:\Program Files\Git\bin\bash.exe`)).toBe(
+      String.raw`'C:\Program Files\Git\bin\bash.exe'`,
+    );
+  });
+
+  it('round-trips hostile values through a real bash', () => {
+    // The quoting is only correct if bash itself agrees.
+    for (const value of [`it's`, 'a b', '$HOME', '`whoami`', 'x"y', String.raw`a\b`]) {
+      const out = spawnSync('bash', ['-c', `printf %s ${posixQuote(value)}`], { encoding: 'utf8' });
+      expect(out.stdout).toBe(value);
+    }
+  });
+});
+
+describe('which', () => {
+  it('resolves a binary that is certainly on PATH', () => {
+    // node runs this repo's tooling; it is on PATH by construction.
+    expect(which('node')).toContain('node');
+  });
+
+  it('returns null for a binary that does not exist', () => {
+    expect(which('definitely-not-a-real-binary-xyz')).toBeNull();
   });
 });

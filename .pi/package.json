@@ -7,12 +7,14 @@
     "@earendil-works/pi-coding-agent": "^0.84.1"
   },
   "scripts": {
+    "test": "bun test extensions/",
     "typecheck": "tsgo --noEmit",
     "lint": "biome check .",
     "format": "biome format .",
     "fix": "biome check --write . --error-on-warnings",
     "update-skills": "bun run scripts/update_skills.ts",
-    "update-packages": "bun update --latest && cd npm && bun update --latest"
+    "update-packages": "bun update --latest && cd npm && bun update --latest",
+    "measure-tools": "bun run scripts/measure_tool_surface.ts"
   },
   "dependencies": {
     "@hypabolic/hypa": "^0.1.13",

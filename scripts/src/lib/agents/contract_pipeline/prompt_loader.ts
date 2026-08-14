@@ -209,6 +209,16 @@ const buildPrInfo = (options: {
   headBranch?: string;
   baseBranch?: string;
   draftFlag: string;
+  /**
+   * Whether `headBranch` actually exists on origin.
+   *
+   * 🔴 Must be MEASURED, not assumed. Blocked reviews reach this with
+   * `headBranch` falling back to the worktree's local branch — reconciliation
+   * either never ran or threw, so nothing was pushed. The header used to say
+   * "Branch Pushed" regardless, and in C-390 the captain burned a turn
+   * disproving its own briefing ("the system-prompt header was stale").
+   */
+  branchPushed?: boolean;
 }): string => {
   if (options.prUrl) {
     return [
@@ -219,12 +229,20 @@ const buildPrInfo = (options: {
     ].join('\n');
   }
   if (options.headBranch) {
-    return [
-      '',
-      '## 📦 Branch Pushed — No PR Yet',
-      `**Branch:** ${options.headBranch} → ${options.baseBranch ?? 'main'}`,
-      `**Compare:** https://github.com/BearlySleeping/aikami/compare/${options.baseBranch ?? 'main'}...${options.headBranch}`,
-    ].join('\n');
+    const base = options.baseBranch ?? 'main';
+    return options.branchPushed
+      ? [
+          '',
+          '## 📦 Branch Pushed — No PR Yet',
+          `**Branch:** ${options.headBranch} → ${base}`,
+          `**Compare:** https://github.com/BearlySleeping/aikami/compare/${base}...${options.headBranch}`,
+        ].join('\n')
+      : [
+          '',
+          '## 📦 Branch NOT Pushed — No PR Yet',
+          `**Branch:** ${options.headBranch} (local only) → ${base}`,
+          'Verified against origin at prompt time. Push it before creating a PR.',
+        ].join('\n');
   }
   return '';
 };
@@ -248,6 +266,8 @@ export const loadReviewPrompt = (options: {
   prUrl?: string;
   headBranch?: string;
   baseBranch?: string;
+  /** Measured `git ls-remote` result for `headBranch`. See {@link buildPrInfo}. */
+  branchPushed?: boolean;
   profile: ReviewProfile;
   /** Current autofix cycle number (1-indexed). Used for circuit breaker. */
   autofixCycle?: number;
@@ -275,6 +295,7 @@ export const loadReviewPrompt = (options: {
     prUrl: options.prUrl,
     headBranch: options.headBranch,
     baseBranch: options.baseBranch,
+    branchPushed: options.branchPushed,
     draftFlag,
   });
 

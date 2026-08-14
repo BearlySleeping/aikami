@@ -1,7 +1,7 @@
 // .pi/extensions/github_cli.ts
 //
 // GitHub CLI integration for pi — PR management, merge, sync.
-// Uses `gh` (v2.96+) from nixpkgs. All tools run via pi.exec for
+// Uses `gh` (v2.96+) from nixpkgs. All tools run via lib/gh.ts for
 // cancellation safety and consistent timeout handling.
 //
 // 🔴 For CodeRabbit AI reviews, prefer the `coderabbitai` MCP tools
@@ -53,57 +53,11 @@ import { Type } from 'typebox';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT = 60_000;
-
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
+import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
-
-/** Repository root — always run gh from here, not from a worktree subdirectory. */
-let _repoRoot: string | undefined;
-const repoRoot = (): string => {
-  if (!_repoRoot) {
-    // When running inside a contract pipeline worktree, gh commands must run
-    // from the main repo root — not the worktree.  Running gh from a worktree
-    // triggers Git "already used by worktree" errors when gh tries to resolve
-    // the target branch (e.g. `main`) for merge operations.
-    const wsPath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
-    if (wsPath) {
-      // Worktree paths are `.pi/workspaces/run-xxx`. Walk up to find the
-      // parent of `.pi/` — that's the main repo root.
-      const piIdx = wsPath.indexOf('/.pi/');
-      if (piIdx !== -1) {
-        _repoRoot = wsPath.slice(0, piIdx);
-        return _repoRoot;
-      }
-    }
-    _repoRoot = process.cwd();
-  }
-  return _repoRoot;
-};
-
-/**
- * Resolve a pr identifier (number, URL, or branch name) to a gh-compatible
- * pr selector. Accepts:
- *   - raw number: "42"          → "42"
- *   - branch name: "feat/xyz"   → "feat/xyz"
- *   - URL: "https://github.com/owner/repo/pull/42" → "42"
- */
-function resolvePrSelector(raw: string): string {
-  // If it's a URL, extract the PR number
-  const urlMatch = raw.match(/\/pull\/(\d+)/);
-  if (urlMatch) {
-    return urlMatch[1] ?? raw;
-  }
-
-  // If it's purely numeric, it's a PR number
-  if (/^\d+$/.test(raw)) {
-    return raw;
-  }
-
-  // Otherwise treat as branch name
-  return raw;
-}
 
 /** Format a byte count for release asset sizes. */
 function formatBytes(bytes: number): string {
@@ -123,23 +77,16 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unitIdx]}`;
 }
 
-/** Resolve the current git branch (default ref for workflow dispatch). */
-async function currentBranch(pi: ExtensionAPI): Promise<string> {
-  const result = await pi.exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 10_000 });
-  return result.code === 0 && result.stdout.trim() ? result.stdout.trim() : 'main';
-}
-
 /** Poll until a workflow run reaches a terminal state, or the timeout elapses. */
 async function waitForRunCompletion(
-  pi: ExtensionAPI,
   runId: string,
   timeoutSeconds: number,
 ): Promise<'completed' | 'timeout' | { error: string }> {
   const deadline = Date.now() + timeoutSeconds * 1000;
   while (Date.now() < deadline) {
-    const result = await runGh(pi, ['run', 'view', runId, '--json', 'status'], {
+    const result = await runGh(['run', 'view', runId, '--json', 'status'], {
       parseJson: true,
-      timeout: 30_000,
+      timeoutMs: 30_000,
     });
     if (!result.success) {
       return { error: result.text };
@@ -155,7 +102,6 @@ async function waitForRunCompletion(
 
 /** Resolve a run id from a run id or branch name (newest run on that branch). */
 async function resolveRunId(
-  pi: ExtensionAPI,
   runOrBranch: string,
   workflow: string,
 ): Promise<{ runId: string; fromBranch: boolean } | { error: string }> {
@@ -164,7 +110,6 @@ async function resolveRunId(
     return { runId: runOrBranch, fromBranch: false };
   }
   const result = await runGh(
-    pi,
     [
       'run',
       'list',
@@ -177,7 +122,7 @@ async function resolveRunId(
       '--json',
       'databaseId',
     ],
-    { parseJson: true, timeout: 30_000 },
+    { parseJson: true, timeoutMs: 30_000 },
   );
   const runs =
     result.success && Array.isArray(result.json)
@@ -323,13 +268,8 @@ const normalizePlatforms = (raw: unknown): string => {
  * Fetch the newest run ID for a workflow on a given ref.
  * Used to detect post-dispatch runs and avoid picking up stale/pre-existing runs.
  */
-async function fetchNewestRunId(
-  pi: ExtensionAPI,
-  workflow: string,
-  ref: string,
-): Promise<string | undefined> {
+async function fetchNewestRunId(workflow: string, ref: string): Promise<string | undefined> {
   const list = await runGh(
-    pi,
     [
       'run',
       'list',
@@ -342,7 +282,7 @@ async function fetchNewestRunId(
       '--json',
       'databaseId',
     ],
-    { parseJson: true, timeout: 30_000 },
+    { parseJson: true, timeoutMs: 30_000 },
   );
   const runs =
     list.success && Array.isArray(list.json) ? (list.json as Array<Record<string, unknown>>) : [];
@@ -351,16 +291,15 @@ async function fetchNewestRunId(
 
 /** Fetch run status + jobs, optionally filtered to the requested platforms. */
 async function fetchRunStatus(
-  pi: ExtensionAPI,
   runId: string,
   platforms: string[],
 ): Promise<
   | { ok: true; status: string; conclusion: string; jobs: Array<Record<string, unknown>> }
   | { ok: false; error: string }
 > {
-  const result = await runGh(pi, ['run', 'view', runId, '--json', 'status,conclusion,jobs'], {
+  const result = await runGh(['run', 'view', runId, '--json', 'status,conclusion,jobs'], {
     parseJson: true,
-    timeout: 30_000,
+    timeoutMs: 30_000,
   });
   if (!result.success) {
     return { ok: false, error: result.text };
@@ -382,18 +321,14 @@ async function fetchRunStatus(
 }
 
 /** Fetch artifacts attached to a run (name + size) for the final report. */
-async function fetchRunArtifacts(
-  pi: ExtensionAPI,
-  runId: string,
-): Promise<Array<{ name: string; size: number }>> {
-  const repoCheck = await ensureGitHubRepo(pi);
+async function fetchRunArtifacts(runId: string): Promise<Array<{ name: string; size: number }>> {
+  const repoCheck = await ensureGitHubRepo();
   if (!repoCheck.ok || !repoCheck.owner || !repoCheck.repo) {
     return [];
   }
   const result = await runGh(
-    pi,
     ['api', `repos/${repoCheck.owner}/${repoCheck.repo}/actions/runs/${runId}/artifacts`],
-    { parseJson: true, timeout: 30_000 },
+    { parseJson: true, timeoutMs: 30_000 },
   );
   const data = result.json as { artifacts?: Array<Record<string, unknown>> } | undefined;
   if (!result.success || !Array.isArray(data?.artifacts)) {
@@ -403,63 +338,6 @@ async function fetchRunArtifacts(
     name: String(a.name ?? '?'),
     size: Number(a.size_in_bytes ?? 0),
   }));
-}
-
-/** Run gh with optional JSON output and parse the result. */
-async function runGh(
-  pi: ExtensionAPI,
-  args: string[],
-  opts?: {
-    timeout?: number;
-    parseJson?: boolean;
-    cwd?: string;
-    signal?: AbortSignal;
-    /** Exit codes that are NOT treated as failure. `gh pr checks` uses 1 for
-     *  "failures OR no checks" and 8 for "pending" — both need handling, not
-     *  a hard failure. */
-    allowExitCodes?: number[];
-  },
-): Promise<{ success: boolean; text: string; json?: unknown }> {
-  const result = await pi.exec('gh', args, {
-    signal: opts?.signal,
-    timeout: opts?.timeout ?? DEFAULT_TIMEOUT,
-    cwd: opts?.cwd ?? repoRoot(),
-  });
-
-  const allowed = opts?.allowExitCodes ?? [];
-  if (result.code !== 0 && !allowed.includes(result.code)) {
-    return { success: false, text: result.stderr || result.stdout || 'gh exited with error' };
-  }
-
-  const text = result.stdout.trim();
-  if (opts?.parseJson && text) {
-    try {
-      return { success: true, text, json: JSON.parse(text) };
-    } catch {
-      // Non-JSON output — return text as-is
-      return { success: true, text };
-    }
-  }
-
-  return { success: true, text };
-}
-
-/** Check that we're inside a git repo with a GitHub remote. */
-async function ensureGitHubRepo(
-  pi: ExtensionAPI,
-): Promise<{ ok: boolean; reason?: string; owner?: string; repo?: string }> {
-  const result = await pi.exec('git', ['remote', 'get-url', 'origin'], {
-    timeout: 10_000,
-  });
-  if (result.code !== 0) {
-    return { ok: false, reason: 'Not a git repository or no "origin" remote configured' };
-  }
-  const remote = result.stdout.trim();
-  const match = remote.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
-  if (!match) {
-    return { ok: false, reason: `Remote 'origin' is not a GitHub repository: ${remote}` };
-  }
-  return { ok: true, owner: match[1], repo: match[2] };
 }
 
 // ── PR Comments Cache ────────────────────────────────────────────────────
@@ -522,7 +400,6 @@ const writeCommentCache = (cache: PrCommentCache, cwd: string): void => {
  * then ALSO fetches inline review comments via the API for per-line findings.
  */
 const fetchPrComments = async (
-  pi: ExtensionAPI,
   prNumber: number,
   cwd: string,
   includeReviews: boolean,
@@ -530,7 +407,7 @@ const fetchPrComments = async (
 ): Promise<PrCommentCache> => {
   const jsonFields = includeReviews ? 'comments,reviews,updatedAt' : 'comments,updatedAt';
 
-  const result = await runGh(pi, ['pr', 'view', String(prNumber), '--json', jsonFields], {
+  const result = await runGh(['pr', 'view', String(prNumber), '--json', jsonFields], {
     parseJson: true,
     cwd,
   });
@@ -573,9 +450,8 @@ const fetchPrComments = async (
     if (owner && repo) {
       try {
         const inlineResult = await runGh(
-          pi,
           ['api', `repos/${owner}/${repo}/pulls/${prNumber}/comments`, '--paginate'],
-          { parseJson: true, cwd, timeout: 30_000 },
+          { parseJson: true, cwd, timeoutMs: 30_000 },
         );
         if (inlineResult.success && Array.isArray(inlineResult.json)) {
           inlineComments = (inlineResult.json as Array<Record<string, unknown>>).map((c) => ({
@@ -872,1885 +748,1545 @@ function formatCheckStatus(raw: string): string {
 // ── Extension ───────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 1: gh_create_pr
-  // ═══════════════════════════════════════════════════════════════════════
+  registerNamespace(pi, {
+    name: 'gh_pr',
+    label: 'GitHub: Pull Requests',
+    description: 'Work with GitHub pull requests via the gh CLI.',
+    promptSnippet: 'Use gh_pr for all pull request work (create, list, view, status, merge, edit)',
+    actions: [
+      defineAction({
+        action: 'create',
+        summary: 'Open a pull request',
 
-  pi.registerTool({
-    name: 'gh_create_pr',
-    label: 'GitHub: Create PR',
-    description:
-      'Create a GitHub Pull Request using gh CLI. Default base branch is "dev". ' +
-      'Returns the PR URL on success. ' +
-      'Set draft=true for work-in-progress PRs. Set web=true to open in browser.',
-    promptSnippet: 'Use gh_create_pr to create a GitHub PR (default base: main)',
-    promptGuidelines: [
-      'Use gh_create_pr when the user asks to create a pull request.',
-      'The default base branch is set via PIPELINE_BASE_BRANCH in contract_pipeline/types.ts. Use baseBranch to override.',
-      'After creation, the PR URL is shown — offer to merge it with gh_merge_pr if approved.',
-    ],
-    parameters: Type.Object({
-      title: Type.String({ description: 'PR title' }),
-      body: Type.Optional(Type.String({ description: 'PR description (markdown supported)' })),
-      headBranch: Type.String({ description: 'Source branch name (head)' }),
-      baseBranch: Type.Optional(
-        Type.String({
-          default: DEFAULT_BASE,
-          description: `Target base branch (default: "${DEFAULT_BASE}")`,
+        parameters: Type.Object({
+          title: Type.String({ description: 'PR title' }),
+          body: Type.Optional(Type.String({ description: 'PR description (markdown supported)' })),
+          headBranch: Type.String({ description: 'Source branch name (head)' }),
+          baseBranch: Type.Optional(
+            Type.String({
+              default: DEFAULT_BASE,
+              description: `Target base branch (default: "${DEFAULT_BASE}")`,
+            }),
+          ),
+          // Default to draft — CI must pass and a human must promote the PR
+          // to "Ready for review" before CodeRabbit AI review is triggered.
+          draft: Type.Optional(Type.Boolean({ default: true, description: 'Create as draft PR' })),
+          web: Type.Optional(
+            Type.Boolean({ default: false, description: 'Open PR in browser after creation' }),
+          ),
         }),
-      ),
-      // Default to draft — CI must pass and a human must promote the PR
-      // to "Ready for review" before CodeRabbit AI review is triggered.
-      draft: Type.Optional(Type.Boolean({ default: true, description: 'Create as draft PR' })),
-      web: Type.Optional(
-        Type.Boolean({ default: false, description: 'Open PR in browser after creation' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const repoCheck = await ensureGitHubRepo(pi);
-      if (!repoCheck.ok) {
-        return {
-          content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-          isError: true,
-          details: {},
-        };
-      }
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const repoCheck = await ensureGitHubRepo();
+          if (!repoCheck.ok) {
+            return {
+              content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+              isError: true,
+              details: {},
+            };
+          }
 
-      const base = params.baseBranch ?? DEFAULT_BASE;
+          const base = params.baseBranch ?? DEFAULT_BASE;
 
-      // 🔗 Auto-linkage: detect explicit "closes #N" markers or GitHub issue URLs
-      let body = params.body ?? '';
-      const closesMatch = body.match(/closes:\s*#(\d+)/im);
-      const ghIssueMatch = body.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
-      const linkedIssue = closesMatch?.[1] ?? ghIssueMatch?.[1];
-      if (linkedIssue) {
-        const closePrefix = `Closes #${linkedIssue}\n\n`;
-        if (!body.startsWith('Closes #')) {
-          body = closePrefix + body;
-        }
-      }
+          // 🔗 Auto-linkage: detect explicit "closes #N" markers or GitHub issue URLs
+          let body = params.body ?? '';
+          const closesMatch = body.match(/closes:\s*#(\d+)/im);
+          const ghIssueMatch = body.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/);
+          const linkedIssue = closesMatch?.[1] ?? ghIssueMatch?.[1];
+          if (linkedIssue) {
+            const closePrefix = `Closes #${linkedIssue}\n\n`;
+            if (!body.startsWith('Closes #')) {
+              body = closePrefix + body;
+            }
+          }
 
-      const args = [
-        'pr',
-        'create',
-        '--title',
-        params.title,
-        '--head',
-        params.headBranch,
-        '--base',
-        base,
-      ];
+          const args = [
+            'pr',
+            'create',
+            '--title',
+            params.title,
+            '--head',
+            params.headBranch,
+            '--base',
+            base,
+          ];
 
-      if (body) {
-        args.push('--body', body);
-      }
-      if (params.draft) {
-        args.push('--draft');
-      }
-      if (params.web) {
-        args.push('--web');
-      }
+          if (body) {
+            args.push('--body', body);
+          }
+          if (params.draft) {
+            args.push('--draft');
+          }
+          if (params.web) {
+            args.push('--web');
+          }
 
-      const result = await runGh(pi, args, { timeout: 60_000 });
+          const result = await runGh(args, { timeoutMs: 60_000 });
 
-      if (!result.success) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `❌ Failed to create PR: ${result.text}`,
-                '',
-                `**Details:**`,
-                `  Title: ${params.title}`,
-                `  Branch: ${params.headBranch} → ${base}`,
-              ].join('\n'),
-            },
-          ],
-          isError: true,
-          details: { headBranch: params.headBranch, baseBranch: base },
-        };
-      }
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `❌ Failed to create PR: ${result.text}`,
+                    '',
+                    `**Details:**`,
+                    `  Title: ${params.title}`,
+                    `  Branch: ${params.headBranch} → ${base}`,
+                  ].join('\n'),
+                },
+              ],
+              isError: true,
+              details: { headBranch: params.headBranch, baseBranch: base },
+            };
+          }
 
-      // Extract the PR URL from the output
-      const prUrl = result.text.match(/(https:\/\/github\.com\/[^\s]+)/)?.[1] ?? result.text;
-      const prNumber = ((): number | undefined => {
-        const match = prUrl.match(/\/pull\/(\d+)/);
-        return match ? Number(match[1]) : undefined;
-      })();
+          // Extract the PR URL from the output
+          const prUrl = result.text.match(/(https:\/\/github\.com\/[^\s]+)/)?.[1] ?? result.text;
+          const prNumber = ((): number | undefined => {
+            const match = prUrl.match(/\/pull\/(\d+)/);
+            return match ? Number(match[1]) : undefined;
+          })();
 
-      // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter.
-      // Match from the TITLE or the head branch (e.g. contract/C-372,
-      // contract-task-c-372-*). The BODY is prose — a PR can mention another
-      // contract in its description (e.g. "ran C-372 to reproduce this") and
-      // must NOT clobber that contract's pr_url.
-      let contractUpdated: string | undefined;
-      if (prNumber && prUrl) {
-        const contractMatch =
-          params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ??
-          params.headBranch.match(/\b(C-\d+|MIG-\d+)\b/i);
-        if (contractMatch?.[1]) {
-          const contractId = contractMatch[1].toUpperCase();
-          const cwd = _ctx?.cwd ?? process.cwd();
-          const contractsDir = join(cwd, 'docs/contracts');
-          try {
-            if (existsSync(contractsDir)) {
-              // Resolution order matches contract_resolver.ts:
-              // 1. Full-slug files (C-XXX-slug.md)
-              const fullSlugFiles = readdirSync(contractsDir).filter(
-                (f: string) => f.startsWith(`${contractId}-`) && f.endsWith('.md'),
-              );
-              // 2. Placeholder files (C-XXX.md)
-              const placeholderFile = `${contractId}.md`;
-              const placeholderExists = existsSync(join(contractsDir, placeholderFile));
+          // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter.
+          // Match from the TITLE or the head branch (e.g. contract/C-372,
+          // contract-task-c-372-*). The BODY is prose — a PR can mention another
+          // contract in its description (e.g. "ran C-372 to reproduce this") and
+          // must NOT clobber that contract's pr_url.
+          let contractUpdated: string | undefined;
+          if (prNumber && prUrl) {
+            const contractMatch =
+              params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ??
+              params.headBranch.match(/\b(C-\d+|MIG-\d+)\b/i);
+            if (contractMatch?.[1]) {
+              const contractId = contractMatch[1].toUpperCase();
+              const cwd = _ctx?.cwd ?? process.cwd();
+              const contractsDir = join(cwd, 'docs/contracts');
+              try {
+                if (existsSync(contractsDir)) {
+                  // Resolution order matches contract_resolver.ts:
+                  // 1. Full-slug files (C-XXX-slug.md)
+                  const fullSlugFiles = readdirSync(contractsDir).filter(
+                    (f: string) => f.startsWith(`${contractId}-`) && f.endsWith('.md'),
+                  );
+                  // 2. Placeholder files (C-XXX.md)
+                  const placeholderFile = `${contractId}.md`;
+                  const placeholderExists = existsSync(join(contractsDir, placeholderFile));
 
-              let contractPath: string | undefined;
-              if (fullSlugFiles.length === 1 && fullSlugFiles[0]) {
-                contractPath = join(contractsDir, fullSlugFiles[0]);
-              } else if (fullSlugFiles.length === 0 && placeholderExists) {
-                contractPath = join(contractsDir, placeholderFile);
-              }
-
-              if (contractPath) {
-                const content = readFileSync(contractPath, 'utf-8');
-                const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
-                if (yamlMatch?.[1]) {
-                  let yaml = yamlMatch[1];
-                  // Update pr_url and pr_number — preserve existing indentation
-                  const prUrlMatch = yaml.match(/^(\s*)pr_url:\s*.+/m);
-                  const indent = prUrlMatch?.[1] ?? '  ';
-                  yaml = yaml.replace(/^\s*pr_url:\s*.+/m, `${indent}pr_url: "${prUrl}"`);
-                  if (/^\s*pr_number:/m.test(yaml)) {
-                    yaml = yaml.replace(/^\s*pr_number:\s*.+/m, `${indent}pr_number: ${prNumber}`);
-                  } else {
-                    // Add pr_number after pr_url if missing
-                    yaml = yaml.replace(
-                      /(^\s*pr_url:\s*.+)/m,
-                      `$1\n${indent}pr_number: ${prNumber}`,
-                    );
+                  let contractPath: string | undefined;
+                  if (fullSlugFiles.length === 1 && fullSlugFiles[0]) {
+                    contractPath = join(contractsDir, fullSlugFiles[0]);
+                  } else if (fullSlugFiles.length === 0 && placeholderExists) {
+                    contractPath = join(contractsDir, placeholderFile);
                   }
-                  const updated = content.replace(yamlMatch[1], yaml);
-                  if (updated !== content) {
-                    writeFileSync(contractPath, updated);
-                    contractUpdated = contractPath;
+
+                  if (contractPath) {
+                    const content = readFileSync(contractPath, 'utf-8');
+                    const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
+                    if (yamlMatch?.[1]) {
+                      let yaml = yamlMatch[1];
+                      // Update pr_url and pr_number — preserve existing indentation
+                      const prUrlMatch = yaml.match(/^(\s*)pr_url:\s*.+/m);
+                      const indent = prUrlMatch?.[1] ?? '  ';
+                      yaml = yaml.replace(/^\s*pr_url:\s*.+/m, `${indent}pr_url: "${prUrl}"`);
+                      if (/^\s*pr_number:/m.test(yaml)) {
+                        yaml = yaml.replace(
+                          /^\s*pr_number:\s*.+/m,
+                          `${indent}pr_number: ${prNumber}`,
+                        );
+                      } else {
+                        // Add pr_number after pr_url if missing
+                        yaml = yaml.replace(
+                          /(^\s*pr_url:\s*.+)/m,
+                          `$1\n${indent}pr_number: ${prNumber}`,
+                        );
+                      }
+                      const updated = content.replace(yamlMatch[1], yaml);
+                      if (updated !== content) {
+                        writeFileSync(contractPath, updated);
+                        contractUpdated = contractPath;
+                      }
+                    }
                   }
                 }
+              } catch {
+                // Non-fatal — contract auto-write is best-effort
               }
             }
-          } catch {
-            // Non-fatal — contract auto-write is best-effort
           }
-        }
-      }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ **Pull Request created!**`,
-              `**URL:** ${prUrl}`,
-              `**Title:** ${params.title}`,
-              `**Branch:** ${params.headBranch} → ${base}`,
-              params.draft ? `**Draft:** yes` : '',
-              contractUpdated ? `**Contract:** Updated \`${contractUpdated}\` with PR URL` : '',
-              '',
-              `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
-            ]
-              .filter(Boolean)
-              .join('\n'),
-          },
-        ],
-        details: {
-          prUrl,
-          prNumber,
-          title: params.title,
-          headBranch: params.headBranch,
-          baseBranch: base,
-          draft: params.draft ?? false,
-          contractUpdated: contractUpdated ?? null,
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ **Pull Request created!**`,
+                  `**URL:** ${prUrl}`,
+                  `**Title:** ${params.title}`,
+                  `**Branch:** ${params.headBranch} → ${base}`,
+                  params.draft ? `**Draft:** yes` : '',
+                  contractUpdated ? `**Contract:** Updated \`${contractUpdated}\` with PR URL` : '',
+                  '',
+                  `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+              },
+            ],
+            details: {
+              prUrl,
+              prNumber,
+              title: params.title,
+              headBranch: params.headBranch,
+              baseBranch: base,
+              draft: params.draft ?? false,
+              contractUpdated: contractUpdated ?? null,
+            },
+          };
         },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 2: gh_list_prs
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_list_prs',
-    label: 'GitHub: List PRs',
-    description:
-      'List GitHub Pull Requests using gh CLI. Filters by state, base branch, author, or label. ' +
-      'Returns formatted list with PR numbers, titles, branches, and URLs.',
-    promptSnippet: 'Use gh_list_prs to list GitHub PRs (open, closed, merged, or all)',
-    promptGuidelines: [
-      'Use gh_list_prs to see open PRs, filter by author, or check what needs review.',
-      'Default state is "open". Use state="all" to see everything.',
-    ],
-    parameters: Type.Object({
-      state: Type.Optional(
-        Type.String({
-          enum: ['open', 'closed', 'merged', 'all'],
-          default: 'open',
-          description: 'Filter by PR state (default: "open")',
-        }),
-      ),
-      base: Type.Optional(
-        Type.String({ description: 'Filter by base branch (e.g. "dev", "main")' }),
-      ),
-      author: Type.Optional(
-        Type.String({ description: 'Filter by author GitHub handle (e.g. "@me" for you)' }),
-      ),
-      label: Type.Optional(Type.String({ description: 'Filter by label' })),
-      limit: Type.Optional(
-        Type.Number({ default: 20, description: 'Maximum PRs to list (default: 20)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const state = params.state ?? 'open';
-      const args = [
-        'pr',
-        'list',
-        '--state',
-        state,
-        '--json',
-        'number,title,headRefName,baseRefName,state,url,createdAt,author,isDraft,labels',
-        '--limit',
-        String(params.limit ?? 20),
-      ];
-
-      if (params.base) {
-        args.push('--base', params.base);
-      }
-      if (params.author) {
-        args.push('--author', params.author);
-      }
-      if (params.label) {
-        args.push('--label', params.label);
-      }
-
-      const result = await runGh(pi, args, { parseJson: true });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to list PRs: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const prs = Array.isArray(result.json) ? (result.json as Array<Record<string, unknown>>) : [];
-      const formatted = formatPrList(prs);
-
-      return {
-        content: [{ type: 'text', text: formatted }],
-        details: {
-          count: prs.length,
-          state,
-          prs: prs.map((p) => ({ number: p.number, title: p.title, url: p.url })),
-        },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 3: gh_summarize_pr
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_summarize_pr',
-    label: 'GitHub: Summarize PR',
-    description:
-      'View and summarize a GitHub Pull Request. Shows title, description, state, ' +
-      'author, review content (including CodeRabbit findings), comments, changed files, and stats. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_summarize_pr to get the full summary of a GitHub PR',
-    promptGuidelines: [
-      'Use gh_summarize_pr to review a PR before merging or when the user asks about a PR.',
-      'Pass the PR number, URL, or branch name.',
-      '🔴 For detailed CodeRabbit review content within this PR, prefer the `coderabbitai` MCP tools (get_coderabbit_reviews, get_review_details) which provide structured findings and resolution tracking.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
       }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const result = await runGh(
-        pi,
-        [
-          'pr',
-          'view',
-          selector,
-          '--json',
-          [
+      defineAction({
+        action: 'list',
+        summary: 'List PRs, filtered by state/base/author/label',
+
+        parameters: Type.Object({
+          state: Type.Optional(
+            Type.String({
+              enum: ['open', 'closed', 'merged', 'all'],
+              default: 'open',
+              description: 'Filter by PR state (default: "open")',
+            }),
+          ),
+          base: Type.Optional(
+            Type.String({ description: 'Filter by base branch (e.g. "dev", "main")' }),
+          ),
+          author: Type.Optional(
+            Type.String({ description: 'Filter by author GitHub handle (e.g. "@me" for you)' }),
+          ),
+          label: Type.Optional(Type.String({ description: 'Filter by label' })),
+          limit: Type.Optional(
+            Type.Number({ default: 20, description: 'Maximum PRs to list (default: 20)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const state = params.state ?? 'open';
+          const args = [
+            'pr',
+            'list',
+            '--state',
+            state,
+            '--json',
+            'number,title,headRefName,baseRefName,state,url,createdAt,author,isDraft,labels',
+            '--limit',
+            String(params.limit ?? 20),
+          ];
+
+          if (params.base) {
+            args.push('--base', params.base);
+          }
+          if (params.author) {
+            args.push('--author', params.author);
+          }
+          if (params.label) {
+            args.push('--label', params.label);
+          }
+
+          const result = await runGh(args, { parseJson: true });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to list PRs: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const prs = Array.isArray(result.json)
+            ? (result.json as Array<Record<string, unknown>>)
+            : [];
+          const formatted = formatPrList(prs);
+
+          return {
+            content: [{ type: 'text', text: formatted }],
+            details: {
+              count: prs.length,
+              state,
+              prs: prs.map((p) => ({ number: p.number, title: p.title, url: p.url })),
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'view',
+        summary: 'Full PR summary: body, reviews, comments, changed files',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const result = await runGh(
+            [
+              'pr',
+              'view',
+              selector,
+              '--json',
+              [
+                'number',
+                'title',
+                'body',
+                'state',
+                'url',
+                'headRefName',
+                'baseRefName',
+                'author',
+                'createdAt',
+                'mergedAt',
+                'closedAt',
+                'labels',
+                'assignees',
+                'reviews',
+                'comments',
+                'additions',
+                'deletions',
+                'files',
+              ].join(','),
+            ],
+            { parseJson: true },
+          );
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to view PR: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const data = result.json as Record<string, unknown>;
+          const formatted = formatPrSummary(data);
+
+          return {
+            content: [{ type: 'text', text: formatted }],
+            details: {
+              number: data.number,
+              title: data.title,
+              state: data.state,
+              url: data.url,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'status',
+        summary: 'CI check status for a PR',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+          watch: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Wait for checks to complete (polling mode)',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const args = ['pr', 'checks', selector];
+
+          if (params.watch) {
+            args.push('--watch');
+          }
+
+          const result = await runGh(args, {
+            timeoutMs: params.watch ? 600_000 : 60_000,
+            signal,
+            // gh pr checks exit codes: 0 = all pass, 1 = failures OR "no checks
+            // reported", 8 = pending. 1 and 8 are handled below, not errors.
+            allowExitCodes: [1, 8],
+          });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to check PR status: ${result.text}` }],
+              isError: true,
+              details: { pr: selector },
+            };
+          }
+
+          // gh exits 1 with "no checks reported on the '<branch>' branch" when the
+          // PR has zero CI checks — a legitimate empty state, not an error.
+          if (/no checks reported/i.test(result.text)) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `**PR #${selector} Checks**\n\nNo CI checks are configured for this PR.`,
+                },
+              ],
+              details: {
+                pr: selector,
+                overallPassing: null,
+                checkCount: 0,
+                note: 'no_checks_reported',
+              },
+            };
+          }
+
+          const formatted = formatCheckStatus(result.text);
+          const overallPassing = !formatted.includes('❌');
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `**PR #${selector} Checks**\n\n${formatted}`,
+              },
+            ],
+            details: { pr: selector, overallPassing },
+          };
+        },
+      }),
+      defineAction({
+        action: 'merge',
+        summary: 'Merge a PR (squash by default, supports auto-merge)',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+          method: Type.Optional(
+            Type.String({
+              enum: ['squash', 'rebase', 'merge'],
+              default: 'squash',
+              description: 'Merge method (default: "squash")',
+            }),
+          ),
+          autoMerge: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Enable auto-merge (wait for CI, then merge automatically)',
+            }),
+          ),
+          deleteBranch: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Delete the head branch after merge',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const method = params.method ?? 'squash';
+          const args = ['pr', 'merge', selector, `--${method}`];
+
+          if (params.autoMerge) {
+            args.push('--auto');
+          }
+          if (params.deleteBranch) {
+            args.push('--delete-branch');
+          }
+
+          const result = await runGh(args, { timeoutMs: 60_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to merge PR: ${result.text}` }],
+              isError: true,
+              details: { pr: selector, method },
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ **PR #${selector} merged successfully!**`,
+                  `**Method:** ${method}`,
+                  params.autoMerge ? `**Auto-merge:** enabled` : '',
+                  '',
+                  result.text,
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+              },
+            ],
+            details: { pr: selector, method, merged: true },
+          };
+        },
+      }),
+      defineAction({
+        action: 'close',
+        summary: 'Close a PR without merging',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+          deleteBranch: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Delete the remote head branch after closing',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const args = ['pr', 'close', selector];
+
+          if (params.deleteBranch) {
+            args.push('--delete-branch');
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to close PR: ${result.text}` }],
+              isError: true,
+              details: { pr: selector },
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ **PR #${selector} closed.**`,
+                  params.deleteBranch ? '**Branch:** deleted' : '',
+                  '',
+                  result.text,
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+              },
+            ],
+            details: { pr: selector, closed: true },
+          };
+        },
+      }),
+      defineAction({
+        action: 'edit',
+        summary: 'Update PR title, body, base, labels or assignees',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+          title: Type.Optional(Type.String({ description: 'New PR title' })),
+          body: Type.Optional(Type.String({ description: 'New PR description (markdown)' })),
+          baseBranch: Type.Optional(Type.String({ description: 'New target base branch' })),
+          addLabels: Type.Optional(
+            Type.Array(Type.String(), {
+              description: 'Labels to add (comma-separated or array)',
+            }),
+          ),
+          removeLabels: Type.Optional(
+            Type.Array(Type.String(), {
+              description: 'Labels to remove (comma-separated or array)',
+            }),
+          ),
+          addAssignees: Type.Optional(
+            Type.Array(Type.String(), {
+              description: 'GitHub handles to assign',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const args = ['pr', 'edit', selector];
+          const changes: string[] = [];
+
+          if (params.title) {
+            args.push('--title', params.title);
+            changes.push(`title → "${params.title}"`);
+          }
+          if (params.body) {
+            args.push('--body', params.body);
+            changes.push('body updated');
+          }
+          if (params.baseBranch) {
+            args.push('--base', params.baseBranch);
+            changes.push(`base → "${params.baseBranch}"`);
+          }
+          if (params.addLabels && params.addLabels.length > 0) {
+            for (const label of params.addLabels) {
+              args.push('--add-label', label);
+            }
+            changes.push(`added labels: ${params.addLabels.join(', ')}`);
+          }
+          if (params.removeLabels && params.removeLabels.length > 0) {
+            for (const label of params.removeLabels) {
+              args.push('--remove-label', label);
+            }
+            changes.push(`removed labels: ${params.removeLabels.join(', ')}`);
+          }
+          if (params.addAssignees && params.addAssignees.length > 0) {
+            for (const assignee of params.addAssignees) {
+              args.push('--add-assignee', assignee);
+            }
+            changes.push(`assigned: ${params.addAssignees.join(', ')}`);
+          }
+
+          if (changes.length === 0) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '⚠️ No changes specified. Provide at least one field to update (title, body, baseBranch, addLabels, removeLabels, addAssignees).',
+                },
+              ],
+              details: { pr: selector },
+            };
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to edit PR: ${result.text}` }],
+              isError: true,
+              details: { pr: selector, changes },
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ **PR #${selector} updated.**`,
+                  '',
+                  '**Changes:**',
+                  ...changes.map((c) => `  - ${c}`),
+                  '',
+                  result.text,
+                ].join('\n'),
+              },
+            ],
+            details: { pr: selector, changes },
+          };
+        },
+      }),
+      defineAction({
+        action: 'ready',
+        summary: 'Promote a draft PR to Ready for Review',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const selector = resolvePrSelector(params.pr);
+
+          const result = await runGh(['pr', 'ready', selector], { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Failed to promote PR #${selector}: ${result.text}`,
+                },
+              ],
+              isError: true,
+              details: { pr: selector },
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `✅ **PR #${selector} is now Ready for Review!**`,
+                  '',
+                  'CodeRabbit AI review has been triggered. You can check for review',
+                  `comments with: \`gh_pr_comments("${selector}")\``,
+                ].join('\n'),
+              },
+            ],
+            details: { pr: selector, promoted: true },
+          };
+        },
+      }),
+      defineAction({
+        action: 'comments',
+        summary: 'Fetch PR review and inline comments (timestamp-cached)',
+
+        parameters: Type.Object({
+          pr: Type.String({
+            description: 'PR number (e.g. "42"), URL, or branch name',
+          }),
+          since: Type.Optional(
+            Type.String({
+              description:
+                'ISO 8601 timestamp (e.g. "2026-07-14T23:00:00Z"). Only return comments created/updated after this time. Use the `fetchedAt` value from the previous response.',
+            }),
+          ),
+          force: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Bypass cache and re-fetch all comments from GitHub.',
+            }),
+          ),
+          includeReviews: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description:
+                'Include formal review bodies (CodeRabbit findings). Set false for timeline comments only.',
+            }),
+          ),
+          includeInline: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description:
+                'Include per-line review comments from CodeRabbit (fetched via separate API). Default: true.',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+          const selector = resolvePrSelector(params.pr);
+          const prNumber = Number(selector);
+          if (Number.isNaN(prNumber)) {
+            return {
+              content: [
+                { type: 'text', text: `❌ Could not resolve PR number from: ${params.pr}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const cwd = ctx.cwd ?? process.cwd();
+          const includeReviews = params.includeReviews ?? true;
+          const includeInline = params.includeInline ?? true;
+
+          // Check cache first (unless forced)
+          if (!params.force) {
+            const cached = readCommentCache(prNumber, cwd);
+            if (cached) {
+              const formatted = formatPrComments(cached, params.since);
+              return {
+                content: [{ type: 'text', text: formatted.text }],
+                details: {
+                  prNumber,
+                  fetchedAt: cached.fetchedAt,
+                  newCount: formatted.newCount,
+                  editedCount: formatted.editedCount,
+                  fromCache: true,
+                },
+              };
+            }
+          }
+
+          // Fetch from GitHub
+          try {
+            const cache = await fetchPrComments(prNumber, cwd, includeReviews, includeInline);
+            writeCommentCache(cache, cwd);
+
+            const formatted = formatPrComments(cache, params.since);
+            return {
+              content: [{ type: 'text', text: formatted.text }],
+              details: {
+                prNumber,
+                fetchedAt: cache.fetchedAt,
+                prUpdatedAt: cache.prUpdatedAt,
+                newCount: formatted.newCount,
+                editedCount: formatted.editedCount,
+                fromCache: false,
+              },
+            };
+          } catch (error) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Failed to fetch PR comments: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+      }),
+    ],
+  });
+
+  registerNamespace(pi, {
+    name: 'gh_issue',
+    label: 'GitHub: Issues',
+    description: 'Work with GitHub issues via the gh CLI.',
+    actions: [
+      defineAction({
+        action: 'list',
+        summary: 'List issues, filtered by state/label/assignee/milestone',
+
+        parameters: Type.Object({
+          state: Type.Optional(
+            Type.String({
+              enum: ['open', 'closed', 'all'],
+              default: 'open',
+              description: 'Filter by issue state (default: "open")',
+            }),
+          ),
+          labels: Type.Optional(
+            Type.Array(Type.String(), {
+              description: 'Filter by labels (comma-separated)',
+            }),
+          ),
+          assignee: Type.Optional(
+            Type.String({ description: 'Filter by assignee (e.g. "@me" for you)' }),
+          ),
+          milestone: Type.Optional(Type.String({ description: 'Filter by milestone title' })),
+          limit: Type.Optional(
+            Type.Number({ default: 20, description: 'Maximum issues to list (default: 20)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const args = [
+            'issue',
+            'list',
+            '--state',
+            params.state ?? 'open',
+            '--json',
+            'number,title,state,url,labels,assignees,milestone,createdAt',
+            '--limit',
+            String(params.limit ?? 20),
+          ];
+
+          if (params.assignee) {
+            args.push('--assignee', params.assignee);
+          }
+          if (params.milestone) {
+            args.push('--milestone', params.milestone);
+          }
+          if (params.labels) {
+            for (const label of params.labels) {
+              args.push('--label', label);
+            }
+          }
+
+          const result = await runGh(args, { parseJson: true });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to list issues: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const issues = Array.isArray(result.json)
+            ? (result.json as Array<Record<string, unknown>>)
+            : [];
+          if (issues.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No issues found.' }],
+              details: { count: 0 },
+            };
+          }
+
+          const lines: string[] = [];
+          for (const issue of issues) {
+            const num = String(issue.number ?? '?');
+            const title = String(issue.title ?? '');
+            const state = String(issue.state ?? '?');
+            const url = String(issue.url ?? '');
+            const issueLabels = Array.isArray(issue.labels)
+              ? (issue.labels as Array<Record<string, unknown>>).map((l) => l.name).join(', ')
+              : '';
+            const issueAssignees = Array.isArray(issue.assignees)
+              ? (issue.assignees as Array<Record<string, unknown>>).map((a) => a.login).join(', ')
+              : '';
+            const milestoneTitle =
+              issue.milestone && typeof issue.milestone === 'object'
+                ? String((issue.milestone as Record<string, unknown>).title ?? '')
+                : '';
+
+            const stateIcon = state === 'OPEN' ? '🟢' : '🔴';
+            const meta: string[] = [];
+            if (issueLabels) {
+              meta.push(`labels: ${issueLabels}`);
+            }
+            if (issueAssignees) {
+              meta.push(`@${issueAssignees}`);
+            }
+            if (milestoneTitle) {
+              meta.push(`🎯 ${milestoneTitle}`);
+            }
+
+            lines.push(`${stateIcon} **#${num}** ${title}`);
+            if (meta.length > 0) {
+              lines.push(`   ${meta.join(' | ')}`);
+            }
+            lines.push(`   ${url}`);
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { count: issues.length, state: params.state },
+          };
+        },
+      }),
+      defineAction({
+        action: 'create',
+        summary: 'Create an issue',
+
+        parameters: Type.Object({
+          title: Type.String({ description: 'Issue title' }),
+          body: Type.Optional(Type.String({ description: 'Issue body (markdown supported)' })),
+          labels: Type.Optional(Type.Array(Type.String(), { description: 'Labels to apply' })),
+          assignees: Type.Optional(
+            Type.Array(Type.String(), { description: 'GitHub handles to assign' }),
+          ),
+          milestone: Type.Optional(Type.String({ description: 'Milestone title' })),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const args = ['issue', 'create', '--title', params.title];
+          if (params.body) {
+            args.push('--body', params.body);
+          }
+          if (params.labels) {
+            for (const label of params.labels) {
+              args.push('--label', label);
+            }
+          }
+          if (params.assignees) {
+            for (const assignee of params.assignees) {
+              args.push('--assignee', assignee);
+            }
+          }
+          if (params.milestone) {
+            args.push('--milestone', params.milestone);
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to create issue: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const issueUrl = result.text.match(/(https:\/\/github\.com\/[^\s]+)/)?.[1] ?? result.text;
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `✅ **Issue created:** ${issueUrl}\n\n**Title:** ${params.title}`,
+              },
+            ],
+            details: { issueUrl, title: params.title },
+          };
+        },
+      }),
+      defineAction({
+        action: 'close',
+        summary: 'Close an issue, optionally with a comment',
+
+        parameters: Type.Object({
+          issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
+          reason: Type.Optional(
+            Type.String({
+              enum: ['completed', 'not planned'],
+              description: 'Reason for closing (default: "completed")',
+            }),
+          ),
+          comment: Type.Optional(Type.String({ description: 'Closing comment' })),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const num = resolvePrSelector(params.issue);
+          const args = ['issue', 'close', num];
+          if (params.reason) {
+            args.push('--reason', params.reason);
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to close issue: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          // Add comment if provided
+          if (params.comment) {
+            await runGh(['issue', 'comment', num, '--body', params.comment], { timeoutMs: 30_000 });
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `✅ **Issue #${num} closed.**${params.comment ? ' Comment added.' : ''}`,
+              },
+            ],
+            details: { issue: num, closed: true },
+          };
+        },
+      }),
+      defineAction({
+        action: 'reopen',
+        summary: 'Reopen a closed issue',
+
+        parameters: Type.Object({
+          issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const num = resolvePrSelector(params.issue);
+          const result = await runGh(['issue', 'reopen', num], { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to reopen issue: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          return {
+            content: [{ type: 'text', text: `✅ **Issue #${num} reopened.**` }],
+            details: { issue: num, reopened: true },
+          };
+        },
+      }),
+      defineAction({
+        action: 'edit',
+        summary: 'Update issue title, body, labels, assignees or milestone',
+
+        parameters: Type.Object({
+          issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
+          title: Type.Optional(Type.String({ description: 'New title' })),
+          body: Type.Optional(Type.String({ description: 'New body (markdown)' })),
+          addLabels: Type.Optional(Type.Array(Type.String(), { description: 'Labels to add' })),
+          removeLabels: Type.Optional(
+            Type.Array(Type.String(), { description: 'Labels to remove' }),
+          ),
+          addAssignees: Type.Optional(
+            Type.Array(Type.String(), { description: 'Handles to assign' }),
+          ),
+          milestone: Type.Optional(Type.String({ description: 'Milestone title' })),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const num = resolvePrSelector(params.issue);
+          const args = ['issue', 'edit', num];
+          const changes: string[] = [];
+
+          if (params.title) {
+            args.push('--title', params.title);
+            changes.push(`title → "${params.title}"`);
+          }
+          if (params.body) {
+            args.push('--body', params.body);
+            changes.push('body updated');
+          }
+          if (params.milestone) {
+            args.push('--milestone', params.milestone);
+            changes.push(`milestone → ${params.milestone}`);
+          }
+          if (params.addLabels) {
+            for (const l of params.addLabels) {
+              args.push('--add-label', l);
+            }
+            changes.push(`added labels: ${params.addLabels.join(', ')}`);
+          }
+          if (params.removeLabels) {
+            for (const l of params.removeLabels) {
+              args.push('--remove-label', l);
+            }
+            changes.push(`removed labels: ${params.removeLabels.join(', ')}`);
+          }
+          if (params.addAssignees) {
+            for (const a of params.addAssignees) {
+              args.push('--add-assignee', a);
+            }
+            changes.push(`assigned: ${params.addAssignees.join(', ')}`);
+          }
+
+          if (changes.length === 0) {
+            return {
+              content: [{ type: 'text', text: '⚠️ No changes specified.' }],
+              details: { issue: num },
+            };
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to edit issue: ${result.text}` }],
+              isError: true,
+              details: { issue: num },
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [`✅ **Issue #${num} updated.**`, '', ...changes.map((c) => `  - ${c}`)].join(
+                  '\n',
+                ),
+              },
+            ],
+            details: { issue: num, changes },
+          };
+        },
+      }),
+      defineAction({
+        action: 'view',
+        summary: 'Full issue details including comments',
+
+        parameters: Type.Object({
+          issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
+          comments: Type.Optional(
+            Type.Boolean({ default: false, description: 'Include comments' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const num = resolvePrSelector(params.issue);
+          const jsonFields = [
             'number',
             'title',
             'body',
             'state',
             'url',
-            'headRefName',
-            'baseRefName',
-            'author',
             'createdAt',
-            'mergedAt',
-            'closedAt',
+            'updatedAt',
             'labels',
             'assignees',
-            'reviews',
+            'milestone',
             'comments',
-            'additions',
-            'deletions',
-            'files',
-          ].join(','),
-        ],
-        { parseJson: true },
-      );
+          ];
+          const args = ['issue', 'view', num, '--json', jsonFields.join(',')];
+          if (params.comments) {
+            args.push('--comments');
+          }
 
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to view PR: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
+          const result = await runGh(args, { parseJson: true });
 
-      const data = result.json as Record<string, unknown>;
-      const formatted = formatPrSummary(data);
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to view issue: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
 
-      return {
-        content: [{ type: 'text', text: formatted }],
-        details: {
-          number: data.number,
-          title: data.title,
-          state: data.state,
-          url: data.url,
+          const data = result.json as Record<string, unknown>;
+          const number = String(data.number ?? '?');
+          const title = String(data.title ?? '');
+          const state = String(data.state ?? '?');
+          const url = String(data.url ?? '');
+          const body = String(data.body ?? '').slice(0, 3000);
+          const createdAt = String(data.createdAt ?? '?');
+          const issueLabels = Array.isArray(data.labels)
+            ? (data.labels as Array<Record<string, unknown>>).map((l) => l.name).join(', ')
+            : '';
+          const issueAssignees = Array.isArray(data.assignees)
+            ? (data.assignees as Array<Record<string, unknown>>).map((a) => a.login).join(', ')
+            : '';
+          const milestoneTitle =
+            data.milestone && typeof data.milestone === 'object'
+              ? String((data.milestone as Record<string, unknown>).title ?? '')
+              : '';
+
+          const stateIcon = state === 'OPEN' ? '🟢' : '🔴';
+          const lines = [
+            `${stateIcon} **#${number}: ${title}**`,
+            `**State:** ${state} | **Created:** ${createdAt}`,
+            `**URL:** ${url}`,
+          ];
+          if (issueLabels) {
+            lines.push(`**Labels:** ${issueLabels}`);
+          }
+          if (issueAssignees) {
+            lines.push(`**Assignees:** @${issueAssignees}`);
+          }
+          if (milestoneTitle) {
+            lines.push(`**Milestone:** 🎯 ${milestoneTitle}`);
+          }
+          if (body) {
+            lines.push('', '**Description:**', body);
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { number, title, state, url },
+          };
         },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 4: gh_pr_status
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_pr_status',
-    label: 'GitHub: PR Checks',
-    description:
-      'Check CI status for a GitHub Pull Request. Shows all checks, their statuses, ' +
-      'and a summary of passing/failing/pending counts. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_pr_status to check CI checks on a GitHub PR',
-    promptGuidelines: [
-      'Use gh_pr_status to see if a PR is passing CI before merging.',
-      'The output shows per-check status with pass/fail/pending summary.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
       }),
-      watch: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Wait for checks to complete (polling mode)',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const args = ['pr', 'checks', selector];
-
-      if (params.watch) {
-        args.push('--watch');
-      }
-
-      const result = await runGh(pi, args, {
-        timeout: params.watch ? 600_000 : 60_000,
-        signal,
-        // gh pr checks exit codes: 0 = all pass, 1 = failures OR "no checks
-        // reported", 8 = pending. 1 and 8 are handled below, not errors.
-        allowExitCodes: [1, 8],
-      });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to check PR status: ${result.text}` }],
-          isError: true,
-          details: { pr: selector },
-        };
-      }
-
-      // gh exits 1 with "no checks reported on the '<branch>' branch" when the
-      // PR has zero CI checks — a legitimate empty state, not an error.
-      if (/no checks reported/i.test(result.text)) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `**PR #${selector} Checks**\n\nNo CI checks are configured for this PR.`,
-            },
-          ],
-          details: {
-            pr: selector,
-            overallPassing: null,
-            checkCount: 0,
-            note: 'no_checks_reported',
-          },
-        };
-      }
-
-      const formatted = formatCheckStatus(result.text);
-      const overallPassing = !formatted.includes('❌');
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `**PR #${selector} Checks**\n\n${formatted}`,
-          },
-        ],
-        details: { pr: selector, overallPassing },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 5: gh_merge_pr
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_merge_pr',
-    label: 'GitHub: Merge PR',
-    description:
-      'Merge a GitHub Pull Request. Default merge method is squash. ' +
-      'Supports auto-merge (merge when CI passes) and branch deletion after merge. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_merge_pr to merge a GitHub PR (default: squash)',
-    promptGuidelines: [
-      'Use gh_merge_pr when the user approves a PR for merging.',
-      'Default merge method is squash. Use method="rebase" or method="merge" to override.',
-      'Set autoMerge=true to enable auto-merge (merges when CI passes).',
-      'Offer to run `git pull` after a successful merge to update the local branch.',
     ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
-      }),
-      method: Type.Optional(
-        Type.String({
-          enum: ['squash', 'rebase', 'merge'],
-          default: 'squash',
-          description: 'Merge method (default: "squash")',
-        }),
-      ),
-      autoMerge: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Enable auto-merge (wait for CI, then merge automatically)',
-        }),
-      ),
-      deleteBranch: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Delete the head branch after merge',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const method = params.method ?? 'squash';
-      const args = ['pr', 'merge', selector, `--${method}`];
-
-      if (params.autoMerge) {
-        args.push('--auto');
-      }
-      if (params.deleteBranch) {
-        args.push('--delete-branch');
-      }
-
-      const result = await runGh(pi, args, { timeout: 60_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to merge PR: ${result.text}` }],
-          isError: true,
-          details: { pr: selector, method },
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ **PR #${selector} merged successfully!**`,
-              `**Method:** ${method}`,
-              params.autoMerge ? `**Auto-merge:** enabled` : '',
-              '',
-              result.text,
-            ]
-              .filter(Boolean)
-              .join('\n'),
-          },
-        ],
-        details: { pr: selector, method, merged: true },
-      };
-    },
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 6: gh_cancel_pr
-  // ═══════════════════════════════════════════════════════════════════════
+  registerNamespace(pi, {
+    name: 'gh_project',
+    label: 'GitHub: Projects',
+    description: 'Work with GitHub Projects v2 (roadmap boards) via the gh CLI and GraphQL API.',
+    actions: [
+      defineAction({
+        action: 'list',
+        summary: 'List Projects for an org or user',
 
-  pi.registerTool({
-    name: 'gh_cancel_pr',
-    label: 'GitHub: Close PR',
-    description:
-      'Close a GitHub Pull Request without merging. Optionally deletes the head branch. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_cancel_pr to close a GitHub PR without merging',
-    promptGuidelines: [
-      'Use gh_cancel_pr when a PR is no longer needed or should be abandoned.',
-      'Set deleteBranch=true to also delete the remote branch.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
-      }),
-      deleteBranch: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Delete the remote head branch after closing',
+        parameters: Type.Object({
+          owner: Type.Optional(
+            Type.String({ description: 'Org or user handle (default: repo owner)' }),
+          ),
+          closed: Type.Optional(
+            Type.Boolean({ default: false, description: 'Include closed projects' }),
+          ),
+          limit: Type.Optional(
+            Type.Number({ default: 20, description: 'Max results (default: 20)' }),
+          ),
         }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const args = ['pr', 'close', selector];
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          let owner = params.owner;
+          if (!owner) {
+            const repoCheck = await ensureGitHubRepo();
+            if (!repoCheck.ok) {
+              return {
+                content: [{ type: 'text', text: `❌ ${repoCheck.reason} — pass owner parameter.` }],
+                isError: true,
+                details: {},
+              };
+            }
+            owner = repoCheck.owner;
+          }
 
-      if (params.deleteBranch) {
-        args.push('--delete-branch');
-      }
+          const projectOwner = owner ?? '';
+          if (!projectOwner) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not determine project owner. Pass owner parameter.',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
 
-      const result = await runGh(pi, args, { timeout: 30_000 });
+          const args = [
+            'project',
+            'list',
+            '--owner',
+            projectOwner,
+            '--format',
+            'json',
+            '--limit',
+            String(params.limit ?? 20),
+          ];
+          if (params.closed) {
+            args.push('--closed');
+          }
 
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to close PR: ${result.text}` }],
-          isError: true,
-          details: { pr: selector },
-        };
-      }
+          const result = await runGh(args, { parseJson: true, timeoutMs: 30_000 });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ **PR #${selector} closed.**`,
-              params.deleteBranch ? '**Branch:** deleted' : '',
-              '',
-              result.text,
-            ]
-              .filter(Boolean)
-              .join('\n'),
-          },
-        ],
-        details: { pr: selector, closed: true },
-      };
-    },
-  });
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to list projects: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 7: gh_edit_pr
-  // ═══════════════════════════════════════════════════════════════════════
+          const resultAny = result.json as { projects?: Array<Record<string, unknown>> };
+          const projects = resultAny?.projects ?? [];
+          if (projects.length === 0) {
+            return {
+              content: [{ type: 'text', text: `No projects found for @${owner}.` }],
+              details: { owner, count: 0 },
+            };
+          }
 
-  pi.registerTool({
-    name: 'gh_edit_pr',
-    label: 'GitHub: Edit PR',
-    description:
-      'Edit a GitHub Pull Request — update title, body, base branch, labels, or assignees. ' +
-      'Only specified fields are changed; omitted fields are left as-is. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_edit_pr to update a GitHub PR title, body, base, or labels',
-    promptGuidelines: [
-      'Use gh_edit_pr to update PR metadata without closing and re-creating.',
-      'Only specified fields are updated — pass only what needs to change.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
-      }),
-      title: Type.Optional(Type.String({ description: 'New PR title' })),
-      body: Type.Optional(Type.String({ description: 'New PR description (markdown)' })),
-      baseBranch: Type.Optional(Type.String({ description: 'New target base branch' })),
-      addLabels: Type.Optional(
-        Type.Array(Type.String(), {
-          description: 'Labels to add (comma-separated or array)',
-        }),
-      ),
-      removeLabels: Type.Optional(
-        Type.Array(Type.String(), {
-          description: 'Labels to remove (comma-separated or array)',
-        }),
-      ),
-      addAssignees: Type.Optional(
-        Type.Array(Type.String(), {
-          description: 'GitHub handles to assign',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const args = ['pr', 'edit', selector];
-      const changes: string[] = [];
+          const lines: string[] = [];
+          for (const p of projects) {
+            const num = String(p.number ?? '?');
+            const title = String(p.title ?? '');
+            const url = String(p.url ?? '');
+            const closed = p.closed;
+            const icon = closed ? '🔴' : '🟢';
+            lines.push(`${icon} **#${num}** ${title}`);
+            lines.push(`   ${url}`);
+          }
 
-      if (params.title) {
-        args.push('--title', params.title);
-        changes.push(`title → "${params.title}"`);
-      }
-      if (params.body) {
-        args.push('--body', params.body);
-        changes.push('body updated');
-      }
-      if (params.baseBranch) {
-        args.push('--base', params.baseBranch);
-        changes.push(`base → "${params.baseBranch}"`);
-      }
-      if (params.addLabels && params.addLabels.length > 0) {
-        for (const label of params.addLabels) {
-          args.push('--add-label', label);
-        }
-        changes.push(`added labels: ${params.addLabels.join(', ')}`);
-      }
-      if (params.removeLabels && params.removeLabels.length > 0) {
-        for (const label of params.removeLabels) {
-          args.push('--remove-label', label);
-        }
-        changes.push(`removed labels: ${params.removeLabels.join(', ')}`);
-      }
-      if (params.addAssignees && params.addAssignees.length > 0) {
-        for (const assignee of params.addAssignees) {
-          args.push('--add-assignee', assignee);
-        }
-        changes.push(`assigned: ${params.addAssignees.join(', ')}`);
-      }
-
-      if (changes.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '⚠️ No changes specified. Provide at least one field to update (title, body, baseBranch, addLabels, removeLabels, addAssignees).',
-            },
-          ],
-          details: { pr: selector },
-        };
-      }
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to edit PR: ${result.text}` }],
-          isError: true,
-          details: { pr: selector, changes },
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ **PR #${selector} updated.**`,
-              '',
-              '**Changes:**',
-              ...changes.map((c) => `  - ${c}`),
-              '',
-              result.text,
-            ].join('\n'),
-          },
-        ],
-        details: { pr: selector, changes },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 8: gh_list_issues
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_list_issues',
-    label: 'GitHub: List Issues',
-    description:
-      'List GitHub Issues using gh CLI. Filters by state, labels, assignee, or milestone. ' +
-      'Returns formatted list with issue numbers, titles, labels, and URLs.',
-    promptSnippet: 'Use gh_list_issues to list GitHub issues (open, closed, or all)',
-    promptGuidelines: [
-      'Use gh_list_issues to see open issues, filter by label, or check what needs triage.',
-      'Default state is "open". Use state="all" to see everything.',
-    ],
-    parameters: Type.Object({
-      state: Type.Optional(
-        Type.String({
-          enum: ['open', 'closed', 'all'],
-          default: 'open',
-          description: 'Filter by issue state (default: "open")',
-        }),
-      ),
-      labels: Type.Optional(
-        Type.Array(Type.String(), {
-          description: 'Filter by labels (comma-separated)',
-        }),
-      ),
-      assignee: Type.Optional(
-        Type.String({ description: 'Filter by assignee (e.g. "@me" for you)' }),
-      ),
-      milestone: Type.Optional(Type.String({ description: 'Filter by milestone title' })),
-      limit: Type.Optional(
-        Type.Number({ default: 20, description: 'Maximum issues to list (default: 20)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const args = [
-        'issue',
-        'list',
-        '--state',
-        params.state ?? 'open',
-        '--json',
-        'number,title,state,url,labels,assignees,milestone,createdAt',
-        '--limit',
-        String(params.limit ?? 20),
-      ];
-
-      if (params.assignee) {
-        args.push('--assignee', params.assignee);
-      }
-      if (params.milestone) {
-        args.push('--milestone', params.milestone);
-      }
-      if (params.labels) {
-        for (const label of params.labels) {
-          args.push('--label', label);
-        }
-      }
-
-      const result = await runGh(pi, args, { parseJson: true });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to list issues: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const issues = Array.isArray(result.json)
-        ? (result.json as Array<Record<string, unknown>>)
-        : [];
-      if (issues.length === 0) {
-        return {
-          content: [{ type: 'text', text: 'No issues found.' }],
-          details: { count: 0 },
-        };
-      }
-
-      const lines: string[] = [];
-      for (const issue of issues) {
-        const num = String(issue.number ?? '?');
-        const title = String(issue.title ?? '');
-        const state = String(issue.state ?? '?');
-        const url = String(issue.url ?? '');
-        const issueLabels = Array.isArray(issue.labels)
-          ? (issue.labels as Array<Record<string, unknown>>).map((l) => l.name).join(', ')
-          : '';
-        const issueAssignees = Array.isArray(issue.assignees)
-          ? (issue.assignees as Array<Record<string, unknown>>).map((a) => a.login).join(', ')
-          : '';
-        const milestoneTitle =
-          issue.milestone && typeof issue.milestone === 'object'
-            ? String((issue.milestone as Record<string, unknown>).title ?? '')
-            : '';
-
-        const stateIcon = state === 'OPEN' ? '🟢' : '🔴';
-        const meta: string[] = [];
-        if (issueLabels) {
-          meta.push(`labels: ${issueLabels}`);
-        }
-        if (issueAssignees) {
-          meta.push(`@${issueAssignees}`);
-        }
-        if (milestoneTitle) {
-          meta.push(`🎯 ${milestoneTitle}`);
-        }
-
-        lines.push(`${stateIcon} **#${num}** ${title}`);
-        if (meta.length > 0) {
-          lines.push(`   ${meta.join(' | ')}`);
-        }
-        lines.push(`   ${url}`);
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { count: issues.length, state: params.state },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 9: gh_create_issue
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_create_issue',
-    label: 'GitHub: Create Issue',
-    description:
-      'Create a GitHub Issue. Supports title, body (markdown), labels, assignees, and milestone.',
-    promptSnippet: 'Use gh_create_issue to create a GitHub issue',
-    promptGuidelines: [
-      'Use gh_create_issue to file bugs, feature requests, or create contract-tracked issues.',
-      'The issue URL is returned — use it to link to projects or reference in commits.',
-    ],
-    parameters: Type.Object({
-      title: Type.String({ description: 'Issue title' }),
-      body: Type.Optional(Type.String({ description: 'Issue body (markdown supported)' })),
-      labels: Type.Optional(Type.Array(Type.String(), { description: 'Labels to apply' })),
-      assignees: Type.Optional(
-        Type.Array(Type.String(), { description: 'GitHub handles to assign' }),
-      ),
-      milestone: Type.Optional(Type.String({ description: 'Milestone title' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const args = ['issue', 'create', '--title', params.title];
-      if (params.body) {
-        args.push('--body', params.body);
-      }
-      if (params.labels) {
-        for (const label of params.labels) {
-          args.push('--label', label);
-        }
-      }
-      if (params.assignees) {
-        for (const assignee of params.assignees) {
-          args.push('--assignee', assignee);
-        }
-      }
-      if (params.milestone) {
-        args.push('--milestone', params.milestone);
-      }
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to create issue: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const issueUrl = result.text.match(/(https:\/\/github\.com\/[^\s]+)/)?.[1] ?? result.text;
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ **Issue created:** ${issueUrl}\n\n**Title:** ${params.title}`,
-          },
-        ],
-        details: { issueUrl, title: params.title },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 10: gh_close_issue
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_close_issue',
-    label: 'GitHub: Close Issue',
-    description: 'Close a GitHub Issue. Optionally add a closing comment.',
-    promptSnippet: 'Use gh_close_issue to close an issue',
-    parameters: Type.Object({
-      issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
-      reason: Type.Optional(
-        Type.String({
-          enum: ['completed', 'not planned'],
-          description: 'Reason for closing (default: "completed")',
-        }),
-      ),
-      comment: Type.Optional(Type.String({ description: 'Closing comment' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const num = resolvePrSelector(params.issue);
-      const args = ['issue', 'close', num];
-      if (params.reason) {
-        args.push('--reason', params.reason);
-      }
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to close issue: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // Add comment if provided
-      if (params.comment) {
-        await runGh(pi, ['issue', 'comment', num, '--body', params.comment], { timeout: 30_000 });
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ **Issue #${num} closed.**${params.comment ? ' Comment added.' : ''}`,
-          },
-        ],
-        details: { issue: num, closed: true },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 11: gh_reopen_issue
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_reopen_issue',
-    label: 'GitHub: Reopen Issue',
-    description: 'Reopen a closed GitHub Issue.',
-    promptSnippet: 'Use gh_reopen_issue to reopen a closed issue',
-    parameters: Type.Object({
-      issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const num = resolvePrSelector(params.issue);
-      const result = await runGh(pi, ['issue', 'reopen', num], { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to reopen issue: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      return {
-        content: [{ type: 'text', text: `✅ **Issue #${num} reopened.**` }],
-        details: { issue: num, reopened: true },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 12: gh_edit_issue
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_edit_issue',
-    label: 'GitHub: Edit Issue',
-    description: 'Edit a GitHub Issue — update title, body, labels, assignees, or milestone.',
-    promptSnippet: 'Use gh_edit_issue to update an issue',
-    parameters: Type.Object({
-      issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
-      title: Type.Optional(Type.String({ description: 'New title' })),
-      body: Type.Optional(Type.String({ description: 'New body (markdown)' })),
-      addLabels: Type.Optional(Type.Array(Type.String(), { description: 'Labels to add' })),
-      removeLabels: Type.Optional(Type.Array(Type.String(), { description: 'Labels to remove' })),
-      addAssignees: Type.Optional(Type.Array(Type.String(), { description: 'Handles to assign' })),
-      milestone: Type.Optional(Type.String({ description: 'Milestone title' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const num = resolvePrSelector(params.issue);
-      const args = ['issue', 'edit', num];
-      const changes: string[] = [];
-
-      if (params.title) {
-        args.push('--title', params.title);
-        changes.push(`title → "${params.title}"`);
-      }
-      if (params.body) {
-        args.push('--body', params.body);
-        changes.push('body updated');
-      }
-      if (params.milestone) {
-        args.push('--milestone', params.milestone);
-        changes.push(`milestone → ${params.milestone}`);
-      }
-      if (params.addLabels) {
-        for (const l of params.addLabels) {
-          args.push('--add-label', l);
-        }
-        changes.push(`added labels: ${params.addLabels.join(', ')}`);
-      }
-      if (params.removeLabels) {
-        for (const l of params.removeLabels) {
-          args.push('--remove-label', l);
-        }
-        changes.push(`removed labels: ${params.removeLabels.join(', ')}`);
-      }
-      if (params.addAssignees) {
-        for (const a of params.addAssignees) {
-          args.push('--add-assignee', a);
-        }
-        changes.push(`assigned: ${params.addAssignees.join(', ')}`);
-      }
-
-      if (changes.length === 0) {
-        return {
-          content: [{ type: 'text', text: '⚠️ No changes specified.' }],
-          details: { issue: num },
-        };
-      }
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to edit issue: ${result.text}` }],
-          isError: true,
-          details: { issue: num },
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [`✅ **Issue #${num} updated.**`, '', ...changes.map((c) => `  - ${c}`)].join(
-              '\n',
-            ),
-          },
-        ],
-        details: { issue: num, changes },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 13: gh_view_issue
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_view_issue',
-    label: 'GitHub: View Issue',
-    description:
-      'View full details of a GitHub Issue — title, body, labels, assignees, milestone, and comments.',
-    promptSnippet: 'Use gh_view_issue to see full issue details',
-    promptGuidelines: [
-      'Use gh_view_issue to read an issue before converting it to a contract.',
-      'The full body and recent comments are shown — useful for understanding feature requests.',
-    ],
-    parameters: Type.Object({
-      issue: Type.String({ description: 'Issue number (e.g. "42") or URL' }),
-      comments: Type.Optional(Type.Boolean({ default: false, description: 'Include comments' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const num = resolvePrSelector(params.issue);
-      const jsonFields = [
-        'number',
-        'title',
-        'body',
-        'state',
-        'url',
-        'createdAt',
-        'updatedAt',
-        'labels',
-        'assignees',
-        'milestone',
-        'comments',
-      ];
-      const args = ['issue', 'view', num, '--json', jsonFields.join(',')];
-      if (params.comments) {
-        args.push('--comments');
-      }
-
-      const result = await runGh(pi, args, { parseJson: true });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to view issue: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const data = result.json as Record<string, unknown>;
-      const number = String(data.number ?? '?');
-      const title = String(data.title ?? '');
-      const state = String(data.state ?? '?');
-      const url = String(data.url ?? '');
-      const body = String(data.body ?? '').slice(0, 3000);
-      const createdAt = String(data.createdAt ?? '?');
-      const issueLabels = Array.isArray(data.labels)
-        ? (data.labels as Array<Record<string, unknown>>).map((l) => l.name).join(', ')
-        : '';
-      const issueAssignees = Array.isArray(data.assignees)
-        ? (data.assignees as Array<Record<string, unknown>>).map((a) => a.login).join(', ')
-        : '';
-      const milestoneTitle =
-        data.milestone && typeof data.milestone === 'object'
-          ? String((data.milestone as Record<string, unknown>).title ?? '')
-          : '';
-
-      const stateIcon = state === 'OPEN' ? '🟢' : '🔴';
-      const lines = [
-        `${stateIcon} **#${number}: ${title}**`,
-        `**State:** ${state} | **Created:** ${createdAt}`,
-        `**URL:** ${url}`,
-      ];
-      if (issueLabels) {
-        lines.push(`**Labels:** ${issueLabels}`);
-      }
-      if (issueAssignees) {
-        lines.push(`**Assignees:** @${issueAssignees}`);
-      }
-      if (milestoneTitle) {
-        lines.push(`**Milestone:** 🎯 ${milestoneTitle}`);
-      }
-      if (body) {
-        lines.push('', '**Description:**', body);
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { number, title, state, url },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 14: gh_list_projects
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_list_projects',
-    label: 'GitHub: List Projects',
-    description:
-      'List GitHub Projects for an owner (org or user). Shows project number, title, state, and URL.',
-    promptSnippet: 'Use gh_list_projects to list GitHub Projects (roadmaps)',
-    promptGuidelines: [
-      'Use gh_list_projects to discover available project boards.',
-      'Default owner is the org (extracted from repo remote). Pass owner to override.',
-      'Closed projects are excluded by default.',
-    ],
-    parameters: Type.Object({
-      owner: Type.Optional(
-        Type.String({ description: 'Org or user handle (default: repo owner)' }),
-      ),
-      closed: Type.Optional(
-        Type.Boolean({ default: false, description: 'Include closed projects' }),
-      ),
-      limit: Type.Optional(Type.Number({ default: 20, description: 'Max results (default: 20)' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      let owner = params.owner;
-      if (!owner) {
-        const repoCheck = await ensureGitHubRepo(pi);
-        if (!repoCheck.ok) {
           return {
-            content: [{ type: 'text', text: `❌ ${repoCheck.reason} — pass owner parameter.` }],
-            isError: true,
-            details: {},
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { owner, count: projects.length },
           };
-        }
-        owner = repoCheck.owner;
-      }
-
-      const projectOwner = owner ?? '';
-      if (!projectOwner) {
-        return {
-          content: [
-            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const args = [
-        'project',
-        'list',
-        '--owner',
-        projectOwner,
-        '--format',
-        'json',
-        '--limit',
-        String(params.limit ?? 20),
-      ];
-      if (params.closed) {
-        args.push('--closed');
-      }
-
-      const result = await runGh(pi, args, { parseJson: true, timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to list projects: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const resultAny = result.json as { projects?: Array<Record<string, unknown>> };
-      const projects = resultAny?.projects ?? [];
-      if (projects.length === 0) {
-        return {
-          content: [{ type: 'text', text: `No projects found for @${owner}.` }],
-          details: { owner, count: 0 },
-        };
-      }
-
-      const lines: string[] = [];
-      for (const p of projects) {
-        const num = String(p.number ?? '?');
-        const title = String(p.title ?? '');
-        const url = String(p.url ?? '');
-        const closed = p.closed;
-        const icon = closed ? '🔴' : '🟢';
-        lines.push(`${icon} **#${num}** ${title}`);
-        lines.push(`   ${url}`);
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { owner, count: projects.length },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 15: gh_project_view
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_project_view',
-    label: 'GitHub: View Project',
-    description:
-      'View a GitHub Project (roadmap) with its fields and items. Shows project metadata, custom fields, and linked issues/PRs.',
-    promptSnippet: 'Use gh_project_view to inspect a GitHub Project board',
-    promptGuidelines: [
-      'Use gh_project_view to view the roadmap and its items.',
-      'Pass fieldView to see items with their field values.',
-    ],
-    parameters: Type.Object({
-      project: Type.String({ description: 'Project number (e.g. "1")' }),
-      owner: Type.Optional(
-        Type.String({ description: 'Org or user handle (default: repo owner)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      let owner = params.owner;
-      if (!owner) {
-        const repoCheck = await ensureGitHubRepo(pi);
-        if (!repoCheck.ok) {
-          return {
-            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-            isError: true,
-            details: {},
-          };
-        }
-        owner = repoCheck.owner;
-      }
-
-      const projectOwner = owner ?? '';
-      if (!projectOwner) {
-        return {
-          content: [
-            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // Use --format json for machine-readable output
-      const args = ['project', 'view', params.project, '--owner', projectOwner, '--format', 'json'];
-      const result = await runGh(pi, args, { parseJson: true, timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to view project: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const data = result.json as Record<string, unknown>;
-      const title = String(data.title ?? '?');
-      const num = String(data.number ?? '?');
-      const url = String(data.url ?? '');
-      const description = String(data.shortDescription ?? '');
-      const closed = !!data.closed;
-      const fields = Array.isArray(data.fields)
-        ? (data.fields as Array<Record<string, unknown>>)
-        : [];
-      const items = Array.isArray(data.items) ? (data.items as Array<Record<string, unknown>>) : [];
-
-      const icon = closed ? '🔴' : '🟢';
-      const lines = [`${icon} **#${num}: ${title}**`, `**URL:** ${url}`];
-      if (description) {
-        lines.push(`**Description:** ${description}`);
-      }
-
-      if (fields.length > 0) {
-        lines.push('', '**Custom fields:**');
-        for (const f of fields) {
-          const fName = String(f.name ?? '?');
-          const fType = String(f.type ?? '?');
-          lines.push(`  - ${fName} (${fType})`);
-        }
-      }
-
-      if (items.length > 0) {
-        lines.push('', `**Items (${items.length}):**`);
-        for (const item of items.slice(0, 30)) {
-          const itemTitle = String(
-            (item.content as Record<string, unknown>)?.title ?? item.title ?? '?',
-          );
-          const itemType = String(
-            (item.content as Record<string, unknown>)?.type ?? item.type ?? '?',
-          );
-          const status = item.status
-            ? String((item.status as Record<string, unknown>)?.name ?? '')
-            : '';
-          const statusStr = status ? ` [${status}]` : '';
-          lines.push(`  - ${itemType}: ${itemTitle}${statusStr}`);
-        }
-        if (items.length > 30) {
-          lines.push(`  ... and ${items.length - 30} more`);
-        }
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { number: num, title, url, itemCount: items.length },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool 16: gh_project_item_add
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_project_item_add',
-    label: 'GitHub: Add to Project',
-    description: 'Add a GitHub Issue or Pull Request to a GitHub Project (roadmap).',
-    promptSnippet: 'Use gh_project_item_add to add an issue or PR to a project board',
-    promptGuidelines: [
-      'Use gh_project_item_add to link an issue or PR to the roadmap.',
-      'Pass the full URL of the issue or PR.',
-    ],
-    parameters: Type.Object({
-      project: Type.String({ description: 'Project number (e.g. "1")' }),
-      url: Type.String({ description: 'Issue or PR URL to add' }),
-      owner: Type.Optional(
-        Type.String({ description: 'Org or user handle (default: repo owner)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      let owner = params.owner;
-      if (!owner) {
-        const repoCheck = await ensureGitHubRepo(pi);
-        if (!repoCheck.ok) {
-          return {
-            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-            isError: true,
-            details: {},
-          };
-        }
-        owner = repoCheck.owner;
-      }
-
-      const projectOwner = owner ?? '';
-      if (!projectOwner) {
-        return {
-          content: [
-            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const args = [
-        'project',
-        'item-add',
-        params.project,
-        '--owner',
-        projectOwner,
-        '--url',
-        params.url,
-      ];
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to add item to project: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `✅ **Added to project #${params.project}**: ${params.url}`,
-          },
-        ],
-        details: { project: params.project, url: params.url },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool: gh_promote_pr
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_promote_pr',
-    label: 'GitHub: Promote PR',
-    description:
-      'Promote a draft GitHub Pull Request to "Ready for Review". ' +
-      'Executes `gh pr ready` to transition the PR out of draft status, ' +
-      'which triggers CodeRabbit AI code review and signals to human reviewers ' +
-      'that the PR is ready for inspection. ' +
-      'Accepts PR number, URL, or branch name.',
-    promptSnippet: 'Use gh_promote_pr to mark a draft PR ready for review',
-    promptGuidelines: [
-      'Use gh_promote_pr when CI passes and the PR is ready for CodeRabbit AI review.',
-      'This transitions the PR from Draft → Ready for Review, triggering automated reviews.',
-      'Only promote after local CI checks pass — draft PRs save CodeRabbit quota.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
+        },
       }),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const selector = resolvePrSelector(params.pr);
+      defineAction({
+        action: 'view',
+        summary: 'View a Project with its fields and items',
 
-      const result = await runGh(pi, ['pr', 'ready', selector], { timeout: 30_000 });
-
-      if (!result.success) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to promote PR #${selector}: ${result.text}`,
-            },
-          ],
-          isError: true,
-          details: { pr: selector },
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ **PR #${selector} is now Ready for Review!**`,
-              '',
-              'CodeRabbit AI review has been triggered. You can check for review',
-              `comments with: \`gh_pr_comments("${selector}")\``,
-            ].join('\n'),
-          },
-        ],
-        details: { pr: selector, promoted: true },
-      };
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool: gh_pr_comments
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_pr_comments',
-    label: 'GitHub: PR Comments',
-    description:
-      'Fetch PR comments (reviews + timeline + inline review comments) with timestamp-based caching. ' +
-      'First call fetches all comments and caches them. Subsequent calls with ' +
-      'the `since` parameter from the previous `fetchedAt` return only new/edited ' +
-      'comments. Use `force: true` to bypass cache. ' +
-      'Set `includeInline: true` to also fetch per-line review comments (CodeRabbit findings).',
-    promptSnippet: 'Use gh_pr_comments to check for new PR comments since last fetch',
-    promptGuidelines: [
-      'On first call, omit `since` to get all comments and cache them.',
-      'On subsequent calls, pass the `fetchedAt` value from the previous response as `since`.',
-      'Pass `force: true` to re-fetch everything and refresh the cache.',
-      'Pass `includeInline: true` to also get per-line CodeRabbit review findings.',
-      '🔴 For CodeRabbit AI reviews, prefer the `coderabbitai` MCP tools (get_coderabbit_reviews, get_review_details, get_review_comments) — they provide structured findings with per-comment resolution tracking. Use gh_pr_comments for human comments and general timeline history only.',
-    ],
-    parameters: Type.Object({
-      pr: Type.String({
-        description: 'PR number (e.g. "42"), URL, or branch name',
-      }),
-      since: Type.Optional(
-        Type.String({
-          description:
-            'ISO 8601 timestamp (e.g. "2026-07-14T23:00:00Z"). Only return comments created/updated after this time. Use the `fetchedAt` value from the previous response.',
+        parameters: Type.Object({
+          project: Type.String({ description: 'Project number (e.g. "1")' }),
+          owner: Type.Optional(
+            Type.String({ description: 'Org or user handle (default: repo owner)' }),
+          ),
         }),
-      ),
-      force: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Bypass cache and re-fetch all comments from GitHub.',
-        }),
-      ),
-      includeReviews: Type.Optional(
-        Type.Boolean({
-          default: true,
-          description:
-            'Include formal review bodies (CodeRabbit findings). Set false for timeline comments only.',
-        }),
-      ),
-      includeInline: Type.Optional(
-        Type.Boolean({
-          default: true,
-          description:
-            'Include per-line review comments from CodeRabbit (fetched via separate API). Default: true.',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const selector = resolvePrSelector(params.pr);
-      const prNumber = Number(selector);
-      if (Number.isNaN(prNumber)) {
-        return {
-          content: [{ type: 'text', text: `❌ Could not resolve PR number from: ${params.pr}` }],
-          isError: true,
-          details: {},
-        };
-      }
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          let owner = params.owner;
+          if (!owner) {
+            const repoCheck = await ensureGitHubRepo();
+            if (!repoCheck.ok) {
+              return {
+                content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+                isError: true,
+                details: {},
+              };
+            }
+            owner = repoCheck.owner;
+          }
 
-      const cwd = ctx.cwd ?? process.cwd();
-      const includeReviews = params.includeReviews ?? true;
-      const includeInline = params.includeInline ?? true;
+          const projectOwner = owner ?? '';
+          if (!projectOwner) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not determine project owner. Pass owner parameter.',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
 
-      // Check cache first (unless forced)
-      if (!params.force) {
-        const cached = readCommentCache(prNumber, cwd);
-        if (cached) {
-          const formatted = formatPrComments(cached, params.since);
-          return {
-            content: [{ type: 'text', text: formatted.text }],
-            details: {
-              prNumber,
-              fetchedAt: cached.fetchedAt,
-              newCount: formatted.newCount,
-              editedCount: formatted.editedCount,
-              fromCache: true,
-            },
-          };
-        }
-      }
+          // Use --format json for machine-readable output
+          const args = [
+            'project',
+            'view',
+            params.project,
+            '--owner',
+            projectOwner,
+            '--format',
+            'json',
+          ];
+          const result = await runGh(args, { parseJson: true, timeoutMs: 30_000 });
 
-      // Fetch from GitHub
-      try {
-        const cache = await fetchPrComments(pi, prNumber, cwd, includeReviews, includeInline);
-        writeCommentCache(cache, cwd);
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to view project: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
 
-        const formatted = formatPrComments(cache, params.since);
-        return {
-          content: [{ type: 'text', text: formatted.text }],
-          details: {
-            prNumber,
-            fetchedAt: cache.fetchedAt,
-            prUpdatedAt: cache.prUpdatedAt,
-            newCount: formatted.newCount,
-            editedCount: formatted.editedCount,
-            fromCache: false,
-          },
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to fetch PR comments: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-    },
-  });
+          const data = result.json as Record<string, unknown>;
+          const title = String(data.title ?? '?');
+          const num = String(data.number ?? '?');
+          const url = String(data.url ?? '');
+          const description = String(data.shortDescription ?? '');
+          const closed = !!data.closed;
+          const fields = Array.isArray(data.fields)
+            ? (data.fields as Array<Record<string, unknown>>)
+            : [];
+          const items = Array.isArray(data.items)
+            ? (data.items as Array<Record<string, unknown>>)
+            : [];
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool: gh_project_item_mutate
-  // ═══════════════════════════════════════════════════════════════════════
+          const icon = closed ? '🔴' : '🟢';
+          const lines = [`${icon} **#${num}: ${title}**`, `**URL:** ${url}`];
+          if (description) {
+            lines.push(`**Description:** ${description}`);
+          }
 
-  pi.registerTool({
-    name: 'gh_project_item_mutate',
-    label: 'GitHub: Mutate Project Item',
-    description:
-      'Update a GitHub Project v2 item field value — e.g. change its Status column. ' +
-      'Uses GraphQL to mutate single-select fields on project items.',
-    promptSnippet: "Use gh_project_item_mutate to update a project item's status or other field",
-    promptGuidelines: [
-      "Use gh_project_item_mutate to change a project item's Status column.",
-      "Requires the project number (e.g. 1), the item's content URL (issue/PR URL), or item ID.",
-      'Also works with any single-select project field, not just Status.',
-    ],
-    parameters: Type.Object({
-      project: Type.String({ description: 'Project number (e.g. "1")' }),
-      url: Type.Optional(
-        Type.String({ description: 'Issue or PR URL linked to the project item' }),
-      ),
-      itemId: Type.Optional(
-        Type.String({ description: 'Project item node ID (from GraphQL). Alternative to url.' }),
-      ),
-      fieldName: Type.Optional(
-        Type.String({ default: 'Status', description: 'Field name to mutate (default: "Status")' }),
-      ),
-      value: Type.String({ description: 'New value for the field (e.g. "In Progress", "Done")' }),
-      owner: Type.Optional(
-        Type.String({ description: 'Org or user handle (default: repo owner)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      let owner = params.owner;
-      if (!owner) {
-        const repoCheck = await ensureGitHubRepo(pi);
-        if (!repoCheck.ok) {
-          return {
-            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-            isError: true,
-            details: {},
-          };
-        }
-        owner = repoCheck.owner;
-      }
-
-      const projectOwner = owner ?? '';
-      if (!projectOwner) {
-        return {
-          content: [
-            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const fieldName = params.fieldName ?? 'Status';
-      const projectNum = Number(params.project);
-
-      // Step 1: Fetch project metadata to get project node ID and field options
-      // Try organization first, fall back to user
-      const orgQuery = `
-        query($owner: String!, $number: Int!) {
-          organization(login: $owner) {
-            projectV2(number: $number) {
-              id
-              fields(first: 50) {
-                nodes {
-                  ... on ProjectV2SingleSelectField {
-                    id
-                    name
-                    options {
-                      id
-                      name
-                    }
-                  }
-                }
-              }
+          if (fields.length > 0) {
+            lines.push('', '**Custom fields:**');
+            for (const f of fields) {
+              const fName = String(f.name ?? '?');
+              const fType = String(f.type ?? '?');
+              lines.push(`  - ${fName} (${fType})`);
             }
           }
-        }
-      `;
 
-      const userQuery = `
-        query($owner: String!, $number: Int!) {
-          user(login: $owner) {
-            projectV2(number: $number) {
-              id
-              fields(first: 50) {
-                nodes {
-                  ... on ProjectV2SingleSelectField {
-                    id
-                    name
-                    options {
-                      id
-                      name
-                    }
-                  }
-                }
-              }
+          if (items.length > 0) {
+            lines.push('', `**Items (${items.length}):**`);
+            for (const item of items.slice(0, 30)) {
+              const itemTitle = String(
+                (item.content as Record<string, unknown>)?.title ?? item.title ?? '?',
+              );
+              const itemType = String(
+                (item.content as Record<string, unknown>)?.type ?? item.type ?? '?',
+              );
+              const status = item.status
+                ? String((item.status as Record<string, unknown>)?.name ?? '')
+                : '';
+              const statusStr = status ? ` [${status}]` : '';
+              lines.push(`  - ${itemType}: ${itemTitle}${statusStr}`);
+            }
+            if (items.length > 30) {
+              lines.push(`  ... and ${items.length - 30} more`);
             }
           }
-        }
-      `;
 
-      let projectData: { projectId: string; fieldId: string; optionId: string };
-      try {
-        // Try organization first
-        let result = await runGh(
-          pi,
-          [
-            'api',
-            'graphql',
-            '-f',
-            `query=${orgQuery}`,
-            '-F',
-            `owner=${projectOwner}`,
-            '-F',
-            `number=${projectNum}`,
-          ],
-          { parseJson: true },
-        );
-
-        // If organization fails, fall back to user
-        if (
-          !result.success ||
-          !result.json ||
-          !(result.json as any).data?.organization?.projectV2
-        ) {
-          result = await runGh(
-            pi,
-            [
-              'api',
-              'graphql',
-              '-f',
-              `query=${userQuery}`,
-              '-F',
-              `owner=${projectOwner}`,
-              '-F',
-              `number=${projectNum}`,
-            ],
-            { parseJson: true },
-          );
-        }
-
-        if (!result.success || !result.json) {
           return {
-            content: [{ type: 'text', text: `❌ Failed to fetch project: ${result.text}` }],
-            isError: true,
-            details: {},
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { number: num, title, url, itemCount: items.length },
           };
-        }
+        },
+      }),
+      defineAction({
+        action: 'item_add',
+        summary: 'Add an issue or PR to a Project',
 
-        const data = result.json as {
-          data?: {
-            organization?: {
-              projectV2?: {
-                id: string;
-                fields: {
-                  nodes: Array<{
-                    id: string;
-                    name: string;
-                    options: Array<{ id: string; name: string }>;
-                  }>;
-                };
+        parameters: Type.Object({
+          project: Type.String({ description: 'Project number (e.g. "1")' }),
+          url: Type.String({ description: 'Issue or PR URL to add' }),
+          owner: Type.Optional(
+            Type.String({ description: 'Org or user handle (default: repo owner)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          let owner = params.owner;
+          if (!owner) {
+            const repoCheck = await ensureGitHubRepo();
+            if (!repoCheck.ok) {
+              return {
+                content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+                isError: true,
+                details: {},
               };
-            };
-            user?: {
-              projectV2?: {
-                id: string;
-                fields: {
-                  nodes: Array<{
-                    id: string;
-                    name: string;
-                    options: Array<{ id: string; name: string }>;
-                  }>;
-                };
-              };
-            };
-          };
-        };
-        const pv2 = data.data?.organization?.projectV2 ?? data.data?.user?.projectV2;
-        if (!pv2) {
-          return {
-            content: [
-              { type: 'text', text: `❌ Project #${projectNum} not found for @${projectOwner}` },
-            ],
-            isError: true,
-            details: {},
-          };
-        }
+            }
+            owner = repoCheck.owner;
+          }
 
-        const field = pv2.fields?.nodes?.find((f) => f.name === fieldName);
-        if (!field) {
-          const available = (pv2.fields?.nodes ?? []).map((f) => f.name).join(', ');
-          return {
-            content: [
-              { type: 'text', text: `❌ Field "${fieldName}" not found. Available: ${available}` },
-            ],
-            isError: true,
-            details: {},
-          };
-        }
+          const projectOwner = owner ?? '';
+          if (!projectOwner) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not determine project owner. Pass owner parameter.',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
 
-        const option = field.options?.find((o) => o.name === params.value);
-        if (!option) {
-          const available = (field.options ?? []).map((o) => o.name).join(', ');
+          const args = [
+            'project',
+            'item-add',
+            params.project,
+            '--owner',
+            projectOwner,
+            '--url',
+            params.url,
+          ];
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to add item to project: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ Option "${params.value}" not found for field "${fieldName}". Available: ${available}`,
+                text: `✅ **Added to project #${params.project}**: ${params.url}`,
               },
             ],
-            isError: true,
-            details: {},
+            details: { project: params.project, url: params.url },
           };
-        }
+        },
+      }),
+      defineAction({
+        action: 'item_set',
+        summary: 'Set a Project item field value, e.g. its Status column',
 
-        projectData = {
-          projectId: pv2.id,
-          fieldId: field.id,
-          optionId: option.id,
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to resolve project metadata: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
+        parameters: Type.Object({
+          project: Type.String({ description: 'Project number (e.g. "1")' }),
+          url: Type.Optional(
+            Type.String({ description: 'Issue or PR URL linked to the project item' }),
+          ),
+          itemId: Type.Optional(
+            Type.String({
+              description: 'Project item node ID (from GraphQL). Alternative to url.',
+            }),
+          ),
+          fieldName: Type.Optional(
+            Type.String({
+              default: 'Status',
+              description: 'Field name to mutate (default: "Status")',
+            }),
+          ),
+          value: Type.String({
+            description: 'New value for the field (e.g. "In Progress", "Done")',
+          }),
+          owner: Type.Optional(
+            Type.String({ description: 'Org or user handle (default: repo owner)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          let owner = params.owner;
+          if (!owner) {
+            const repoCheck = await ensureGitHubRepo();
+            if (!repoCheck.ok) {
+              return {
+                content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+                isError: true,
+                details: {},
+              };
+            }
+            owner = repoCheck.owner;
+          }
 
-      // Step 2: Find the project item by URL or item ID
-      let itemId = params.itemId;
-      if (!itemId && params.url) {
-        try {
-          // Try organization first, fall back to user, with pagination
-          const itemOrgQuery = `
-            query($owner: String!, $number: Int!, $cursor: String) {
+          const projectOwner = owner ?? '';
+          if (!projectOwner) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not determine project owner. Pass owner parameter.',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const fieldName = params.fieldName ?? 'Status';
+          const projectNum = Number(params.project);
+
+          // Step 1: Fetch project metadata to get project node ID and field options
+          // Try organization first, fall back to user
+          const orgQuery = `
+            query($owner: String!, $number: Int!) {
               organization(login: $owner) {
                 projectV2(number: $number) {
-                  items(first: 100, after: $cursor) {
-                    pageInfo {
-                      hasNextPage
-                      endCursor
-                    }
+                  id
+                  fields(first: 50) {
                     nodes {
-                      id
-                      content {
-                        ... on Issue { url }
-                        ... on PullRequest { url }
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options {
+                          id
+                          name
+                        }
                       }
                     }
                   }
@@ -2758,20 +2294,21 @@ export default function (pi: ExtensionAPI) {
               }
             }
           `;
-          const itemUserQuery = `
-            query($owner: String!, $number: Int!, $cursor: String) {
+
+          const userQuery = `
+            query($owner: String!, $number: Int!) {
               user(login: $owner) {
                 projectV2(number: $number) {
-                  items(first: 100, after: $cursor) {
-                    pageInfo {
-                      hasNextPage
-                      endCursor
-                    }
+                  id
+                  fields(first: 50) {
                     nodes {
-                      id
-                      content {
-                        ... on Issue { url }
-                        ... on PullRequest { url }
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options {
+                          id
+                          name
+                        }
                       }
                     }
                   }
@@ -2780,71 +2317,540 @@ export default function (pi: ExtensionAPI) {
             }
           `;
 
-          const allNodes: Array<{ id: string; content: { url?: string } }> = [];
-          let cursor: string | null = null;
-          let hasNextPage = true;
+          let projectData: { projectId: string; fieldId: string; optionId: string };
+          try {
+            // Try organization first
+            let result = await runGh(
+              [
+                'api',
+                'graphql',
+                '-f',
+                `query=${orgQuery}`,
+                '-F',
+                `owner=${projectOwner}`,
+                '-F',
+                `number=${projectNum}`,
+              ],
+              { parseJson: true },
+            );
 
-          // Try organization first
-          while (hasNextPage && !itemId) {
-            const args = [
-              'api',
-              'graphql',
-              '-f',
-              `query=${itemOrgQuery}`,
-              '-F',
-              `owner=${projectOwner}`,
-              '-F',
-              `number=${projectNum}`,
-            ];
-            if (cursor) {
-              args.push('-f', `cursor=${cursor}`);
+            // If organization fails, fall back to user
+            if (
+              !result.success ||
+              !result.json ||
+              !(result.json as any).data?.organization?.projectV2
+            ) {
+              result = await runGh(
+                [
+                  'api',
+                  'graphql',
+                  '-f',
+                  `query=${userQuery}`,
+                  '-F',
+                  `owner=${projectOwner}`,
+                  '-F',
+                  `number=${projectNum}`,
+                ],
+                { parseJson: true },
+              );
             }
 
-            const itemResult = await runGh(pi, args, { parseJson: true });
-            const itemData = itemResult.json as {
+            if (!result.success || !result.json) {
+              return {
+                content: [{ type: 'text', text: `❌ Failed to fetch project: ${result.text}` }],
+                isError: true,
+                details: {},
+              };
+            }
+
+            const data = result.json as {
               data?: {
                 organization?: {
                   projectV2?: {
-                    items: {
-                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
-                      nodes: Array<{ id: string; content: { url?: string } }>;
+                    id: string;
+                    fields: {
+                      nodes: Array<{
+                        id: string;
+                        name: string;
+                        options: Array<{ id: string; name: string }>;
+                      }>;
+                    };
+                  };
+                };
+                user?: {
+                  projectV2?: {
+                    id: string;
+                    fields: {
+                      nodes: Array<{
+                        id: string;
+                        name: string;
+                        options: Array<{ id: string; name: string }>;
+                      }>;
                     };
                   };
                 };
               };
             };
-
-            const items = itemData.data?.organization?.projectV2?.items;
-            if (!items && cursor === null) {
-              // Organization failed on first page, try user instead
-              break;
-            }
-            if (!items) {
-              hasNextPage = false;
-              break;
-            }
-
-            allNodes.push(...items.nodes);
-            const match = items.nodes.find((n) => n.content?.url === params.url);
-            if (match) {
-              itemId = match.id;
-              break;
+            const pv2 = data.data?.organization?.projectV2 ?? data.data?.user?.projectV2;
+            if (!pv2) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `❌ Project #${projectNum} not found for @${projectOwner}`,
+                  },
+                ],
+                isError: true,
+                details: {},
+              };
             }
 
-            hasNextPage = items.pageInfo.hasNextPage;
-            cursor = items.pageInfo.endCursor;
+            const field = pv2.fields?.nodes?.find((f) => f.name === fieldName);
+            if (!field) {
+              const available = (pv2.fields?.nodes ?? []).map((f) => f.name).join(', ');
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `❌ Field "${fieldName}" not found. Available: ${available}`,
+                  },
+                ],
+                isError: true,
+                details: {},
+              };
+            }
+
+            const option = field.options?.find((o) => o.name === params.value);
+            if (!option) {
+              const available = (field.options ?? []).map((o) => o.name).join(', ');
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `❌ Option "${params.value}" not found for field "${fieldName}". Available: ${available}`,
+                  },
+                ],
+                isError: true,
+                details: {},
+              };
+            }
+
+            projectData = {
+              projectId: pv2.id,
+              fieldId: field.id,
+              optionId: option.id,
+            };
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Failed to resolve project metadata: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
+              isError: true,
+              details: {},
+            };
           }
 
-          // If organization didn't work or item not found, try user
+          // Step 2: Find the project item by URL or item ID
+          let itemId = params.itemId;
+          if (!itemId && params.url) {
+            try {
+              // Try organization first, fall back to user, with pagination
+              const itemOrgQuery = `
+                query($owner: String!, $number: Int!, $cursor: String) {
+                  organization(login: $owner) {
+                    projectV2(number: $number) {
+                      items(first: 100, after: $cursor) {
+                        pageInfo {
+                          hasNextPage
+                          endCursor
+                        }
+                        nodes {
+                          id
+                          content {
+                            ... on Issue { url }
+                            ... on PullRequest { url }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+              const itemUserQuery = `
+                query($owner: String!, $number: Int!, $cursor: String) {
+                  user(login: $owner) {
+                    projectV2(number: $number) {
+                      items(first: 100, after: $cursor) {
+                        pageInfo {
+                          hasNextPage
+                          endCursor
+                        }
+                        nodes {
+                          id
+                          content {
+                            ... on Issue { url }
+                            ... on PullRequest { url }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `;
+
+              const allNodes: Array<{ id: string; content: { url?: string } }> = [];
+              let cursor: string | null = null;
+              let hasNextPage = true;
+
+              // Try organization first
+              while (hasNextPage && !itemId) {
+                const args = [
+                  'api',
+                  'graphql',
+                  '-f',
+                  `query=${itemOrgQuery}`,
+                  '-F',
+                  `owner=${projectOwner}`,
+                  '-F',
+                  `number=${projectNum}`,
+                ];
+                if (cursor) {
+                  args.push('-f', `cursor=${cursor}`);
+                }
+
+                const itemResult = await runGh(args, { parseJson: true });
+                const itemData = itemResult.json as {
+                  data?: {
+                    organization?: {
+                      projectV2?: {
+                        items: {
+                          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                          nodes: Array<{ id: string; content: { url?: string } }>;
+                        };
+                      };
+                    };
+                  };
+                };
+
+                const items = itemData.data?.organization?.projectV2?.items;
+                if (!items && cursor === null) {
+                  // Organization failed on first page, try user instead
+                  break;
+                }
+                if (!items) {
+                  hasNextPage = false;
+                  break;
+                }
+
+                allNodes.push(...items.nodes);
+                const match = items.nodes.find((n) => n.content?.url === params.url);
+                if (match) {
+                  itemId = match.id;
+                  break;
+                }
+
+                hasNextPage = items.pageInfo.hasNextPage;
+                cursor = items.pageInfo.endCursor;
+              }
+
+              // If organization didn't work or item not found, try user
+              if (!itemId) {
+                cursor = null;
+                hasNextPage = true;
+                while (hasNextPage && !itemId) {
+                  const args = [
+                    'api',
+                    'graphql',
+                    '-f',
+                    `query=${itemUserQuery}`,
+                    '-F',
+                    `owner=${projectOwner}`,
+                    '-F',
+                    `number=${projectNum}`,
+                  ];
+                  if (cursor) {
+                    args.push('-f', `cursor=${cursor}`);
+                  }
+
+                  const itemResult = await runGh(args, { parseJson: true });
+                  const itemData = itemResult.json as {
+                    data?: {
+                      user?: {
+                        projectV2?: {
+                          items: {
+                            pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                            nodes: Array<{ id: string; content: { url?: string } }>;
+                          };
+                        };
+                      };
+                    };
+                  };
+
+                  const items = itemData.data?.user?.projectV2?.items;
+                  if (!items) {
+                    hasNextPage = false;
+                    break;
+                  }
+
+                  allNodes.push(...items.nodes);
+                  const match = items.nodes.find((n) => n.content?.url === params.url);
+                  if (match) {
+                    itemId = match.id;
+                    break;
+                  }
+
+                  hasNextPage = items.pageInfo.hasNextPage;
+                  cursor = items.pageInfo.endCursor;
+                }
+              }
+            } catch {
+              // will report error below
+            }
+          }
+
           if (!itemId) {
-            cursor = null;
-            hasNextPage = true;
-            while (hasNextPage && !itemId) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not find the project item. Provide either `url` (issue/PR URL) or `itemId` (project item node ID).',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          // Step 3: Mutate the field value
+          const mutation = `
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId
+                itemId: $itemId
+                fieldId: $fieldId
+                value: { singleSelectOptionId: $optionId }
+              }) {
+                clientMutationId
+              }
+            }
+          `;
+
+          try {
+            const mutResult = await runGh(
+              [
+                'api',
+                'graphql',
+                '-f',
+                `query=${mutation}`,
+                '-f',
+                `projectId=${projectData.projectId}`,
+                '-f',
+                `itemId=${itemId}`,
+                '-f',
+                `fieldId=${projectData.fieldId}`,
+                '-f',
+                `optionId=${projectData.optionId}`,
+              ],
+              { parseJson: true },
+            );
+
+            if (!mutResult.success) {
+              return {
+                content: [{ type: 'text', text: `❌ Mutation failed: ${mutResult.text}` }],
+                isError: true,
+                details: {},
+              };
+            }
+
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `✅ **Project #${projectNum} item updated:** \`${fieldName}\` → "${params.value}"`,
+                },
+              ],
+              details: { project: projectNum, fieldName, value: params.value, updated: true },
+            };
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Failed to mutate project item: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+      }),
+      defineAction({
+        action: 'item_get',
+        summary: 'Look up a Project item by its issue/PR URL',
+
+        parameters: Type.Object({
+          project: Type.String({ description: 'Project number (e.g. "1")' }),
+          url: Type.String({ description: 'Issue or PR URL to find in the project' }),
+          owner: Type.Optional(
+            Type.String({ description: 'Org or user handle (default: repo owner)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          let owner = params.owner;
+          if (!owner) {
+            const repoCheck = await ensureGitHubRepo();
+            if (!repoCheck.ok) {
+              return {
+                content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+                isError: true,
+                details: {},
+              };
+            }
+            owner = repoCheck.owner;
+          }
+
+          const projectOwner = owner ?? '';
+          if (!projectOwner) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: '❌ Could not determine project owner. Pass owner parameter.',
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const projectNum = Number(params.project);
+
+          // Try organization first, fall back to user, with pagination
+          const orgQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              organization(login: $owner) {
+                projectV2(number: $number) {
+                  id
+                  title
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                          title
+                          url
+                          state
+                        }
+                        ... on PullRequest {
+                          number
+                          title
+                          url
+                          state
+                        }
+                      }
+                      fieldValues(first: 20) {
+                        nodes {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                            field { ... on ProjectV2Field { name } }
+                          }
+                          ... on ProjectV2ItemFieldTextValue {
+                            text
+                            field { ... on ProjectV2Field { name } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+
+          const userQuery = `
+            query($owner: String!, $number: Int!, $cursor: String) {
+              user(login: $owner) {
+                projectV2(number: $number) {
+                  id
+                  title
+                  items(first: 100, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      id
+                      content {
+                        ... on Issue {
+                          number
+                          title
+                          url
+                          state
+                        }
+                        ... on PullRequest {
+                          number
+                          title
+                          url
+                          state
+                        }
+                      }
+                      fieldValues(first: 20) {
+                        nodes {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                            field { ... on ProjectV2Field { name } }
+                          }
+                          ... on ProjectV2ItemFieldTextValue {
+                            text
+                            field { ... on ProjectV2Field { name } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+
+          try {
+            type ProjectItemNode = {
+              id: string;
+              content: {
+                number?: number;
+                title?: string;
+                url?: string;
+                state?: string;
+              };
+              fieldValues: {
+                nodes: Array<{
+                  name?: string;
+                  text?: string;
+                  field?: { name?: string };
+                }>;
+              };
+            };
+
+            const allItems: ProjectItemNode[] = [];
+            let cursor: string | null = null;
+            let hasNextPage = true;
+
+            // Try organization first
+            while (hasNextPage) {
               const args = [
                 'api',
                 'graphql',
                 '-f',
-                `query=${itemUserQuery}`,
+                `query=${orgQuery}`,
                 '-F',
                 `owner=${projectOwner}`,
                 '-F',
@@ -2854,1359 +2860,1103 @@ export default function (pi: ExtensionAPI) {
                 args.push('-f', `cursor=${cursor}`);
               }
 
-              const itemResult = await runGh(pi, args, { parseJson: true });
-              const itemData = itemResult.json as {
+              const result = await runGh(args, { parseJson: true });
+              const data = result.json as {
                 data?: {
-                  user?: {
+                  organization?: {
                     projectV2?: {
+                      id: string;
+                      title: string;
                       items: {
                         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-                        nodes: Array<{ id: string; content: { url?: string } }>;
+                        nodes: ProjectItemNode[];
                       };
                     };
                   };
                 };
               };
 
-              const items = itemData.data?.user?.projectV2?.items;
-              if (!items) {
+              const pv2 = data.data?.organization?.projectV2;
+              if (!pv2 && cursor === null) {
+                // Organization failed on first page, try user instead
+                break;
+              }
+              if (!pv2) {
                 hasNextPage = false;
                 break;
               }
 
-              allNodes.push(...items.nodes);
-              const match = items.nodes.find((n) => n.content?.url === params.url);
-              if (match) {
-                itemId = match.id;
-                break;
-              }
-
-              hasNextPage = items.pageInfo.hasNextPage;
-              cursor = items.pageInfo.endCursor;
+              allItems.push(...pv2.items.nodes);
+              hasNextPage = pv2.items.pageInfo.hasNextPage;
+              cursor = pv2.items.pageInfo.endCursor;
             }
-          }
-        } catch {
-          // will report error below
-        }
-      }
 
-      if (!itemId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '❌ Could not find the project item. Provide either `url` (issue/PR URL) or `itemId` (project item node ID).',
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // Step 3: Mutate the field value
-      const mutation = `
-        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-          updateProjectV2ItemFieldValue(input: {
-            projectId: $projectId
-            itemId: $itemId
-            fieldId: $fieldId
-            value: { singleSelectOptionId: $optionId }
-          }) {
-            clientMutationId
-          }
-        }
-      `;
-
-      try {
-        const mutResult = await runGh(
-          pi,
-          [
-            'api',
-            'graphql',
-            '-f',
-            `query=${mutation}`,
-            '-f',
-            `projectId=${projectData.projectId}`,
-            '-f',
-            `itemId=${itemId}`,
-            '-f',
-            `fieldId=${projectData.fieldId}`,
-            '-f',
-            `optionId=${projectData.optionId}`,
-          ],
-          { parseJson: true },
-        );
-
-        if (!mutResult.success) {
-          return {
-            content: [{ type: 'text', text: `❌ Mutation failed: ${mutResult.text}` }],
-            isError: true,
-            details: {},
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `✅ **Project #${projectNum} item updated:** \`${fieldName}\` → "${params.value}"`,
-            },
-          ],
-          details: { project: projectNum, fieldName, value: params.value, updated: true },
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to mutate project item: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Tool: gh_project_item_get
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_project_item_get',
-    label: 'GitHub: Get Project Item',
-    description:
-      'Get a GitHub Project v2 item by its linked content URL (issue/PR URL). ' +
-      'Returns the item node ID, field values, and content metadata. ' +
-      'Useful for finding a project item to mutate its fields.',
-    promptSnippet: 'Use gh_project_item_get to find a project item by its linked issue/PR URL',
-    promptGuidelines: [
-      "Use gh_project_item_get to get a project item's node ID for subsequent mutations.",
-      'Pass the issue/PR URL to find its corresponding project item.',
-    ],
-    parameters: Type.Object({
-      project: Type.String({ description: 'Project number (e.g. "1")' }),
-      url: Type.String({ description: 'Issue or PR URL to find in the project' }),
-      owner: Type.Optional(
-        Type.String({ description: 'Org or user handle (default: repo owner)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      let owner = params.owner;
-      if (!owner) {
-        const repoCheck = await ensureGitHubRepo(pi);
-        if (!repoCheck.ok) {
-          return {
-            content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-            isError: true,
-            details: {},
-          };
-        }
-        owner = repoCheck.owner;
-      }
-
-      const projectOwner = owner ?? '';
-      if (!projectOwner) {
-        return {
-          content: [
-            { type: 'text', text: '❌ Could not determine project owner. Pass owner parameter.' },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const projectNum = Number(params.project);
-
-      // Try organization first, fall back to user, with pagination
-      const orgQuery = `
-        query($owner: String!, $number: Int!, $cursor: String) {
-          organization(login: $owner) {
-            projectV2(number: $number) {
-              id
-              title
-              items(first: 100, after: $cursor) {
-                pageInfo {
-                  hasNextPage
-                  endCursor
+            // If organization didn't work, try user
+            if (allItems.length === 0) {
+              cursor = null;
+              hasNextPage = true;
+              while (hasNextPage) {
+                const args = [
+                  'api',
+                  'graphql',
+                  '-f',
+                  `query=${userQuery}`,
+                  '-F',
+                  `owner=${projectOwner}`,
+                  '-F',
+                  `number=${projectNum}`,
+                ];
+                if (cursor) {
+                  args.push('-f', `cursor=${cursor}`);
                 }
-                nodes {
-                  id
-                  content {
-                    ... on Issue {
-                      number
-                      title
-                      url
-                      state
-                    }
-                    ... on PullRequest {
-                      number
-                      title
-                      url
-                      state
-                    }
-                  }
-                  fieldValues(first: 20) {
-                    nodes {
-                      ... on ProjectV2ItemFieldSingleSelectValue {
-                        name
-                        field { ... on ProjectV2Field { name } }
-                      }
-                      ... on ProjectV2ItemFieldTextValue {
-                        text
-                        field { ... on ProjectV2Field { name } }
-                      }
-                    }
-                  }
+
+                const result = await runGh(args, { parseJson: true });
+
+                if (!result.success || !result.json) {
+                  return {
+                    content: [
+                      { type: 'text', text: `❌ Failed to fetch project items: ${result.text}` },
+                    ],
+                    isError: true,
+                    details: {},
+                  };
                 }
-              }
-            }
-          }
-        }
-      `;
 
-      const userQuery = `
-        query($owner: String!, $number: Int!, $cursor: String) {
-          user(login: $owner) {
-            projectV2(number: $number) {
-              id
-              title
-              items(first: 100, after: $cursor) {
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
-                nodes {
-                  id
-                  content {
-                    ... on Issue {
-                      number
-                      title
-                      url
-                      state
-                    }
-                    ... on PullRequest {
-                      number
-                      title
-                      url
-                      state
-                    }
-                  }
-                  fieldValues(first: 20) {
-                    nodes {
-                      ... on ProjectV2ItemFieldSingleSelectValue {
-                        name
-                        field { ... on ProjectV2Field { name } }
-                      }
-                      ... on ProjectV2ItemFieldTextValue {
-                        text
-                        field { ... on ProjectV2Field { name } }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      `;
-
-      try {
-        type ProjectItemNode = {
-          id: string;
-          content: {
-            number?: number;
-            title?: string;
-            url?: string;
-            state?: string;
-          };
-          fieldValues: {
-            nodes: Array<{
-              name?: string;
-              text?: string;
-              field?: { name?: string };
-            }>;
-          };
-        };
-
-        const allItems: ProjectItemNode[] = [];
-        let cursor: string | null = null;
-        let hasNextPage = true;
-
-        // Try organization first
-        while (hasNextPage) {
-          const args = [
-            'api',
-            'graphql',
-            '-f',
-            `query=${orgQuery}`,
-            '-F',
-            `owner=${projectOwner}`,
-            '-F',
-            `number=${projectNum}`,
-          ];
-          if (cursor) {
-            args.push('-f', `cursor=${cursor}`);
-          }
-
-          const result = await runGh(pi, args, { parseJson: true });
-          const data = result.json as {
-            data?: {
-              organization?: {
-                projectV2?: {
-                  id: string;
-                  title: string;
-                  items: {
-                    pageInfo: { hasNextPage: boolean; endCursor: string | null };
-                    nodes: ProjectItemNode[];
+                const data = result.json as {
+                  data?: {
+                    user?: {
+                      projectV2?: {
+                        id: string;
+                        title: string;
+                        items: {
+                          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+                          nodes: ProjectItemNode[];
+                        };
+                      };
+                    };
                   };
                 };
-              };
-            };
-          };
 
-          const pv2 = data.data?.organization?.projectV2;
-          if (!pv2 && cursor === null) {
-            // Organization failed on first page, try user instead
-            break;
-          }
-          if (!pv2) {
-            hasNextPage = false;
-            break;
-          }
+                const pv2 = data.data?.user?.projectV2;
+                if (!pv2) {
+                  hasNextPage = false;
+                  break;
+                }
 
-          allItems.push(...pv2.items.nodes);
-          hasNextPage = pv2.items.pageInfo.hasNextPage;
-          cursor = pv2.items.pageInfo.endCursor;
-        }
-
-        // If organization didn't work, try user
-        if (allItems.length === 0) {
-          cursor = null;
-          hasNextPage = true;
-          while (hasNextPage) {
-            const args = [
-              'api',
-              'graphql',
-              '-f',
-              `query=${userQuery}`,
-              '-F',
-              `owner=${projectOwner}`,
-              '-F',
-              `number=${projectNum}`,
-            ];
-            if (cursor) {
-              args.push('-f', `cursor=${cursor}`);
+                allItems.push(...pv2.items.nodes);
+                hasNextPage = pv2.items.pageInfo.hasNextPage;
+                cursor = pv2.items.pageInfo.endCursor;
+              }
             }
 
-            const result = await runGh(pi, args, { parseJson: true });
+            // Now search through all collected items
+            const match = params.url
+              ? allItems.find((n) => n.content?.url === params.url)
+              : allItems[0];
 
-            if (!result.success || !result.json) {
+            if (!match) {
               return {
                 content: [
-                  { type: 'text', text: `❌ Failed to fetch project items: ${result.text}` },
+                  {
+                    type: 'text',
+                    text: params.url
+                      ? `❌ No project item found for URL: ${params.url}`
+                      : '❌ No project items found',
+                  },
                 ],
                 isError: true,
                 details: {},
               };
             }
 
-            const data = result.json as {
-              data?: {
-                user?: {
-                  projectV2?: {
-                    id: string;
-                    title: string;
-                    items: {
-                      pageInfo: { hasNextPage: boolean; endCursor: string | null };
-                      nodes: ProjectItemNode[];
-                    };
-                  };
-                };
-              };
-            };
+            const content = match.content;
+            const fieldValues = (match.fieldValues?.nodes ?? [])
+              .filter((fv) => fv.field?.name)
+              .map((fv) => {
+                const value = fv.name ?? fv.text ?? '—';
+                return `  - ${fv.field?.name ?? '?'}: ${value}`;
+              });
 
-            const pv2 = data.data?.user?.projectV2;
-            if (!pv2) {
-              hasNextPage = false;
+            const lines = [
+              `**Project Item Found**`,
+              `**Node ID:** \`${match.id}\``,
+              `**Content:** ${content?.title ?? '?'} (#${content?.number ?? '?'}) — ${content?.state ?? '?'}`,
+              `**URL:** ${content?.url ?? '?'}`,
+              '',
+              '**Field Values:**',
+              ...fieldValues,
+            ];
+
+            return {
+              content: [{ type: 'text', text: lines.join('\n') }],
+              details: {
+                itemId: match.id,
+                url: content?.url,
+                number: content?.number,
+                title: content?.title,
+                state: content?.state,
+              },
+            };
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Failed to get project item: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+      }),
+    ],
+  });
+
+  registerNamespace(pi, {
+    name: 'gh_workflow',
+    label: 'GitHub: Actions',
+    description:
+      'Trigger and inspect GitHub Actions workflow runs, including the release/deploy pipeline.',
+    actions: [
+      defineAction({
+        action: 'run',
+        summary: 'Trigger a workflow via workflow_dispatch',
+
+        parameters: Type.Object({
+          workflow: Type.Optional(
+            Type.String({
+              default: 'release.yml',
+              description: 'Workflow file name (default: "release.yml")',
+            }),
+          ),
+          ref: Type.Optional(
+            Type.String({ description: 'Branch/tag to run on (default: current git branch)' }),
+          ),
+          inputs: Type.Optional(
+            Type.Record(Type.String(), Type.String(), {
+              description:
+                'workflow_dispatch inputs as string key→value pairs (booleans must be "true"/"false")',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const repoCheck = await ensureGitHubRepo();
+          if (!repoCheck.ok) {
+            return {
+              content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const workflow = params.workflow ?? 'release.yml';
+          const ref = params.ref ?? (await currentBranch());
+
+          // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
+          const baselineRunId = await fetchNewestRunId(workflow, ref);
+
+          const args = ['workflow', 'run', workflow, '--ref', ref];
+          for (const [key, value] of Object.entries(params.inputs ?? {})) {
+            args.push('-f', `${key}=${value}`);
+          }
+
+          const result = await runGh(args, { timeoutMs: 30_000 });
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `❌ Failed to trigger workflow: ${result.text}`,
+                    '',
+                    'If the error mentions "failed to parse workflow", the workflow file is invalid —',
+                    'check job-level `if:` conditions (env context is not allowed there).',
+                  ].join('\n'),
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          // Dispatch returns no payload — poll briefly for the NEW run (not a pre-existing one).
+          let runId: string | undefined;
+          let runUrl: string | undefined;
+          for (let attempt = 0; attempt < 10; attempt++) {
+            await new Promise((r) => setTimeout(r, 1500));
+            const list = await runGh(
+              [
+                'run',
+                'list',
+                '--workflow',
+                workflow,
+                '--branch',
+                ref,
+                '--limit',
+                '1',
+                '--json',
+                'databaseId,url',
+              ],
+              { parseJson: true, timeoutMs: 30_000 },
+            );
+            const runs =
+              list.success && Array.isArray(list.json)
+                ? (list.json as Array<Record<string, unknown>>)
+                : [];
+            if (runs[0]) {
+              const candidateId = String(runs[0].databaseId ?? '');
+              // Accept only when the run ID differs from the baseline (new run created)
+              if (candidateId !== baselineRunId) {
+                runId = candidateId;
+                runUrl = String(runs[0].url ?? '');
+                break;
+              }
+            }
+          }
+
+          const lines = [
+            '✅ **Workflow dispatched!**',
+            `**Workflow:** ${workflow}`,
+            `**Ref:** ${ref}`,
+          ];
+          if (params.inputs && Object.keys(params.inputs).length > 0) {
+            lines.push(`**Inputs:** ${JSON.stringify(params.inputs)}`);
+          }
+          if (runUrl) {
+            lines.push(`**Run:** ${runUrl}`);
+          } else {
+            lines.push(
+              '**Run:** not visible yet — check with `gh_workflow_status` in a few seconds.',
+            );
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: {
+              workflow,
+              ref,
+              inputs: params.inputs ?? {},
+              runId: runId ?? null,
+              runUrl: runUrl ?? null,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'status',
+        summary: 'Recent runs for a workflow, or one run in detail',
+
+        parameters: Type.Object({
+          workflow: Type.Optional(
+            Type.String({
+              default: 'release.yml',
+              description: 'Workflow file name (default: "release.yml")',
+            }),
+          ),
+          run: Type.Optional(
+            Type.String({ description: 'Run ID or branch name to inspect a single run' }),
+          ),
+          limit: Type.Optional(
+            Type.Number({
+              default: 5,
+              description: 'Runs to list when no run is given (default: 5)',
+            }),
+          ),
+          watch: Type.Optional(
+            Type.Boolean({ default: false, description: 'Poll until the run completes' }),
+          ),
+          timeoutSeconds: Type.Optional(
+            Type.Number({
+              default: 1800,
+              description: 'Max watch time in seconds (default: 1800)',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const workflow = params.workflow ?? 'release.yml';
+
+          // ── List mode: no run specified ──
+          if (!params.run) {
+            const result = await runGh(
+              [
+                'run',
+                'list',
+                '--workflow',
+                workflow,
+                '--limit',
+                String(params.limit ?? 5),
+                '--json',
+                'databaseId,displayTitle,event,status,conclusion,headBranch,url',
+              ],
+              { parseJson: true, timeoutMs: 30_000 },
+            );
+            if (!result.success) {
+              return {
+                content: [{ type: 'text', text: `❌ Failed to list runs: ${result.text}` }],
+                isError: true,
+                details: {},
+              };
+            }
+            const runs = Array.isArray(result.json)
+              ? (result.json as Array<Record<string, unknown>>)
+              : [];
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `**Recent runs — ${workflow}**\n\n${formatRunList(runs)}`,
+                },
+              ],
+              details: { workflow, count: runs.length },
+            };
+          }
+
+          // ── Single run mode ──
+          const resolved = await resolveRunId(params.run, workflow);
+          if ('error' in resolved) {
+            return {
+              content: [{ type: 'text', text: `❌ ${resolved.error}` }],
+              isError: true,
+              details: {},
+            };
+          }
+          const { runId } = resolved;
+
+          // Optional watch: poll until terminal state.
+          if (params.watch) {
+            const outcome = await waitForRunCompletion(runId, params.timeoutSeconds ?? 1800);
+            if (typeof outcome === 'object') {
+              return {
+                content: [{ type: 'text', text: `❌ ${outcome.error}` }],
+                isError: true,
+                details: { runId },
+              };
+            }
+            if (outcome === 'timeout') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s — use gh_workflow_status again or gh_workflow_logs to inspect.`,
+                  },
+                ],
+                details: { runId, status: 'still-running' },
+              };
+            }
+          }
+
+          const result = await runGh(
+            [
+              'run',
+              'view',
+              runId,
+              '--json',
+              'databaseId,displayTitle,event,status,conclusion,url,headBranch,jobs',
+            ],
+            { parseJson: true, timeoutMs: 30_000 },
+          );
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to view run: ${result.text}` }],
+              isError: true,
+              details: { runId },
+            };
+          }
+
+          const data = result.json as Record<string, unknown>;
+          return {
+            content: [{ type: 'text', text: formatRunDetail(data) }],
+            details: {
+              runId,
+              status: data.status,
+              conclusion: data.conclusion ?? null,
+              url: data.url ?? null,
+            },
+          };
+        },
+      }),
+      defineAction({
+        action: 'logs',
+        summary: 'Stream logs for a run, optionally watching to completion',
+
+        parameters: Type.Object({
+          run: Type.String({ description: 'Run ID or branch name' }),
+          workflow: Type.Optional(
+            Type.String({
+              default: 'release.yml',
+              description: 'Workflow file name (default: "release.yml")',
+            }),
+          ),
+          job: Type.Optional(
+            Type.String({ description: 'Only show logs for a specific job (name or ID)' }),
+          ),
+          failedOnly: Type.Optional(
+            Type.Boolean({ default: false, description: 'Only show logs for failed steps' }),
+          ),
+          watch: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Wait for the run to finish before dumping logs',
+            }),
+          ),
+          timeoutSeconds: Type.Optional(
+            Type.Number({
+              default: 1800,
+              description: 'Max watch time in seconds (default: 1800)',
+            }),
+          ),
+          lines: Type.Optional(
+            Type.Number({ description: 'Keep only the last N log lines (0 = all)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const workflow = params.workflow ?? 'release.yml';
+          const resolved = await resolveRunId(params.run, workflow);
+          if ('error' in resolved) {
+            return {
+              content: [{ type: 'text', text: `❌ ${resolved.error}` }],
+              isError: true,
+              details: {},
+            };
+          }
+          const { runId } = resolved;
+
+          if (params.watch) {
+            const outcome = await waitForRunCompletion(runId, params.timeoutSeconds ?? 1800);
+            if (typeof outcome === 'object') {
+              return {
+                content: [{ type: 'text', text: `❌ ${outcome.error}` }],
+                isError: true,
+                details: { runId },
+              };
+            }
+            if (outcome === 'timeout') {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s. Logs may be incomplete — fetch again later.`,
+                  },
+                ],
+                details: { runId, status: 'still-running' },
+              };
+            }
+          }
+
+          const args = ['run', 'view', runId];
+          if (params.failedOnly) {
+            args.push('--log-failed');
+          } else {
+            args.push('--log');
+          }
+          if (params.job) {
+            args.push('--job', params.job);
+          }
+
+          const result = await runGh(args, { timeoutMs: 300_000 });
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to fetch logs: ${result.text}` }],
+              isError: true,
+              details: { runId },
+            };
+          }
+
+          let logText = result.text;
+          if (params.lines && params.lines > 0) {
+            const parts = logText.split('\n');
+            logText = parts.slice(-params.lines).join('\n');
+          }
+
+          return {
+            content: [{ type: 'text', text: logText || '_No log output for this run._' }],
+            details: { runId, failedOnly: params.failedOnly ?? false, job: params.job ?? null },
+          };
+        },
+      }),
+      defineAction({
+        action: 'deploy',
+        summary: 'Trigger the release/deploy workflow and optionally wait',
+
+        parameters: Type.Object({
+          mode: Type.Optional(
+            Type.String({
+              enum: ['staging', 'production'],
+              default: 'staging',
+              description: 'Deployment target (default: staging)',
+            }),
+          ),
+          platforms: Type.Optional(
+            Type.Union(
+              [
+                Type.Array(Type.String({ enum: ['linux', 'windows', 'macos'] })),
+                Type.String({ description: 'Comma-separated, e.g. "linux,windows"' }),
+              ],
+              { description: 'Platforms to build (default: all)' },
+            ),
+          ),
+          bundles: Type.Optional(
+            Type.String({
+              description:
+                'Bundle targets to build, comma-separated (appimage,deb,rpm,msi,dmg). Empty = platform defaults',
+            }),
+          ),
+          ref: Type.Optional(
+            Type.String({ description: 'Branch to deploy (default: current git branch)' }),
+          ),
+          workflow: Type.Optional(
+            Type.String({
+              default: 'release.yml',
+              description: 'Workflow file name (default: "release.yml")',
+            }),
+          ),
+          force: Type.Optional(
+            Type.Boolean({
+              default: false,
+              description: 'Bypass the Redis checksum cache (--force)',
+            }),
+          ),
+          wait: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description: 'Wait for completion and report (default: true)',
+            }),
+          ),
+          timeoutSeconds: Type.Optional(
+            Type.Number({
+              default: 2700,
+              minimum: 1,
+              description: 'Max wait time in seconds (default: 2700 = 45min)',
+            }),
+          ),
+          intervalSeconds: Type.Optional(
+            Type.Number({
+              default: 15,
+              minimum: 1,
+              description: 'Poll interval in seconds (default: 15)',
+            }),
+          ),
+          fetchLogs: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description: 'Auto-fetch failed step logs when a job fails (default: true)',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+          const repoCheck = await ensureGitHubRepo();
+          if (!repoCheck.ok) {
+            return {
+              content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const workflow = params.workflow ?? 'release.yml';
+          const mode = params.mode ?? 'staging';
+          const ref = params.ref ?? (await currentBranch());
+          const platformsCsv = normalizePlatforms(params.platforms);
+          const platforms = platformsCsv ? platformsCsv.split(',') : [];
+          const timeoutSeconds = Math.max(1, params.timeoutSeconds ?? 2700);
+          const intervalSeconds = Math.max(1, params.intervalSeconds ?? 15);
+          const intervalMs = intervalSeconds * 1000;
+
+          // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
+          const baselineRunId = await fetchNewestRunId(workflow, ref);
+
+          // ── 1. Dispatch ──
+          const dispatchArgs = ['workflow', 'run', workflow, '--ref', ref, '-f', `mode=${mode}`];
+          if (params.force) {
+            dispatchArgs.push('-f', 'force=true');
+          }
+          if (platformsCsv) {
+            dispatchArgs.push('-f', `platforms=${platformsCsv}`);
+          }
+          const bundles = params.bundles?.trim() ?? '';
+          if (bundles) {
+            dispatchArgs.push('-f', `bundles=${bundles}`);
+          }
+
+          const progress = (line: string) =>
+            onUpdate?.({ content: [{ type: 'text', text: line }], details: {} });
+
+          progress(
+            `🚀 Dispatching ${workflow} on ${ref} (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})...`,
+          );
+          const dispatch = await runGh(dispatchArgs, { timeoutMs: 30_000 });
+          if (!dispatch.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `❌ Failed to trigger deploy: ${dispatch.text}`,
+                    '',
+                    'If the error mentions "failed to parse workflow", the workflow file is invalid.',
+                  ].join('\n'),
+                },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          // ── 2. Wait for the NEW run to appear (not a pre-existing one) ──
+          let runId: string | undefined;
+          for (let attempt = 0; attempt < 10; attempt++) {
+            try {
+              await abortableSleep(1500, signal);
+            } catch {
+              return {
+                content: [
+                  { type: 'text', text: '🛑 Aborted while waiting for the run to appear.' },
+                ],
+                details: { dispatched: true },
+              };
+            }
+            const list = await runGh(
+              [
+                'run',
+                'list',
+                '--workflow',
+                workflow,
+                '--branch',
+                ref,
+                '--limit',
+                '1',
+                '--json',
+                'databaseId,url',
+              ],
+              { parseJson: true, timeoutMs: 30_000 },
+            );
+            const runs =
+              list.success && Array.isArray(list.json)
+                ? (list.json as Array<Record<string, unknown>>)
+                : [];
+            if (runs[0]) {
+              const candidateId = String(runs[0].databaseId ?? '');
+              // Accept only when the run ID differs from the baseline (new run created)
+              if (candidateId !== baselineRunId) {
+                runId = candidateId;
+                break;
+              }
+            }
+          }
+
+          if (!runId) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `❌ Deploy dispatched but the run did not appear — check with gh_workflow_status(workflow="${workflow}").`,
+                },
+              ],
+              isError: true,
+              details: { workflow, ref, mode },
+            };
+          }
+
+          const runUrl = `https://github.com/${repoCheck.owner}/${repoCheck.repo}/actions/runs/${runId}`;
+
+          // ── 3. Quick dispatch (no wait) ──
+          if (!params.wait) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})`,
+                    `**Run:** ${runUrl}`,
+                    '',
+                    `Watch with: gh_workflow_status(run=${runId}, watch=true)`,
+                    `Logs with: gh_workflow_logs(run=${runId})`,
+                  ].join('\n'),
+                },
+              ],
+              details: { runId, runUrl, workflow, ref, mode, platforms },
+            };
+          }
+
+          // ── 4. Periodic fetch until all requested jobs are terminal ──
+          const deadline = Date.now() + timeoutSeconds * 1000;
+          let lastJobState = '';
+          let aborted = false;
+          let timedOut = false;
+          let finalStatus:
+            | { ok: true; status: string; conclusion: string; jobs: Array<Record<string, unknown>> }
+            | undefined;
+          let lastError: string | undefined;
+
+          while (Date.now() < deadline) {
+            const snap = await fetchRunStatus(runId, platforms);
+            if (!snap.ok) {
+              lastError = snap.error;
+              break;
+            }
+            finalStatus = snap;
+
+            const jobStates = snap.jobs
+              .map(
+                (j) => `${String(j.name ?? '?')}:${String(j.conclusion ?? String(j.status ?? ''))}`,
+              )
+              .join(' | ');
+            if (jobStates !== lastJobState) {
+              progress(`⏳ ${jobStates || '(no jobs yet — runner starting)'}`);
+              lastJobState = jobStates;
+            }
+
+            const relevantJobs = snap.jobs.filter((j) => String(j.status ?? '') === 'completed');
+            const allDone = snap.jobs.length > 0 && relevantJobs.length === snap.jobs.length;
+            if (allDone || snap.status === 'completed') {
               break;
             }
 
-            allItems.push(...pv2.items.nodes);
-            hasNextPage = pv2.items.pageInfo.hasNextPage;
-            cursor = pv2.items.pageInfo.endCursor;
+            try {
+              await abortableSleep(intervalMs, signal);
+            } catch {
+              aborted = true;
+              break;
+            }
           }
-        }
 
-        // Now search through all collected items
-        const match = params.url
-          ? allItems.find((n) => n.content?.url === params.url)
-          : allItems[0];
+          // Prioritize polling errors even if we have a stale finalStatus
+          if (lastError) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to poll deploy run: ${lastError}` }],
+              isError: true,
+              details: { runId },
+            };
+          }
 
-        if (!match) {
+          if (!finalStatus) {
+            timedOut = true;
+          } else if (Date.now() >= deadline && !aborted) {
+            timedOut = true;
+          }
+
+          // ── 5. Final report ──
+          const report: string[] = [];
+          const isAborted = aborted;
+          if (isAborted) {
+            report.push('🛑 **Aborted** (Esc/Ctrl+C) — current state:');
+          } else if (timedOut) {
+            report.push(`⏳ **Timed out after ${timeoutSeconds}s** — current state:`);
+          }
+
+          const runStatus = finalStatus?.status ?? 'unknown';
+          const runConclusion = finalStatus?.conclusion ?? '';
+          const finalJobs = finalStatus?.jobs ?? [];
+          const allSucceeded =
+            !isAborted &&
+            !timedOut &&
+            runStatus === 'completed' &&
+            (runConclusion === 'success' ||
+              (finalJobs.length > 0 && finalJobs.every((j) => j.conclusion === 'success')));
+
+          report.push(
+            `${allSucceeded ? '✅' : '❌'} **Deploy ${allSucceeded ? 'succeeded' : runConclusion || runStatus}** — ${mode}${platformsCsv ? ` (${platformsCsv})` : ' (all platforms)'}${bundles ? `, bundles: ${bundles}` : ''}`,
+            `**Run:** ${runUrl}`,
+          );
+
+          if (finalStatus && finalStatus.jobs.length > 0) {
+            report.push('', '**Jobs:**');
+            for (const job of finalStatus.jobs) {
+              const jobName = String(job.name ?? '?');
+              const jobConclusion = job.conclusion
+                ? String(job.conclusion)
+                : String(job.status ?? '');
+              const icon =
+                jobConclusion === 'success'
+                  ? '✅'
+                  : jobConclusion === 'skipped'
+                    ? '⏭️'
+                    : jobConclusion === 'cancelled'
+                      ? '🚫'
+                      : '❌';
+              report.push(`  ${icon} **${jobName}** — ${jobConclusion}`);
+            }
+          }
+
+          // Artifacts (only meaningful when the run is done)
+          if (runStatus === 'completed') {
+            const artifacts = await fetchRunArtifacts(runId);
+            if (artifacts.length > 0) {
+              report.push('', '**Artifacts:**');
+              for (const a of artifacts) {
+                report.push(`  📦 ${a.name} — ${formatBytes(a.size)}`);
+              }
+            }
+          }
+
+          // ── 6. Auto-fetch failed logs ──
+          const failedJobs = finalStatus?.jobs.filter((j) => j.conclusion === 'failure') ?? [];
+          if (
+            params.fetchLogs !== false &&
+            (failedJobs.length > 0 || runConclusion === 'failure')
+          ) {
+            report.push('', '---', '**Failed step logs:**');
+            const logs = await runGh(['run', 'view', runId, '--log-failed'], {
+              timeoutMs: 120_000,
+            });
+            if (logs.success && logs.text.trim()) {
+              const lines = logs.text.split('\n');
+              const kept = lines.slice(-150);
+              report.push('', '```', kept.join('\n'), '```');
+            } else {
+              report.push('  _(no failed logs available)_');
+            }
+          }
+
           return {
-            content: [
-              {
-                type: 'text',
-                text: params.url
-                  ? `❌ No project item found for URL: ${params.url}`
-                  : '❌ No project items found',
-              },
-            ],
-            isError: true,
-            details: {},
-          };
-        }
-
-        const content = match.content;
-        const fieldValues = (match.fieldValues?.nodes ?? [])
-          .filter((fv) => fv.field?.name)
-          .map((fv) => {
-            const value = fv.name ?? fv.text ?? '—';
-            return `  - ${fv.field?.name ?? '?'}: ${value}`;
-          });
-
-        const lines = [
-          `**Project Item Found**`,
-          `**Node ID:** \`${match.id}\``,
-          `**Content:** ${content?.title ?? '?'} (#${content?.number ?? '?'}) — ${content?.state ?? '?'}`,
-          `**URL:** ${content?.url ?? '?'}`,
-          '',
-          '**Field Values:**',
-          ...fieldValues,
-        ];
-
-        return {
-          content: [{ type: 'text', text: lines.join('\n') }],
-          details: {
-            itemId: match.id,
-            url: content?.url,
-            number: content?.number,
-            title: content?.title,
-            state: content?.state,
-          },
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to get project item: ${err instanceof Error ? err.message : String(err)}`,
+            content: [{ type: 'text', text: report.join('\n') }],
+            details: {
+              runId,
+              runUrl,
+              workflow,
+              ref,
+              mode,
+              platforms,
+              bundles: bundles || null,
+              status: runStatus,
+              conclusion: runConclusion || null,
+              succeeded: allSucceeded,
+              aborted: isAborted,
+              timedOut,
             },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-    },
+          };
+        },
+      }),
+    ],
   });
+
+  registerNamespace(pi, {
+    name: 'gh_release',
+    label: 'GitHub: Releases',
+    description: 'Inspect GitHub releases and their uploaded assets.',
+    actions: [
+      defineAction({
+        action: 'list',
+        summary: 'List releases with tag, title and date',
+
+        parameters: Type.Object({
+          limit: Type.Optional(
+            Type.Number({ default: 10, description: 'Max releases (default: 10)' }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const result = await runGh(
+            [
+              'release',
+              'list',
+              '--limit',
+              String(params.limit ?? 10),
+              '--json',
+              'tagName,name,isLatest,publishedAt,url',
+            ],
+            { parseJson: true, timeoutMs: 30_000 },
+          );
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to list releases: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const releases = Array.isArray(result.json)
+            ? (result.json as Array<Record<string, unknown>>)
+            : [];
+          if (releases.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No releases found.' }],
+              details: { count: 0 },
+            };
+          }
+
+          const lines: string[] = [];
+          for (const r of releases) {
+            const tag = String(r.tagName ?? '?');
+            const name = String(r.name ?? '');
+            const isLatest = r.isLatest ? ' 🟢 latest' : '';
+            const published = String(r.publishedAt ?? '?').slice(0, 10);
+            const url = String(r.url ?? '');
+            lines.push(
+              `**${tag}**${isLatest} — ${name || tag}`,
+              `   published ${published} | ${url}`,
+            );
+          }
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { count: releases.length },
+          };
+        },
+      }),
+      defineAction({
+        action: 'view',
+        summary: 'View a release with its notes and assets',
+
+        parameters: Type.Object({
+          tag: Type.Optional(
+            Type.String({
+              description: 'Release tag, or "latest" for the newest release (defaults to latest)',
+            }),
+          ),
+        }),
+        async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+          const args = ['release', 'view'];
+          if (params.tag && params.tag !== 'latest') {
+            args.push(params.tag);
+          }
+          args.push('--json', 'tagName,name,body,publishedAt,isLatest,url,assets');
+          const result = await runGh(args, { parseJson: true, timeoutMs: 30_000 });
+          if (!result.success) {
+            return {
+              content: [{ type: 'text', text: `❌ Failed to view release: ${result.text}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const data = result.json as Record<string, unknown>;
+          const tag = String(data.tagName ?? '?');
+          const name = String(data.name ?? '');
+          const isLatest = data.isLatest ? ' 🟢 latest' : '';
+          const published = String(data.publishedAt ?? '?');
+          const url = String(data.url ?? '');
+          const body = String(data.body ?? '').slice(0, 3000);
+
+          const lines = [
+            `**${tag}**${isLatest} — ${name || tag}`,
+            `**Published:** ${published}`,
+            `**URL:** ${url}`,
+          ];
+
+          const assets = Array.isArray(data.assets)
+            ? (data.assets as Array<Record<string, unknown>>)
+            : [];
+          if (assets.length > 0) {
+            lines.push('', `**Assets (${assets.length}):**`);
+            const byExt = new Map<string, Array<Record<string, unknown>>>();
+            for (const asset of assets) {
+              const aName = String(asset.name ?? '?');
+              const ext = aName.includes('.')
+                ? aName.slice(aName.lastIndexOf('.')).toLowerCase()
+                : '(none)';
+              const list = byExt.get(ext) ?? [];
+              list.push(asset);
+              byExt.set(ext, list);
+            }
+            for (const [ext, list] of byExt) {
+              lines.push(`  **${ext}** (${list.length}):`);
+              for (const asset of list) {
+                const aName = String(asset.name ?? '?');
+                const size = formatBytes(Number(asset.size ?? 0));
+                const downloads = Number(asset.downloadCount ?? 0);
+                const state = String(asset.state ?? '?');
+                const stateIcon = state === 'uploaded' ? '✅' : '⚠️';
+                lines.push(
+                  `    ${stateIcon} ${aName} — ${size}, ${downloads} downloads (${state})`,
+                );
+              }
+            }
+          } else {
+            lines.push(
+              '',
+              '⚠️ **No assets uploaded to this release.**',
+              '  If this was a desktop release, the upload step likely failed.',
+            );
+          }
+
+          if (body.trim()) {
+            lines.push('', '**Notes:**', body);
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { tag: tag, isLatest: !!data.isLatest, assetCount: assets.length },
+          };
+        },
+      }),
+    ],
+  });
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 1: gh_create_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 2: gh_list_prs
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 3: gh_summarize_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 4: gh_pr_status
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 5: gh_merge_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 6: gh_cancel_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 7: gh_edit_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 8: gh_list_issues
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 9: gh_create_issue
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 10: gh_close_issue
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 11: gh_reopen_issue
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 12: gh_edit_issue
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 13: gh_view_issue
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 14: gh_list_projects
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 15: gh_project_view
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool 16: gh_project_item_add
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_promote_pr
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_pr_comments
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_project_item_mutate
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_project_item_get
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_workflow_run
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_workflow_run',
-    label: 'GitHub: Trigger Workflow',
-    description:
-      'Trigger a GitHub Actions workflow via workflow_dispatch (e.g. the release/deploy pipeline). ' +
-      'Passes inputs as -f key=value; booleans must be strings "true"/"false". ' +
-      'Returns the run URL once the run appears.',
-    promptSnippet: 'Use gh_workflow_run to trigger a workflow_dispatch deploy',
-    promptGuidelines: [
-      'Use gh_workflow_run to trigger the release.yml deploy pipeline for testing or manual deploys.',
-      'Dispatch is async — the run appears a few seconds after triggering.',
-      'Pass inputs as strings: e.g. inputs={ mode: "staging", force: "true" }.',
-      'After triggering, use gh_workflow_status (watch=true) or gh_workflow_logs to follow the run.',
-    ],
-    parameters: Type.Object({
-      workflow: Type.Optional(
-        Type.String({
-          default: 'release.yml',
-          description: 'Workflow file name (default: "release.yml")',
-        }),
-      ),
-      ref: Type.Optional(
-        Type.String({ description: 'Branch/tag to run on (default: current git branch)' }),
-      ),
-      inputs: Type.Optional(
-        Type.Record(Type.String(), Type.String(), {
-          description:
-            'workflow_dispatch inputs as string key→value pairs (booleans must be "true"/"false")',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const repoCheck = await ensureGitHubRepo(pi);
-      if (!repoCheck.ok) {
-        return {
-          content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const workflow = params.workflow ?? 'release.yml';
-      const ref = params.ref ?? (await currentBranch(pi));
-
-      // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
-      const baselineRunId = await fetchNewestRunId(pi, workflow, ref);
-
-      const args = ['workflow', 'run', workflow, '--ref', ref];
-      for (const [key, value] of Object.entries(params.inputs ?? {})) {
-        args.push('-f', `${key}=${value}`);
-      }
-
-      const result = await runGh(pi, args, { timeout: 30_000 });
-      if (!result.success) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `❌ Failed to trigger workflow: ${result.text}`,
-                '',
-                'If the error mentions "failed to parse workflow", the workflow file is invalid —',
-                'check job-level `if:` conditions (env context is not allowed there).',
-              ].join('\n'),
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // Dispatch returns no payload — poll briefly for the NEW run (not a pre-existing one).
-      let runId: string | undefined;
-      let runUrl: string | undefined;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const list = await runGh(
-          pi,
-          [
-            'run',
-            'list',
-            '--workflow',
-            workflow,
-            '--branch',
-            ref,
-            '--limit',
-            '1',
-            '--json',
-            'databaseId,url',
-          ],
-          { parseJson: true, timeout: 30_000 },
-        );
-        const runs =
-          list.success && Array.isArray(list.json)
-            ? (list.json as Array<Record<string, unknown>>)
-            : [];
-        if (runs[0]) {
-          const candidateId = String(runs[0].databaseId ?? '');
-          // Accept only when the run ID differs from the baseline (new run created)
-          if (candidateId !== baselineRunId) {
-            runId = candidateId;
-            runUrl = String(runs[0].url ?? '');
-            break;
-          }
-        }
-      }
-
-      const lines = ['✅ **Workflow dispatched!**', `**Workflow:** ${workflow}`, `**Ref:** ${ref}`];
-      if (params.inputs && Object.keys(params.inputs).length > 0) {
-        lines.push(`**Inputs:** ${JSON.stringify(params.inputs)}`);
-      }
-      if (runUrl) {
-        lines.push(`**Run:** ${runUrl}`);
-      } else {
-        lines.push('**Run:** not visible yet — check with `gh_workflow_status` in a few seconds.');
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: {
-          workflow,
-          ref,
-          inputs: params.inputs ?? {},
-          runId: runId ?? null,
-          runUrl: runUrl ?? null,
-        },
-      };
-    },
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_workflow_status
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_workflow_status',
-    label: 'GitHub: Workflow Status',
-    description:
-      'Show recent GitHub Actions runs for a workflow, or detailed status (jobs + steps) of a single run. ' +
-      'watch=true polls until the run completes.',
-    promptSnippet: 'Use gh_workflow_status to check workflow run status',
-    promptGuidelines: [
-      'Use gh_workflow_status to see recent deploy runs, or inspect a specific run with run=<id|branch>.',
-      'watch=true polls every 10s until the run completes (handy right after gh_workflow_run).',
-      'The run parameter accepts a run id or a branch name (newest run on that branch).',
-    ],
-    parameters: Type.Object({
-      workflow: Type.Optional(
-        Type.String({
-          default: 'release.yml',
-          description: 'Workflow file name (default: "release.yml")',
-        }),
-      ),
-      run: Type.Optional(
-        Type.String({ description: 'Run ID or branch name to inspect a single run' }),
-      ),
-      limit: Type.Optional(
-        Type.Number({ default: 5, description: 'Runs to list when no run is given (default: 5)' }),
-      ),
-      watch: Type.Optional(
-        Type.Boolean({ default: false, description: 'Poll until the run completes' }),
-      ),
-      timeoutSeconds: Type.Optional(
-        Type.Number({
-          default: 1800,
-          description: 'Max watch time in seconds (default: 1800)',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const workflow = params.workflow ?? 'release.yml';
-
-      // ── List mode: no run specified ──
-      if (!params.run) {
-        const result = await runGh(
-          pi,
-          [
-            'run',
-            'list',
-            '--workflow',
-            workflow,
-            '--limit',
-            String(params.limit ?? 5),
-            '--json',
-            'databaseId,displayTitle,event,status,conclusion,headBranch,url',
-          ],
-          { parseJson: true, timeout: 30_000 },
-        );
-        if (!result.success) {
-          return {
-            content: [{ type: 'text', text: `❌ Failed to list runs: ${result.text}` }],
-            isError: true,
-            details: {},
-          };
-        }
-        const runs = Array.isArray(result.json)
-          ? (result.json as Array<Record<string, unknown>>)
-          : [];
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `**Recent runs — ${workflow}**\n\n${formatRunList(runs)}`,
-            },
-          ],
-          details: { workflow, count: runs.length },
-        };
-      }
-
-      // ── Single run mode ──
-      const resolved = await resolveRunId(pi, params.run, workflow);
-      if ('error' in resolved) {
-        return {
-          content: [{ type: 'text', text: `❌ ${resolved.error}` }],
-          isError: true,
-          details: {},
-        };
-      }
-      const { runId } = resolved;
-
-      // Optional watch: poll until terminal state.
-      if (params.watch) {
-        const outcome = await waitForRunCompletion(pi, runId, params.timeoutSeconds ?? 1800);
-        if (typeof outcome === 'object') {
-          return {
-            content: [{ type: 'text', text: `❌ ${outcome.error}` }],
-            isError: true,
-            details: { runId },
-          };
-        }
-        if (outcome === 'timeout') {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s — use gh_workflow_status again or gh_workflow_logs to inspect.`,
-              },
-            ],
-            details: { runId, status: 'still-running' },
-          };
-        }
-      }
-
-      const result = await runGh(
-        pi,
-        [
-          'run',
-          'view',
-          runId,
-          '--json',
-          'databaseId,displayTitle,event,status,conclusion,url,headBranch,jobs',
-        ],
-        { parseJson: true, timeout: 30_000 },
-      );
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to view run: ${result.text}` }],
-          isError: true,
-          details: { runId },
-        };
-      }
-
-      const data = result.json as Record<string, unknown>;
-      return {
-        content: [{ type: 'text', text: formatRunDetail(data) }],
-        details: {
-          runId,
-          status: data.status,
-          conclusion: data.conclusion ?? null,
-          url: data.url ?? null,
-        },
-      };
-    },
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_workflow_logs
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_workflow_logs',
-    label: 'GitHub: Workflow Logs',
-    description:
-      'Stream logs for a GitHub Actions workflow run. ' +
-      'Optionally watch until the run finishes, filter to failed steps, ' +
-      'target one job, or keep only the last N lines.',
-    promptSnippet: 'Use gh_workflow_logs to watch workflow run logs',
-    promptGuidelines: [
-      'Use gh_workflow_logs to debug a deploy run — failedOnly=true shows just the failing steps.',
-      'The run parameter accepts a run id or a branch name (newest run on that branch).',
-      'watch=true first waits for the run to complete, then dumps the logs.',
-      'For huge builds (e.g. Tauri), pass lines=<N> to keep only the tail.',
-    ],
-    parameters: Type.Object({
-      run: Type.String({ description: 'Run ID or branch name' }),
-      workflow: Type.Optional(
-        Type.String({
-          default: 'release.yml',
-          description: 'Workflow file name (default: "release.yml")',
-        }),
-      ),
-      job: Type.Optional(
-        Type.String({ description: 'Only show logs for a specific job (name or ID)' }),
-      ),
-      failedOnly: Type.Optional(
-        Type.Boolean({ default: false, description: 'Only show logs for failed steps' }),
-      ),
-      watch: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description: 'Wait for the run to finish before dumping logs',
-        }),
-      ),
-      timeoutSeconds: Type.Optional(
-        Type.Number({ default: 1800, description: 'Max watch time in seconds (default: 1800)' }),
-      ),
-      lines: Type.Optional(
-        Type.Number({ description: 'Keep only the last N log lines (0 = all)' }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const workflow = params.workflow ?? 'release.yml';
-      const resolved = await resolveRunId(pi, params.run, workflow);
-      if ('error' in resolved) {
-        return {
-          content: [{ type: 'text', text: `❌ ${resolved.error}` }],
-          isError: true,
-          details: {},
-        };
-      }
-      const { runId } = resolved;
-
-      if (params.watch) {
-        const outcome = await waitForRunCompletion(pi, runId, params.timeoutSeconds ?? 1800);
-        if (typeof outcome === 'object') {
-          return {
-            content: [{ type: 'text', text: `❌ ${outcome.error}` }],
-            isError: true,
-            details: { runId },
-          };
-        }
-        if (outcome === 'timeout') {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s. Logs may be incomplete — fetch again later.`,
-              },
-            ],
-            details: { runId, status: 'still-running' },
-          };
-        }
-      }
-
-      const args = ['run', 'view', runId];
-      if (params.failedOnly) {
-        args.push('--log-failed');
-      } else {
-        args.push('--log');
-      }
-      if (params.job) {
-        args.push('--job', params.job);
-      }
-
-      const result = await runGh(pi, args, { timeout: 300_000 });
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to fetch logs: ${result.text}` }],
-          isError: true,
-          details: { runId },
-        };
-      }
-
-      let logText = result.text;
-      if (params.lines && params.lines > 0) {
-        const parts = logText.split('\n');
-        logText = parts.slice(-params.lines).join('\n');
-      }
-
-      return {
-        content: [{ type: 'text', text: logText || '_No log output for this run._' }],
-        details: { runId, failedOnly: params.failedOnly ?? false, job: params.job ?? null },
-      };
-    },
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_release_list
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_release_list',
-    label: 'GitHub: List Releases',
-    description: 'List GitHub Releases with tag, title, publication date, and latest marker.',
-    promptSnippet: 'Use gh_release_list to list GitHub releases',
-    promptGuidelines: [
-      'Use gh_release_list to find the latest release tag or see release history.',
-      'Use gh_release_view to inspect a release + its uploaded assets.',
-    ],
-    parameters: Type.Object({
-      limit: Type.Optional(Type.Number({ default: 10, description: 'Max releases (default: 10)' })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const result = await runGh(
-        pi,
-        [
-          'release',
-          'list',
-          '--limit',
-          String(params.limit ?? 10),
-          '--json',
-          'tagName,name,isLatest,publishedAt,url',
-        ],
-        { parseJson: true, timeout: 30_000 },
-      );
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to list releases: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const releases = Array.isArray(result.json)
-        ? (result.json as Array<Record<string, unknown>>)
-        : [];
-      if (releases.length === 0) {
-        return {
-          content: [{ type: 'text', text: 'No releases found.' }],
-          details: { count: 0 },
-        };
-      }
-
-      const lines: string[] = [];
-      for (const r of releases) {
-        const tag = String(r.tagName ?? '?');
-        const name = String(r.name ?? '');
-        const isLatest = r.isLatest ? ' 🟢 latest' : '';
-        const published = String(r.publishedAt ?? '?').slice(0, 10);
-        const url = String(r.url ?? '');
-        lines.push(`**${tag}**${isLatest} — ${name || tag}`, `   published ${published} | ${url}`);
-      }
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { count: releases.length },
-      };
-    },
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_release_view
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_release_view',
-    label: 'GitHub: View Release',
-    description:
-      'View a GitHub Release — tag, notes, publication date — and its uploaded assets ' +
-      '(name, size, download count, state) to debug artifact uploads.',
-    promptSnippet: 'Use gh_release_view to inspect a release and its assets',
-    promptGuidelines: [
-      'Use gh_release_view after a release-published deploy to confirm desktop artifacts were uploaded.',
-      'Assets show state (uploaded), size, and download count — missing assets are the usual release bug.',
-      'Pass tag="latest" or a specific tag like "v0.1.0".',
-    ],
-    parameters: Type.Object({
-      tag: Type.Optional(
-        Type.String({
-          description: 'Release tag, or "latest" for the newest release (defaults to latest)',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const args = ['release', 'view'];
-      if (params.tag && params.tag !== 'latest') {
-        args.push(params.tag);
-      }
-      args.push('--json', 'tagName,name,body,publishedAt,isLatest,url,assets');
-      const result = await runGh(pi, args, { parseJson: true, timeout: 30_000 });
-      if (!result.success) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to view release: ${result.text}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const data = result.json as Record<string, unknown>;
-      const tag = String(data.tagName ?? '?');
-      const name = String(data.name ?? '');
-      const isLatest = data.isLatest ? ' 🟢 latest' : '';
-      const published = String(data.publishedAt ?? '?');
-      const url = String(data.url ?? '');
-      const body = String(data.body ?? '').slice(0, 3000);
-
-      const lines = [
-        `**${tag}**${isLatest} — ${name || tag}`,
-        `**Published:** ${published}`,
-        `**URL:** ${url}`,
-      ];
-
-      const assets = Array.isArray(data.assets)
-        ? (data.assets as Array<Record<string, unknown>>)
-        : [];
-      if (assets.length > 0) {
-        lines.push('', `**Assets (${assets.length}):**`);
-        const byExt = new Map<string, Array<Record<string, unknown>>>();
-        for (const asset of assets) {
-          const aName = String(asset.name ?? '?');
-          const ext = aName.includes('.')
-            ? aName.slice(aName.lastIndexOf('.')).toLowerCase()
-            : '(none)';
-          const list = byExt.get(ext) ?? [];
-          list.push(asset);
-          byExt.set(ext, list);
-        }
-        for (const [ext, list] of byExt) {
-          lines.push(`  **${ext}** (${list.length}):`);
-          for (const asset of list) {
-            const aName = String(asset.name ?? '?');
-            const size = formatBytes(Number(asset.size ?? 0));
-            const downloads = Number(asset.downloadCount ?? 0);
-            const state = String(asset.state ?? '?');
-            const stateIcon = state === 'uploaded' ? '✅' : '⚠️';
-            lines.push(`    ${stateIcon} ${aName} — ${size}, ${downloads} downloads (${state})`);
-          }
-        }
-      } else {
-        lines.push(
-          '',
-          '⚠️ **No assets uploaded to this release.**',
-          '  If this was a desktop release, the upload step likely failed.',
-        );
-      }
-
-      if (body.trim()) {
-        lines.push('', '**Notes:**', body);
-      }
-
-      return {
-        content: [{ type: 'text', text: lines.join('\n') }],
-        details: { tag: tag, isLatest: !!data.isLatest, assetCount: assets.length },
-      };
-    },
-  });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_deploy — trigger the release workflow and wait for the result
-  // ═══════════════════════════════════════════════════════════════════════
-
-  pi.registerTool({
-    name: 'gh_deploy',
-    label: 'GitHub: Deploy & Wait',
-    description:
-      'Trigger the release/deploy workflow (workflow_dispatch) and optionally wait for the result. ' +
-      'Dispatches release.yml with mode/platforms/bundles/force inputs, then periodically polls ' +
-      'job status until every requested platform finishes (code_rabbit-style periodic fetcher, ' +
-      'abortable with Esc/Ctrl+C). On failure it auto-fetches the failed step logs. ' +
-      'Use platforms=["windows"] for "deploy windows only", bundles="appimage" for a single bundle.',
-    promptSnippet: 'Use gh_deploy to deploy and wait for the result',
-    promptGuidelines: [
-      'Use gh_deploy when the user says "deploy", "test/debug the deployment", "deploy and wait", "ship windows" etc.',
-      'Set platforms to a subset: ["windows"] or "windows,linux" (default: all).',
-      'Set bundles to a subset: "appimage", "appimage,deb" etc. (default: platform defaults).',
-      'Default mode is staging — pass mode: "production" explicitly for a production deploy.',
-      'wait=true (default) polls until completion and returns a per-platform report with failed logs.',
-      'For a quick dispatch without waiting, pass wait=false — then follow up with gh_workflow_status / gh_workflow_logs.',
-    ],
-    parameters: Type.Object({
-      mode: Type.Optional(
-        Type.String({
-          enum: ['staging', 'production'],
-          default: 'staging',
-          description: 'Deployment target (default: staging)',
-        }),
-      ),
-      platforms: Type.Optional(
-        Type.Union(
-          [
-            Type.Array(Type.String({ enum: ['linux', 'windows', 'macos'] })),
-            Type.String({ description: 'Comma-separated, e.g. "linux,windows"' }),
-          ],
-          { description: 'Platforms to build (default: all)' },
-        ),
-      ),
-      bundles: Type.Optional(
-        Type.String({
-          description:
-            'Bundle targets to build, comma-separated (appimage,deb,rpm,msi,dmg). Empty = platform defaults',
-        }),
-      ),
-      ref: Type.Optional(
-        Type.String({ description: 'Branch to deploy (default: current git branch)' }),
-      ),
-      workflow: Type.Optional(
-        Type.String({
-          default: 'release.yml',
-          description: 'Workflow file name (default: "release.yml")',
-        }),
-      ),
-      force: Type.Optional(
-        Type.Boolean({ default: false, description: 'Bypass the Redis checksum cache (--force)' }),
-      ),
-      wait: Type.Optional(
-        Type.Boolean({
-          default: true,
-          description: 'Wait for completion and report (default: true)',
-        }),
-      ),
-      timeoutSeconds: Type.Optional(
-        Type.Number({
-          default: 2700,
-          minimum: 1,
-          description: 'Max wait time in seconds (default: 2700 = 45min)',
-        }),
-      ),
-      intervalSeconds: Type.Optional(
-        Type.Number({
-          default: 15,
-          minimum: 1,
-          description: 'Poll interval in seconds (default: 15)',
-        }),
-      ),
-      fetchLogs: Type.Optional(
-        Type.Boolean({
-          default: true,
-          description: 'Auto-fetch failed step logs when a job fails (default: true)',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      const repoCheck = await ensureGitHubRepo(pi);
-      if (!repoCheck.ok) {
-        return {
-          content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
-          isError: true,
-          details: {},
-        };
-      }
-
-      const workflow = params.workflow ?? 'release.yml';
-      const mode = params.mode ?? 'staging';
-      const ref = params.ref ?? (await currentBranch(pi));
-      const platformsCsv = normalizePlatforms(params.platforms);
-      const platforms = platformsCsv ? platformsCsv.split(',') : [];
-      const timeoutSeconds = Math.max(1, params.timeoutSeconds ?? 2700);
-      const intervalSeconds = Math.max(1, params.intervalSeconds ?? 15);
-      const intervalMs = intervalSeconds * 1000;
-
-      // Capture the newest run ID BEFORE dispatch so we can detect the new run afterward
-      const baselineRunId = await fetchNewestRunId(pi, workflow, ref);
-
-      // ── 1. Dispatch ──
-      const dispatchArgs = ['workflow', 'run', workflow, '--ref', ref, '-f', `mode=${mode}`];
-      if (params.force) {
-        dispatchArgs.push('-f', 'force=true');
-      }
-      if (platformsCsv) {
-        dispatchArgs.push('-f', `platforms=${platformsCsv}`);
-      }
-      const bundles = params.bundles?.trim() ?? '';
-      if (bundles) {
-        dispatchArgs.push('-f', `bundles=${bundles}`);
-      }
-
-      console.log(
-        `🚀 Dispatching ${workflow} on ${ref} (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})...`,
-      );
-      const dispatch = await runGh(pi, dispatchArgs, { timeout: 30_000 });
-      if (!dispatch.success) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `❌ Failed to trigger deploy: ${dispatch.text}`,
-                '',
-                'If the error mentions "failed to parse workflow", the workflow file is invalid.',
-              ].join('\n'),
-            },
-          ],
-          isError: true,
-          details: {},
-        };
-      }
-
-      // ── 2. Wait for the NEW run to appear (not a pre-existing one) ──
-      let runId: string | undefined;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        try {
-          await abortableSleep(1500, signal);
-        } catch {
-          return {
-            content: [{ type: 'text', text: '🛑 Aborted while waiting for the run to appear.' }],
-            details: { dispatched: true },
-          };
-        }
-        const list = await runGh(
-          pi,
-          [
-            'run',
-            'list',
-            '--workflow',
-            workflow,
-            '--branch',
-            ref,
-            '--limit',
-            '1',
-            '--json',
-            'databaseId,url',
-          ],
-          { parseJson: true, timeout: 30_000 },
-        );
-        const runs =
-          list.success && Array.isArray(list.json)
-            ? (list.json as Array<Record<string, unknown>>)
-            : [];
-        if (runs[0]) {
-          const candidateId = String(runs[0].databaseId ?? '');
-          // Accept only when the run ID differs from the baseline (new run created)
-          if (candidateId !== baselineRunId) {
-            runId = candidateId;
-            break;
-          }
-        }
-      }
-
-      if (!runId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Deploy dispatched but the run did not appear — check with gh_workflow_status(workflow="${workflow}").`,
-            },
-          ],
-          isError: true,
-          details: { workflow, ref, mode },
-        };
-      }
-
-      const runUrl = `https://github.com/${repoCheck.owner}/${repoCheck.repo}/actions/runs/${runId}`;
-
-      // ── 3. Quick dispatch (no wait) ──
-      if (!params.wait) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})`,
-                `**Run:** ${runUrl}`,
-                '',
-                `Watch with: gh_workflow_status(run=${runId}, watch=true)`,
-                `Logs with: gh_workflow_logs(run=${runId})`,
-              ].join('\n'),
-            },
-          ],
-          details: { runId, runUrl, workflow, ref, mode, platforms },
-        };
-      }
-
-      // ── 4. Periodic fetch until all requested jobs are terminal ──
-      const deadline = Date.now() + timeoutSeconds * 1000;
-      let lastJobState = '';
-      let aborted = false;
-      let timedOut = false;
-      let finalStatus:
-        | { ok: true; status: string; conclusion: string; jobs: Array<Record<string, unknown>> }
-        | undefined;
-      let lastError: string | undefined;
-
-      while (Date.now() < deadline) {
-        const snap = await fetchRunStatus(pi, runId, platforms);
-        if (!snap.ok) {
-          lastError = snap.error;
-          break;
-        }
-        finalStatus = snap;
-
-        const jobStates = snap.jobs
-          .map((j) => `${String(j.name ?? '?')}:${String(j.conclusion ?? String(j.status ?? ''))}`)
-          .join(' | ');
-        if (jobStates !== lastJobState) {
-          console.log(`⏳ ${jobStates || '(no jobs yet — runner starting)'}`);
-          lastJobState = jobStates;
-        }
-
-        const relevantJobs = snap.jobs.filter((j) => String(j.status ?? '') === 'completed');
-        const allDone = snap.jobs.length > 0 && relevantJobs.length === snap.jobs.length;
-        if (allDone || snap.status === 'completed') {
-          break;
-        }
-
-        try {
-          await abortableSleep(intervalMs, signal);
-        } catch {
-          aborted = true;
-          break;
-        }
-      }
-
-      // Prioritize polling errors even if we have a stale finalStatus
-      if (lastError) {
-        return {
-          content: [{ type: 'text', text: `❌ Failed to poll deploy run: ${lastError}` }],
-          isError: true,
-          details: { runId },
-        };
-      }
-
-      if (!finalStatus) {
-        timedOut = true;
-      } else if (Date.now() >= deadline && !aborted) {
-        timedOut = true;
-      }
-
-      // ── 5. Final report ──
-      const report: string[] = [];
-      const isAborted = aborted;
-      if (isAborted) {
-        report.push('🛑 **Aborted** (Esc/Ctrl+C) — current state:');
-      } else if (timedOut) {
-        report.push(`⏳ **Timed out after ${timeoutSeconds}s** — current state:`);
-      }
-
-      const runStatus = finalStatus?.status ?? 'unknown';
-      const runConclusion = finalStatus?.conclusion ?? '';
-      const finalJobs = finalStatus?.jobs ?? [];
-      const allSucceeded =
-        !isAborted &&
-        !timedOut &&
-        runStatus === 'completed' &&
-        (runConclusion === 'success' ||
-          (finalJobs.length > 0 && finalJobs.every((j) => j.conclusion === 'success')));
-
-      report.push(
-        `${allSucceeded ? '✅' : '❌'} **Deploy ${allSucceeded ? 'succeeded' : runConclusion || runStatus}** — ${mode}${platformsCsv ? ` (${platformsCsv})` : ' (all platforms)'}${bundles ? `, bundles: ${bundles}` : ''}`,
-        `**Run:** ${runUrl}`,
-      );
-
-      if (finalStatus && finalStatus.jobs.length > 0) {
-        report.push('', '**Jobs:**');
-        for (const job of finalStatus.jobs) {
-          const jobName = String(job.name ?? '?');
-          const jobConclusion = job.conclusion ? String(job.conclusion) : String(job.status ?? '');
-          const icon =
-            jobConclusion === 'success'
-              ? '✅'
-              : jobConclusion === 'skipped'
-                ? '⏭️'
-                : jobConclusion === 'cancelled'
-                  ? '🚫'
-                  : '❌';
-          report.push(`  ${icon} **${jobName}** — ${jobConclusion}`);
-        }
-      }
-
-      // Artifacts (only meaningful when the run is done)
-      if (runStatus === 'completed') {
-        const artifacts = await fetchRunArtifacts(pi, runId);
-        if (artifacts.length > 0) {
-          report.push('', '**Artifacts:**');
-          for (const a of artifacts) {
-            report.push(`  📦 ${a.name} — ${formatBytes(a.size)}`);
-          }
-        }
-      }
-
-      // ── 6. Auto-fetch failed logs ──
-      const failedJobs = finalStatus?.jobs.filter((j) => j.conclusion === 'failure') ?? [];
-      if (params.fetchLogs !== false && (failedJobs.length > 0 || runConclusion === 'failure')) {
-        report.push('', '---', '**Failed step logs:**');
-        const logs = await runGh(pi, ['run', 'view', runId, '--log-failed'], {
-          timeout: 120_000,
-        });
-        if (logs.success && logs.text.trim()) {
-          const lines = logs.text.split('\n');
-          const kept = lines.slice(-150);
-          report.push('', '```', kept.join('\n'), '```');
-        } else {
-          report.push('  _(no failed logs available)_');
-        }
-      }
-
-      return {
-        content: [{ type: 'text', text: report.join('\n') }],
-        details: {
-          runId,
-          runUrl,
-          workflow,
-          ref,
-          mode,
-          platforms,
-          bundles: bundles || null,
-          status: runStatus,
-          conclusion: runConclusion || null,
-          succeeded: allSucceeded,
-          aborted: isAborted,
-          timedOut,
-        },
-      };
-    },
-  });
 }

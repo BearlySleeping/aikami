@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { which } from '../../env/which';
 
 /** Relative to the repo root (pipeline may be invoked from root or scripts/). */
 export const ALARM_FILE = '.pi/sounds/alarm.wav';
@@ -94,7 +95,7 @@ export const playerFor = (
  */
 const spawnPlayer = (file: string): void => {
   try {
-    const argv = playerFor(process.platform, (bin) => Bun.which(bin), file);
+    const argv = playerFor(process.platform, which, file);
     if (!argv) {
       return;
     }

@@ -19,6 +19,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
 import { smartTruncate } from './lib/output_filter';
+import { runCommand } from './lib/process_runner.ts';
 
 // Local list for the tool's enum/help text only — NOT used for validation
 // (logs.ts validates against the real APP_CONFIG and errors clearly on a
@@ -48,17 +49,6 @@ export default function (pi: ExtensionAPI) {
       'View logs for any Aikami service — Cloud Run, Firebase Functions, or client (a static ' +
       'app with no server of its own; its browser logs are forwarded through hub and filtered ' +
       `automatically). Apps: ${KNOWN_APPS.join(', ')}.`,
-    promptSnippet:
-      'Use service_logs to view logs for any Aikami app. Supports --since, --severity, ' +
-      '--message, --filter (raw Cloud Logging expression), and --tail for live streaming.',
-    promptGuidelines: [
-      "Use service_logs when user says 'hub crashed in staging' → app=hub, mode=staging.",
-      "Use service_logs when user says 'check function logs for pollGmail' → app=firebase, only=pollGmail — firebase REQUIRES only, else it interleaves every function in the region.",
-      "Use service_logs when user says 'tail the logs' → tail=true.",
-      "Use service_logs when user says 'get logs from client where X' → app=client, message=X (or filter for a raw Cloud Logging filter expression).",
-      "client has no server of its own — its browser logs land in hub's Cloud Run stream, filtered to just client automatically. No extra params needed for that.",
-      'site/docs/client-tauri have no server-side logs at all (static hosting / desktop release) — service_logs will say so rather than returning anything.',
-    ],
     parameters: Type.Object({
       app: Type.String({
         description: `App to target: ${KNOWN_APPS.join(', ')}`,
@@ -139,9 +129,9 @@ export default function (pi: ExtensionAPI) {
         args.push('--json');
       }
 
-      const result = await pi.exec('env', args, {
+      const result = await runCommand('env', args, {
         signal,
-        timeout: params.tail ? DefaultTimeout : 60_000,
+        timeoutMs: params.tail ? DefaultTimeout : 60_000,
         // Run from the repo root (direnv's AIKAMI_ROOT) so `bun run scripts`
         // resolves the workspace regardless of pi's current cwd.
         cwd: process.env.AIKAMI_ROOT,
