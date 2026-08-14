@@ -73,7 +73,7 @@ services:
       - 0.0.0.0
       - --port
       - "11434"
-      - --n-cpu
+      - --threads
       - "${TEXT_THREADS:--1}"
     volumes:
       - *model-volume
