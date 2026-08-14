@@ -2,7 +2,7 @@
 id: C-393
 title: "Speech-to-Text Backend Service (sherpa-onnx streaming + whisper.cpp batch)"
 source: "user request — 'also setup contract for speech to text setup (for backend)'"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -413,3 +413,101 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Built the C-393 STT service as a two-protocol surface on the existing sherpa
+voice container: a stdlib-only streaming websocket server (`stt_server.py`,
+Moonshine + Silero VAD, `WS /v1/stream`) plus an OpenAI-compatible batch
+proxy over whisper.cpp (`POST /v1/audio/transcriptions`), with
+`GET /v1/capabilities` and a model-aware `GET /health`. Shared TypeBox
+schemas/types define the wire contract for C-359. STT is opt-in: shipped
+defaults (`COMPOSE_PROFILES`, `ENABLE_STT`) are off, the STT port publishes
+only via a new `compose.stt.yaml` override, the model fetcher tier-selects
+STT entries, and the manifest pins Moonshine base + whisper tiny/base/small
++ Silero VAD digests. Verified live: the voice image builds (sherpa-onnx
+1.13.4 + whisper.cpp v1.9.2), the full wire contract passes
+(`stt_service.test.ts`, 8/8), and check.sh's C-393 live probes (AC-8 fs/log,
+AC-10 missing-model) pass. AC-12 (Darwin) is scripted and static-checked but
+not executed — no macOS host in this environment.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Streaming partials + exactly one final verified live (fixture WAV over WS) |
+| AC-2 | ✅ | speech-start / speech-end emitted by Silero VAD, verified live |
+| AC-3 | ✅ | Batch endpoint OpenAI-shaped; proxy rewrites to whisper `/inference`; live `{"text": ...}` verified |
+| AC-4 | ✅ | `/v1/capabilities` validates against the shared schema (unit + live) |
+| AC-5 | ✅ | `language: de` → `unsupported-language` naming the batch endpoint (live) |
+| AC-6 | ✅ | 44.1k stereo stream → `bad-audio-format` naming the expected format (live) |
+| AC-7 | ✅ | `.env.example` ships stt-off; `compose.stt.yaml` gates the port; check.sh asserts no-STT render |
+| AC-8 | ✅ | Live fs scan + log grep: no audio files, no transcript text |
+| AC-9 | ✅ | Disallowed Origin → HTTP 403 before any audio (live) |
+| AC-10 | ✅ | Missing model → `/health` 503 naming the file (throwaway container, live) |
+| AC-11 | ✅ | Manifest tiers with pinned SHA-256; fetcher tier selection; no weights COPYed into the image |
+| AC-12 | ⚠️ | `run-native-stt.sh` rewritten for the protocol; static checks pass; Darwin run deferred (no macOS host) |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/local_ai/stt.ts` | TypeBox wire-protocol schemas (capabilities, client/server messages, error codes) |
+| `packages/shared/schemas/src/lib/local_ai/stt.test.ts` | 23 schema-validation tests (AC-4) |
+| `packages/shared/types/src/lib/local_ai/stt.ts` | `Static<typeof Schema>` derived types for C-359 |
+| `apps/backend/local-stack/docker/voice/stt_server.py` | Streaming WS server + capabilities + health + batch proxy (stdlib only) |
+| `apps/backend/local-stack/compose.stt.yaml` | STT port publish override (AC-7 — conditional port) |
+| `apps/backend/local-stack/stack/stt.test.ts` | Manifest + fetcher tier-selection tests (AC-11) |
+| `apps/backend/local-stack/stack/stt_service.test.ts` | Live wire-contract integration tests (AC-1..AC-10) |
+| `apps/backend/local-stack/stack/fixtures/stt_test_utterance.wav` | Committed 16k mono fixture WAV (TTS-generated) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | barrel export for `stt.ts` |
+| `packages/shared/types/src/index.ts` | barrel export for `stt.ts` |
+| `apps/backend/local-stack/docker/voice/Dockerfile.sherpa` | whisper.cpp v1.9.2 build (static), libgomp1 runtime, stt_server.py COPY |
+| `apps/backend/local-stack/docker/voice/entrypoint.sh` | manifest-driven STT startup (stream + whisper batch), no ad-hoc model download |
+| `apps/backend/local-stack/compose.yaml` | STT envs, dual healthcheck (TTS+STT), no unconditional STT port |
+| `apps/backend/local-stack/.env.example` | STT off by default; tier + override docs |
+| `apps/backend/local-stack/stack/models.manifest.json` | Moonshine base, whisper tiny/base/small, Silero VAD entries (pinned digests) |
+| `apps/backend/local-stack/stack/fetch_models.ts` | STT tier selection (empty-string-safe), VAD always fetched |
+| `apps/backend/local-stack/stack/env_writer.ts` | `stack init` appends `compose.stt.yaml` when stt is planned |
+| `apps/backend/local-stack/bin/run-native-stt.sh` | Native path parity (stt_server.py + optional whisper-server) |
+| `apps/backend/local-stack/scripts/check.sh` | AC-7/AC-11 static checks; C-393 live probes (wire contract, AC-8, AC-10) |
+| `apps/backend/local-stack/README.md` | STT section: protocol, tiers, privacy posture, smoke-test matrix |
+| `apps/frontend/docs/src/content/docs/guides/run-locally.mdx` | STT endpoints, opt-in note, macOS native path |
+
+### Deviations from Spec
+- **STT port publish is conditional via `compose.stt.yaml`** (AC-7 requires
+  "no STT port is bound" with defaults; Compose cannot conditionally publish
+  per-profile). Enabling STT now needs `compose.stt.yaml` in COMPOSE_FILE —
+  documented in `.env.example`/README and wired into `stack init`
+  (`env_writer.ts`).
+- **Shipped default tier is minimal** (Moonshine tiny + whisper tiny), not
+  the "default" tier in the tier table — the Watch Point allows this when
+  the 300 ms first-partial budget demands it; `stack init` and `.env`
+  document the other tiers.
+- **whisper.cpp v1.9.2 does not expose `/v1/audio/transcriptions`** — its
+  server endpoint is `/inference` with an OpenAI-shaped `{"text": ...}`
+  response. The proxy rewrites the path; the public wire contract remains
+  OpenAI-compatible (verified with the same multipart shape the openai SDK
+  sends).
+- **sherpa-onnx 1.13.4 Python API facts** (verified against the shipped
+  wheel): Moonshine uses `OfflineRecognizer.from_moonshine(...)`; decode
+  results come from `stream.result`; VAD uses `empty()`/`front` (property);
+  `SpeechSegment.start` is a sample index.
+- **Live integration tests require an explicit `STT_URL` env** so the plain
+  unit run stays hermetic; check.sh's live section sets it.
+- **AC-12 (Darwin)**: scripted and statically asserted only — no macOS host
+  available in this environment for a live run.
+
+### Test Results
+- Unit: 88/88 pass (local-stack, incl. 9 STT manifest/fetcher tests), 23/23
+  schema tests (schemas package), 348/348 schemas suite — 0 failures.
+- E2E (live): `stt_service.test.ts` 8/8 pass against the built voice
+  container (AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-9, AC-10).
+- Visual: N/A (no UI in this contract).
+- Baseline: 0 pre-existing failures; 0 new failures. `check.sh --static`
+  87/87; live `LOCAL_STACK_LIVE=1` run: 97 pass, 3 environment-scoped
+  failures (AC-4 text/image/web probes — those engines were not started in
+  the stt-only verification stack; they are pre-existing C-390 stack checks).
