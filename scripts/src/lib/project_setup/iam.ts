@@ -80,10 +80,6 @@ const RUNTIME_ROLES: Array<{ role: string; why: string }> = [
     role: 'roles/firebase.admin',
     why: 'Firebase Admin SDK permissions (token/session-cookie verification) — usually pre-granted',
   },
-  {
-    role: 'roles/iam.serviceAccountTokenCreator',
-    why: 'Admin SDK createCustomToken signs JWTs via IAM (iam.serviceAccounts.signBlob) — required for device-link handoff tokens',
-  },
 ];
 
 /**
@@ -97,16 +93,26 @@ const SERVICE_ACCOUNT_USER_ROLE = {
 } as const;
 
 /**
- * Roles the default CLOUD FUNCTIONS runtime SA needs. 2nd-gen Cloud
+ * Token creator role for the runtime SA: lets it sign JWTs via IAM
+ * (iam.serviceAccounts.signBlob) for Admin SDK createCustomToken.
+ * Scoped to the runtime SA resource itself (self-impersonation).
+ */
+const RUNTIME_SA_TOKEN_CREATOR_ROLE = {
+  role: 'roles/iam.serviceAccountTokenCreator',
+  why: 'Admin SDK createCustomToken signs JWTs via IAM (iam.serviceAccounts.signBlob) — required for device-link handoff tokens',
+} as const;
+
+/**
+ * Token creator role for the Cloud Functions runtime SA. 2nd-gen Cloud
  * Functions run as the project's compute default SA
  * (`<projectNumber>-compute@developer.gserviceaccount.com`) unless a
  * serviceAccount is set on the function — so this separate grant is what
  * actually fixes `createCustomToken` in the deployed callables (auth,
  * poll_device_handoff), which sign JWTs through IAM
- * (`iam.serviceAccounts.signBlob`). The firebase-adminsdk runtime SA gets
- * its own tokenCreator via {@link RUNTIME_ROLES} above.
+ * (`iam.serviceAccounts.signBlob`). Scoped to the compute SA resource
+ * itself (self-impersonation).
  */
-const FUNCTIONS_RUNTIME_SA_ROLE = {
+const FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE = {
   role: 'roles/iam.serviceAccountTokenCreator',
   why: 'Cloud Functions runtime SA (compute default) signs custom tokens via Admin SDK createCustomToken (iam.serviceAccounts.signBlob)',
 } as const;
@@ -264,7 +270,7 @@ export const setupIam = async (
   // Cloud Functions default runtime SA = compute default SA
   // (<projectNumber>-compute@developer.gserviceaccount.com). Resolved
   // dynamically so it stays correct if the project number ever changes.
-  const { out: projectNumberRaw } = await run([
+  const { out: projectNumberRaw, code: projectNumberCode } = await run([
     'gcloud',
     'projects',
     'describe',
@@ -273,7 +279,7 @@ export const setupIam = async (
     '--quiet',
   ]);
   const projectNumber = projectNumberRaw.trim();
-  if (!/^\d+$/.test(projectNumber)) {
+  if (projectNumberCode !== 0 || !/^\d+$/.test(projectNumber)) {
     console.log(fmt.err(`Could not resolve project number for ${projectId} (got "${projectNumber}")`));
     checks.push({ name: 'Functions runtime SA: project number', status: 'error' });
     return { checks };
@@ -323,10 +329,16 @@ export const setupIam = async (
       resource: { serviceAccount: runtimeSaEmail },
     },
     {
-      role: FUNCTIONS_RUNTIME_SA_ROLE.role,
-      why: FUNCTIONS_RUNTIME_SA_ROLE.why,
+      role: RUNTIME_SA_TOKEN_CREATOR_ROLE.role,
+      why: RUNTIME_SA_TOKEN_CREATOR_ROLE.why,
+      member: runtimeSaEmail,
+      resource: { serviceAccount: runtimeSaEmail },
+    },
+    {
+      role: FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE.role,
+      why: FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE.why,
       member: functionsRuntimeSaEmail,
-      resource: 'project',
+      resource: { serviceAccount: functionsRuntimeSaEmail },
     },
   ];
 

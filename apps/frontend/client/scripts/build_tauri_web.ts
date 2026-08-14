@@ -43,7 +43,11 @@ for (let i = 0; i < args.length; i++) {
     continue; // bun passes a bare `--` through; it carries no meaning here
   }
   if (arg === '--mode') {
-    modeFlag = args[++i];
+    const nextArg = args[i + 1];
+    if (nextArg && !nextArg.startsWith('-')) {
+      modeFlag = nextArg;
+      i++;
+    }
   } else if (arg.startsWith('--mode=')) {
     modeFlag = arg.slice('--mode='.length);
   } else if (arg === '--dry-run') {
