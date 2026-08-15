@@ -91,6 +91,19 @@ describe('CatalogAssetEntrySchema', () => {
     const entry = { ...VALID_ENTRY, licenses: 'OGA-BY 3.0' };
     expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(false);
   });
+
+  test('accepts an optional thumbnailHash (C-396 AC-5)', () => {
+    const entry = {
+      ...VALID_ENTRY,
+      thumbnailHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    };
+    expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(true);
+  });
+
+  test('rejects a non-sha256 thumbnailHash', () => {
+    const entry = { ...VALID_ENTRY, thumbnailHash: 'not-a-hash' };
+    expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -215,6 +228,12 @@ describe('CatalogIndexShardSchema', () => {
 
   test('accepts an empty shard', () => {
     const shard = { ...VALID_SHARD, entries: [] };
+    expect(Value.Check(CatalogIndexShardSchema, shard)).toBe(true);
+  });
+
+  test('accepts a shard WITHOUT id — the live C-395 index predates the field (C-396)', () => {
+    const shard = { ...VALID_SHARD };
+    delete shard.id;
     expect(Value.Check(CatalogIndexShardSchema, shard)).toBe(true);
   });
 

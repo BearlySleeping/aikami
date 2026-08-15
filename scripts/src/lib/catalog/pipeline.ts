@@ -33,6 +33,7 @@ import {
 import { assetKey } from './content_address.ts';
 import { type GeneratedShard, generateCatalogIndex } from './index_generation.ts';
 import { runAttributionPreflight } from './preflight.ts';
+import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
 
 export type CatalogPublishOptions = {
@@ -52,6 +53,16 @@ export type CatalogPublishReport = {
   failed: number;
   bytesTransferred: number;
   failedKeys: readonly string[];
+  /** Thumbnail phase stats (C-396 AC-5). */
+  thumbnails: {
+    generated: number;
+    skippedNonImage: number;
+    decodeFailedTags: readonly string[];
+    fallbackTags: readonly string[];
+    uploaded: number;
+    skipped: number;
+    failed: number;
+  };
   rootKey: string;
   shardKeys: readonly string[];
   elapsedMs: number;
@@ -105,6 +116,15 @@ export const runCatalogPublish = async (
       failed: 0,
       bytesTransferred: 0,
       failedKeys: [],
+      thumbnails: {
+        generated: 0,
+        skippedNonImage: 0,
+        decodeFailedTags: [],
+        fallbackTags: [],
+        uploaded: 0,
+        skipped: 0,
+        failed: 0,
+      },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       elapsedMs: Date.now() - startedAt,
@@ -133,15 +153,40 @@ export const runCatalogPublish = async (
       failed: uploadReport.failed,
       bytesTransferred: uploadReport.bytesTransferred,
       failedKeys: uploadReport.failedKeys,
+      thumbnails: {
+        generated: 0,
+        skippedNonImage: 0,
+        decodeFailedTags: [],
+        fallbackTags: [],
+        uploaded: 0,
+        skipped: 0,
+        failed: 0,
+      },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       elapsedMs: Date.now() - startedAt,
     };
   }
 
+  // 3.5. Thumbnail phase (C-396 AC-5): one single-frame preview per image
+  // asset, content-addressed under thumbnails/. The index is generated from
+  // the entries WITH thumbnailHash, so a republished index resolves previews.
+  // A failed thumbnail upload DROPS that entry's thumbnailHash (the grid
+  // shows a placeholder) rather than publishing a dangling reference — the
+  // index stays internally consistent either way.
+  const thumbnailPhase = await runThumbnailPhase({ client, entries, gameDataDir });
+  const thumbnailFailedHashes = new Set(
+    thumbnailPhase.report.failedKeys.map((key) => key.split('/').pop()?.split('.')[0] ?? ''),
+  );
+  const entriesForIndex = thumbnailPhase.entries.map((entry) =>
+    entry.thumbnailHash && thumbnailFailedHashes.has(entry.thumbnailHash)
+      ? { ...entry, thumbnailHash: undefined }
+      : entry,
+  );
+
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({
-    entries,
+    entries: entriesForIndex,
     originUrl: config.originUrl,
   });
 
@@ -162,6 +207,7 @@ export const runCatalogPublish = async (
       failed: uploadReport.failed,
       bytesTransferred: uploadReport.bytesTransferred,
       failedKeys: uploadReport.failedKeys,
+      thumbnails: thumbnailPhase.report,
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       elapsedMs: Date.now() - startedAt,
@@ -204,6 +250,11 @@ export const runCatalogPublish = async (
     `   bytes transferred: ${(uploadReport.bytesTransferred / (1024 * 1024)).toFixed(1)} MB`,
   );
   console.log(
+    `🖼  thumbnails: ${thumbnailPhase.report.generated} generated (${thumbnailPhase.report.uploaded} uploaded, ${thumbnailPhase.report.skipped} skipped, ${thumbnailPhase.report.failed} failed), ` +
+      `${thumbnailPhase.report.skippedNonImage} non-image skipped, ` +
+      `${thumbnailPhase.report.fallbackTags.length} fallback-geometry`,
+  );
+  console.log(
     `📇 index: ${ROOT_INDEX_KEY} (root, ${shards.length} shard(s))` +
       `${failedIndexKeys.length > 0 ? ` — ${failedIndexKeys.length} index object(s) FAILED` : ''}`,
   );
@@ -219,6 +270,7 @@ export const runCatalogPublish = async (
     failed: uploadReport.failed + failedIndexKeys.length,
     bytesTransferred: uploadReport.bytesTransferred,
     failedKeys: [...uploadReport.failedKeys, ...failedIndexKeys],
+    thumbnails: thumbnailPhase.report,
     rootKey: ROOT_INDEX_KEY,
     shardKeys: shards.map((shard) => shard.key),
     elapsedMs,

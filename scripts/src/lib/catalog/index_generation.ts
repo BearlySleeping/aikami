@@ -73,6 +73,9 @@ const entryToShardEntry = (entry: CatalogEntry) => ({
   authors: [...entry.authors],
   sourceUrls: [...entry.sourceUrls],
   ...(entry.licenseNote ? { licenseNote: entry.licenseNote } : {}),
+  // C-396 AC-5: the thumbnail phase attaches this after generating the
+  // single-frame preview; entries without one simply omit the field.
+  ...(entry.thumbnailHash ? { thumbnailHash: entry.thumbnailHash } : {}),
 });
 
 /**

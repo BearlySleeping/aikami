@@ -1,0 +1,57 @@
+---
+title: Browsing the Asset Catalog
+description: How the public Aikami Hub catalog works — browsing, filtering, licensing, and how preview thumbnails are generated at publish time.
+---
+
+The Aikami Hub hosts the public asset catalog: LPC sprites, music, sfx,
+sprites, backgrounds and ambient assets shared with the community. Anyone —
+signed in or not — can browse, search and preview assets without an account.
+
+## The public shell
+
+The hub's default is **public**: the landing page at `/` shows the catalog
+categories with asset counts, and every `/catalog/**` page renders for
+anonymous visitors. Authentication is the exception — member-only routes such
+as `/dashboard` keep their guard and redirect to `/login`.
+
+The catalog renders from the **static index** published by the
+[publish pipeline](./publishing-catalog-assets.md) (C-395), never from a
+database. Each category page fetches only its own shard of the index, so a
+cold page load never waits on Postgres; optional stats (pack counts) stream
+in after first paint and degrade to "stats unavailable" when the database is
+unreachable.
+
+## Browsing
+
+- **Landing** (`/`) — category cards with total asset counts and a search
+  box that filters categories.
+- **Category** (`/catalog/lpc`, …) — a grid of asset tiles, each with a
+  single-frame preview, a display name and a license badge. Search and
+  subcategory filters operate within the loaded category.
+- **Asset detail** (`/catalog/lpc/<tag>`) — preview, size, license badges,
+  verbatim attribution (authors + source links), and the asset tag.
+
+Unknown licenses are shown explicitly as "Unknown" rather than omitted, and
+entries without a generated preview show a "Preview unavailable" placeholder
+instead of the raw multi-frame sprite sheet.
+
+## How previews are generated
+
+Sprite sheets (especially LPC) contain many animation frames laid out in a
+grid. Rather than cropping in the browser, the publish pipeline generates one
+**single-frame thumbnail per asset** at publish time (C-396 AC-5):
+
+- A per-animation-state frame-geometry table knows the frame count and
+  direction rows for each state (`walk`, `thrust`, `idle`, `hurt`, …).
+- The first frame of the first direction row is cropped and uploaded under a
+  content-addressed `thumbnails/` key, referenced by
+  `thumbnailHash` in the index.
+- Assets that predate the thumbnail republish keep a placeholder preview
+  until the next publish run.
+
+## Source
+
+- Hub routes and views: `apps/frontend/hub/src/routes/(public)/` and
+  `apps/frontend/hub/src/lib/views/catalog/`
+- Index client: `apps/frontend/hub/src/lib/server/catalog/catalog_index.ts`
+- Thumbnail generation: `scripts/src/lib/catalog/thumbnail_generation.ts`
