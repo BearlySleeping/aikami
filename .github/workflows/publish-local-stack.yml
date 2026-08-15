@@ -41,9 +41,25 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Needed only for the "Download client secrets" step below (GCP_SA_KEY /
+    # environment-scoped secrets) — the rest of this job doesn't touch GCP.
+    environment:
+      name: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      # Single source of truth for the local-stack release tag: the images
+      # get a stable `:$LOCAL_STACK_VERSION` tag (in addition to `:latest`
+      # and `:$sha`) so users can pin a known-good stack version instead of
+      # always tracking `latest`. Bump apps/backend/local-stack/package.json
+      # to cut a new version.
+      - name: Read local-stack version
+        id: version
+        run: |
+          version=$(jq -r .version apps/backend/local-stack/package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "LOCAL_STACK_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -59,6 +75,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # ── AC-1: every upstream image reference resolves ─────────────────
+      # Uses `docker buildx imagetools inspect`, not `docker manifest
+      # inspect` — the classic manifest command fails on these refs with
+      # "Treating single images as manifest lists is not implemented"
+      # because ggml-org/leejet publish single-platform OCI image manifests
+      # (not manifest lists) at a `tag@digest` ref, which some Docker CLI
+      # versions' `manifest inspect` can't parse. buildx imagetools handles
+      # both manifest lists and single-platform manifests, and accepts
+      # `name:tag@digest` directly (verified 2026-08-15 after 4 straight
+      # publish failures on this step).
       - name: Verify upstream image references resolve
         run: |
           set -euo pipefail
@@ -72,7 +97,7 @@ jobs:
           grep -hoE 'ghcr.io/(ggml-org|leejet)/[^" ]+' /tmp/render-*.yaml \
             | sort -u | while read -r img; do
               echo "resolving $img"
-              docker manifest inspect "$img" >/dev/null
+              docker buildx imagetools inspect "$img" >/dev/null
             done
 
       # ── Model-fetcher image (bzip2-enabled bun) ────────────────────────
@@ -85,6 +110,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:latest
             ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64,linux/arm64
 
       # ── Voice image ────────────────────────────────────────────────────
@@ -97,6 +123,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/aikami-voice:latest
             ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
 
       # ── CPU sd-server image ───────────────────────────────────────────
@@ -109,14 +136,29 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
 
       # ── Client image (staged SPA + runtime config mount, AC-9) ────────
+      # The SPA needs real PUBLIC_FIREBASE_* / PUBLIC_* values baked in (Vite
+      # inlines them at build time) or the packaged client's auth/Firestore
+      # never work. apps/frontend/client/.env.production is gitignored, so
+      # fetch it from GCP Secret Manager the same way release.yml's
+      # prepare-secrets job does, scoped to just the `client` app — this
+      # workflow builds nothing else that needs secrets.
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-deps: "true"
+          gcp-auth: "true"
+          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Download client secrets from GCP Secret Manager
+        run: bun scripts/src/lib/ops/download_secrets.ts --mode=production --strict client
+
       - name: Build the client SPA for staging
         working-directory: apps/frontend/client
-        run: |
-          bun install --frozen-lockfile
-          bun run build:production
+        run: bun run build:production
         env:
           NODE_ENV: production
 
@@ -137,6 +179,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/aikami-client:latest
             ${{ env.IMAGE_PREFIX }}/aikami-client:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/aikami-client:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
 
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
@@ -156,7 +199,9 @@ jobs:
             size_bytes=$(docker image inspect "$img" --format '{{.Size}}')
             echo "uncompressed size: $(awk "BEGIN{printf \"%.1f\", $size_bytes/1048576}") MB"
             # Compressed size = sum of the registry manifest's layer sizes.
-            compressed=$(docker manifest inspect "$img" \
+            # buildx imagetools, not `docker manifest inspect` — see the
+            # AC-1 step above for why.
+            compressed=$(docker buildx imagetools inspect "$img" --raw \
               | jq '[.layers[].size] | add // 0')
             echo "compressed size: $(awk "BEGIN{printf \"%.1f\", $compressed/1048576}") MB"
             if [ "$compressed" -gt 262144000 ]; then

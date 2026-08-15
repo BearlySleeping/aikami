@@ -1,5 +1,6 @@
 {
   "name": "@aikami/local-stack",
+  "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "description": "Compose profiles, backend overrides, checksum-verified model fetcher, and Native Host Binary launchers for the local AI engine stack (C-390).",
