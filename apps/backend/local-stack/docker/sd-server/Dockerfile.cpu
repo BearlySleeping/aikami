@@ -61,7 +61,13 @@ RUN cmake . -B ./build \
     -DGGML_CPU_ALL_VARIANTS=ON \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
     -DCMAKE_INSTALL_RPATH='$ORIGIN'
-RUN cmake --build ./build --config Release --parallel
+# --parallel with no job cap uses every core; combined with
+# GGML_CPU_ALL_VARIANTS=ON (every CPU ISA variant compiled from source) this
+# spiked past the GitHub-hosted runner's 16GB RAM and got it OOM-killed
+# ("lost communication with the server", 2026-08-15). Capping to 2 trades
+# wall-clock time for headroom — see also the swap-file step in the
+# publish workflow.
+RUN cmake --build ./build --config Release --parallel 2
 
 FROM ubuntu:${UBUNTU_VERSION} AS runtime
 
