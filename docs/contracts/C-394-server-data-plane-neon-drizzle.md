@@ -2,7 +2,7 @@
 id: C-394
 title: "Server Data Plane: Neon PostgreSQL + Drizzle + the hub's catalog write model"
 source: "user request — hub community catalog; ADR amendments A-1, A-2, A-6"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -504,3 +504,98 @@ a design decision.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Built the hub's server data plane end-to-end: a new `packages/backend/database/`
+package (Drizzle schema for accounts/packs/pack_versions, generated migration,
+transactional migration runner, lazy pooled `pg` connection, three typed
+repositories), TypeBox catalog wire schemas with a type-level conformance gate,
+hub wiring (`GET /api/health/db`), the `database` deploy app (`database-migration`
+service type through the full deploy pipeline), the PG17→18 flake re-pin with a
+clean local PG18.4 reset, and CI guards for I-1/I-9. All five ACs verified
+locally against real PostgreSQL 18.4. The live Neon half of AC-1 (Cloud Run
+deploy) and the GSM secret for `NEON_DATABASE_URL_DIRECT` are documented for the
+pipeline — irreversible production mutations are not executed by the implementer.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `GET /api/health/db` live-verified: `{"status":"ok","databaseVersion":"18.4","host":"localhost","roundTripMs":7}`; degraded (dead host) → `{"status":"unreachable"}` with `/login` still 200; unconfigured covered by unit test + lazy-pool invariant. Neon probe (read-only): both pooled and direct endpoints reachable, report 18.4. Cloud Run deploy evidence left for verification (deploys are pipeline-orchestrated). |
+| AC-2 | ✅ | `flake.nix` re-pinned to `postgresql_18`; `nix develop -c postgres --version` → 18.4 (matches Neon). Local `.postgres/` re-initialised on 18.4. Migration `0000_dark_banshee.sql` generated (committed), applied to local postgres, re-apply is a no-op, and all constraints (unique firebase_uid, unique slug + url-safe CHECK, enum, composite unique, RESTRICT FKs) asserted in the database via `\d+` and `pg_constraint`/`pg_indexes`. |
+| AC-3 | ✅ | 27/27 tests pass against real local PostgreSQL. Happy path (account→pack→two versions) + all six violations rejected by the DB: 23505 (dup firebase_uid/slug/(pack,version)), 23503 (missing pack FK), 23001 RESTRICT on account/pack delete (ON DELETE RESTRICT fires — assert that delete is *rejected*, not cascaded), 22P02 (bad enum), 23514 (slug CHECK). |
+| AC-4 | ✅ | I-1: hub build + grep of `build/client` shows zero db/pg/drizzle/NEON references; source guard (`guard-data-plane`) enforces server-only imports. I-9: zero `@neondatabase/serverless`, `drizzle-typebox` absent from bun.lock, no `@sinclair/typebox` direct dep. Conformance test is a pure type assertion (row→wire) that fails `tsgo` on drift (verified both directions). `:typecheck`/`:lint` pass for all affected projects. |
+| AC-5 | ✅ | `database` registered with `serviceType: 'database-migration'`, `needsDist: false`; dispatcher case runs backup→apply against `NEON_DATABASE_URL_DIRECT`; `resolve_plan.ts` gained its sixth `SERVICE_TYPE_OUTPUT_KEY` entry (compile tripwire satisfied); `release.yml` gained the `database_migration_apps` output + `deploy-database-migration` job; `logs.ts` has an explicit unsupported branch. Canonical invocation `bun scripts/src/lib/deploy/index.ts database --mode=emulator --yes` verified against local postgres: apply (1) then no-op (0), failure exits non-zero. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/backend/database/package.json` | Package manifest (`@aikami/backend-database`; drizzle-orm, drizzle-kit, pg, @types/pg) |
+| `packages/backend/database/moon.yml` | Moon project (backend-database) |
+| `packages/backend/database/tsconfig.json` | Backend tsconfig with workspace path mappings |
+| `packages/backend/database/drizzle.config.ts` | Drizzle Kit config (generate → `./drizzle`) |
+| `packages/backend/database/src/index.ts` | Package barrel (server-only, I-1 note) |
+| `packages/backend/database/src/lib/schema.ts` | Drizzle schema: accounts, packs, pack_versions + constraints |
+| `packages/backend/database/src/lib/connection.ts` | Lazy pooled connection factory (statement timeout, pool cap 5, no credential logging) |
+| `packages/backend/database/src/lib/migrate.ts` | Migration runner (transactional, idempotent, journal-aware status) |
+| `packages/backend/database/src/lib/repositories/account_repository.ts` | Account CRUD + createOrFetch (lazy account idiom) |
+| `packages/backend/database/src/lib/repositories/pack_repository.ts` | Pack CRUD (slug/visibility/ownership) |
+| `packages/backend/database/src/lib/repositories/pack_version_repository.ts` | Pack version CRUD (immutable, composite unique) |
+| `packages/backend/database/src/lib/repositories/index.ts` | `createCatalogRepositories(pool)` bundle |
+| `packages/backend/database/drizzle/0000_dark_banshee.sql` + `meta/` | Generated first migration (committed) |
+| `packages/backend/database/tests/connection.test.ts` | AC-1 connection/lazy-pool tests |
+| `packages/backend/database/tests/migrations.test.ts` | AC-2 migration + in-DB constraint tests |
+| `packages/backend/database/tests/catalog_repository.test.ts` | AC-3 happy path + all six violation tests |
+| `packages/backend/database/tests/conformance.test.ts` | AC-4.3 type-level row→wire conformance gate |
+| `packages/backend/database/tests/helpers.ts` | Test connection/truncate/pg-error-code helpers |
+| `packages/shared/schemas/src/lib/catalog/account.ts` | AccountPublicSchema (wire projection) |
+| `packages/shared/schemas/src/lib/catalog/pack.ts` | PackSummarySchema + PackVisibilitySchema |
+| `packages/shared/schemas/src/lib/catalog/pack_version.ts` | PackVersionSchema |
+| `apps/frontend/hub/src/lib/server/api/health_db.ts` | AC-1 `GET /api/health/db` handler (lazy pool, host-only, 3-state response) |
+| `apps/frontend/hub/src/lib/server/api/health_db.test.ts` | AC-1 handler unit tests (ok/unconfigured/unreachable) |
+| `scripts/src/lib/database/migrate.ts` | Developer `db:migrate`/`db:status` CLI (local + production DIRECT) |
+| `scripts/src/lib/deploy/database_migration.ts` | AC-5 deploy app: pg_dump backup + applyMigrations |
+| `scripts/src/lib/deploy/__tests__/deployment_config.test.ts` | AC-5 config + secret-naming tests |
+| `scripts/src/lib/ops/guard_data_plane.ts` | I-1 (source) + I-9 CI guard |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `flake.nix` | `postgresql_17` → `postgresql_18` (C-394 AC-2) + destructive-reset warning comment |
+| `README.md` | PG18 version note + destructive reset instructions; new "Server data plane" dev-setup section (two connection strings, migration commands) |
+| `.gitignore` | Added `.db-backups/` (pre-migration logical backups) |
+| `.moon/workspace.yml` | Registered `backend-database` project |
+| `package.json` (root) | Added `db:generate`, `db:migrate`, `db:status` scripts |
+| `biome.json` | Removed the stale `@aikami/backend-database` import restriction (package now exists) |
+| `packages/shared/schemas/src/index.ts` | Barrel-exported the catalog schemas |
+| `packages/shared/schemas/src/lib/project/project.ts` | Added `'database'` to `AppIdSchema` |
+| `apps/frontend/hub/package.json` | Added `@aikami/backend-database` dependency |
+| `apps/frontend/hub/moon.yml` | Added `backend-database` to dependsOn |
+| `apps/frontend/hub/svelte.config.js` | Added `@aikami/backend/database` alias |
+| `apps/frontend/hub/src/lib/server/api/index.ts` | Mounted `GET /api/health/db` on the Elysia app |
+| `scripts/moon.yml` | Added `guard-data-plane` task (runInCI) |
+| `scripts/src/lib/deploy/deployment_config.ts` | Added `database-migration` service type + `database` app entry |
+| `scripts/src/lib/deploy/index.ts` | `database-migration` dispatcher case; skips checksum cache like firebase-functions |
+| `scripts/src/lib/deploy/resolve_plan.ts` | Sixth `SERVICE_TYPE_OUTPUT_KEY` entry + `database_migration_apps` bucket |
+| `scripts/src/lib/ops/logs.ts` | Explicit `database-migration` unsupported branch |
+| `.github/workflows/release.yml` | `database_migration_apps` output + `deploy-database-migration` job |
+| `scripts/src/lib/agents/contract_pipeline/{herdr_adapter,stage_runner,contract_status,status}.ts` | Pre-existing typecheck/lint failures fixed (dead code / style) so `:typecheck`/`:lint` pass — see Deviations |
+
+### Deviations from Spec
+
+1. **Phase 6 live Neon actions deferred to the pipeline (execution-time scope boundary).** The implementer stage is forbidden from deploying or making irreversible production mutations (`NEON_DATABASE_URL_DIRECT` → GSM, applying migrations to Neon, Cloud Run deploy). Read-only probes were run instead: both Neon endpoints (pooled `-pooler` and direct) are reachable and report **18.4**; `NEON_DATABASE_URL` exists in GSM, `NEON_DATABASE_URL_DIRECT` does not yet. Exact remaining commands for the pipeline: (a) create GSM secret `NEON_DATABASE_URL_DIRECT` with the direct URL from `apps/frontend/hub/.env.production`; (b) confirm that file's `NEON_DATABASE_URL` uses the `-pooler` host (worktree copy already swapped; the value is gitignored so it does not travel with the PR); (c) `bun run deploy database --mode=production`; (d) deploy the hub and curl `/api/health/db` — expect `18.x`. No amendment needed; this matches the AC evidence matrix ("Filled during verification").
+2. **Pre-existing `scripts:typecheck`/`scripts:lint`/workspace `:lint` failures fixed** (3+3 errors in `scripts/src/lib/agents/contract_pipeline/` — unused vars, dead `role === 'review'` branch, non-null assertion, single-line ifs — plus one formatting fix each in `scripts/src/lib/project_setup/iam.ts` and `.pi/extensions/lib/tool_namespace.ts`). They predate this contract (verified by stashing), but AC-4.4/AC-5 require `:typecheck`/`:lint` to pass, so the mechanical, behavior-preserving fixes are included. Amendment proposed: none needed, but reviewers may want to attribute these to a follow-up cleanup if they prefer strictly-scoped PRs.
+3. **Local verification environment**: the worktree's direnv delegates to the main repo's flake (still PG17), so local postgres lifecycle + deploy dry-runs used the PG18.4 binaries from the worktree's re-pinned flake (`nix develop`/direct store path). CI and normal checkouts use the re-pinned flake directly — no issue there.
+4. `bun run db:migrate --mode=production` and the `database` deploy read `NEON_DATABASE_URL_DIRECT` from `apps/frontend/hub/.env.production`. That file is gitignored; the worktree copy has both keys (pooled `NEON_DATABASE_URL` + direct `NEON_DATABASE_URL_DIRECT`) but the deploy machine's copy still needs the Phase 6 update — covered in deviation 1.
+
+### Test Results
+
+- Unit: backend-database 27/27 pass (0 failures); hub 6/6 (3 pre-existing + 3 new); scripts 202/202 (4 new AC-5 tests); schemas suite passes.
+- E2E: N/A — no UI in this contract (explicitly out of scope).
+- Visual: N/A — no UI; the user-facing surface is the `/api/health/db` endpoint, verified live via curl (200 JSON on healthy + degraded paths).
+- Baseline: 0 pre-existing failures in the Phase-0 baseline runs (`scripts:test` 198, `hub:test` 3, `hub:build` after env sync). `scripts:typecheck`/`scripts:lint` had pre-existing failures (fixed — see Deviations). `validate()`'s workspace-wide `:fix` pass also touched unrelated pre-existing unformatted files; all reverted to keep the diff scoped.
