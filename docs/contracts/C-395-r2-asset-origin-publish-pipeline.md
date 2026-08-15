@@ -2,7 +2,7 @@
 id: C-395
 title: "R2 Asset Origin and Content-Addressed Catalog Index"
 source: "user request — hub community catalog; ADR amendments A-3, A-4"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,10 +21,10 @@ created_at: "2026-08-15"
 | **Target** | `scripts/src/lib/ops/{scan_assets,upload_assets,upload_lpc_assets}.ts`, new publish pipeline under `scripts/src/lib/catalog/`, `packages/shared/schemas/src/lib/catalog/` |
 | **Priority** | P1 — C-396 (browse) and C-397 (client on-demand assets) both read the index this contract produces. Nothing user-facing ships without it. |
 | **Dependencies** | None. Runs in parallel with C-394 — this is the immutable plane, that is the mutable one, and they share no data model. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer notes on publishing assets |
-| **Contract version** | 2.3.0 |
+| **Contract version** | 2.4.0 |
 
 ## Problem & Baseline Evidence
 
@@ -35,7 +35,7 @@ created_at: "2026-08-15"
   - `scripts/src/lib/ops/upload_assets.ts` already uploads the bundled tree to Firebase Storage with a concurrency pool, a per-extension MIME map, and a mode→bucket mapping. `upload_lpc_assets.ts` exists separately because of LPC's file count.
   - `packages/frontend/storage/src/lib/assets.ts` → `AssetRegistryRepository` already models `assets` / `asset_sources` / `install_state`, and `asset_sources.backend` already includes **`'r2'`** as a legal value (`migrations.ts:201`). The device plane is already built for this; nothing writes `'r2'` rows yet.
   - `packages/shared/schemas/src/lib/game/pack_index.ts` (`PackIndexSchema`) is the existing shape for a pack registry index.
-- **Known gaps**: the bucket and S3 credentials now exist (provisioned 2026-08-15 — see State & Data Models); the **custom domain does not**, pending a DNS migration (Open Question 1 — not a blocker). Nothing content-addresses the stored objects (Firebase Storage layout mirrors the source tree, so two versions of an asset collide); no catalog index distinct from the client's boot manifest; no publish pipeline that produces an index a browser can read.
+- **Known gaps**: the bucket, S3 credentials and the **custom domain `assets.bearlysleeping.com`** now exist and are live (provisioned 2026-08-15 — see State & Data Models; Open Question 1 resolved). Nothing content-addresses the stored objects (Firebase Storage layout mirrors the source tree, so two versions of an asset collide); no catalog index distinct from the client's boot manifest; no publish pipeline that produces an index a browser can read.
 - **Baseline tests**: `bun moon run scripts:test`, `bun moon run frontend-storage:test`. Both must pass before starting.
 
 ## User Outcome
@@ -66,9 +66,11 @@ index — and a **player** eventually stops downloading 93 MB they may never use
 
 Stand up a Cloudflare R2 bucket as the origin for catalog asset bytes, stored
 under **content-addressed keys** derived from the sha256 that `scan_assets.ts`
-already computes. Generate a **catalog index** — a signed, versioned JSON
-document describing what exists, what it costs to download, its license and
+already computes. Generate a **catalog index** — a versioned JSON document
+describing what exists, what it costs to download, its license and
 attribution, and where to fetch it — and publish both with one command.
+(Byte-signing is deliberately out of scope: no consumer in this contract or
+C-396/C-397 verifies a signature, and no signing key or AC exists for one.)
 
 The client is not modified. It keeps bundling and keeps booting exactly as it
 does today; this contract only creates the origin and the index that C-396 and
@@ -103,9 +105,12 @@ R2 speaks the S3 API — use an S3-compatible client, not a Cloudflare-specific 
 - **Publishing is idempotent and resumable.** A run that uploads 12,707 objects
   will be interrupted at some point. Re-running must skip what already exists
   by key, not re-upload it.
-- **Do not modify the client.** No change to `apps/frontend/client/static/`, the
-  AssetManager, or boot behaviour. That is C-397, deliberately separated so this
-  contract can merge without touching the play path.
+- **Do not modify the client.** No change to the AssetManager, boot behaviour, or
+  the bundled `static/` contents that the client loads. The scan step already
+  regenerates `manifest.json`/`asset_hashes.json` in place (an existing process);
+  adding the credits sidecar is additive data, not a behaviour change. That is
+  C-397, deliberately separated so this contract can merge without touching the
+  play path.
 
 ## State & Data Models
 
@@ -138,7 +143,7 @@ Bucket: `aikami-catalog`, location hint **WEUR**, default storage class
 **Standard** (Infrequent Access is excluded from the R2 free tier and adds
 retrieval fees — never use it for a CDN origin).
 
-Catalog index entry — TypeBox in `packages/shared/schemas/src/lib/catalog/`:
+Catalog index schemas — TypeBox in `packages/shared/schemas/src/lib/catalog/`:
 
 ```ts
 /** One downloadable artifact in the public catalog. */
@@ -148,7 +153,10 @@ type CatalogAssetEntry = {
   /** sha256 of the bytes. Also the storage address. */
   hash: string;
   sizeBytes: number;
-  /** "lpc" | "maps" | "music" | "sprites" | "tilesets" — from the existing scan. */
+  /** Category from the existing scan (ASSET_CATEGORIES): "lpc" | "music" | "sprites" | "sfx" | "ambient" | "backgrounds".
+   *  NOTE: static/game-data/maps/ and sprites/tilesets/ hold dev-only sandbox
+   *  files and are NOT scan categories — keep them out of the catalog, same
+   *  reasoning as static/ort (see Edge Cases). */
   category: string;
   subcategory?: string;
   /** File extension including the dot, e.g. ".webp". */
@@ -165,15 +173,32 @@ type CatalogAssetEntry = {
   licenseNote?: string;
 };
 
-/** A category shard or the root index. */
-type CatalogIndex = {
+/**
+ * Root index — category summaries and counts ONLY, never per-asset entries.
+ * 12,707 entries would reproduce the 7 MB manifest.json problem (AC-2);
+ * per-asset entries live in per-category shards fetched on demand.
+ */
+type CatalogIndexRoot = {
   schemaVersion: 1;
   /** ISO 8601 — when this index was published. */
   publishedAt: string;
-  /** Base URL that `hash` resolves against, e.g. "https://assets.bearlysleeping.com". */
+  /** Base URL that shard `hash`es resolve against, e.g. "https://assets.bearlysleeping.com". */
   originUrl: string;
   /** Total across all shards, so a client can show progress before fetching them. */
   totalCount: number;
+  /** One summary row per category; its shard URL is `index/v1/<id>.json`. */
+  categories: readonly { id: string; count: number }[];
+};
+
+/** One category shard — per-asset entries for a single category. */
+type CatalogIndexShard = {
+  schemaVersion: 1;
+  /** ISO 8601 — when this shard was published. */
+  publishedAt: string;
+  /** Base URL that `hash` resolves against. */
+  originUrl: string;
+  /** Category this shard covers (same values as CatalogAssetEntry.category). */
+  category: string;
   entries: readonly CatalogAssetEntry[];
 };
 ```
@@ -208,7 +233,9 @@ it without carrying attribution is a licensing problem, not a missing feature.
   - New publish pipeline under `scripts/src/lib/catalog/`: content-addressed upload, index generation, index publication.
   - Retargeting `upload_assets.ts` / `upload_lpc_assets.ts` to R2, or superseding them if the content-addressed path makes them redundant — decide during Phase 1 and record it.
   - `packages/shared/schemas/src/lib/catalog/` — `CatalogAssetEntry` / `CatalogIndex` TypeBox schemas.
-  - License/attribution capture in the scan step.
+  - License/attribution capture in the scan step (the `lpc_credits.json` sidecar
+    from `collect_lpc_assets.ts` and the committed `project_licenses.json`
+    declaration for non-LPC assets).
   - A `catalog` deploy entry if the pipeline should run from CI (see Open Questions).
   - Developer documentation for publishing.
 - **Out of Scope:**
@@ -263,17 +290,20 @@ corrupting the index (which is written last)
 
 **Given** the assets are uploaded
 **When** the index is generated
-**Then** `index/v1/catalog.json` validates against `CatalogIndexSchema`, its
-`totalCount` equals the number of published assets, every entry's `hash`
-resolves to a real object, and the root index is **under 256 KB gzipped**
+**Then** `index/v1/catalog.json` validates against `CatalogIndexRootSchema`
+(category summaries and counts only, no per-asset entries), its `totalCount`
+equals the number of published assets, and the root index is **under 256 KB
+gzipped**
 
-**And** each category shard validates against the same schema and stays under
-1 MB, with LPC sharded further by subcategory if it exceeds that
+**And** each category shard (`index/v1/<category>.json`) validates against
+`CatalogIndexShardSchema`, every entry's `hash` resolves to a real object, and
+each shard stays under 1 MB, with LPC sharded further by subcategory if it
+exceeds that
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit + Integration | `packages/shared/schemas/src/lib/catalog/catalog_index.test.ts`, `scripts/src/lib/catalog/__tests__/index_generation.test.ts` | N/A | Filled during verification |
+| AC-2 | Unit + Integration | `packages/shared/schemas/src/lib/catalog/catalog_index.test.ts`, `scripts/src/lib/catalog/__tests__/index_generation.test.ts` | `https://assets.bearlysleeping.com/index/v1/catalog.json` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run schemas:test`, `bun moon run scripts:test`
@@ -286,12 +316,7 @@ resolves to a real object, and the root index is **under 256 KB gzipped**
 
 ### AC-3: The public origin serves bytes anonymously with correct caching
 
-> ⏸️ **Deferred until the custom domain exists** (Open Question 1). The rest of
-> the contract is verifiable without it; this AC alone gates promotion past
-> `sandbox`. Verify the `r2.dev` equivalent in the meantime so the caching and
-> anonymous-write behaviour is known before the domain lands.
-
-**Given** the custom domain is configured
+**Given** the custom domain `assets.bearlysleeping.com` is configured and live
 **When** an asset URL from the index is fetched with no credentials
 **Then** it returns `200` with the correct `Content-Type`, a one-year immutable
 `Cache-Control`, and a body whose sha256 equals the `hash` in the index entry
@@ -373,7 +398,11 @@ or a silently-empty `authors` array
 **Implementation**: in the collector, look up `CREDITS.csv` by `entry.path` and
 emit a `lpc_credits.json` sidecar keyed by the **output** asset tag. `scan_assets.ts`
 merges that sidecar into the manifest the same way it already merges
-`asset_hashes.json`. The index generator reads it from there.
+`asset_hashes.json`. Non-LPC assets resolve through a committed project-owned
+declaration, `scripts/src/lib/catalog/project_licenses.json`, keyed by tag with
+the same `CatalogAssetEntry` license/author/source fields; `scan_assets.ts`
+merges it the same way. The index generator reads both from there, and the
+preflight fails on any tag present in neither source.
 
 **Watch Points**:
 - 🔴 **Do not normalise to SPDX.** LPC's licenses include `OGA-BY 3.0`, which has no SPDX identifier. Store the upstream strings verbatim; inventing a mapping is how an incorrect license claim gets baked in across 12,707 files.
@@ -385,17 +414,18 @@ merges that sidecar into the manifest the same way it already merges
 
 ## Implementation Sequence
 
-1. **Phase 1 (Decide)**: the bucket and S3 credentials already exist. Confirm the credentials reach GSM for CI, wire `originUrl` as injected configuration (never a constant), and decide whether `upload_assets.ts` is retargeted or superseded — record the decision. The custom domain is NOT a prerequisite; see Open Question 1.
+1. **Phase 1 (Decide)**: the bucket and S3 credentials already exist. Confirm the credentials reach GSM for CI, wire `originUrl` as injected configuration (never a constant), and decide whether `upload_assets.ts` is retargeted or superseded — record the decision. Record the category boundary too: the catalog publishes exactly what `scan_assets.ts` emits (music/sfx/ambient/sprites/backgrounds/lpc); `maps/` and `sprites/tilesets/` stay out (see Edge Cases). The custom domain is NOT a prerequisite; see Open Question 1.
 2. **Phase 2 (Publish pipeline)**: content-addressed uploader with a prefix-listing diff, concurrency pool, and resumability. Verify AC-1.
 3. **Phase 3 (Licence capture + preflight gate)**: extend the collector to emit the credits sidecar and the scan to carry it; add the project-owned licence declaration for non-LPC assets; implement the preflight as a **hard gate ahead of the upload phase**, with no bypass flag. Verify AC-4.
 4. **Phase 4 (Index)**: TypeBox schemas, index + shard generation with size budgets asserted in tests, published last. Verify AC-2.
-5. **Phase 5 (Origin verification)**: caching headers, anonymous read, rejected write, CORS — against `r2.dev` now, against the custom domain when it exists. AC-3 completes only in the latter pass.
+5. **Phase 5 (Origin verification)**: caching headers, anonymous read, rejected write, CORS — against the live custom domain `assets.bearlysleeping.com` (Open Question 1 resolved). AC-3 completes in this pass.
 6. **Phase 6 (Docs)**: developer publishing guide.
 
 ## Edge Cases & Gotchas
 
 - **The 7 MB `manifest.json` is a warning, not a template.** It is the reason the index must be sharded. Reusing its shape for a browse document reproduces the problem at CDN scale.
 - **`static/ort` is 76 MB and is not catalog content** — it is the ONNX runtime. Do not sweep it into the catalog because it happens to live under `static/`.
+- **`static/game-data/maps/` and `sprites/tilesets/` are dev-only and not catalog content either.** They are not scan categories (`ASSET_CATEGORIES` has no `maps`/`tilesets` keys) and hold sandbox/debug files. Keep them out of the catalog; if real map/tileset catalog content ever exists, extend `ASSET_CATEGORIES` in a follow-up contract — changing it here would alter the client's boot manifest, which this contract must not do.
 - **Content addressing changes the meaning of "update an asset".** There is no update; there is a new object and a new index entry. Any tooling that assumes a stable path per asset needs to move to tag→hash resolution through the index.
 - **R2 is S3-compatible but not S3.** Multipart thresholds, conditional headers, and listing semantics differ in small ways. Prefer an S3 client configured against R2's endpoint over a Cloudflare-specific SDK, so the origin stays swappable — the same portability argument as I-9 for Neon.
 - **Free tier**: 10 GB storage, 1M Class A ops/month, unlimited egress. The current library is ~93 MB, so storage is not a concern; **write operations** are the metric to watch, which is what makes AC-1's idempotency a cost control.
@@ -405,36 +435,29 @@ merges that sidecar into the manifest the same way it already merges
 
 Must be resolved before status becomes `approved`:
 
-1. **Public hostname — PARTIALLY RESOLVED 2026-08-15.** The bucket and
-   S3 credentials exist (see State & Data Models). The **custom domain is
-   deferred** — `bearlysleeping.com` has not yet migrated to Cloudflare DNS,
-   and that migration will take a while.
+1. **Public hostname — RESOLVED 2026-08-15: `assets.bearlysleeping.com` is
+   live.** The bucket, S3 credentials and the **custom domain** all exist and
+   the domain is serving (see State & Data Models). AC-3 is no longer
+   deferred and is verifiable in full against the production origin.
 
-   **This does not block the contract**, because of a property of the
-   content-addressed design: objects are addressed by hash, and the origin is
-   a *variable* — `CatalogIndex.originUrl`. So:
+   The content-addressed design means this lands with zero re-upload work:
+   objects are addressed by hash, and `CatalogIndex.originUrl` is a variable —
+   a publish run pointed at the final hostname re-uploads **zero bytes** and
+   only regenerates the index.
 
-   - **Phases 2–4 proceed now.** Uploading, hashing, license capture and index
-     generation need only the S3 credentials, which exist. AC-1, AC-2 and AC-4
-     are all verifiable today.
-   - **`originUrl` is configuration, not a constant.** Point it at the
-     bucket's `r2.dev` public URL (`https://pub-<hash>.r2.dev`) for
-     development and verification. Cloudflare rate-limits `r2.dev` and
-     documents it as unsuitable for production — that is acceptable for
-     Phases 2–5 and unacceptable for real traffic.
-   - **When the domain lands, regenerate the index only.** Re-publishing the
-     index with a new `originUrl` is a seconds-long operation that re-uploads
-     **zero bytes**. Nothing about the 93 MB of objects changes.
+   - **Phases 2–5 proceed against the live domain.** AC-1, AC-2 and AC-4 are
+     verifiable with the S3 credentials; AC-3 is now verifiable over
+     `https://assets.bearlysleeping.com` directly.
+   - **`originUrl` remains injected configuration.** The domain being live
+     does not change the first-commit rule: no hardcoded hostname anywhere,
+     including in test fixtures — that coupling is exactly what breaks a
+     later origin change.
 
-   **Remaining action:** confirm the final hostname (proposed:
-   `assets.bearlysleeping.com`) and complete AC-3 against it before C-396 or
-   C-397 ships to production. Until then C-395 can reach `implemented` but
-   must not be promoted past `sandbox`.
-
-   🔴 The implementation must therefore treat `originUrl` as injected
-   configuration from the first commit. Hardcoding a hostname anywhere —
-   including in a test fixture — recreates the coupling this resolution
-   depends on not existing.
+   **Remaining action:** verify AC-3 end to end against
+   `assets.bearlysleeping.com` — anonymous read, one-year immutable
+   `Cache-Control` on assets, short cache on the index, rejected anonymous
+   write, and CORS for the hub's origin — before C-396 or C-397 ships to
+   production. AC-3 remains the sole gate on promotion past `sandbox`.
 2. **Does the publish pipeline run from CI or stay a local ops command?** A 93 MB publish from a developer machine is fine today; it stops being fine when C-398 lets members submit content that needs publishing on approval. If CI, this contract also adds a `catalog` entry to `deployment_config.ts` — which means a second new `ServiceType` on top of C-394's `database-migration`, and the same `resolve_plan.ts` compile tripwire applies.
 3. **Per-asset LPC attribution — RESOLVED 2026-08-15: fully recoverable, no separate contract needed.** The upstream generator is vendored in-tree with a 13,787-row `CREDITS.csv`, and `collect_lpc_assets.ts` already derives the exact join key (`relative(SPRITESHEETS_DIR, fullPath)`, line 160) and carries the source path into its `{ src, dst }` manifest (line 449). The lookup is a CSV parse and a map at a point in the code where both halves of the mapping are already present. AC-4 was rewritten against the real data shape: arrays of `licenses`/`authors`/`sourceUrls` held verbatim, **not** a single SPDX string — LPC publishes `OGA-BY 3.0`, which has no SPDX identifier, and multi-licensing is normal.
 
@@ -442,6 +465,7 @@ Must be resolved before status becomes `approved`:
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
+| 2.4.0 | 2026-08-15 | Resolved Open Question 1 in full: the custom domain `assets.bearlysleeping.com` is live and serving, so AC-3 is no longer deferred. Removed the deferral note and the `r2.dev` fallback guidance from AC-3, Open Question 1 and Phase 5; the domain being live does not relax the `originUrl`-is-configuration rule (no hardcoded hostname, even in fixtures). AC-3 can now be verified against the production origin and remains the sole gate on promotion past `sandbox`. | snorreks (via Claude) |
 | 2.3.0 | 2026-08-15 | Hardened AC-4's attribution gate on user instruction. It now runs as a **preflight before the upload phase** (failing after 12,707 uploads burns Class A ops and orphans objects), covers **every** asset rather than only `lpc:` tags (closing the loophole where music/maps/sprites publish uncredited and the run still reports success), forbids any bypass flag, and gains an integration-level evidence row asserting non-zero exit **and** zero uploads **and** no index written — a unit test alone cannot prove the gate fired before uploading. Added a Legal/compliance quality requirement so the gate is a stated requirement rather than only an AC. | snorreks (via Claude) |
 | 2.2.0 | 2026-08-15 | Resolved Open Question 3 — per-asset LPC attribution is recoverable from the vendored `CREDITS.csv` (13,787 rows) via a join key `collect_lpc_assets.ts` already computes; not a separate contract. Corrected the `CatalogAssetEntry` licence model from a single SPDX string to verbatim `licenses`/`authors`/`sourceUrls` arrays, because LPC uses the non-SPDX `OGA-BY 3.0` and multi-licensing is the norm. AC-4 rewritten to require 100% tag coverage with a build failure on any miss. | snorreks (via Claude) |
 | 2.1.0 | 2026-08-15 | Recorded the provisioned bucket (`aikami-catalog`, WEUR, Standard) and the maintainer's `CLOUD_FLARE_BUCKET_*` credential names, placed in `scripts/.env.*` rather than the hub's env — the hub never writes to R2 (I-7), and every non-`PUBLIC_` key in a hub env file is shipped to Cloud Run as a secret by `buildSecretArgsFromEnvFile`. Partially resolved Open Question 1: the custom domain is deferred pending a DNS migration, which does **not** block the contract because `originUrl` is a variable in a content-addressed index — re-pointing it later re-uploads zero bytes. AC-3 marked deferred and made the sole gate on promotion past `sandbox`. | snorreks (via Claude) |
