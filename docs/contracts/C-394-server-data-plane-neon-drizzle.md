@@ -2,12 +2,13 @@
 id: C-394
 title: "Server Data Plane: Neon PostgreSQL + Drizzle + the hub's catalog write model"
 source: "user request — hub community catalog; ADR amendments A-1, A-2, A-6"
-status: implemented
+status: merged
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/147"
+  pr_number: 147
 created_at: "2026-08-15"
 ---
 
