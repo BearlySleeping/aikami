@@ -14,7 +14,7 @@ saves.
 
 | Mode | What it means |
 | --- | --- |
-| **Offline / local** | Ollama (text), ComfyUI (image), Kokoro (voice) on your own hardware — Docker is the full-stack default, but alternatives like vLLM and non-Docker desktop setups are supported |
+| **Offline / local** | llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) on your own hardware — Docker is the full-stack default, with Ollama, ComfyUI, and vLLM supported as opt-in swaps |
 | **BYOK** | Your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint |
 | **Service** *(coming soon)* | Fully managed pay-as-you-go hosting — no GPU, no Docker, no setup |
 
@@ -29,24 +29,28 @@ configuration, not a degraded one.
 
 ## Picking a text provider
 
-- **Local (Ollama / vLLM)** — free to run, private, works fully offline. Quality
-  and speed depend entirely on the model and hardware you choose. This is the
-  demanding part of a local setup; plan for a GPU.
+- **Local (llama.cpp by default, or Ollama / vLLM)** — free to run, private,
+  works fully offline. Quality and speed depend entirely on the model and
+  hardware you choose. This is the demanding part of a local setup; a GPU
+  speeds it up, but CPU works too.
 - **BYOK cloud** — best quality per unit of effort, no hardware requirements,
   and you pay the provider directly at their rates. Aikami is never a proxy in
   that path — your key and your prompts go straight to the provider you picked.
 
 A common arrangement is a cloud model for text (where GM quality matters most),
-local ComfyUI for images (where you'd otherwise pay per generation), and local
-Kokoro for voice.
+a local image engine (where you'd otherwise pay per generation), and local
+voice.
 
 ## Images and voice
 
-- **Images** — ComfyUI locally by default; DALL·E, Stability AI, NovelAI, and
+- **Images** — sd-server locally by default (ComfyUI is a supported opt-in
+  swap for more control over workflows); DALL·E, Stability AI, NovelAI, and
   fal.ai via BYOK. See [Image Generation](/guides/image-generation/) for style
-  profiles and contextual triggers.
-- **Voice** — Kokoro locally by default; ElevenLabs, OpenAI TTS, VOICEVOX, and
-  Fish Speech via BYOK. You can assign voices per NPC.
+  profiles and contextual triggers, and
+  [Image Engine Selection](/guides/image-engine-selection/) for the
+  sd-server/ComfyUI tradeoffs.
+- **Voice** — sherpa-onnx (Kokoro) locally by default; ElevenLabs, OpenAI TTS,
+  VOICEVOX, and Fish Speech via BYOK. You can assign voices per NPC.
 
 ## Where to configure it
 

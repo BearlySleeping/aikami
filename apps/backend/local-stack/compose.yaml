@@ -41,14 +41,14 @@ services:
   # check cannot run on an exited container, so this is the correct gate.
   model-fetcher:
     profiles: ["text", "image", "voice", "stt"]
-    # Built from docker/fetcher: the upstream oven/bun image lacks bzip2, which
-    # fetch_models.ts needs to extract the Kokoro/Moonshine .tar.bz2 archives
-    # (AC-6/AC-7 production path). No `image:` key — same pattern as voice/web;
-    # the published ghcr.io/aikami/aikami-model-fetcher image is produced by
-    # publish-local-stack.yml for users who prefer a prebuilt image.
+    # Pulls the published image by default (Compose's default pull_policy
+    # only pulls when missing, never rebuilds); `docker compose build
+    # model-fetcher` builds from docker/fetcher/Dockerfile locally instead —
+    # useful when editing fetch_models.ts or models.manifest.json.
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-model-fetcher:${LOCAL_STACK_VERSION:-latest}
     build:
-      context: ./docker/fetcher
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/fetcher/Dockerfile
     command:
       - /bin/sh
       - -c
@@ -72,9 +72,6 @@ services:
       MODELS_CHOWN: "${MODELS_CHOWN:-1}"
     volumes:
       - *model-volume
-      # The fetcher source ships in the repo tree; mount it read-only so the
-      # image never has to be rebuilt when the manifest changes.
-      - ./stack:/app/stack:ro
     restart: "no"
 
   # ── Text engine — llama.cpp server (OpenAI-compatible /v1) ─────────────
@@ -113,7 +110,7 @@ services:
   # 2026-08-14).
   image:
     profiles: ["image"]
-    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/aikami}/aikami-sd-server:cpu
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-sd-server:cpu
     # The sd.cpp images ship /sd-cli as their ENTRYPOINT; sd-server must be
     # selected explicitly or the engine boots the CLI and errors on the
     # first argument. (C-392 verified on leejet/stable-diffusion.cpp
@@ -155,6 +152,9 @@ services:
   # the `stt` profile is not part of the shipped COMPOSE_PROFILES.
   voice:
     profiles: ["voice", "stt"]
+    # Pulls the published image by default; `docker compose build voice`
+    # builds from docker/voice/Dockerfile.sherpa locally instead.
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-voice:${LOCAL_STACK_VERSION:-latest}
     build:
       context: ./docker/voice
       dockerfile: Dockerfile.sherpa
@@ -206,20 +206,26 @@ services:
 
   # ── Web client — prebuilt SPA behind nginx (opt-in `web` profile) ──────
   # Tauri users and dist-servers start no client container. The runtime
-  # engine config is mounted as /usr/share/nginx/html/config.json (AC-9) so
-  # one image works across any topology with zero rebuild.
+  # engine config.json (AC-9) is generated inside the container at start by
+  # docker/client/generate_config.sh from the env vars below (defaulting to
+  # the standard local-stack ports), so one image works across any topology
+  # with zero rebuild and no bind mount.
   web:
     profiles: ["web"]
+    # Pulls the published image by default; `docker compose build web`
+    # builds from Dockerfile.client locally instead (needs `bun run
+    # build:client` run first to stage .build/client).
+    image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-client:${LOCAL_STACK_VERSION:-latest}
     build:
       context: .
       dockerfile: Dockerfile.client
     ports:
       - "127.0.0.1:${WEB_PORT:-5274}:5274"
-    volumes:
-      - type: bind
-        source: "${CLIENT_CONFIG:-./.build/client/config.json}"
-        target: /usr/share/nginx/html/config.json
-        read_only: true
+    environment:
+      LLM_ENDPOINT: "${LLM_ENDPOINT:-}"
+      IMAGE_ENDPOINT: "${IMAGE_ENDPOINT:-}"
+      VOICE_ENDPOINT: "${VOICE_ENDPOINT:-}"
+      STT_ENDPOINT: "${STT_ENDPOINT:-}"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5274/"]
       interval: 10s

@@ -13,7 +13,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - **Rich World Building**: Lorebooks, knowledge graphs, character relationships, and world state that persist and evolve.
 - **Cross-Platform**: PWA for web/mobile, desktop via Tauri, SSR Hub on Cloud Run.
 - **Offline-First**: Campaigns, saves, and chat history live in a local Turso (libSQL) database — play with zero network; cloud is an optional sync layer, never a boot dependency.
-- **Local AI by Default**: Text, image, and voice generation run locally via Docker microservices (Ollama, ComfyUI, Kokoro); BYOK cloud keys are an option.
+- **Local AI by Default**: Text, image, and voice generation run locally via Docker microservices (llama.cpp, sd-server, sherpa-onnx/Kokoro — Ollama/ComfyUI as opt-in swaps); BYOK cloud keys are an option.
 
 ## User Experience
 
@@ -29,7 +29,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - **Offline-first**: Turso (libSQL) is the local source of truth — local campaign creation, play, and saving must never depend on Firebase availability or sign-in
 - **Game first**: Launch into a spatial world, not a chat dashboard; deterministic rules are authoritative while AI handles character and prose
 - **One AI gateway, three modes**: All text/image/voice generation goes through `AiProviderGateway` — offline (local), BYOK (cloud key), or service (Aikami-hosted)
-- **Local AI microservices**: Ollama (text), ComfyUI (image), and Kokoro (voice) run locally via Docker/herdr
+- **Local AI microservices**: llama.cpp (text), sd-server (image), and sherpa-onnx/Kokoro (voice) run locally via Docker/herdr, C-390's publishable topology — Ollama/ComfyUI as opt-in swaps
 - **SvelteKit Client + Hub**: Fast, installable PWA plus an SSR community hub on Cloud Run
 - **Desktop**: Native 2D RPG experience via Tauri v2
 
@@ -41,7 +41,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - ✅ Client with auth, personas, NPCs, chat, dashboard, and the spatial game client (PixiJS v8 + bitECS engine in `packages/frontend/engine`)
 - ✅ Offline-first persistence — Turso (libSQL) is the local source of truth for campaigns, saves, and chat history (C-321); Firebase remains auth + optional sync
 - ✅ Hub app — SvelteKit SSR community hub on Google Cloud Run (Bun) for community assets, maps, mods, and managing your own characters/personas
-- ✅ Local AI microservices — Ollama (text), ComfyUI (image), Kokoro (voice) via Docker/herdr
+- ✅ Local AI microservices — llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) via Docker/herdr (C-390); Ollama/ComfyUI as opt-in swaps
 - ✅ AiProviderGateway — one wrapper with offline / BYOK / service modes (C-320)
 - ✅ TypeBox runtime validation across shared schemas, types, and mocks
 - ✅ Firebase backend (auth triggers, callable functions, scheduled jobs)

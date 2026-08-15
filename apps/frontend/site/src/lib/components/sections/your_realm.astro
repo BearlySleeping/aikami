@@ -126,7 +126,8 @@ const stats = await getRepoStats();
           <p class="text-xs text-muted-foreground leading-relaxed mb-4">
             <span class="text-rune font-medium">The all-in option.</span>
             Everything runs locally on your machine — no internet needed after initial setup.
-            ComfyUI for image generation, Kokoro for TTS, Ollama for LLM — all bundled.
+            llama.cpp for text, sd-server for image generation, sherpa-onnx (Kokoro) for voice —
+            all bundled, with Ollama and ComfyUI available as drop-in swaps.
           </p>
           <div class="grid md:grid-cols-2 gap-4">
             <div class="glass-panel p-4">
@@ -137,10 +138,11 @@ const stats = await getRepoStats();
                 <pre
                   class="overflow-x-auto rounded-sm bg-background border border-border p-4 text-xs font-mono text-foreground leading-relaxed"
                 ><code>git clone https://github.com/BearlySleeping/aikami
-cd aikami
-docker compose up aikami-client
+cd aikami/apps/backend/local-stack
+echo "COMPOSE_PROFILES=web" >> .env
+docker compose up -d
 
-# Open http://localhost:5173</code></pre>
+# Open http://localhost:5274</code></pre>
                 <button
                   type="button"
                   class="copy-snippet-btn absolute top-2 right-2 rounded-sm bg-card border border-border px-2.5 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:border-rune transition-colors"
@@ -161,11 +163,12 @@ docker compose up aikami-client
                 <pre
                   class="overflow-x-auto rounded-sm bg-background border border-border p-4 text-xs font-mono text-foreground leading-relaxed"
                 ><code>git clone https://github.com/BearlySleeping/aikami
-cd aikami
-docker compose up aikami
+cd aikami/apps/backend/local-stack
+bun run stack init
+docker compose up -d
 
-# Includes: client, ComfyUI, Kokoro TTS,
-# Ollama, Firebase emulators
+# Includes: text (llama.cpp), image (sd-server),
+# voice (sherpa-onnx/Kokoro), web client
 # Everything runs locally. No internet.</code></pre>
                 <button
                   type="button"
@@ -176,8 +179,9 @@ docker compose up aikami
                 </button>
               </div>
               <p class="mt-2 text-[10px] text-muted-foreground/60">
-                ComfyUI (default image gen) and Kokoro (default TTS) included. Swap for any
-                supported provider via Settings — ElevenLabs, Stability AI, and more.
+                sd-server (default image gen) and sherpa-onnx/Kokoro (default TTS) included, with
+                Ollama and ComfyUI as opt-in swaps. Change providers any time via Settings —
+                ElevenLabs, Stability AI, and more.
               </p>
             </div>
           </div>
@@ -341,15 +345,15 @@ bun tauri build
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
           <p class="font-mono text-[10px] uppercase tracking-wider text-rune mb-2">AI Runtime</p>
-          <p class="font-serif text-xl">Ollama</p>
-          <p class="text-[10px] text-muted-foreground mt-1">+ vLLM + BYOK</p>
+          <p class="font-serif text-xl">llama.cpp</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ Ollama + BYOK</p>
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
           <p class="font-mono text-[10px] uppercase tracking-wider text-pink-400 mb-2">
             Voice &amp; Image
           </p>
           <p class="font-serif text-xl">Kokoro</p>
-          <p class="text-[10px] text-muted-foreground mt-1">+ ComfyUI</p>
+          <p class="text-[10px] text-muted-foreground mt-1">+ sd-server, ComfyUI</p>
         </div>
         <div class="glass-panel p-5 text-center group hover:border-rune/50 transition-colors">
           <p class="font-mono text-[10px] uppercase tracking-wider text-ember mb-2">Desktop</p>

@@ -10,7 +10,7 @@ Aikami is a modern monorepo application platform with a web-native game engine. 
 - **PixiJS v8 + bitECS Game Engine** — WebGPU-accelerated 2D rendering with data-oriented ECS architecture
 - **Turso (libSQL) Offline-First** — Local-first persistence: campaigns, saves, and chat history live in an embedded SQLite-compatible store (C-321); cloud sync is an optional adapter, never a boot dependency
 - **SvelteKit Hub (SSR)** — Community hub on Google Cloud Run (Bun) for community assets, maps, mods, and managing your own characters/personas
-- **Local AI Microservices** — ComfyUI (image), Ollama (text), Kokoro (voice) via Docker/herdr
+- **Local AI Microservices** — llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) via Docker/herdr (C-390); Ollama/ComfyUI as opt-in swaps
 - **Bun Runtime** — Fast JavaScript/TypeScript runtime
 - **Moon Monorepo** — Task orchestration and dependency management
 - **Biome** — Consistent linting and formatting

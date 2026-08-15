@@ -9,8 +9,8 @@ is stored in the client-side vault and text requests go directly from your clien
 provider you configured (Anthropic, OpenAI, Gemini, etc.). Aikami is not a proxy in that
 path and never sees the key or the prompt.
 
-With **local/offline mode**, nothing leaves your machine at all — Ollama, ComfyUI, and
-Kokoro run on your own hardware.
+With **local/offline mode**, nothing leaves your machine at all — llama.cpp, sd-server,
+and sherpa-onnx/Kokoro (or Ollama/ComfyUI if you swap them in) run on your own hardware.
 
 The **Service mode** (when available) routes requests through Aikami's infrastructure to
 provide managed AI without requiring your own hardware or API keys. In that case, Aikami

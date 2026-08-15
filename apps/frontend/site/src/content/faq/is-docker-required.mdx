@@ -10,8 +10,10 @@ ways to run Aikami:
 - **Web, BYOK** — no install at all. Open the hosted client, drop in an API key, play.
 - **Desktop app** — a native Tauri v2 build for Windows, macOS, and Linux. Works with a
   local Ollama/vLLM instance or your own cloud keys.
-- **Docker** — `docker compose up aikami` for the whole local stack (client + Ollama +
-  ComfyUI + Kokoro), or `aikami-client` for just the client.
+- **Docker** — `bun run stack init && docker compose up -d` for the whole local stack
+  (text via llama.cpp, image via sd-server, voice via sherpa-onnx/Kokoro — Ollama and
+  ComfyUI available as opt-in swaps), or just the web client if you're bringing your own
+  endpoints.
 - **From source** — Bun + Moon, if you're contributing or want to modify it.
 
 Full commands are on the [tech page](/tech#your-realm).

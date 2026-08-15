@@ -8,9 +8,10 @@ Only if you want to run the AI models locally.
 
 - **BYOK or the web client** — no GPU needed at all. The game itself is a 2D PixiJS
   renderer; any machine that runs a modern browser smoothly will run Aikami smoothly.
-- **Fully local (Docker stack)** — you'll want a GPU. Text generation via Ollama is the
-  demanding part; image generation via ComfyUI more so. The exact requirements depend
-  entirely on which models you choose to run.
+- **Fully local (Docker stack)** — works on CPU (that's the default the setup wizard falls
+  back to with no GPU detected), but a GPU makes it meaningfully faster. Text generation is
+  the demanding part; image generation more so. The exact requirements depend entirely on
+  which models you choose to run.
 
 You can also split the difference: local text on your own hardware, cloud image
 generation via an API key, or vice versa.

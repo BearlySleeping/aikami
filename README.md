@@ -32,7 +32,7 @@ It's built **game-first, not chat-first**: you launch into a spatial 2D world re
 - 🧵 **Persistent memory & world state** — NPCs remember what you did, relationships and factions evolve across sessions, nothing resets when you close the tab
 - 🎨 **Procedural LPC sprites** — every character is assembled from modular Liberated Pixel Cup layers, no static sprite sheets, zero AI dependency for the visual baseline
 - 💾 **Offline-first** — campaigns, saves, and chat history live in a local Turso (libSQL) database; the game boots and plays with zero network
-- 🔑 **Vendor-agnostic AI** — run local models (Ollama / ComfyUI / Kokoro via Docker), bring your own cloud API key, or (soon) use Aikami's managed hosting
+- 🔑 **Vendor-agnostic AI** — run local models (llama.cpp / sd-server / sherpa-onnx via Docker, with Ollama and ComfyUI available as opt-in drop-in swaps), bring your own cloud API key, or (soon) use Aikami's managed hosting
 - 🖥️ **Cross-platform** — Progressive Web App, native desktop via Tauri v2 (Windows/macOS/Linux), and a SvelteKit community hub for sharing assets, maps, and mods
 
 ---
@@ -49,18 +49,38 @@ Pick whichever fits how you want to run it:
 
 ### Option 1 — Docker (zero setup, fully local)
 
+**Easy path** — one wizard detects your hardware and picks sane defaults (llama.cpp for text, sd-server for image, sherpa-onnx/Kokoro for voice):
+
 ```bash
 git clone https://github.com/BearlySleeping/aikami
-cd aikami
+cd aikami/apps/backend/local-stack
 
-# Everything local: client + ComfyUI (image) + Kokoro (voice) + Ollama (text)
-docker compose up aikami
-
-# ...or just the client, if you're bringing your own endpoints / API keys
-docker compose up aikami-client
+bun run stack init      # detects GPU/CPU/RAM, writes .env, shows the download plan
+docker compose up -d    # pulls images, fetches models, starts the stack
 ```
 
-Open **http://localhost:5173** and you're playing. No internet required after the first pull.
+Open **http://localhost:5274** and you're playing. No internet required after the first pull.
+
+**Advanced path** — pick the hardware backend and modalities explicitly, or run just the client against your own endpoints:
+
+```bash
+# Explicit backend + modalities (CPU/CUDA/ROCm/Vulkan/Intel/MUSA)
+bun run stack init --yes --backend cuda --modalities text,image,voice
+
+# ...or just the web client, bringing your own cloud key / remote endpoints
+echo "COMPOSE_PROFILES=web" >> .env && docker compose up -d
+```
+
+**Prefer Ollama or ComfyUI?** Both are supported drop-in swaps on the same ports — set these in `.env` instead of the defaults:
+
+```bash
+COMPOSE_PROFILES=text,ollama      # Ollama replaces llama.cpp on :11434
+COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on :8188
+```
+
+Full backend matrix (CUDA/ROCm/Vulkan/Intel/MUSA), STT setup, the macOS native path (Docker Desktop has no Metal passthrough), model licensing, and smoke tests all live in the [Local Stack README](apps/backend/local-stack/README.md) — that's the source of truth for anything Docker/engine-related.
+
+**Don't want to clone the repo at all?** You don't have to — `model-fetcher`, `voice`, and `web` all pull prebuilt images from GHCR by default. Grab just the `compose*.yaml` files and a hand-written `.env` (from `.env.example`) into an empty directory and `docker compose up -d` works standalone; you only lose the hardware-detection wizard (`stack init` needs the repo).
 
 ### Option 2 — From source (Bun + Moon)
 
@@ -178,7 +198,7 @@ All text, image, and voice generation flows through one abstraction — `AiProvi
 
 | Mode                        | What it means                                                                                                 |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Offline / local**         | Ollama (text), ComfyUI (image), Kokoro (voice) — run as Docker microservices on your own hardware             |
+| **Offline / local**         | llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) — run as Docker microservices on your own hardware, with Ollama and ComfyUI available as opt-in drop-in swaps |
 | **BYOK**                    | Bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint |
 | **Service** _(coming soon)_ | Fully managed, pay-as-you-go hosting on Aikami's infrastructure — no GPU, no Docker, no setup                 |
 
@@ -203,7 +223,7 @@ Everything is **local-first by design**: Firebase (auth + optional cloud sync/ba
 │         Functions │ Auth │ Storage │ Firestore (infra)           │
 ├──────────────────────────────────────────────────────────────────┤
 │        Local AI Microservices (Docker/herdr)                     │
-│   ComfyUI (image) │ Ollama (text) │ Kokoro (voice)               │
+│    sd-server (image) │ llama.cpp (text) │ sherpa-onnx (voice)    │
 ├──────────────────────────────────────────────────────────────────┤
 │               Shared Packages (packages/shared/)                  │
 │  constants │ types │ schemas │ parser │ logger │ utils │ mocks   │
@@ -235,7 +255,7 @@ Full write-up: [Architecture](docs/architecture/architecture.md)
 | Game logic            | bitECS (data-oriented ECS)                                   |
 | Local persistence     | Turso (libSQL) — offline-first source of truth               |
 | Cloud sync (optional) | Firebase (Auth, Storage, Functions)                          |
-| Local AI              | Ollama (text) · ComfyUI (image) · Kokoro (voice), via Docker |
+| Local AI              | llama.cpp (text) · sd-server (image) · sherpa-onnx/Kokoro (voice), via Docker — Ollama/ComfyUI as opt-in swaps |
 | AI abstraction        | `AiProviderGateway` — offline / BYOK / service               |
 | Validation            | TypeBox                                                      |
 | Community hub         | SvelteKit SSR on Google Cloud Run (Bun adapter)              |
@@ -257,10 +277,11 @@ apps/
 │   ├── site/        # Public landing page (Astro)
 │   └── docs/         # Documentation site (Astro)
 └── backend/
-    ├── firebase/    # Cloud Functions, auth triggers, security rules
-    ├── image/        # ComfyUI Docker microservice
-    ├── text/         # Ollama Docker microservice
-    └── voice/        # Kokoro Docker microservice
+    ├── firebase/       # Cloud Functions, auth triggers, security rules
+    ├── local-stack/    # Publishable Docker topology — text/image/voice/stt + web (C-390)
+    ├── image/          # sd-server image engine (dev), ComfyUI as opt-in advanced alt
+    ├── text/           # llama.cpp text engine (dev), Ollama as opt-in advanced alt
+    └── voice/          # sherpa-onnx/Kokoro voice + STT engine (dev)
 
 packages/
 ├── shared/     # types, schemas, constants, parser, logger, utils, mocks

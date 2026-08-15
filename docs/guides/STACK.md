@@ -27,7 +27,7 @@ This document details the primary technologies, frameworks, and services used in
 | **Cloud Sync (optional)** | Firebase | Auth + optional backup/sync layer; never a boot dependency |
 | Authentication | Firebase Authentication | Email/password |
 | File Storage | Firebase Storage | User uploads, assets |
-| **Local AI Microservices** | ComfyUI / Ollama / Kokoro | Docker/herdr services for image, text, and voice generation |
+| **Local AI Microservices** | llama.cpp / sd-server / sherpa-onnx (Kokoro) | Docker/herdr services for text, image, and voice generation (C-390); Ollama/ComfyUI as opt-in swaps |
 | **Validation** | TypeBox | Runtime validation across API boundaries and persistence (unified; replaces Zod/Valibot) |
 | AI Framework | AiProviderGateway (C-320) | One wrapper, three modes: offline (local) / BYOK / service |
 | Linting/Formatting | Biome | Consistent code style |
@@ -48,7 +48,7 @@ This document details the primary technologies, frameworks, and services used in
 │         Functions │ Auth │ Storage │ Firestore (infra)           │
 ├──────────────────────────────────────────────────────────────────┤
 │        Local AI Microservices (Docker/herdr)                     │
-│   ComfyUI (image) │ Ollama (text) │ Kokoro (voice)               │
+│    sd-server (image) │ llama.cpp (text) │ sherpa-onnx (voice)    │
 ├──────────────────────────────────────────────────────────────────┤
 │               Shared Packages (packages/shared/)                  │
 │  constants │ types │ schemas │ parser │ logger │ utils │ mocks   │
@@ -65,5 +65,5 @@ This document details the primary technologies, frameworks, and services used in
 
 - **Firestore as campaign store** → Replaced by **Turso (libSQL)** as the local source of truth (C-321). Campaigns, saves, and chat history live in the embedded local database from day one; Firebase remains for auth, sync, and infrastructure only.
 - **Data Connect / PowerSync / TanStack DB** → Never adopted for the campaign store. PowerSync/TanStack DB are explicitly deferred (Turso's embedded-replica sync is the default, C-357); Data Connect is revisited only if a dashboard/admin use case emerges.
-- **Genkit** → Replaced by vendor-agnostic **AiProviderGateway** (C-320) with offline (local Ollama), BYOK, and service modes.
+- **Genkit** → Replaced by vendor-agnostic **AiProviderGateway** (C-320) with offline (local llama.cpp/sd-server/sherpa-onnx, or Ollama/ComfyUI as opt-in swaps), BYOK, and service modes.
 - **Zod/Valibot** → Unified on **TypeBox** (tree-shakeable, used across shared schemas, types, and mocks).
