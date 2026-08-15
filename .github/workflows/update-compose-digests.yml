@@ -13,9 +13,12 @@
 
 name: Update Compose Digests
 
+# Weekly cron held off for now (2026-08-15) while the local-stack publish
+# pipeline is still being stabilized — re-enable once publish-local-stack.yml
+# is reliably green. Until then trigger manually via workflow_dispatch.
 on:
-  schedule:
-    - cron: '0 3 * * 1' # Monday 03:00 UTC
+  # schedule:
+  #   - cron: '0 3 * * 1' # Monday 03:00 UTC
   workflow_dispatch:
 
 permissions:

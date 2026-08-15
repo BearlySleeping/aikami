@@ -161,6 +161,32 @@ Hands-Free Play).
 
 ---
 
+### Community Hub — Catalog, Assets, and Mods
+
+The hub becomes a public community catalog for LPC sprites, maps, tilesets,
+music and user-submitted content packs. Architecture and rationale:
+`docs/architecture/data-layer-target-architecture.md` §5.1 (amendments A-1…A-8,
+2026-08-15) — Neon PostgreSQL for mutable state, Cloudflare R2 for asset bytes,
+a content-addressed static index for browsing.
+
+Implementation order is C-394 and C-395 (parallel — mutable and immutable
+planes, no shared data model) → C-396 and C-397 (parallel) → C-398 → C-399.
+
+| ID | Title | Priority | Status |
+|----|-------|----------|--------|
+| C-394 | Server Data Plane — Neon PostgreSQL + Drizzle + the hub's catalog write model | P1 | 📝 draft |
+| C-395 | R2 Asset Origin and Content-Addressed Catalog Index | P1 | 📝 draft |
+| C-396 | Hub Public Shell and Catalog Browse (SSR) | P1 | 📝 draft |
+| C-397 | Client Asset Migration — Bundled to On-Demand | P2 | ⏳ not_started |
+| C-398 | Member Submissions — Signed Upload, Validation, and Moderation | P2 | ⏳ not_started |
+| C-399 | Social Metadata — Ratings, Install Counts, Moderation Actions | P3 | ⏳ not_started |
+
+A "mod" is a content pack plus its assets, containing no executable code — the
+`ContentPackManifest` schema already is the mod format. Scripted/behavioural
+extensions are explicitly deferred to a future ADR (§5.2).
+
+---
+
 ### Completed Contracts (Phase 1–2 era, pre-TODO.md consolidation)
 
 These contracts were completed before the TODO.md consolidation. They built the

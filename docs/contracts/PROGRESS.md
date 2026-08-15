@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-29)
+## Status Summary (Auto-generated: 2026-08-15)
 
-**166 active (24 without contract file), 119 archived, 1 duplicates**
+**166 active (0 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -10,32 +10,32 @@
 |----------|------|--------|-----------|---------|
 | C-011 | Blackbox Testing | 🏁 completed | — | v1 |
 | C-014 | Database Abstraction And Dataconnect | 🏁 completed | — | v1 |
-| C-015 | Ai Service Abstraction | 📦 legacy_completed | — | v1 |
-| C-031 | Adapter Static And Hosting | 📦 legacy_completed | — | v1 |
-| C-056 | Hybrid Text Gateway | 📦 legacy_completed | — | v1 |
-| C-117 | Ecs Snapshot Serializer | 📦 legacy_completed | — | v1 |
-| C-118 | Save Load Ui Wiring | 📦 legacy_completed | — | v1 |
-| C-119 | Routing And Layout Simplification | 📦 legacy_completed | — | v1 |
-| C-120 | View Folder Restructure | 📦 legacy_completed | — | v1 |
-| C-121 | Start Menu And Auth | 📦 legacy_completed | — | v1 |
-| C-123 | Character Creation Flow | 📦 legacy_completed | — | v1 |
-| C-124 | Game Engine Initialization | 📦 legacy_completed | — | v1 |
-| C-125 | Game Ui Overlay Architecture | 📦 legacy_completed | — | v1 |
-| C-127 | Settings Menu Refactor | 📦 legacy_completed | — | v1 |
-| C-128 | Dialogue Overlay And Ai Chat | 📦 legacy_completed | — | v1 |
+| C-015 | Ai Service Abstraction | ⏳ not_started | — | v1 |
+| C-031 | Adapter Static And Hosting | ⏳ not_started | — | v1 |
+| C-056 | Hybrid Text Gateway | ⏳ not_started | — | v1 |
+| C-117 | Ecs Snapshot Serializer | ⏳ not_started | — | v1 |
+| C-118 | Save Load Ui Wiring | ⏳ not_started | — | v1 |
+| C-119 | Routing And Layout Simplification | ⏳ not_started | — | v1 |
+| C-120 | View Folder Restructure | ⏳ not_started | — | v1 |
+| C-121 | Start Menu And Auth | ⏳ not_started | — | v1 |
+| C-123 | Character Creation Flow | ⏳ not_started | — | v1 |
+| C-124 | Game Engine Initialization | ⏳ not_started | — | v1 |
+| C-125 | Game Ui Overlay Architecture | ⏳ not_started | — | v1 |
+| C-127 | Settings Menu Refactor | ⏳ not_started | — | v1 |
+| C-128 | Dialogue Overlay And Ai Chat | ⏳ not_started | — | v1 |
 | C-129 | Dialogue Ai Integration Polish | 🏁 completed | — | v1 |
 | C-132 | Save Load System | 🏁 completed | 🔗 integrated | v1 |
 | C-133 | Flexible Provider Onboarding | 🏁 completed | — | v1 |
 | C-134 | Inline Provider Setup | 🏁 completed | — | v1 |
-| C-135 | Tilemap Environment Parsing | 📦 legacy_completed | — | v1 |
-| C-136 | Entity Prop Spawner | 📦 legacy_completed | — | v1 |
-| C-138 | Map Transitions | 📦 legacy_completed | — | v1 |
-| C-140 | Game Mode System | 📦 legacy_completed | — | v1 |
-| C-141 | Npc Interaction Trigger | 📦 legacy_completed | — | v1 |
-| C-142 | Inventory Item Pickups | 📦 legacy_completed | — | v1 |
-| C-143 | Quest Log And Test Fixes | 📦 legacy_completed | — | v1 |
-| C-144 | Combat Encounter Integration | 📦 legacy_completed | — | v1 |
-| C-149 | Combat Gatekeeping | 📦 legacy_completed | — | v1 |
+| C-135 | Tilemap Environment Parsing | ⏳ not_started | — | v1 |
+| C-136 | Entity Prop Spawner | ⏳ not_started | — | v1 |
+| C-138 | Map Transitions | ⏳ not_started | — | v1 |
+| C-140 | Game Mode System | ⏳ not_started | — | v1 |
+| C-141 | Npc Interaction Trigger | ⏳ not_started | — | v1 |
+| C-142 | Inventory Item Pickups | ⏳ not_started | — | v1 |
+| C-143 | Quest Log And Test Fixes | ⏳ not_started | — | v1 |
+| C-144 | Combat Encounter Integration | ⏳ not_started | — | v1 |
+| C-149 | Combat Gatekeeping | ⏳ not_started | — | v1 |
 | C-152 | End To End Boot Flow | 🏁 completed | — | v1 |
 | C-153 | Character Dashboard Equipment | 🏁 completed | — | v1 |
 | C-154 | Ai Vendors Economy | 🏁 completed | — | v1 |
@@ -48,7 +48,7 @@
 | C-162 | Bg3 Action Menu Dice | 🏁 completed | — | v1 |
 | C-163 | Visceral Feedback Juice | 🏁 completed | — | v1 |
 | C-164 | Combat Split Screen Layout | 🏁 completed | — | v1 |
-| C-168 | Pixijs Asset Pipeline Fix | 📦 legacy_completed | — | v1 |
+| C-168 | Pixijs Asset Pipeline Fix | ⏳ not_started | — | v1 |
 | C-173 | Ecs Spatial Hash Grid | 🏁 completed | — | v1 |
 | C-175 | Llm Jton Map Pipeline | 🏁 completed | — | v1 |
 | C-180 | Engine Stability Harness | 🏁 completed | — | v1 |
@@ -62,7 +62,7 @@
 | C-194 | Ecs Offscreen Macro Simulation | 🏁 completed | 🔗 integrated | v1 |
 | C-195 | Ecs String Registry Hydration | 🏁 completed | 🔗 integrated | v1 |
 | C-196 | Ecs Emergent World Integration | 🏁 completed | 🔗 integrated | v1 |
-| C-197 | Ecs Goap Combat Tactics | 📦 legacy_completed | — | v1 |
+| C-197 | Ecs Goap Combat Tactics | ❓ ✅ completed | — | v1 |
 | C-198 | Dev Sandbox Polish And Zoning | 🏁 completed | 🔗 integrated | v1 |
 | C-199 | Visual Camera Alignment | 🏁 completed | 🔗 integrated | v1 |
 | C-200 | Visual Pipeline Optimization | ❓ ✅ completed | 🔗 integrated | v1 |
@@ -148,32 +148,32 @@
 | C-343 | Promote Rich Chat Ux Into Production Gameplay | 👍 approved | ❓ `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) | v2 |
 | C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | — | v2 |
 | C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | — | v2 |
-| C-346 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | — | — |
-| C-347 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | — | — |
-| C-348 | Build a Unified AI Turn Orchestrator with Validated State Patches | ⏳ not_started (no contract file) | — | — |
-| C-349 | Add Prompt Regression, Context Budgets, Cost Guards, and AI Tracing | ⏳ not_started (no contract file) | — | — |
-| C-350 | Add Hierarchical Lore and Memory Retrieval | ⏳ not_started (no contract file) | — | — |
-| C-351 | Integrate an AI Game Master and Narrative Director | ⏳ not_started (no contract file) | — | — |
-| C-352 | Integrate NPC Autonomy, Schedules, and Offscreen Simulation | ⏳ not_started (no contract file) | — | — |
-| C-353 | Add Generative Quests Inside Authored Rules and Content Constraints | ⏳ not_started (no contract file) | — | — |
-| C-354 | Reintroduce Generated Campaigns as a Content-Pack Compiler | ⏳ not_started (no contract file) | — | — |
-| C-355 | Build an Optional Media Director for Expressions, Voice, Images, and Music | ⏳ not_started (no contract file) | — | — |
-| C-356 | Complete Local Model Discovery, Lifecycle, and Hybrid Failover | ⏳ not_started (no contract file) | — | — |
-| C-357 | Add Turso Cloud Sync with an Outbox and Conflict Policy | ⏳ not_started (no contract file) | — | — |
-| C-358 | Build a Content Authoring Studio and Validation Pipeline | ⏳ not_started (no contract file) | — | — |
-| C-359 | Complete Import, Export, Backup, and Migration | ⏳ not_started (no contract file) | — | — |
-| C-360 | Enforce Runtime Performance, Memory, and Asset Budgets | ⏳ not_started (no contract file) | — | — |
-| C-361 | Harden Tauri and PWA Offline Installation and Updates | ⏳ not_started (no contract file) | — | — |
-| C-362 | Deliver Mobile/Small-Screen Packaging and Thermal Budgets | ⏳ not_started (no contract file) | — | — |
-| C-363 | Add Privacy, Security, Secret, and AI Cost Controls | ⏳ not_started (no contract file) | — | — |
-| C-364 | Add Speech Input and Hands-Free Play as an Accessibility Mode | ⏳ not_started (no contract file) | — | — |
-| C-365 | Add Bring-Your-Own Rulesets and Rulebook RAG | ⏳ not_started (no contract file) | — | — |
-| C-366 | Add Co-op Multiplayer with Authoritative Campaign Sessions | ⏳ not_started (no contract file) | — | — |
-| C-367 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | — | — |
-| C-368 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
-| C-369 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
 | C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | — | v2 |
 | C-371 | C 371 | 👍 approved | — | v2 |
+| C-372 | Fix P0 Lpc Asset Resolution And Unify Resolver | 👍 approved | ❓ `integrated` | v2 |
+| C-373 | Turso Asset Registry Opfs Cache | 🛠️ implemented | ❓ `integrated` | v2 |
+| C-374 | Hub Firestore To Dataconnect | 👍 approved | ❓ `integrated` | v2 |
+| C-375 | Emberwatch Rendering And Assets Overhaul | 👍 approved | ❓ `sandbox` — | v2 |
+| C-376 | Emberwatch Solidity Rendering Architecture Hardening | 👍 approved | ❓ `integrated` — no dev sandbox required; the production `/game` route + E2E + visual suite are the evidence (C-375 gate re-run) | v2 |
+| C-377 | Pixel Art Render Correctness | 📝 draft | ❓ `integrated` — the production `/game` route + the existing `emberwatch.visual.ts` suite are the evidence | v2 |
+| C-378 | Layered Terrain And Autotiling | 📝 draft | ❓ `integrated` — the production `/game` route + `emberwatch.visual.ts` are the evidence | v2 |
+| C-379 | Collision And Movement Unification | 👍 approved | ❓ `integrated` — `/game` route, `collision_e2e.spec.ts`, `emergent_world.visual.ts` | v2 |
+| C-380 | Frame Pacing And Click To Move | 📝 draft | ❓ `integrated` — `/game` route + a new Playwright spec | v2 |
+| C-381 | Content Pipeline Hardening | 📝 draft | ❓ `integrated` — `/game` boot path + hub upload gate | v2 |
+| C-383 | Data Exposure Hardening | 📝 draft | — | v2 |
+| C-384 | Local Sqlite Migration Framework | 🛠️ implemented | — | v2 |
+| C-385 | Remove Data Connect | 🛠️ implemented | — | v2 |
+| C-386 | Firestore Removal Local First Client | 🛠️ implemented | — | v2 |
+| C-387 | Local Postgres Dev Environment | 👍 approved | — | v2 |
+| C-388 | Image Engine Provider Abstraction | 👍 approved | — | v2 |
+| C-389 | Runtime Engine Config Offline Tts Tauri | 🛠️ implemented | — | v2 |
+| C-390 | Local Stack V2 Publishable Topology | 🛠️ implemented | — | v2 |
+| C-391 | Stack Init Hardware Detection Wizard | 🛠️ implemented | — | v2 |
+| C-392 | Converge Dev Engine Services With Stack | 👍 approved | — | v2 |
+| C-393 | Speech To Text Backend Service | 👍 approved | — | v2 |
+| C-394 | Server Data Plane Neon Drizzle | 📝 draft | — | v2 |
+| C-395 | R2 Asset Origin Publish Pipeline | 📝 draft | — | v2 |
+| C-396 | Hub Public Shell Catalog Browse | 📝 draft | — | v2 |
 
 ---
 

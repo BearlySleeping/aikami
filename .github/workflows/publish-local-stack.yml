@@ -21,13 +21,19 @@
 
 name: Publish Local Stack Images
 
+# Push-to-main trigger held off for now (2026-08-15) while this workflow is
+# still being stabilized — the sd-server:cpu image alone takes 15-20+ min to
+# compile from source (GGML_CPU_ALL_VARIANTS=ON: every CPU ISA variant, for
+# runtime dispatch on unknown user hardware — a real product requirement,
+# not a thing to cache away). Re-enable once it's reliably green; until then
+# trigger manually via workflow_dispatch.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/backend/local-stack/**'
-      - '.github/workflows/publish-local-stack.yml'
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'apps/backend/local-stack/**'
+  #     - '.github/workflows/publish-local-stack.yml'
 
 env:
   REGISTRY: ghcr.io
@@ -120,6 +126,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=aikami-model-fetcher
+          cache-to: type=gha,mode=max,scope=aikami-model-fetcher
 
       # ── Voice image ────────────────────────────────────────────────────
       - name: Build and publish aikami-voice
@@ -133,6 +141,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
+          cache-from: type=gha,scope=aikami-voice
+          cache-to: type=gha,mode=max,scope=aikami-voice
 
       # ── CPU sd-server image ───────────────────────────────────────────
       - name: Build and publish aikami-sd-server:cpu
@@ -146,6 +156,13 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
+          # This is the slow one (15-20+ min cold: GGML_CPU_ALL_VARIANTS=ON
+          # compiles every CPU ISA variant from source). GHA layer cache
+          # means a rebuild after e.g. only bumping SD_CPP_REVISION, or
+          # re-running after an unrelated step failed downstream, reuses
+          # the compiled ggml/sd.cpp layers instead of recompiling.
+          cache-from: type=gha,scope=aikami-sd-server-cpu
+          cache-to: type=gha,mode=max,scope=aikami-sd-server-cpu
 
       # ── Client image (staged SPA + runtime config mount, AC-9) ────────
       # The SPA needs real PUBLIC_FIREBASE_* / PUBLIC_* values baked in (Vite
@@ -189,6 +206,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/aikami-client:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/aikami-client:${{ env.LOCAL_STACK_VERSION }}
           platforms: linux/amd64
+          cache-from: type=gha,scope=aikami-client
+          cache-to: type=gha,mode=max,scope=aikami-client
 
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
       # Runs AFTER all three images are published. AC-5 names aikami-client
