@@ -1,0 +1,128 @@
+// scripts/src/lib/catalog/config.ts
+//
+// Catalog publish configuration (C-395).
+//
+// R2 write credentials come from scripts/.env.{mode} (populated by
+// download_secrets.ts from GSM) — they belong to the publish pipeline, NOT
+// to the hub: the hub never writes to R2 (invariant I-7), so they must never
+// appear in apps/frontend/hub/.env.* where buildSecretArgsFromEnvFile would
+// ship them to Cloud Run.
+//
+//   CLOUD_FLARE_BUCKET_ACCESS_KEY_ID      S3 access key id
+//   CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY  S3 secret
+//   CLOUD_FLARE_BUCKET_ENDPOINT           S3 endpoint (https://<account>.r2.cloudflarestorage.com)
+//
+// `originUrl` is INJECTED configuration — never a constant, never a
+// hardcoded hostname in code or fixtures. The public origin is
+// https://assets.bearlysleeping.com, but the first-commit rule (Open
+// Question 1) forbids hardcoding it; re-pointing later must only regenerate
+// the index (zero re-uploads, objects are content-addressed).
+
+import { resolve } from 'node:path';
+import { AUDIO_MIME_MAP, IMAGE_MIME_MAP } from '@aikami/constants';
+import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
+
+// ---------------------------------------------------------------------------
+// Bucket / index layout constants
+// ---------------------------------------------------------------------------
+
+/** Default R2 bucket for the catalog origin. Override via CATALOG_BUCKET. */
+export const DEFAULT_CATALOG_BUCKET = 'aikami-catalog';
+
+/** Asset object key prefix (content-addressed, immutable). */
+export const ASSET_KEY_PREFIX = 'assets/';
+
+/** Index object key prefix (mutable, short cache). */
+export const INDEX_KEY_PREFIX = 'index/v1/';
+
+/** Root index object key. */
+export const ROOT_INDEX_KEY = `${INDEX_KEY_PREFIX}catalog.json`;
+
+/** One-year immutable cache for asset bytes. */
+export const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+/** Short cache for the index (AC-3: 60s or less). */
+export const INDEX_CACHE_CONTROL = 'public, max-age=60';
+
+// ---------------------------------------------------------------------------
+// MIME types — the existing maps in @aikami/constants are the source of truth
+// ---------------------------------------------------------------------------
+
+const EXTRA_MIME: Record<string, string> = {
+  '.json': 'application/json',
+  '.webm': 'audio/webm',
+};
+
+/** Content-Type for a file extension (lowercase, dot included). */
+export const contentTypeForExt = (ext: string): string =>
+  IMAGE_MIME_MAP[ext] ?? AUDIO_MIME_MAP[ext] ?? EXTRA_MIME[ext] ?? 'application/octet-stream';
+
+// ---------------------------------------------------------------------------
+// Config resolution
+// ---------------------------------------------------------------------------
+
+export type CatalogConfig = {
+  /** S3 access key id. */
+  accessKeyId: string;
+  /** S3 secret access key. */
+  secretAccessKey: string;
+  /** S3 endpoint (https://<account>.r2.cloudflarestorage.com). */
+  endpoint: string;
+  /** R2 bucket name. */
+  bucket: string;
+  /** Public origin base URL — injected configuration, never hardcoded. */
+  originUrl: string;
+};
+
+/**
+ * Resolve the catalog publish configuration from the environment.
+ *
+ * @param mode - AIKAMI mode used to load scripts/.env.{mode} credentials.
+ */
+export const resolveCatalogConfig = (mode: string): CatalogConfig => {
+  initScriptsEnv(mode);
+
+  const accessKeyId = getScriptsEnv('CLOUD_FLARE_BUCKET_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = getScriptsEnv('CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY') ?? '';
+  const endpoint = getScriptsEnv('CLOUD_FLARE_BUCKET_ENDPOINT') ?? '';
+  const originUrl = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
+  const bucket = getScriptsEnv('CATALOG_BUCKET') ?? DEFAULT_CATALOG_BUCKET;
+
+  const missing: string[] = [];
+  if (!accessKeyId) {
+    missing.push('CLOUD_FLARE_BUCKET_ACCESS_KEY_ID');
+  }
+  if (!secretAccessKey) {
+    missing.push('CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY');
+  }
+  if (!endpoint) {
+    missing.push('CLOUD_FLARE_BUCKET_ENDPOINT');
+  }
+  if (!originUrl) {
+    missing.push('CATALOG_ORIGIN_URL');
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Catalog publish config missing: ${missing.join(', ')}. ` +
+        'Set them in scripts/.env.{mode} (see scripts/.env.example).',
+    );
+  }
+
+  return {
+    accessKeyId,
+    secretAccessKey,
+    endpoint,
+    bucket,
+    originUrl,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Repo paths
+// ---------------------------------------------------------------------------
+
+/** Monorepo root (scripts/src/lib/catalog → 4 levels up). */
+export const REPO_ROOT = resolve(import.meta.dirname, '../../../../');
+
+/** Bundled game-data directory that the publish pipeline reads. */
+export const GAME_DATA_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/game-data');

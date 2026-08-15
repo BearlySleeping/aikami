@@ -1,0 +1,37 @@
+{
+  "$note": "Project-owned licence declaration for non-LPC catalog assets (C-395 AC-4). Every catalog asset must resolve to a CREDITS.csv row (lpc_credits.json), the LPC library-level supplement (lpc_credits_supplement.json), or an explicit declaration here — the publish preflight hard-fails on any tag present in none of the three sources. This file IS the review surface: if an entry below is wrong, fix it here (a reviewable diff) — never add a bypass flag.",
+  "credits": {
+    "music:exploration:bgm_explore": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch exploration theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license."
+    },
+    "music:exploration:Chainsmoker": {
+      "licenses": ["MIT"],
+      "authors": [
+        "Aikami Studio (theme credited as 'Chainsmoker — Exploration Theme' in the Emberwatch pack credits)"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Bundled demo music track. Original theme credit 'Chainsmoker' comes from the Emberwatch content-pack credits block; the track ships in-repo under the repo's MIT license."
+    },
+    "music:combat:bgm_combat": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch combat theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license."
+    },
+    "sprites:combat:enemy_portrait": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch enemy portrait, committed in-repo under the repo's MIT license."
+    },
+    "sprites:combat:player_portrait": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch player portrait, committed in-repo under the repo's MIT license."
+    }
+  }
+}
