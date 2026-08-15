@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { ASSET_CATEGORIES, splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetHashesFile, AssetManifest } from '@aikami/types';
@@ -136,6 +136,96 @@ const hashFile = async (filePath: string): Promise<{ hash: string; sizeBytes: nu
 };
 
 // ---------------------------------------------------------------------------
+// C-395: attribution merge (AC-4)
+// ---------------------------------------------------------------------------
+
+/** One credit merged into asset_credits.json — a CatalogAssetEntry credit. */
+type MergedCredit = {
+  licenses: string[];
+  authors: string[];
+  sourceUrls: string[];
+  licenseNote?: string;
+  /** Where the credit came from — lpc (CREDITS.csv), lpc-supplement, or project. */
+  source: 'lpc' | 'lpc-supplement' | 'project';
+};
+
+/** The asset_credits.json sidecar document. */
+type AssetCreditsFile = {
+  scannedAt: string;
+  credits: Record<string, MergedCredit>;
+};
+
+/**
+ * Read a JSON sidecar file; returns null when missing or unparseable.
+ */
+const readJsonSidecar = async <T>(filePath: string): Promise<T | null> => {
+  try {
+    return JSON.parse(await readFile(filePath, 'utf8')) as T;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Merge the three committed attribution sources into asset_credits.json:
+ *   - lpc_credits.json          — CREDITS.csv join, keyed by output tag (collector)
+ *   - lpc_credits_supplement.json — LPC library-level declarations for tags
+ *                                   CREDITS.csv does not cover (collector)
+ *   - project_licenses.json     — project-owned declaration for non-LPC tags
+ *                                 (committed in scripts/src/lib/catalog/)
+ *
+ * The publish pipeline reads manifest.json + asset_hashes.json +
+ * asset_credits.json, and its preflight hard-fails on any catalog tag
+ * present in none of the three sources (C-395 AC-4).
+ */
+const writeCreditsSidecar = async (rootDir: string): Promise<void> => {
+  const credits: Record<string, MergedCredit> = {};
+
+  const lpcCredits = await readJsonSidecar<{
+    credits: Record<string, Omit<MergedCredit, 'source'>>;
+  }>(join(rootDir, 'lpc_credits.json'));
+  if (lpcCredits) {
+    for (const [tag, credit] of Object.entries(lpcCredits.credits)) {
+      credits[tag] = { ...credit, source: 'lpc' };
+    }
+  }
+
+  const supplement = await readJsonSidecar<{
+    credits: Record<string, Omit<MergedCredit, 'source'>>;
+  }>(join(rootDir, 'lpc_credits_supplement.json'));
+  if (supplement) {
+    for (const [tag, credit] of Object.entries(supplement.credits)) {
+      // The supplement must never override a real CREDITS.csv resolution.
+      if (!credits[tag]) {
+        credits[tag] = { ...credit, source: 'lpc-supplement' };
+      }
+    }
+  }
+
+  const projectPath = resolve(join(import.meta.dirname, '../catalog/project_licenses.json'));
+  const project = await readJsonSidecar<{
+    credits: Record<string, Omit<MergedCredit, 'source'>>;
+  }>(projectPath);
+  if (project) {
+    for (const [tag, credit] of Object.entries(project.credits)) {
+      if (!credits[tag]) {
+        credits[tag] = { ...credit, source: 'project' };
+      }
+    }
+  }
+
+  const creditsPath = join(rootDir, 'asset_credits.json');
+  const creditsFile: AssetCreditsFile = {
+    scannedAt: new Date().toISOString(),
+    credits,
+  };
+  await writeFile(creditsPath, JSON.stringify(creditsFile, null, 2), 'utf-8');
+  console.log(
+    `scan_assets: asset_credits.json emitted — ${Object.keys(credits).length} tags with attribution`,
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -164,6 +254,10 @@ const hashesFile: AssetHashesFile = {
   hashes,
 };
 await writeFile(hashesPath, JSON.stringify(hashesFile), 'utf-8');
+
+// C-395 AC-4: merge lpc_credits.json + lpc_credits_supplement.json +
+// project_licenses.json into asset_credits.json for the publish pipeline.
+await writeCreditsSidecar(rootDir);
 
 console.log(
   `scan_assets: done — ${manifest.count} assets indexed, ${Object.keys(hashes).length} hashes emitted`,
