@@ -86,7 +86,7 @@
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.7",
+    "@biomejs/biome": "2.5.8",
     "@google-cloud/firestore": "*",
     "@google-cloud/secret-manager": "*",
     "@moonrepo/cli": "2.4.6",
@@ -97,7 +97,7 @@
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "typebox": "1.3.12"
+    "typebox": "1.3.14"
   },
   "overrides": {},
   "trustedDependencies": [
