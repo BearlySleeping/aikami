@@ -160,9 +160,9 @@ const NAMESPACE_PARAMS = Type.Object({
       {
         additionalProperties: true,
         description:
-          "Arguments for the chosen action, as a NESTED object — e.g. " +
+          'Arguments for the chosen action, as a NESTED object — e.g. ' +
           '{ "action": "review_decision", "params": { "decision": "merge", "summary": "..." } }. ' +
-          'Do NOT put the action\'s own fields (decision, summary, etc.) at the top level ' +
+          "Do NOT put the action's own fields (decision, summary, etc.) at the top level " +
           'alongside `action` — they must be inside this `params` object or they are silently dropped.',
       },
     ),
@@ -185,7 +185,7 @@ export const registerNamespace = (pi: ExtensionAPI, options: NamespaceOptions): 
     label: options.label,
     description:
       `${options.description}\n\n` +
-      "🔴 Call shape: { action: \"<name>\", params: { ...that action's fields } } — " +
+      '🔴 Call shape: { action: "<name>", params: { ...that action\'s fields } } — ' +
       'the fields below are ALWAYS nested inside `params`, never alongside `action`.\n\n' +
       `Actions:\n${_buildActionIndex(options.actions)}`,
     ...(options.promptSnippet ? { promptSnippet: options.promptSnippet } : {}),
@@ -220,10 +220,11 @@ export const registerNamespace = (pi: ExtensionAPI, options: NamespaceOptions): 
       // retrying never converges. Recover the flattened shape here instead:
       // prefer a genuinely nested `params`, and only fall back to "the rest
       // of rawParams" when nothing was nested.
-      const { action: _actionKey, params: nestedParams, ...flatRest } = rawParams as Record<
-        string,
-        unknown
-      >;
+      const {
+        action: _actionKey,
+        params: nestedParams,
+        ...flatRest
+      } = rawParams as Record<string, unknown>;
       const hasNested =
         nestedParams !== undefined &&
         typeof nestedParams === 'object' &&

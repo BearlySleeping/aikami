@@ -143,4 +143,57 @@ describe('runStage retry safeguard', () => {
     expect(launched).toHaveLength(1);
     expect(outcome.result.status).toBe('passed');
   });
+
+  it('adopts the pane ID returned by a relaunch for the next health check', async () => {
+    // A relaunch spawns a NEW pane. The next checkAgentWorking must poll
+    // that replacement ID — polling the dead pane would make every relaunch
+    // look like another crash.
+    const checkedPaneIds: string[] = [];
+    let launches = 0;
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 60_000,
+      pollIntervalMs: 5,
+      launchWorker: async (_request) => {
+        launches += 1;
+        if (launches === 1) {
+          return { paneId: 'pane-original' };
+        }
+        // Relaunch: new pane, same result path. Do NOT write the result
+        // yet — the test asserts the next health check uses this ID.
+        return { paneId: 'pane-relaunched' };
+      },
+      checkAgentWorking: async (paneId) => {
+        checkedPaneIds.push(paneId);
+        if (paneId === 'pane-relaunched') {
+          // The relaunched worker completes once it is being health-checked.
+          writeStageResult({
+            resultPath: join(runDirectory, 'stages', 'implement-1.json'),
+            result: resultFor(1, 'passed'),
+          });
+          return true;
+        }
+        // Original worker is dead — drives idleMs past DEAD_CHECK_GRACE_MS
+        // so the in-loop relaunch fires.
+        return false;
+      },
+    });
+    expect(launches).toBe(2);
+    expect(checkedPaneIds).toContain('pane-original');
+    // The health check AFTER the relaunch must use the replacement pane ID.
+    expect(checkedPaneIds).toContain('pane-relaunched');
+    expect(checkedPaneIds.indexOf('pane-relaunched')).toBeGreaterThan(
+      checkedPaneIds.indexOf('pane-original'),
+    );
+    expect(outcome.paneId).toBe('pane-relaunched');
+    expect(outcome.result.status).toBe('passed');
+    // The in-loop relaunch only fires after DEAD_CHECK_GRACE_MS (5s) of
+    // confirmed non-working — longer than bun's default 5s per-test timeout.
+  }, 30_000);
 });

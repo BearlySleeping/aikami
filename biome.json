@@ -72,7 +72,6 @@
             "paths": {
               "@aikami/backend-auth": "Use @aikami/backend/auth instead",
               "@aikami/backend-configs": "Use @aikami/backend/configs instead",
-              "@aikami/backend-database": "Use @aikami/backend/firestore instead",
               "@aikami/backend-firestore": "Use @aikami/backend/firestore instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",

@@ -20,6 +20,8 @@ import { OnboardingSectionSchema } from './onboarding_hints.ts';
 const SEMVER_PATTERN =
   '^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$';
 
+export { SEMVER_PATTERN };
+
 // ---------------------------------------------------------------------------
 // Vendor inventory item ID pattern (comma-separated alphanumeric + underscore)
 // ---------------------------------------------------------------------------

@@ -52,6 +52,7 @@ import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudRunSveltekit } from './cloud_run';
+import { deployDatabaseMigration } from './database_migration';
 import {
   APP_CONFIG,
   type AppConfig,
@@ -182,6 +183,11 @@ async function deployApp(
         isForce,
         preflightChecksum,
       );
+      return 'success';
+    case 'database-migration':
+      // Migrations never need a moon build, docker push or Cloud Run
+      // deploy — just an explicit, idempotent apply (AC-5).
+      await deployDatabaseMigration({ mode, rootDir });
       return 'success';
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
@@ -360,7 +366,12 @@ async function main(): Promise<void> {
     }
 
     // firebase-functions doesn't use checksum caching — always deploy
-    if (config.serviceType === 'firebase-functions') {
+    // database-migration likewise: migrations are idempotent, and a cache
+    // hit must never silently skip a pending migration.
+    if (
+      config.serviceType === 'firebase-functions' ||
+      config.serviceType === 'database-migration'
+    ) {
       continue;
     }
 

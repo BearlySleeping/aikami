@@ -32,6 +32,7 @@ projects:
   # Backend Packages
   backend-chat: "packages/backend/chat"
   backend-configs: "packages/backend/configs"
+  backend-database: "packages/backend/database"
   backend-utils: "packages/backend/utils"
   backend-auth: "packages/backend/auth"
   backend-svelte-kit: "packages/backend/svelte-kit"

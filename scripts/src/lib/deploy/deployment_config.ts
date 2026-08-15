@@ -26,6 +26,7 @@ export const ALL_SERVICE_TYPES = [
   'firebase-hosting',
   'firebase-functions',
   'docker-release',
+  'database-migration',
 ] as const;
 
 export type ServiceType = (typeof ALL_SERVICE_TYPES)[number];
@@ -187,6 +188,25 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     memory: '4Gi',
     cpu: '2',
     enabled: false,
+  },
+  /**
+   * Server-data-plane migrations (C-394 AC-5). Not a service — this app
+   * runs `applyMigrations` against NEON_DATABASE_URL_DIRECT (the DIRECT,
+   * unpooled endpoint — DDL under PgBouncer transaction pooling breaks).
+   *
+   * The AppConfig hosting fields (shortName, imageName, customDomains …)
+   * are meaningless for a migration job and are deliberately left unset.
+   * `needsDist: false` keeps the deploy pipeline from attempting a moon
+   * build. It is independently invocable and must NEVER run as a side
+   * effect of deploying the hub — that coupling is exactly what C-385
+   * removed when Data Connect stopped riding along with Firebase deploys.
+   */
+  database: {
+    serviceType: 'database-migration',
+    path: 'packages/backend/database',
+    shortName: '',
+    prefix: 'HUB',
+    needsDist: false,
   },
 };
 

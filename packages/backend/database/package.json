@@ -1,0 +1,28 @@
+{
+  "name": "@aikami/backend-database",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test --pass-with-no-tests",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.21.0",
+    "drizzle-kit": "^0.31.10"
+  }
+}

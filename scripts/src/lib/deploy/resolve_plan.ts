@@ -37,6 +37,7 @@ const SERVICE_TYPE_OUTPUT_KEY: Record<ServiceType, string> = {
   'firebase-hosting': 'firebase_hosting_apps',
   'firebase-functions': 'firebase_functions_apps',
   'docker-release': 'docker_release_apps',
+  'database-migration': 'database_migration_apps',
 };
 
 /** Write a single-line value to $GITHUB_OUTPUT (or console when not in CI). */
@@ -86,6 +87,7 @@ function main(): void {
     firebase_hosting_apps: [],
     firebase_functions_apps: [],
     docker_release_apps: [],
+    database_migration_apps: [],
   };
 
   for (const app of apps) {

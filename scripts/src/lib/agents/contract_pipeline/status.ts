@@ -11,9 +11,15 @@ const runsDir = join(repoRoot, '.pi/contract-runs');
 
 const elapsed = (isoTime: string): string => {
   const ms = Date.now() - new Date(isoTime).getTime();
-  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
-  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m ago`;
-  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h ago`;
+  if (ms < 60_000) {
+    return `${Math.round(ms / 1000)}s ago`;
+  }
+  if (ms < 3600_000) {
+    return `${Math.round(ms / 60_000)}m ago`;
+  }
+  if (ms < 86400_000) {
+    return `${Math.round(ms / 3600_000)}h ago`;
+  }
   return `${Math.round(ms / 86400_000)}d ago`;
 };
 
@@ -38,7 +44,9 @@ const main = async (): Promise<void> => {
 
   for (const runId of runs) {
     const manifestPath = join(runsDir, runId, 'manifest.json');
-    if (!existsSync(manifestPath)) continue;
+    if (!existsSync(manifestPath)) {
+      continue;
+    }
 
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
@@ -88,7 +96,12 @@ const main = async (): Promise<void> => {
         continue;
       }
       const age = Math.round((Date.now() - new Date(metadata.createdAt).getTime()) / 1000);
-      const ageStr = age < 60 ? `${age}s` : age < 3600 ? `${Math.round(age / 60)}m` : `${Math.round(age / 3600)}h`;
+      const ageStr =
+        age < 60
+          ? `${age}s`
+          : age < 3600
+            ? `${Math.round(age / 60)}m`
+            : `${Math.round(age / 3600)}h`;
       console.log(`  🔴 ${contractId} (PID ${metadata.pid}, locked ${ageStr} ago)`);
     }
   }

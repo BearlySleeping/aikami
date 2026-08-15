@@ -76,12 +76,19 @@ bun run dev:all     # client + Firebase emulators (herdr workspace)
 
 ### Local PostgreSQL (dev)
 
-Aikami pins **PostgreSQL 17** in the Nix devShell — the same engine major the
-production providers speak over the wire — and runs it as a herdr dev service
-like any other. No Docker, no system Postgres, no sudo: the server runs as
-your OS user, binds to `127.0.0.1:5433` only (port 5432 is left free for your
-own system Postgres), and keeps all state in the gitignored `.postgres/`
-directory.
+Aikami pins **PostgreSQL 18** in the Nix devShell — the same engine major the
+production provider (Neon) speaks over the wire — and runs it as a herdr dev
+service like any other. No Docker, no system Postgres, no sudo: the server
+runs as your OS user, binds to `127.0.0.1:5433` only (port 5432 is left free
+for your own system Postgres), and keeps all state in the gitignored
+`.postgres/` directory.
+
+> 🔴 **Major-version bump (17 → 18, C-394):** PostgreSQL refuses to start on
+a data directory initialised by a different major version. If you upgraded
+from an older checkout, run `bun postgres:stop` → `bun postgres:reset --yes`
+→ `bun postgres:init`. **This destroys all local Postgres data** — any local
+rows (e.g. applied hub migrations) are gone and must be re-applied via
+`bun db:migrate`.
 
 ```bash
 bun herdr:start postgres   # or: bun postgres:start (background)
@@ -99,6 +106,40 @@ postgresql://localhost:5433/aikami_dev?sslmode=disable
 
 Lifecycle script: `scripts/src/lib/postgres/lifecycle.ts`. If a previous run
 left a stale `postmaster.pid`, `start` clears it automatically.
+
+### Server data plane — catalog database (C-394)
+
+The hub's server-side write model lives in `packages/backend/database/`
+(Drizzle schema, generated migrations, pooled `pg` connection, catalog
+repositories). Postgres is the WRITE model; the static catalog index is a
+derived read model regenerated at publish time — nothing browses by querying
+Postgres.
+
+Two connection strings, both server-side only:
+
+| Variable | Purpose | Emulator | Production (Neon) |
+|---|---|---|---|
+| `NEON_DATABASE_URL` | Runtime (pooled) | `postgresql://localhost:5433/aikami_dev?sslmode=disable` | Pooled endpoint (`-pooler` host), `sslmode=require` |
+| `NEON_DATABASE_URL_DIRECT` | Migrations only (unpooled — DDL under PgBouncer transaction pooling breaks) | same as above (no pooler locally) | Direct endpoint |
+
+They live in `apps/frontend/hub/.env.{emulator,production}` and reach Cloud
+Run as GSM secrets via the existing `buildSecretArgsFromEnvFile` path. The
+connection is created LAZILY on first query — a dead database never prevents
+the hub from booting (`GET /api/health/db` reports `unconfigured` /
+`unreachable` instead).
+
+```bash
+bun run db:generate              # drizzle-kit generate → timestamped SQL migration
+bun run db:migrate               # apply pending migrations to LOCAL postgres (idempotent)
+bun run db:status                # how many migrations are applied
+bun run db:migrate --mode=production  # apply to Neon via NEON_DATABASE_URL_DIRECT
+bun run deploy database --mode=production  # canonical deploy path (AC-5): backup + apply
+```
+
+Migrations are forward-only, generated (never hand-edited), transactional
+and NEVER auto-applied on server boot. Adding a table = edit
+`packages/backend/database/src/lib/schema.ts` → `bun run db:generate` →
+commit the generated SQL → apply locally → apply via the deploy pipeline.
 
 ### Option 3 — Desktop app (Tauri v2)
 

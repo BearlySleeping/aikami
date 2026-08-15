@@ -73,3 +73,16 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-394 AC-4: structural invariants of the server data plane (I-1 source
+  # level + I-9). Runs in moon ci — the built-bundle half of I-1 is proven
+  # by hub:build + a grep of build/client (documented in AC-4 evidence).
+  guard-data-plane:
+    command: 'bun run src/lib/ops/guard_data_plane.ts'
+    inputs:
+      - 'src/lib/ops/guard_data_plane.ts'
+      - 'apps/frontend/hub/src/**/*'
+      - 'packages/backend/database/**/*'
+    options:
+      cache: false
+      runInCI: true

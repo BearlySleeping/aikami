@@ -37,10 +37,16 @@ export const withUpdatedStatus = (content: string, status: string): string => {
         statusLinePattern,
         `status: ${status}`,
       );
+      // `index` is undefined only when the match is zero-length at position
+      // 0, which the leading `^---\n` pattern makes impossible — but the
+      // type system can't see that, so guard instead of asserting.
+      if (frontmatterMatch.index === undefined) {
+        return updated;
+      }
       updated =
         updated.slice(0, frontmatterMatch.index) +
         `---\n${updatedFrontmatter}\n---\n` +
-        updated.slice(frontmatterMatch.index! + frontmatterMatch[0].length);
+        updated.slice(frontmatterMatch.index + frontmatterMatch[0].length);
     }
   }
 

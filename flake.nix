@@ -76,10 +76,18 @@
           google-cloud-sql-proxy
 
           # ── Local PostgreSQL (C-387) ──
-          # Pinned major (17) so the local engine matches production's wire
-          # protocol. Nix provides the binaries; initdb + data live under
-          # .postgres/ in the repo (see scripts/src/lib/postgres/lifecycle.ts).
-          postgresql_17
+          # Pinned major (18) so the local engine matches production Neon's
+          # wire protocol (C-394 AC-2 — Neon project is PostgreSQL 18, and
+          # D-8 requires local ≡ production). Nix provides the binaries;
+          # initdb + data live under .postgres/ in the repo (see
+          # scripts/src/lib/postgres/lifecycle.ts).
+          #
+          # 🔴 Major-version bumps do NOT upgrade an existing .postgres/data
+          # directory — PostgreSQL refuses to start on a data directory
+          # initialised by a different major. After bumping: `postgres:stop`
+          # → `postgres:reset --yes` → `postgres:init`. This destroys local
+          # data (see README).
+          postgresql_18
 
           # ── Developer Experience ──
           # direnv + nix-direnv for cached flake evaluation

@@ -118,6 +118,7 @@ jobs:
       firebase_hosting_apps: ${{ steps.resolve.outputs.firebase_hosting_apps }}
       firebase_functions_apps: ${{ steps.resolve.outputs.firebase_functions_apps }}
       docker_release_apps: ${{ steps.resolve.outputs.docker_release_apps }}
+      database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -762,5 +763,50 @@ jobs:
           FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
           bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
             ${{ needs.resolve-plan.outputs.docker_release_apps }}
+        env:
+          CI: "true"
+
+  # ── Database Migration (server data plane, C-394 AC-5) ──────────────
+  # One-shot migration job: applies pending server-plane migrations against
+  # NEON_DATABASE_URL_DIRECT (the DIRECT, unpooled endpoint — DDL under
+  # PgBouncer transaction pooling is where pooling breaks). Transactional,
+  # idempotent, and NEVER a side effect of deploying the hub — this job only
+  # runs when resolve-plan found the `database` app in DEPLOY_APPS.
+  deploy-database-migration:
+    name: Database Migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [resolve-plan, prepare-secrets]
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.resolve-plan.outputs.database_migration_apps != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-deps: "true"
+          gcp-auth: "true"
+          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Restore env files from Redis
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+
+      - name: Run Database Migration
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" \
+            ${{ needs.resolve-plan.outputs.database_migration_apps }}
         env:
           CI: "true"
