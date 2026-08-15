@@ -43,10 +43,20 @@ class NavigationDrawerViewModel
     }
 
     this._lastCurrentRoute = currentRoute;
+    const isCatalogRoute =
+      currentRoute === 'catalog' ||
+      currentRoute === 'catalogCategory' ||
+      currentRoute === 'catalogAsset';
     this._cachedNavigationItems = [
       {
         title: 'Navigation',
         items: [
+          {
+            label: 'Catalog',
+            icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
+            route: 'catalog' as const,
+            active: isCatalogRoute,
+          },
           {
             label: 'Dashboard',
             icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',

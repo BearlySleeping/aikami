@@ -67,8 +67,13 @@ export type VisualTestSuite = {
   id: string;
   /** Route path (e.g. '/dev/sandbox/map'). */
   route: string;
+  /**
+   * Which dev server the route lives on (C-396: the hub is an SSR app on
+   * its own port). Defaults to the client.
+   */
+  app?: 'client' | 'hub';
   /** How to wait for the engine/canvas before capturing. */
-  waitCondition: 'pixi_loaded' | 'game_ready';
+  waitCondition: 'pixi_loaded' | 'game_ready' | 'hub_ready';
   /** Test cases in this suite. */
   cases: VisualTestCase[];
   /**
@@ -217,13 +222,33 @@ const _waitForCanvas = async (page: Page, timeout = 20_000): Promise<void> => {
 // ── URL builder ───────────────────────────────────────────────
 
 /**
+ * Waits for a hub catalog page (C-396) to render: the asset grid for a
+ * category page, or the detail container for an asset page.
+ */
+const _waitForHubReady = async (page: Page, timeout = 30_000): Promise<void> => {
+  await page.waitForFunction(
+    () =>
+      !!document.querySelector('[data-testid="catalog-asset-grid"]') ||
+      !!document.querySelector('[data-testid="catalog-asset"]'),
+    undefined,
+    { timeout },
+  );
+};
+
+/**
  * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
  * Always includes `screenshot=true` as a default query param.
  * Case-level `searchParams` are merged on top and can override defaults.
  */
-const _buildUrl = (suites: { route: string; searchParams?: Record<string, string> }): string => {
-  const base = `http://localhost:${EMULATOR_PORTS.client + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}${suites.route}`;
+const _buildUrl = (suites: {
+  route: string;
+  searchParams?: Record<string, string>;
+  app?: 'client' | 'hub';
+}): string => {
+  const app = suites.app ?? 'client';
+  const port = app === 'hub' ? EMULATOR_PORTS.hub : EMULATOR_PORTS.client;
+  const base = `http://localhost:${port + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}${suites.route}`;
 
   // Default: always request screenshot mode so the page suppresses
   // overlays, HUD, and extraneous UI that would contaminate visual diffs.
@@ -283,6 +308,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
         const url = _buildUrl({
           route: suite.route,
           searchParams: testCase.searchParams,
+          app: suite.app,
         });
 
         const page = await context.newPage();
@@ -297,6 +323,8 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           if (suite.waitCondition === 'pixi_loaded') {
             await _waitForCanvas(page);
             await _waitForPixiLoaded(page);
+          } else if (suite.waitCondition === 'hub_ready') {
+            await _waitForHubReady(page);
           } else {
             await _waitForGameReady(page);
           }
@@ -313,6 +341,8 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
 
             if (suite.waitCondition === 'pixi_loaded') {
               await _waitForPixiLoaded(page);
+            } else if (suite.waitCondition === 'hub_ready') {
+              await _waitForHubReady(page);
             } else {
               await _waitForGameReady(page);
             }

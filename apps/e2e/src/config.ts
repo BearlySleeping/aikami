@@ -33,6 +33,9 @@ export const EMULATOR_PORTS = {
 /** Emulator GCP project ID (base, worker-agnostic). */
 export const EMULATOR_PROJECT_ID = 'demo-aikami-emulator' as const;
 
+/** Test API key for the Firebase Auth emulator (fake, emulator-only). */
+export const FIREBASE_API_KEY = 'fake-api-key' as const;
+
 /** Number of max parallel workers for multi-project teardown. */
 export const MAX_WORKERS = 8;
 

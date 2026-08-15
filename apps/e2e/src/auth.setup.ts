@@ -13,7 +13,7 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { test as setup } from '@playwright/test';
-import { EMULATOR_PORTS } from './config';
+import { EMULATOR_PORTS, FIREBASE_API_KEY } from './config';
 
 // ── Configuration ───────────────────────────────────────────
 
@@ -24,7 +24,6 @@ const AUTH_DIR = './.auth';
 
 const TEST_EMAIL = 'user@example.com';
 const TEST_PASSWORD = 'asdasd';
-const FIREBASE_API_KEY = 'fake-api-key';
 const AUTH_STORAGE_KEY = `firebase:authUser:${FIREBASE_API_KEY}:[DEFAULT]`;
 
 // ── Auth Emulator REST helpers ──────────────────────────────
