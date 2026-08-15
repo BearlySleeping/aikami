@@ -144,6 +144,20 @@ jobs:
           cache-from: type=gha,scope=aikami-voice
           cache-to: type=gha,mode=max,scope=aikami-voice
 
+      # sd-server:cpu compiles stable-diffusion.cpp + every ggml CPU ISA
+      # variant from source; even with --parallel capped to 2 (see
+      # Dockerfile.cpu), a heavy build here got the standard runner
+      # OOM-killed ("lost communication with the server", 2026-08-15).
+      # A swap file gives the kernel somewhere to go instead of invoking the
+      # OOM killer — cheap headroom, standard runner, no cost.
+      - name: Add swap space
+        run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
       # ── CPU sd-server image ───────────────────────────────────────────
       - name: Build and publish aikami-sd-server:cpu
         uses: docker/build-push-action@v6
