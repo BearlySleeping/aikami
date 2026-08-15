@@ -280,7 +280,9 @@ export const setupIam = async (
   ]);
   const projectNumber = projectNumberRaw.trim();
   if (projectNumberCode !== 0 || !/^\d+$/.test(projectNumber)) {
-    console.log(fmt.err(`Could not resolve project number for ${projectId} (got "${projectNumber}")`));
+    console.log(
+      fmt.err(`Could not resolve project number for ${projectId} (got "${projectNumber}")`),
+    );
     checks.push({ name: 'Functions runtime SA: project number', status: 'error' });
     return { checks };
   }

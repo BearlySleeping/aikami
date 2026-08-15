@@ -101,6 +101,13 @@ export function resolveLogTarget(
     case 'tauri-release':
       return { unsupported: `${appId} is a desktop release artifact — no server logs.` };
 
+    case 'database-migration':
+      return {
+        unsupported:
+          `${appId} is a one-shot migration job (C-394 AC-5) with no runtime — ` +
+          'there are no server logs to stream. Run it via `bun run deploy database --mode=production`.',
+      };
+
     case 'docker-release':
       return {
         unsupported:

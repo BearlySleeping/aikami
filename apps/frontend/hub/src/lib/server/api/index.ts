@@ -11,6 +11,7 @@ import { createSessionCookie, verifyIdToken } from '@aikami/backend/utils/auth.t
 import { AUTH_COOKIE_NAME } from '@aikami/constants';
 import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
+import { handleDbHealth } from './health_db.ts';
 
 // ─── Session cookie helpers ──────────────────────────────────────────
 // Mirrors the aikami session store shape: the `__session` cookie
@@ -142,9 +143,31 @@ const handleSession = async ({
 
 // ─── App ─────────────────────────────────────────────────────────────
 
-export const app = new Elysia({ prefix: '/api' }).post('/auth/session', handleSession, {
-  body: sessionRequestSchema,
-  response: t.Null(),
-});
+// GET /api/health/db — database reachability + version (C-394 AC-1).
+// Unauthenticated on purpose; reports host only, never credentials.
+const dbHealthResponseSchema = t.Union([
+  t.Object({
+    status: t.Literal('ok'),
+    databaseVersion: t.String(),
+    host: t.String(),
+    roundTripMs: t.Number(),
+  }),
+  t.Object({
+    status: t.Literal('unconfigured'),
+  }),
+  t.Object({
+    status: t.Literal('unreachable'),
+    host: t.Optional(t.String()),
+  }),
+]);
+
+export const app = new Elysia({ prefix: '/api' })
+  .post('/auth/session', handleSession, {
+    body: sessionRequestSchema,
+    response: t.Null(),
+  })
+  .get('/health/db', handleDbHealth, {
+    response: dbHealthResponseSchema,
+  });
 
 export type App = typeof app;

@@ -114,6 +114,10 @@ pids/
 # scripts/src/lib/postgres/lifecycle.ts). Reset with `bun postgres:reset --yes`.
 .postgres/
 
+# Pre-migration logical backups taken by the `database` deploy app (C-394 AC-5).
+# pg_dump output stored outside Neon — Neon Free history retention is 6 hours.
+.db-backups/
+
 # --- 5. Environment & Config ---
 ## 🔑 Environment Variables
 # Ignore all .env files...

@@ -40,6 +40,7 @@
     "svelte-fast-check": "^0.4.5"
   },
   "dependencies": {
+    "@aikami/backend-database": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",

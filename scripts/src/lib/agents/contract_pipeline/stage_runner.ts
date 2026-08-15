@@ -229,7 +229,7 @@ export const runStage = async (options: {
       );
       relaunches += 1;
       idleMs = 0;
-      const { paneId: newPaneId } = await options.launchWorker({
+      await options.launchWorker({
         runId: options.runId,
         resultPath,
         delivery: 'direct_prompt',
