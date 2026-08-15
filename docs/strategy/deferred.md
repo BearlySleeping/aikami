@@ -19,9 +19,15 @@ Phase 1:
   (Turso's own embedded-replica sync is the default, see C-357);
 - Aikami-hosted "no setup required" pay-per-use service mode — the
   `AiProviderGateway`'s `service` adapter interface exists from C-320, but
-  billing, Cloud Run cold-start optimization (model weights in Storage instead
-  of the Docker image), and GCP Model Garden evaluation are Phase 5 work, not
-  Phase 1;
+  billing is Phase 5 work, not Phase 1.
+  🔴 **Under revision (C-413):** the Cloud Run cold-start optimization (model
+  weights in Storage instead of the Docker image) and GCP Model Garden
+  evaluation named here are recommended for **rejection**, not scheduling —
+  Cloud Run GPU cold starts (20–30 s) sit directly in the player's first
+  dialogue turn, and self-hosted inference only wins at sustained high
+  utilization. The recommendation is that `service` mode be a thin metered
+  proxy over frontier APIs. See
+  `docs/strategy/mvp-assessment-2026-08-16.md` §2.4;
 - Data Connect migration for NPC/chat/items — Turso is the campaign-runtime
   source of truth (C-321); Data Connect is revisited only if a genuine
   dashboard/reporting/admin use case emerges;

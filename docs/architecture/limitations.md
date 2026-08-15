@@ -114,13 +114,44 @@ The web client must stay **non-cross-origin-isolated**: `COOP: same-origin-allow
 - **No header combination yields both popup sign-in and SharedArrayBuffer** — Chrome only grants `crossOriginIsolated` with strict `same-origin` COOP. If SharedArrayBuffer is ever needed again, sign-in must use the redirect flow (no popup).
 - **Do not reintroduce `SharedArrayBuffer` / `Atomics` / `crossOriginIsolated`-gated code** in the client or engine — it is dead weight that throws at runtime (`SharedArrayBuffer is not defined`) wherever isolation is off. The Tauri desktop build never had SAB either (WebKitGTK/WKWebView don't implement it).
 
+## Observed MVP Defects (playthrough 2026-08-16)
+
+Confirmed by a full walkthrough of the Emberwatch slice. Full analysis in
+`docs/strategy/mvp-assessment-2026-08-16.md` §6; specifications in
+`docs/contracts/MVP_BACKLOG.md`.
+
+| Defect | Severity | Contract |
+|---|---|---|
+| NPCs render as disembodied heads; all NPC heads identical; "invalid NPC" entities | P0 | C-400 |
+| Production dialogue does **not** stream — `npc_dialogue_service.svelte.ts:795` claims it does, but `NpcDialogueTextGenerator` (line 96) has no `onChunk`. Skill checks compound it with a second non-streamed call (line 1373) | P0 | C-401 |
+| Player soft-locks when an NPC walks into them — two-way collision blocking with no resolution rule (`entity_spawner.ts:112-115`) | P0 | C-402 |
+| `/setup` world-generation output is discarded; the MVP loads Emberwatch regardless | P0 | C-405 |
+| Equipment changes do not update the player's LPC sprite | P1 | C-403 |
+| Maps near-unreadable at default night ambient | P1 | C-404 |
+| `/capability` reports providers as `detected` when they are not (`capability_view_model.svelte.ts:103`) | P1 | C-406 |
+| Dialogue choices overflow into a horizontal scrollbar, hiding valid actions | P1 | C-407 |
+| Persona creation redirects to `/dev` for LPC preview | P1 | C-408 |
+| 47 `(dev)` routes ship to production — `routes/(dev)/+layout.svelte` has no guard | P2 | C-410 |
+
+### Known dead code
+
+- `packages/frontend/dataconnect` and `packages/frontend/firestore` are empty
+  directories (0 `.ts` files) still referenced from 5 `tsconfig.json` files.
+  D-1 and D-2 call for their removal. → C-411
+- `apps/backend/firebase/src/controllers/scheduler/daily.ts` logs a hardcoded
+  object and returns. → C-411 / C-412
+- The `appearanceLayers` builder is duplicated verbatim between
+  `game_boot_service.svelte.ts:1327-1362` and
+  `game_engine_service.svelte.ts:840-875`. → C-411
+
 ## TODO (High Priority)
 
-1. Build the authored 10–20 minute offline vertical slice
-2. Fix schema test TypeScript errors
-3. Add Client view model unit tests
-4. Add engine boundary (EngineBridge) tests
-5. Turso embedded-replica cloud sync (C-357)
+1. Land the P0 MVP block — C-400, C-401, C-402, C-405
+2. Cold-start playtest: three strangers, their own machines, silent observation
+3. Fix schema test TypeScript errors
+4. Add Client view model unit tests
+5. Add engine boundary (EngineBridge) tests
+6. Turso embedded-replica cloud sync (C-357)
 
 ## TODO (Nice to Have)
 
