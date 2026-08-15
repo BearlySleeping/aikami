@@ -104,23 +104,36 @@ export const parseCsvLine = (line: string): string[] => {
  * filename. Returns an empty map for missing/unparseable content rather than
  * throwing — the collector degrades to "no sidecar" when the vendored
  * generator is absent (examples/ is gitignored).
+ *
+ * Quoted fields may contain embedded newlines, so records are accumulated
+ * line-by-line until the quote count balances before parsing. Malformed or
+ * incomplete records (fewer than five fields, or a missing filename) are
+ * skipped and reported via a warning — they never silently vanish.
  */
 export const parseCreditsCsv = (content: string): Map<string, LpcCreditsRow> => {
   const rows = new Map<string, LpcCreditsRow>();
-  const lines = content.split('\n');
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) {
+  const rawLines = content.split('\n');
+  let skippedRows = 0;
+  let i = 1; // skip the header row
+  while (i < rawLines.length) {
+    let pending = rawLines[i].trim();
+    if (!pending) {
+      i++;
       continue;
     }
-    const fields = parseCsvLine(line);
-    if (fields.length < 5) {
+    // Accumulate continuation lines while a quoted field is still open
+    // (odd number of unescaped quote characters ⇒ the record continues).
+    while (countQuotes(pending) % 2 !== 0 && i + 1 < rawLines.length) {
+      i++;
+      pending = `${pending}\n${rawLines[i]}`;
+    }
+    const fields = parseCsvLine(pending);
+    if (fields.length < 5 || !fields[0]) {
+      skippedRows++;
+      i++;
       continue;
     }
     const [filename, notes, authorsRaw, licensesRaw, urlsRaw] = fields;
-    if (!filename) {
-      continue;
-    }
     rows.set(filename, {
       filename,
       // Trim field edges: CREDITS.csv pads quoted cells with spaces before
@@ -130,9 +143,16 @@ export const parseCreditsCsv = (content: string): Map<string, LpcCreditsRow> => 
       licenses: splitList(licensesRaw),
       urls: splitList(urlsRaw),
     });
+    i++;
+  }
+  if (skippedRows > 0) {
+    console.warn(`parseCreditsCsv: skipped ${skippedRows} malformed/incomplete row(s)`);
   }
   return rows;
 };
+
+/** Count raw `"` characters — doubled quotes contribute an even count. */
+const countQuotes = (value: string): number => value.split('"').length - 1;
 
 /** Split a CREDITS.csv list cell ("A,B") into trimmed entries. */
 const splitList = (raw: string): string[] =>
@@ -337,6 +357,61 @@ export type LpcCreditEntry = {
   licenseNote?: string;
 };
 
+/**
+ * Prebuilt credit lookup index — built once from CREDITS.csv and consumed by
+ * resolveLpcCredit so per-state resolution is O(1) for tiers 1-2 instead of
+ * rescanning every row (13k rows × 12k states).
+ */
+export type LpcCreditsIndex = {
+  /** Tier 1 — exact spritesheet-relative path → precomputed entry. */
+  byPath: Map<string, LpcCreditEntry>;
+  /**
+   * Tier 2 — asset key (slot/type/bodyType) → the single distinct credit.
+   * Absent when the asset key has no rows OR maps to 2+ distinct credits
+   * (ambiguous → treated as unresolved, matching the old scan semantics).
+   */
+  byAssetKey: Map<string, LpcCreditEntry>;
+  /** Tier 3 — rows whose filename contains a `${head}`-style placeholder. */
+  templateRows: readonly { filename: string; entry: LpcCreditEntry }[];
+};
+
+/**
+ * Build the credit lookup index from parsed CREDITS.csv rows.
+ *
+ * Parses each row once (path → asset key) and precomputes rowToEntry so
+ * neither is repeated per resolved state.
+ */
+export const buildLpcCreditsIndex = (creditsCsv: Map<string, LpcCreditsRow>): LpcCreditsIndex => {
+  const byPath = new Map<string, LpcCreditEntry>();
+  const byAssetKeyRows = new Map<string, Map<string, LpcCreditEntry>>();
+  const templateRows: { filename: string; entry: LpcCreditEntry }[] = [];
+
+  for (const row of creditsCsv.values()) {
+    const entry = rowToEntry(row);
+    byPath.set(row.filename, entry);
+    if (row.filename.includes('\u0024{')) {
+      templateRows.push({ filename: row.filename, entry });
+    }
+    const rowParsed = parseLpcSourcePath(row.filename);
+    if (!rowParsed) {
+      continue;
+    }
+    const assetKey = assetKeyOf(rowParsed);
+    const distinct = byAssetKeyRows.get(assetKey) ?? new Map<string, LpcCreditEntry>();
+    distinct.set(creditFingerprint(entry), entry);
+    byAssetKeyRows.set(assetKey, distinct);
+  }
+
+  const byAssetKey = new Map<string, LpcCreditEntry>();
+  for (const [assetKey, distinct] of byAssetKeyRows) {
+    if (distinct.size === 1) {
+      byAssetKey.set(assetKey, distinct.values().next().value as LpcCreditEntry);
+    }
+  }
+
+  return { byPath, byAssetKey, templateRows };
+};
+
 /** The lpc_credits.json sidecar document. */
 export type LpcCreditsSidecar = {
   /** ISO 8601 — when the sidecar was generated. */
@@ -357,6 +432,12 @@ export type LpcCreditsSidecar = {
    * committed lpc_credits_supplement.json must declare (C-395 AC-4).
    */
   unresolvedTags: readonly string[];
+  /**
+   * Paired unresolved records (tag ↔ spritesheet-relative source), sorted by
+   * tag. Preserved so allowlist decisions (supplement generation) never have
+   * to pair the independently-sorted flat arrays by index.
+   */
+  unresolved: readonly { tag: string; source: string }[];
 };
 
 /** Asset identity — slot + type + bodyType (animation/colour variants share it). */
@@ -401,39 +482,31 @@ const creditFingerprint = (entry: LpcCreditEntry): string =>
 export const resolveLpcCredit = (options: {
   sourcePath: string;
   parsed: Pick<LpcParsedState, 'slot' | 'type' | 'bodyType'>;
-  creditsCsv: Map<string, LpcCreditsRow>;
+  index: LpcCreditsIndex;
   spritesheetsDir: string;
 }): LpcCreditEntry | undefined => {
-  const { sourcePath, parsed, creditsCsv, spritesheetsDir } = options;
+  const { sourcePath, parsed, index, spritesheetsDir } = options;
 
   // Tier 1: exact path.
-  const exact = creditsCsv.get(relative(spritesheetsDir, sourcePath));
+  const exact = index.byPath.get(relative(spritesheetsDir, sourcePath));
   if (exact) {
-    return rowToEntry(exact);
+    return exact;
   }
 
-  // Tier 2: same asset (slot/type/bodyType), any anim/colour variant.
-  const wantedAsset = assetKeyOf(parsed);
-  const sameAsset = new Map<string, LpcCreditEntry>();
-  for (const row of creditsCsv.values()) {
-    const rowParsed = parseLpcSourcePath(row.filename);
-    if (rowParsed && assetKeyOf(rowParsed) === wantedAsset) {
-      sameAsset.set(creditFingerprint(rowToEntry(row)), rowToEntry(row));
-    }
-  }
-  if (sameAsset.size === 1) {
-    return sameAsset.values().next().value;
+  // Tier 2: same asset (slot/type/bodyType), any anim/colour variant. The
+  // index stores the entry only when the asset key resolves to exactly one
+  // distinct credit; ambiguous keys are absent and fall through to tier 3.
+  const sameAsset = index.byAssetKey.get(assetKeyOf(parsed));
+  if (sameAsset) {
+    return sameAsset;
   }
 
   // Tier 3: `${head}` template rows (the only placeholder CREDITS.csv uses).
   const parts = relative(spritesheetsDir, sourcePath).split('/');
   const templateMatches = new Map<string, LpcCreditEntry>();
   const headPlaceholder = '\u0024{head}';
-  for (const row of creditsCsv.values()) {
-    if (!row.filename.includes('\u0024{')) {
-      continue;
-    }
-    const rowParts = row.filename.split('/');
+  for (const { filename, entry } of index.templateRows) {
+    const rowParts = filename.split('/');
     if (rowParts.length !== parts.length) {
       continue;
     }
@@ -450,7 +523,7 @@ export const resolveLpcCredit = (options: {
       break;
     }
     if (matches) {
-      templateMatches.set(creditFingerprint(rowToEntry(row)), rowToEntry(row));
+      templateMatches.set(creditFingerprint(entry), entry);
     }
   }
   if (templateMatches.size === 1) {
@@ -479,9 +552,9 @@ export const buildLpcCreditsSidecar = (options: {
 }): LpcCreditsSidecar => {
   const { states, creditsCsv, spritesheetsDir, generatedAt } = options;
   const credits: Record<string, LpcCreditEntry> = {};
-  const unresolvedSources: string[] = [];
-  const unresolvedTags: string[] = [];
+  const unresolved: { tag: string; source: string }[] = [];
   const seenTags = new Set<string>();
+  const index = buildLpcCreditsIndex(creditsCsv);
 
   for (const { parsed, sourcePath } of states) {
     const tag = lpcOutputTag(parsed);
@@ -490,24 +563,23 @@ export const buildLpcCreditsSidecar = (options: {
     }
     seenTags.add(tag);
 
-    const entry = resolveLpcCredit({ sourcePath, parsed, creditsCsv, spritesheetsDir });
+    const entry = resolveLpcCredit({ sourcePath, parsed, index, spritesheetsDir });
     if (!entry) {
-      unresolvedSources.push(relative(spritesheetsDir, sourcePath));
-      unresolvedTags.push(tag);
+      unresolved.push({ tag, source: relative(spritesheetsDir, sourcePath) });
       continue;
     }
     credits[tag] = entry;
   }
 
-  unresolvedSources.sort();
-  unresolvedTags.sort();
+  unresolved.sort((a, b) => a.tag.localeCompare(b.tag) || a.source.localeCompare(b.source));
 
   return {
     generatedAt: generatedAt ?? new Date().toISOString(),
     assetCount: seenTags.size,
     credits,
-    unresolvedSources,
-    unresolvedTags,
+    unresolvedSources: unresolved.map((record) => record.source),
+    unresolvedTags: unresolved.map((record) => record.tag),
+    unresolved,
   };
 };
 
@@ -534,18 +606,66 @@ export const LPC_LIBRARY_CREDIT: LpcCreditEntry = {
     'LPC library asset with no per-file CREDITS.csv row; attributed at library level (C-395 generated supplement).',
 };
 
+/**
+ * Committed allowlist of spritesheet-relative source prefixes that may be
+ * declared at LPC library level in lpc_credits_supplement.json. Only
+ * unresolved assets whose source starts with one of these prefixes receive
+ * LPC_LIBRARY_CREDIT; every other unresolved tag stays undeclared so the
+ * publish preflight (AC-4) continues to fail for unapproved assets. Verified
+ * 2026-08-15 against the real data: these 31 prefixes cover exactly the 993
+ * unresolved sources.
+ */
+export const LPC_SUPPLEMENT_APPROVED_SOURCE_PREFIXES: readonly string[] = [
+  'dress/kimono',
+  'eyes/human',
+  'facial/earrings',
+  'facial/masks',
+  'hair/braid',
+  'hair/curls_large',
+  'hair/extensions',
+  'hair/flat_top_fade',
+  'hair/xlong',
+  'hat/cloth',
+  'hat/holiday',
+  'hat/pirate',
+  'hat/visor',
+  'head/faces',
+  'head/heads',
+  'legs/pants',
+  'neck/cravat',
+  'neck/gem',
+  'neck/jabot',
+  'shield/crusader',
+  'shield/crusader2',
+  'shield/plus',
+  'shield/scutum',
+  'shield/scutum_trim',
+  'shield/two_engrailed',
+  'shield/two_engrailed_trim',
+  'torso/clothes',
+  'weapon/magic',
+  'weapon/polearm',
+  'weapon/ranged',
+  'weapon/sword',
+];
+
 // ---------------------------------------------------------------------------
 // File convenience
 // ---------------------------------------------------------------------------
 
 /**
- * Read and parse a CREDITS.csv file. Returns an empty map when the file is
- * absent (vendored generator not present — examples/ is gitignored).
+ * Read and parse a CREDITS.csv file. Returns an empty map only when the file
+ * is absent (vendored generator not present — examples/ is gitignored);
+ * permission, decoding and parsing failures are re-thrown so the collector
+ * does not misreport them as a missing CREDITS.csv.
  */
 export const readCreditsCsv = (filePath: string): Map<string, LpcCreditsRow> => {
   try {
     return parseCreditsCsv(readFileSync(filePath, 'utf8'));
-  } catch {
-    return new Map();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return new Map();
+    }
+    throw error;
   }
 };

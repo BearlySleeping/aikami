@@ -24,6 +24,10 @@ import { runCatalogPublish } from './pipeline.ts';
 import { createR2Client } from './upload.ts';
 
 const modeIndex = process.argv.indexOf('--mode');
+if (modeIndex >= 0 && !process.argv[modeIndex + 1]) {
+  console.error('❌ --mode requires a value (e.g. --mode production).');
+  process.exit(1);
+}
 const mode = modeIndex >= 0 ? process.argv[modeIndex + 1] : 'production';
 
 const config = resolveCatalogConfig(mode);

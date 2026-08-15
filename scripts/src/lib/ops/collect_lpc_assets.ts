@@ -24,6 +24,7 @@ import { dirname, join, relative } from 'node:path';
 import {
   buildLpcCreditsSidecar,
   LPC_LIBRARY_CREDIT,
+  LPC_SUPPLEMENT_APPROVED_SOURCE_PREFIXES,
   parseLpcSourcePath,
   readCreditsCsv,
 } from '../catalog/lpc_credits.ts';
@@ -340,29 +341,38 @@ if (creditsCsv.size === 0) {
     console.warn(`    Unresolved: ${sidecar.unresolvedSources.slice(0, 10).join(', ')}`);
   }
 
-  // Committed supplement: every tag with no CREDITS.csv row is declared
-  // explicitly with LPC-library-level provenance (AC-4 — no silent default).
-  // The diff of this file is the review surface for the declaration.
+  // Committed supplement: only unresolved tags whose SOURCE matches an
+  // approved LPC library prefix are declared with LPC-library-level
+  // provenance (AC-4 — no silent default, no blanket declaration). Every
+  // other unresolved tag is omitted so the publish preflight continues to
+  // fail for unapproved assets; the diff of this file is the review surface
+  // for the declaration.
   const supplementCredits: Record<string, typeof LPC_LIBRARY_CREDIT> = {};
-  for (const tag of sidecar.unresolvedTags) {
-    supplementCredits[tag] = LPC_LIBRARY_CREDIT;
+  for (const { tag, source } of sidecar.unresolved) {
+    const approved = LPC_SUPPLEMENT_APPROVED_SOURCE_PREFIXES.some((prefix) =>
+      source.startsWith(prefix),
+    );
+    if (approved) {
+      supplementCredits[tag] = LPC_LIBRARY_CREDIT;
+    }
   }
+  const supplementCount = Object.keys(supplementCredits).length;
   writeFileSync(
     OUTPUT_CREDITS_SUPPLEMENT,
     JSON.stringify(
       {
         generatedAt: sidecar.generatedAt,
-        assetCount: sidecar.unresolvedTags.length,
+        assetCount: supplementCount,
         credits: supplementCredits,
       },
       null,
       2,
     ),
   );
-  if (sidecar.unresolvedTags.length > 0) {
+  if (supplementCount > 0) {
     console.log(
       `📝 Credits supplement written: ${OUTPUT_CREDITS_SUPPLEMENT} — ` +
-        `${sidecar.unresolvedTags.length} LPC library-level declarations`,
+        `${supplementCount} LPC library-level declarations`,
     );
   }
 }

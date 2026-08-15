@@ -85,7 +85,7 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   const accessKeyId = getScriptsEnv('CLOUD_FLARE_BUCKET_ACCESS_KEY_ID') ?? '';
   const secretAccessKey = getScriptsEnv('CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY') ?? '';
   const endpoint = getScriptsEnv('CLOUD_FLARE_BUCKET_ENDPOINT') ?? '';
-  const originUrl = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
+  const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
   const bucket = getScriptsEnv('CATALOG_BUCKET') ?? DEFAULT_CATALOG_BUCKET;
 
   const missing: string[] = [];
@@ -98,13 +98,27 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   if (!endpoint) {
     missing.push('CLOUD_FLARE_BUCKET_ENDPOINT');
   }
-  if (!originUrl) {
+  if (!originUrlRaw) {
     missing.push('CATALOG_ORIGIN_URL');
   }
   if (missing.length > 0) {
     throw new Error(
       `Catalog publish config missing: ${missing.join(', ')}. ` +
         'Set them in scripts/.env.{mode} (see scripts/.env.example).',
+    );
+  }
+
+  // Validate + canonicalize the origin: new URL() rejects malformed or
+  // protocol-less values, and trailing slashes are stripped so index
+  // generation produces single-slash asset URLs (no double slashes when the
+  // consumer joins originUrl with a hash).
+  let originUrl: string;
+  try {
+    originUrl = new URL(originUrlRaw).toString().replace(/\/+$/, '');
+  } catch {
+    throw new Error(
+      `Catalog publish config invalid: CATALOG_ORIGIN_URL is not a valid URL ` +
+        `(${JSON.stringify(originUrlRaw)}). Set it in scripts/.env.{mode} (see scripts/.env.example).`,
     );
   }
 

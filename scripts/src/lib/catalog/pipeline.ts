@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type CatalogIndexRoot, CatalogIndexRootSchema } from '@aikami/schemas';
+import { CatalogIndexRootSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
@@ -145,11 +145,37 @@ export const runCatalogPublish = async (
     originUrl: config.originUrl,
   });
 
-  // 5. Upload the index LAST.
+  // Validate the root BEFORE constructing or uploading any index object —
+  // an invalid index is worse than none (it produces 404s the client will
+  // cache), so a validation failure aborts without writing.
+  if (!Value.Check(CatalogIndexRootSchema, root)) {
+    console.error(
+      '❌ Generated root index failed CatalogIndexRootSchema validation — index NOT uploaded.',
+    );
+    return {
+      ok: false,
+      checkedCount: preflight.checkedCount,
+      unresolvedTags: preflight.unresolvedTags,
+      incompleteAttributionTags: preflight.incompleteAttributionTags,
+      uploaded: uploadReport.uploaded,
+      skipped: uploadReport.skipped,
+      failed: uploadReport.failed,
+      bytesTransferred: uploadReport.bytesTransferred,
+      failedKeys: uploadReport.failedKeys,
+      rootKey: ROOT_INDEX_KEY,
+      shardKeys: [],
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+
+  // 5. Upload the index LAST — all generated shards first, then the root,
+  // so the root (the document consumers fetch first) is the final object
+  // written. A partial publish therefore never leaves a root pointing at
+  // missing shards.
   const rootJson = JSON.stringify(root, null, 2);
   const indexObjects: { key: string; json: string }[] = [
-    { key: ROOT_INDEX_KEY, json: rootJson },
     ...shards.map((shard: GeneratedShard) => ({ key: shard.key, json: shard.json })),
+    { key: ROOT_INDEX_KEY, json: rootJson },
   ];
   const failedIndexKeys: string[] = [];
   for (const { key, json } of indexObjects) {
@@ -167,8 +193,7 @@ export const runCatalogPublish = async (
     }
   }
 
-  const rootValidation = Value.Check(CatalogIndexRootSchema, root as CatalogIndexRoot);
-  const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0 && rootValidation;
+  const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0;
 
   const elapsedMs = Date.now() - startedAt;
   console.log('');
@@ -200,19 +225,22 @@ export const runCatalogPublish = async (
   };
 };
 
-/** Read the merged credits map from asset_credits.json. */
+/**
+ * Read the merged credits map from asset_credits.json.
+ *
+ * File/parse errors PROPAGATE (they are real failures — a missing or
+ * corrupt credits file must not silently look like an empty attribution
+ * map); the `parsed.credits` fallback applies only to valid files where the
+ * `credits` field is absent.
+ */
 const loadCreditsByTag = (
   gameDataDir: string,
 ): Record<string, { licenses?: string[]; authors?: string[] }> => {
-  try {
-    const raw = readFileSync(join(gameDataDir, 'asset_credits.json'), 'utf8');
-    const parsed = JSON.parse(raw) as {
-      credits: Record<string, { licenses?: string[]; authors?: string[] }>;
-    };
-    return parsed.credits ?? {};
-  } catch {
-    return {};
-  }
+  const raw = readFileSync(join(gameDataDir, 'asset_credits.json'), 'utf8');
+  const parsed = JSON.parse(raw) as {
+    credits?: Record<string, { licenses?: string[]; authors?: string[] }>;
+  };
+  return parsed.credits ?? {};
 };
 
 export { ASSET_CACHE_CONTROL, INDEX_CACHE_CONTROL, INDEX_KEY_PREFIX };

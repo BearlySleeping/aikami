@@ -75,9 +75,20 @@ const entryToShardEntry = (entry: CatalogEntry) => ({
   ...(entry.licenseNote ? { licenseNote: entry.licenseNote } : {}),
 });
 
-/** Sanitize a subcategory path into a url-safe shard id fragment. */
+/**
+ * Sanitize a subcategory path into a url-safe, collision-free shard id
+ * fragment. Alphanumerics are kept verbatim; every other character is
+ * encoded as `-xx-` (lowercase hex), so distinct subcategories such as
+ * "a/b" and "a-b" ALWAYS produce distinct fragments — the old scheme
+ * collapsed both to "a-b", which collides shard ids and R2 keys.
+ */
 const shardIdFragment = (subcategory: string): string =>
-  subcategory.replace(/\//g, '-').replace(/[^a-zA-Z0-9_-]/g, '-');
+  subcategory
+    .split('')
+    .map((char) =>
+      /[a-zA-Z0-9]/.test(char) ? char : `-${char.charCodeAt(0).toString(16).padStart(2, '0')}-`,
+    )
+    .join('');
 
 const buildShardDocument = (options: {
   id: string;
@@ -91,6 +102,7 @@ const buildShardDocument = (options: {
     schemaVersion: 1,
     publishedAt,
     originUrl,
+    id,
     category,
     entries: entries.map(entryToShardEntry),
   };

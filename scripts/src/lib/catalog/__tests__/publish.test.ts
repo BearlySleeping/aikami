@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
-import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
+import { FakeR2Client, FIXTURE_HASHES, makeFixtureGameData } from './fixtures.ts';
 
 const ORIGIN_URL = 'https://assets.example.test';
 
@@ -56,19 +56,23 @@ describe('catalog publish pipeline (AC-1)', () => {
     await runCatalogPublish({ config: config(), client, gameDataDir });
     const assets = [...client.objects.keys()].filter((k) => k.startsWith('assets/'));
     expect(assets).toHaveLength(4);
-    // Same hash → same key, regardless of source path.
-    expect(assets.some((k) => k.endsWith('celestial_adult.thrust.webp'))).toBe(false);
+    // The thrust asset's key is derived from its sha256 — assert the exact
+    // content-addressed key, not merely the absence of a source filename.
+    const thrustHash = FIXTURE_HASHES.thrust;
+    expect(assets).toContain(`assets/${thrustHash.slice(0, 2)}/${thrustHash}.webp`);
   });
 
   test('applies correct MIME type and one-year immutable Cache-Control', async () => {
     await runCatalogPublish({ config: config(), client, gameDataDir });
-    const asset = [...client.objects.entries()].find(([key]) => key.startsWith('assets/'));
-    expect(asset).toBeDefined();
-    if (!asset) {
-      return;
+    const assets = [...client.objects.entries()].filter(([key]) => key.startsWith('assets/'));
+    expect(assets.length).toBeGreaterThan(0);
+    // Assert EVERY asset, not just the first: file-read promise resolution
+    // order is nondeterministic, so "first asset" is not a stable pick.
+    for (const [key, object] of assets) {
+      expect(object.cacheControl).toBe('public, max-age=31536000, immutable');
+      const ext = key.slice(key.lastIndexOf('.'));
+      expect(object.contentType).toBe(ext === '.webm' ? 'audio/webm' : 'image/webp');
     }
-    expect(asset[1].contentType).toBe('image/webp');
-    expect(asset[1].cacheControl).toBe('public, max-age=31536000, immutable');
   });
 
   test('index objects get a short Cache-Control (60s)', async () => {
@@ -90,9 +94,9 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(second.ok).toBe(true);
     expect(second.uploaded).toBe(0);
     expect(second.skipped).toBe(4);
-    // Only the index objects were re-written on the second run.
-    expect(client.putCount - putCountAfterFirst).toBeGreaterThan(0);
-    expect(client.putCount - putCountAfterFirst).toBeLessThan(6);
+    // Only the index objects were re-written on the second run: every shard
+    // plus the root, exactly — no extra puts.
+    expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1);
   });
 
   test('resumes after a partial run without corrupting the index', async () => {

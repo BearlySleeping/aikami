@@ -16,8 +16,19 @@
 /** Derive the content-addressed object key for an asset. */
 export const assetKey = (options: { hash: string; ext: string }): string => {
   const { hash, ext } = options;
-  // ext includes the leading dot (".webp") — the contract layout renders
-  // `<sha256>.<ext>`, so the stored name is `<hash><ext>`.
-  const extSuffix = ext.startsWith('.') ? ext : `.${ext}`;
+  // The hash IS the address — reject anything that is not a sha256 hex
+  // digest before it reaches a bucket key.
+  if (!/^[a-f0-9]{64}$/.test(hash)) {
+    throw new Error(`assetKey: invalid sha256 hash ${JSON.stringify(hash)}`);
+  }
+  // ext may or may not include the leading dot (".webp"), must be lowercase
+  // and path-safe (no separators or other invalid characters).
+  const normalizedExt = ext.toLowerCase();
+  if (!/^\.?[a-z0-9]+$/.test(normalizedExt)) {
+    throw new Error(`assetKey: invalid extension ${JSON.stringify(ext)}`);
+  }
+  // The contract layout renders `<sha256>.<ext>`, so the stored name is
+  // `<hash><ext>` with the leading dot preserved.
+  const extSuffix = normalizedExt.startsWith('.') ? normalizedExt : `.${normalizedExt}`;
   return `assets/${hash.slice(0, 2)}/${hash}${extSuffix}`;
 };

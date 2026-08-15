@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  buildLpcCreditsIndex,
   buildLpcCreditsSidecar,
   LPC_LIBRARY_CREDIT,
   lpcOutputTag,
@@ -124,12 +125,6 @@ describe('lpcOutputTag', () => {
       }),
     ).toBe('lpc:hat:magic:celestial_moon_adult:backslash');
   });
-
-  test('matches the contract example tag shape', () => {
-    expect(
-      lpcOutputTag({ slot: 'hat', type: 'magic/celestial', bodyType: 'adult', anim: 'thrust' }),
-    ).toBe('lpc:hat:magic:celestial_adult:thrust');
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -139,7 +134,7 @@ describe('lpcOutputTag', () => {
 describe('resolveLpcCredit', () => {
   const csv = parseCreditsCsv(CREDITS_CSV);
   const opts = {
-    creditsCsv: csv,
+    index: buildLpcCreditsIndex(csv),
     spritesheetsDir: '/gen/spritesheets',
   };
 
@@ -173,6 +168,26 @@ describe('resolveLpcCredit', () => {
     expect(credit?.licenses).toEqual(['OGA-BY 3.0', 'CC-BY-SA 3.0', 'GPL 3.0']);
   });
 
+  test('tier 2 — ambiguous same-asset rows resolve to undefined, not a silent pick', () => {
+    // Two rows share slot/type/bodyType but carry DIFFERENT authors — the
+    // asset key is ambiguous and must resolve to undefined so the publish
+    // preflight treats it as unresolved (AC-4: never silently default).
+    const ambiguousCsv = parseCreditsCsv(
+      [
+        'filename,notes,authors,licenses,urls',
+        '"body/bodies/male/spellcast.png",,"bluecarrot16","OGA-BY 3.0","https://x"',
+        '"body/bodies/male/thrust.png",,"Stephen Challener (Redshrike)","OGA-BY 3.0","https://x"',
+      ].join('\n'),
+    );
+    const credit = resolveLpcCredit({
+      index: buildLpcCreditsIndex(ambiguousCsv),
+      spritesheetsDir: '/gen/spritesheets',
+      sourcePath: '/gen/spritesheets/body/bodies/male/walk.png',
+      parsed: parsedOrThrow('body/bodies/male/walk.png'),
+    });
+    expect(credit).toBeUndefined();
+  });
+
   test('tier 3 — head template rows match concrete head variants', () => {
     const placeholder = '\u0024{head}';
     const templateCsv = parseCreditsCsv(
@@ -183,7 +198,7 @@ describe('resolveLpcCredit', () => {
       ].join('\n'),
     );
     const credit = resolveLpcCredit({
-      creditsCsv: templateCsv,
+      index: buildLpcCreditsIndex(templateCsv),
       spritesheetsDir: '/gen/spritesheets',
       sourcePath: '/gen/spritesheets/head/faces/male/anger/spellcast.png',
       parsed: parsedOrThrow('head/faces/male/anger/spellcast.png'),

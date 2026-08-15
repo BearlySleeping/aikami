@@ -130,6 +130,31 @@ describe('generateCatalogIndex (AC-2)', () => {
     }
   });
 
+  test('subcategories that collide after naive normalization produce distinct shard ids', () => {
+    // "hat/magic", "hat-magic" and "hat magic" all collapsed to "hat-magic"
+    // under the old sanitizer — colliding shard ids and R2 keys. The encoded
+    // fragment must keep them distinct.
+    const { createHash } = require('node:crypto') as typeof import('node:crypto');
+    const colliding = ['hat/magic', 'hat-magic', 'hat magic'];
+    const entries = Array.from({ length: 30000 }, (_, i) => ({
+      ...makeEntry({ tag: `lpc:tag${i}`, category: 'lpc', subcategory: colliding[i % 3] }),
+      licenseNote: `note ${i} ${createHash('sha1').update(String(i)).digest('hex').slice(0, 8)}`,
+    }));
+    const { shards } = generateCatalogIndex({ entries, originUrl: ORIGIN });
+
+    // The whole-category shard must exceed 1 MB gzipped so it splits into
+    // exactly the three colliding subcategory groups.
+    expect(shards.length).toBe(3);
+    const ids = shards.map((shard) => shard.id);
+    expect(new Set(ids).size).toBe(3);
+    const keys = shards.map((shard) => shard.key);
+    expect(new Set(keys).size).toBe(3);
+    for (const shard of shards) {
+      expect(shard.gzipBytes).toBeLessThan(SHARD_MAX_GZIP_BYTES);
+      expect(Value.Check(CatalogIndexShardSchema, JSON.parse(shard.json))).toBe(true);
+    }
+  });
+
   test('cross-field consistency: shard.category equals every entry category', () => {
     const entries = [
       makeEntry({ tag: 'lpc:a', category: 'lpc', subcategory: 'hat' }),

@@ -15,20 +15,24 @@ export const makeFixtureGameData = (): string => {
   mkdirSync(join(dir, 'lpc', 'hat', 'magic'), { recursive: true });
   mkdirSync(join(dir, 'sprites', 'combat'), { recursive: true });
 
+  // Buffers the fixture files are written from — sizeBytes below is DERIVED
+  // from these so the manifest never drifts from the actual file bytes.
+  const thrustBytes = 'lpc-thrust-bytes';
+  const idleBytes = 'lpc-idle-bytes';
+  const musicBytes = 'music-bytes';
+  const portraitBytes = 'portrait-bytes';
+
   // Two lpc assets + one music asset + one tileset (excluded from catalog).
   writeFileSync(
     join(dir, 'lpc', 'hat', 'magic', 'celestial_adult.thrust.webp'),
-    Buffer.from('lpc-thrust-bytes'),
+    Buffer.from(thrustBytes),
   );
   writeFileSync(
     join(dir, 'lpc', 'hat', 'magic', 'celestial_adult.idle.webp'),
-    Buffer.from('lpc-idle-bytes'),
+    Buffer.from(idleBytes),
   );
-  writeFileSync(join(dir, 'music', 'exploration', 'bgm_explore.webm'), Buffer.from('music-bytes'));
-  writeFileSync(
-    join(dir, 'sprites', 'combat', 'enemy_portrait.webp'),
-    Buffer.from('portrait-bytes'),
-  );
+  writeFileSync(join(dir, 'music', 'exploration', 'bgm_explore.webm'), Buffer.from(musicBytes));
+  writeFileSync(join(dir, 'sprites', 'combat', 'enemy_portrait.webp'), Buffer.from(portraitBytes));
 
   const hashOf = (bytes: string): string => {
     // Deterministic 64-hex hash: sha256 of the content via crypto.
@@ -36,10 +40,10 @@ export const makeFixtureGameData = (): string => {
     return createHash('sha256').update(bytes).digest('hex');
   };
 
-  const hThrust = hashOf('lpc-thrust-bytes');
-  const hIdle = hashOf('lpc-idle-bytes');
-  const hMusic = hashOf('music-bytes');
-  const hPortrait = hashOf('portrait-bytes');
+  const hThrust = hashOf(thrustBytes);
+  const hIdle = hashOf(idleBytes);
+  const hMusic = hashOf(musicBytes);
+  const hPortrait = hashOf(portraitBytes);
   const hTileset = hashOf('tileset-bytes');
 
   writeFileSync(
@@ -99,10 +103,22 @@ export const makeFixtureGameData = (): string => {
     JSON.stringify({
       scannedAt: '2026-08-15T00:00:00.000Z',
       hashes: {
-        'lpc:hat:magic:celestial_adult:thrust': { hash: hThrust, sizeBytes: 15 },
-        'lpc:hat:magic:celestial_adult:idle': { hash: hIdle, sizeBytes: 13 },
-        'music:exploration:bgm_explore': { hash: hMusic, sizeBytes: 10 },
-        'sprites:combat:enemy_portrait': { hash: hPortrait, sizeBytes: 14 },
+        'lpc:hat:magic:celestial_adult:thrust': {
+          hash: hThrust,
+          sizeBytes: Buffer.byteLength(thrustBytes),
+        },
+        'lpc:hat:magic:celestial_adult:idle': {
+          hash: hIdle,
+          sizeBytes: Buffer.byteLength(idleBytes),
+        },
+        'music:exploration:bgm_explore': {
+          hash: hMusic,
+          sizeBytes: Buffer.byteLength(musicBytes),
+        },
+        'sprites:combat:enemy_portrait': {
+          hash: hPortrait,
+          sizeBytes: Buffer.byteLength(portraitBytes),
+        },
         'sprites:tilesets:atlas': { hash: hTileset, sizeBytes: 13 },
       },
     }),
@@ -143,6 +159,23 @@ export const makeFixtureGameData = (): string => {
 
   return dir;
 };
+
+const hashOfFixture = (bytes: string): string => {
+  const { createHash } = require('node:crypto') as typeof import('node:crypto');
+  return createHash('sha256').update(bytes).digest('hex');
+};
+
+/**
+ * Fixture sha256 hashes (of the literal buffers in makeFixtureGameData),
+ * exported so tests can assert exact content-addressed keys derived from
+ * them rather than re-hashing inline.
+ */
+export const FIXTURE_HASHES = {
+  thrust: hashOfFixture('lpc-thrust-bytes'),
+  idle: hashOfFixture('lpc-idle-bytes'),
+  music: hashOfFixture('music-bytes'),
+  portrait: hashOfFixture('portrait-bytes'),
+} as const;
 
 /** In-memory fake R2 client for pipeline tests. */
 export class FakeR2Client implements R2ClientLike {

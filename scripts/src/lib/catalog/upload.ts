@@ -51,8 +51,7 @@ export const createR2Client = (config: CatalogConfig): R2ClientLike => {
     async listKeys(prefix) {
       const keys: string[] = [];
       let continuationToken: string | undefined;
-      let isTruncated = true;
-      while (isTruncated) {
+      while (true) {
         const page = await s3.list({
           prefix,
           ...(continuationToken ? { continuationToken } : {}),
@@ -60,8 +59,14 @@ export const createR2Client = (config: CatalogConfig): R2ClientLike => {
         for (const obj of page.contents ?? []) {
           keys.push(obj.key);
         }
-        isTruncated = page.isTruncated ?? false;
-        continuationToken = page.nextContinuationToken;
+        // Stop when the page is not truncated, OR when it claims truncation
+        // but offers no continuation token — continuing with the same
+        // continuation state would re-request the same page forever.
+        const nextToken = page.nextContinuationToken;
+        if (!(page.isTruncated ?? false) || !nextToken) {
+          break;
+        }
+        continuationToken = nextToken;
       }
       return keys;
     },
@@ -69,19 +74,44 @@ export const createR2Client = (config: CatalogConfig): R2ClientLike => {
       // Bun's S3 client does not expose per-object Cache-Control, so the PUT
       // goes through a presigned URL with explicit headers. Verified against
       // the live bucket: the custom domain serves exactly these headers.
-      const url = s3.file(key).presign({ method: 'PUT', expiresIn: 300 });
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Cache-Control': cacheControl,
-          'Content-Type': contentType,
-        },
-        body,
-      });
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(`S3 PUT ${key} failed (${response.status}) ${text.slice(0, 200)}`);
+      // Retries are bounded with backoff for timeouts, network failures and
+      // transient 5xx/429 responses; the final failure is propagated.
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_PUT_ATTEMPTS; attempt++) {
+        try {
+          const url = s3.file(key).presign({ method: 'PUT', expiresIn: 300 });
+          const response = await fetch(url, {
+            method: 'PUT',
+            headers: {
+              'Cache-Control': cacheControl,
+              'Content-Type': contentType,
+            },
+            body,
+            signal: AbortSignal.timeout(PUT_TIMEOUT_MS),
+          });
+          if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            const error = new Error(
+              `S3 PUT ${key} failed (${response.status}) ${text.slice(0, 200)}`,
+            );
+            if (isRetryableStatus(response.status) && attempt < MAX_PUT_ATTEMPTS) {
+              lastError = error;
+              await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+              continue;
+            }
+            throw error;
+          }
+          return;
+        } catch (error) {
+          if (attempt < MAX_PUT_ATTEMPTS && isTransientFailure(error)) {
+            lastError = error;
+            await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+            continue;
+          }
+          throw error;
+        }
       }
+      throw lastError;
     },
   };
 };
@@ -111,6 +141,32 @@ export type UploadReport = {
 };
 
 const CONCURRENCY = 16;
+
+/** Max attempts per presigned PUT (original + retries). */
+const MAX_PUT_ATTEMPTS = 3;
+
+/** Per-attempt timeout for the presigned PUT fetch. */
+const PUT_TIMEOUT_MS = 30_000;
+
+/** Base backoff for PUT retries (doubles per attempt: 250ms, 500ms). */
+const RETRY_BASE_DELAY_MS = 250;
+
+/** Transient HTTP statuses worth retrying — 429 (rate limit) and 5xx. */
+const isRetryableStatus = (status: number): boolean => status === 429 || status >= 500;
+
+/**
+ * Timeouts (AbortSignal.timeout → DOMException TimeoutError/AbortError) and
+ * network-level fetch failures (TypeError) are transient; everything else
+ * (including the non-retryable HTTP error thrown in putObject) propagates.
+ */
+const isTransientFailure = (error: unknown): boolean => {
+  if (error instanceof DOMException) {
+    return error.name === 'TimeoutError' || error.name === 'AbortError';
+  }
+  return error instanceof TypeError;
+};
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Upload catalog assets, skipping objects whose content-addressed key already

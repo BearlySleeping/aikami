@@ -193,6 +193,17 @@ export const CatalogIndexShardSchema = Type.Object(
       minLength: 1,
       description: 'Base URL that asset hashes resolve against',
     }),
+    /**
+     * Shard id — the category id for single-shard categories (matches
+     * CatalogAssetEntry.category), or a split-shard id like
+     * `lpc__hat-magic` when a category must be sharded by subcategory to
+     * stay under the 1 MB budget. Matches the root `categories[].id` so
+     * clients can correlate a fetched shard with its summary row.
+     */
+    id: Type.String({
+      minLength: 1,
+      description: 'Shard id — the category, or a split-shard id',
+    }),
     /** Category this shard covers (same values as CatalogAssetEntry.category). */
     category: CatalogCategorySchema,
     /** Per-asset entries for this category. */

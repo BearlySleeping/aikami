@@ -19,7 +19,10 @@
       "!**/dist/*",
       "!**/build/*",
       "!apps/frontend/client/static/game-data/manifest.json",
-      "!apps/frontend/client/static/game-data/asset_hashes.json"
+      "!apps/frontend/client/static/game-data/asset_hashes.json",
+      "!apps/frontend/client/static/game-data/asset_credits.json",
+      "!apps/frontend/client/static/game-data/lpc_credits.json",
+      "!apps/frontend/client/static/game-data/lpc_credits_supplement.json"
     ]
   },
   "formatter": {

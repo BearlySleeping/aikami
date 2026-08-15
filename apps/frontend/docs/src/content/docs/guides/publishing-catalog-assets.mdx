@@ -83,6 +83,23 @@ bun run scripts/src/lib/ops/scan_assets.ts             # manifest + hashes + mer
 - Objects are immutable; "updating" an asset publishes a new object and a new
   index entry. Rollback is publishing an older index.
 
+### CORS (required before promotion past sandbox)
+
+The hub consumes the index from the browser, so the bucket must permit
+cross-origin reads from the hub's origins. The publish pipeline's S3
+credentials cannot set a CORS rule (`PutBucketCors` is denied), so this is a
+maintainer action in the Cloudflare R2 dashboard — apply it to
+`aikami-catalog`:
+
+- Allowed origins: `https://hub.bearlysleeping.com`,
+  `https://hub.stg.bearlysleeping.com`, `https://aikami.bearlysleeping.com`
+- Allowed methods: `GET`, `HEAD`
+- Allowed headers: `*`
+
+**Promotion beyond sandbox must be blocked until this CORS configuration is
+complete.** Without it, a browser fetch of the index fails the preflight and
+C-396's browse feature cannot ship — this is the AC-3 gate.
+
 ## Adding a new non-LPC asset
 
 Add its tag to `scripts/src/lib/catalog/project_licenses.json` with explicit

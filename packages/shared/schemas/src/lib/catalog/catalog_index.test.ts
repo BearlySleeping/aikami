@@ -45,7 +45,15 @@ describe('CatalogAssetEntrySchema', () => {
   });
 
   test('accepts verbatim multi-license strings — never SPDX-normalised (AC-4)', () => {
-    expect(Value.Check(CatalogAssetEntrySchema, VALID_ENTRY)).toBe(true);
+    // The licenses field must remain an ARRAY of verbatim strings — a single
+    // string would silently break the multi-license contract (AC-4).
+    expect(Array.isArray(VALID_ENTRY.licenses)).toBe(true);
+    expect(VALID_ENTRY.licenses.every((license) => typeof license === 'string')).toBe(true);
+    expect(VALID_ENTRY.licenses).toEqual(['OGA-BY 3.0', 'CC-BY-SA 3.0', 'GPL 3.0']);
+    // Replacing the array with a single string fails schema validation.
+    expect(Value.Check(CatalogAssetEntrySchema, { ...VALID_ENTRY, licenses: 'OGA-BY 3.0' })).toBe(
+      false,
+    );
   });
 
   test('accepts empty arrays for licenses/authors/sourceUrls (gate is the preflight, not the schema)', () => {
@@ -183,6 +191,7 @@ const VALID_SHARD = {
   schemaVersion: 1,
   publishedAt: '2026-08-15T12:00:00.000Z',
   originUrl: 'https://assets.bearlysleeping.com',
+  id: 'lpc',
   category: 'lpc',
   entries: [VALID_ENTRY],
 };
