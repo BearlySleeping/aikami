@@ -1,6 +1,6 @@
 // scripts/src/lib/ops/generate_brand_assets.ts
 // Generates favicons, PWA icons, OG images, and webmanifest for all frontends
-// from the canonical root assets/logo.png.
+// from the canonical root assets/default.webp.
 //
 // Usage: bun run scripts/src/lib/ops/generate_brand_assets.ts [--skip-svg]
 //   --skip-svg   Skip the PNG→SVG conversion (faster iteration)
@@ -16,8 +16,8 @@ import sharp from 'sharp';
 // ---------------------------------------------------------------------------
 
 const ROOT = path.resolve(import.meta.dir, '../../../..');
-const SOURCE_LOGO = path.join(ROOT, 'assets/logo.png');
-const SOURCE_SVG = path.join(ROOT, 'assets/logo.svg');
+const SOURCE_LOGO = path.join(ROOT, 'assets/default.webp');
+const SOURCE_SVG = path.join(ROOT, 'assets/default.svg');
 
 type FrontendTarget = {
   /** Human-readable name */
@@ -111,7 +111,7 @@ const convertPngToSvg = async (skipSvg: boolean): Promise<void> => {
   }
 
   console.log(`Tracing ${SOURCE_LOGO} → ${SOURCE_SVG} ...`);
-  const convertScript = path.join(import.meta.dir, 'convert_logo_png_to_svg.ts');
+  const convertScript = path.join(import.meta.dir, 'convert_image_to_svg.ts');
   execSync(`bun run "${convertScript}" --input "${SOURCE_LOGO}" --output "${SOURCE_SVG}"`, {
     cwd: ROOT,
     stdio: 'inherit',
@@ -241,7 +241,7 @@ const main = async (): Promise<void> => {
 
   if (!fs.existsSync(SOURCE_LOGO)) {
     console.error(`Source logo not found: ${SOURCE_LOGO}`);
-    console.error('Place your logo at assets/logo.png and re-run.');
+    console.error('Place your logo at assets/default.webp and re-run.');
     process.exit(1);
   }
 
