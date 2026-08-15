@@ -244,8 +244,19 @@ jobs:
             echo "uncompressed size: $(awk "BEGIN{printf \"%.1f\", $size_bytes/1048576}") MB"
             # Compressed size = sum of the registry manifest's layer sizes.
             # buildx imagetools, not `docker manifest inspect` — see the
-            # AC-1 step above for why.
-            compressed=$(docker buildx imagetools inspect "$img" --raw \
+            # AC-1 step above for why. `--raw` on $img's tag returns a
+            # manifest INDEX, not a single image manifest — build-push-
+            # action@v6 attaches a provenance/SBOM attestation by default,
+            # even for single-platform builds, so `.layers` isn't at the
+            # top level. Resolve the real per-platform manifest (the one
+            # whose platform isn't the attestation's "unknown/unknown")
+            # and inspect that digest directly for its `.layers`.
+            raw=$(docker buildx imagetools inspect "$img" --raw)
+            manifest_digest=$(echo "$raw" \
+              | jq -r '.manifests[] | select(.platform.architecture != "unknown") | .digest' \
+              | head -1)
+            repo="${img%%:*}"
+            compressed=$(docker buildx imagetools inspect "${repo}@${manifest_digest}" --raw \
               | jq '[.layers[].size] | add // 0')
             echo "compressed size: $(awk "BEGIN{printf \"%.1f\", $compressed/1048576}") MB"
             if [ "$compressed" -gt 262144000 ]; then
