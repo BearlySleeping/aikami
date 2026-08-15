@@ -52,9 +52,10 @@ apps/
     │   │   ├── controllers/     # API, callable, auth triggers, scheduler, firestore
     │   │   └── rules/           # Security rules
     │   └── dataconnect/         # Firebase Data Connect config (optional sync adapter)
-    ├── image/                   # ComfyUI Docker microservice (AI image generation)
-    ├── text/                    # Ollama Docker microservice (AI text generation)
-    └── voice/                   # Kokoro Docker microservice (AI voice/TTS)
+    ├── local-stack/             # Publishable Docker topology — text/image/voice/stt + web (C-390)
+    ├── image/                   # sd-server image engine (dev); ComfyUI as opt-in advanced alt
+    ├── text/                    # llama.cpp text engine (dev); Ollama as opt-in advanced alt
+    └── voice/                   # sherpa-onnx/Kokoro voice + STT engine (dev)
 ```
 
 ## Packages

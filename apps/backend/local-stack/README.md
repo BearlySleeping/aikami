@@ -14,6 +14,15 @@ the full download plan, and writes `.env` — it is the only way `.env` is
 created (there is no `.env.example` copy step, so nothing ever asks you to
 overwrite a hand-edited file).
 
+**A full repo checkout is not required.** `model-fetcher`, `voice`, and `web`
+all default to pulling the published `ghcr.io/bearlysleeping/aikami-*`
+images (`build:` is still wired in for contributors — `docker compose build
+<service>` builds from source instead). Drop just the `compose*.yaml` files
+and a hand-written `.env` (copied from `.env.example`) into an empty
+directory and `docker compose up -d` works with no `git clone` at all — you
+only lose the hardware-detection wizard, since `stack init` is a repo-local
+script.
+
 This is the publishable topology (C-390): one `compose.yaml` whose
 **profiles select modalities**, and whose **override files select the
 hardware backend**. All variation lives in `.env`; the runtime command never

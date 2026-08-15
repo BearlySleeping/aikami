@@ -118,7 +118,7 @@ jobs:
       - name: Build and publish aikami-model-fetcher
         uses: docker/build-push-action@v6
         with:
-          context: apps/backend/local-stack/docker/fetcher
+          context: apps/backend/local-stack
           file: apps/backend/local-stack/docker/fetcher/Dockerfile
           push: true
           tags: |
@@ -312,6 +312,22 @@ jobs:
           done
           curl -fsS http://127.0.0.1:15274/config.json | grep -q '10.2.2.2' \
             && echo "ok: config B served without rebuild"
+          docker rm -f "$cid_b" >/dev/null 2>&1
+          trap - EXIT
+
+      # ── AC-9b: no mount at all — the clone-free default path ───────────
+      - name: AC-9b default-generated config test
+        run: |
+          set -euo pipefail
+          img="${{ env.IMAGE_PREFIX }}/aikami-client:latest"
+          cid_c=$(docker run -d -p 15274:5274 "$img")
+          trap 'docker rm -f "$cid_c" >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:15274/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:15274/config.json | grep -q '"url": "http://localhost:11434/v1"' \
+            && echo "ok: default config self-generated with no mount, no repo checkout"
 
       # ── Anonymous pull verification ────────────────────────────────────
       - name: Verify anonymous pull

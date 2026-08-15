@@ -7,8 +7,10 @@ Aikami's local AI stack runs entirely on your machine — text (llama.cpp),
 image (stable-diffusion.cpp), voice (sherpa-onnx Kokoro TTS), and
 speech-to-text (sherpa-onnx Moonshine streaming + whisper.cpp batch) —
 behind one Compose topology whose **profiles select modalities** and whose
-**override files select your hardware backend**. Two commands is the whole
-story:
+**override files select your hardware backend**. The easy path is two
+commands; everything below the fold covers the advanced knobs — picking a
+backend explicitly, swapping in Ollama or ComfyUI, enabling speech-to-text,
+and macOS's native path.
 
 ```bash
 bun run stack init     # detects your hardware, recommends models, writes .env
@@ -58,6 +60,55 @@ COMPOSE_FILE=compose.yaml:compose.cuda.yaml:compose.stt.yaml   # see the table
 
 The first start pulls the engine images and downloads the models you enabled
 (checksum-verified and resumable). Everything after that starts in seconds.
+
+## No repo checkout required
+
+`model-fetcher`, `voice`, and `web` default to pulling the published
+`ghcr.io/bearlysleeping/aikami-*` images (`build:` still works for
+contributors via `docker compose build <service>`). Grab just the
+`compose*.yaml` files and a hand-written `.env` (based on `.env.example`)
+into an empty directory and `docker compose up -d` works standalone — the
+only thing you lose is the `stack init` hardware-detection wizard, since
+that's a repo-local script.
+
+## Advanced: swapping in Ollama or ComfyUI
+
+llama.cpp and sd-server are the defaults — small, fast to start, no extra
+setup. If you'd rather use Ollama for text or ComfyUI for image generation
+(more control over workflows, a model library you already manage), both are
+supported drop-in swaps on the **same ports**:
+
+```bash
+# .env
+COMPOSE_PROFILES=text,ollama      # Ollama replaces llama.cpp on :11434
+COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on :8188
+```
+
+sd-server and ComfyUI can't both bind `:8188` — override `IMAGE_PORT` in
+`.env` if you need both running at once. See
+[Image Engine Selection](/guides/image-engine-selection/) for the tradeoffs.
+
+## Verifying it's working
+
+```bash
+docker compose ps                                   # every service should show "healthy"
+bun moon run local-stack:test                        # static + unit tests, no docker pull
+LOCAL_STACK_LIVE=1 bun moon run local-stack:test      # + real health probes against the running stack
+```
+
+Or hit the health endpoints directly:
+
+```bash
+curl http://127.0.0.1:11434/health          # text
+curl http://127.0.0.1:8188/sdapi/v1/sd-models  # image
+curl http://127.0.0.1:8089/health           # voice
+curl http://127.0.0.1:8087/health           # stt (only if the stt profile is enabled)
+curl -I http://127.0.0.1:5274/              # web client — expect 200
+```
+
+A cold start (models not yet fetched) can take a while on the first
+`docker compose up -d`; a warm start with models already present reaches
+all-healthy in well under 20s on CPU.
 
 ## What you get
 

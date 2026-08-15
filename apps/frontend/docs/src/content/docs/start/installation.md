@@ -49,24 +49,50 @@ sudo dnf install fuse-libs
 ## Option 3 — Docker (fully local, zero cloud)
 
 Everything runs on your own hardware — no internet required after the first
-pull.
+pull. The default engines are llama.cpp (text), sd-server (image), and
+sherpa-onnx/Kokoro (voice); Ollama and ComfyUI are supported as opt-in
+drop-in swaps.
 
 ```bash
 git clone https://github.com/BearlySleeping/aikami
-cd aikami
+cd aikami/apps/backend/local-stack
 
-# Everything local: client + ComfyUI (image) + Kokoro (voice) + Ollama (text)
-docker compose up aikami
-
-# ...or just the client, if you're bringing your own endpoints / API keys
-docker compose up aikami-client
+bun run stack init      # detects your GPU/CPU/RAM, writes .env
+docker compose up -d    # pulls images, fetches models, starts the stack
 ```
 
-Open **http://localhost:5173** and you're playing.
+Open **http://localhost:5274** and you're playing.
 
-The full stack expects a GPU — text generation via Ollama is the demanding
-part, image generation via ComfyUI more so. The `aikami-client` variant has no
-such requirement since you supply the endpoints.
+The full stack works on CPU (that's the default `stack init` falls back to
+with no GPU tooling detected), but a GPU makes text and image generation
+meaningfully faster — see the backend matrix below. If you're bringing your
+own endpoints / API keys instead, run just the client:
+
+```bash
+echo "COMPOSE_PROFILES=web" >> .env
+docker compose up -d
+```
+
+**Want Ollama or ComfyUI instead of the built-in engines?** Both are
+supported drop-in swaps on the same ports:
+
+```bash
+# .env
+COMPOSE_PROFILES=text,ollama      # Ollama replaces llama.cpp on :11434
+COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on :8188
+```
+
+**Picking a hardware backend explicitly** (CPU/CUDA/ROCm/Vulkan/Intel/MUSA),
+enabling speech-to-text, the macOS native path (Docker Desktop has no Metal
+passthrough), model licensing, and smoke tests to verify everything's
+healthy — all covered in the
+[Local Stack README](https://github.com/BearlySleeping/aikami/blob/main/apps/backend/local-stack/README.md),
+the source of truth for the Docker setup.
+
+Don't even want to clone the repo? You don't have to — the engine images
+pull from GHCR by default, so a standalone `compose*.yaml` + `.env` (no
+checkout) works too; you only lose the hardware-detection wizard. See "No
+repo checkout required" in the Local Stack README.
 
 ## Option 4 — From source
 

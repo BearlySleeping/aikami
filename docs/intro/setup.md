@@ -9,6 +9,8 @@ Two very different kinds of "setup" exist in this repo — don't confuse them:
 
 This page is about **local machine setup**. For cloud infrastructure setup, see [Project Setup (GCP)](#project-setup-gcp) at the bottom or run `bun run project:setup`.
 
+Looking to run the AI engines themselves (text/image/voice, via Docker)? That's a third, separate thing — see [Local Stack README](../../apps/backend/local-stack/README.md) (`bun run stack init && docker compose up -d`).
+
 ## Quick Start
 
 ```bash
