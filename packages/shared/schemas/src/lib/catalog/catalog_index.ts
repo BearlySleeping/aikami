@@ -122,6 +122,20 @@ export const CatalogAssetEntrySchema = Type.Object(
     }),
     /** Freeform upstream note, where one exists. */
     licenseNote: Type.Optional(Type.String({ description: 'Freeform upstream note' })),
+    /**
+     * sha256 of the generated single-frame preview image (C-396 AC-5). Same
+     * content-addressed scheme as the asset itself
+     * (`assets/<hash[0:2]>/<hash>.<ext>`), stored under a `thumbnails/`
+     * prefix. Absent only for entries that predate C-396's first republish
+     * (and for non-image assets such as music, which have no frame to
+     * crop) — the browse UI renders a placeholder for those.
+     */
+    thumbnailHash: Type.Optional(
+      Type.String({
+        pattern: SHA256_PATTERN,
+        description: 'sha256 hex digest of the generated single-frame preview',
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -199,11 +213,18 @@ export const CatalogIndexShardSchema = Type.Object(
      * `lpc__hat-magic` when a category must be sharded by subcategory to
      * stay under the 1 MB budget. Matches the root `categories[].id` so
      * clients can correlate a fetched shard with its summary row.
+     *
+     * OPTIONAL since C-396: the live C-395 index was first published before
+     * this field existed, and the hub identifies shards by the root
+     * `categories[].id` row anyway — a shard without `id` is valid and must
+     * not fail validation (the generator emits it on new publishes).
      */
-    id: Type.String({
-      minLength: 1,
-      description: 'Shard id — the category, or a split-shard id',
-    }),
+    id: Type.Optional(
+      Type.String({
+        minLength: 1,
+        description: 'Shard id — the category, or a split-shard id',
+      }),
+    ),
     /** Category this shard covers (same values as CatalogAssetEntry.category). */
     category: CatalogCategorySchema,
     /** Per-asset entries for this category. */

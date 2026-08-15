@@ -36,6 +36,7 @@ const STORAGE_PORT = 9198 + EMULATOR_PORT_OFFSET;
 const PUBSUB_PORT = 8086 + EMULATOR_PORT_OFFSET;
 const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
+const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
 
 /**
  * Worker-specific project ID for emulator data isolation.
@@ -58,6 +59,8 @@ process.env.GCLOUD_PROJECT = PROJECT_ID;
 
 const CLIENT_BASE_URL = `http://localhost:${CLIENT_PORT}`;
 const SITE_BASE_URL = `http://localhost:${SITE_PORT}`;
+// Hub SSR dev server (C-396): public catalog browse surface.
+const HUB_BASE_URL = `http://localhost:${HUB_PORT}`;
 
 // Auth state cache file — per-worker for data isolation.
 // Falls back to worker-0 if the specific worker file doesn't exist
@@ -205,6 +208,18 @@ export default defineConfig({
         },
       },
       dependencies: ['setup'],
+    },
+
+    // ── Hub Domain (C-396) ────────────────────────────────
+    // The hub is an SSR app on its own dev server. Hub tests manage their
+    // own session cookie (POST /api/auth/session) — no storageState dep.
+    {
+      name: 'hub',
+      testDir: './tests/hub',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: HUB_BASE_URL,
+      },
     },
 
     // ── Game Domain ────────────────────────────────────────

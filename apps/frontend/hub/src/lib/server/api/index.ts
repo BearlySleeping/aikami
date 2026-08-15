@@ -9,8 +9,10 @@
 import { sessionAge } from '@aikami/backend/svelte-kit/cookies.ts';
 import { createSessionCookie, verifyIdToken } from '@aikami/backend/utils/auth.ts';
 import { AUTH_COOKIE_NAME } from '@aikami/constants';
+import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
+import { handleCatalogStats } from './catalog_stats.ts';
 import { handleDbHealth } from './health_db.ts';
 
 // ─── Session cookie helpers ──────────────────────────────────────────
@@ -161,6 +163,12 @@ const dbHealthResponseSchema = t.Union([
   }),
 ]);
 
+// GET /api/catalog/stats — streamed, Postgres-backed placeholder stats
+// (C-396 AC-4). Public on purpose: anonymous visitors see exactly what
+// signed-in visitors see on the catalog. Unconfigured/unreachable database
+// resolves to `null` — never a 500.
+const catalogStatsResponseSchema = t.Union([CategoryStatsSchema, AssetStatsSchema, t.Null()]);
+
 export const app = new Elysia({ prefix: '/api' })
   .post('/auth/session', handleSession, {
     body: sessionRequestSchema,
@@ -168,6 +176,9 @@ export const app = new Elysia({ prefix: '/api' })
   })
   .get('/health/db', handleDbHealth, {
     response: dbHealthResponseSchema,
+  })
+  .get('/catalog/stats', handleCatalogStats, {
+    response: catalogStatsResponseSchema,
   });
 
 export type App = typeof app;

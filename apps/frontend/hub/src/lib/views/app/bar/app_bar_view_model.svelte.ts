@@ -5,7 +5,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CurrentUser } from '@aikami/types';
-import type { RouteName } from '$router';
+import { routeTypeOf } from '$routes';
 import { appService, authService, routerService } from '$services';
 
 export type ProfileMenuOption = {
@@ -60,8 +60,8 @@ class AppBarViewModel
       return true;
     }
 
-    const publicRoutes: RouteName[] = ['login'];
-    return !publicRoutes.includes(this.currentRoute);
+    // Drawer button on every non-auth page — catalog included (C-396).
+    return routeTypeOf(this.currentRoute) !== 'unauthenticated';
   }
 
   get appBarTitle() {
@@ -70,6 +70,10 @@ class AppBarViewModel
         return 'Dashboard';
       case 'login':
         return 'Login';
+      case 'catalog':
+      case 'catalogCategory':
+      case 'catalogAsset':
+        return 'Catalog';
       default:
         return undefined;
     }
@@ -104,7 +108,8 @@ class AppBarViewModel
 
   async goToHome(): Promise<void> {
     try {
-      await routerService.goToRoute('dashboard', {
+      // The brand button lands on the catalog — the hub's public home (C-396).
+      await routerService.goToRoute('catalog', {
         pathParameters: undefined,
         queryParameters: undefined,
       });

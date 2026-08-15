@@ -33,6 +33,8 @@ export type CatalogEntry = {
   authors: readonly string[];
   sourceUrls: readonly string[];
   licenseNote?: string;
+  /** sha256 of the generated single-frame preview (C-396 AC-5). */
+  thumbnailHash?: string;
 };
 
 /** Merged attribution shape from asset_credits.json. */

@@ -6,7 +6,7 @@
 // a pack can be owned, moderated and versioned.
 
 import { BaseClass, type BaseClassOptions } from '@aikami/utils';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import { type PackRow, packs, type packVisibility } from '../schema.ts';
@@ -100,5 +100,19 @@ export class PackRepository extends BaseClass<PackRepositoryOptions> {
   async delete(id: string): Promise<boolean> {
     const rows = await this._db.delete(packs).where(eq(packs.id, id)).returning({ id: packs.id });
     return rows.length > 0;
+  }
+
+  /**
+   * Count of publicly visible packs (C-396 AC-4 placeholder aggregate).
+   *
+   * Zero until C-398/C-399 write rows — the stats stream's job is to prove
+   * the I-8 machinery end to end, not to return meaningful numbers yet.
+   */
+  async countPublic(): Promise<number> {
+    const rows = await this._db
+      .select({ value: count() })
+      .from(packs)
+      .where(eq(packs.visibility, sql`'public'::pack_visibility`));
+    return rows[0]?.value ?? 0;
   }
 }

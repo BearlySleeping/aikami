@@ -11,6 +11,7 @@ import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
 import { logger } from '$logger';
 import type { RouteName } from '$router';
+import { routeTypeOf } from '$routes';
 import { appService, authService, routerService } from '$services';
 import type { AdminHookData } from '$types';
 import type { BaseMetaTags } from './metadata/head_tags_view_model.svelte';
@@ -101,9 +102,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     if (!this.currentRoute) {
       return false;
     }
-    // Example: Use your router's exact logic here
-    const isPublic = ['login'].includes(this.currentRoute);
-    return this.isLoggedIn && !isPublic && !this._isMinimalRouteView(this.currentRoute);
+    // Drawer shows for signed-in users on every non-auth page — including
+    // the public catalog (C-396): a signed-in visitor browsing the catalog
+    // keeps their navigation. Only the auth pages stay minimal.
+    const isAuthPage = routeTypeOf(this.currentRoute) === 'unauthenticated';
+    return this.isLoggedIn && !isAuthPage && !this._isMinimalRouteView(this.currentRoute);
   }
 
   get showAppBar() {
@@ -212,17 +215,21 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     }
 
     try {
-      const isPublicRoute = ['login', 'register'].includes(route);
+      // Route-type-driven guards (C-396): the hub's default is PUBLIC. Only
+      // `authenticated` routes send anonymous visitors to login, and only
+      // `unauthenticated` routes (login) send signed-in users back to the
+      // app. Public catalog routes welcome everyone.
+      const routeType = routeTypeOf(route);
 
       // Rule 1: Authenticated users shouldn't be on auth pages
-      if (user && isPublicRoute) {
+      if (user && routeType === 'unauthenticated') {
         this.log('Redirecting authenticated user to app');
         await routerService.navigateToApp();
         return;
       }
 
       // Rule 2: Unauthenticated users shouldn't be on protected pages
-      if (!user && !isPublicRoute) {
+      if (!user && routeType === 'authenticated') {
         this.log('Redirecting unauthenticated user to login');
         await routerService.goToRoute('login', {
           pathParameters: undefined,
