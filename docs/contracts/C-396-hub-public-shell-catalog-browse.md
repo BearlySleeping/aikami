@@ -18,13 +18,13 @@ created_at: "2026-08-15"
 | Field | Value |
 |---|---|
 | **Source** | User request (2026-08-15). Architecture: `docs/architecture/data-layer-target-architecture.md` D-5, D-14, D-15 and invariant I-8 (amendments A-4, A-5). |
-| **Target** | `apps/frontend/hub/src/routes/`, `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/lib/types/data.ts`, `apps/frontend/hub/src/lib/constants/routes.ts` |
+| **Target** | `apps/frontend/hub/src/routes/`, `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/lib/types/data.ts`, `apps/frontend/hub/src/lib/constants/routes.ts`, `scripts/src/lib/catalog/` (thumbnail-generation phase added to the existing C-395 publish pipeline), `packages/shared/schemas/src/lib/catalog/catalog_index.ts` (`thumbnailHash` field) |
 | **Priority** | P1 — this is the hub's reason to exist. C-394 and C-395 are both plumbing for it. |
-| **Dependencies** | C-395 (the catalog index must exist to browse). C-394 only for the streamed stats in AC-4 — the browse pages work without it. |
+| **Dependencies** | C-395 (the catalog index must exist to browse). This contract also extends C-395's already-merged publish pipeline (`scripts/src/lib/catalog/`) with thumbnail generation — see Open Question 2 — without reopening the C-395 contract document or changing its status. C-394 only for the streamed stats in AC-4 — the browse pages work without it. |
 | **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → a page in `apps/frontend/docs/src/content/docs/` describing the catalog |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 
 ## Problem & Baseline Evidence
 
@@ -62,6 +62,8 @@ and attribution, and preview an asset before installing it.
 | Root redirect | `src/routes/+page.server.ts` | replace |
 | Typed API client | `@elysiajs/eden` treaty | reuse |
 | Catalog index | C-395 `index/v1/*.json` | reuse |
+| Publish pipeline (content-addressed upload, index writer) | `scripts/src/lib/catalog/` (C-395, PR #148, merged) | modify — add a thumbnail-generation phase; reuse the existing uploader, content-addressing and index writer as-is |
+| `CatalogAssetEntry` schema | `packages/shared/schemas/src/lib/catalog/catalog_index.ts` (C-395) | modify — add `thumbnailHash` |
 
 ## Overview
 
@@ -171,6 +173,12 @@ all interaction state.
   CDN; it never proxies through the hub.
 - Do not change `hooks.server.ts`, the session cookie, App Check, or
   `POST /api/auth/session`. The optional-session behaviour already works.
+- **Thumbnail generation happens in the publish pipeline, never in the hub or
+  the browser.** It is a new phase in `scripts/src/lib/catalog/`, run with the
+  same local R2 write credentials as the rest of the C-395 pipeline
+  (`scripts/.env.*`). The hub only ever reads a `thumbnailHash` that already
+  exists in the index — this preserves "no R2 write key in any browser bundle"
+  (I-1, I-7) exactly as C-395 established it.
 
 ## State & Data Models
 
@@ -210,14 +218,29 @@ type CatalogCategoryPageData = {
 /** A single asset, with license and attribution surfaced. */
 type CatalogAssetPageData = {
   entry: CatalogAssetEntry;
-  /** Resolved CDN URL for preview. */
+  /** Resolved CDN URL for preview — the same single-frame thumbnail used in
+   *  category grids (see Open Question 2), not the raw multi-frame sheet. */
   previewUrl: string;
   stats: Promise<AssetStats | null>;
 };
 ```
 
+`CatalogAssetEntry` (C-395, `packages/shared/schemas/src/lib/catalog/catalog_index.ts`)
+gains one field, produced by this contract's new pipeline phase:
+
+```ts
+/** sha256 of the generated single-frame preview image. Same content-addressed
+ *  scheme as the asset itself (`assets/<hash[0:2]>/<hash>.<ext>`), stored
+ *  under a `thumbnails/` prefix. Absent only for entries that predate this
+ *  contract's first republish. */
+thumbnailHash?: string;
+```
+
 `routes.ts` gains a third route type alongside `'authenticated'` and
-`'unauthenticated'` — `'public'`, meaning "renders either way".
+`'unauthenticated'` — `'public'`, meaning "renders either way". A signed-in
+visitor differs from an anonymous one only in the app bar's existing account
+menu (see Open Question 3) — no new member-only UI element is introduced by
+this contract.
 
 ## Quality Requirements
 
@@ -249,12 +272,21 @@ type CatalogAssetPageData = {
   - Index fetching + client-side filter/search within a loaded shard.
   - The streamed-stats path against C-394's API (degrading to null when absent).
   - A docs page describing the catalog.
+  - A thumbnail-generation phase added to the existing C-395 publish pipeline
+    (`scripts/src/lib/catalog/`): one content-addressed, single-frame preview
+    image per catalog asset, keyed by a per-animation-state frame-geometry
+    table (see Open Question 2 and Edge Cases). Adds `thumbnailHash` to
+    `CatalogAssetEntry` and republishes the index. This reuses C-395's
+    uploader, content-addressing and index writer unchanged — it does not
+    reopen or amend the C-395 contract document.
 - **Out of Scope:**
   - Uploads, submissions, moderation (C-398).
   - Ratings UI and install-count writes (C-399) — this contract only *displays* stats if present.
   - Any client (game) change (C-397).
   - Changing auth, session handling, or App Check.
   - Server-side search or pagination across the whole catalog. Filtering is within a loaded shard; if that proves insufficient it is a follow-up contract, not an improvisation here.
+  - Animated/hover previews or any frame beyond the single representative one. One static thumbnail per asset only.
+  - Running the thumbnail phase from CI. It stays a local ops command, matching C-395's Open Question 2 decision.
 
 ## Contract Size & Split Rule
 
@@ -266,6 +298,16 @@ no public page in it is unverifiable (nothing proves the guard was correctly
 narrowed), and catalog pages inside the current layout would be unreachable to
 the anonymous visitors they exist for. They land together. If the work grows,
 split the **asset detail page** out first — it is the most self-contained piece.
+
+Thumbnail generation stays in this contract rather than becoming a C-395
+amendment or a new contract, for the same test: it has no independent
+consumer. A thumbnail with no browse UI to render it is unverifiable, and this
+contract's own Edge Cases note ("retrofitting thumbnails means republishing")
+makes deferring it strictly more expensive than including it now. It is,
+however, the piece most likely to make this contract grow past the line — if
+the frame-geometry table turns out to need per-layout special-casing beyond a
+day's work, split **thumbnail generation** out as its own contract before
+Phase 4, not after discovering it mid-Phase-4.
 
 ## Acceptance Criteria
 
@@ -279,7 +321,9 @@ split the **asset detail page** out first — it is the most self-contained piec
 **Then** they are redirected to `/login` exactly as today
 
 **And when** a signed-in user requests `/` and `/catalog/lpc`
-**Then** both render, showing member affordances the anonymous visitor does not see
+**Then** both render, and the app bar shows the account menu in place of the
+anonymous visitor's login affordance — the only difference between the two
+(Open Question 3)
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -290,7 +334,7 @@ split the **asset detail page** out first — it is the most self-contained piec
 - Moon Task: `bun moon run hub:test`, `bun moon run hub:build`
 - E2E / Visual:
   - **Functional**: `tests/hub/catalog_public.spec.ts` — signed-out reaches `/` and `/catalog/lpc`; signed-out is redirected from `/dashboard`; signed-in reaches all three.
-  - **Visual**: `suites/hub_catalog.visual.ts` — route `/catalog/lpc`. Score 90+: a grid of sprite previews is visible, each tile shows a name and a license badge, the filter control is present, and no layout overflow.
+  - **Visual**: `suites/hub_catalog.visual.ts` — route `/catalog/lpc`. Score 90+: a grid of sprite previews is visible (single-frame thumbnails per AC-5, not raw sheets), each tile shows a name and a license badge, the filter control is present, and no layout overflow.
 
 **Watch Points**:
 - 🔴 `src/routes/+page.server.ts` currently redirects **unconditionally**. Replacing it is the single change that makes the hub public — verify no other layout reintroduces a guard above the `(public)` group.
@@ -369,36 +413,94 @@ unhandled promise rejection occurs
 - 🔴 Call `setHeaders` **before** returning the streamed promise. After streaming begins, headers are already flushed and `setHeaders` throws.
 - Streaming requires JavaScript. With JS disabled the `{#await}` block renders its pending branch and never resolves — make the pending state degrade to something acceptable as a permanent state (e.g. simply absent), not a spinner that spins forever.
 
+### AC-5: Sprite-sheet previews are single-frame thumbnails, not raw sheets
+
+**Given** a catalog asset entry is republished through the extended pipeline
+**When** the thumbnail-generation phase runs
+**Then** a single-frame preview image is generated using a per-animation-state
+frame-geometry table, uploaded to a content-addressed key distinct from the
+source sheet, and `CatalogAssetEntry.thumbnailHash` in the republished index
+resolves to it
+
+**And when** a category grid or the asset detail page renders that entry
+**Then** the image shown is the cropped single frame — never the full
+multi-frame sheet, and never a mid-frame or wrong-direction crop
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-5 | Unit + Integration | `scripts/src/lib/catalog/__tests__/thumbnail_generation.test.ts` | `index/v1/<category>.json` `thumbnailHash` field | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run scripts:test`
+- Integration: run the thumbnail phase against a fixture covering at least
+  `walk`, `thrust` and `idle` states (different frame grids); assert the
+  cropped output is the intended frame, not an arbitrary offset.
+- Visual: covered by AC-1's grid visual suite and AC-3's detail visual suite —
+  both now assert a single sprite frame per tile, not a sheet.
+
+**Watch Points**:
+- 🔴 LPC animation layouts are not uniform — `walk`, `thrust`, `slash`, `cast`,
+  `hurt`, `idle` etc. have different frame counts and grid dimensions. A single
+  global frame size will silently crop mid-frame for every layout that doesn't
+  match it. The frame-geometry table must be keyed by animation state, not
+  assumed constant.
+- A missing or wrong geometry entry produces a plausible-looking but *wrong*
+  image (part of two frames, wrong direction) rather than an error — assert
+  crop correctness against known frame boundaries in the test, not just "an
+  image file was produced".
+- Default to a defined safe frame (e.g. south-facing, first frame) for any
+  state without an explicit table entry, and log which tags fell back —
+  silence here is how a wrong thumbnail ships unnoticed at 12,707-asset scale.
+
 ## Implementation Sequence
 
 1. **Phase 1 (Route restructure)**: create `(public)/`, move the root page into it, replace the unconditional redirect, add the `'public'` route type and extend `routes.test.ts`. Verify AC-1 with no catalog content yet.
 2. **Phase 2 (Index client)**: server-side index fetching with caching and an error state; page data types. Verify AC-2 against a published index.
-3. **Phase 3 (Browse UI)**: category views and view models, filtering and search, navigation entries. Verify AC-1's visual criteria.
-4. **Phase 4 (Detail)**: asset detail with preview, license, attribution. Verify AC-3.
-5. **Phase 5 (Streamed stats)**: the C-394-backed promise path with `.catch()` and skeletons. Verify AC-4.
-6. **Phase 6 (Validation + docs)**: `hub:test`, `hub:build`, E2E, visual suites, docs page.
+3. **Phase 3 (Thumbnail pipeline)**: extend `scripts/src/lib/catalog/` with the frame-geometry table and thumbnail-generation phase, add `thumbnailHash` to `CatalogAssetEntry`, and republish. Verify AC-5 before Phase 4 needs the URLs — this is the "decide before Phase 3" gotcha, now scheduled as its own phase.
+4. **Phase 4 (Browse UI)**: category views and view models, filtering and search, navigation entries, thumbnail rendering. Verify AC-1's visual criteria.
+5. **Phase 5 (Detail)**: asset detail with preview, license, attribution. Verify AC-3.
+6. **Phase 6 (Streamed stats)**: the C-394-backed promise path with `.catch()` and skeletons. Verify AC-4.
+7. **Phase 7 (Validation + docs)**: `hub:test`, `hub:build`, E2E, visual suites, docs page.
 
 ## Edge Cases & Gotchas
 
 - **The auth inversion is the risky part, not the UI.** Today every route is guarded by default. After this contract the default is public — a member-only page added later without the guard leaks. Consider asserting in `routes.test.ts` that every route marked `'authenticated'` actually resolves under the `(authenticated)` group.
 - **`+page.server.ts` vs `+page.ts`.** Use `+page.server.ts` for anything touching the index cache or the database. Do not add `+page.ts` files "for symmetry" with nordclaw — see Design Reference; there is nothing for them to do here.
 - **Devalue handles `Date`, but not class instances.** If a value must survive the wire as something richer than a plain object, it needs a transport shape. Prefer plain data.
-- **LPC previews are sprite sheets, not portraits.** A raw `<img>` of a sheet shows every frame in a grid. Either render a single frame via CSS `background-position` or generate preview thumbnails in C-395. Decide before Phase 3 — retrofitting thumbnails means republishing.
+- **LPC previews are sprite sheets, not portraits.** A raw `<img>` of a sheet shows every frame in a grid. Resolved (Open Question 2): pre-generated single-frame thumbnails, produced by a new phase in this contract's Phase 3 — not CSS `background-position` cropping, and not a C-395 amendment. Retrofitting thumbnails later means republishing, which is why generation is sequenced before the browse UI that consumes it.
 - **The catalog landing must not fetch the 7 MB root manifest.** It needs category summaries only. If C-395's root index is not small enough to satisfy that, this contract is blocked on fixing the index, not on working around it client-side.
 - **`notification_drawer` and other shell pieces may assume a session.** Audit the shell view models for anonymous-path assumptions before Phase 3.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+All three resolved 2026-08-15 (see Amendments).
 
-1. **What does an anonymous visitor see at `/` — the catalog itself, or a landing page that links to it?** This is a product decision that changes Phase 1's page. Recommend the catalog landing directly (categories with counts and a search box): it makes the hub's purpose legible in one screen and gives a signed-out visitor somewhere to go.
-2. **Sprite-sheet previews: CSS frame-cropping or pre-generated thumbnails?** Thumbnails look better and cost a republish plus storage; CSS cropping is free but needs frame geometry the index does not currently carry. If thumbnails, C-395 must generate them — which means amending C-395 before it is implemented, not after.
-3. **Do member affordances exist at all in this contract?** AC-1 asserts a signed-in user "sees member affordances the anonymous visitor does not", but every member action (submit, rate) belongs to C-398/C-399. Either narrow that clause to just the app-bar account menu, or define one concrete affordance here. Recommend narrowing — the account menu already exists.
+1. **RESOLVED — what does an anonymous visitor see at `/`?** The catalog
+   landing itself (categories with counts and a search box), not an
+   interstitial page. Auth guard narrows to `(authenticated)/dashboard` and
+   future member-only routes; nothing else is gated.
+2. **RESOLVED — CSS frame-cropping or pre-generated thumbnails?**
+   Pre-generated thumbnails, generated by a new phase added to this contract
+   (Phase 3, AC-5), not by amending the already-merged C-395. Rationale:
+   both approaches need the same per-animation-state frame-geometry knowledge
+   (LPC sheet layouts differ by state), so CSS cropping doesn't actually avoid
+   that cost — it only defers it to every page load, at full-sheet download
+   size, against a 1s-cold-FCP budget. Thumbnails pay the cost once at publish
+   time via C-395's existing content-addressed, idempotent pipeline, which
+   this contract extends rather than reopens (C-395's contract document and
+   status are unchanged).
+3. **RESOLVED — do member affordances exist in this contract?** Narrowed to
+   the existing app-bar account menu. AC-1's "member affordances" clause means
+   specifically: signed-in visitors see the account menu, anonymous visitors
+   see a login affordance instead. No new member-only UI is introduced here;
+   submit/rate affordances remain C-398/C-399.
 
 ## Amendments
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
+| 2.1.0 | 2026-08-15 | Resolved all three Open Questions on user instruction: (1) public catalog landing at `/`, auth narrowed to member-only routes; (2) pre-generated thumbnails chosen over CSS frame-cropping, implemented as a new phase in **this** contract extending C-395's publish pipeline rather than amending the merged C-395 contract — added `thumbnailHash` to `CatalogAssetEntry`, a new Phase 3 (Thumbnail pipeline), and AC-5; (3) member affordances narrowed to the existing app-bar account menu, no new UI. | snorreks (via Claude) |
 | — | — | — | — |
 
 ## Promotion Lifecycle
