@@ -31,7 +31,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 jobs:
   publish:
@@ -54,12 +53,21 @@ jobs:
       # and `:$sha`) so users can pin a known-good stack version instead of
       # always tracking `latest`. Bump apps/backend/local-stack/package.json
       # to cut a new version.
-      - name: Read local-stack version
+      #
+      # IMAGE_PREFIX is computed here (not in workflow-level `env:`) because
+      # `github.repository_owner` is "BearlySleeping" — mixed case — and
+      # Docker repository names must be lowercase. GitHub Actions expression
+      # syntax has no case-conversion function, so this is a shell step.
+      # (Every build-push step below failed on this the first time the
+      # AC-1 fix let the workflow get this far — "invalid tag ...: repository
+      # name must be lowercase".)
+      - name: Read local-stack version + image prefix
         id: version
         run: |
           version=$(jq -r .version apps/backend/local-stack/package.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "LOCAL_STACK_VERSION=$version" >> "$GITHUB_ENV"
+          echo "IMAGE_PREFIX=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
