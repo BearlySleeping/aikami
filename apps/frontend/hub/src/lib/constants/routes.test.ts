@@ -74,14 +74,15 @@ describe('hub routes — C-396 public catalog', () => {
     }
   });
 
-  test('public routes render for anonymous visitors — no route defaults to authenticated', () => {
-    const publicIds = Object.values(routes)
-      .filter((route) => route.type === 'public')
-      .map((route) => route.routeId);
+  test('every public route resolves under the (public) route group — future public routes cannot bypass the invariant', () => {
+    const publicRoutes = Object.entries(routes).filter(([, route]) => route.type === 'public');
     // The two catalog browse surfaces the contract guarantees for anonymous
     // visitors: the landing and a category page.
-    expect(publicIds).toContain('/(public)');
-    expect(publicIds).toContain('/(public)/catalog/[category]');
-    expect(publicIds).toContain('/(public)/catalog/[category]/[tag]');
+    expect(publicRoutes.length).toBeGreaterThanOrEqual(3);
+    for (const [name, route] of publicRoutes) {
+      expect(route.routeId, `public route '${name}' must resolve under (public)`).toMatch(
+        /^\/\(public\)/,
+      );
+    }
   });
 });

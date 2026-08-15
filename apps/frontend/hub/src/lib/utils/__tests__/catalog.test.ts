@@ -90,6 +90,15 @@ describe('resolveThumbnailUrl', () => {
     );
   });
 
+  test('normalises a trailing-slash origin — exactly one separator before thumbnails', () => {
+    const entry = makeEntry({
+      thumbnailHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    });
+    expect(resolveThumbnailUrl('https://assets.bearlysleeping.com/', entry)).toBe(
+      'https://assets.bearlysleeping.com/thumbnails/9f/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.webp',
+    );
+  });
+
   test('returns undefined when the entry has no thumbnailHash', () => {
     expect(resolveThumbnailUrl('https://assets.bearlysleeping.com', makeEntry())).toBeUndefined();
   });

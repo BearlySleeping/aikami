@@ -12,7 +12,12 @@
 // first paint (I-8) — the page data type carries the promise itself, never a
 // blocked-on value.
 
-import type { CatalogAssetEntry } from '@aikami/schemas';
+import type { AssetStats, CatalogAssetEntry, CategoryStats } from '@aikami/schemas';
+
+// Re-export the shared stats contract so page data references resolve through
+// $types without a second source of truth (C-396: these shapes are defined
+// once in @aikami/schemas and consumed by the hub's stats handler + loads).
+export type { AssetStats, CategoryStats };
 
 // ---------------------------------------------------------------------------
 // Catalog landing — category summaries only
@@ -71,11 +76,6 @@ export type CatalogCategoryPageData = {
   stats: Promise<CategoryStats | null>;
 };
 
-/** Placeholder aggregate served by GET /api/catalog/stats (C-396 AC-4). */
-export type CategoryStats = {
-  packCount: number;
-};
-
 // ---------------------------------------------------------------------------
 // Catalog asset — detail page
 // ---------------------------------------------------------------------------
@@ -94,9 +94,4 @@ export type CatalogAssetPageData = {
   previewUrl: string | undefined;
   /** Streamed — null when the stats endpoint is unreachable/unconfigured. */
   stats: Promise<AssetStats | null>;
-};
-
-/** Placeholder aggregate served by GET /api/catalog/stats (C-396 AC-4). */
-export type AssetStats = {
-  packCount: number;
 };

@@ -36,6 +36,14 @@ export type CatalogStatsResponse = (CategoryStats | AssetStats) | null;
 
 let _repositories: CatalogRepositories | undefined;
 
+/**
+ * In-process cache for the pack-count aggregate. The detail route is the
+ * highest-fan-out page in the catalog and the value changes rarely — a short
+ * TTL bounds Postgres round trips during traffic spikes/crawling (N8).
+ */
+const STATS_CACHE_TTL_MS = 45_000;
+let _statsCache: { cachedAt: number; value: CategoryStats | AssetStats } | undefined;
+
 /** Lazily build the C-394 repositories over the shared pool. */
 const getRepositories = (): CatalogRepositories => {
   if (!_repositories) {
@@ -65,11 +73,18 @@ export const loadPackStats = async (): Promise<CategoryStats | AssetStats | null
   }
 
   try {
+    const now = Date.now();
+    if (_statsCache && now - _statsCache.cachedAt < STATS_CACHE_TTL_MS) {
+      return _statsCache.value;
+    }
     const repositories = getRepositories();
     const packCount = await repositories.packs.countPublic();
-    return { packCount };
+    const value = { packCount };
+    _statsCache = { cachedAt: Date.now(), value };
+    return value;
   } catch (error) {
-    // Expected and degraded — warn, never error (AC-4).
+    // Expected and degraded — warn, never error (AC-4). Not cached: the
+    // next request probes the database again once it recovers.
     logger.warn('catalog:stats unavailable — browse continues without stats', { error });
     return null;
   }
@@ -100,4 +115,5 @@ export const hasStatsRepositories = (): boolean =>
  */
 export const resetStatsRepositories = (): void => {
   _repositories = undefined;
+  _statsCache = undefined;
 };

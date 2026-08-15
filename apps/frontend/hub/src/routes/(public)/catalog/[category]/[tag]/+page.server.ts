@@ -10,14 +10,31 @@
 import { error } from '@sveltejs/kit';
 import { catalogCategoryLabel } from '$lib/constants/catalog_labels.ts';
 import { loadPackStats } from '$lib/server/api/catalog_stats.ts';
-import { getAssetEntry, resolveThumbnailUrl } from '$lib/server/catalog/catalog_index.ts';
+import {
+  CatalogIndexUnavailableError,
+  getAssetEntry,
+  resolveThumbnailUrl,
+} from '$lib/server/catalog/catalog_index.ts';
 import type { CatalogAssetPageData } from '$types';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   depends('catalog:pack');
 
-  const found = await getAssetEntry(params.category, params.tag);
+  let found: Awaited<ReturnType<typeof getAssetEntry>>;
+  try {
+    found = await getAssetEntry(params.category, params.tag);
+  } catch (cause) {
+    if (cause instanceof CatalogIndexUnavailableError) {
+      // Index outage → an explicit 503 with a fixed user-facing message,
+      // never a 500 and never internal URL details (Quality Requirements:
+      // "Neither is a 500").
+      throw error(503, {
+        message: 'The catalog index is unavailable. Please try again in a moment.',
+      });
+    }
+    throw cause;
+  }
   if (!found) {
     error(404, {
       message: `Asset "${params.tag}" was not found in category "${params.category}".`,

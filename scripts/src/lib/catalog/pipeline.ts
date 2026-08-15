@@ -58,6 +58,7 @@ export type CatalogPublishReport = {
     generated: number;
     skippedNonImage: number;
     decodeFailedTags: readonly string[];
+    geometryFailedTags: readonly string[];
     fallbackTags: readonly string[];
     uploaded: number;
     skipped: number;
@@ -120,6 +121,7 @@ export const runCatalogPublish = async (
         generated: 0,
         skippedNonImage: 0,
         decodeFailedTags: [],
+        geometryFailedTags: [],
         fallbackTags: [],
         uploaded: 0,
         skipped: 0,
@@ -157,6 +159,7 @@ export const runCatalogPublish = async (
         generated: 0,
         skippedNonImage: 0,
         decodeFailedTags: [],
+        geometryFailedTags: [],
         fallbackTags: [],
         uploaded: 0,
         skipped: 0,

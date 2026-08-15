@@ -48,7 +48,13 @@ export default defineConfig({
       prompt: HUB_CATALOG_PROMPT,
       schema: HubCatalogSchema,
       screenshotSelector: '[data-testid="catalog-category"]',
-      requiredTrueFields: ['gridVisible', 'singleFramePreviews', 'noOverflow'],
+      requiredTrueFields: [
+        'gridVisible',
+        'licenseBadges',
+        'filterControl',
+        'singleFramePreviews',
+        'noOverflow',
+      ],
     },
   ],
 });

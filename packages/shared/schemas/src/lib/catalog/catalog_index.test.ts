@@ -103,6 +103,26 @@ describe('CatalogAssetEntrySchema', () => {
   test('rejects a non-sha256 thumbnailHash', () => {
     const entry = { ...VALID_ENTRY, thumbnailHash: 'not-a-hash' };
     expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(false);
+    // Uppercase hex and off-by-one lengths must also fail (the pattern is
+    // exactly 64 lowercase hex chars — case-sensitivity is a contract).
+    expect(
+      Value.Check(CatalogAssetEntrySchema, {
+        ...VALID_ENTRY,
+        thumbnailHash: '9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CatalogAssetEntrySchema, {
+        ...VALID_ENTRY,
+        thumbnailHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a0',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CatalogAssetEntrySchema, {
+        ...VALID_ENTRY,
+        thumbnailHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08' + '0',
+      }),
+    ).toBe(false);
   });
 });
 

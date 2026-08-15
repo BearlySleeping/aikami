@@ -10,10 +10,9 @@
 // same flow the hub's login page uses.
 
 import { expect, test } from '@playwright/test';
+import { EMULATOR_PORTS, FIREBASE_API_KEY } from '../../src/config';
 
-const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-const AUTH_EMULATOR_URL = `http://127.0.0.1:${9098 + EMULATOR_PORT_OFFSET}`;
-const FIREBASE_API_KEY = 'fake-api-key';
+const AUTH_EMULATOR_URL = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
 const AUTH_STORAGE_KEY = `firebase:authUser:${FIREBASE_API_KEY}:[DEFAULT]`;
 
 /**
@@ -60,6 +59,11 @@ const seedSignedInState = async (page: import('@playwright/test').Page): Promise
           if (!db.objectStoreNames.contains('firebaseLocalStorage')) {
             db.createObjectStore('firebaseLocalStorage');
           }
+        };
+        request.onblocked = () => {
+          // Another connection holds the DB open — the promise must still
+          // settle instead of hanging the page load forever.
+          reject(new Error('indexedDB.open was blocked by an existing connection'));
         };
         request.onsuccess = () => {
           const db = request.result;
@@ -117,20 +121,32 @@ test.describe('Catalog public shell — C-396 AC-1', () => {
     await expect(
       page.getByTestId('catalog-landing').getByRole('heading', { name: 'Catalog' }),
     ).toBeVisible();
-    // Category cards from the live index.
-    await expect(page.getByRole('button', { name: /LPC Characters/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Music/ })).toBeVisible();
+    // Structural: the category grid renders with at least one category card.
+    await expect(page.getByTestId('catalog-category-grid')).toBeVisible();
+    await expect(page.getByTestId('catalog-category-grid').locator('li').first()).toBeVisible();
     // Anonymous visitor: app bar shows the login affordance, no account menu.
     await expect(page.getByRole('button', { name: 'Login' })).toBeVisible();
     await expect(page.locator('[aria-label="Profile menu"]')).toHaveCount(0);
   });
 
-  test('anonymous visitor reaches a category page and sees the asset grid', async ({ page }) => {
+  test('live index exposes the expected category labels (data pin)', async ({ page }) => {
+    // This test deliberately pins LIVE index content — it fails for a data
+    // reason if the index is republished without LPC/Music, not for a code
+    // reason. The structural tests above do not depend on it.
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /LPC Characters/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Music/ })).toBeVisible();
+  });
+
+  test('anonymous visitor reaches a category page and sees a non-empty asset grid', async ({
+    page,
+  }) => {
     const response = await page.goto('/catalog/lpc');
     expect(response?.status()).toBe(200);
 
     await expect(page.getByTestId('catalog-category')).toBeVisible();
     await expect(page.getByTestId('catalog-asset-grid')).toBeVisible();
+    // Structural: at least one tile renders — never depends on which asset.
     await expect(page.getByTestId('catalog-asset-tile').first()).toBeVisible();
   });
 

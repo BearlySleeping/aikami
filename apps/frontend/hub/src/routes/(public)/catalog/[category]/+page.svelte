@@ -7,7 +7,10 @@ import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 
-const viewModel = getCategoryViewModel({ data, className: 'CategoryViewModel' });
+// React to route data changes (catalog:pack invalidation): $derived rebuilds
+// the view model whenever `data` changes, so entries/search state never go
+// stale after a reload.
+const viewModel = $derived(getCategoryViewModel({ data, className: 'CategoryViewModel' }));
 </script>
 
 <CategoryView {viewModel} />

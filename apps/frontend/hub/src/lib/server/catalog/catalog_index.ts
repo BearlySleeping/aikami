@@ -32,6 +32,7 @@ import {
   type CatalogIndexShard,
   CatalogIndexShardSchema,
 } from '@aikami/schemas';
+import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { env } from '$env/dynamic/private';
 import { logger } from '$logger';
@@ -51,6 +52,14 @@ export const catalogOriginUrl = (): string => env.CATALOG_ORIGIN_URL ?? '';
  * memory instead of hammering the CDN.
  */
 export const CATALOG_INDEX_CACHE_TTL_MS = 60_000;
+
+/**
+ * Failure cache TTL. While the origin is down, a hung/timeout fetch would
+ * otherwise block every page view for the full request timeout; the negative
+ * cache serves the degraded error state fast for a few seconds, then probes
+ * the origin again.
+ */
+export const CATALOG_INDEX_FAILURE_TTL_MS = 5_000;
 
 /** Request timeout for index fetches — a hung origin must degrade, not hang. */
 const CATALOG_FETCH_TIMEOUT_MS = 10_000;
@@ -76,15 +85,19 @@ export class CatalogIndexUnavailableError extends Error {
 // Fetch + cache
 // ---------------------------------------------------------------------------
 
-type CacheEntry = {
-  fetchedAt: number;
-  data: unknown;
-};
+type CacheEntry =
+  | { kind: 'ok'; fetchedAt: number; data: unknown }
+  | { kind: 'error'; failedAt: number; error: CatalogIndexUnavailableError };
 
 const documentCache = new Map<string, CacheEntry>();
 
+/** In-flight promises — concurrent cold requests share one fetch (coalescing). */
+const inFlight = new Map<string, Promise<unknown>>();
+
 const isCacheFresh = (entry: CacheEntry): boolean =>
-  Date.now() - entry.fetchedAt < CATALOG_INDEX_CACHE_TTL_MS;
+  entry.kind === 'ok'
+    ? Date.now() - entry.fetchedAt < CATALOG_INDEX_CACHE_TTL_MS
+    : Date.now() - entry.failedAt < CATALOG_INDEX_FAILURE_TTL_MS;
 
 /** Fetch one JSON document with timeout + status check. */
 const fetchJson = async (url: string): Promise<unknown> => {
@@ -118,20 +131,61 @@ const fetchJson = async (url: string): Promise<unknown> => {
   }
 };
 
-/** Fetch a JSON document through the in-process TTL cache. */
-const fetchCached = async (url: string): Promise<unknown> => {
+/**
+ * Fetch a JSON document through the TTL cache, validating it once per TTL
+ * window and caching the VALIDATED document (schema validation never runs
+ * against a cache hit). Coalesces concurrent cold requests onto one fetch,
+ * and negative-caches failures for a short failure TTL.
+ */
+const fetchValidated = async <T>(options: {
+  url: string;
+  schema: TSchema;
+  documentName: string;
+}): Promise<T> => {
+  const { url, schema, documentName } = options;
+
   const cached = documentCache.get(url);
   if (cached && isCacheFresh(cached)) {
-    return cached.data;
+    if (cached.kind === 'error') {
+      throw cached.error;
+    }
+    return cached.data as T;
   }
-  const data = await fetchJson(url);
-  documentCache.set(url, { fetchedAt: Date.now(), data });
-  return data;
+
+  const pending = inFlight.get(url);
+  if (pending) {
+    return pending as Promise<T>;
+  }
+
+  const promise = (async () => {
+    try {
+      const raw = await fetchJson(url);
+      if (!Value.Check(schema, raw)) {
+        logger.error('catalog:index failed schema validation', { url, documentName });
+        throw new CatalogIndexUnavailableError(`${documentName} failed schema validation`, { url });
+      }
+      documentCache.set(url, { kind: 'ok', fetchedAt: Date.now(), data: raw });
+      return raw as T;
+    } catch (cause) {
+      const error =
+        cause instanceof CatalogIndexUnavailableError
+          ? cause
+          : new CatalogIndexUnavailableError(`Catalog index unavailable: ${url}`, { url, cause });
+      documentCache.set(url, { kind: 'error', failedAt: Date.now(), error });
+      throw error;
+    } finally {
+      inFlight.delete(url);
+    }
+  })();
+
+  inFlight.set(url, promise);
+  return promise;
 };
 
 /** Clear the in-process cache — used by tests. */
 export const clearCatalogIndexCache = (): void => {
   documentCache.clear();
+  inFlight.clear();
 };
 
 // ---------------------------------------------------------------------------
@@ -149,13 +203,11 @@ export const fetchRootIndex = async (): Promise<CatalogIndexRoot> => {
       'Catalog index is not configured: CATALOG_ORIGIN_URL is unset',
     );
   }
-  const url = indexUrl(originUrl, 'catalog.json');
-  const raw = await fetchCached(url);
-  if (!Value.Check(CatalogIndexRootSchema, raw)) {
-    logger.error('catalog:root index failed schema validation', { url });
-    throw new CatalogIndexUnavailableError('Catalog root index failed schema validation', { url });
-  }
-  return raw;
+  return await fetchValidated<CatalogIndexRoot>({
+    url: indexUrl(originUrl, 'catalog.json'),
+    schema: CatalogIndexRootSchema,
+    documentName: 'Catalog root index',
+  });
 };
 
 /** Fetch + validate one category shard document. */
@@ -166,15 +218,11 @@ export const fetchShard = async (shardId: string): Promise<CatalogIndexShard> =>
       'Catalog index is not configured: CATALOG_ORIGIN_URL is unset',
     );
   }
-  const url = indexUrl(originUrl, `${shardId}.json`);
-  const raw = await fetchCached(url);
-  if (!Value.Check(CatalogIndexShardSchema, raw)) {
-    logger.error('catalog:shard failed schema validation', { url, shardId });
-    throw new CatalogIndexUnavailableError(`Catalog shard ${shardId} failed schema validation`, {
-      url,
-    });
-  }
-  return raw;
+  return await fetchValidated<CatalogIndexShard>({
+    url: indexUrl(originUrl, `${shardId}.json`),
+    schema: CatalogIndexShardSchema,
+    documentName: `Catalog shard ${shardId}`,
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -205,8 +253,20 @@ export const getCategoryEntries = async (
   }
 
   const shards = await Promise.all(shardIds.map((id) => fetchShard(id)));
+
+  // Single-origin invariant: every shard of one publish shares the same
+  // originUrl. A partial republish must not silently resolve later shards'
+  // assets/thumbnails against the first shard's origin (D-14, AC-5).
+  const originUrl = shards[0]?.originUrl ?? root.originUrl;
+  if (shards.some((shard) => shard.originUrl !== originUrl)) {
+    logger.error('catalog:shard origin mismatch', { category, originUrl });
+    throw new CatalogIndexUnavailableError(
+      `Catalog shards for "${category}" disagree on originUrl — refusing to merge`,
+    );
+  }
+
   const entries = shards.flatMap((shard) => shard.entries);
-  return { entries, originUrl: shards[0]?.originUrl ?? root.originUrl };
+  return { entries, originUrl };
 };
 
 /** One asset entry by tag, resolved within its category shard. */

@@ -7,7 +7,12 @@ import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 
-const viewModel = getCatalogLandingViewModel({ data, className: 'CatalogLandingViewModel' });
+// React to load reruns: $derived rebuilds the view model whenever `data`
+// changes (e.g. catalog:root invalidation), so the copied categories/error
+// state never goes stale after a refresh.
+const viewModel = $derived(
+  getCatalogLandingViewModel({ data, className: 'CatalogLandingViewModel' }),
+);
 </script>
 
 <CatalogLandingView {viewModel} />

@@ -49,7 +49,13 @@ export default defineConfig({
       prompt: HUB_DETAIL_PROMPT,
       schema: HubCatalogDetailSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
-      requiredTrueFields: ['previewPanel', 'licenseVisible', 'attributionVisible', 'noOverflow'],
+      requiredTrueFields: [
+        'previewPanel',
+        'licenseVisible',
+        'attributionVisible',
+        'metadataVisible',
+        'noOverflow',
+      ],
     },
   ],
 });

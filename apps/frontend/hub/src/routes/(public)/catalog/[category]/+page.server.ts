@@ -10,7 +10,10 @@
 import { error } from '@sveltejs/kit';
 import { catalogCategoryLabel } from '$lib/constants/catalog_labels.ts';
 import { loadPackStats } from '$lib/server/api/catalog_stats.ts';
-import { getCategoryEntries } from '$lib/server/catalog/catalog_index.ts';
+import {
+  CatalogIndexUnavailableError,
+  getCategoryEntries,
+} from '$lib/server/catalog/catalog_index.ts';
 import type { CatalogCategoryPageData } from '$types';
 import type { PageServerLoad } from './$types';
 
@@ -21,7 +24,20 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   // meaningless without it. Fetches the root index (to discover split-shard
   // ids) plus ONLY this category's shards — never another category's shards,
   // never the 7 MB client manifest.
-  const categoryData = await getCategoryEntries(params.category);
+  let categoryData: Awaited<ReturnType<typeof getCategoryEntries>>;
+  try {
+    categoryData = await getCategoryEntries(params.category);
+  } catch (cause) {
+    if (cause instanceof CatalogIndexUnavailableError) {
+      // Index outage → an explicit 503 with a fixed user-facing message,
+      // never a 500 and never internal URL details (Quality Requirements:
+      // "Neither is a 500").
+      throw error(503, {
+        message: 'The catalog index is unavailable. Please try again in a moment.',
+      });
+    }
+    throw cause;
+  }
   if (!categoryData) {
     error(404, { message: `Category "${params.category}" was not found in the catalog.` });
   }

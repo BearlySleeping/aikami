@@ -7,7 +7,10 @@ import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 
-const viewModel = getCatalogAssetViewModel({ data, className: 'CatalogAssetViewModel' });
+// React to parameter-only navigation (asset → asset) and load reruns:
+// $derived rebuilds the view model whenever `data` changes, so the displayed
+// entry/preview/stats never show a stale asset after navigation.
+const viewModel = $derived(getCatalogAssetViewModel({ data, className: 'CatalogAssetViewModel' }));
 </script>
 
 <CatalogAssetView {viewModel} />

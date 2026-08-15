@@ -30,8 +30,8 @@ export const load: PageServerLoad = async ({ setHeaders, depends }) => {
     }
 
     const categories = [...countByCategory.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, count]) => ({ id, label: catalogCategoryLabel(id), count }));
+      .map(([id, count]) => ({ id, label: catalogCategoryLabel(id), count }))
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     return {
       status: 'ready',
@@ -40,9 +40,11 @@ export const load: PageServerLoad = async ({ setHeaders, depends }) => {
     } satisfies CatalogLandingPageData;
   } catch (cause) {
     if (cause instanceof CatalogIndexUnavailableError) {
+      // Fixed user-facing message — never leak the internal origin URL or
+      // transport details embedded in cause.message to anonymous visitors.
       return {
         status: 'error',
-        message: cause.message,
+        message: 'The catalog index could not be loaded. Please try again in a moment.',
       } satisfies CatalogLandingPageData;
     }
     throw cause;

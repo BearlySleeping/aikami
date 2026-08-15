@@ -125,9 +125,14 @@ const setEnv = (options: { catalogOrigin?: string; neonUrl?: string }): void => 
 };
 
 describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     requestedPaths.length = 0;
     setEnv({ catalogOrigin: origin?.url, neonUrl: undefined });
+    // Each test starts with an empty document cache — a stale cached
+    // root/shard from a previous test (or its fixture server) must never
+    // leak into the next one.
+    const { clearCatalogIndexCache } = await import('$lib/server/catalog/catalog_index.ts');
+    clearCatalogIndexCache();
   });
 
   test('fetches the root index plus ONLY the requested category shards', async () => {
@@ -161,10 +166,11 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
             schemaVersion: 1,
             publishedAt: '2026-08-15T00:00:00.000Z',
             originUrl,
-            totalCount: 2,
+            totalCount: 3,
             categories: [
               { id: 'lpc__hat-magic', count: 1 },
               { id: 'lpc__body', count: 1 },
+              { id: 'lpcx', count: 1 },
               { id: 'music', count: 1 },
             ],
           });
@@ -189,16 +195,25 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
             entries: [makeEntry('lpc:body:body:male_adult:walk', 'lpc', 'body/body')],
           });
         }
+        if (url.pathname === '/index/v1/lpcx.json') {
+          // A sibling category whose id is a PREFIX of "lpc" (lpcx !== lpc,
+          // lpcx does not start with "lpc__") — discovery must NEVER fetch it.
+          return Response.json({
+            schemaVersion: 1,
+            publishedAt: '2026-08-15T00:00:00.000Z',
+            originUrl,
+            id: 'lpcx',
+            category: 'lpc',
+            entries: [makeEntry('lpcx:test:asset', 'lpc', 'test')],
+          });
+        }
         return new Response('not found', { status: 404 });
       },
     });
 
     try {
       setEnv({ catalogOrigin: server.url.toString().replace(/\/$/, ''), neonUrl: undefined });
-      const { clearCatalogIndexCache, getCategoryEntries } = await import(
-        '$lib/server/catalog/catalog_index.ts'
-      );
-      clearCatalogIndexCache();
+      const { getCategoryEntries } = await import('$lib/server/catalog/catalog_index.ts');
       const result = await getCategoryEntries('lpc');
       expect(result?.entries).toHaveLength(2);
       expect(requestedPaths.sort()).toEqual([
@@ -206,6 +221,9 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
         '/index/v1/lpc__body.json',
         '/index/v1/lpc__hat-magic.json',
       ]);
+      // Negative assertion: the lpcx sibling shard is NEVER fetched when
+      // loading lpc — prefix-similar ids must not match `<category>__`.
+      expect(requestedPaths).not.toContain('/index/v1/lpcx.json');
     } finally {
       server.stop(true);
       requestedPaths.length = 0;

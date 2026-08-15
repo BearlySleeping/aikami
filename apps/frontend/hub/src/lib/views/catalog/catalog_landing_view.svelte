@@ -61,7 +61,7 @@ const { viewModel }: Props = $props();
           placeholder="Search categories…"
           value={viewModel.searchQuery}
           oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
-          class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >
       </label>
     </header>

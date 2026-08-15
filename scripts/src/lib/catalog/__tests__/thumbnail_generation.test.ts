@@ -53,6 +53,33 @@ const readPixel = async (bytes: Uint8Array): Promise<Rgb> => {
   return { r: data[0], g: data[1], b: data[2] };
 };
 
+/** Read the bottom-right pixel of a generated thumbnail. */
+const readCornerPixel = async (bytes: Uint8Array): Promise<Rgb> => {
+  const { data, info } = await sharp(Buffer.from(bytes))
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const i = (info.height * info.width - 1) * info.channels;
+  return { r: data[i], g: data[i + 1], b: data[i + 2] };
+};
+
+/** Euclidean distance between two colours. */
+const colorDistance = (a: Rgb, b: Rgb): number =>
+  Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
+
+/**
+ * Assert the bottom-right pixel belongs to frame 0, NOT the fixture's filler
+ * colour (30,60,120) — a crop spilling into a neighbouring frame or direction
+ * row would show filler at the corner. Distance comparison instead of a tight
+ * per-channel tolerance: webp's lossy encoding shifts edge pixels by tens of
+ * levels, so the meaningful boundary assertion is "closer to frame 0 than to
+ * the filler", not "exactly frame 0".
+ */
+const expectCornerIsFrame0 = async (bytes: Uint8Array, frame0: Rgb): Promise<void> => {
+  const corner = await readCornerPixel(bytes);
+  const FILLER: Rgb = { r: 30, g: 60, b: 120 };
+  expect(colorDistance(corner, frame0)).toBeLessThan(colorDistance(corner, FILLER));
+};
+
 const expectPixelClose = (actual: Rgb, expected: Rgb): void => {
   expect(Math.abs(actual.r - expected.r)).toBeLessThanOrEqual(6);
   expect(Math.abs(actual.g - expected.g)).toBeLessThanOrEqual(6);
@@ -142,7 +169,7 @@ describe('generateThumbnail — crop correctness against known boundaries', () =
     expectPixelClose(pixel, { r: 220, g: 30, b: 30 });
   });
 
-  test('thrust crops the first frame of its 8×4 grid', async () => {
+  test('thrust crops the first frame of its 8×4 grid — dims and corner prove the boundary', async () => {
     const { generateThumbnail } = await import('../thumbnail_generation.ts');
     const thumb = await generateThumbnail({
       sourcePath: join(fixtureDir, 'thrust.webp'),
@@ -150,7 +177,14 @@ describe('generateThumbnail — crop correctness against known boundaries', () =
       state: 'thrust',
     });
     expect(thumb.geometry.framesPerRow).toBe(8);
+    // Exactly one frame — never wider/taller (a crop containing a second
+    // frame or direction row would show filler at the corner).
+    const meta = await sharp(thumb.bytes).metadata();
+    expect(meta.width).toBe(64);
+    expect(meta.height).toBe(64);
     expectPixelClose(await readPixel(thumb.bytes), { r: 30, g: 200, b: 40 });
+    // Boundary: the last pixel must still be frame 0, never the filler.
+    await expectCornerIsFrame0(thumb.bytes, { r: 30, g: 200, b: 40 });
   });
 
   test('idle crops the first frame of its 2×4 grid', async () => {
@@ -164,7 +198,7 @@ describe('generateThumbnail — crop correctness against known boundaries', () =
     expectPixelClose(await readPixel(thumb.bytes), { r: 40, g: 80, b: 230 });
   });
 
-  test('hurt crops the single-row 6×1 layout correctly', async () => {
+  test('hurt crops the single-row 6×1 layout correctly — dims and corner prove the boundary', async () => {
     const { generateThumbnail } = await import('../thumbnail_generation.ts');
     const thumb = await generateThumbnail({
       sourcePath: join(fixtureDir, 'hurt.webp'),
@@ -172,7 +206,13 @@ describe('generateThumbnail — crop correctness against known boundaries', () =
       state: 'hurt',
     });
     expect(thumb.geometry.rows).toBe(1);
+    // Single-row sheet: the crop must be 64×64 and end before frame 1 —
+    // the bottom-right pixel proves no neighbouring frame leaks in.
+    const meta = await sharp(thumb.bytes).metadata();
+    expect(meta.width).toBe(64);
+    expect(meta.height).toBe(64);
     expectPixelClose(await readPixel(thumb.bytes), { r: 200, g: 30, b: 180 });
+    await expectCornerIsFrame0(thumb.bytes, { r: 200, g: 30, b: 180 });
   });
 
   test('unknown state still crops the top-left frame and reports the fallback', async () => {
