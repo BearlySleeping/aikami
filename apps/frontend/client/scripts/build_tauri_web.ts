@@ -22,7 +22,7 @@
  * (bun run scripts/src/lib/ops/download_secrets.ts --mode <mode>).
  */
 
-import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

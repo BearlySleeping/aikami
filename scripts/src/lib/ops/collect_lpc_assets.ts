@@ -20,7 +20,14 @@
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
+import {
+  buildLpcCreditsSidecar,
+  LPC_LIBRARY_CREDIT,
+  LPC_SUPPLEMENT_APPROVED_SOURCE_PREFIXES,
+  parseLpcSourcePath,
+  readCreditsCsv,
+} from '../catalog/lpc_credits.ts';
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -63,26 +70,14 @@ const OUTPUT_CATALOG = join(
 );
 const MANIFEST_FILE = join(import.meta.dirname, '.lpc_manifest.json');
 
-const CONVERT = process.argv.includes('--convert');
+/** Upstream CREDITS.csv — vendored with the generator (13,787 rows). */
+const CREDITS_FILE = join(LPC_REPO, 'CREDITS.csv');
+/** C-395: attribution sidecar keyed by output asset tag (committed). */
+const OUTPUT_CREDITS = join(dirname(OUTPUT_ASSETS_DIR), 'lpc_credits.json');
+/** C-395: generated supplement for LPC tags CREDITS.csv does not cover (committed). */
+const OUTPUT_CREDITS_SUPPLEMENT = join(dirname(OUTPUT_ASSETS_DIR), 'lpc_credits_supplement.json');
 
-const SLOT_MAP: Record<string, string> = {
-  body: 'body',
-  head: 'head',
-  hair: 'hair',
-  torso: 'torso',
-  legs: 'legs',
-  feet: 'feet',
-  hat: 'hat',
-  shoulders: 'shoulders',
-  shield: 'shield',
-  weapon: 'weapon',
-  cape: 'cape',
-  eyes: 'eyes',
-  facial: 'facial',
-  neck: 'neck',
-  beards: 'beard',
-  dress: 'dress',
-};
+const CONVERT = process.argv.includes('--convert');
 
 const SOURCE_EXT = '.png';
 const WEBP_QUALITY = 80;
@@ -114,130 +109,13 @@ type AssetEntry = {
 };
 
 // ── Parsing ───────────────────────────────────────────────────────────────
+//
+// The source-path parser (SLOT_MAP / BODY_CANDIDATES / ANIM_CANDIDATES /
+// parsePath) lives in scripts/src/lib/catalog/lpc_credits.ts — the CREDITS
+// join and the collector must share ONE key derivation, or the attribution
+// join drifts (exactly what C-395 AC-4's preflight is designed to catch).
 
-const BODY_CANDIDATES = new Set([
-  'male',
-  'female',
-  'adult',
-  'child',
-  'teen',
-  'thin',
-  'muscular',
-  'pregnant',
-  'bg',
-  'fg',
-  'foreground',
-  'background',
-  'universal',
-  'mask',
-]);
-const ANIM_CANDIDATES = new Set([
-  'walk',
-  'idle',
-  'combat_idle',
-  'run',
-  'jump',
-  'sit',
-  'climb',
-  'emote',
-  'thrust',
-  'slash',
-  'halfslash',
-  'backslash',
-  'shoot',
-  'hurt',
-  'spellcast',
-  'die',
-]);
-
-function parsePath(fullPath: string): {
-  slot: string;
-  type: string;
-  bodyType: string;
-  anim: string;
-  color: string;
-} | null {
-  const rel = relative(SPRITESHEETS_DIR, fullPath);
-  const parts = rel.split('/');
-  if (parts.length < 2) {
-    return null;
-  }
-
-  const slot = parts[0];
-  if (!SLOT_MAP[slot]) {
-    return null;
-  }
-
-  // Find body type boundary
-  let bodyIdx = -1;
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (BODY_CANDIDATES.has(parts[i])) {
-      bodyIdx = i;
-      break;
-    }
-  }
-
-  let animIdx = -1;
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (ANIM_CANDIDATES.has(parts[i])) {
-      animIdx = i;
-      break;
-    }
-  }
-
-  const fileBase = basename(parts[parts.length - 1], SOURCE_EXT);
-  const isAnimFile = ANIM_CANDIDATES.has(fileBase);
-
-  if (isAnimFile) {
-    // File IS the animation state: e.g. shield/round/thrust.png
-    const typeParts = parts.slice(1, -1);
-    let bodyType = 'default';
-    if (bodyIdx > 0) {
-      bodyType = parts[bodyIdx];
-      // Remove body type from type parts (bodyIdx is index in parts, index in typeParts = bodyIdx - 1)
-      typeParts.splice(bodyIdx - 1, 1);
-    } else {
-      const maybeBody = typeParts[typeParts.length - 1];
-      if (BODY_CANDIDATES.has(maybeBody)) {
-        bodyType = maybeBody;
-        typeParts.pop();
-      }
-    }
-    return {
-      slot: SLOT_MAP[slot],
-      type: typeParts.join('/'),
-      bodyType,
-      anim: fileBase,
-      color: 'default',
-    };
-  }
-
-  if (bodyIdx > 0) {
-    const typeParts = parts.slice(1, bodyIdx);
-    const bodyType = parts[bodyIdx];
-    const rest = parts.slice(bodyIdx + 1);
-    const anim = rest.length > 1 && ANIM_CANDIDATES.has(rest[0]) ? rest[0] : 'idle';
-    const color = basename(rest[rest.length - 1], SOURCE_EXT);
-    return { slot: SLOT_MAP[slot], type: typeParts.join('/'), bodyType, anim, color };
-  }
-
-  if (animIdx > 0) {
-    const typeParts = parts.slice(1, animIdx);
-    const anim = parts[animIdx];
-    const color = basename(parts[parts.length - 1], SOURCE_EXT);
-    return { slot: SLOT_MAP[slot], type: typeParts.join('/'), bodyType: 'default', anim, color };
-  }
-
-  const typeParts = parts.slice(1, -1);
-  const color = fileBase;
-  return {
-    slot: SLOT_MAP[slot],
-    type: typeParts.join('/'),
-    bodyType: 'default',
-    anim: 'idle',
-    color,
-  };
-}
+type ParsedState = ReturnType<typeof parseLpcSourcePath>;
 
 function scoreEntry(p: { bodyType: string; anim: string; color: string }): number {
   const bi = BODY_TYPES.indexOf(p.bodyType);
@@ -285,13 +163,10 @@ const allFiles = walkFiles(SPRITESHEETS_DIR, SOURCE_EXT);
 console.log(`   ${allFiles.length.toLocaleString()} total PNG files`);
 
 // Group by (slot, type, bodyType) key first, then pick best per state
-const bestPerState = new Map<
-  string,
-  { parsed: NonNullable<ReturnType<typeof parsePath>>; path: string }
->();
+const bestPerState = new Map<string, { parsed: NonNullable<ParsedState>; path: string }>();
 
 for (const file of allFiles) {
-  const p = parsePath(file);
+  const p = parseLpcSourcePath(relative(SPRITESHEETS_DIR, file));
   if (!p) {
     continue;
   }
@@ -433,6 +308,74 @@ lines.push('}');
 
 writeFileSync(OUTPUT_CATALOG, lines.join('\n'));
 console.log(`📝 Catalog written: ${OUTPUT_CATALOG}`);
+
+// ── Phase 1.5: Credits sidecar (C-395 AC-4) ────────────────────────────────
+//
+// Join every chosen source PNG back to its CREDITS.csv row (keyed by the
+// spritesheet-relative path — the same key parsePath derives) and emit a
+// sidecar keyed by the OUTPUT asset tag, carrying licenses/authors/sourceUrls
+// VERBATIM (never SPDX-normalised — LPC publishes "OGA-BY 3.0").
+// The publish preflight (scripts/src/lib/catalog/preflight.ts) fails the run
+// if any catalog tag resolves to neither this sidecar nor project_licenses.json.
+//
+// Runs in both modes: it is pure lookup over the already-collected
+// bestPerState map — no conversion or extra filesystem walk.
+
+const creditsCsv = readCreditsCsv(CREDITS_FILE);
+if (creditsCsv.size === 0) {
+  console.warn('⚠️  CREDITS.csv not found — skipping lpc_credits.json sidecar.');
+  console.warn(`    Expected at: ${CREDITS_FILE}`);
+  console.warn('    The vendored generator is gitignored (examples/); regenerate where it exists.');
+} else {
+  const sidecar = buildLpcCreditsSidecar({
+    states: [...bestPerState.values()].map(({ parsed, path }) => ({ parsed, sourcePath: path })),
+    creditsCsv,
+    spritesheetsDir: SPRITESHEETS_DIR,
+  });
+  writeFileSync(OUTPUT_CREDITS, JSON.stringify(sidecar, null, 2));
+  console.log(
+    `📝 Credits written: ${OUTPUT_CREDITS} — ${Object.keys(sidecar.credits).length} resolved, ` +
+      `${sidecar.unresolvedSources.length} unresolved source(s)`,
+  );
+  if (sidecar.unresolvedSources.length > 0) {
+    console.warn(`    Unresolved: ${sidecar.unresolvedSources.slice(0, 10).join(', ')}`);
+  }
+
+  // Committed supplement: only unresolved tags whose SOURCE matches an
+  // approved LPC library prefix are declared with LPC-library-level
+  // provenance (AC-4 — no silent default, no blanket declaration). Every
+  // other unresolved tag is omitted so the publish preflight continues to
+  // fail for unapproved assets; the diff of this file is the review surface
+  // for the declaration.
+  const supplementCredits: Record<string, typeof LPC_LIBRARY_CREDIT> = {};
+  for (const { tag, source } of sidecar.unresolved) {
+    const approved = LPC_SUPPLEMENT_APPROVED_SOURCE_PREFIXES.some((prefix) =>
+      source.startsWith(prefix),
+    );
+    if (approved) {
+      supplementCredits[tag] = LPC_LIBRARY_CREDIT;
+    }
+  }
+  const supplementCount = Object.keys(supplementCredits).length;
+  writeFileSync(
+    OUTPUT_CREDITS_SUPPLEMENT,
+    JSON.stringify(
+      {
+        generatedAt: sidecar.generatedAt,
+        assetCount: supplementCount,
+        credits: supplementCredits,
+      },
+      null,
+      2,
+    ),
+  );
+  if (supplementCount > 0) {
+    console.log(
+      `📝 Credits supplement written: ${OUTPUT_CREDITS_SUPPLEMENT} — ` +
+        `${supplementCount} LPC library-level declarations`,
+    );
+  }
+}
 
 // ── Phase 2: Convert (parallel) ──────────────────────────────────────────
 
