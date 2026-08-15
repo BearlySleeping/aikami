@@ -2,7 +2,7 @@
 id: C-394
 title: "Server Data Plane: Neon PostgreSQL + Drizzle + the hub's catalog write model"
 source: "user request — hub community catalog; ADR amendments A-1, A-2, A-6"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-15"
 | **Target** | New `packages/backend/database/` (Drizzle schema, migrations, repositories), `packages/shared/schemas/src/lib/catalog/` (TypeBox API boundary), `apps/frontend/hub/src/lib/server/`, `apps/frontend/hub/.env.*`, `flake.nix`, `scripts/src/lib/deploy/` |
 | **Priority** | P1 — every other hub contract (C-396, C-398, C-399) needs a server data plane, and none of them can be written against a database that does not exist. |
 | **Dependencies** | C-387 (local PostgreSQL dev environment — implemented, PR #137). This contract re-pins its major version 17 → 18; see AC-2. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer setup notes in the repo README (database URL, migration commands) |
 | **Contract version** | 2.1.0 |
@@ -202,6 +202,9 @@ NEON_DATABASE_URL          Runtime. POOLED endpoint (host contains "-pooler").
                            emulator   → postgresql://localhost:5433/aikami_dev?sslmode=disable
                            production → Neon pooled, aws-eu-west-2, sslmode=require
                            Already set by the maintainer (2026-08-15).
+                           ⚠️ The value present in the local `.env.production` as of
+                           2026-08-15 uses the DIRECT host (no "-pooler") — swap to the
+                           -pooler host during Phase 6 before deploying.
                            Delivered to Cloud Run as a GSM secret by the existing
                            buildSecretArgsFromEnvFile path — no new machinery.
 
@@ -260,7 +263,7 @@ local       flake.nix: pkgs.postgresql_17 → pkgs.postgresql_18  (nixpkgs 18.4)
   - New `packages/backend/database/` package: Drizzle schema, `drizzle.config.ts`, generated migrations, migration runner, pooled connection factory, repositories for the three tables, unit + integration tests.
   - New `packages/shared/schemas/src/lib/catalog/` TypeBox API-boundary schemas + barrel export.
   - Workspace wiring: `.moon/workspace.yml` project mapping (`backend-database`), `package.json` workspace entry, `tsconfig.json` path mappings, `biome.json` if an import rule is needed.
-  - Hub wiring: dependency in `apps/frontend/hub/package.json` and `moon.yml`, alias in `svelte.config.js`, `NEON_DATABASE_URL_DIRECT` added to `.env.example` and `.env.production` (`NEON_DATABASE_URL` is already present).
+  - Hub wiring: dependency in `apps/frontend/hub/package.json` and `moon.yml`, alias in `svelte.config.js`, `NEON_DATABASE_URL_DIRECT` added to `.env.production` (both keys are already present in `.env.example`), and both `NEON_DATABASE_URL` and `NEON_DATABASE_URL_DIRECT` set in `.env.emulator` to `postgresql://localhost:5433/aikami_dev?sslmode=disable` — the hub's `dev` script runs `vite dev --mode emulator`, so AC-1's local success path reads these from the emulator env file.
   - `flake.nix` — re-pin `postgresql_17` → `postgresql_18`. Update the C-387 README section's stated version.
   - A single new Elysia route: `GET /api/health/db`.
   - **Migration deploy path**, replacing the deleted Data-Connect-rides-along-with-Firebase flow:
@@ -318,7 +321,7 @@ at module load
 
 **Test Hooks**:
 - Moon Task: `bun moon run backend-database:test`
-- Integration: `bun herdr:start postgres hub`, then `curl localhost:<hub>/api/health/db`; repeat with `DATABASE_URL` unset.
+- Integration: `bun herdr:start postgres hub`, then `curl localhost:5276/api/health/db` (hub dev port, see `development_ports.ts`); repeat with `NEON_DATABASE_URL` unset.
 
 **Watch Points**:
 - 🔴 The connection must be created **lazily on first query**, not at module import (confirmed by the maintainer 2026-08-15). A module-level `new Pool()` that eagerly connects turns a database outage into a boot failure and breaks the degraded-mode half of this AC.
@@ -394,8 +397,8 @@ owns, publish two versions, then attempt each violation below
 **Then** all three hold:
 
 1. `bun moon run hub:build` succeeds and no database module, `pg`, `drizzle-orm`, or `NEON_DATABASE_URL` reference appears in any client-side bundle chunk (I-1).
-2. `grep -rn "@neondatabase/serverless" --include='*.ts' apps packages | grep -v node_modules` returns zero matches, and neither `@neondatabase/serverless` nor `@sinclair/typebox` appears in `bun.lock` (I-9, plus the drizzle-typebox exclusion — `@sinclair/typebox` appearing means something pulled in the second TypeBox).
-3. A **type-level conformance test** asserts each TypeBox catalog schema's `Static<>` type agrees with the corresponding Drizzle inferred row type. It must fail to typecheck when a column is added to a Drizzle table without a matching schema update, and vice versa.
+2. `grep -rn "@neondatabase/serverless" --include='*.ts' apps packages | grep -v node_modules` returns zero matches, `grep -c "drizzle-typebox" bun.lock` returns 0, and neither `@neondatabase/serverless` nor `drizzle-typebox` appears as a dependency in any `package.json` (I-9, plus the drizzle-typebox exclusion). The `@sinclair/typebox` part of the exclusion is enforced as **no new direct dependency**: `@sinclair/typebox` must not be added to any `package.json`'s `dependencies` or `devDependencies`. A bare `bun.lock` grep for `@sinclair/typebox` would fail at baseline — the lockfile already carries `@sinclair/typebox@0.34.49` transitively via `@inlang/paraglide-js` → `@inlang/sdk` (a direct devDependency of both `client` and `hub`) and via `@jest/schemas`. Those are unrelated tooling; the guard's intent is that *this contract* does not pull the old scoped package into the runtime.
+3. A **type-level conformance test** asserts each Drizzle inferred row type is assignable to the corresponding TypeBox catalog schema's `Static<>` type — every field of every wire shape exists on the row type with a compatible type (the wire shape is a projection of the row). It must fail to typecheck when a wire schema references a field the row type lacks or types differently, or when a field is removed from the row type. The reverse direction is intentionally NOT enforced: adding an internal column to a Drizzle table does not require a schema change, because wire shapes deliberately omit internal ids and server-assigned timestamps (see Architecture Directives — "They are permitted to differ").
 4. `bun moon run :typecheck` and `bun moon run :lint` pass across the workspace.
 
 **Evidence Matrix**:
@@ -410,13 +413,13 @@ owns, publish two versions, then attempt each violation below
 **Watch Points**:
 - 🔴 SvelteKit only guarantees server-only code stays server-side for modules under `$lib/server` or named `*.server.ts`. A workspace package imported from a shared module can be pulled into the client graph. Import the database package **only** from `src/lib/server/`, and read `NEON_DATABASE_URL` through SvelteKit's `$env/dynamic/private` so a client import fails loudly at build time rather than shipping a secret.
 - The bundle check must inspect the **built** client output, not the source. Source greps miss transitive imports, which is exactly how a credential leaks.
-- The conformance test should be a pure type assertion (a `satisfies` / mutual-assignability helper), not a runtime test. It costs nothing at runtime and fails at `:typecheck`, which is where drift should surface.
+- The conformance test should be a pure type assertion (a `satisfies` / assignability helper, one direction: row → wire), not a runtime test. It costs nothing at runtime and fails at `:typecheck`, which is where drift should surface.
 - The TypeBox catalog schemas are shared (`packages/shared/schemas`) and therefore **may** legitimately reach the client — that is their purpose. Only the Drizzle definitions are server-only. Do not co-locate them.
 
 ### AC-5: Migrations deploy through the standard deploy pipeline
 
 **Given** `'database'` is registered as an app with `serviceType: 'database-migration'`
-**When** `bun run scripts` deploy is invoked for the `database` app in production mode
+**When** `bun scripts/src/lib/deploy/index.ts database --mode=production` is run (the canonical invocation, matching the `release.yml` deploy job; `bun run scripts -- deploy/index database --mode=production` is equivalent)
 **Then** it applies pending migrations against `NEON_DATABASE_URL_DIRECT`, is a
 no-op when nothing is pending, exits non-zero on failure without leaving a
 partial schema, and never runs as a side effect of deploying the `hub` app
@@ -448,7 +451,7 @@ job that reads it
 3. **Phase 3 (Connection + repositories + TypeBox)**: lazy pooled connection factory; the three repositories; `packages/shared/schemas/src/lib/catalog/` schemas and the conformance test; integration tests against local Postgres. Verify AC-3.
 4. **Phase 4 (Hub wiring)**: hub dependency, alias, `.env.*` keys, `GET /api/health/db`. Verify AC-1 locally.
 5. **Phase 5 (Deploy path)**: `AppIdSchema`, `ALL_SERVICE_TYPES`, `APP_CONFIG`, the `index.ts` dispatcher case, `resolve_plan.ts` output key, `release.yml` job. Exercise against local Postgres before pointing it at Neon. Verify AC-5.
-6. **Phase 6 (Neon)**: add `NEON_DATABASE_URL_DIRECT` to GSM and `.env.production`; apply migrations to Neon via the Phase 5 path; deploy the hub; verify AC-1 against Cloud Run reports 18.x.
+6. **Phase 6 (Neon)**: add `NEON_DATABASE_URL_DIRECT` to GSM and `.env.production`; confirm `NEON_DATABASE_URL` in `.env.production` uses the `-pooler` host (the value as of 2026-08-15 does not) and confirm both secrets exist in GSM; apply migrations to Neon via the Phase 5 path; deploy the hub; verify AC-1 against Cloud Run reports 18.x.
 7. **Phase 7 (Guards + docs)**: the I-1 bundle check and I-9 grep; `:typecheck`, `:lint`; README section covering the PG18 reset and the two connection strings. Verify AC-4.
 
 ## Edge Cases & Gotchas
