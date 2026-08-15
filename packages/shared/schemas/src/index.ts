@@ -7,6 +7,7 @@ export * from './lib/api/oauth.ts';
 export * from './lib/auth/auth.ts';
 export * from './lib/capability.ts';
 export * from './lib/catalog/account.ts';
+export * from './lib/catalog/catalog_index.ts';
 export * from './lib/catalog/pack.ts';
 export * from './lib/catalog/pack_version.ts';
 export * from './lib/common/fields.ts';
