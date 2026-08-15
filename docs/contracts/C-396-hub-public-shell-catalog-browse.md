@@ -2,7 +2,7 @@
 id: C-396
 title: "Hub Public Shell and Catalog Browse (SSR)"
 source: "user request — hub community catalog; ADR amendment A-5 (D-15)"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -553,3 +553,135 @@ All three resolved 2026-08-15 (see Amendments).
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Implemented the hub's public shell: a `(public)` route group renders the
+catalog for anyone — the landing at `/` (category summaries from C-395's
+root index), `/catalog/[category]` shard-backed browse with client-side
+filter/search, and `/catalog/[category]/[tag]` asset detail with preview,
+license and attribution. The root redirect was replaced, member routes stay
+guarded under `(authenticated)`, and the shell view models now follow the
+route table (`type: 'public'`) instead of hardcoded route lists. Stats stream
+in after first paint via a new `GET /api/catalog/stats` Elysia handler backed
+by C-394's repositories, degrading to absent (never a 500) when the database
+is unreachable. The C-395 publish pipeline gained a thumbnail-generation
+phase (per-animation-state frame-geometry table) that crops single-frame
+previews and republishes `thumbnailHash` in the index; the live R2 index was
+not republished (no write credentials in this environment) so the UI renders
+explicit preview-unavailable placeholders for pre-republish entries.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `/` and `/catalog/lpc` render 200 for anonymous visitors; `/dashboard` redirects to `/login`; signed-in visitor sees the account menu (e2e `catalog_public.spec.ts` 4/4, browser-verified + screenshots, `ai_validate_image` 95/100 landing). |
+| AC-2 | ✅ | Category loads fetch only the root index + that category's shards (never other shards, never the 7 MB manifest) — asserted by `category_load.test.ts` against a fixture origin; NEON unset case renders fully with stats absent. |
+| AC-3 | ✅ | Detail shows preview (or explicit "Preview unavailable"), size, license badges, attribution; unknown license renders "Unknown" (utils unit tests + `catalog_detail.spec.ts` + `ai_validate_image` 95/100). |
+| AC-4 | ✅ | `GET /api/catalog/stats` handler + streamed promise with mandatory `.catch(() => null)`; `streamed_stats.test.ts` covers unconfigured/unreachable/populate; browser-verified "0 packs" populate and "stats unavailable" degrade; pending branch is a static placeholder (no infinite spinner). |
+| AC-5 | ✅ | Frame-geometry table keyed by animation state (measured from real sheets: walk 9×4, thrust 8×4, idle 2×4, hurt 6×1, …); crop correctness asserted by colour-painted fixtures; `thumbnailHash` added to `CatalogAssetEntry` and emitted by the index writer; pipeline integration test proves thumbnailHash lands in the republished index. Live republish not run (no R2 write creds) — see Deviations. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/hub/src/routes/(public)/+layout.server.ts` | Public group layout — passes session through, never redirects |
+| `apps/frontend/hub/src/routes/(public)/+page.server.ts` | Landing load — groups root-index shard rows into category summaries |
+| `apps/frontend/hub/src/routes/(public)/+page.svelte` | Catalog landing page (category grid + search) |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/+page.server.ts` | Category load — root + only this category's shards, streamed stats |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/+page.svelte` | Category page shell |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/[tag]/+page.server.ts` | Asset detail load — single entry + previewUrl |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/[tag]/+page.svelte` | Asset detail page shell |
+| `apps/frontend/hub/src/lib/server/catalog/catalog_index.ts` | Server-side index client (fetch + validate + TTL cache + typed errors) |
+| `apps/frontend/hub/src/lib/server/api/catalog_stats.ts` | `loadPackStats` + `handleCatalogStats` (lazy pool, warn-degrade) |
+| `apps/frontend/hub/src/lib/constants/catalog_labels.ts` | Hub-local category display labels |
+| `apps/frontend/hub/src/lib/utils/catalog.ts` | Client-safe display helpers (names, bytes, license, thumbnail URLs) |
+| `apps/frontend/hub/src/lib/types/data.ts` | Page data types (landing/category/asset + stats) |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_landing_view*.svelte.ts` | Landing view + view model |
+| `apps/frontend/hub/src/lib/views/catalog/category_view*.svelte.ts` | Category view + view model (filter/search/window) |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view*.svelte.ts` | Detail view + view model |
+| `apps/frontend/hub/src/lib/views/catalog/components/catalog_asset_tile.svelte` | Grid tile (thumbnail, name, license badge, focus-visible) |
+| `apps/frontend/hub/src/lib/views/catalog/__tests__/category_load.test.ts` | AC-2 integration test (fixture origin, fetch discipline, NEON unset) |
+| `apps/frontend/hub/src/lib/views/catalog/__tests__/streamed_stats.test.ts` | AC-4 test (unconfigured/unreachable/populate/no-reject) |
+| `apps/frontend/hub/src/lib/utils/__tests__/catalog.test.ts` | Display-helper unit tests (incl. unknown-license) |
+| `scripts/src/lib/catalog/thumbnail_generation.ts` | AC-5 thumbnail phase (geometry table, sharp crop, upload) |
+| `scripts/src/lib/catalog/__tests__/thumbnail_generation.test.ts` | AC-5 unit + pipeline integration tests |
+| `packages/shared/schemas/src/lib/catalog/catalog_stats.ts` | CategoryStats/AssetStats TypeBox schemas |
+| `packages/shared/constants/src/lib/catalog.ts` | Shared thumbnail ext + key prefix constants |
+| `apps/e2e/tests/hub/catalog_public.spec.ts` | AC-1 e2e (anonymous/signed-in/dashboard guard) |
+| `apps/e2e/tests/hub/catalog_detail.spec.ts` | AC-3 e2e (tile→detail, metadata, 404s) |
+| `apps/e2e/src/visual/suites/hub_catalog.visual.ts` | AC-1 visual suite (grid, badges, single-frame) |
+| `apps/e2e/src/visual/suites/hub_catalog_detail.visual.ts` | AC-3 visual suite (preview/license/attribution) |
+| `apps/frontend/docs/src/content/docs/guides/catalog-browse.mdx` | User-facing docs page |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/hub/src/lib/constants/routes.ts` | Added `catalog`, `catalogCategory`, `catalogAsset` `'public'` routes + `routeTypeOf` helper |
+| `apps/frontend/hub/src/lib/constants/routes.test.ts` | Public-route coverage + auth-inversion guard |
+| `apps/frontend/hub/src/routes/+page.server.ts` | Deleted (unconditional redirect replaced by `(public)/+page.server.ts`) |
+| `apps/frontend/hub/src/lib/views/app/app_view_model.svelte.ts` | Route-type-driven auth guards + drawer logic (anonymous safe) |
+| `apps/frontend/hub/src/lib/views/app/bar/app_bar_view_model.svelte.ts` | Brand → catalog home, catalog titles, route-type drawer button |
+| `apps/frontend/hub/src/lib/views/app/drawer/navigation/navigation_drawer_view_model.svelte.ts` | Catalog navigation entry |
+| `apps/frontend/hub/src/lib/server/api/index.ts` | Registered `GET /api/catalog/stats` |
+| `apps/frontend/hub/.env.example` | Documented `CATALOG_ORIGIN_URL` |
+| `packages/shared/schemas/src/lib/catalog/catalog_index.ts` | Added optional `thumbnailHash`; shard `id` optional (see Deviations) |
+| `packages/shared/schemas/src/lib/catalog/catalog_index.test.ts` | thumbnailHash + id-less shard tests |
+| `packages/shared/schemas/src/index.ts` | Re-exported catalog_stats |
+| `packages/shared/constants/src/index.ts` | Re-exported catalog constants |
+| `packages/backend/database/src/lib/repositories/pack_repository.ts` | Added `countPublic()` |
+| `scripts/src/lib/catalog/catalog_entries.ts` | `CatalogEntry.thumbnailHash` |
+| `scripts/src/lib/catalog/index_generation.ts` | Shard entries carry thumbnailHash |
+| `scripts/src/lib/catalog/pipeline.ts` | Thumbnail phase in publish orchestration + report fields |
+| `apps/e2e/playwright.config.ts` | Hub project + HUB_BASE_URL |
+| `apps/e2e/src/visual/core/capture.ts` | `app: 'hub'` + `hub_ready` wait condition |
+
+### Deviations from Spec
+
+1. **`CatalogIndexShardSchema.id` made optional** — the live C-395 index
+   (published 2026-08-15) predates the shard `id` field and all shards lack
+   it; with the field required the hub could not browse the production index
+   (AC-1/AC-2 fail against live data). `id` is redundant for the hub (the
+   root `categories[].id` row identifies the shard), and the generator still
+   emits it on new publishes. Backward-compatible schema relaxation,
+   documented in the schema + test. Proposal: keep as-is; no contract change
+   needed beyond this note.
+2. **Live republish with thumbnails not run** — the thumbnail phase is fully
+   unit/integration tested against fixtures, but running it against the live
+   R2 bucket requires `CLOUD_FLARE_BUCKET_*` write credentials from
+   `scripts/.env.{mode}` (secret-manager backed), which are absent in this
+   environment. Until a maintainer runs `bun run
+   scripts/src/lib/catalog/publish.ts --mode production`, the live index has
+   no `thumbnailHash` and the UI shows the defined preview-unavailable
+   placeholder (AC-3 Edge Cases). The AC-5 evidence path (`thumbnailHash` in
+   `index/v1/<category>.json`) is demonstrated by the pipeline fixture test.
+3. **Thumbnail phase degrades instead of aborting** — a source file sharp
+   cannot decode skips that tag's thumbnail with a warn (`decodeFailedTags`
+   reported), and a failed thumbnail upload drops that entry's
+   `thumbnailHash` rather than publishing a dangling reference. A corrupt
+   sheet must not block a 12,707-asset publish.
+4. **Non-image assets get no thumbnailHash** — music/sfx/ambient have no
+   frame to crop; the browse UI renders the placeholder. Matches the schema
+   comment and the contract's UI behaviour.
+5. **Stats are pack-derived totals** — C-394's `packs` table has no
+   category/asset-tag column, so `CategoryStats`/`AssetStats` both return the
+   public pack count (zero until C-398/C-399 write rows), per the contract's
+   placeholder-aggregate design.
+6. **Full `e2e:test` not runnable in this workspace** — the aggregate
+   Playwright run targets the pipeline's service orchestration (client/site/
+   game dev servers + per-worker emulator projects). The hub project passes
+   7/7 with the contract port offset; the other projects fail
+   environmentally (ERR_CONNECTION_REFUSED on base ports) and were already
+   out of this contract's baseline.
+
+### Test Results
+
+- Unit: hub 28/28 (0 fail) · scripts 262/262 (0 fail) · schemas 378/378 (0
+  fail) · constants 114/114 (0 fail) · backend-database 31/31 (0 fail)
+- E2E: hub project 7/7 (0 fail)
+- Visual: hub_catalog 95/100 PASS · hub_catalog_detail 95/100 PASS
+- Baseline: hub:test 6/6, hub:build pass, scripts:test pass — 0 pre-existing
+  failures, 0 new failures
