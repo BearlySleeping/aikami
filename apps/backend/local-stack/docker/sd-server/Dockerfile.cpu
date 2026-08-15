@@ -70,6 +70,11 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
+    # ubuntu:24.04 ships a default "ubuntu" user at uid/gid 1000, colliding
+    # with SD_UID/SD_GID's own 1000 default — drop it first (harmless no-op
+    # when SD_UID/SD_GID were overridden away from 1000).
+    && userdel -r ubuntu 2>/dev/null || true \
+    && groupdel ubuntu 2>/dev/null || true \
     && groupadd --gid "${SD_GID}" aikami-sd \
     && useradd --uid "${SD_UID}" --gid "${SD_GID}" --create-home --shell /usr/sbin/nologin aikami-sd
 
