@@ -152,10 +152,13 @@ jobs:
       # OOM killer — cheap headroom, standard runner, no cost.
       - name: Add swap space
         run: |
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          # The runner image already has an active swap file at /swapfile
+          # ("fallocate failed: Text file busy" when this used that path) —
+          # /mnt is the runner's separate, much larger scratch volume.
+          sudo fallocate -l 8G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
           free -h
 
       # ── CPU sd-server image ───────────────────────────────────────────
