@@ -1,0 +1,43 @@
+# packages/backend/database/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'database'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-database'
+  description: 'Server data plane — Drizzle schema, migrations, pooled pg connection and catalog repositories (C-394).'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'logger'
+  - 'schemas'
+  - 'types'
+  - 'utils'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'drizzle.config.ts'
+  migrations:
+    - 'drizzle/**/*'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+      - '@group(migrations)'

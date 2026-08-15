@@ -25,6 +25,7 @@ dependsOn:
   - 'logger'
   - 'utils'
   - 'backend-configs'
+  - 'backend-database'
   - 'backend-utils'
 
 fileGroups:

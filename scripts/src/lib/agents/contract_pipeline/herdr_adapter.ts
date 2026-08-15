@@ -176,23 +176,7 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
  * can fail a stage; tool unavailability just kills the worker. So this split
  * MUST be advisory: all tools load, prompt forbids their use.
  */
-const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
-  // Review captain gets everything. Workers exclude GitHub admin tools.
-  if (role === 'review') {
-    return undefined; // Load all tools for the captain
-  }
-  // Workers: exclude gh_project_item_mutate, gh_workflow_*, gh_release_*, gh_deploy
-  // (GitHub project mutations, workflow triggers, release mgmt, deployments).
-  // Keep the query/list tools and gh_create_pr/gh_merge_pr (needed for the pipeline).
-  const excludedTools = new Set([
-    'gh_project_item_mutate',
-    'gh_workflow_run',
-    'gh_workflow_status',
-    'gh_workflow_logs',
-    'gh_release_list',
-    'gh_release_view',
-    'gh_deploy',
-  ]);
+const toolsForRole = (_role: ContractWorkerRole): string[] | undefined => {
   // The tool loader isn't exposed, so just return undefined (all tools load).
   // The prompt-governance will prevent misuse. TODO: revisit if tool sandboxing
   // becomes available without error-without-completion risk.

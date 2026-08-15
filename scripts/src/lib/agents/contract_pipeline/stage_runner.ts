@@ -171,17 +171,21 @@ export const runStage = async (options: {
     ? feedbackMessage({ role, feedback: options.feedback })
     : undefined;
 
-  const { paneId } = await options.launchWorker({
-    runId: options.runId,
-    resultPath,
-    delivery: 'direct_prompt',
-    prompt,
-    contractPath: options.contractPath,
-    role,
-    stage: options.stage,
-    attempt: options.attempt,
-    userMessage,
-  });
+  let paneId: string;
+  {
+    const launched = await options.launchWorker({
+      runId: options.runId,
+      resultPath,
+      delivery: 'direct_prompt',
+      prompt,
+      contractPath: options.contractPath,
+      role,
+      stage: options.stage,
+      attempt: options.attempt,
+      userMessage,
+    });
+    paneId = launched.paneId;
+  }
 
   const pollIntervalMs = options.pollIntervalMs ?? 500;
   const startedAt = Date.now();
@@ -229,7 +233,10 @@ export const runStage = async (options: {
       );
       relaunches += 1;
       idleMs = 0;
-      const { paneId: newPaneId } = await options.launchWorker({
+      // 🔴 A relaunch spawns a NEW pane — adopt its paneId before the next
+      // checkAgentWorking/nudgeWorker call, or health checks keep polling
+      // the dead pane and every relaunch looks like another crash.
+      const relaunched = await options.launchWorker({
         runId: options.runId,
         resultPath,
         delivery: 'direct_prompt',
@@ -243,6 +250,7 @@ export const runStage = async (options: {
         userMessage:
           '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
       });
+      paneId = relaunched.paneId;
       // Relaunch succeeded — continue polling
       continue;
     }
@@ -279,7 +287,7 @@ export const runStage = async (options: {
     );
     relaunches += 1;
     idleMs = 0;
-    await options.launchWorker({
+    const relaunched = await options.launchWorker({
       runId: options.runId,
       resultPath,
       delivery: 'direct_prompt',
@@ -290,6 +298,7 @@ export const runStage = async (options: {
       attempt: options.attempt,
       userMessage: '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
     });
+    paneId = relaunched.paneId;
     // Give relaunch 30s to produce a result
     const finalDeadline = Date.now() + 30_000;
     while (Date.now() < finalDeadline) {
