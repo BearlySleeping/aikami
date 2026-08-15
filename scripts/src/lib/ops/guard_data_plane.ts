@@ -20,6 +20,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 
@@ -59,41 +60,73 @@ const walk = (dir: string, exts: readonly string[]): string[] => {
 
 const HUB_SRC = resolve(ROOT, 'apps/frontend/hub/src');
 
+/** Hub source extensions the guard scans (client-bound .svelte + server-capable .ts). */
+const HUB_SOURCE_EXTS = ['.ts', '.svelte'];
+
+/**
+ * Forbidden client-bound references (I-1). `pg` and `drizzle-orm` are
+ * matched as module specifiers only, so a bare word like "jpeg" or a
+ * comment mentioning drizzle never trips the guard.
+ */
+const FORBIDDEN_REF_PATTERNS: Array<{ label: string; re: RegExp }> = [
+  { label: '@aikami/backend-database', re: /@aikami\/backend-database/ },
+  { label: 'pg', re: /(?:from\s+|require\(\s*)['"`]pg['"`]/ },
+  { label: 'drizzle-orm', re: /(?:from\s+|require\(\s*)['"`]drizzle-orm['"`]/ },
+  { label: 'NEON_DATABASE_URL', re: /NEON_DATABASE_URL/ },
+];
+
 const guardServerOnlyImports = (): void => {
-  const files = walk(HUB_SRC, ['.ts', '.svelte']);
+  const files = walk(HUB_SRC, HUB_SOURCE_EXTS);
   const offenders: string[] = [];
 
   for (const file of files) {
     const content = readFileSync(file, 'utf8');
-    if (!content.includes('@aikami/backend-database')) {
+    const hits = FORBIDDEN_REF_PATTERNS.filter(({ re }) => re.test(content)).map(
+      ({ label }) => label,
+    );
+    if (hits.length === 0) {
+      continue;
+    }
+    // A .svelte file is ALWAYS client-bound — reject it before evaluating
+    // the server-only path exception, which exists only for .ts modules.
+    if (file.endsWith('.svelte')) {
+      offenders.push(`${file.replace(`${ROOT}/`, '')} (${hits.join(', ')})`);
       continue;
     }
     const isServerOnly =
       file.includes('/lib/server/') || file.endsWith('.server.ts') || file.endsWith('+server.ts');
     if (!isServerOnly) {
-      offenders.push(file.replace(`${ROOT}/`, ''));
+      offenders.push(`${file.replace(`${ROOT}/`, '')} (${hits.join(', ')})`);
     }
   }
 
   if (offenders.length > 0) {
     fail(
-      'I-1: @aikami/backend-database imported outside server-only code:\n' +
+      'I-1: database/pg/drizzle/NEON reference outside server-only code:\n' +
         offenders.map((f) => `      ${f}`).join('\n'),
     );
   } else {
-    ok('I-1: database package imports are confined to $lib/server / *.server.ts');
+    ok('I-1: database references are confined to $lib/server / *.server.ts');
   }
 };
 
 // ── I-9: no Neon-proprietary / duplicate-TypeBox dependencies ───────────
 
+/** Every workspace source tree (apps, packages, scripts) and the source extensions to scan. */
+const WORKSPACE_TREES = [
+  resolve(ROOT, 'apps'),
+  resolve(ROOT, 'packages'),
+  resolve(ROOT, 'scripts/src'),
+];
+const SOURCE_EXTS = ['.ts', '.tsx', '.svelte', '.js', '.mjs'];
+
 const guardNeonDependencies = (): void => {
-  // 1. @neondatabase/serverless anywhere in TypeScript sources.
-  const tsFiles = [
-    ...walk(resolve(ROOT, 'apps'), ['.ts']),
-    ...walk(resolve(ROOT, 'packages'), ['.ts']),
-  ];
-  const neondbHits = tsFiles.filter((file) =>
+  // 1. @neondatabase/serverless anywhere in workspace sources (excluding
+  //    this guard's own source, which names the package in its docs).
+  const sourceFiles = WORKSPACE_TREES.flatMap((tree) => walk(tree, SOURCE_EXTS)).filter(
+    (file) => file !== fileURLToPath(import.meta.url),
+  );
+  const neondbHits = sourceFiles.filter((file) =>
     readFileSync(file, 'utf8').includes('@neondatabase/serverless'),
   );
   if (neondbHits.length > 0) {
@@ -111,10 +144,11 @@ const guardNeonDependencies = (): void => {
     ok('I-9: drizzle-typebox absent from bun.lock');
   }
 
-  // 3. @sinclair/typebox must not be a DIRECT dependency of any package.
+  // 3. @sinclair/typebox must not be a DIRECT dependency of any workspace
+  //    package manifest (apps, packages, scripts, root).
   const pkgFiles = [
-    ...walk(resolve(ROOT, 'apps'), ['package.json']),
-    ...walk(resolve(ROOT, 'packages'), ['package.json']),
+    ...WORKSPACE_TREES.flatMap((tree) => walk(tree, ['package.json'])),
+    resolve(ROOT, 'scripts/package.json'),
     resolve(ROOT, 'package.json'),
   ];
   const sinclairDeps = pkgFiles.filter((file) => {

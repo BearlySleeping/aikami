@@ -18,7 +18,10 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { applyMigrations } from '../../../../packages/backend/database/src/index.ts';
+import {
+  applyMigrations,
+  assertDirectEndpoint,
+} from '../../../../packages/backend/database/src/lib/migrate.ts';
 import { parseEnvKeys } from './utils.ts';
 
 export const HUB_ENV_DIR = resolve(import.meta.dir, '../../../../apps/frontend/hub');
@@ -75,6 +78,10 @@ export const deployDatabaseMigration = async (options: {
         'migrations must run through the DIRECT (unpooled) endpoint.',
     );
   }
+  // Fail fast on a pooled endpoint BEFORE the backup: DDL under PgBouncer
+  // transaction pooling is a corruption path, and a logical backup of the
+  // wrong database is worse than no backup at all.
+  assertDirectEndpoint(connectionString);
 
   const backupPath = dumpBeforeMigrate(connectionString);
   if (backupPath) {

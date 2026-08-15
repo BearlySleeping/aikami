@@ -36,8 +36,6 @@ const config = {
 
       '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
       '@aikami/backend/firestore/*': toPackagesPath('backend/firestore/src/lib/*'),
-      '@aikami/backend/database': toPackagesPath('backend/database/src'),
-      '@aikami/backend/database/*': toPackagesPath('backend/database/src/lib/*'),
       '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
       '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),
 

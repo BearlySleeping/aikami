@@ -8,6 +8,5 @@
 // (AC-4.1) — so no database credential ever reaches a browser.
 
 export * from './lib/connection.ts';
-export * from './lib/migrate.ts';
 export * from './lib/repositories/index.ts';
 export * from './lib/schema.ts';

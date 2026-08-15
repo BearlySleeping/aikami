@@ -6,9 +6,10 @@
 // database outage must not prevent the hub from booting or serving pages
 // that render from the static index (D-14 / AC-1 degraded mode).
 //
-// The connection string is resolved here from `DATABASE_URL` — the single
-// server-side secret. Production uses Neon's POOLED endpoint (host contains
-// "-pooler") with `sslmode=require`; see apps/frontend/hub/.env.*
+// The connection string is read here from `NEON_DATABASE_URL` (see
+// DATABASE_URL_ENV_KEY below) — the single server-side secret. Production
+// uses Neon's POOLED endpoint (host contains "-pooler") with
+// `sslmode=require`; see apps/frontend/hub/.env.*
 //
 // Security (I-1): this module is the ONLY place the connection string is
 // read. It must never be imported from a `.svelte` file or a shared module
@@ -59,6 +60,7 @@ export const describeConnectionString = (
 // ── Pool state ──────────────────────────────────────────────────────────
 
 let _pool: Pool | undefined;
+let _poolConnectionString: string | undefined;
 
 /**
  * The active pool, or undefined when never created (database unconfigured).
@@ -89,6 +91,15 @@ export const getPool = (options: {
     statementTimeoutMs = DEFAULT_STATEMENT_TIMEOUT_MS,
   } = options;
   if (_pool) {
+    // Fail fast on a mismatched connection string rather than silently
+    // returning a pool bound to a different database — a caller that
+    // switches targets must closePool() first.
+    if (_poolConnectionString !== connectionString) {
+      const current = describeConnectionString(_poolConnectionString ?? '');
+      throw new Error(
+        `getPool: cached pool is bound to ${current.host} — closePool() before switching connection strings.`,
+      );
+    }
     return _pool;
   }
 
@@ -108,6 +119,7 @@ export const getPool = (options: {
   };
 
   _pool = new Pool(config);
+  _poolConnectionString = connectionString;
 
   // Log a failed acquire once per identity — the first query after a Neon
   // suspend/resume can fail transiently, and we want the SQLSTATE on the
@@ -129,5 +141,6 @@ export const closePool = async (): Promise<void> => {
   }
   const pool = _pool;
   _pool = undefined;
+  _poolConnectionString = undefined;
   await pool.end();
 };

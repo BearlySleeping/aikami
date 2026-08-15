@@ -21,7 +21,16 @@
 // not merely in Drizzle's type layer — see migrations.
 
 import { sql } from 'drizzle-orm';
-import { check, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  check,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 // ── Enums ──────────────────────────────────────────────────────────────
 
@@ -89,6 +98,8 @@ export const packs = pgTable(
     // Slug pattern: lowercase alphanumerics separated by single hyphens.
     // Enforced in the DB via CHECK, not just Drizzle's type layer.
     check('packs_slug_url_safe', sql`${table.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`),
+    // Ownership reads (moderation, per-owner listing) filter on this FK.
+    index('packs_owner_account_id_idx').on(table.ownerAccountId),
   ],
 );
 
@@ -110,6 +121,8 @@ export const packVersions = pgTable(
     version: text('version').notNull(),
     /** sha256 of the canonical manifest bytes. */
     manifestHash: text('manifest_hash').notNull(),
+    /** When the row was created — unpublished versions keep their creation time. */
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** Null while unpublished. */
     publishedAt: timestamp('published_at', { withTimezone: true }),
   },

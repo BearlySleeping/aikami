@@ -22,8 +22,10 @@ import { isPostgresReachable, TEST_CONNECTION_URL } from './helpers.ts';
 
 const reachable = await isPostgresReachable();
 
-beforeEach(() => {
-  closePool().catch(() => {});
+beforeEach(async () => {
+  // Await the teardown and let a rejection propagate — a pool still closing
+  // from a previous test must not race the next test's assertions.
+  await closePool();
 });
 
 afterAll(async () => {

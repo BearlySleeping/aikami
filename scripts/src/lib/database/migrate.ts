@@ -21,8 +21,9 @@
 import { resolve } from 'node:path';
 import {
   applyMigrations,
+  assertDirectEndpoint,
   countAppliedMigrations,
-} from '../../../../packages/backend/database/src/index.ts';
+} from '../../../../packages/backend/database/src/lib/migrate.ts';
 import { parseEnvKeys } from '../deploy/utils.ts';
 
 const HUB_ENV_DIR = resolve(import.meta.dir, '../../../../apps/frontend/hub');
@@ -64,6 +65,9 @@ const main = async (): Promise<void> => {
   const isStatus = args.includes('--status');
 
   const connectionString = resolveDirectUrl(mode);
+  // Shared guard: the migration path refuses a pooled endpoint before any
+  // count/apply work (DDL under PgBouncer transaction pooling breaks).
+  assertDirectEndpoint(connectionString);
   if (isStatus) {
     const applied = await countAppliedMigrations({ connectionString });
     console.log(`db:status ${mode} — ${applied} migration(s) applied`);

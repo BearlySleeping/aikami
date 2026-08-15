@@ -10,6 +10,7 @@ import { BaseClass, type BaseClassOptions } from '@aikami/utils';
 import { eq, inArray } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
+import { pgErrorCode } from '../pg_errors.ts';
 import { type AccountRow, accounts } from '../schema.ts';
 
 export type AccountRepositoryOptions = BaseClassOptions & {
@@ -56,13 +57,19 @@ export class AccountRepository extends BaseClass<AccountRepositoryOptions> {
     }
     try {
       return await this.create(options);
-    } catch {
+    } catch (error) {
+      // Only a UNIQUE violation (23505) means we lost the create-or-fetch
+      // race — any other failure (connection, constraint) must surface
+      // unchanged rather than being masked by a re-fetch.
+      if (pgErrorCode(error) !== '23505') {
+        throw error;
+      }
       // Lost the uniqueness race — another request created the row first.
       const winner = await this.findByFirebaseUid(options.firebaseUid);
       if (winner) {
         return winner;
       }
-      throw new Error('accounts.create failed and no winner row exists');
+      throw new Error('accounts.create failed and no winner row exists', { cause: error });
     }
   }
 

@@ -6,6 +6,10 @@
 // and the read model.
 
 import { type Static, Type } from 'typebox';
+import { SEMVER_PATTERN } from '../game/content_pack.ts';
+
+/** sha256 of the canonical manifest bytes — lowercase 64-char hex. */
+const MANIFEST_HASH_PATTERN = '^[0-9a-f]{64}$';
 
 /**
  * Read shape of a pack version as exposed on the wire.
@@ -16,9 +20,15 @@ import { type Static, Type } from 'typebox';
  */
 export const PackVersionSchema = Type.Object({
   /** Semver string, unique per pack — (pack_id, version) is UNIQUE in storage. */
-  version: Type.String({ description: 'Semver version string, unique per pack' }),
+  version: Type.String({
+    pattern: SEMVER_PATTERN,
+    description: 'Semver version string, unique per pack',
+  }),
   /** sha256 of the canonical manifest bytes — joins this row to the static index. */
-  manifestHash: Type.String({ description: 'sha256 content address of the manifest' }),
+  manifestHash: Type.String({
+    pattern: MANIFEST_HASH_PATTERN,
+    description: 'sha256 content address of the manifest',
+  }),
 });
 
 export type PackVersion = Static<typeof PackVersionSchema>;

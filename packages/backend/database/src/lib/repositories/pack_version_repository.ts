@@ -4,7 +4,7 @@
 // versions, content-addressed by manifestHash into the static index.
 
 import { BaseClass, type BaseClassOptions } from '@aikami/utils';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
 import { type PackVersionRow, packVersions } from '../schema.ts';
@@ -73,7 +73,7 @@ export class PackVersionRepository extends BaseClass<PackVersionRepositoryOption
       .select()
       .from(packVersions)
       .where(eq(packVersions.packId, packId))
-      .orderBy(desc(packVersions.publishedAt));
+      .orderBy(sql`${packVersions.publishedAt} DESC NULLS LAST`);
   }
 
   /** Batch read by pack ids — one `IN` query instead of N per-pack queries. */
@@ -85,7 +85,7 @@ export class PackVersionRepository extends BaseClass<PackVersionRepositoryOption
       .select()
       .from(packVersions)
       .where(inArray(packVersions.packId, packIds))
-      .orderBy(desc(packVersions.publishedAt));
+      .orderBy(sql`${packVersions.publishedAt} DESC NULLS LAST`);
   }
 
   /** Delete a version (test/cleanup only — published versions are immutable in production flow). */

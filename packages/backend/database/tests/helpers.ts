@@ -9,9 +9,15 @@
 
 import { expect } from 'bun:test';
 import type { Pool } from 'pg';
+import { pgErrorCode } from '../src/lib/pg_errors.ts';
 
-/** Local C-387 PostgreSQL — the emulator value of NEON_DATABASE_URL. */
-export const TEST_CONNECTION_URL = 'postgresql://localhost:5433/aikami_dev?sslmode=disable';
+/** Shared helper — canonical home is src/lib/pg_errors.ts (re-exported for tests). */
+export { pgErrorCode };
+
+/** Local C-387 PostgreSQL — the emulator value of NEON_DATABASE_URL.
+ *  Override via TEST_DATABASE_URL (e.g. to run against a sandbox). */
+export const TEST_CONNECTION_URL =
+  process.env.TEST_DATABASE_URL ?? 'postgresql://localhost:5433/aikami_dev?sslmode=disable';
 
 /** True when the local postgres answers a `SELECT 1` on port 5433. */
 export const isPostgresReachable = async (): Promise<boolean> => {
@@ -38,21 +44,6 @@ export const isPostgresReachable = async (): Promise<boolean> => {
  */
 export const truncateCatalog = async (pool: Pool): Promise<void> => {
   await pool.query('TRUNCATE accounts, packs, pack_versions CASCADE');
-};
-
-/** Extract the Postgres error code from a rejected promise (drizzle wraps pg errors in DrizzleQueryError → cause chain). */
-export const pgErrorCode = (error: unknown): string | undefined => {
-  let current: unknown = error;
-  const seen = new Set<unknown>();
-  while (current && typeof current === 'object' && !seen.has(current)) {
-    seen.add(current);
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) {
-      return code;
-    }
-    current = (current as { cause?: unknown }).cause;
-  }
-  return undefined;
 };
 
 /** Expect a rejection with the given Postgres error code (walks the cause chain). */

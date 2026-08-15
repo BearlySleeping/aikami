@@ -35,6 +35,25 @@ export const DATABASE_URL_DIRECT_ENV_KEY = 'NEON_DATABASE_URL_DIRECT';
 /** Drizzle-generated migration folder, relative to this package root. */
 const MIGRATIONS_DIR = resolve(fileURLToPath(new URL('..', import.meta.url)), '..', 'drizzle');
 
+// ── Direct-endpoint validation ──────────────────────────────────────────
+
+/**
+ * Throw unless the connection string points at a DIRECT (non-pooled) host.
+ *
+ * DDL under PgBouncer transaction pooling is precisely where pooling breaks
+ * (D-9) — the migration path must refuse a `-pooler` host before any
+ * backup, count or apply work. Local postgres (no pooler) passes.
+ */
+export const assertDirectEndpoint = (connectionString: string): void => {
+  const { host, isPooled } = describeConnectionString(connectionString);
+  if (isPooled) {
+    throw new Error(
+      `Refusing to run migrations against the POOLED endpoint (${host}) — ` +
+        'use NEON_DATABASE_URL_DIRECT (the unpooled host). DDL under PgBouncer transaction pooling is a corruption path.',
+    );
+  }
+};
+
 // ── Runner ──────────────────────────────────────────────────────────────
 
 /**
@@ -52,8 +71,9 @@ export const applyMigrations = async (options: {
   migrationsFolder?: string;
 }): Promise<number> => {
   const { connectionString, migrationsFolder = MIGRATIONS_DIR } = options;
-  const { host, isPooled } = describeConnectionString(connectionString);
-  logger.debug('database:migrate:start', { host, isPooled });
+  assertDirectEndpoint(connectionString);
+  const { host } = describeConnectionString(connectionString);
+  logger.debug('database:migrate:start', { host });
 
   const client = new Client({ connectionString });
   try {
@@ -84,6 +104,7 @@ export const countAppliedMigrations = async (options: {
   connectionString: string;
 }): Promise<number> => {
   const { connectionString } = options;
+  assertDirectEndpoint(connectionString);
   const { host } = describeConnectionString(connectionString);
   const client = new Client({ connectionString });
   try {
