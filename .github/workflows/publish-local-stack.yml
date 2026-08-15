@@ -264,9 +264,18 @@ jobs:
               exit 1
             fi
             echo "ok: $img within the 250 MB compressed budget (AC-5)"
-            # Weights must not be in any layer (AC-5).
+            # Weights must not be in any layer (AC-5). `find /` inside the
+            # container hits permission-denied dirs and can exit non-zero
+            # even with stderr suppressed — under set -e -o pipefail that
+            # non-zero `docker run` exit aborted this script right after
+            # printing "ok: no weight files" for the FIRST image, before
+            # ever reaching sd-server/client (found 2026-08-15, first time
+            # this step ran to completion). `; true` makes docker run's own
+            # exit status reflect only whether the container started, not
+            # find's traversal noise — the actual pass/fail still comes
+            # from the grep below.
             docker run --rm --entrypoint /bin/sh "$img" -c \
-              'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null' \
+              'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null; true' \
               | { grep -q . && { echo "FAIL: weight files found in image"; exit 1; } || echo "ok: no weight files"; }
           done
 
