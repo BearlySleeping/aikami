@@ -44,6 +44,11 @@ const TARGETS: FrontendTarget[] = [
     publicDir: path.join(ROOT, 'apps/frontend/docs/public'),
     imagesSubdir: '',
   },
+  {
+    name: 'hub',
+    publicDir: path.join(ROOT, 'apps/frontend/hub/static'),
+    imagesSubdir: '',
+  },
 ];
 
 // ---------------------------------------------------------------------------

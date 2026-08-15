@@ -1,11 +1,15 @@
 # Contracts — Aikami Feature Development
 
-> **Canonical source of truth for priorities:** `docs/TODO.md`
 > **Auto-generated status dashboard:** `docs/contracts/PROGRESS.md`
+> (regenerate with `bun run scripts/src/lib/ops/sync_contracts.ts`)
 > **Promotion matrix:** `docs/contracts/PROMOTION.md`
+> **Current MVP priorities:** `docs/contracts/MVP_BACKLOG.md`
 >
-> This index mirrors the Phase organization of `docs/TODO.md`. Each entry links to
-> its contract file when one exists; otherwise the TODO.md item is the reference.
+> ⚠️ **`docs/TODO.md` is no longer a structured backlog.** It holds draft notes
+> and points at GitHub issues. `scripts/src/lib/ops/parse_backlog.ts` still
+> parses it as the canonical backlog (`TODO_PATH` at line 70) and therefore
+> finds nothing, which makes `bun run contract --source todo` unusable. The
+> Phase tables below are historical organization, not live priorities.
 
 ## Contract Format (v2.0.0)
 
@@ -252,6 +256,37 @@ See `docs/contracts/PROGRESS.md` for full status of all 159+ contracts.
 > including archived/legacy items.
 >
 > **Priority order:** See `docs/TODO.md` for the canonical implementation sequence.
+
+## MVP Backlog (C-400 … C-416)
+
+Seeded 2026-08-16 from a full MVP playthrough. See
+**`docs/contracts/MVP_BACKLOG.md`** for the specifications and
+**`docs/strategy/mvp-assessment-2026-08-16.md`** for the assessment behind
+them.
+
+| Contract | Name | Priority | Authored? |
+|---|---|---|---|
+| C-400 | Unify LPC appearance resolution; no silent slot drops | P0 | ✅ contract file |
+| C-401 | Stream dialogue narrative; collapse the two-call skill-check flow | P0 | ✅ contract file |
+| C-402 | Fix NPC/player movement deadlock | P0 | ✅ contract file |
+| C-405 | Cut world generation from the critical path | P0 | ✅ contract file |
+| C-403 | Propagate equipment changes to the LPC sprite | P1 | seed only |
+| C-404 | Ambient lighting and map readability | P1 | seed only |
+| C-406 | `/capability` correctness and polish | P1 | seed only |
+| C-407 | Dialogue UI overhaul | P1 | seed only |
+| C-408 | Persona creation: inline LPC preview and parallel generation | P1 | seed only |
+| C-409 | Shared design tokens across client, hub, site, docs | P2 | seed only |
+| C-410 | Gate dev routes out of production builds | P2 | seed only |
+| C-411 | Repository cleanup | P2 | seed only |
+| C-412 | Retire Firebase Functions into the hub's Elysia API | P2 | seed only |
+| C-413 | Reverse the Cloud Run inference plan (ADR amendment) | P2 | seed only |
+| C-414 | Standalone install script for the local stack | P2 | seed only |
+| C-415 | Character card (V2/V3) import | P3 | seed only |
+| C-416 | Merchant UI refinement | P3 | seed only |
+
+C-397 … C-399 remain reserved by `data-layer-target-architecture.md` §5.1 and
+are not MVP work. **P2 infrastructure contracts must not start before the P0
+block lands** — see `mvp-assessment-2026-08-16.md` §1.
 
 ## Usage
 

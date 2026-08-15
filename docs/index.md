@@ -25,6 +25,9 @@ Aikami is a modern monorepo application platform with a web-native game engine. 
 5. Read `guides/CODING_STANDARDS.md` — Includes strict AI coding rules
 6. Read `architecture/limitations.md` — Engine boundary constraints and known gaps
 7. Check `contracts/INDEX.md` — Active work items
+8. Read `strategy/mvp-assessment-2026-08-16.md` — Current MVP state, defect
+   inventory, and infrastructure/go-to-market assessment; its backlog is
+   `contracts/MVP_BACKLOG.md`
 
 ## For AI Tools
 

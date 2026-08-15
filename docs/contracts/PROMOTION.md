@@ -171,7 +171,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-391 | Stack Init Hardware Detection Wizard | 🛠️ implemented | v2 |
 | C-392 | Converge Dev Engine Services With Stack | 👍 approved | v2 |
 | C-393 | Speech To Text Backend Service | 👍 approved | v2 |
-| C-394 | Server Data Plane Neon Drizzle | 📝 draft | v2 |
-| C-395 | R2 Asset Origin Publish Pipeline | 📝 draft | v2 |
-| C-396 | Hub Public Shell Catalog Browse | 📝 draft | v2 |
+| C-394 | Server Data Plane Neon Drizzle | 👍 approved | v2 |
+| C-395 | R2 Asset Origin Publish Pipeline | 👍 approved | v2 |
+| C-396 | Hub Public Shell Catalog Browse | 👍 approved | v2 |
 

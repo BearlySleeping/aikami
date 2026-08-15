@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-08-15)
 
-**166 active (0 without contract file), 119 archived, 1 duplicates**
+**170 active (0 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -171,9 +171,13 @@
 | C-391 | Stack Init Hardware Detection Wizard | 🛠️ implemented | — | v2 |
 | C-392 | Converge Dev Engine Services With Stack | 👍 approved | — | v2 |
 | C-393 | Speech To Text Backend Service | 👍 approved | — | v2 |
-| C-394 | Server Data Plane Neon Drizzle | 📝 draft | — | v2 |
-| C-395 | R2 Asset Origin Publish Pipeline | 📝 draft | — | v2 |
-| C-396 | Hub Public Shell Catalog Browse | 📝 draft | — | v2 |
+| C-394 | Server Data Plane Neon Drizzle | 👍 approved | — | v2 |
+| C-395 | R2 Asset Origin Publish Pipeline | 👍 approved | — | v2 |
+| C-396 | Hub Public Shell Catalog Browse | 👍 approved | — | v2 |
+| C-400 | Unify Lpc Appearance Resolution | 📝 draft | ❓ `—` | v2 |
+| C-401 | Stream Dialogue Narrative | 📝 draft | ❓ `—` | v2 |
+| C-402 | Fix Npc Player Movement Deadlock | 📝 draft | ❓ `—` | v2 |
+| C-405 | Cut Worldgen From Critical Path | 📝 draft | ❓ `—` | v2 |
 
 ---
 

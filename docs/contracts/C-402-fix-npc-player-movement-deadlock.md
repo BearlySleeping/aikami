@@ -1,0 +1,429 @@
+---
+id: C-402
+title: "Fix NPC/Player Movement Deadlock"
+source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
+status: draft
+github:
+  issue_number: null
+  issue_url: null
+  project_item_id: null
+  pr_url: null
+created_at: "2026-08-16"
+---
+
+# Contract C-402: Fix NPC/Player Movement Deadlock
+
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §6.2 — live MVP playthrough 2026-08-16 |
+| **Target** | `packages/frontend/engine/src/systems/` — collision masks, movement, GOAP movement execution |
+| **Priority** | P0 — soft-locks play; the player loses control with no recovery short of reload |
+| **Dependencies** | — |
+| **Status** | draft |
+| **Promotion** | `—` |
+| **Docs Impact** | internal |
+| **Contract version** | 2.0.0 |
+
+## Problem & Baseline Evidence
+
+- **Current behavior**: the player becomes stuck when an NPC walks toward them.
+  Movement input stops taking effect and does not recover.
+
+- **Root cause**: symmetric blocking with no resolution rule.
+
+  `packages/frontend/engine/src/systems/movement_system.ts:55`:
+  ```ts
+  export const PLAYER_COLLISION_MASK =
+    CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+  ```
+
+  `packages/frontend/engine/src/systems/entity_spawner.ts:115`:
+  ```ts
+  /**
+   * NPC collision mask: blocks walls, other NPCs, and the player (two-way
+   * blocking so a future GOAP/moving NPC cannot walk through the player).
+   */
+  const NPC_COLLISION_MASK =
+    CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
+  ```
+
+  The comment names the intent — *"so a future GOAP/moving NPC cannot walk
+  through the player"* — and that future arrived with C-191/C-192 (GOAP
+  scheduler and JPS pathfinder). The mask was written for static NPCs, where
+  symmetric blocking is harmless. With NPCs that move, a moving NPC pathing
+  into the player's tile and a player pathing into the NPC's tile block each
+  other, and **neither yields**. There is no push-out, no repath-on-block, and
+  no notion of a living entity as a soft obstacle.
+
+- **Reproduction**:
+  1. Load Emberwatch `village`.
+  2. Stand still and wait for an NPC to path toward the player (GOAP idle
+     patrol is enabled at `entity_spawner.ts:458`).
+  3. Once adjacent, movement input no longer moves the player.
+
+- **Existing implementation to reuse**:
+  - `packages/frontend/engine/src/systems/collision_system.ts` — mask
+    evaluation.
+  - `packages/frontend/engine/src/systems/goap_movement_executor.ts` (249
+    lines) — where an NPC commits to a step; the natural place for a halt rule.
+  - `packages/frontend/engine/src/systems/interaction_proximity_system.ts`
+    (138 lines) — already computes player proximity; `interactionRadius` is
+    declared per NPC in map data (`village.json`, value `48`).
+  - `packages/frontend/engine/src/systems/path_follow_system.ts` (142 lines).
+  - `COMBATANT_COLLISION_MASK` (`movement_system.ts:67`) — combat correctly
+    requires mutual blocking and must keep it.
+  - `apps/e2e/engine_replay.test.ts` — the deterministic replay harness this
+    contract's regression test belongs in.
+
+- **Known gaps**: no stuck detection exists anywhere; a blocked player is
+  indistinguishable from a player not pressing a key.
+
+- **Baseline tests**: `moon run engine:test -- movement_system.test.ts`,
+  `path_follow_system.test.ts`, `apps/e2e/tests/game/collision_e2e.spec.ts`.
+
+## User Outcome
+
+After this contract, a **player** never loses control of their character
+because of another character's movement. NPCs approach, stop at conversational
+distance, and the player can always walk away.
+
+## Success Measures
+
+- **Time/latency target**: no added per-tick cost in the movement loop; the
+  halt check is a distance comparison the proximity system already performs.
+- **Offline/degraded behavior**: N/A — pure engine logic, no network or AI.
+- **Production journey enabled**: an uninterruptible walk through all three
+  Emberwatch maps, which the cold-start playtest depends on.
+
+## Existing System & Reuse Map
+
+| Capability | Existing source | Reuse / modify / replace |
+|---|---|---|
+| Player collision mask | `movement_system.ts:55` | **modify** — drop `npc` |
+| NPC collision mask | `entity_spawner.ts:115` | **modify** — drop `player` |
+| Combatant mask | `movement_system.ts:67` | **reuse unchanged** — combat needs mutual blocking |
+| NPC step commit | `goap_movement_executor.ts` | **modify** — add the halt rule |
+| Proximity computation | `interaction_proximity_system.ts` | **reuse** — supplies the halt distance |
+| Per-NPC interaction radius | map data (`interactionRadius: 48`) | **reuse** as the halt distance |
+| Deterministic replay | `apps/e2e/engine_replay.test.ts` | **reuse** the harness |
+
+## Overview
+
+Player and NPC collision masks block each other symmetrically with no rule for
+who yields, so a moving NPC and a moving player deadlock. This contract removes
+the deadlock **class** rather than resolving it per frame: NPCs halt at their
+declared interaction radius and never enter the player's tile, and the player
+passes through NPCs. Combat positioning is untouched. A stuck detector is added
+as a safety net for any remaining case.
+
+## Design Reference
+
+**The design decision, and why.** Three approaches were considered:
+
+- **(a) Soft obstacle** — NPCs treat the player as passable and repath around;
+  the player never collides with NPCs. Removes the deadlock but lets NPCs walk
+  through the player, which looks wrong.
+- **(b) Mutual push-out** — the lower-priority actor is displaced to the
+  nearest free tile. Resolves the deadlock but adds a per-frame displacement
+  search, can teleport actors through walls if the free-tile search is sloppy,
+  and produces visible jitter when two actors contest a tile.
+- **(c) Halt at interaction radius** — NPCs stop before reaching the player's
+  tile, so the contested state never arises.
+
+**Chosen: (c) for NPCs, plus (a) for the player.** NPCs halt at
+`interactionRadius`, and the player's mask no longer includes `npc`. This
+eliminates the deadlock by construction instead of detecting and resolving it
+every tick, and it reuses a value already declared per NPC in map data. The
+cost — the player can walk through a stationary NPC — is a minor visual
+compromise, and it is strictly better than losing control of the character.
+It also matches how the NPCs are meant to behave: they exist to be talked to,
+and stopping at conversational distance is the correct behaviour regardless of
+the bug.
+
+**Combat is explicitly excluded.** `COMBATANT_COLLISION_MASK`
+(`movement_system.ts:67`) deliberately blocks combatants against each other and
+against the player; tactical positioning depends on it. This contract must not
+touch it.
+
+> 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
+
+## Architecture Directives
+
+- Collision masks stay **data on the entity** (`CollisionData`), read by the
+  movement loop. Do not special-case entity kinds inside the movement loop
+  itself — `movement_system.ts:73` already warns that the loop must never fall
+  back to the player's mask for a non-player mover.
+- The halt rule lives in the **NPC movement executor**, not in the collision
+  system. Collision answers "can this cell be entered"; halting is a behaviour
+  decision and belongs with the behaviour.
+- Combat masks and the turn-based walkability composites
+  (`turn_manager_system`, `goap_combat_tactics_system`) are **out of scope and
+  must not change**.
+- Stuck detection is a **safety net that logs**, not a movement mechanic. If it
+  ever fires in normal play, that is a bug to fix, and the log is how it gets
+  found.
+- All of this is engine-internal. Nothing crosses `EngineBridge`
+  (directive #6).
+
+## State & Data Models
+
+```ts
+/** Why an NPC stopped moving this tick — carried for observability
+ *  and asserted in the replay test. */
+type NpcHaltReason =
+  | 'none'
+  | 'reached_goal'
+  | 'player_proximity'   // ← new: halted at interactionRadius
+  | 'blocked_terrain'
+  | 'blocked_actor';
+
+/** Stuck-detector state, tracked per mover. */
+type StuckWatch = {
+  readonly eid: number;
+  /** Consecutive ticks with movement intent but zero displacement. */
+  readonly blockedTicks: number;
+  /** Tick at which the detector last logged, to rate-limit output. */
+  readonly lastReportTick: number;
+};
+```
+
+No component layout changes and no persisted state changes. `interactionRadius`
+is already present in map data and read by the proximity system.
+
+## Quality Requirements
+
+- **Offline/degraded mode**: N/A — pure engine logic.
+- **Accessibility/input**: this contract *restores* input responsiveness; that
+  is its point. Verify keyboard and click-to-move (C-380) both recover.
+- **Performance budget**: the halt check is one distance comparison per moving
+  NPC per tick, using a value the proximity system already computes. Must add
+  no measurable cost to the 60fps loop. The stuck detector is a counter, not a
+  search.
+- **Security/privacy**: N/A.
+- **Persistence/migration**: N/A — masks are runtime values reconstructed at
+  spawn, not persisted. Old saves are unaffected.
+- **Cancellation/retry/idempotency**: N/A.
+- **Observability**: log every stuck-detector trigger with the entity id, the
+  blocked direction, and the occupying entity. Log `NpcHaltReason` transitions
+  at debug level.
+
+## Migration & Rollback
+
+N/A — no persistent state changes. Collision masks are constructed at spawn
+from constants; rollback is a revert.
+
+## Scope Boundaries
+
+- **In Scope:**
+  - Remove `CollisionLayer.npc` from `PLAYER_COLLISION_MASK`.
+  - Remove `CollisionLayer.player` from `NPC_COLLISION_MASK`.
+  - Halt rule in the NPC movement executor at `interactionRadius`.
+  - Stuck detection with logging as a safety net.
+  - Deterministic replay regression test for both directions of approach.
+  - Update the now-stale comments at `entity_spawner.ts:112-115` and `:396`.
+
+- **Out of Scope:**
+  - `COMBATANT_COLLISION_MASK` and all combat positioning.
+  - `turn_manager_system` and `goap_combat_tactics_system` walkability.
+  - Prop collision (`PROP_COLLISION_MASK`) — props are static and correctly
+    block.
+  - Crowd simulation, flow fields, or local avoidance steering.
+  - Party-follow behaviour (`party_follow_system.ts`) unless the replay test
+    shows it deadlocks too — if it does, record an amendment rather than
+    widening scope silently.
+  - Click-to-move path planning (C-380) beyond verifying it recovers.
+
+## Contract Size & Split Rule
+
+> 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
+
+**For this contract:** not split. The two mask changes and the halt rule are
+one invariant — "a living actor never permanently blocks another" — and
+applying either mask change alone leaves an asymmetry that is harder to reason
+about than the current symmetric bug. The stuck detector is small and exists to
+prove the invariant holds.
+
+## Acceptance Criteria
+
+### AC-1: An approaching NPC never blocks the player
+**Given** the player is stationary in Emberwatch `village`
+**When** an NPC paths toward the player and reaches them
+**Then** player movement input continues to move the player in every direction
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-1 | Integration | `apps/e2e/engine_replay.test.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run e2e:test -- engine_replay.test.ts`
+- Integration: deterministic replay — spawn one NPC, path it into the player,
+  then apply movement input for N ticks and assert player displacement is
+  non-zero.
+- E2E / Visual: **Functional**: extend
+  `apps/e2e/tests/game/collision_e2e.spec.ts`. **Visual**: N/A — a deadlock is
+  not visible in a still frame.
+
+**Watch Points**:
+- Assert displacement over ticks, not a single-frame position. A one-tick block
+  is normal; a permanent one is the bug.
+
+### AC-2: A player walking into an NPC does not deadlock
+**Given** an NPC standing still
+**When** the player walks directly into it and continues to hold input
+**Then** neither entity is permanently blocked and the player continues moving
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-2 | Integration | `apps/e2e/engine_replay.test.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run e2e:test -- engine_replay.test.ts`
+- Integration: replay covering all four cardinal approach directions.
+- E2E / Visual: **Functional**: `collision_e2e.spec.ts`. **Visual**: N/A.
+
+**Watch Points**:
+- With `npc` removed from the player mask the player passes *through* the NPC.
+  Confirm this does not let the player leave the map or enter a wall via an NPC
+  standing in a doorway — walls are a separate layer and must still block.
+
+### AC-3: NPCs halt at interaction radius
+**Given** an NPC with `interactionRadius: 48` pathing toward the player
+**When** it reaches that distance
+**Then** it stops with `NpcHaltReason.player_proximity` and does not enter the
+player's tile
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-3 | Unit | `packages/frontend/engine/src/systems/__tests__/goap_movement_executor.test.ts` | N/A | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run engine:test`
+- Integration: assert final NPC distance from the player is `>= interactionRadius`
+  and `< interactionRadius + tileSize`.
+- E2E / Visual: **Visual**: a case in `emberwatch.visual.ts` asserting NPCs
+  stand at conversational distance rather than overlapping the player — pairs
+  naturally with C-400's visual work if that contract lands first.
+
+**Watch Points**:
+- An NPC whose spawn point omits `interactionRadius` must use a sane default,
+  not `0` — a `0` radius reintroduces the deadlock for that NPC specifically.
+
+### AC-4: Combat positioning is unchanged
+**Given** the existing combat test suite
+**When** it runs after this change
+**Then** all combat positioning and walkability tests pass unmodified
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-4 | Integration | `apps/e2e/tests/game/goap_combat.spec.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run e2e:test -- tests/game/goap_combat.spec.ts`
+- Integration: also run `tests/client/combat_sandbox.spec.ts` and
+  `combat_enhancements.spec.ts`.
+- E2E / Visual: **Functional**: existing specs, unmodified. **Visual**: N/A.
+
+**Watch Points**:
+- This AC is satisfied by *not* changing `COMBATANT_COLLISION_MASK`. If any
+  combat test needs editing to pass, scope has leaked — stop and raise an
+  amendment.
+
+### AC-5: Stuck detection logs rather than silently failing
+**Given** a mover with movement intent and zero displacement
+**When** that persists beyond the threshold tick count
+**Then** a warning is logged with the entity id, direction, and occupying
+entity, rate-limited to avoid per-tick spam
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-5 | Unit | `packages/frontend/engine/src/systems/__tests__/movement_system.test.ts` | N/A | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run engine:test`
+- Integration: construct a genuinely walled-in entity and assert exactly one
+  log within the rate-limit window.
+- E2E / Visual: N/A.
+
+**Watch Points**:
+- A player pressing into a wall is *normal* and must not log. The detector must
+  distinguish "blocked by terrain" (expected) from "blocked by an actor"
+  (suspicious). Only the latter warns.
+
+## Implementation Sequence
+
+1. **Phase 1 (Data/Logic)** — Remove `CollisionLayer.npc` from
+   `PLAYER_COLLISION_MASK` (`movement_system.ts:55`) and
+   `CollisionLayer.player` from `NPC_COLLISION_MASK`
+   (`entity_spawner.ts:115`). Update both stale comments. Add `NpcHaltReason`
+   and the halt rule to `goap_movement_executor.ts`, reading
+   `interactionRadius` via the proximity system with a documented default.
+2. **Phase 2 (Integration)** — Add the stuck detector to the movement loop,
+   distinguishing terrain-blocked from actor-blocked. Verify click-to-move
+   (C-380) and keyboard input both recover. Run the full combat suite to prove
+   AC-4 before writing new tests.
+3. **Phase 3 (Validation)** — Add replay cases for AC-1 and AC-2 across four
+   approach directions, the halt-rule unit test, and the stuck-detector test.
+   Run `moon run engine:test`, `moon run e2e:test`, `bun run typecheck`.
+
+## Edge Cases & Gotchas
+
+- **NPC standing in a doorway.** With the player able to pass through NPCs this
+  is no longer a blocker, but confirm the player cannot use an NPC in a
+  transition zone to skip a zone trigger (`zoning_system.ts`).
+- **Two NPCs contesting a tile.** `NPC_COLLISION_MASK` retains
+  `CollisionLayer.npc`, so NPC-vs-NPC blocking is unchanged and can still
+  deadlock. That is pre-existing and out of scope, but the stuck detector will
+  now surface it — expect log noise and record it rather than widening scope.
+- **Party followers** (`party_follow_system.ts`) may rely on the player
+  blocking them. Verify the follower does not walk through or over the player
+  after the mask change.
+- **The `interactionRadius: 48` value is in pixels**, while collision works in
+  tile coordinates (`tileSize: 32`). Do not mix units — this is the most likely
+  source of an off-by-one-tile halt distance.
+- **Combat entry from a halted NPC.** Rollo can start combat from dialogue.
+  Confirm the transition from halted-at-radius into combat positioning works,
+  since combat re-enables mutual blocking.
+
+## Open Questions
+
+Must be resolved before status becomes `approved`:
+
+- **OQ-1** — Does `party_follow_system.ts` depend on the player blocking
+  followers? If yes, the follower needs its own halt rule in this contract or
+  an explicit follow-up. Verify by running `tests/client/party-follow` sandbox
+  before implementing.
+- **OQ-2** — What is the default `interactionRadius` for an NPC spawn that
+  omits it? Must be non-zero. Recommend `tileSize * 1.5` (48px at
+  `tileSize: 32`), matching the value Emberwatch already declares.
+- **OQ-3** — Should the player also pass through *enemies* outside combat?
+  `PLAYER_COLLISION_MASK` retains `CollisionLayer.enemy`. If overworld enemies
+  can move, they have the same deadlock. Determine whether any currently do; if
+  so, decide here rather than shipping a half-fix.
+
+## Amendments
+
+Changes to ACs or scope require a version bump and user approval.
+
+| Version | Date | Change | Approved by |
+|---|---|---|---|
+| 1.0.0 | 2026-08-16 | Initial draft from `mvp-assessment-2026-08-16.md` §6.2. Approach (c)+(a) — halt at interaction radius plus player pass-through — chosen over push-out; rationale in Design Reference. | — |
+
+## Promotion Lifecycle
+
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
+
+Target: **`integrated`** — production route plus deterministic replay and E2E
+coverage. A deadlock is a temporal behaviour, so visual assessment adds nothing.
+
+## Status Lifecycle
+
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+---
