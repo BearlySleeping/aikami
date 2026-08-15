@@ -2,7 +2,7 @@
 id: C-396
 title: "Hub Public Shell and Catalog Browse (SSR)"
 source: "user request — hub community catalog; ADR amendment A-5 (D-15)"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -18,10 +18,10 @@ created_at: "2026-08-15"
 | Field | Value |
 |---|---|
 | **Source** | User request (2026-08-15). Architecture: `docs/architecture/data-layer-target-architecture.md` D-5, D-14, D-15 and invariant I-8 (amendments A-4, A-5). |
-| **Target** | `apps/frontend/hub/src/routes/`, `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/lib/types/data.ts`, `apps/frontend/hub/src/lib/constants/routes.ts`, `scripts/src/lib/catalog/` (thumbnail-generation phase added to the existing C-395 publish pipeline), `packages/shared/schemas/src/lib/catalog/catalog_index.ts` (`thumbnailHash` field) |
+| **Target** | `apps/frontend/hub/src/routes/`, `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/lib/types/data.ts`, `apps/frontend/hub/src/lib/constants/routes.ts`, `scripts/src/lib/catalog/` (thumbnail-generation phase added to the existing C-395 publish pipeline), `packages/shared/schemas/src/lib/catalog/catalog_index.ts` (`thumbnailHash` field), `packages/shared/schemas/src/lib/catalog/catalog_stats.ts` (new stats schemas) |
 | **Priority** | P1 — this is the hub's reason to exist. C-394 and C-395 are both plumbing for it. |
 | **Dependencies** | C-395 (the catalog index must exist to browse). This contract also extends C-395's already-merged publish pipeline (`scripts/src/lib/catalog/`) with thumbnail generation — see Open Question 2 — without reopening the C-395 contract document or changing its status. C-394 only for the streamed stats in AC-4 — the browse pages work without it. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → a page in `apps/frontend/docs/src/content/docs/` describing the catalog |
 | **Contract version** | 2.1.0 |
@@ -35,8 +35,8 @@ created_at: "2026-08-15"
   - `hooks.server.ts` already resolves `locals.userSession` from the `__session` cookie on **every** request without requiring it — so the shell already has everything needed to render an optional-auth page. Only the route guards force authentication.
   - `routes.ts` already models route types (`'authenticated' | 'unauthenticated'`) via `@aikami/frontend/services`, and `routes.test.ts` guards the table.
   - The Eden treaty client (`src/lib/client/services/api/internal.svelte.ts`) is the established typed client for the Elysia API.
-- **Known gaps**: no route type for "public, auth optional"; no catalog views; no index fetching; no page that renders for an anonymous visitor.
-- **Baseline tests**: `bun moon run hub:test`, `bun moon run hub:build`. Both must pass before starting.
+- **Known gaps**: no hub route *entry* typed `'public'` (the `RouteType` union in `@aikami/frontend/services` already includes `'public'` and `router_utils.ts` already treats it as renderable either way — the hub's `routes.ts` simply never uses it); no catalog views; no index fetching; no page that renders for an anonymous visitor.
+- **Baseline tests**: `bun moon run hub:test`, `bun moon run hub:build`. Both must pass before starting. Note: `hub:test` includes C-394's `health_db.test.ts`, which expects the local Postgres to be reachable — start it first (C-387 lifecycle / `herdr_session start postgres`). Verified 2026-08-15: with Postgres stopped, exactly that one test fails (`ECONNREFUSED localhost`); with it running the suite is green.
 
 ## User Outcome
 
@@ -201,17 +201,32 @@ src/routes/
 Page data types, in `src/lib/types/data.ts` (the file C-385 emptied):
 
 ```ts
-/** Catalog landing: category summaries only, never the full asset list. */
+/**
+ * Catalog landing: category summaries only, never the full asset list.
+ * C-395's root index emits one `{ id, count }` row PER SHARD, and a large
+ * category (LPC) is split into several shards (`lpc__<fragment>`, with
+ * no-subcategory entries under `__base`). The landing groups rows by
+ * category: `id` is the six-value category id, `count` is the SUM of that
+ * category's shard counts, and `label` comes from a hub-local constant map
+ * keyed by category id (the root index carries no labels — deriving them
+ * avoids changing C-395's index writer, which this contract reuses as-is).
+ */
 type CatalogLandingPageData = {
   categories: readonly { id: string; label: string; count: number }[];
   publishedAt: string;
 };
 
-/** One category's assets, from the C-395 shard. */
+/**
+ * One category's assets, merged from every C-395 shard whose id equals the
+ * category or starts with `<category>__` (the split-shard form). The load
+ * fetches the small root index to discover the shard ids, then fetches only
+ * that category's shards — never another category's shards, and never the
+ * 7 MB client manifest.
+ */
 type CatalogCategoryPageData = {
   category: string;
   entries: readonly CatalogAssetEntry[];
-  /** Streamed — null when Postgres is unreachable or unconfigured. */
+  /** Streamed — null when the stats endpoint is unreachable or unconfigured. */
   stats: Promise<CategoryStats | null>;
 };
 
@@ -225,6 +240,23 @@ type CatalogAssetPageData = {
 };
 ```
 
+Stats shapes — new TypeBox schemas in
+`packages/shared/schemas/src/lib/catalog/catalog_stats.ts` (re-exported from
+`@aikami/schemas`), served by a new hub Elysia handler (see In Scope):
+
+```ts
+/**
+ * Placeholder aggregates served by `GET /api/catalog/stats`. C-394's data
+ * plane (accounts/packs/pack_versions) has no install or rating columns —
+ * the handler returns pack-derived counts, zero until C-398/C-399 write
+ * rows, so the I-8 streaming machinery is real and testable end to end.
+ * These shapes are the contract for THIS contract only; C-399 extends them
+ * without reopening this document.
+ */
+type CategoryStats = { packCount: number };
+type AssetStats = { packCount: number };
+```
+
 `CatalogAssetEntry` (C-395, `packages/shared/schemas/src/lib/catalog/catalog_index.ts`)
 gains one field, produced by this contract's new pipeline phase:
 
@@ -236,11 +268,13 @@ gains one field, produced by this contract's new pipeline phase:
 thumbnailHash?: string;
 ```
 
-`routes.ts` gains a third route type alongside `'authenticated'` and
-`'unauthenticated'` — `'public'`, meaning "renders either way". A signed-in
-visitor differs from an anonymous one only in the app bar's existing account
-menu (see Open Question 3) — no new member-only UI element is introduced by
-this contract.
+`routes.ts` gains a `public` route entry. The `RouteType` union in
+`@aikami/frontend/services` already includes `'public'` ("renders either
+way") and `router_utils.ts` already handles it — only the hub's route table
+needs a `type: 'public'` entry; no shared-package change is required. A
+signed-in visitor differs from an anonymous one only in the app bar's
+existing account menu (see Open Question 3) — no new member-only UI element
+is introduced by this contract.
 
 ## Quality Requirements
 
@@ -270,7 +304,13 @@ this contract.
   - Navigation drawer and app bar entries for the catalog.
   - `src/lib/types/data.ts` page data types.
   - Index fetching + client-side filter/search within a loaded shard.
-  - The streamed-stats path against C-394's API (degrading to null when absent).
+  - The streamed-stats path: a new `GET /api/catalog/stats` Elysia handler on
+  the hub (extending C-394's API surface), backed by C-394's repositories,
+  returning `CategoryStats`/`AssetStats` per the schemas above. C-394 as
+  merged exposes only `POST /api/auth/session` and `GET /api/health/db` — it
+  has no stats endpoint, so this handler is in scope here (a minimal count
+  query; zeros until C-398/C-399 populate rows). Database unreachable or
+  handler absent → the client maps the failure to `null` with a `warn` log.
   - A docs page describing the catalog.
   - A thumbnail-generation phase added to the existing C-395 publish pipeline
     (`scripts/src/lib/catalog/`): one content-addressed, single-frame preview
@@ -334,7 +374,7 @@ anonymous visitor's login affordance — the only difference between the two
 - Moon Task: `bun moon run hub:test`, `bun moon run hub:build`
 - E2E / Visual:
   - **Functional**: `tests/hub/catalog_public.spec.ts` — signed-out reaches `/` and `/catalog/lpc`; signed-out is redirected from `/dashboard`; signed-in reaches all three.
-  - **Visual**: `suites/hub_catalog.visual.ts` — route `/catalog/lpc`. Score 90+: a grid of sprite previews is visible (single-frame thumbnails per AC-5, not raw sheets), each tile shows a name and a license badge, the filter control is present, and no layout overflow.
+  - **Visual**: `apps/e2e/src/visual/suites/hub_catalog.visual.ts` — route `/catalog/lpc`. Score 90+: a grid of sprite previews is visible (single-frame thumbnails per AC-5, not raw sheets), each tile shows a name and a license badge, the filter control is present, and no layout overflow.
 
 **Watch Points**:
 - 🔴 `src/routes/+page.server.ts` currently redirects **unconditionally**. Replacing it is the single change that makes the hub public — verify no other layout reintroduces a guard above the `(public)` group.
@@ -362,7 +402,7 @@ Postgres queries are issued** during the render
 
 **Watch Points**:
 - 🔴 This AC is the enforcement point for I-8. A query that "just" fetches a count in the awaited part of the load defeats the entire design and will not be caught by any test that runs with a warm database — which is why the unset-`NEON_DATABASE_URL` case is a required assertion, not a nice-to-have.
-- The index shard for LPC is the largest; assert the page does not fetch the root index *and* the shard when only the shard is needed.
+- LPC's shard set is the largest; assert the load fetches the root index (needed to discover split-shard ids) plus only that category's shards — never another category's shards, and never the 7 MB client manifest.
 
 ### AC-3: Asset detail shows a preview, license, and attribution
 
@@ -377,7 +417,7 @@ license, and its attribution text when the license requires one
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | E2E + Visual | `apps/e2e/tests/hub/catalog_detail.spec.ts`, `suites/hub_catalog_detail.visual.ts` | `/catalog/lpc/[tag]` | Filled during verification |
+| AC-3 | E2E + Visual | `apps/e2e/tests/hub/catalog_detail.spec.ts`, `apps/e2e/src/visual/suites/hub_catalog_detail.visual.ts` | `/catalog/lpc/[tag]` | Filled during verification |
 
 **Test Hooks**:
 - E2E / Visual:
@@ -390,11 +430,13 @@ license, and its attribution text when the license requires one
 
 ### AC-4: Postgres-backed stats stream in and never block first paint
 
-**Given** C-394 is deployed and reachable
+**Given** the `GET /api/catalog/stats` handler (this contract's In Scope) is
+deployed and the database is reachable
 **When** a catalog page is loaded with a **cold** Neon compute
 **Then** the page's first contentful paint happens without waiting for the
 database, a loading affordance appears where stats will be, and the stats
-populate when the promise resolves
+populate when the promise resolves (zero counts are a valid populate —
+C-394's tables are empty until C-398/C-399 write rows)
 
 **And when** the database query fails or times out
 **Then** the stats region resolves to absent with a `warn` log, and no
@@ -471,6 +513,7 @@ multi-frame sheet, and never a mid-frame or wrong-direction crop
 - **LPC previews are sprite sheets, not portraits.** A raw `<img>` of a sheet shows every frame in a grid. Resolved (Open Question 2): pre-generated single-frame thumbnails, produced by a new phase in this contract's Phase 3 — not CSS `background-position` cropping, and not a C-395 amendment. Retrofitting thumbnails later means republishing, which is why generation is sequenced before the browse UI that consumes it.
 - **The catalog landing must not fetch the 7 MB root manifest.** It needs category summaries only. If C-395's root index is not small enough to satisfy that, this contract is blocked on fixing the index, not on working around it client-side.
 - **`notification_drawer` and other shell pieces may assume a session.** Audit the shell view models for anonymous-path assumptions before Phase 3.
+- **Entries without `thumbnailHash` (pre-republish) need defined UI behavior.** The grid and detail page render a placeholder or hide the preview tile — never the raw multi-frame sheet. AC-3's "preview resolved from the CDN" applies only to entries whose `thumbnailHash` exists; otherwise the detail page must say the preview is unavailable.
 
 ## Open Questions
 
