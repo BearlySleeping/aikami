@@ -243,18 +243,18 @@ bun run preview:chromium
 ## Generating Public Assets
 
 Brand assets (favicons, PWA icons, OG images, webmanifest) are generated from
-the canonical `assets/logo.png` at the repo root. The unified script produces
+the canonical `assets/default.webp` at the repo root. The unified script produces
 assets for all frontends (`client`, `site`, `docs`) in one pass.
 
 ```bash
 # From repo root:
 bun run scripts/src/lib/ops/generate_brand_assets.ts
 
-# Skip slow PNG→SVG tracing (use existing assets/logo.svg):
+# Skip slow PNG→SVG tracing (use existing assets/default.svg):
 bun run scripts/src/lib/ops/generate_brand_assets.ts --skip-svg
 
-# Convert logo PNG → SVG only:
-bun run scripts/src/lib/ops/convert_logo_png_to_svg.ts
+# Convert image → SVG only (PNG or WebP input):
+bun run scripts/src/lib/ops/convert_image_to_svg.ts
 ```
 
 ## Firebase Config

@@ -12,7 +12,7 @@
     "build:emulator": "vite build --mode emulator",
     "build:production": "vite build --mode production",
     "tauri": "tauri",
-    "tauri:icon": "tauri icon ../../../assets/logo.png",
+    "tauri:icon": "tauri icon ../../../assets/default.svg",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:run": "bun run ../../../scripts/src/lib/ops/run_tauri.ts",
