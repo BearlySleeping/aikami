@@ -2,7 +2,7 @@
 id: C-395
 title: "R2 Asset Origin and Content-Addressed Catalog Index"
 source: "user request — hub community catalog; ADR amendments A-3, A-4"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -477,3 +477,73 @@ Must be resolved before status becomes `approved`:
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Built the full R2 catalog publish pipeline: a content-addressed uploader (Bun S3 client + presigned PUT for exact Cache-Control), the AC-4 attribution preflight as a hard gate before any upload, TypeBox schemas for the root index + category shards with size budgets asserted in tests, and a live first publish of all 12,704 catalog assets to `aikami-catalog` (55.3 MB, 317 s, idempotent re-run). Extended the LPC collector to emit committed `lpc_credits.json` + `lpc_credits_supplement.json` sidecars and scan_assets to merge them with the committed `project_licenses.json` into `asset_credits.json`. AC-3 verifies against the live origin except bucket CORS, which the available credentials cannot configure (maintainer action documented below). Decision recorded: the pipeline stays a local ops command (Open Question 2), and `upload_assets.ts`/`upload_lpc_assets.ts` are superseded for R2 but left untouched (Firebase Storage mirror stays per Out of Scope).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Live publish: 12,704 uploaded (0 failed), content-addressed keys `assets/<sha[0:2]>/<sha>.<ext>`, correct MIME + `Cache-Control: public, max-age=31536000, immutable`; second run 0 uploaded / 12,704 skipped / exit 0; resume + index-written-last covered by `publish.test.ts`; 317 s < 10 min target |
+| AC-2 | ✅ | Root index validates (summaries only, `totalCount` 12,704) and is far under 256 KB gz; LPC shard 639 KB gz < 1 MB (no split needed at current scale; subcategory split path covered by test); every shard entry hash resolves to a real object (hash-match verified over the live domain); size budgets asserted in `index_generation.test.ts` |
+| AC-3 | ⚠️ | 8/9 sub-checks pass against `assets.bearlysleeping.com`: anonymous asset read 200 + hash match + one-year immutable cache + correct Content-Type; index 200 + 60 s cache; anonymous write rejected (401). **CORS missing** — no rule on the bucket, and neither credential can set it (S3 keys: AccessDenied on PutBucketCors; REST token: 403 on `/r2/buckets/*`). Maintainer must add the CORS rule in the R2 dashboard (exact rule in Deviations). |
+| AC-4 | ✅ | Preflight runs before any upload (unit + integration tests assert non-zero result, zero uploads, no index object, unresolved tags named); covers every catalog tag; no bypass flag; LPC licenses/authors/sourceUrls verbatim (never SPDX-normalised); empty licenses OR empty authors both fail; `project_licenses.json` declares the 5 non-LPC tags |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/catalog/catalog_index.ts` | TypeBox schemas: `CatalogAssetEntry`, `CatalogIndexRoot`, `CatalogIndexShard`, `CatalogAssetCredit` (strict objects, `additionalProperties: false`) |
+| `packages/shared/schemas/src/lib/catalog/catalog_index.test.ts` | 25 schema tests (AC-2/AC-4 shape contracts) |
+| `packages/shared/types/src/lib/game/catalog_index.ts` | Static-derived catalog types (mirror pattern) |
+| `scripts/src/lib/catalog/config.ts` | Env resolution (`CLOUD_FLARE_BUCKET_*`, `CATALOG_ORIGIN_URL`, `CATALOG_BUCKET`), MIME map, layout constants |
+| `scripts/src/lib/catalog/content_address.ts` | Content-addressed key derivation |
+| `scripts/src/lib/catalog/upload.ts` | R2 client (Bun S3Client, prefix-listing diff, presigned-PUT for exact headers) + concurrency pool + counts |
+| `scripts/src/lib/catalog/preflight.ts` | Attribution preflight gate (AC-4) + catalog path exclusion (`maps/`, `sprites/tilesets/`) |
+| `scripts/src/lib/catalog/catalog_entries.ts` | Loads manifest + hashes + credits into catalog entries |
+| `scripts/src/lib/catalog/index_generation.ts` | Root + shard generation with gzip size budgets + subcategory split |
+| `scripts/src/lib/catalog/pipeline.ts` | Orchestration: preflight → upload → index (written last), report + non-zero exit |
+| `scripts/src/lib/catalog/publish.ts` | CLI entry (`bun run scripts/src/lib/catalog/publish.ts --mode production`) |
+| `scripts/src/lib/catalog/lpc_credits.ts` | CREDITS.csv parser + tiered join (exact / same-asset / `${head}` template) + output-tag derivation + supplement credit |
+| `scripts/src/lib/catalog/project_licenses.json` | Committed project-owned declaration for the 5 non-LPC catalog tags |
+| `scripts/src/lib/catalog/__tests__/license_capture.test.ts` | 24 tests: CSV parsing, tag derivation, tiered resolution, no-SPDX rule |
+| `scripts/src/lib/catalog/__tests__/publish.test.ts` | AC-1 pipeline tests (keys, MIME/cache, idempotency, resume, index-last, preflight abort) |
+| `scripts/src/lib/catalog/__tests__/publish_preflight.test.ts` | AC-4 gate tests incl. integration (non-zero + zero uploads + no index) |
+| `scripts/src/lib/catalog/__tests__/index_generation.test.ts` | AC-2 tests: validation, size budgets, split, totalCount, cross-field consistency |
+| `scripts/src/lib/catalog/__tests__/fixtures.ts` | Fixture game-data + in-memory fake R2 client |
+| `apps/frontend/client/static/game-data/lpc_credits.json` | Committed LPC attribution sidecar (11,706 tags, CREDITS.csv join) |
+| `apps/frontend/client/static/game-data/lpc_credits_supplement.json` | Committed library-level declarations for 993 LPC tags CREDITS.csv does not cover |
+| `apps/frontend/client/static/game-data/asset_credits.json` | Merged attribution sidecar emitted by scan_assets (12,704 tags) |
+| `apps/frontend/docs/src/content/docs/guides/publishing-catalog-assets.mdx` | Developer publishing guide |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Export catalog_index schemas |
+| `packages/shared/types/src/index.ts` | Export catalog_index types |
+| `scripts/src/lib/ops/collect_lpc_assets.ts` | Emits `lpc_credits.json` + `lpc_credits_supplement.json`; parsePath moved to `lpc_credits.ts` (single key source of truth) |
+| `scripts/src/lib/ops/scan_assets.ts` | Merges lpc credits + supplement + project_licenses into `asset_credits.json` |
+| `scripts/.env.example` | Documents `CATALOG_ORIGIN_URL` / `CATALOG_BUCKET` |
+| `apps/frontend/client/static/game-data/manifest.json` | `scannedAt` bump (natural scan output) |
+| `apps/frontend/client/static/game-data/asset_hashes.json` | `scannedAt` bump (natural scan output) |
+
+### Deviations from Spec
+
+1. **AC-4 CREDITS.csv coverage is not 1:1 (contract claim verified wrong at scale).** The contract asserted the LPC join is "1:1 and deterministic… fully recoverable". Reality (verified against the real data): the generator's on-disk tree has 144,699 PNGs vs 13,465 parseable CREDITS.csv rows; the collector's `bestPerState` picks nested/colour/animation variant files that CREDITS.csv does not credit by exact path. Only ~45% match exactly; exact + same-asset fallback (zero credit ambiguity measured across all 12,699 states) + `${head}` template matching resolve 11,706 (92.2%). The remaining 993 LPC tags genuinely have no per-file upstream credit (e.g. `eyes/human/*` has zero CREDITS rows). Resolution per AC-4's own guidance ("declare it explicitly — a reviewable diff"): the collector emits a committed `lpc_credits_supplement.json` declaring LPC-library-level provenance (triple license + LPC contributors + OpenGameArt URLs) for those tags; the preflight treats it as a declaration source and still hard-fails any tag in none of the three sources. No bypass flag was added. **Proposed Amendment**: add `lpc_credits_supplement.json` as a recognised declaration source in AC-4's "How the join works" and State & Data Models, and note the tiered join (exact → same-asset → `${head}` template → supplement).
+2. **AC-3 CORS is not configured and cannot be configured with the available credentials.** The bucket has no CORS rule: OPTIONS preflight on the custom domain returns 403, GET with `Origin` returns no `access-control-allow-origin`. The S3 credentials return AccessDenied on `PutBucketCors`; the `CLOUD_FLARE_BUCKET_TOKEN` returns 403 on `/r2/buckets/*` (token lacks Workers R2 Storage permission, though it can list accounts). **Required maintainer action** (R2 dashboard or a token with R2 bucket Edit): apply a CORS rule on `aikami-catalog` for `https://hub.bearlysleeping.com`, `https://hub.stg.bearlysleeping.com`, `https://aikami.bearlysleeping.com` with methods GET/HEAD and `Access-Control-Allow-Headers: *`. Every other AC-3 sub-check verifies against the live origin.
+3. **Open Question 2 — decision recorded**: the publish pipeline stays a local ops command. No `catalog` `ServiceType`/deploy entry added (would have duplicated C-394's `database-migration` tripwire); revisit when C-398 needs approval-triggered publishing.
+4. **Phase 1 decision recorded**: `upload_assets.ts`/`upload_lpc_assets.ts` are superseded for R2 by the content-addressed pipeline but left unchanged — they still serve the Firebase Storage mirror, which Out of Scope keeps until C-397 proves the R2 path.
+5. **Preflight strictness**: an entry with empty `licenses` OR empty `authors` fails (contract text: "Empty arrays must abort the publish"; test asserts no silently-assigned permissive licence and no silently-empty authors array).
+
+### Test Results
+
+- Unit: 250/250 scripts (203 baseline + 47 new catalog tests; 0 failures), 375/375 schemas (25 new), 48/48 frontend-storage (baseline)
+- E2E: N/A (no UI in this contract)
+- Visual: N/A
+- Baseline: 0 pre-existing failures; 0 new failures
+- Live: publish 12,704 objects (55.3 MB, 317 s), re-run 0 uploaded / 12,704 skipped, exit 0; AC-3 origin checks 8/9 (CORS pending maintainer action)
