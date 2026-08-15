@@ -47,7 +47,11 @@ WORKDIR /sd.cpp
 
 RUN git clone --depth 1 https://github.com/leejet/stable-diffusion.cpp.git . \
     && git fetch --depth 1 origin ${SD_CPP_REVISION} \
-    && git checkout ${SD_CPP_REVISION}
+    && git checkout ${SD_CPP_REVISION} \
+    # ggml (and other vendored deps) are git submodules — without this,
+    # CMakeLists.txt's add_subdirectory(ggml) fails ("does not contain a
+    # CMakeLists.txt file") because the submodule dir is left empty.
+    && git submodule update --init --recursive --depth 1
 
 RUN cmake . -B ./build \
     -DSD_BUILD_SHARED_LIBS=ON \
