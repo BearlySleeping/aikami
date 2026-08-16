@@ -719,4 +719,23 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
     expect('isWalkable' in omittedClone.props.village_gate).toBe(false);
     expect(Value.Check(PackConfigSchema, omittedClone)).toBe(true);
   });
+
+  test('accepts the C-400 npcs projection (npcId → appearanceLayers)', () => {
+    const config = {
+      tiles: {},
+      props: {},
+      npcs: {
+        // biome-ignore lint/style/useNamingConvention: manifest npc IDs use snake_case
+        village_elder: { appearanceLayers: [2, 3, 65, 21, 20, 97] },
+      },
+    };
+    expect(Value.Check(PackConfigSchema, config)).toBe(true);
+    const parsed = Value.Parse(PackConfigSchema, config);
+    expect(parsed.npcs?.village_elder?.appearanceLayers).toEqual([2, 3, 65, 21, 20, 97]);
+  });
+
+  test('npcs is optional — legacy configs without it still validate (C-400)', () => {
+    const legacy = { tiles: {}, props: {} };
+    expect(Value.Check(PackConfigSchema, legacy)).toBe(true);
+  });
 });

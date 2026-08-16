@@ -6,15 +6,14 @@ import type {
   GameCommand,
   GameWorld,
   InteractableStateMap,
-  LpcLayerRecipe,
 } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
-import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { logger } from '$logger';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
@@ -477,7 +476,7 @@ class GameEngineService
    * (collision rects, movement cost, interaction radius) ride the same field.
    */
   private _buildPackConfig(
-    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains'>,
+    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains' | 'npcs'>,
   ): PackConfig {
     return {
       tiles: Object.fromEntries(
@@ -526,6 +525,25 @@ class GameEngineService
       // inside the world (map load). Carried only when the pack declares
       // them — a terrain-less pack stays legacy (AC-8).
       ...(manifest.terrains === undefined ? {} : { terrains: manifest.terrains }),
+      // C-400: NPC appearance crosses the worker boundary so the entity
+      // spawner reads appearance from the manifest (npcId → appearanceLayers)
+      // instead of Tiled spawn-point properties. Carried only when the pack
+      // declares NPCs — legacy packs keep the spawner's default stack.
+      ...(manifest.npcs === undefined
+        ? {}
+        : {
+            npcs: Object.fromEntries(
+              Object.entries(manifest.npcs).map(([npcId, def]) => [
+                npcId,
+                {
+                  // Optional appearanceLayers is carried only when present.
+                  ...(def.appearanceLayers === undefined
+                    ? {}
+                    : { appearanceLayers: def.appearanceLayers }),
+                },
+              ]),
+            ),
+          }),
     };
   }
 
@@ -704,9 +722,8 @@ class GameEngineService
 
       const textureManager = new TextureManager();
 
-      const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
-        generatedLpcSlots,
-        (slot, assetId, state) => getLpcAssetPath(slot, assetId, state as unknown as number),
+      const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+        getLpcAssetPath(slot, assetId, state as unknown as number),
       );
 
       const playerData = this._buildPlayerData();
@@ -723,8 +740,11 @@ class GameEngineService
       this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',
         bridge,
-        recipeResolver,
-        assetUrlResolver,
+        recipeResolver: pipeline.recipeResolver,
+        assetUrlResolver: pipeline.assetUrlResolver,
+        // C-400: forward the projected catalog so the worker resolves the
+        // same slot/assetId sequences as the main-thread resolver.
+        lpcCatalog: pipeline.catalog,
         // C-374: merge equipped items onto the player's base LPC render
         equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
         textureManager,
@@ -905,77 +925,16 @@ class GameEngineService
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
     getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
-  ): {
-    recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
-    assetUrlResolver: (_slot: string, assetId: string, state: string) => string | null;
-  } {
+  ) {
+    // C-400: single source of truth — the engine's shared createLpcPipeline
+    // (projected catalog + pure resolver + asset URL resolver). The
+    // hard-coded head override and the numeric-string asset IDs are gone;
+    // worker and main thread share this exact function.
     this._cachedLpcSlots = generatedLpcSlots;
-
-    const SlotCatalogIndex: Record<string, number> = {};
-    for (let idx = 0; idx < generatedLpcSlots.length; idx++) {
-      SlotCatalogIndex[generatedLpcSlots[idx].slot] = idx;
-    }
-
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
-
-    const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
-      const recipes: LpcLayerRecipe[] = [];
-      for (let i = 0; i < EngineSlots.length; i++) {
-        const rawId = layerIds[i];
-        const slotName = EngineSlots[i] ?? `layer_${i}`;
-        const catalogIdx = SlotCatalogIndex[slotName];
-        if (catalogIdx === undefined) {
-          continue;
-        }
-        const slotDef = generatedLpcSlots[catalogIdx];
-        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
-        if (slotName === 'head') {
-          // Ensure we always get an actual head asset (not ears, faces, etc.).
-          // Index 94 = head/heads/human_male in the generated catalog.
-          if (effectiveIdx < 0) {
-            effectiveIdx = 94;
-          }
-          const headVariant = slotDef?.variants[effectiveIdx];
-          if (!headVariant?.assetId.startsWith('head/heads/')) {
-            // Computed variant is not a head — fall back to default human head.
-            effectiveIdx = 94;
-          }
-        }
-        const variant = slotDef?.variants[effectiveIdx];
-        if (!variant) {
-          // C-370: body fallback — if body slot variant lookup fails, inject default
-          if (slotName === 'body') {
-            recipes.push({
-              slot: 'body',
-              assetId: LPC_DEFAULT_BODY_ASSET_ID,
-              hexPalette: new Uint8Array(1024),
-            });
-          }
-          continue;
-        }
-        recipes.push({
-          slot: slotName,
-          assetId: variant.assetId,
-          hexPalette: new Uint8Array(1024),
-        });
-      }
-      // C-370: ensure body recipe exists — inject default if missing
-      const hasBody = recipes.some((r) => r.slot === 'body');
-      if (!hasBody) {
-        recipes.unshift({
-          slot: 'body',
-          assetId: LPC_DEFAULT_BODY_ASSET_ID,
-          hexPalette: new Uint8Array(1024),
-        });
-      }
-      return recipes;
-    };
-
-    const assetUrlResolver = (_slot: string, assetId: string, state: string): string | null => {
-      return getLpcAssetPath(_slot, assetId, state);
-    };
-
-    return { recipeResolver, assetUrlResolver };
+    return createLpcPipeline({
+      catalog: projectLpcCatalog(generatedLpcSlots),
+      getLpcAssetPath,
+    });
   }
 
   // ── Private: persona loading ──
