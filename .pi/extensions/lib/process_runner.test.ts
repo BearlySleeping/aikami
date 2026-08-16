@@ -132,7 +132,17 @@ describe('startCommand', () => {
     // The child backgrounds a grandchild and exits-by-signal; killing the
     // group must reap both. If only the direct child died, the grandchild
     // would hold the pipe open and completion would hang until timeout.
-    const handle = startCommand('sh', ['-c', 'sleep 30 & sleep 30'], { timeoutMs: 2000 });
+    //
+    // 🔴 MSYS2's `sh` (Git Bash) spawns backgrounded `sleep` OUTSIDE the
+    // parent-child tree that Windows `taskkill /T` walks, so the sh-based
+    // tree is not reapable on Windows. cmd's `start /b` creates a real
+    // Windows parent-child tree that taskkill /T can walk.
+    const isWin = process.platform === 'win32';
+    const handle = startCommand(
+      isWin ? 'cmd' : 'sh',
+      isWin ? ['/c', 'start /b sleep 30 & sleep 30'] : ['-c', 'sleep 30 & sleep 30'],
+      { timeoutMs: 2000 },
+    );
     const result = await handle.completion;
     expect(result.killed).toBe(true);
     expect(result.durationMs).toBeLessThan(6000);

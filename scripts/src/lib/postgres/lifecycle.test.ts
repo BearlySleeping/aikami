@@ -49,9 +49,11 @@ describe('postgres lifecycle config', () => {
   });
 
   it('keeps all state under the repo-local .postgres dir', () => {
-    expect(dataDir()).toContain('/.postgres/data');
-    expect(runDir()).toContain('/.postgres/run');
-    expect(logFile()).toContain('/.postgres/');
+    // Platform-agnostic: on Windows the repo-local dir is `\.postgres\…`,
+    // on POSIX `/.postgres/…` — assert via path.join so both pass.
+    expect(dataDir()).toContain(join('.postgres', 'data'));
+    expect(runDir()).toContain(join('.postgres', 'run'));
+    expect(logFile()).toContain(join('.postgres', ''));
   });
 
   it('resolves the repo root from the script location', () => {

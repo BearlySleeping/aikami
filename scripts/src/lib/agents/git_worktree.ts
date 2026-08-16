@@ -10,7 +10,7 @@
 //    removeWorktree / WORKSPACES_DIR were deleted when the pipeline switched
 //    to herdr-native worktrees — this file holds only git primitives now.
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -23,6 +23,82 @@ interface GitExecError extends Error {
 }
 
 const isGitExecError = (err: unknown): err is GitExecError => err instanceof Error;
+
+/**
+ * Split a git command string into an argv array, honoring the quoting style
+ * every runGit caller uses: single-quoted paths (`'path with spaces'`),
+ * double-quoted values (`-m "message"`, `--format="%H %s"`), `\"` escapes
+ * inside double quotes, and the POSIX `'\''` single-quote escape (worktree.ts
+ * branch names). No shell expansion is performed — callers interpolate values
+ * into the string before runGit ever sees it.
+ *
+ * 🔴 WHY NOT `execSync`: on Windows it routes through cmd.exe, which treats
+ * `'` as a literal character, so `git status -- 'code.ts'` silently never
+ * matches the path — corrupting every quoted runGit call (e.g. contract_sync
+ * `status --porcelain -- '<path>'`). Executing via `execFileSync` with a real
+ * argv array skips the shell entirely and behaves identically on POSIX and
+ * Windows. Values are pre-interpolated, so this reproduces the POSIX
+ * `sh -c` path minus the quoting bugs.
+ */
+export const splitGitCommand = (command: string): string[] => {
+  const args: string[] = [];
+  let current = '';
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'") {
+      // Single-quoted segment — everything literal until the closing quote.
+      // `'\''` inside a single-quoted string escapes a literal quote.
+      let end = i + 1;
+      while (end < command.length) {
+        if (command[end] === "'" && command[end + 1] === '\\' && command[end + 2] === "'") {
+          current += "'";
+          end += 3;
+          continue;
+        }
+        if (command[end] === "'") {
+          break;
+        }
+        current += command[end];
+        end += 1;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (ch === '"') {
+      // Double-quoted segment — literal except `\"`.
+      let end = i + 1;
+      while (end < command.length) {
+        if (command[end] === '\\' && command[end + 1] === '"') {
+          current += '"';
+          end += 2;
+          continue;
+        }
+        if (command[end] === '"') {
+          break;
+        }
+        current += command[end];
+        end += 1;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (ch === ' ' || ch === '\t') {
+      if (current !== '') {
+        args.push(current);
+        current = '';
+      }
+      i += 1;
+      continue;
+    }
+    current += ch;
+    i += 1;
+  }
+  if (current !== '') {
+    args.push(current);
+  }
+  return args;
+};
 
 /**
  * Run a git command with retry on index.lock contention.
@@ -38,16 +114,14 @@ export const runGit = (
   command: string,
   options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
 ): string => {
-  const cmd = `git ${command}`;
-
   const opts: {
     encoding: 'utf-8';
     stdio: ['pipe', 'pipe', 'pipe'];
     cwd?: string;
     env?: Record<string, string>;
     timeout?: number;
-    // Windows: execSync runs via cmd.exe — without this every git call
-    // flashes a console window. No-op on POSIX.
+    // Windows: without windowsHide, git.exe spawns a visible console window
+    // per call. No-op on POSIX.
     windowsHide?: boolean;
   } = {
     encoding: 'utf-8' as const,
@@ -67,7 +141,7 @@ export const runGit = (
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      return execSync(cmd, opts).trim();
+      return execFileSync('git', splitGitCommand(command), opts).trim();
     } catch (err: unknown) {
       lastError = err;
       const message = isGitExecError(err) ? (err.stderr ?? err.message) : String(err);
