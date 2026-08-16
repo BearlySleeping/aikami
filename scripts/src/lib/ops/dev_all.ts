@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 // scripts/src/lib/ops/dev_all.ts
 /**
  * Start all development services using the unified herdr workspace library.
@@ -15,20 +16,14 @@
  *   bun run herdr:stop all            # Stop everything
  */
 
+import { resolveAikamiMode } from '../env/mode';
 import { type AikamiMode, hasHerdr, startServices } from '../herdr/session.ts';
 
-const VALID_MODES: AikamiMode[] = ['emulator', 'staging', 'production'];
 const args = process.argv.slice(2);
 const detach = args.includes('--detach') || args.includes('-d');
 
 // Read mode from env or default to emulator
-const mode: AikamiMode = (() => {
-  const envMode = process.env.AIKAMI_MODE;
-  if (envMode && VALID_MODES.includes(envMode as AikamiMode)) {
-    return envMode as AikamiMode;
-  }
-  return 'emulator';
-})();
+const mode: AikamiMode = resolveAikamiMode();
 
 async function main() {
   console.log(`

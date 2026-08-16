@@ -257,6 +257,8 @@ const _dispatchHerdrAlert = async (message: string): Promise<void> => {
   try {
     const proc = spawn('herdr', ['notify', message], {
       stdio: 'ignore',
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
     });
     await new Promise<void>((resolveA) => {
       proc.on('close', () => resolveA());
@@ -278,6 +280,8 @@ const _runMoonTask = async (
     const proc = spawn('bun', ['moon', 'run', target], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
     });
 
     let stdout = '';

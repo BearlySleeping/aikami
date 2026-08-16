@@ -217,11 +217,11 @@ apps/e2e/
 ├── playwright.config.ts    # setup, client projects
 ├── src/
 │   ├── auth.setup.ts       # Per-worker auth state generation
-│   ├── config.ts           # EMULATOR_PORTS, getWorkerProjectId()
-│   ├── emulator_helper.ts  # clearAllWorkerProjects()
+│   ├── config.ts           # EMULATOR_PORTS, EMULATOR_PROJECT_ID
+│   ├── emulator_helper.ts  # clearAllEmulatorData()
 │   ├── fixtures.ts         # Shared fixtures (guestUser, etc.)
-│   ├── global_setup.ts     # Pre-suite emulator purge (all workers)
-│   ├── global_teardown.ts  # Post-suite emulator purge (all workers)
+│   ├── global_setup.ts     # Pre-suite emulator purge (single project)
+│   ├── global_teardown.ts  # Post-suite emulator purge (single project)
 │   └── pom/                # Page Object Models
 │       ├── combat_page.ts
 │       ├── inventory_page.ts
@@ -303,10 +303,14 @@ Then add to `apps/e2e/src/pom/index.ts` barrel export.
 
 ### Worker Isolation
 
-- Each worker uses a distinct Firebase project ID: `demo-aikami-worker-{0..N}`
+- All workers run against the **single emulator project** `demo-aikami-emulator`
+- Parallel workers isolate state via separate browser contexts
 - Auth states are per-worker: `.auth/user-worker-{0..N}.json`
-- Global setup/teardown purges ALL worker projects via emulator REST API
-- `MAX_WORKERS = 8` — increase if running more parallel workers
+- Global setup/teardown purges the emulator project via REST API
+
+> Per-worker emulator project IDs (`demo-aikami-worker-{0..N}`) were removed —
+> nothing ever wrote to those projects, and their Auth purges tripped the
+> emulator's single-project-mode warnings.
 
 ### Path Aliases
 

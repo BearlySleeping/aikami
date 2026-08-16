@@ -39,7 +39,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { runGit, sanitizeBranchName } from '../agents/git_worktree.ts';
-import { findWorkspace, herdr, herdrJson, wrapCommand } from './session.ts';
+import { resolveAikamiMode } from '../env/mode';
+import { findWorkspace, herdr, herdrJson, wrapCommandForPane } from './session.ts';
 import {
   bootstrapWorktree,
   createWorktree,
@@ -168,7 +169,7 @@ const launchPiInWorktree = async (w: TaskWorktree): Promise<void> => {
   const r = await herdrJson<{ result: { pane_id: string } }>(['pane', 'get', w.rootPaneId]);
   const paneId = r?.result?.pane_id ?? w.rootPaneId;
   await herdr(['tab', 'rename', `${w.workspaceId}:1`, 'pi']);
-  await herdr(['pane', 'run', paneId, wrapCommand('pi')]);
+  await herdr(['pane', 'run', paneId, await wrapCommandForPane(paneId, 'pi')]);
   ok(`pi running in workspace ${w.workspaceId} (tab "pi")`);
 };
 
@@ -223,7 +224,7 @@ const cmdNew = async (args: string[]): Promise<void> => {
       const owner = {
         checkoutPath: w.checkoutPath,
         branch: w.branch,
-        mode: process.env.AIKAMI_MODE ?? 'emulator',
+        mode: resolveAikamiMode(),
         claimedAt: new Date().toISOString(),
       };
       const ownerPath = devStackOwnerPath();

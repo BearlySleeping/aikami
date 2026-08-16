@@ -14,6 +14,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveAikamiMode } from './mode';
 
 // ── Configuration ────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ const SECRET_KEYS = [
 
 // ── Resolve mode ──────────────────────────────────────────────────────
 
-const mode = process.env.AIKAMI_MODE || 'emulator';
+const mode = resolveAikamiMode();
 const isEmulator = mode === 'emulator';
 const root = process.env.AIKAMI_ROOT || process.cwd();
 

@@ -11,6 +11,8 @@ const gitLines = (options: { cwd: string; args: string[] }): string[] => {
       cwd: options.cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      // Windows: hide the console window (no-op on POSIX).
+      windowsHide: true,
     })
       .split('\n')
       .map((line) => line.trim())
@@ -95,6 +97,8 @@ export const currentCommit = (cwd: string): string => {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      // Windows: hide the console window (no-op on POSIX).
+      windowsHide: true,
     }).trim();
   } catch {
     return 'unknown';

@@ -117,6 +117,8 @@ export function runArgs(
       stdio,
       maxBuffer: 100 * 1024 * 1024,
       shell: false,
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
     });
     if (result.status !== 0 && !(opts.quiet || _quiet)) {
       error(`Command failed: ${cmd.join(' ')}`);

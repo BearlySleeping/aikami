@@ -20,6 +20,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveAikamiMode } from './mode';
 
 const _filename = fileURLToPath(import.meta.url);
 const _scriptDir = dirname(_filename);
@@ -90,8 +91,7 @@ export function initScriptsEnv(mode: string): void {
  */
 export function getScriptsEnv(key: string): string | undefined {
   if (_loadedMode === null) {
-    const mode = process.env.AIKAMI_MODE || 'emulator';
-    initScriptsEnv(mode);
+    initScriptsEnv(resolveAikamiMode());
   }
   return process.env[key] ?? _envCache.get(key);
 }

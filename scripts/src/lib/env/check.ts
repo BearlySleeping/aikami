@@ -13,12 +13,13 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { isEmulatorMode, resolveAikamiMode } from './mode';
 
 // ── Resolve context ────────────────────────────────────────────────────
 
-const mode = process.env.AIKAMI_MODE || 'emulator';
+const mode = resolveAikamiMode();
 const projectId = process.env.AIKAMI_PROJECT_ID || 'demo-aikami-emulator';
-const isEmulator = mode === 'emulator';
+const isEmulator = isEmulatorMode();
 const root = process.env.AIKAMI_ROOT || process.cwd();
 
 // ── Helpers ────────────────────────────────────────────────────────────

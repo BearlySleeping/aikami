@@ -4,15 +4,15 @@
 //
 // C-054 AC-3: Uses shared emulator_helper for REST API purging.
 
-import { clearAllWorkerProjects } from './emulator_helper';
+import { clearAllEmulatorData } from './emulator_helper';
 
 /**
  * Playwright global teardown hook.
- * Resets emulator state for ALL worker projects after all suites finish.
+ * Resets emulator state after all suites finish, so the next run starts clean.
  */
 const globalTeardown = async (): Promise<void> => {
-  console.log('\n🧹 Global Teardown: Purging all worker emulator projects...');
-  await clearAllWorkerProjects();
+  console.log('\n🧹 Global Teardown: Purging emulator data...');
+  await clearAllEmulatorData();
   console.log('✓ Global teardown complete\n');
 };
 

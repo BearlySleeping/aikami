@@ -54,8 +54,34 @@ const SIGTERM_GRACE_MS = 3000; // wait 3 s after SIGTERM before SIGKILL
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+/**
+ * Terminate a process and its whole tree.
+ *
+ * POSIX: kill the process group (`-pid`) so grandchildren die too — a child
+ * that survives with the stdout pipe open would otherwise hold `completion`
+ * open forever.
+ *
+ * Windows: there are no POSIX signals or process groups, and Node's
+ * `process.kill(-pid, …)` is unsupported (throws), so killing only the direct
+ * pid strands its descendants holding the pipes open. `taskkill /T /F` is the
+ * canonical whole-tree termination; `/F` is required because console apps
+ * (sh, sleep) do not respond to the graceful WM_CLOSE path. There is no
+ * graceful variant on Windows — Node maps SIGTERM to TerminateProcess anyway,
+ * and the callers' grace-period escalation re-runs this harmlessly.
+ */
 function killProcessTree(pid: number | undefined): void {
   if (pid === undefined) {
+    return;
+  }
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } catch {
+      // Already dead
+    }
     return;
   }
   try {
@@ -71,6 +97,17 @@ function killProcessTree(pid: number | undefined): void {
 
 function killProcessTreeForce(pid: number | undefined): void {
   if (pid === undefined) {
+    return;
+  }
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } catch {
+      // Already dead
+    }
     return;
   }
   try {
@@ -182,6 +219,10 @@ export function startCommand(
     stdio: ['pipe', 'pipe', 'pipe'],
     // Own process group (via setsid) so the whole tree can be killed by -pid.
     detached: true,
+    // Windows: without this, spawning console apps (herdr, bun, node) opens a
+    // visible console window per call — a flash-popup storm under polling.
+    // No-op on POSIX.
+    windowsHide: true,
   });
 
   // Close stdin immediately — prevents CLI tools from hanging on prompts.
@@ -247,7 +288,11 @@ export function startCommand(
     return {
       stdout: stdout.trim(),
       stderr: stderr.trim(),
-      code,
+      // 🔴 Windows has no signals: a tree terminated via taskkill exits with a
+      // numeric code (1), not null like a POSIX signal death. The POSIX
+      // contract — "code is null when we killed it" — is restored by reporting
+      // null whenever this handle performed the termination.
+      code: killed ? null : code,
       killed,
       durationMs: Date.now() - startTime,
     };
@@ -262,7 +307,14 @@ export function startCommand(
     running: () => !finished,
     exitCode: () => exitCode,
     kill: (force = false) => {
+      if (finished) {
+        return;
+      }
       if (force) {
+        // 🔴 Mark killed BEFORE killing: on Windows taskkill reaps the tree
+        // with a numeric exit code (1), not a signal-null like POSIX — the
+        // completion must report code null for a handle-performed kill.
+        killed = true;
         killProcessTreeForce(child.pid);
         return;
       }
@@ -324,6 +376,8 @@ export function runSync(
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     encoding: 'utf8',
+    // Windows: hide the console window this spawn would otherwise flash.
+    windowsHide: true,
   });
 
   const stdout = (result.stdout ?? '').toString().trim();

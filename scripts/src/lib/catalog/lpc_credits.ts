@@ -37,7 +37,7 @@
 // preflight refuses to publish such entries.
 
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // CREDITS.csv row shape
@@ -479,6 +479,15 @@ const creditFingerprint = (entry: LpcCreditEntry): string =>
  * Returns undefined when no tier resolves — the caller records the source
  * as unresolved and the publish preflight gates on it.
  */
+/**
+ * Normalize a spritesheet-relative path to forward slashes.
+ * CREDITS.csv and the output sidecar use `/` as the join key separator on
+ * every platform; on Windows `relative()` returns backslash paths
+ * (`weapon\staff\thrust.png`), which would never match the `/`-keyed index.
+ * No-op on POSIX (including literal backslashes in filenames).
+ */
+const toForwardSlashes = (path: string): string => path.split(sep).join('/');
+
 export const resolveLpcCredit = (options: {
   sourcePath: string;
   parsed: Pick<LpcParsedState, 'slot' | 'type' | 'bodyType'>;
@@ -488,7 +497,7 @@ export const resolveLpcCredit = (options: {
   const { sourcePath, parsed, index, spritesheetsDir } = options;
 
   // Tier 1: exact path.
-  const exact = index.byPath.get(relative(spritesheetsDir, sourcePath));
+  const exact = index.byPath.get(toForwardSlashes(relative(spritesheetsDir, sourcePath)));
   if (exact) {
     return exact;
   }
@@ -502,7 +511,7 @@ export const resolveLpcCredit = (options: {
   }
 
   // Tier 3: `${head}` template rows (the only placeholder CREDITS.csv uses).
-  const parts = relative(spritesheetsDir, sourcePath).split('/');
+  const parts = toForwardSlashes(relative(spritesheetsDir, sourcePath)).split('/');
   const templateMatches = new Map<string, LpcCreditEntry>();
   const headPlaceholder = '\u0024{head}';
   for (const { filename, entry } of index.templateRows) {
@@ -565,7 +574,7 @@ export const buildLpcCreditsSidecar = (options: {
 
     const entry = resolveLpcCredit({ sourcePath, parsed, index, spritesheetsDir });
     if (!entry) {
-      unresolved.push({ tag, source: relative(spritesheetsDir, sourcePath) });
+      unresolved.push({ tag, source: toForwardSlashes(relative(spritesheetsDir, sourcePath)) });
       continue;
     }
     credits[tag] = entry;

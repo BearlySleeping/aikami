@@ -43,11 +43,20 @@
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
+
+// Re-exported for back-compat — the canonical definition now lives in
+// ../env/mode (single source of truth for mode resolution).
+import type { AikamiMode } from '../env/mode';
+
+export type { AikamiMode } from '../env/mode';
+
 import {
   killPid,
   killPortUnsafe,
@@ -58,8 +67,6 @@ import {
 import { findBash, posixQuote } from '../env/which';
 
 // ── Types ──────────────────────────────────────────────────
-
-export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
 export type DevService =
@@ -463,6 +470,11 @@ export const herdr = (args: string[], opts: HerdrOptions = {}): Promise<HerdrRes
     const proc = spawn('herdr', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...opts.env },
+      // Windows: herdr is a console app — without windowsHide every headless
+      // CLI call flashes a new console window (open/close popup storm). The
+      // contract pipeline polls herdr every ~500ms, so this must be hidden.
+      // No-op on POSIX.
+      windowsHide: true,
     });
     let out = '';
     let errOut = '';
@@ -648,6 +660,9 @@ export const ensureServer = async (): Promise<void> => {
   const proc = spawn('herdr', ['server'], {
     stdio: 'ignore',
     env: process.env,
+    // Windows: hide the server's console window — without this it appears as
+    // a stray popup, and closing that window kills the server mid-run.
+    windowsHide: true,
   });
   proc.unref(); // detach — don't keep parent event loop alive
 
@@ -784,6 +799,73 @@ export const killPort = async (port: number): Promise<void> => {
 const PANE_TRAILER = '=== Stopped. Press Enter to close ===';
 
 /**
+ * The shell a herdr pane runs — governs how a command string must be quoted
+ * before `pane run` sends it to the pane's PTY.
+ */
+export type PaneShell = 'powershell' | 'nushell' | 'cmd' | 'posix';
+
+/**
+ * Map a pane's foreground process name to the shell kind it represents.
+ * herdr launches panes with the user's configured default shell — on this
+ * Windows install that is `powershell.exe` (the old "panes default to
+ * Nushell" comment predates herdr 0.8.0-preview).
+ */
+const paneShellFromProcessName = (name: string): PaneShell => {
+  const n = name.toLowerCase().replace(/\.exe$/, '');
+  if (n.includes('powershell') || n.includes('pwsh')) {
+    return 'powershell';
+  }
+  if (n === 'cmd' || n.includes('cmd')) {
+    return 'cmd';
+  }
+  if (n === 'nu' || n === 'nushell' || n.includes('nu')) {
+    return 'nushell';
+  }
+  return 'posix';
+};
+
+/** Detect the shell running in a herdr pane (defaults to posix on failure). */
+export const detectPaneShell = async (paneId: string): Promise<PaneShell> => {
+  try {
+    const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+    const name = r?.result?.process_info?.foreground_processes?.[0]?.name;
+    return name ? paneShellFromProcessName(name) : 'posix';
+  } catch {
+    return 'posix';
+  }
+};
+
+/**
+ * Quote a value for a PowerShell single-quoted string: `'` → `''`.
+ * PowerShell has no POSIX `'\''` escape; doubling is the single-quote escape.
+ */
+const psQuote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+
+/**
+ * Quote a value as a CMD double-quoted argument, escaping embedded `"` as
+ * `\"` (cmd.exe has no literal-quote escape inside a `"…"` token; `\"` is
+ * the accepted convention for native args). Used for `cmd` panes, which
+ * treat POSIX single quotes as literals.
+ */
+const cmdQuote = (value: string): string => `"${value.replaceAll('"', '\\"')}"`;
+
+/**
+ * Write `script` to a unique temp .sh file and return its path. Used for
+ * PowerShell panes, where passing `-c <script>` through PowerShell's native
+ * arg mangling (embedded `"` becomes `\"` in the command line) corrupts the
+ * script. A file avoids the `-c` boundary entirely: only two quoted paths
+ * cross the shell.
+ */
+const writeTempBashScript = (script: string): string => {
+  const path = join(
+    tmpdir(),
+    `herdr-pane-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`,
+  );
+  writeFileSync(path, script, 'utf-8');
+  return path;
+};
+
+/**
  * Wraps a command for a herdr pane, in descending order of fidelity:
  *
  *   1. bash + direnv — `direnv exec .` loads the flake devShell (bun, jdk,
@@ -799,15 +881,45 @@ const PANE_TRAILER = '=== Stopped. Press Enter to close ===';
  *      exit, but the command still runs.
  *
  * `bash` is passed as an absolute path (see `findBash`) because herdr panes
- * default to Nushell on Windows, whose PATH does not include Git's bash.
+ * default to the user's shell on Windows (PowerShell here), whose PATH does
+ * not include Git's bash.
+ *
+ * PowerShell panes get `& 'bash' 'script.sh'` with the script in a temp
+ * file — PowerShell rejects the POSIX `'bash' -c '…'` form (parse error at
+ * `-c`) and mangles embedded `"` in native args, so a file is the only
+ * reliable transport. With direnv, both the PowerShell and CMD forms route
+ * through `direnv exec .` so the pane still gets the flake devShell env.
+ * CMD panes invoke the temp script with double-quoted args (`cmd.exe` treats
+ * single quotes as literals); the keep-open trailer is preserved in all
+ * bash-backed forms.
  */
-export const wrapCommand = (command: string): string => {
+export const wrapCommand = (command: string, shell: PaneShell = 'posix'): string => {
   const bash = findBash();
   if (bash) {
     const script = `${command}; echo; echo "${PANE_TRAILER}"; read`;
+    if (shell === 'powershell') {
+      const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+      // With direnv, route through `direnv exec .` so the pane gets the flake
+      // devShell env; the `&` call operator is only valid as the first token,
+      // so it is dropped in the direnv form.
+      if (hasDirenv()) {
+        return `direnv exec . ${psQuote(bash)} ${psQuote(scriptPath)}`;
+      }
+      return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
+    }
+    if (shell === 'cmd') {
+      // cmd.exe treats single quotes as literals, so the POSIX `-c '…'` form
+      // would pass the script text as one literal arg and fail. Use the same
+      // temp-script transport as PowerShell, invoked with CMD-compatible
+      // double-quote escaping. direnv exec is retained for the direnv case,
+      // matching the POSIX path.
+      const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+      const invocation = `${cmdQuote(bash)} ${cmdQuote(scriptPath)}`;
+      return hasDirenv() ? `direnv exec . ${invocation}` : invocation;
+    }
     // Quoted so a Windows path like `C:\Program Files\Git\bin\bash.exe`
-    // survives Nushell's tokenizing — unquoted, the space in "Program Files"
-    // would split it into two args.
+    // survives the pane shell's tokenizing — unquoted, the space in "Program
+    // Files" would split it into two args.
     const prefix = hasDirenv() ? `direnv exec . ${posixQuote(bash)} -c` : `${posixQuote(bash)} -c`;
     return `${prefix} ${posixQuote(script)}`;
   }
@@ -820,6 +932,28 @@ export const wrapCommand = (command: string): string => {
   }
 
   return command;
+};
+
+/** Detect the pane's shell, then wrap the command for it. */
+export const wrapCommandForPane = async (paneId: string, command: string): Promise<string> =>
+  wrapCommand(command, await detectPaneShell(paneId));
+
+/**
+ * Run a raw bash script in a pane, shell-aware. Same PowerShell-vs-POSIX
+ * split as {@link wrapCommand}: PowerShell gets a temp script file invoked
+ * via `& 'bash' 'file'` (its native-arg `"` mangling corrupts `-c`), other
+ * shells get `'bash' -c '<script>'`.
+ */
+export const bashScriptForPane = async (paneId: string, script: string): Promise<string> => {
+  const bash = findBash();
+  if (!bash) {
+    return script;
+  }
+  if ((await detectPaneShell(paneId)) === 'powershell') {
+    const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+    return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
+  }
+  return `${posixQuote(bash)} -c ${posixQuote(script)}`;
 };
 
 /**
@@ -1080,7 +1214,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     // Rename initial tab and run command
     const rootPaneId = r.result.root_pane.pane_id;
     await herdr(['tab', 'rename', `${workspaceId}:1`, svc.name]);
-    await herdr(['pane', 'run', rootPaneId, wrapCommand(buildServiceCommand(first, mode, offset))]);
+    await herdr([
+      'pane',
+      'run',
+      rootPaneId,
+      await wrapCommandForPane(rootPaneId, buildServiceCommand(first, mode, offset)),
+    ]);
     console.log(`  ✓ Tab: ${svc.name}`);
 
     // Add remaining services as new tabs
@@ -1102,7 +1241,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           'pane',
           'run',
           tabR.result.root_pane.pane_id,
-          wrapCommand(buildServiceCommand(service, mode, offset)),
+          await wrapCommandForPane(
+            tabR.result.root_pane.pane_id,
+            buildServiceCommand(service, mode, offset),
+          ),
         ]);
         console.log(`  ✓ Tab: ${s.name}`);
       }
@@ -1128,7 +1270,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
                 'pane',
                 'run',
                 servicePane.pane_id,
-                wrapCommand(buildServiceCommand(service, mode, offset)),
+                await wrapCommandForPane(
+                  servicePane.pane_id,
+                  buildServiceCommand(service, mode, offset),
+                ),
               ]);
               continue;
             }
@@ -1157,7 +1302,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           'pane',
           'run',
           tabR.result.root_pane.pane_id,
-          wrapCommand(buildServiceCommand(service, mode, offset)),
+          await wrapCommandForPane(
+            tabR.result.root_pane.pane_id,
+            buildServiceCommand(service, mode, offset),
+          ),
         ]);
         console.log(`  ✓ Tab: ${svc.name}`);
       }
