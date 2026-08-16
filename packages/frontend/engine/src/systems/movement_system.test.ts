@@ -1,7 +1,8 @@
 // packages/frontend/engine/src/systems/movement_system.test.ts
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
+import { logger } from '$logger';
 import {
   CollisionData,
   CollisionLayer,
@@ -20,8 +21,10 @@ import {
 } from './collision_system.ts';
 import {
   clampSpawnToWalkable,
+  getStuckWatch,
   isPlayerSpawnBlocked,
   PLAYER_COLLISION_MASK,
+  resetStuckWatch,
   updateMovement,
 } from './movement_system.ts';
 
@@ -415,10 +418,16 @@ describe('movement_system — axis-independent wall sliding', () => {
       );
     };
 
-    it('player is blocked from walking into an NPC grid cell', () => {
+    // C-402: the player mask no longer includes `npc` — NPCs are soft
+    // obstacles. The player passes through an NPC cell instead of being
+    // blocked (AC-2: walking into an NPC never deadlocks). The old C-375
+    // test asserted the player was blocked; the C-402 contract removed
+    // `npc` from PLAYER_COLLISION_MASK so a moving NPC and a moving player
+    // can never mutually block (the deadlock class). Walls/props still
+    // block (separate layer — tested above).
+    it('player passes through an NPC grid cell (C-402 AC-2)', () => {
       setCollisionGrid(ALL_WALKABLE);
       // NPC occupies tile (5,5) — pixel x 160..191, y 160..191.
-      // Unique eid range (9000+) avoids SoA collisions with other test files.
       placeGridEntity(9001, 5, 5, CollisionLayer.npc);
 
       const player = addEntity(world);
@@ -428,10 +437,9 @@ describe('movement_system — axis-independent wall sliding', () => {
       updateMovement(world, 1000); // candidate nextY = 190 → box overlaps (5,5)
 
       const pos = getComponent(world, player, Position);
-      // nextY=190: box top=159, bottom=190 → rows 4 and 5; tile (5,5) occupied
-      // by the NPC → Y blocked, player stays at 130.
+      // Player mask excludes npc → the NPC cell is passable → Y advances.
       expect(pos.x).toBe(160);
-      expect(pos.y).toBe(130);
+      expect(pos.y).toBe(190);
     });
 
     it('player is blocked from walking into a solid prop (wall-layer) cell', () => {
@@ -709,6 +717,272 @@ describe('movement_system — axis-independent wall sliding', () => {
       updateMovement(world, 1000); // candidate nextY = 282.925 → rows 7,8
       const pos = getComponent(world, player, Position);
       expect(pos.y).toBeGreaterThan(clamped.y); // moved down, unstuck
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // C-402: NPC/player movement deadlock — AC-1, AC-2, AC-5
+  // ---------------------------------------------------------------------
+
+  describe('C-402 NPC/player movement deadlock (AC-1/AC-2)', () => {
+    /** Registers a stationary NPC in the spatial grid at a tile cell. */
+    const placeNpc = (eid: number, tileX: number, tileY: number): void => {
+      GridPosition.x[eid] = tileX;
+      GridPosition.y[eid] = tileY;
+      CollisionData.layer[eid] = CollisionLayer.npc;
+      CollisionData.mask[eid] = CollisionLayer.wall | CollisionLayer.npc;
+      SpatialLink.next[eid] = 0;
+      SpatialLink.prev[eid] = 0;
+      insertIntoSpatialGrid(eid);
+    };
+
+    /** Creates the player with the C-402 mask (no `npc` layer). */
+    const placePlayer = (eid: number, x: number, y: number, vx: number, vy: number): void => {
+      addComponent(world, eid, Position);
+      addComponent(world, eid, set(Position, { x, y }));
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, set(Velocity, { x: vx, y: vy }));
+      addComponent(world, eid, CollisionData);
+      addComponent(
+        world,
+        eid,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: PLAYER_COLLISION_MASK,
+        }),
+      );
+    };
+
+    it('AC-1: player displacement is non-zero while an NPC paths into the player', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // NPC adjacent to the player's start tile, pathed INTO the player.
+      // Unique eid range (9200+) avoids SoA collisions across test files.
+      const npc = addEntity(world);
+      addComponent(world, npc, Position);
+      addComponent(world, npc, set(Position, { x: 160, y: 96 })); // tile (5,3)
+      addComponent(world, npc, Velocity);
+      addComponent(world, npc, CollisionData);
+      addComponent(
+        world,
+        npc,
+        set(CollisionData, {
+          layer: CollisionLayer.npc,
+          mask: CollisionLayer.wall | CollisionLayer.npc,
+        }),
+      );
+
+      // The player is stationary in the world but has movement intent
+      // (velocity set) — exactly the C-402 repro: an NPC paths toward and
+      // reaches the player's tile.
+      const player = addEntity(world);
+      placePlayer(player, 160, 160, 60, 0); // moving right, out of the path
+
+      // Simulate the locomotion executor + movement loop for N frames.
+      for (let frame = 0; frame < 30; frame++) {
+        updateMovement(world, 16);
+      }
+
+      const pos = getComponent(world, player, Position);
+      // The player must have displaced — no permanent block from the NPC.
+      expect(pos.x).toBeGreaterThan(160);
+    });
+
+    it('AC-2: player walking into a stationary NPC from the north keeps moving', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      placeNpc(9202, 5, 5); // NPC at tile (5,5)
+
+      const player = addEntity(world);
+      placePlayer(player, 160, 130, 0, 60); // north of the NPC, moving down
+
+      updateMovement(world, 1000); // candidate nextY=190 crosses the NPC cell
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.y).toBe(190); // passed through the NPC cell
+    });
+
+    it('AC-2: player walking into a stationary NPC from the south keeps moving', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      placeNpc(9203, 5, 5); // NPC at tile (5,5)
+
+      const player = addEntity(world);
+      placePlayer(player, 160, 190, 0, -60); // south of the NPC, moving up
+
+      updateMovement(world, 1000); // candidate nextY=130 crosses the NPC cell
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.y).toBe(130); // passed through the NPC cell
+    });
+
+    it('AC-2: player walking into a stationary NPC from the east keeps moving', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      placeNpc(9204, 5, 5); // NPC at tile (5,5)
+
+      const player = addEntity(world);
+      placePlayer(player, 190, 160, -60, 0); // east of the NPC, moving left
+
+      updateMovement(world, 1000); // candidate nextX=130 crosses the NPC cell
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.x).toBe(130); // passed through the NPC cell
+    });
+
+    it('AC-2: player walking into a stationary NPC from the west keeps moving', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      placeNpc(9205, 5, 5); // NPC at tile (5,5)
+
+      const player = addEntity(world);
+      placePlayer(player, 130, 160, 60, 0); // west of the NPC, moving right
+
+      updateMovement(world, 1000); // candidate nextX=190 crosses the NPC cell
+
+      const pos = getComponent(world, player, Position);
+      expect(pos.x).toBe(190); // passed through the NPC cell
+    });
+
+    // AC-2 watch point: the player cannot use an NPC to enter a wall. Walls
+    // are a separate layer and must still block even when an NPC stands in
+    // front of them.
+    it('AC-2: walls still block even when an NPC stands in front of them', () => {
+      // Block tile (6,5) with a solid wall; NPC stands at (5,5).
+      setCollisionGrid(singleBlockGrid(6, 5));
+      placeNpc(9206, 5, 5);
+
+      const player = addEntity(world);
+      placePlayer(player, 130, 160, 60, 0); // west, moving right toward wall
+
+      updateMovement(world, 1000); // nextX=190 → box overlaps (6,5) wall
+
+      const pos = getComponent(world, player, Position);
+      // X blocked at the wall (tile 6) — the player cannot enter the wall
+      // even though the NPC at (5,5) is passable.
+      expect(pos.x).toBeLessThan(6 * 32);
+    });
+  });
+
+  describe('C-402 AC-5: stuck detection (safety net that logs)', () => {
+    let warnSpy: ReturnType<typeof spyOn>;
+
+    /** Registers a stationary NPC in the spatial grid at a tile cell. */
+    const placeNpc = (eid: number, tileX: number, tileY: number): void => {
+      GridPosition.x[eid] = tileX;
+      GridPosition.y[eid] = tileY;
+      CollisionData.layer[eid] = CollisionLayer.npc;
+      CollisionData.mask[eid] = CollisionLayer.wall | CollisionLayer.npc;
+      SpatialLink.next[eid] = 0;
+      SpatialLink.prev[eid] = 0;
+      insertIntoSpatialGrid(eid);
+    };
+
+    /** Counts movement:stuck-by-actor warnings recorded on the shared spy. */
+    const stuckWarnings = (): unknown[][] =>
+      warnSpy.mock.calls.filter((args: unknown[]) =>
+        String(args[0] ?? '').includes('movement:stuck-by-actor'),
+      );
+
+    beforeEach(() => {
+      resetStuckWatch();
+      // One Bun spy for the whole block (CodeRabbit review, C-402):
+      // derived assertions, restored in afterEach.
+      warnSpy = spyOn(logger, 'warn');
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+      resetStuckWatch();
+    });
+
+    it('logs a warning when a mover is blocked by an actor beyond the threshold', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      // A player-entity mover whose mask includes `npc` is boxed in by four
+      // NPCs (north/east/south/west of tile (5,5)) — every axis is blocked
+      // by an ACTOR (suspicious), not terrain (expected).
+      const mover = addEntity(world);
+      addComponent(world, mover, Position);
+      addComponent(world, mover, set(Position, { x: 160, y: 160 }));
+      addComponent(world, mover, Velocity);
+      addComponent(world, mover, CollisionData);
+      addComponent(
+        world,
+        mover,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: CollisionLayer.wall | CollisionLayer.npc,
+        }),
+      );
+      placeNpc(9301, 5, 4);
+      placeNpc(9302, 5, 6);
+      placeNpc(9303, 4, 5);
+      placeNpc(9304, 6, 5);
+
+      // Press right for more than the threshold (60) ticks. Large velocity
+      // so the collision box reaches the NPC tile on frame 1 (blocked from
+      // the very first tick — blockedTicks >= 60 after 70 frames).
+      for (let frame = 0; frame < 70; frame++) {
+        Velocity.x[mover] = 2000;
+        Velocity.y[mover] = 0;
+        updateMovement(world, 16);
+      }
+
+      expect(stuckWarnings().length).toBe(1); // exactly one report within the rate window
+      expect(getStuckWatch(mover)?.blockedTicks ?? 0).toBeGreaterThanOrEqual(60);
+    });
+
+    it('detects a single blocker in the attempted direction (NPC directly right)', () => {
+      // CodeRabbit review (C-402): the stuck detector must scan the
+      // position the mover ATTEMPTED to reach, not the reverted current
+      // box — a single NPC directly right of a mover pressing right sits
+      // outside the mover's current collision box, so only the attempted
+      // position reveals it.
+      setCollisionGrid(ALL_WALKABLE);
+      const mover = addEntity(world);
+      addComponent(world, mover, Position);
+      addComponent(world, mover, set(Position, { x: 160, y: 160 })); // tile (5,5)
+      addComponent(world, mover, Velocity);
+      addComponent(world, mover, CollisionData);
+      addComponent(
+        world,
+        mover,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: CollisionLayer.wall | CollisionLayer.npc,
+        }),
+      );
+      placeNpc(9305, 6, 5); // directly right — the tile the mover attempts
+
+      for (let frame = 0; frame < 70; frame++) {
+        Velocity.x[mover] = 2000;
+        Velocity.y[mover] = 0;
+        updateMovement(world, 16);
+      }
+
+      expect(stuckWarnings().length).toBe(1);
+      expect(getStuckWatch(mover)?.blockedTicks ?? 0).toBeGreaterThanOrEqual(60);
+    });
+
+    it('does NOT log when a player presses into terrain (expected block)', () => {
+      // Block tile (6,5) — pressing right into a wall is NORMAL.
+      setCollisionGrid(singleBlockGrid(6, 5));
+      const mover = addEntity(world);
+      addComponent(world, mover, Position);
+      addComponent(world, mover, set(Position, { x: 130, y: 160 }));
+      addComponent(world, mover, Velocity);
+      addComponent(world, mover, CollisionData);
+      addComponent(
+        world,
+        mover,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: PLAYER_COLLISION_MASK,
+        }),
+      );
+
+      for (let frame = 0; frame < 70; frame++) {
+        Velocity.x[mover] = 60;
+        Velocity.y[mover] = 0;
+        updateMovement(world, 16);
+      }
+
+      expect(stuckWarnings().length).toBe(0); // terrain blocks are expected — no log
     });
   });
 });

@@ -18,6 +18,10 @@ import {
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpatialLinkObservers, SpatialLink } from '../components/spatial_link.ts';
+// Namespace import so spyOn can patch the module exports — Bun patches the
+// live bindings, so syncGridPositions (which imports these functions by
+// name) sees the spies too.
+import * as collisionSystemModule from '../systems/collision_system.ts';
 import {
   type CollisionGrid,
   getMapPixelBounds,
@@ -31,10 +35,6 @@ import {
   resetCollisionGrid,
   setCollisionGrid,
 } from '../systems/collision_system.ts';
-// Namespace import so spyOn can patch the module exports — Bun patches the
-// live bindings, so syncGridPositions (which imports these functions by
-// name) sees the spies too.
-import * as collisionSystemModule from '../systems/collision_system.ts';
 import { syncGridPositions } from '../systems/grid_position_sync_system.ts';
 
 /** Reads the head EID of a spatial-grid cell (0 = empty). */

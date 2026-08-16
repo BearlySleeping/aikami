@@ -19,7 +19,10 @@
 
 import { expect, test } from '@playwright/test';
 
-const BASE_URL = 'http://localhost:5274';
+// Contract-scoped pipeline runs shift the client port (same offset formula
+// as playwright.config.ts). 0 for a manual, non-contract run.
+const CLIENT_PORT = 5274 + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+const BASE_URL = `http://localhost:${CLIENT_PORT}`;
 
 /**
  * Debug position shape exposed by GameWorld._updateRenderFromBuffer
@@ -352,5 +355,78 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
     // Bottom-right OOB/water spawn → clamped inward to nearest interior grass (8,8).
     expect(tileX).toBe(8);
     expect(tileY).toBe(8);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-402: NPC/player movement deadlock — production-path functional tests
+// ---------------------------------------------------------------------------
+//
+// The /game route loads Emberwatch village, which spawns GOAP NPCs that
+// path toward the player (locomotion enabled). AC-1/AC-2 assert the player
+// NEVER loses control because of another character's movement. The deadlock
+// was: player mask blocked npc AND npc mask blocked player, with no
+// resolution rule. C-402 removes npc from the player mask (and player from
+// the NPC mask) plus adds a halt rule, so the player can always walk away.
+//
+// Functional evidence: while NPCs are present and moving on the production
+// route, keyboard movement input must still displace the player.
+
+test.describe('C-402 NPC/player movement deadlock (production /game)', () => {
+  test('player can walk away while NPCs are present (AC-1/AC-2)', async ({ page }) => {
+    await page.goto(`${BASE_URL}/game`, { waitUntil: 'domcontentloaded' });
+
+    // Wait for the engine + player position + an NPC that has actually
+    // approached the player, not merely spawned (CodeRabbit review,
+    // C-402): the deadlock only exists once an NPC is within collision
+    // range, so npcCount > 0 alone cannot prove the scenario. Keep the
+    // bridge check (playerX/playerY/npcCount) unchanged.
+    await page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | {
+              playerX?: number;
+              playerY?: number;
+              npcCount?: number;
+              playerEid?: number;
+              entityPositions?: Record<string, { x: number; y: number }>;
+            }
+          | undefined;
+        const px = debug?.playerX;
+        const py = debug?.playerY;
+        if (px === undefined || py === undefined || (debug?.npcCount ?? 0) <= 0) {
+          return false;
+        }
+        // Any NON-player rendered entity within ~3 tiles of the player —
+        // an NPC that has approached to collision range.
+        const positions = debug?.entityPositions ?? {};
+        return Object.entries(positions).some(([eid, pos]) => {
+          if (Number(eid) === debug?.playerEid) {
+            return false;
+          }
+          const dx = pos.x - px;
+          const dy = pos.y - py;
+          return Math.hypot(dx, dy) < 96;
+        });
+      },
+      { timeout: 20_000 },
+    );
+
+    const startPos = await _readPlayerPosition(page);
+
+    // Hold a movement key long enough for the player to displace — if the
+    // deadlock existed, input would have no effect once an NPC reached the
+    // player.
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(1200);
+    await page.keyboard.up('ArrowRight');
+    await page.waitForTimeout(200);
+
+    const endPos = await _readPlayerPosition(page);
+
+    // The player must have displaced RIGHTWARD — input is not deadlocked by
+    // NPCs. Assert the held direction, not either-axis displacement
+    // (CodeRabbit review, C-402).
+    expect(endPos.playerX - startPos.playerX > 16).toBe(true);
   });
 });
