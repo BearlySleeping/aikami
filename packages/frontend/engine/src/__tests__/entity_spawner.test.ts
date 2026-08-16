@@ -82,7 +82,7 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     }
   });
 
-  test('NPC spawns with layer npc + mask wall|npc|player and grid coords', () => {
+  test('NPC spawns with layer npc + mask wall|npc (C-402: no player layer)', () => {
     const results = spawnEntities({
       world,
       spawnPoints: [
@@ -101,9 +101,10 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     expect(GridPosition.x[eid]).toBe(9);
     expect(GridPosition.y[eid]).toBe(6);
     expect(CollisionData.layer[eid]).toBe(CollisionLayer.npc);
-    expect(CollisionData.mask[eid]).toBe(
-      CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player,
-    );
+    // C-402: the NPC mask no longer blocks the player — the two-way
+    // symmetric block was the deadlock root cause. NPCs still block walls
+    // and other NPCs; the halt rule stops NPCs at interactionRadius.
+    expect(CollisionData.mask[eid]).toBe(CollisionLayer.wall | CollisionLayer.npc);
   });
 
   test('solid prop spawns with layer wall and a blocking mask', () => {

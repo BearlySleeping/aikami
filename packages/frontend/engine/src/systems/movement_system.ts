@@ -6,6 +6,7 @@ import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
+import { SpatialLink } from '../components/spatial_link.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
@@ -14,6 +15,7 @@ import {
   getTerrainTileSize,
   isCellBlocked,
   isWalkable,
+  peekSpatialGridHead,
 } from './collision_system.ts';
 import { isEntityOffscreen } from './macro_simulation_system.ts';
 
@@ -44,16 +46,67 @@ import { isEntityOffscreen } from './macro_simulation_system.ts';
 /** Cached query terms — created once per world to avoid per-frame overhead. */
 const MOVEMENT_QUERY_TERMS = [Position, Velocity];
 
+// ---------------------------------------------------------------------------
+// C-402 AC-5: stuck detection (safety net that logs, not a mechanic)
+// ---------------------------------------------------------------------------
+
 /**
- * Default collision mask for the player entity — collides with walls,
- * NPCs, and enemies (not items).
+ * Stuck-detector state, tracked per mover.
+ *
+ * Exported (CodeRabbit review, C-402) so the public
+ * {@link getStuckWatch} return type is nameable by package consumers and
+ * declaration emit succeeds.
+ */
+export type StuckWatch = {
+  readonly eid: number;
+  /** Consecutive ticks with movement intent but zero displacement. */
+  blockedTicks: number;
+  /** Tick at which the detector last logged, to rate-limit output. */
+  lastReportTick: number;
+};
+
+/** Consecutive zero-displacement ticks before the detector reports. */
+const STUCK_THRESHOLD_TICKS = 60;
+
+/** Minimum ms between reports for the same mover. */
+const STUCK_REPORT_INTERVAL_MS = 5000;
+
+/** Per-mover stuck state, keyed by entity id. */
+const _stuckWatch = new Map<number, StuckWatch>();
+
+/**
+ * Clears all stuck-detector state. Test/observability helper.
+ */
+export const resetStuckWatch = (): void => {
+  _stuckWatch.clear();
+};
+
+/**
+ * Returns the stuck state for a mover, or undefined when not tracked.
+ * Test/observability helper.
+ *
+ * @param eid - The mover's entity ID.
+ */
+export const getStuckWatch = (eid: number): StuckWatch | undefined => _stuckWatch.get(eid);
+
+/**
+ * Default collision mask for the player entity — collides with walls and
+ * enemies (not items, not NPCs).
+ *
+ * C-402: `CollisionLayer.npc` was REMOVED from this mask. NPCs are soft
+ * obstacles for the player: with both the player and NPC masks symmetric
+ * (npc blocks player AND player blocks npc), a moving NPC pathing into the
+ * player's tile and a player pathing into the NPC's tile deadlock — neither
+ * yields. The deadlock class is removed by construction: NPCs halt at their
+ * interaction radius (path_follow_system halt rule) and the player passes
+ * through NPCs. Combat masks are unchanged (COMBATANT_COLLISION_MASK still
+ * blocks combatants both ways).
  *
  * Kept as the player's VALUE (C-379). The movement loop reads each
  * entity's own mask from CollisionData; this constant is used by the
  * player spawn clamp and callers that construct the player mask.
  */
-export const PLAYER_COLLISION_MASK =
-  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+export const PLAYER_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.enemy;
 
 /**
  * Default collision mask for combatants (NPCs/enemies) used by the
@@ -176,6 +229,44 @@ const _isTileBlockedFor = (
 };
 
 /**
+ * Returns the first ACTOR (living) occupant of a spatial-grid cell that the
+ * mover collides with.
+ *
+ * C-402 AC-5: the stuck detector distinguishes "blocked by terrain"
+ * (expected — walls, water, solid props; never warns) from "blocked by an
+ * actor" (suspicious — an NPC/enemy/player occupying the target cell;
+ * warns). Props use the `wall` layer and are terrain-like, so they are
+ * deliberately excluded: a player pressing into a solid prop must not log.
+ *
+ * Walks the cell's intrusive linked list the same way {@link isCellBlocked}
+ * does, but returns the occupying entity instead of a boolean, and only
+ * counts layers that represent living actors.
+ *
+ * @param tx - Grid X of the cell.
+ * @param ty - Grid Y of the cell.
+ * @param moverMask - The mover's collision mask.
+ * @param selfEid - The moving entity (excluded from the scan).
+ * @returns The occupying actor eid, or 0 when none.
+ */
+const _findBlockingActor = (tx: number, ty: number, moverMask: number, selfEid: number): number => {
+  const headEid = peekSpatialGridHead(tx, ty);
+  let current = headEid;
+  while (current !== 0) {
+    if (current !== selfEid) {
+      const layer = CollisionData.layer[current] ?? 0;
+      // Living actors only — wall-layer props are terrain-like (expected).
+      const isActor =
+        (layer & (CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy)) !== 0;
+      if (isActor && (moverMask & layer) !== 0) {
+        return current;
+      }
+    }
+    current = SpatialLink.next[current] ?? 0;
+  }
+  return 0;
+};
+
+/**
  * Updates world-space positions for all entities that have both a
  * {@link Position} and a {@link Velocity} component.
  *
@@ -242,6 +333,13 @@ const updateMovement = (world: World, deltaMs: number): void => {
     // Axis-independent continuous movement with per-axis collision.
     let nextX = pos.x + vel.x * deltaSeconds;
     let nextY = pos.y + vel.y * deltaSeconds;
+
+    // C-402 AC-5: preserve the pre-collision candidate so the stuck
+    // detector can scan where the mover ATTEMPTED to go — after the axis
+    // checks revert a blocked axis, nextX/nextY equal the current position
+    // and a scan there would never find the actor in the way.
+    const attemptedX = nextX;
+    const attemptedY = nextY;
 
     // ── Map pixel bounds for per-entity bounding-box enforcement ──
     const bounds = getMapPixelBounds();
@@ -326,6 +424,70 @@ const updateMovement = (world: World, deltaMs: number): void => {
         y: nextY,
       }),
     );
+
+    // ── C-402 AC-5: stuck detection (safety net that logs) ──
+    // A mover with movement intent that never displaces is either blocked
+    // by terrain (expected — walls, water, solid props) or by an actor
+    // (suspicious). Only actor-blocking beyond the threshold warns, and
+    // the report is rate-limited per mover to avoid per-tick spam. This
+    // runs INSIDE the per-entity loop with per-entity state — a counter,
+    // not a search (performance budget).
+    if (vel.x !== 0 || vel.y !== 0) {
+      const displaced = nextX !== pos.x || nextY !== pos.y;
+      if (displaced) {
+        _stuckWatch.delete(eid);
+      } else {
+        // Zero displacement with intent — figure out why. The axis checks
+        // above used the mover's own mask; re-scan the first blocked tile
+        // for an actor occupant. Cost: only on genuinely blocked frames.
+        let blockingActorEid = 0;
+        const tileSizeScan = getTerrainTileSize();
+        // Scan the ATTEMPTED position (pre-collision candidate), not the
+        // reverted one — the blocking actor sits where the mover tried to
+        // go (e.g. an NPC directly right of a mover pressing right), which
+        // is outside the mover's current collision box.
+        const boxLeftScan = attemptedX - ENTITY_HALF_WIDTH;
+        const boxRightScan = attemptedX + ENTITY_HALF_WIDTH - 1;
+        const boxTopScan = attemptedY - ENTITY_HEIGHT_ABOVE + 1;
+        const boxBottomScan = attemptedY;
+        for (
+          let ty = Math.floor(boxTopScan / tileSizeScan);
+          ty <= Math.floor(boxBottomScan / tileSizeScan);
+          ty++
+        ) {
+          for (
+            let tx = Math.floor(boxLeftScan / tileSizeScan);
+            tx <= Math.floor(boxRightScan / tileSizeScan);
+            tx++
+          ) {
+            const actorEid = _findBlockingActor(tx, ty, moverMask, eid);
+            if (actorEid !== 0) {
+              blockingActorEid = actorEid;
+              break;
+            }
+          }
+          if (blockingActorEid !== 0) {
+            break;
+          }
+        }
+
+        const watch = _stuckWatch.get(eid) ?? { eid, blockedTicks: 0, lastReportTick: 0 };
+        watch.blockedTicks++;
+        _stuckWatch.set(eid, watch);
+
+        if (blockingActorEid !== 0 && watch.blockedTicks >= STUCK_THRESHOLD_TICKS) {
+          const now = Date.now();
+          if (now - watch.lastReportTick >= STUCK_REPORT_INTERVAL_MS) {
+            watch.lastReportTick = now;
+            logger.warn('movement:stuck-by-actor', {
+              eid,
+              direction: { x: vel.x, y: vel.y },
+              occupyingEntity: blockingActorEid,
+            });
+          }
+        }
+      }
+    }
   }
 };
 

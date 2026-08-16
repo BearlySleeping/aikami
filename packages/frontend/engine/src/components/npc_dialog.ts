@@ -6,6 +6,17 @@ import { observe, onGet, onSet } from 'bitecs';
 // NPCDialog — SoA component for interactable NPCs
 // ---------------------------------------------------------------------------
 
+/**
+ * Default interaction radius for NPCs in pixels.
+ *
+ * Lives in the component module (CodeRabbit review, C-402) so movement
+ * systems (goap_movement_executor, path_follow_system) can read the spawn
+ * default without depending on the heavy entity_spawner module — keeping
+ * the dependency direction leaf-ward and avoiding an import cycle if the
+ * spawner ever needs executor state.
+ */
+export const DEFAULT_INTERACTION_RADIUS = 50;
+
 /** SoA storage for NPC dialog data. Indexed by entity ID. */
 export const NPCDialog = {
   npcId: [] as string[],
