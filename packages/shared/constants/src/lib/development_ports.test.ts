@@ -15,7 +15,9 @@ import { describe, expect, it } from 'bun:test';
 import {
   CONTRACT_PORT_SLOTS,
   contractPortOffset,
+  EPHEMERAL_PORT_START,
   FIXED_PORTS,
+  NORDCLAW_RESERVED_RANGES,
   OFFSETTABLE_PORTS,
   withPortOffset,
 } from './development_ports.ts';
@@ -61,6 +63,38 @@ describe('contractPortOffset — collision-free across every contract slot', () 
         expect(
           fixedValues.has(port),
           `C-${id}:${name} (${port}) collides with a FIXED_PORTS value`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it('keeps every contract-shifted port outside the documented reserved ranges and below the ephemeral-port range', () => {
+    // Guarantee behind the table at the top of development_ports.ts: a
+    // contract-shifted offsettable port must never land on a port Nordclaw
+    // tooling (or the system Postgres reservation) binds, nor inside the OS
+    // ephemeral range. Reuses the symbols development_ports.ts exports, so
+    // changing CONTRACT_PORT_SLOTS/STEP — or the reserved ranges themselves
+    // — makes THIS test the first thing to fail.
+    const insideReserved = (port: number): string | undefined => {
+      for (const [start, end] of NORDCLAW_RESERVED_RANGES) {
+        if (port >= start && port <= end) {
+          return `${start}-${end}`;
+        }
+      }
+      return undefined;
+    };
+    for (let id = 1; id <= CONTRACT_PORT_SLOTS; id++) {
+      const offset = contractPortOffset(`C-${id}`);
+      for (const [name, base] of Object.entries(OFFSETTABLE_PORTS)) {
+        const port = base + offset;
+        const range = insideReserved(port);
+        expect(
+          range,
+          `C-${id}:${name} (${port}) is inside documented reserved range ${range}`,
+        ).toBeUndefined();
+        expect(
+          port >= EPHEMERAL_PORT_START,
+          `C-${id}:${name} (${port}) is inside the ephemeral-port range (>= ${EPHEMERAL_PORT_START})`,
         ).toBe(false);
       }
     }

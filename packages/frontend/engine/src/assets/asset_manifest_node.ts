@@ -142,7 +142,11 @@ export const buildManifest = async (rootDir?: string): Promise<AssetManifest> =>
         continue;
       }
 
-      const relPath = relative(resolvedRoot, entryPath);
+      // node:path's relative() emits backslashes on Windows; asset tags and
+      // manifest paths are always POSIX-style, so normalize before splitting
+      // — otherwise the whole path collapses into one segment on Windows and
+      // categoryName never matches ASSET_CATEGORIES.
+      const relPath = relative(resolvedRoot, entryPath).split('\\').join('/');
 
       // Determine category from first path segment
       const pathSegments = relPath.split('/');

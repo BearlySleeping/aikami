@@ -107,6 +107,7 @@ function diffChannels(
   desired: DesiredChannel[],
   live: GuildChannel[],
   categoryIdByName: Map<string, string>,
+  desiredCategoryNames: Set<string>,
 ): { create: DesiredChannel[]; update: ChannelUpdate[]; extra: GuildChannel[] } {
   const nonCategory = live.filter((ch) => ch.type !== ChannelType.GuildCategory);
   const liveByName = new Map(nonCategory.map((ch) => [ch.name, ch]));
@@ -115,6 +116,34 @@ function diffChannels(
   const matched = new Set<string>();
 
   for (const channel of desired) {
+    // 🔴 Resolve + VALIDATE the category reference before planning anything.
+    // The old `categoryIdByName.get(...) ?? null` fallback silently treated
+    // an invalid category name as "move to top level" — a typo in
+    // structure.ts would quietly yank every channel out of its category.
+    // Validation is against structure.categories (the declaration), so
+    // categories being created during THIS same sync (declared but not live
+    // yet) are valid references too.
+    let desiredParentId: string | null;
+    let pendingCategory = false;
+    if (channel.category) {
+      const liveId = categoryIdByName.get(channel.category);
+      if (liveId !== undefined) {
+        desiredParentId = liveId;
+      } else if (desiredCategoryNames.has(channel.category)) {
+        // Declared but not live yet — created earlier in this same sync, so
+        // the parent id is applied from the post-create map at apply time.
+        desiredParentId = null;
+        pendingCategory = true;
+      } else {
+        throw new Error(
+          `Invalid category reference: channel "${channel.name}" declares category ` +
+            `"${channel.category}", which is not listed in structure.categories.`,
+        );
+      }
+    } else {
+      desiredParentId = null; // top level
+    }
+
     const existing = liveByName.get(channel.name);
     if (!existing) {
       create.push(channel);
@@ -125,11 +154,20 @@ function diffChannels(
     if (CHANNEL_TYPE_MAP[channel.type] !== existing.type) {
       changes.push(`type ${existing.type} → ${CHANNEL_TYPE_MAP[channel.type]}`);
     }
-    const desiredParentId = channel.category
-      ? (categoryIdByName.get(channel.category) ?? null)
-      : null;
-    if (desiredParentId !== null && desiredParentId !== (existing.parent_id ?? null)) {
-      changes.push(`category → ${channel.category}`);
+    const currentParentId = existing.parent_id ?? null;
+    if (channel.category) {
+      if (pendingCategory) {
+        // The category cannot exist live yet, so whatever the channel's
+        // current parent is, a move into the new category is needed.
+        changes.push(`category → ${channel.category} (created this sync)`);
+      } else if (desiredParentId !== currentParentId) {
+        changes.push(`category → ${channel.category}`);
+      }
+    } else if (currentParentId !== null) {
+      // Desired state is top level but the channel is currently categorized
+      // — plan the move UP. Applied with parent_id: null (omitting parent_id
+      // would leave the channel where it is — see ChannelUpdateBody).
+      changes.push('category → top level');
     }
     if (channel.topic !== undefined && channel.topic !== (existing.topic ?? undefined)) {
       changes.push(`topic → ${JSON.stringify(channel.topic)}`);
@@ -154,13 +192,22 @@ export function computePlan(
   const roleDiff = diffRoles(desired.roles, live.roles);
   const categoryDiff = diffCategories(desired.categories, live.channels);
 
-  // Channels created in the same sync as their category won't have a live
-  // parent id yet — resolve() re-runs this after categories are created.
+  // Live categories by name. Channels pointing at a category that is only
+  // DECLARED (created during this same sync) resolve via
+  // desiredCategoryNames below — the parent id itself is applied at apply
+  // time from the post-create map (sync.ts adds each created category to its
+  // categoryIdByName before creating/updating channels).
   const categoryIdByName = new Map<string, string>();
   for (const [name, ch] of categoryDiff.liveByName) {
     categoryIdByName.set(name, ch.id);
   }
-  const channelDiff = diffChannels(desired.channels, live.channels, categoryIdByName);
+  const desiredCategoryNames = new Set(desired.categories.map((cat) => cat.name));
+  const channelDiff = diffChannels(
+    desired.channels,
+    live.channels,
+    categoryIdByName,
+    desiredCategoryNames,
+  );
 
   return {
     createCategories: categoryDiff.create,

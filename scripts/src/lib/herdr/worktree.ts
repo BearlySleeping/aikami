@@ -29,7 +29,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -552,9 +554,17 @@ export const bootstrapWorktree = async (
   // mode, or a future caller passing the wrong path) that write would
   // clobber the REAL .envrc with the worktree-delegation stub. This is
   // exactly how 763da4d6 merged a corrupted `.envrc` to main (C-400):
-  // resolve() both sides so a trailing slash or drive-letter case difference
-  // can't slip past the check on Windows.
-  if (resolve(checkoutPath) === resolve(repoRoot)) {
+  // realpathSync.native() both sides so a trailing slash, symlink, or
+  // drive-letter case difference can't slip past the check on Windows
+  // (path.resolve alone would still treat `C:\Repo` and `c:\repo` as
+  // different paths), then compare case-insensitively on Windows.
+  const canonicalCheckout = realpathSync.native(checkoutPath);
+  const canonicalRoot = realpathSync.native(repoRoot);
+  const samePath =
+    process.platform === 'win32'
+      ? canonicalCheckout.toLowerCase() === canonicalRoot.toLowerCase()
+      : canonicalCheckout === canonicalRoot;
+  if (samePath) {
     throw new Error(
       `bootstrapWorktree refused: checkoutPath equals repoRoot (${repoRoot}). ` +
         'This would overwrite the real .envrc with the worktree-delegation stub. ' +
@@ -787,6 +797,43 @@ const killContractPorts = async (checkoutPath: string): Promise<void> => {
 };
 
 /**
+ * Refuse the rmSync removal fallback unless `checkoutPath` is a genuine
+ * non-root git-linked worktree. Two checks, both must pass:
+ *  1. canonical checkoutPath !== canonical repoRoot (case-insensitive on
+ *     Windows) — rmSync(repoRoot) would recursively delete the ENTIRE repo.
+ *  2. a `.git` FILE marker exists at the target — linked worktrees get a
+ *     `.git` file (gitdir: ...), while repo roots get a `.git` directory;
+ *     without the marker the target is not a managed git worktree and
+ *     rmSync would eat arbitrary user data.
+ */
+const assertManagedWorktreeTarget = (checkoutPath: string, repoRoot: string): void => {
+  const canonicalPath = realpathSync.native(checkoutPath);
+  const canonicalRoot = realpathSync.native(repoRoot);
+  const samePath =
+    process.platform === 'win32'
+      ? canonicalPath.toLowerCase() === canonicalRoot.toLowerCase()
+      : canonicalPath === canonicalRoot;
+  if (samePath) {
+    throw new Error(
+      `refusing to rm -rf ${checkoutPath}: it equals the repo root (${repoRoot}) — ` +
+        'this would delete the entire repository.',
+    );
+  }
+  let gitMarker: ReturnType<typeof statSync> | undefined;
+  try {
+    gitMarker = statSync(join(checkoutPath, '.git'));
+  } catch {
+    gitMarker = undefined;
+  }
+  if (!gitMarker?.isFile()) {
+    throw new Error(
+      `refusing to rm -rf ${checkoutPath}: no git-worktree .git marker file found — ` +
+        'the target is not a non-root managed git worktree.',
+    );
+  }
+};
+
+/**
  * Remove a worktree: herdr state + checkout together, then optionally the
  * local and/or remote branch. herdr `worktree remove` NEVER deletes the
  * branch — that is always a separate explicit git step here.
@@ -824,6 +871,12 @@ export const removeWorktree = async (
       checkoutRemoved = true;
     } catch (gitErr: unknown) {
       try {
+        // 🔴 Validate BEFORE the recursive delete. git worktree remove just
+        // failed, so the only thing standing between this path and
+        // rmSync(checkoutPath) is this guard — without it, a checkoutPath
+        // equal to repoRoot would recursively delete the entire repository
+        // and a plain directory would be deleted as arbitrary user data.
+        assertManagedWorktreeTarget(options.checkoutPath, repoRoot);
         // 🔴 node:fs rmSync, not `execSync('rm -rf ...')` — the latter never
         // worked on Windows (no `rm` binary) and, independent of that, hand
         // POSIX-quoting a path for cmd.exe leaks the literal quote

@@ -1,6 +1,6 @@
 // scripts/src/lib/ops/infra_report.test.ts
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -77,8 +77,15 @@ describe('reportInfraIssue / readInfraIssues round-trip', () => {
     const cwd = makeTempCwd();
     reportInfraIssue({ component: 'a', operation: 'b', error: new Error('one'), cwd });
     reportInfraIssue({ component: 'a', operation: 'b', error: new Error('two'), cwd });
-    // Simulate a torn write: append a truncated JSON line.
     reportInfraIssue({ component: 'a', operation: 'b', error: new Error('three'), cwd });
+    // Simulate a torn write: append a deliberately truncated, invalid JSON
+    // line DIRECTLY to the log. (The old comment claimed the third
+    // reportInfraIssue call did this, but it wrote valid JSON — the
+    // corrupted-line path was never actually exercised.)
+    appendFileSync(
+      join(cwd, '.pi', 'infra-issues.jsonl'),
+      '{"timestamp":"2026-01-01T00:00:00.000Z","component":"torn","op',
+    );
     const events = readInfraIssues(cwd);
     expect(events.length).toBeGreaterThanOrEqual(3);
   });

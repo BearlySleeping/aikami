@@ -805,7 +805,26 @@ const launchBackground = async (options: {
   }
   const launcherPaneId = wsResult.result.root_pane.pane_id;
   const command = ['bun', 'run', import.meta.path, ...childArgs].map(posixQuote).join(' ');
-  await herdr(['pane', 'run', launcherPaneId, await wrapCommandForPane(launcherPaneId, command)]);
+  // 🔴 Capture the pane-run result and fail fast on a nonzero code instead of
+  // blindly polling readyPath for the full 180s deadline: a herdr-level
+  // failure (pane vanished, workspace closed, bad invocation) means the child
+  // never started and can never write the ready file. Surface whatever
+  // stderr/stdout herdr reported — far better than a generic "did not become
+  // ready" timeout whose diagnostic only sees an idle pane.
+  const paneRun = await herdr([
+    'pane',
+    'run',
+    launcherPaneId,
+    await wrapCommandForPane(launcherPaneId, command),
+  ]);
+  if (paneRun.code !== 0) {
+    const detail = (
+      paneRun.stderr.trim() ||
+      paneRun.stdout.trim() ||
+      `exit code ${paneRun.code}`
+    ).slice(0, 500);
+    throw new Error(`Failed to launch pipeline in herdr pane ${launcherLabel}: ${detail}`);
+  }
 
   // The child can legitimately need well beyond 30s to become ready:
   // initialize() runs bootstrapWorktree, which does a full git checkout +
