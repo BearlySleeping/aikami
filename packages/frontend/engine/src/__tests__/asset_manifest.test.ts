@@ -9,7 +9,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetManifest } from '@aikami/types';
 import {
@@ -164,13 +164,9 @@ describe('buildManifest lpc category', () => {
     const dirs = join(testDir, 'lpc-scan-test');
     await ensureAssetDirs(dirs);
 
-    await writeTestFile(join(dirs, 'lpc/body/bodies_male.walk.webp').replace(`${testDir}/`, ''));
-    await writeTestFile(
-      join(dirs, 'lpc/hair/bangslong2/bg_adult.walk.webp').replace(`${testDir}/`, ''),
-    );
-    await writeTestFile(
-      join(dirs, 'lpc/head/heads/human_male.walk.webp').replace(`${testDir}/`, ''),
-    );
+    await writeTestFile(relative(testDir, join(dirs, 'lpc/body/bodies_male.walk.webp')));
+    await writeTestFile(relative(testDir, join(dirs, 'lpc/hair/bangslong2/bg_adult.walk.webp')));
+    await writeTestFile(relative(testDir, join(dirs, 'lpc/head/heads/human_male.walk.webp')));
 
     const manifest = await buildManifest(dirs);
 
@@ -200,7 +196,7 @@ describe('buildManifest lpc category', () => {
     const dirs = join(testDir, 'lpc-scan-dot-test');
     await ensureAssetDirs(dirs);
 
-    await writeTestFile(join(dirs, 'lpc/body/bodies_male.walk.webp').replace(`${testDir}/`, ''));
+    await writeTestFile(relative(testDir, join(dirs, 'lpc/body/bodies_male.walk.webp')));
 
     const manifest = await buildManifest(dirs);
 
@@ -221,13 +217,11 @@ describe('buildManifest', () => {
     await ensureAssetDirs(dirs);
 
     // Create test files
-    await writeTestFile(join(dirs, 'sprites/generic-fantasy/elf.png').replace(`${testDir}/`, ''));
+    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/elf.png')));
+    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/goblin.png')));
+    await writeTestFile(relative(testDir, join(dirs, 'backgrounds/fantasy/forest.png')));
     await writeTestFile(
-      join(dirs, 'sprites/generic-fantasy/goblin.png').replace(`${testDir}/`, ''),
-    );
-    await writeTestFile(join(dirs, 'backgrounds/fantasy/forest.png').replace(`${testDir}/`, ''));
-    await writeTestFile(
-      join(dirs, 'music/exploration/fantasy/calm/wanderer.mp3').replace(`${testDir}/`, ''),
+      relative(testDir, join(dirs, 'music/exploration/fantasy/calm/wanderer.mp3')),
     );
 
     const manifest = await buildManifest(dirs);
@@ -258,12 +252,8 @@ describe('buildManifest', () => {
     const dirs = join(testDir, 'hidden-test');
     await ensureAssetDirs(dirs);
 
-    await writeTestFile(
-      join(dirs, 'sprites/generic-fantasy/visible.png').replace(`${testDir}/`, ''),
-    );
-    await writeTestFile(
-      join(dirs, 'sprites/generic-fantasy/.hidden.png').replace(`${testDir}/`, ''),
-    );
+    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/visible.png')));
+    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/.hidden.png')));
 
     // Let's write .hidden manually to the right path
     await writeFile(join(dirs, 'sprites/generic-fantasy/.hidden.png'), 'test');
@@ -280,7 +270,7 @@ describe('buildManifest', () => {
     const dirs = join(testDir, 'ext-test');
     await ensureAssetDirs(dirs);
 
-    await writeTestFile(join(dirs, 'sprites/generic-fantasy/valid.png').replace(`${testDir}/`, ''));
+    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/valid.png')));
     await writeFile(join(dirs, 'sprites/generic-fantasy/bad.txt'), 'test');
     await writeFile(join(dirs, 'sprites/generic-fantasy/nope.pdf'), 'test');
 

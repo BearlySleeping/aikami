@@ -85,6 +85,29 @@ const createTestWorld = (): World => {
 };
 
 // ---------------------------------------------------------------------------
+// Global SoA cleanup
+//
+// MapLocation/ZoneStatus/GoapAgent are module-level arrays indexed by raw
+// eid, shared by every test file in this process — not scoped to the
+// bitECS `World` each `beforeEach` recreates. Since a fresh `createWorld()`
+// hands out the same low eid numbers every time, leftover entries here
+// (e.g. an inactive-zone assignment at eid 2) silently leak into whichever
+// OTHER test file's entity happens to land on eid 2 next, wrongly flagging
+// it offscreen. Truncate after every test so this file never leaks state
+// past its own run.
+// ---------------------------------------------------------------------------
+afterEach(() => {
+  MapLocation.currentZoneId.length = 0;
+  MapLocation.virtualGridX.length = 0;
+  MapLocation.virtualGridY.length = 0;
+  ZoneStatus.isActive.length = 0;
+  GoapAgent.currentState.length = 0;
+  GoapAgent.currentGoal.length = 0;
+  GoapAgent.currentActionId.length = 0;
+  GoapAgent.targetEntityId.length = 0;
+});
+
+// ---------------------------------------------------------------------------
 // AC-1: High-Fidelity Gating — inactive entities skipped
 // ---------------------------------------------------------------------------
 
