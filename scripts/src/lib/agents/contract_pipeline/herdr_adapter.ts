@@ -193,8 +193,16 @@ const withEnvArgs = (base: string[], env: string[]): string[] => {
  */
 const inheritedPathEnv = (): string[] => (process.env.PATH ? [`PATH=${process.env.PATH}`] : []);
 
-/** Path of the per-run GH_TOKEN file (mode 0600 — never passed as a CLI arg). */
-const ghTokenFilePath = (options: { repoRoot: string; runId: string }): string =>
+/**
+ * Path of the per-run GH_TOKEN file — never passed as a CLI arg (readable
+ * via `ps`/`/proc/<pid>/cmdline`). `mode: 0o600` on write restricts it on
+ * POSIX; Node ignores that mode bit on Windows beyond read-only, so on
+ * Windows the real trust boundary is the user-profile ACL (same as any
+ * other file under the repo checkout) rather than a POSIX permission bit.
+ * Deleted by the orchestrator's terminal `finally` (see runContractPipeline)
+ * once the run reaches any end state — it has no reason to outlive the run.
+ */
+export const ghTokenFilePath = (options: { repoRoot: string; runId: string }): string =>
   join(options.repoRoot, '.pi/contract-runs', options.runId, 'gh-token');
 
 const atomicWrite = (options: { path: string; content: string }): void => {

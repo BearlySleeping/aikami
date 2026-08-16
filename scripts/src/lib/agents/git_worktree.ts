@@ -11,6 +11,7 @@
 //    to herdr-native worktrees — this file holds only git primitives now.
 
 import { execFileSync } from 'node:child_process';
+import { reportInfraIssue } from '../ops/infra_report.ts';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -199,6 +200,24 @@ export const commitAll = (options: {
   message: string;
   authorName?: string;
   authorEmail?: string;
+  /**
+   * Paths that must never ride into a pipeline commit — workspace-local
+   * state (direnv delegation, pi settings, shared progress docs). These are
+   * normally kept out of `git add -A` by `git update-index --skip-worktree`
+   * (see WORKTREE_SKIP_WORKTREE_PATHS in herdr/worktree.ts), but that is a
+   * separate mechanism applied once at bootstrap time — if it ever fails
+   * silently (missing index entry, a race, a git version quirk) `add -A`
+   * stages the file anyway with no further warning.
+   *
+   * 🔴 This is the last-mile check: C-400 (763da4d6) merged a corrupted
+   * `.envrc` to main this way — skip-worktree should have kept it out, but
+   * something upstream let it through, and nothing downstream caught it
+   * before the PR merged. This guard makes that class of failure impossible
+   * to miss: any protected path found staged is unstaged and reported; if it
+   * cannot be unstaged, the commit is refused outright rather than silently
+   * carrying the leaked file forward.
+   */
+  protectedPaths?: string[];
 }): string => {
   const envFlags =
     options.authorName && options.authorEmail
@@ -210,6 +229,10 @@ export const commitAll = (options: {
 
   // Stage all changes including untracked files.
   runGit(`${envFlags} add -A`.trim(), { cwd: options.cwd, env });
+
+  if (options.protectedPaths && options.protectedPaths.length > 0) {
+    unstageProtectedPaths({ cwd: options.cwd, env, protectedPaths: options.protectedPaths });
+  }
 
   // Check if there's anything to commit.
   try {
@@ -223,6 +246,51 @@ export const commitAll = (options: {
     `${envFlags} commit --no-verify -m "${options.message.replace(/"/g, '\\"')}"`.trim();
   runGit(commitCmd, { cwd: options.cwd, env });
   return getGitHeadCommit(options.cwd);
+};
+
+const stagedPaths = (options: { cwd: string; env: Record<string, string> }): string[] => {
+  try {
+    return runGit('diff --cached --name-only', { cwd: options.cwd, env: options.env })
+      .split('\n')
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
+/** See `commitAll`'s `protectedPaths` doc — the last-mile guard itself. */
+const unstageProtectedPaths = (options: {
+  cwd: string;
+  env: Record<string, string>;
+  protectedPaths: string[];
+}): void => {
+  const leaked = options.protectedPaths.filter((p) => stagedPaths(options).includes(p));
+  if (leaked.length === 0) {
+    return;
+  }
+  console.warn(
+    `⚠️  Unstaging protected path(s) that leaked into the commit despite skip-worktree: ` +
+      `${leaked.join(', ')}. skip-worktree failed to keep these out — investigate the worktree bootstrap.`,
+  );
+  reportInfraIssue({
+    component: 'commit_all',
+    operation: 'unstage protected paths that leaked past skip-worktree',
+    error: new Error(leaked.join(', ')),
+    context: { cwd: options.cwd },
+  });
+  for (const path of leaked) {
+    try {
+      runGit(`restore --staged -- '${path}'`, { cwd: options.cwd, env: options.env });
+    } catch {
+      // Fall through — the re-check below refuses the commit outright.
+    }
+  }
+  const stillLeaked = options.protectedPaths.filter((p) => stagedPaths(options).includes(p));
+  if (stillLeaked.length > 0) {
+    throw new Error(
+      `Refusing to commit: protected path(s) could not be unstaged: ${stillLeaked.join(', ')}.`,
+    );
+  }
 };
 
 /**

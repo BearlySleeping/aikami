@@ -17,6 +17,14 @@
  *   emulator   — jdk, chromium                  (needed for bun run dev:all)
  *   tauri      — rust, webkit2gtk, gtk3, ...    (needed for bun tauri build)
  *
+ * Plus a handful of capability probes that don't fit the "run a bin
+ * --version" shape (see runExtraChecks): on Windows, Git Bash, directory
+ * junction capability, and git core.longpaths — each has a documented
+ * failure mode that silently degrades the contract pipeline there (see the
+ * rig-audit findings). On every platform where herdr is installed, its
+ * client/server protocol compatibility — the same check the contract
+ * pipeline's own preflight uses, surfaced here before any run starts.
+ *
  * The recommended path (direnv + nix + flake.nix) provides all of the above
  * automatically, so it's surfaced as a recommendation, not a tool check.
  *
@@ -26,10 +34,15 @@
  *   bun run setup --only=essentials      # only check one category
  *   bun run setup --only=dx,tauri        # ...or several
  *   bun run setup --json                 # machine-readable summary
+ *   bun run setup --doctor               # --json --check combined: one machine-readable pass/fail
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { c, fmt, parseCliArgs, run } from '../cli_utils';
+import { findBash } from '../env/which.ts';
+import { parseHerdrStatus } from '../herdr/session.ts';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Platform = NodeJS.Platform;
@@ -115,8 +128,17 @@ const RECOMMENDED_INSTALL: Partial<Record<Platform, { label: string; commands: s
     ],
   },
   win32: {
-    label: 'Use WSL',
-    commands: ['# nix + direnv require a POSIX shell — install WSL, then follow the Linux steps'],
+    // Nix itself has no native Windows port — WSL genuinely is the only way
+    // to get the exact flake devShell. This is NOT the same claim as "you
+    // need WSL to work on Aikami": native Windows (no WSL) is a fully
+    // supported path for the actual dev workflow — the contract pipeline,
+    // herdr, and every tool check below all run natively — you just install
+    // the pieces individually instead of getting them from one flake.
+    label: 'Use WSL (only if you specifically want the flake devShell)',
+    commands: [
+      '# nix has no native Windows build — WSL is the only way to get the exact devShell.',
+      '# This is optional: native Windows works fine for dev/the contract pipeline — see the checks below.',
+    ],
   },
 };
 
@@ -523,13 +545,148 @@ function printRecommendedSection(recommended: { direnv: boolean; nix: boolean })
   console.log();
 }
 
+// ─── Extra capability probes ───────────────────────────────────────────
+//
+// These don't fit the generic ToolCheck shape (probe a bin, run --version) —
+// each needs its own live-detection logic. Added from the rig-audit
+// findings (F-06, F-07): every one of these has a documented failure mode
+// that silently degrades the contract pipeline on Windows specifically,
+// with nothing in `bun run setup` that would have caught it beforehand.
+
+type ExtraCheck = {
+  name: string;
+  ok: boolean;
+  note: string;
+  hint?: string;
+};
+
+/**
+ * Attempt a real directory link in a throwaway temp dir — a junction on
+ * Windows (same type worktree bootstrap now uses, see herdr/worktree.ts),
+ * a symlink elsewhere.
+ */
+const probeSymlinkCapability = (): boolean => {
+  const base = mkdtempSync(join(tmpdir(), 'aikami-symlink-probe-'));
+  const src = join(base, 'src');
+  const dst = join(base, 'dst');
+  try {
+    mkdirSync(src);
+    symlinkSync(src, dst, process.platform === 'win32' ? 'junction' : 'dir');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+};
+
+/** `git config --get core.longpaths` — separate from the OS-level setting;
+ *  git needs its own flag even when Windows long-path support is enabled. */
+const gitLongpathsEnabled = async (): Promise<boolean> => {
+  const { out, code } = await run(['git', 'config', '--get', 'core.longpaths']);
+  return code === 0 && out.trim() === 'true';
+};
+
+/** Reuses herdr/session.ts's own status parser — same verdict the contract
+ *  pipeline's preflight uses, surfaced here so it's visible before any run
+ *  starts, not 180 seconds into one. */
+const probeHerdrCompat = async (): Promise<ExtraCheck> => {
+  const { out, code } = await run(['herdr', 'status']);
+  if (code !== 0) {
+    return {
+      name: 'herdr protocol',
+      ok: true,
+      note: 'server not running (fine — a fresh one starts compatible)',
+    };
+  }
+  const status = parseHerdrStatus(out);
+  if (status.compatible === false) {
+    return {
+      name: 'herdr protocol',
+      ok: false,
+      note:
+        `client ${status.clientVersion ?? '?'} (protocol ${status.clientProtocol ?? '?'}) vs ` +
+        `server ${status.serverVersion ?? '?'} (protocol ${status.serverProtocol ?? '?'})`,
+      hint: 'herdr server stop && herdr   — restarts the server on the current client binary.',
+    };
+  }
+  return { name: 'herdr protocol', ok: true, note: 'client/server compatible' };
+};
+
+const runExtraChecks = async (platform: Platform): Promise<ExtraCheck[]> => {
+  const checks: ExtraCheck[] = [];
+
+  if (platform === 'win32') {
+    const bash = findBash();
+    checks.push({
+      name: 'Git Bash',
+      ok: bash !== null,
+      note: bash ? `found at ${bash}` : 'not found on PATH or via Git',
+      hint: bash
+        ? undefined
+        : 'Install Git for Windows (winget install --id Git.Git) — it ships bash.exe.',
+    });
+
+    const symlinkOk = probeSymlinkCapability();
+    checks.push({
+      name: 'Directory junctions',
+      ok: symlinkOk,
+      note: symlinkOk
+        ? 'working'
+        : 'failed — worktree .pi deps linking falls back to a slower stale-prone copy',
+      hint: symlinkOk
+        ? undefined
+        : 'Unusual — junctions need no special privilege on Windows. Check antivirus/EDR policy on NTFS reparse points.',
+    });
+
+    const longpaths = await gitLongpathsEnabled();
+    checks.push({
+      name: 'git core.longpaths',
+      ok: longpaths,
+      note: longpaths ? 'enabled' : 'not enabled — deep worktree/node_modules paths can fail',
+      hint: longpaths ? undefined : 'git config --global core.longpaths true',
+    });
+  }
+
+  if (Bun.which('herdr')) {
+    checks.push(await probeHerdrCompat());
+  }
+
+  return checks;
+};
+
+function printExtraChecks(checks: ExtraCheck[]): void {
+  if (checks.length === 0) {
+    return;
+  }
+  console.log(fmt.section('Additional capability checks'));
+  for (const check of checks) {
+    if (check.ok) {
+      console.log(fmt.ok(`${check.name} — ${check.note}`));
+    } else {
+      console.log(fmt.err(`${check.name} — ${check.note}`));
+      if (check.hint) {
+        console.log(fmt.note(check.hint));
+      }
+    }
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────
 
 const opts = parseCliArgs(Bun.argv.slice(2), {
   check: { type: 'boolean' },
   json: { type: 'boolean' },
   only: { type: 'string' },
+  doctor: { type: 'boolean' },
 });
+// --doctor is --json --check plus the extra capability checks gating the
+// exit code too — a strict, scriptable preflight rather than the
+// human-readable guide (which --check/--json alone still are).
+if (opts.doctor) {
+  opts.json = true;
+  opts.check = true;
+}
 
 const platform = process.platform as Platform;
 const onlySet = new Set<Category>(
@@ -560,6 +717,8 @@ const results = await Promise.all(
   }),
 );
 
+const extraChecks = await runExtraChecks(platform);
+
 // ── JSON mode ────────────────────────────────────────────────────────────
 if (opts.json) {
   const summary = results.map((r) => ({
@@ -569,9 +728,28 @@ if (opts.json) {
     version: r.version ?? null,
     why: r.tool.why,
   }));
-  console.log(JSON.stringify({ platform, recommended, checks: summary }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        platform,
+        recommended,
+        checks: summary,
+        extraChecks: extraChecks.map((check) => ({
+          name: check.name,
+          ok: check.ok,
+          note: check.note,
+        })),
+      },
+      null,
+      2,
+    ),
+  );
   const missingEssential = results.some((r) => !r.present && r.tool.category === 'essentials');
-  process.exit(missingEssential ? 1 : 0);
+  // --doctor is a strict preflight — extra-capability failures gate the
+  // exit code too. Plain --json keeps its original (essentials-only)
+  // behavior so existing scripts consuming it don't change meaning.
+  const extraFailure = opts.doctor && extraChecks.some((c) => !c.ok);
+  process.exit(missingEssential || extraFailure ? 1 : 0);
 }
 
 // ── Interactive guide ────────────────────────────────────────────────────
@@ -582,6 +760,7 @@ console.log(fmt.note('the GCP cloud project wizard is `bun run project:setup`.')
 console.log(fmt.note(`Platform: ${c.bold}${platform}${c.reset}`));
 
 printRecommendedSection(recommended);
+printExtraChecks(extraChecks);
 
 const missingByCategory = new Map<Category, CheckResult[]>();
 

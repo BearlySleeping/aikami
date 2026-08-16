@@ -9,18 +9,24 @@
 
 import { execFileSync, execSync, spawn } from 'node:child_process';
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   readFileSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
-import { assertHerdrCompatible } from '../herdr/session.ts';
+import { findBash, posixQuote } from '../env/which.ts';
+import {
+  assertHerdrCompatible,
+  ensureServer,
+  herdr,
+  herdrJson,
+  wrapCommandForPane,
+} from '../herdr/session.ts';
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
 import { readManifest } from './contract_pipeline/manifest_store.ts';
@@ -28,6 +34,44 @@ import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const LAUNCHER_ARTIFACT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Delete stale `launch-*.json` / `launch-*.log` handshake files from
+ * `.pi/contract-runs/`. These are pure launcher↔background-child IPC
+ * artifacts (see `launchBackground` below) — read once via `readyPath` /
+ * `launcherLogPath` while the child is starting up and never touched again
+ * afterward — so anything older than a week is litter, not history. Does
+ * NOT touch the `run-*` directories (manifest.json, pipeline.log, prompts/) —
+ * those are real, inspectable run history a user may still want to read
+ * long after the run finished.
+ */
+const pruneLauncherArtifacts = (repoRoot: string): void => {
+  const runsDirectory = join(repoRoot, '.pi/contract-runs');
+  if (!existsSync(runsDirectory)) {
+    return;
+  }
+  const cutoff = Date.now() - LAUNCHER_ARTIFACT_MAX_AGE_MS;
+  try {
+    for (const entry of readdirSync(runsDirectory)) {
+      if (!entry.startsWith('launch-') || !(entry.endsWith('.json') || entry.endsWith('.log'))) {
+        continue;
+      }
+      const fullPath = join(runsDirectory, entry);
+      try {
+        if (statSync(fullPath).mtimeMs < cutoff) {
+          unlinkSync(fullPath);
+        }
+      } catch {
+        // Raced with another process (e.g. a concurrent launcher), or
+        // already gone — not worth failing startup over.
+      }
+    }
+  } catch {
+    // Best-effort housekeeping only.
+  }
+};
 
 /** Valid source modes for contract generation. */
 type ContractSource = 'prompt' | 'issue' | 'todo' | 'path';
@@ -184,9 +228,19 @@ Options:
 
 // ── Source Handlers ─────────────────────────────────────────
 
-/** Run a gh command and return stdout. */
+/**
+ * Run a gh command and return stdout.
+ *
+ * 🔴 execFileSync with an argv array — never execSync with a joined/quoted
+ * string. execSync shells out through cmd.exe on Windows, where a single
+ * quote is a literal character, not quoting; any hand-written POSIX
+ * `'${arg}'` wrapping leaks the quote characters into the child process
+ * instead of protecting the argument (see F-02 in the rig audit — this
+ * exact bug broke the contract pipeline's PR lookup on Windows).
+ * execFileSync bypasses the shell entirely, so there is nothing to quote.
+ */
 const gh = (args: string[], options?: { timeout?: number }): string => {
-  const result = execSync(['gh', ...args].join(' '), {
+  const result = execFileSync('gh', args, {
     encoding: 'utf-8',
     timeout: options?.timeout ?? 30_000,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -690,8 +744,6 @@ const launchBackground = async (options: {
   const runsDirectory = join(process.cwd(), '.pi/contract-runs');
   mkdirSync(runsDirectory, { recursive: true });
   const readyPath = join(runsDirectory, `${token}.json`);
-  const launcherLogPath = join(runsDirectory, `${token}.log`);
-  const descriptor = openSync(launcherLogPath, 'a');
   // Forward ALL user args (including --root/--dirty) so the background child
   // runs with the same configuration. setupRootBranch is idempotent — the
   // child detects it is already on the branch and proceeds. Stripped from the
@@ -717,55 +769,68 @@ const launchBackground = async (options: {
   // for default prompt runs, preserving interactiveWriter and preventing
   // skipAuthoring from advancing directly to implementation.
   const sourceArgs = options.source ? ['--source', options.source] : [];
-  const child = spawn(
-    'bun',
-    [
-      'run',
-      import.meta.path,
-      ...forwarded,
-      ...targetArgs,
-      ...writerArgs,
-      ...sourceArgs,
-      '--background',
-      '--launcher-token',
-      token,
-    ],
-    {
-      cwd: process.cwd(),
-      detached: true,
-      stdio: ['ignore', descriptor, descriptor],
-      env: process.env,
-      // Windows: hide the background child's console window — without this
-      // every `bun run contract` flashes a popup for the whole pipeline run.
-      windowsHide: true,
-    },
-  );
-  child.unref();
-  closeSync(descriptor);
+  const childArgs = [
+    ...forwarded,
+    ...targetArgs,
+    ...writerArgs,
+    ...sourceArgs,
+    '--background',
+    '--launcher-token',
+    token,
+  ];
+
+  // 🔴 Run the background orchestrator inside a herdr pane instead of a raw
+  // `spawn(..., { detached: true })` child. On Windows, `detached: true`
+  // does NOT escape the launching terminal's Job Object the way it does on
+  // POSIX (that only calls setsid()) — modern terminals set
+  // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, so closing the terminal window
+  // silently kills every process still in the job, including a detached +
+  // unref()'d child, with no signal delivered for any handler to catch.
+  // This killed a real run (C-401): the orchestrator died mid-flight,
+  // leaving a stale lock and a completed-but-unconsumed implementer result.
+  // herdr's server is independently detached and already proven to survive
+  // exactly this — every worker/review agent pane it hosts already does —
+  // so hosting the orchestrator's own process in a herdr pane gives it the
+  // same terminal-independence its own children already have.
+  await ensureServer();
+  const launcherLabel = `aikami-launcher-${token}`;
+  const wsResult = await herdrJson<{
+    result: {
+      workspace: { workspace_id: string };
+      root_pane: { pane_id: string };
+    };
+  }>(['workspace', 'create', '--cwd', process.cwd(), '--label', launcherLabel, '--no-focus']);
+  if (!wsResult?.result) {
+    throw new Error(`Failed to create herdr launcher workspace ${launcherLabel}.`);
+  }
+  const launcherPaneId = wsResult.result.root_pane.pane_id;
+  const command = ['bun', 'run', import.meta.path, ...childArgs].map(posixQuote).join(' ');
+  await herdr(['pane', 'run', launcherPaneId, await wrapCommandForPane(launcherPaneId, command)]);
 
   // The child can legitimately need well beyond 30s to become ready:
   // initialize() runs bootstrapWorktree, which does a full git checkout +
   // `bun install --frozen-lockfile` — a cold bun cache takes minutes. A
-  // fixed 30s deadline burned the launcher while the detached child kept
-  // running (and kept holding the contract lock), manufacturing a phantom
-  // "already running" deadlock on the next attempt. Distinguish the two
-  // cases: child exited → fail fast with the log tail; child alive → keep
-  // waiting (180s cap) with progress output.
+  // fixed 30s deadline burned the launcher while the child kept running
+  // (and kept holding the contract lock), manufacturing a phantom "already
+  // running" deadlock on the next attempt.
+  //
+  // 🔴 No fast-fail-on-early-exit here (the old code had one, via the raw
+  // child's own `exitCode`). herdr's `pane process-info` foreground-process
+  // detection — reliable for the long-lived dev-service panes it was built
+  // for (assessServicePane, minutes-scale) — measurably failed to register
+  // a short-lived nested `& bash.exe 'script'` invocation as non-idle
+  // during manual verification of this launch path, which would have made
+  // EVERY launch fail immediately on a false "exited" positive. Rather than
+  // build a bespoke exit-code-marker wrapper to get fast-fail back safely,
+  // this trades it for simplicity: wait out the full deadline, then surface
+  // whatever the pane actually printed as the diagnostic. Slower on a
+  // genuine early failure (180s instead of instant), never wrong.
   const deadline = Date.now() + 180_000;
   let lastProgress = 0;
   while (!existsSync(readyPath)) {
-    if (child.exitCode !== null) {
-      const diagnostic = existsSync(launcherLogPath)
-        ? readFileSync(launcherLogPath, 'utf-8').slice(-4_000)
-        : 'No launcher log was produced.';
-      throw new Error(
-        `Pipeline exited before becoming ready (code ${child.exitCode}).\n${diagnostic}`,
-      );
-    }
     if (Date.now() >= deadline) {
-      const diagnostic = existsSync(launcherLogPath)
-        ? readFileSync(launcherLogPath, 'utf-8').slice(-4_000)
-        : 'No launcher log was produced.';
+      const r = await herdr(['pane', 'read', launcherPaneId, '--lines', '80', '--format', 'text']);
+      const diagnostic = r.stdout.trim() || 'No pane output was captured.';
       throw new Error(`Pipeline did not become ready within 180s.\n${diagnostic}`);
     }
     await sleep(250);
@@ -806,6 +871,12 @@ const main = async (): Promise<void> => {
     return;
   }
 
+  // Housekeeping — only the foreground launcher does this, never the
+  // detached background child (cheap either way, but no reason to repeat it).
+  if (!cli.background) {
+    pruneLauncherArtifacts(process.cwd());
+  }
+
   // 🔴 Preflight: herdr client/server protocol skew (old server still running
   // after a herdr update) makes EVERY herdr call fail with protocol_mismatch
   // — the pipeline then crashes with a confusing "herdr worktree create
@@ -820,6 +891,22 @@ const main = async (): Promise<void> => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`❌ ${msg}`);
       process.exit(1);
+    }
+
+    // 🔴 Cheap, synchronous preflight (no subprocess — just a PATH scan):
+    // warn, don't block, when Git Bash is missing on Windows. F-07 removed
+    // most of the hard dependency (contract-scoped port env now goes through
+    // `herdr tab --env`), but wrapCommand/bashScriptForPane still prefer bash
+    // when present for worktree bootstrap and log-tailing; its absence
+    // degrades quietly rather than failing outright. Surfacing it here beats
+    // discovering it mid-run. Full capability check: `bun run setup --doctor`.
+    if (process.platform === 'win32' && !findBash()) {
+      console.warn(
+        '⚠️  Git Bash not found — some pipeline steps (worktree bootstrap, log tailing) fall back ' +
+          'to native PowerShell/cmd equivalents, which is fine but less tested. ' +
+          'Install Git for Windows (winget install --id Git.Git) for the primary path. ' +
+          'Full check: bun run setup --doctor',
+      );
     }
   }
 

@@ -4,7 +4,17 @@ import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
-import { publishWorktree, removeWorktree } from '../../herdr/worktree.ts';
+import {
+  publishWorktree,
+  removeWorktree,
+  WORKTREE_SKIP_WORKTREE_PATHS,
+} from '../../herdr/worktree.ts';
+import {
+  formatInfraNotesForPrompt,
+  readInfraIssues,
+  reportInfraIssue,
+  summarizeInfraIssues,
+} from '../../ops/infra_report.ts';
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
@@ -20,6 +30,7 @@ import {
   buildWorkspaceLabel,
   ContractHerdrAdapter,
   type ContractHerdrAdapterInterface,
+  ghTokenFilePath,
 } from './herdr_adapter.ts';
 import {
   acquireLock,
@@ -68,6 +79,28 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
 ];
 
 const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run `gh` with an argv array and return trimmed stdout.
+ *
+ * 🔴 execFileSync, never execSync with an interpolated/quoted string. On
+ * Windows, execSync shells out through cmd.exe, where a single quote is a
+ * literal character rather than quoting — every hand-written `'${url}'`
+ * this file used to write leaked its quote characters straight into `gh`'s
+ * argv (F-02 in the rig audit). That silently broke the PR lookup and made
+ * the orchestrator misdiagnose the failure as "no PR found" instead of a
+ * shell-quoting bug. execFileSync never invokes a shell, so this closes the
+ * whole class rather than one call site.
+ */
+const ghExec = (args: string[], options: { cwd: string; timeoutMs?: number }): string =>
+  execFileSync('gh', args, {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: options.cwd,
+    timeout: options.timeoutMs ?? 15_000,
+    // Windows: hide the cmd.exe console window (no-op on POSIX).
+    windowsHide: true,
+  }).trim();
 
 const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
   const d = join(options.cwd, '.pi/contract-runs');
@@ -314,6 +347,7 @@ const reconcileWorkspace = async (options: {
     message: finalMsg,
     authorName: 'Pi Agent',
     authorEmail: 'agent@pi.internal',
+    protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
   });
   pushBranch({ cwd: workspacePath, branchName: headBranch });
 
@@ -975,6 +1009,7 @@ export const runContractPipeline = async (options: {
                 message: `Feat: Contract ${manifest.contractId} — implementation`,
                 authorName: 'Pi Agent',
                 authorEmail: 'agent@pi.internal',
+                protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
               });
               pipelineLog({
                 runId: manifest.runId,
@@ -1066,6 +1101,7 @@ export const runContractPipeline = async (options: {
                     message: `Feat: Contract ${manifest.contractId} — revision`,
                     authorName: 'Pi Agent',
                     authorEmail: 'agent@pi.internal',
+                    protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
                   });
                 } catch {}
                 pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
@@ -1264,14 +1300,7 @@ export const runContractPipeline = async (options: {
             const degradedPrUrl = manifest.prUrl;
             if (degradedPrUrl) {
               try {
-                execSync(`gh pr ready --undo ${degradedPrUrl}`, {
-                  encoding: 'utf-8',
-                  stdio: ['pipe', 'pipe', 'pipe'],
-                  cwd: options.repoRoot,
-                  timeout: 15000,
-                  // Windows: hide the cmd.exe console window (no-op on POSIX).
-                  windowsHide: true,
-                });
+                ghExec(['pr', 'ready', '--undo', degradedPrUrl], { cwd: options.repoRoot });
                 console.log(`📝 PR converted to Draft: ${degradedPrUrl}\n`);
               } catch {
                 // PR may already be a draft or not found.
@@ -1285,7 +1314,7 @@ export const runContractPipeline = async (options: {
             });
           }
 
-          const prompt = isBlockedReview
+          const basePrompt = isBlockedReview
             ? buildBlockedReviewPrompt({ manifest, repoRoot: options.repoRoot })
             : loadReviewPrompt({
                 repoRoot: options.repoRoot,
@@ -1305,6 +1334,15 @@ export const runContractPipeline = async (options: {
                 autofixCycle: manifest.autofixCycles + 1,
                 maxAutofixCycles: MAX_AUTOFIX_CYCLES,
               });
+          // Read-only "report, don't fix" notes for whatever the pipeline
+          // silently worked around during this run — see infra_report.ts.
+          // Appended to BOTH the blocked and ready/yolo review prompts, once,
+          // here — the single point every review-captain launch passes
+          // through, regardless of profile.
+          const infraNotes = formatInfraNotesForPrompt(
+            summarizeInfraIssues(readInfraIssues(options.repoRoot)),
+          );
+          const prompt = infraNotes ? `${basePrompt}\n${infraNotes}` : basePrompt;
           const started = await adapter.startReview({
             prompt,
             contractPath: manifest.contractPath,
@@ -1391,22 +1429,39 @@ export const runContractPipeline = async (options: {
             return undefined;
           }
           try {
-            const r = execSync(
-              `gh pr list --head '${headBranch}' --state open --json url --jq '.[0].url'`,
-              {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                cwd: options.repoRoot,
-                timeout: 10000,
-                // Windows: hide the cmd.exe console window (no-op on POSIX).
-                windowsHide: true,
-              },
-            ).trim();
+            const r = ghExec(
+              [
+                'pr',
+                'list',
+                '--head',
+                headBranch,
+                '--state',
+                'open',
+                '--json',
+                'url',
+                '--jq',
+                '.[0].url',
+              ],
+              { cwd: options.repoRoot, timeoutMs: 10_000 },
+            );
             if (r) {
               manifest.prUrl = r;
             }
             return r || undefined;
-          } catch {
+          } catch (err: unknown) {
+            // 🔴 This exact catch is F-02 from the rig audit: it used to
+            // swallow a Windows shell-quoting bug and let the orchestrator
+            // report "No PR found" instead of the real cause. The quoting
+            // bug is fixed (ghExec uses execFileSync), but `gh` can still
+            // fail for other reasons (rate limit, auth, network) — report
+            // those instead of going silent again.
+            reportInfraIssue({
+              component: 'gh_pr_lookup',
+              operation: 'gh pr list --head <branch>',
+              error: err,
+              context: { headBranch, runId: manifest.runId },
+              cwd: options.repoRoot,
+            });
             return undefined;
           }
         };
@@ -1422,14 +1477,7 @@ export const runContractPipeline = async (options: {
             }
             if (decision.decision === 'approve') {
               try {
-                execSync(`gh pr ready ${prUrl}`, {
-                  encoding: 'utf-8',
-                  stdio: ['pipe', 'pipe', 'pipe'],
-                  cwd: options.repoRoot,
-                  timeout: 15000,
-                  // Windows: hide the cmd.exe console window (no-op on POSIX).
-                  windowsHide: true,
-                });
+                ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
               } catch {}
               console.log(`\n✅ PR ready: ${prUrl}\n`);
               manifest = transition({ manifest, next: 'pr_created' });
@@ -1443,14 +1491,7 @@ export const runContractPipeline = async (options: {
                 console.log(`\n🚀 PR merged: ${prUrl}\n`);
               } else {
                 try {
-                  execSync(`gh pr ready ${prUrl}`, {
-                    encoding: 'utf-8',
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    cwd: options.repoRoot,
-                    timeout: 15000,
-                    // Windows: hide the cmd.exe console window (no-op on POSIX).
-                    windowsHide: true,
-                  });
+                  ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
                 } catch {}
                 execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
                   encoding: 'utf-8',
@@ -1486,14 +1527,7 @@ export const runContractPipeline = async (options: {
             const prUrl = findPrUrl();
             if (prUrl) {
               try {
-                execSync(`gh pr close ${prUrl}`, {
-                  encoding: 'utf-8',
-                  stdio: ['pipe', 'pipe', 'pipe'],
-                  cwd: options.repoRoot,
-                  timeout: 15000,
-                  // Windows: hide the cmd.exe console window (no-op on POSIX).
-                  windowsHide: true,
-                });
+                ghExec(['pr', 'close', prUrl], { cwd: options.repoRoot });
               } catch {}
             }
             manifest.blockedReason = decision.summary;
@@ -1512,14 +1546,7 @@ export const runContractPipeline = async (options: {
         }
         if (decision.decision === 'approve') {
           try {
-            execSync(`gh pr ready ${prUrl}`, {
-              encoding: 'utf-8',
-              stdio: ['pipe', 'pipe', 'pipe'],
-              cwd: options.repoRoot,
-              timeout: 15000,
-              // Windows: hide the cmd.exe console window (no-op on POSIX).
-              windowsHide: true,
-            });
+            ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
           } catch {}
           console.log(`\n✅ PR ready for review: ${prUrl}\n`);
           manifest = transition({ manifest, next: 'pr_created' });
@@ -1540,14 +1567,7 @@ export const runContractPipeline = async (options: {
           } else {
             // Non-YOLO: orchestrator handles the merge.
             try {
-              execSync(`gh pr ready ${prUrl}`, {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                cwd: options.repoRoot,
-                timeout: 15000,
-                // Windows: hide the cmd.exe console window (no-op on POSIX).
-                windowsHide: true,
-              });
+              ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
             } catch {}
             execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
               encoding: 'utf-8',
@@ -1586,14 +1606,7 @@ export const runContractPipeline = async (options: {
           // Status tracked in run manifest — don't touch main contract.
           manifest = transition({ manifest, next: 'implement' });
         } else {
-          execSync(`gh pr close ${prUrl}`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: options.repoRoot,
-            timeout: 15000,
-            // Windows: hide the cmd.exe console window (no-op on POSIX).
-            windowsHide: true,
-          });
+          ghExec(['pr', 'close', prUrl], { cwd: options.repoRoot });
           manifest.blockedReason = decision.summary;
           manifest = transition({ manifest, next: 'blocked' });
         }
@@ -1615,6 +1628,12 @@ export const runContractPipeline = async (options: {
       const s = formatBlockedSummary(manifest);
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
+      const infraNotes = formatInfraNotesForPrompt(
+        summarizeInfraIssues(readInfraIssues(options.repoRoot)),
+      );
+      if (infraNotes) {
+        console.log(infraNotes);
+      }
     }
 
     // Terminal workspace handling — one funnel for merged / pr_created /
@@ -1664,6 +1683,19 @@ export const runContractPipeline = async (options: {
     }
     throw e;
   } finally {
+    // 🔴 F-05: the gh-token file has no reason to outlive the run — delete
+    // it on every exit path (success, blocked, crash), not just the happy
+    // one. `mode: 0o600` at write time only restricts it on POSIX; deleting
+    // it promptly matters more on Windows, where that mode bit is a no-op.
+    try {
+      const tokenPath = ghTokenFilePath({ repoRoot: options.repoRoot, runId: manifest.runId });
+      if (existsSync(tokenPath)) {
+        unlinkSync(tokenPath);
+      }
+    } catch {
+      // Best-effort — a leftover token file is a hygiene issue, not one
+      // worth failing pipeline teardown over.
+    }
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });
   }
 };
