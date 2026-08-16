@@ -83,11 +83,27 @@ const toGitBashPath = (path: string): string => {
  * `Get-Content -LiteralPath '…' -Tail 10 -Wait` (and cmd panes get the same
  * via `powershell -Command …`) instead of a `tail` that cannot exist there;
  * only POSIX/Nushell panes keep plain `tail -f`.
+ *
+ * 🔴 The pipeline/worktree pane this runs in is NOT created with the
+ * `--env PATH=…` forwarding that worker/review tabs get (see
+ * `inheritedPathEnv` below) — herdr hands new panes whatever baseline PATH
+ * the daemon itself started with, which on Windows routinely lacks Git's
+ * `usr\bin`. `findBash()` resolving an absolute bash.exe path sidesteps that
+ * for launching bash itself, but a non-login, non-interactive `bash
+ * script.sh` never sources `/etc/profile`, so once inside, `tail` still
+ * resolves against that same PATH-less pane env and fails with "tail:
+ * command not found". Prepending bash's own directory — where `tail.exe`
+ * lives alongside it in every Git-for-Windows layout — fixes it without
+ * depending on pane env inheritance at all.
  */
 const logTailCommand = async (paneId: string, log: string): Promise<string> => {
   const bash = findBash();
   if (bash) {
-    return bashScriptForPane(paneId, `tail -f ${posixQuote(toGitBashPath(log))}`);
+    const bashBinDir = toGitBashPath(dirname(bash));
+    return bashScriptForPane(
+      paneId,
+      `PATH="${bashBinDir}:$PATH" tail -f ${posixQuote(toGitBashPath(log))}`,
+    );
   }
   const shell = await detectPaneShell(paneId);
   if (shell === 'posix' || shell === 'nushell') {
