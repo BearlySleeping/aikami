@@ -110,6 +110,21 @@ mock.module('$services', () => ({
     selectedCheckpoint: '',
   },
   routerService: {},
+  messageBranchStore: {
+    swipeAlternative: mock(() => {}),
+    clearAlternatives: mock(() => {}),
+    addAlternative: mock(() => {}),
+    enrichMessage: mock(
+      (options: { id: string; text: string; sender: string; timestamp: Date }) => ({
+        ...options,
+        alternativeCount: 1,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+        showActions: true,
+      }),
+    ),
+  },
   SentenceBoundaryChunker: class {
     feed(_text: string) {}
     close() {}

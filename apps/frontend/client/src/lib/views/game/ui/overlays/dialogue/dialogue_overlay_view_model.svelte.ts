@@ -111,6 +111,13 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Whether the AI is currently streaming a response. */
   readonly isStreaming: boolean;
 
+  /**
+   * Streamed narrative text for the in-flight turn (C-401). Grows as tokens
+   * arrive, frame-batched to at most one `$state` write per animation frame.
+   * Empty when no turn is streaming.
+   */
+  readonly streamingText: string;
+
   /** The player's current input text (bound to the text input field). */
   inputText: string;
 
@@ -383,6 +390,19 @@ class DialogueOverlayViewModel
 
   isStreaming = $state<boolean>(false);
 
+  /** Streamed narrative for the in-flight turn (C-401). */
+  streamingText = $state<string>('');
+
+  /** Frame-batched buffer — flushed to {@link streamingText} once per frame. */
+  private _streamBuffer = '';
+
+  /** Whether a rAF flush of `_streamBuffer` is scheduled. */
+  private _streamFrameScheduled = false;
+
+  /** Monotonic stream epoch — stale flushes from a previous turn are dropped. */
+  private _streamEpoch = 0;
+
+  /** @inheritdoc */
   inputText = $state<string>('');
 
   streamError = $state<string | null>(null);
@@ -526,6 +546,129 @@ class DialogueOverlayViewModel
   private readonly _chunker = new SentenceBoundaryChunker();
 
   private _ttsInitialized = false;
+
+  // ── C-401 Streaming helpers ───────────────────────────────────────────
+
+  /**
+   * Appends a token chunk to the frame-batched stream buffer. The buffer is
+   * flushed to `streamingText` at most once per animation frame — never one
+   * rune write per token (limitations.md §Svelte update threshold).
+   * Protected so dev-sandbox overrides can stream mock narratives.
+   */
+  protected _handleStreamChunk(text: string): void {
+    this._streamBuffer += text;
+    if (!this._streamFrameScheduled) {
+      this._streamFrameScheduled = true;
+      const epoch = this._streamEpoch;
+      const raf =
+        typeof requestAnimationFrame === 'function'
+          ? requestAnimationFrame
+          : (callback: FrameRequestCallback) =>
+              setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame;
+      raf(() => {
+        this._streamFrameScheduled = false;
+        if (epoch !== this._streamEpoch) {
+          return; // stale stream — a new turn started
+        }
+        this._flushStreamBuffer();
+      });
+    }
+  }
+
+  /** Flushes buffered chunks into streamingText (single $state write). */
+  protected _flushStreamBuffer(): void {
+    if (this._streamBuffer.length > 0) {
+      this.streamingText += this._streamBuffer;
+      this._streamBuffer = '';
+    }
+  }
+
+  /** Synchronously flushes any pending buffer (call before finalizing a turn). */
+  protected _flushStreamNow(): void {
+    this._streamFrameScheduled = false;
+    this._flushStreamBuffer();
+  }
+
+  /** Resets the stream for a new turn (invalidates any scheduled flush). */
+  protected _resetStreaming(): void {
+    this._streamEpoch++;
+    this._streamBuffer = '';
+    this._streamFrameScheduled = false;
+    this.streamingText = '';
+  }
+
+  /** Whether the error message represents cancellation (AC-3). */
+  private _isAbortError(message: string): boolean {
+    return /abort/i.test(message);
+  }
+
+  /**
+   * Formats the AC-4 actionable error, naming the provider when the gateway
+   * routing diagnostic is available.
+   */
+  private _formatTimeoutError(): string {
+    const routing = (globalThis as Record<string, unknown>).__text_service_resolved_routing as
+      | { provider?: string }
+      | undefined;
+    const provider = routing?.provider;
+    return provider
+      ? `The ${provider} provider did not respond in time. Showing the NPC's pre-written reply instead.`
+      : "The text provider did not respond in time. Showing the NPC's pre-written reply instead.";
+  }
+
+  /**
+   * Handles a failed generation call:
+   * - Abort (AC-3): removes the placeholder — no partial turn persists, no error.
+   * - Timeout (AC-4): surfaces an actionable error naming the provider.
+   * - Other: surfaces the raw error message.
+   */
+  private _handleTurnFailure(options: { npcMessageId: string; error: unknown }): void {
+    const { npcMessageId, error } = options;
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (this._isAbortError(message)) {
+      // AC-3: remove the placeholder — no partial turn written, no error toast.
+      this.messages = this.messages.filter((m) => m.id !== npcMessageId);
+      const lastPlayer = [...this.messages].reverse().find((m) => m.role === 'player');
+      if (lastPlayer) {
+        this.inputText = lastPlayer.content;
+      }
+      return;
+    }
+
+    const turnState = this._npcDialogueService.turnState as
+      | { kind: 'failed'; reason: string }
+      | undefined;
+    const timedOut = turnState?.kind === 'failed' && turnState.reason === 'timeout';
+    this.streamError = timedOut ? this._formatTimeoutError() : message;
+    this.messages = this.messages.filter((m) => m.id !== npcMessageId);
+  }
+
+  /**
+   * Fills a placeholder NPC message with the final text (enriched through
+   * messageBranchStore for alternatives/swiping).
+   */
+  protected _setMessageContent(npcMessageId: string, text: string): void {
+    this.messages = this.messages.map((m) => {
+      if (m.id !== npcMessageId) {
+        return m;
+      }
+      const enriched = messageBranchStore.enrichMessage({
+        id: m.id,
+        text,
+        sender: 'ai',
+        timestamp: new Date(),
+      });
+      return {
+        ...m,
+        content: text,
+        alternativeCount: enriched.alternativeCount,
+        alternativeLabel: enriched.alternativeLabel,
+        canSwipeLeft: enriched.canSwipeLeft,
+        canSwipeRight: enriched.canSwipeRight,
+      };
+    });
+  }
 
   constructor(options: DialogueOverlayViewModelOptions) {
     super(options);
@@ -894,6 +1037,8 @@ class DialogueOverlayViewModel
 
   /**
    * C-371: Call #2 — sends the dice outcome to the LLM for narrative resolution.
+   * C-401: the resolution narrative streams into a placeholder; the call is
+   * linked to `_activeAbortController` so End Chat aborts call 2 (AC-3).
    */
   private async _executeRollResolution(options: {
     checkType: string;
@@ -904,14 +1049,34 @@ class DialogueOverlayViewModel
   }): Promise<void> {
     const { checkType, difficultyClass, total, isSuccess } = options;
     this.isResolvingSkillCheck = true;
+    this._resetStreaming();
+
+    // Placeholder NPC message — the streamed resolution narrative lands here
+    const npcMessageId = crypto.randomUUID();
+    this.messages = [
+      ...this.messages,
+      {
+        id: npcMessageId,
+        content: '',
+        role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+
+    // AC-3: link to the active abort controller so End Chat cancels call 2.
+    const controller = new AbortController();
+    this._activeAbortController = controller;
 
     try {
-      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
-        (m) => ({
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
+        .filter((m) => m.id !== npcMessageId)
+        .map((m) => ({
           role: m.role,
           content: m.content,
-        }),
-      );
+        }));
 
       const lastPlayerMsg = [...this.messages].reverse().find((m) => m.role === 'player');
       const playerInput = lastPlayerMsg?.content ?? '';
@@ -920,23 +1085,39 @@ class DialogueOverlayViewModel
         npcId: this._npcData.npcId,
         npcName: this._npcData.npcName,
         messages,
-        signal: new AbortController().signal,
+        signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
         checkType,
         difficultyClass,
         rollTotal: total,
         outcome: isSuccess ? 'pass' : 'fail',
         playerInput,
+        onChunk: (text) => this._handleStreamChunk(text),
       });
 
-      this._appendNpcMessage(resolution.narrativeResult);
+      this._flushStreamNow();
+      const narrative = this.streamingText || resolution.narrativeResult;
+      this._setMessageContent(npcMessageId, narrative);
+      this._resetStreaming();
       this.suggestedChips = resolution.suggestedChips;
+
+      // AC-4: a stalled provider surfaces an actionable error while the
+      // derived fallback narrative is still shown.
+      const turnState = this._npcDialogueService.turnState as
+        | { kind: 'failed'; reason: string }
+        | undefined;
+      if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
+        this.streamError = this._formatTimeoutError();
+      }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.warn('_executeRollResolution:failed', { msg });
-      this.streamError = msg;
+      this._flushStreamNow();
+      this._handleTurnFailure({ npcMessageId, error });
     } finally {
       this.isResolvingSkillCheck = false;
+      this._resetStreaming();
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
     }
   }
 
@@ -985,14 +1166,31 @@ class DialogueOverlayViewModel
   /**
    * GM Mode: sends the player's message directly to the Game Master.
    * The GM responds as the dungeon master, not as an NPC.
+   * Streams the response into a placeholder (C-401).
    */
   private async _sendToGameMaster(_content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
+    this._resetStreaming();
 
     const controller = new AbortController();
     this._activeAbortController = controller;
+
+    // Placeholder NPC message — the streamed GM response lands here
+    const npcMessageId = crypto.randomUUID();
+    this.messages = [
+      ...this.messages,
+      {
+        id: npcMessageId,
+        content: '',
+        role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
 
     try {
       const gmResponse = await this._npcDialogueService.analyzeIntent({
@@ -1009,17 +1207,21 @@ class DialogueOverlayViewModel
           level: 1,
           classId: 'fighter',
         },
+        onChunk: (text) => this._handleStreamChunk(text),
       });
 
-      this._appendNpcMessage(`🎭 *Game Master*\n${gmResponse.npcResponse}`);
+      this._flushStreamNow();
+      const narrative = this.streamingText || gmResponse.npcResponse;
+      this._setMessageContent(npcMessageId, `🎭 *Game Master*\n${narrative}`);
+      this._resetStreaming();
       this.suggestedChips = gmResponse.suggestedChips;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.warn('_sendToGameMaster:failed', { msg });
-      this._appendNpcMessage('🎭 *The Game Master remains silent...*');
+      this._flushStreamNow();
+      this._handleTurnFailure({ npcMessageId, error });
     } finally {
       this.isStreaming = false;
       this.highlightSpeaker = null;
+      this._resetStreaming();
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
@@ -1030,21 +1232,40 @@ class DialogueOverlayViewModel
    * C-371: Sends a player message through the two-call intent analysis pipeline.
    * Call #1 (analyzeIntent) → if roll needed: DECLARED_DC → dice → rollDice → call #2.
    * If no roll needed: display narrative + chips directly.
+   *
+   * C-401: the pre-roll narrative streams into a placeholder before the dice
+   * prompt appears (AC-2); abort removes the placeholder (AC-3).
    */
   private async _sendWithIntentAnalysis(_content: string, npcMessageId?: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
+    this._resetStreaming();
 
     const controller = new AbortController();
     this._activeAbortController = controller;
 
+    // Placeholder NPC message — the streamed pre-roll narrative lands here
+    const id = npcMessageId ?? crypto.randomUUID();
+    this.messages = [
+      ...this.messages,
+      {
+        id,
+        content: '',
+        role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+
     try {
-      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
-        (m) => ({
+      const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
+        .filter((m) => m.id !== id)
+        .map((m) => ({
           role: m.role,
           content: m.content,
-        }),
-      );
+        }));
 
       const analysis = await this._npcDialogueService.analyzeIntent({
         npcId: this._npcData.npcId,
@@ -1052,19 +1273,31 @@ class DialogueOverlayViewModel
         messages,
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        onChunk: (text) => this._handleStreamChunk(text),
       });
 
-      // Display the pre-roll narrative
-      this._appendNpcMessage(analysis.npcResponse, npcMessageId);
+      this._flushStreamNow();
+      const narrative = this.streamingText || analysis.npcResponse;
+      this._setMessageContent(id, narrative);
+      this._resetStreaming();
 
       // Run expression detection on the NPC response
-      void this._detectExpression(analysis.npcResponse);
+      void this._detectExpression(narrative);
 
       // Execute the GM's quest-activation tool call (accept/decline), if any.
       this._applyQuestActivation(analysis.questActivation);
 
       // Show suggestion chips
       this.suggestedChips = analysis.suggestedChips;
+
+      // AC-4: a stalled provider surfaces an actionable error while the
+      // derived fallback narrative is still shown.
+      const turnState = this._npcDialogueService.turnState as
+        | { kind: 'failed'; reason: string }
+        | undefined;
+      if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
+        this.streamError = this._formatTimeoutError();
+      }
 
       if (analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
         // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
@@ -1088,12 +1321,12 @@ class DialogueOverlayViewModel
         this.dialoguePhase = 'FREE_TEXT';
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.warn('_sendWithIntentAnalysis:failed', { msg });
-      this.streamError = msg;
+      this._flushStreamNow();
+      this._handleTurnFailure({ npcMessageId: id, error });
     } finally {
       this.isStreaming = false;
       this.highlightSpeaker = null;
+      this._resetStreaming();
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
@@ -1480,10 +1713,15 @@ class DialogueOverlayViewModel
    * Delegates NPC response generation to the NPC dialogue orchestrator.
    * Handles both AI streaming and authored fallback paths via
    * NpcDialogueService.generateTurn.
+   *
+   * C-401: the placeholder accumulates streamed tokens; abort removes the
+   * placeholder entirely (no partial turn persists, AC-3); a timeout
+   * surfaces an actionable error while the authored fallback is offered (AC-4).
    */
   private async _delegateGenerateResponse(options?: { npcMessageId?: string }): Promise<void> {
     this.isStreaming = true;
     this.streamError = null;
+    this._resetStreaming();
 
     // Create a placeholder NPC message that accumulates streamed tokens
     const npcMessageId = options?.npcMessageId ?? crypto.randomUUID();
@@ -1517,34 +1755,28 @@ class DialogueOverlayViewModel
         messages,
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        onChunk: (text) => this._handleStreamChunk(text),
       });
 
-      // Update the NPC message with the full response
-      this.messages = this.messages.map((m) => {
-        if (m.id !== npcMessageId) {
-          return m;
-        }
-        // Update alternative tracking from messageBranchStore
-        const enriched = messageBranchStore.enrichMessage({
-          id: m.id,
-          text: turn.narrative,
-          sender: 'ai',
-          timestamp: new Date(),
-        });
-        return {
-          ...m,
-          content: turn.narrative,
-          alternativeCount: enriched.alternativeCount,
-          alternativeLabel: enriched.alternativeLabel,
-          canSwipeLeft: enriched.canSwipeLeft,
-          canSwipeRight: enriched.canSwipeRight,
-        };
-      });
+      // Flush any buffered tokens so the final text is complete
+      this._flushStreamNow();
+      const finalText = this.streamingText || turn.narrative;
+      this._setMessageContent(npcMessageId, finalText);
+      this._resetStreaming();
 
       // Append the follow-up choices as actionable buttons
       if (turn.choices.length > 0) {
         // Store choices on the NPC message for the View to render
         this._setMessageChoices(npcMessageId, turn);
+      }
+
+      // AC-4: a stalled provider surfaces an actionable error while the
+      // authored fallback turn is offered as the recovery.
+      const turnState = this._npcDialogueService.turnState as
+        | { kind: 'failed'; reason: string }
+        | undefined;
+      if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
+        this.streamError = this._formatTimeoutError();
       }
 
       // Execute any command from the turn, guarding against re-execution
@@ -1558,27 +1790,11 @@ class DialogueOverlayViewModel
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      if (message.includes('abort') || message.includes('AbortError')) {
-        // C-343: Handle cancellation — replace placeholder with cancelled notice
-        this.messages = this.messages.map((m) =>
-          m.id === npcMessageId ? { ...m, content: '[Generation cancelled]' } : m,
-        );
-        // Restore the player's input from the last player message
-        const lastPlayer = [...this.messages].reverse().find((m) => m.role === 'player');
-        if (lastPlayer) {
-          this.inputText = lastPlayer.content;
-        }
-      } else {
-        this.streamError = message;
-        // Replace the empty NPC message with an error placeholder
-        this.messages = this.messages.map((m) =>
-          m.id === npcMessageId ? { ...m, content: '*...*' } : m,
-        );
-      }
+      this._flushStreamNow();
+      this._handleTurnFailure({ npcMessageId, error: err });
     } finally {
       this.isStreaming = false;
+      this._resetStreaming();
     }
   }
 
@@ -1726,6 +1942,11 @@ class DialogueOverlayViewModel
     const { skill, difficultyClass, rollValue, isSuccess } = options;
     this.isResolvingSkillCheck = true;
     this.streamError = null;
+    this._resetStreaming();
+
+    // AC-3: link to the active abort controller so End Chat cancels.
+    const controller = new AbortController();
+    const npcMessageId = crypto.randomUUID();
 
     try {
       // Delegate to the NPC dialogue orchestrator with the dice result
@@ -1733,7 +1954,7 @@ class DialogueOverlayViewModel
       const diceOutcome = `[Dice result: Skill=${skill}, DC=${difficultyClass}, Roll=${rollValue}, ${isSuccess ? 'SUCCESS' : 'FAILURE'}]`;
       const playerMessage = `\${this._npcData.npcName}, I attempt a ${skill} check. ${diceOutcome}`;
 
-      const npcMessageId = crypto.randomUUID();
+      this._activeAbortController = controller;
       this.messages = [
         ...this.messages,
         {
@@ -1757,21 +1978,19 @@ class DialogueOverlayViewModel
       // Add the virtual player message with dice result
       messages.push({ role: 'player', content: playerMessage });
 
-      const controller = new AbortController();
-
       const turn = await this._npcDialogueService.generateTurn({
         npcId: this._npcData.npcId,
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        onChunk: (text) => this._handleStreamChunk(text),
       });
 
-      // Remove the virtual player message
-      this.messages = this.messages.filter((m) => m.id !== npcMessageId);
-
-      // Append the NPC's narrative response
-      this._appendNpcMessage(turn.narrative);
+      this._flushStreamNow();
+      const narrative = this.streamingText || turn.narrative;
+      this._setMessageContent(npcMessageId, narrative);
+      this._resetStreaming();
 
       // Execute any command
       if (turn.command && !this._npcDialogueService.wasCommandExecuted(npcMessageId)) {
@@ -1779,11 +1998,24 @@ class DialogueOverlayViewModel
         await this._dispatchCommand({ command: turn.command, npcMessageId });
       }
     } catch (error) {
+      this._flushStreamNow();
       const message = error instanceof Error ? error.message : String(error);
-      this.warn('_executeSkillCheckAction:failed', { message });
-      this.streamError = `Skill check failed: ${message}`;
+      if (this._isAbortError(message)) {
+        // AC-3: abort — remove the placeholder, no partial turn, no error.
+        const placeholderId = this.messages.at(-1)?.id ?? '';
+        this.messages = this.messages.filter((m) => m.id !== placeholderId);
+      } else {
+        this.warn('_executeSkillCheckAction:failed', { message });
+        this.streamError = `Skill check failed: ${message}`;
+        const placeholderId = this.messages.at(-1)?.id ?? '';
+        this.messages = this.messages.filter((m) => m.id !== placeholderId);
+      }
     } finally {
       this.isResolvingSkillCheck = false;
+      this._resetStreaming();
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
       // Return to chat phase after resolution
       this.dialoguePhase = 'MENU';
     }

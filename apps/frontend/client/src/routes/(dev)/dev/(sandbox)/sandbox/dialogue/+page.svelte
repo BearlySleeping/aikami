@@ -42,6 +42,57 @@ const MOCK_NPC_DATA = {
   personaId: 'sage',
 };
 
+// ── C-401 streaming mock state ──────────────────────────────────────────
+
+/** Turn state owned by the dev mock — mirrors the real service's turnState. */
+let mockTurnState: {
+  kind: 'idle' | 'streaming' | 'awaiting_envelope' | 'complete' | 'failed';
+  text?: string;
+  reason?: 'timeout' | 'aborted' | 'provider_error' | 'malformed';
+  fallbackOffered?: boolean;
+} = { kind: 'idle' };
+
+/**
+ * When true (via `?stall=1`), the mock never streams — simulates a stalled
+ * provider for the AC-4 timeout E2E.
+ */
+const STALL_MODE = typeof window !== 'undefined' && window.location.search.includes('stall=1');
+
+/**
+ * Emits chunks to onChunk on a fixed cadence, respecting the abort signal.
+ * Resolves after the last chunk; rejects with AbortError on cancel (AC-3).
+ */
+const emitChunks = (options: {
+  chunks: string[];
+  onChunk?: (text: string) => void;
+  signal?: AbortSignal;
+  intervalMs?: number;
+}): Promise<void> => {
+  const { chunks, onChunk, signal, intervalMs = 110 } = options;
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    let index = 0;
+    const timer = setInterval(() => {
+      if (signal?.aborted) {
+        clearInterval(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      if (index < chunks.length) {
+        onChunk?.(chunks[index]);
+        mockTurnState = { kind: 'streaming', text: chunks.slice(0, index + 1).join('') };
+        index++;
+      } else {
+        clearInterval(timer);
+        resolve();
+      }
+    }, intervalMs);
+  });
+};
+
 const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
   npcData: MOCK_NPC_DATA,
@@ -52,14 +103,20 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     activeNpc: undefined,
     startDialogue: () => {},
     endDialogue: () => {},
-    generateTurn: async () => ({
-      narrative: '[Dev mock AI response]',
-      choices: [
-        { id: 'talk', label: 'Ask about the ward' },
-        { id: 'leave', label: 'Leave' },
-      ],
-      source: 'ai',
-    }),
+    generateTurn: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
+      // C-401: stream a deterministic slow narrative, then return the turn.
+      const chunks = ['*The elder ponders your words.*\n', '"An interesting proposition."'];
+      await emitChunks({ chunks, onChunk: opts.onChunk, signal: opts.signal });
+      mockTurnState = { kind: 'complete', text: chunks.join('') };
+      return {
+        narrative: chunks.join(''),
+        choices: [
+          { id: 'talk', label: 'Ask about the ward' },
+          { id: 'leave', label: 'Leave' },
+        ],
+        source: 'ai',
+      };
+    },
     wasCommandExecuted: () => false,
     markCommandExecuted: () => {},
     configure: () => {},
@@ -73,6 +130,10 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
     }),
     executeCommand: () => true,
+    /** Turn state owned by the dev mock (C-401) — mirrors the real service. */
+    get turnState() {
+      return mockTurnState;
+    },
     analyzeIntent: async (opts: {
       npcId: string;
       npcName: string;
@@ -80,6 +141,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       signal: AbortSignal;
       gameStateFacts?: string[];
       playerContext?: { characterSheetSummary: string; level: number; classId: string };
+      onChunk?: (text: string) => void;
     }) => {
       if (!viewModel.useMockAi) {
         // ── Real LLM path ────────────────────────────────────────
@@ -135,16 +197,50 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         };
       }
 
-      // ── Mock AI path ───────────────────────────────────────────
-      // Simulate AI processing delay
-      await new Promise((r) => setTimeout(r, 600 + Math.random() * 400));
+      // ── Mock AI path (C-401: streams via onChunk) ───────────────────
+      if (STALL_MODE) {
+        // Simulate a provider that never responds (AC-4): the ViewModel's
+        // turnState check surfaces the actionable timeout error.
+        await new Promise((resolve) => setTimeout(resolve, 1600));
+        mockTurnState = { kind: 'failed', reason: 'timeout', fallbackOffered: true };
+        return {
+          requiresRoll: false,
+          checkType: undefined,
+          difficultyClass: undefined,
+          modifierSource: undefined,
+          npcResponse: '*Elder Thrain looks at you, waiting.*',
+          suggestedChips: [],
+        };
+      }
+
+      const narrativeChunks = [
+        '*Elder Thrain strokes his beard thoughtfully.*\n',
+        '"Ah, an interesting question indeed. ',
+        'The village has seen many travelers, ',
+        'but few with such curiosity."',
+      ];
+      await emitChunks({
+        chunks: narrativeChunks,
+        onChunk: opts.onChunk,
+        signal: opts.signal,
+      });
+      mockTurnState = { kind: 'complete', text: narrativeChunks.join('') };
+
+      const playerText = opts.messages.filter((m) => m.role === 'player').pop()?.content ?? '';
+      let checkType: string | undefined;
+      if (/persuade/i.test(playerText)) {
+        checkType = 'Persuasion';
+      } else if (/intimidate/i.test(playerText)) {
+        checkType = 'Intimidation';
+      }
+      const requiresRoll = checkType !== undefined;
+
       return {
-        requiresRoll: false,
-        checkType: undefined,
-        difficultyClass: undefined,
-        modifierSource: undefined,
-        npcResponse:
-          '*Elder Thrain strokes his beard thoughtfully.*\n"Ah, an interesting question indeed. The village has seen many travelers, but few with such curiosity."',
+        requiresRoll,
+        checkType,
+        difficultyClass: requiresRoll ? 12 : undefined,
+        modifierSource: requiresRoll ? 'CHA' : undefined,
+        npcResponse: narrativeChunks.join(''),
         suggestedChips: [
           {
             id: 'talk',
@@ -161,12 +257,30 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         ],
       };
     },
-    resolveRoll: async () => {
-      // Simulate AI processing delay
-      await new Promise((r) => setTimeout(r, 500 + Math.random() * 300));
+    resolveRoll: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
+      // C-401: stream the resolution narrative (AC-2).
+      if (STALL_MODE) {
+        await new Promise((resolve) => setTimeout(resolve, 1600));
+        mockTurnState = { kind: 'failed', reason: 'timeout', fallbackOffered: true };
+        return {
+          narrativeResult: '*Elder Thrain waits for your next move.*',
+          stateDeltas: [],
+          suggestedChips: [],
+        };
+      }
+      const narrativeChunks = [
+        '*Elder Thrain nods slowly.*\n',
+        '"The dice have spoken. Fate has a way of guiding us, ',
+        'does it not?"',
+      ];
+      await emitChunks({
+        chunks: narrativeChunks,
+        onChunk: opts.onChunk,
+        signal: opts.signal,
+      });
+      mockTurnState = { kind: 'complete', text: narrativeChunks.join('') };
       return {
-        narrativeResult:
-          '*Elder Thrain nods slowly.*\n"The dice have spoken. Fate has a way of guiding us, does it not?"',
+        narrativeResult: narrativeChunks.join(''),
         stateDeltas: [],
         suggestedChips: [],
       };
@@ -176,7 +290,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   onStartCombat: () => {
     goBack();
   },
-  initialDiceOutcome: 'random',
+  initialDiceOutcome: 'always_succeed',
   initialUseMockAi: true,
   initialNpcPreset: 'sage',
   initialInteractionMode: 'freeTextFirst',
