@@ -842,6 +842,14 @@ export const detectPaneShell = async (paneId: string): Promise<PaneShell> => {
 const psQuote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
 
 /**
+ * Quote a value as a CMD double-quoted argument, escaping embedded `"` as
+ * `\"` (cmd.exe has no literal-quote escape inside a `"…"` token; `\"` is
+ * the accepted convention for native args). Used for `cmd` panes, which
+ * treat POSIX single quotes as literals.
+ */
+const cmdQuote = (value: string): string => `"${value.replaceAll('"', '\\"')}"`;
+
+/**
  * Write `script` to a unique temp .sh file and return its path. Used for
  * PowerShell panes, where passing `-c <script>` through PowerShell's native
  * arg mangling (embedded `"` becomes `\"` in the command line) corrupts the
@@ -879,7 +887,11 @@ const writeTempBashScript = (script: string): string => {
  * PowerShell panes get `& 'bash' 'script.sh'` with the script in a temp
  * file — PowerShell rejects the POSIX `'bash' -c '…'` form (parse error at
  * `-c`) and mangles embedded `"` in native args, so a file is the only
- * reliable transport.
+ * reliable transport. With direnv, both the PowerShell and CMD forms route
+ * through `direnv exec .` so the pane still gets the flake devShell env.
+ * CMD panes invoke the temp script with double-quoted args (`cmd.exe` treats
+ * single quotes as literals); the keep-open trailer is preserved in all
+ * bash-backed forms.
  */
 export const wrapCommand = (command: string, shell: PaneShell = 'posix'): string => {
   const bash = findBash();
@@ -887,7 +899,23 @@ export const wrapCommand = (command: string, shell: PaneShell = 'posix'): string
     const script = `${command}; echo; echo "${PANE_TRAILER}"; read`;
     if (shell === 'powershell') {
       const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+      // With direnv, route through `direnv exec .` so the pane gets the flake
+      // devShell env; the `&` call operator is only valid as the first token,
+      // so it is dropped in the direnv form.
+      if (hasDirenv()) {
+        return `direnv exec . ${psQuote(bash)} ${psQuote(scriptPath)}`;
+      }
       return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
+    }
+    if (shell === 'cmd') {
+      // cmd.exe treats single quotes as literals, so the POSIX `-c '…'` form
+      // would pass the script text as one literal arg and fail. Use the same
+      // temp-script transport as PowerShell, invoked with CMD-compatible
+      // double-quote escaping. direnv exec is retained for the direnv case,
+      // matching the POSIX path.
+      const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+      const invocation = `${cmdQuote(bash)} ${cmdQuote(scriptPath)}`;
+      return hasDirenv() ? `direnv exec . ${invocation}` : invocation;
     }
     // Quoted so a Windows path like `C:\Program Files\Git\bin\bash.exe`
     // survives the pane shell's tokenizing — unquoted, the space in "Program

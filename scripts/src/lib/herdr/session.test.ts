@@ -1,7 +1,8 @@
 // scripts/src/lib/herdr/session.test.ts
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
+import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
 import {
   ALL_SERVICES,
@@ -219,6 +220,11 @@ describe('isPortReady protocol probe (C-387)', () => {
 });
 
 describe('wrapCommand', () => {
+  // Force the non-direnv path so the shape assertions below are deterministic
+  // regardless of whether the test machine has direnv on PATH. The direnv
+  // cases are pinned explicitly in their own tests.
+  beforeEach(() => resetDirenvCache(false));
+
   it('wraps in bash with the keep-open trailer on a machine that has bash', () => {
     const wrapped = wrapCommand('bun run dev');
     expect(wrapped).toContain('bash');
@@ -252,6 +258,42 @@ describe('wrapCommand', () => {
     const wrapped = wrapCommand('bun run dev', 'posix');
     expect(wrapped).toContain('-c');
     expect(wrapped).toContain('Press Enter to close');
+  });
+
+  it('invokes the temp bash script with CMD-compatible double quotes for cmd panes', () => {
+    // cmd.exe treats single quotes as literals, so the POSIX `'bash' -c '…'`
+    // form must never reach a cmd pane. The command is a double-quoted bash
+    // path + double-quoted temp .sh path; the keep-open trailer lives inside
+    // the script file, not the command string.
+    const wrapped = wrapCommand('bun run dev', 'cmd');
+    expect(wrapped).toMatch(/^".*bash.*" ".*\.sh"$/);
+    expect(wrapped).not.toContain("'");
+    expect(wrapped).not.toContain('-c');
+    expect(wrapped).not.toContain('Press Enter to close');
+  });
+
+  it('routes the PowerShell temp-script invocation through direnv exec when direnv is available', () => {
+    resetDirenvCache(true);
+    try {
+      const wrapped = wrapCommand('bun run dev', 'powershell');
+      // `&` is only valid as the first token of a PowerShell command, so the
+      // direnv form must not carry it.
+      expect(wrapped).toMatch(/^direnv exec \. '.*bash.*' '.*\.sh'$/);
+      expect(wrapped).not.toMatch(/^& /);
+    } finally {
+      resetDirenvCache(undefined);
+    }
+  });
+
+  it('retains direnv exec for cmd panes when direnv is available', () => {
+    resetDirenvCache(true);
+    try {
+      const wrapped = wrapCommand('bun run dev', 'cmd');
+      expect(wrapped).toMatch(/^direnv exec \. ".*bash.*" ".*\.sh"$/);
+      expect(wrapped).not.toContain("'");
+    } finally {
+      resetDirenvCache(undefined);
+    }
   });
 });
 

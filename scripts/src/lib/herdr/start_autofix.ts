@@ -1,19 +1,22 @@
 // scripts/src/lib/herdr/start_autofix.ts
 //
 // Spawns a pi agent in the aikami-pi workspace configured for automated
-// fix → typecheck → test → commit/push workflows.
+// fix → typecheck → test workflows. Commit/push runs ONLY on explicit caller
+// request (`--only commit` or `commit` in `--only`) — the default pipeline
+// stops after validation and never mutates the repository.
 //
 // Model: deepseek-v4-pro (best for correctness, falls back to v4-flash if unavailable)
 // Thinking: high (non-negotiable for reliable fixes)
 //
 // Usage:
-//   bun autofix                              # fix + typecheck + commit (git-scoped, default)
-//   bun autofix --all                        # fix + typecheck + test:unit + commit (git-scoped)
-//   bun autofix --scope all                  # fix + typecheck + test + commit (entire project)
-//   bun autofix --scope all --all             # entire project + all tests
-//   bun autofix --only commit                # commit only (pre-commit hook covers fix/typecheck)
+//   bun autofix                              # fix + typecheck (git-scoped; stops after validation)
+//   bun autofix --all                        # fix + typecheck + test:unit (git-scoped; stops after validation)
+//   bun autofix --scope all                  # fix + typecheck (entire project; stops after validation)
+//   bun autofix --scope all --all             # entire project + all tests (stops after validation)
+//   bun autofix --only commit                # commit only — explicit authorization (pre-commit hook covers fix/typecheck)
 //   bun autofix --only fix,typecheck         # fix + typecheck, no commit (git-scoped)
-//   bun autofix --only test,commit           # test:unit then commit (git-scoped)
+//   bun autofix --only fix,typecheck,commit  # fix + typecheck + explicit commit (git-scoped)
+//   bun autofix --only test,commit           # test:unit then commit (git-scoped; commit explicitly authorized)
 //   bun autofix --only test:e2e              # e2e tests only (starts client + firebase)
 //   bun autofix --only test:all              # all tests including e2e
 //   bun autofix --model deepseek/deepseek-v4-flash --thinking high
@@ -62,8 +65,12 @@ type AutofixStep = 'fix' | 'typecheck' | 'test' | 'commit';
 type TestMode = 'unit' | 'e2e' | 'all';
 type ScopeMode = 'git' | 'all';
 
-const ALL_STEPS: AutofixStep[] = ['fix', 'typecheck', 'test', 'commit'];
-const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck', 'commit'];
+// `commit` is deliberately NOT in the implicit step sets: staging, committing
+// and pushing require explicit caller authorization (`--only commit`, or
+// `commit` in an explicit `--only` list). The default pipeline stops after
+// validation.
+const ALL_STEPS: AutofixStep[] = ['fix', 'typecheck', 'test'];
+const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck'];
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -376,17 +383,18 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
 
   let stepNum = 0;
   const stepsText: string[] = [];
+  const scopedFileArgs = gitFiles.map((f) => `'${f}'`).join(' ');
 
   if (doFix) {
     stepNum += 1;
     stepsText.push(
-      `## STEP ${stepNum}: \`bun run fix\``,
+      `## STEP ${stepNum}: \`bun run fix\` (git-scoped)`,
       isGitScoped
-        ? '1. Run `bun run fix` on **git-scoped files only**.'
+        ? `1. Run: \`bunx biome check --write ${scopedFileArgs} --error-on-warnings --no-errors-on-unmatched\` — the command receives ONLY the git-scoped files above, so biome cannot process anything outside that set. Files biome ignores (e.g. docs/*.md) are skipped, not lint targets.`
         : '1. Run `bun run fix` on the entire project.',
       '2. Fix errors and warnings at the source. Prefer minimal, mechanical edits.',
       '3. 🔴 **CIRCUIT BREAKER**: If you cannot fix an error after **5 attempts**, use an escape hatch (see rules below).',
-      '4. Do not proceed until `bun run fix` outputs zero errors.',
+      '4. Do not proceed until the fix command outputs zero errors AND zero warnings.',
       '',
     );
   }
@@ -394,13 +402,13 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
   if (doTypecheck) {
     stepNum += 1;
     stepsText.push(
-      `## STEP ${stepNum}: \`bun run typecheck\``,
+      `## STEP ${stepNum}: \`bun run typecheck\` (affected projects)`,
       isGitScoped
-        ? '1. Run `bun run typecheck` on **git-scoped files only**.'
+        ? '1. Run: `(git diff --name-only; git diff --name-only --cached) | bunx moon run :typecheck --affected --stdin` — the git-scoped file list is piped into moon, so ONLY projects touched by those files are type-checked.'
         : '1. Run `bun run typecheck` on the entire project.',
       '2. Fix every type error by adjusting interfaces or adding imports.',
       '3. 🔴 **CIRCUIT BREAKER**: If you cannot fix a type error after **5 attempts**, use an escape hatch (see rules below).',
-      '4. Do not proceed until `bun run typecheck` passes cleanly.',
+      '4. Do not proceed until the typecheck command passes cleanly.',
       '',
     );
   }
@@ -408,6 +416,19 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
   if (doTest) {
     stepNum += 1;
     stepsText.push(...(await buildTestPrompt(stepNum)));
+  }
+
+  if (!doCommit) {
+    // Default flow: no repository mutations. The agent validates, then
+    // stops — committing/pushing only happens on explicit caller request.
+    stepNum += 1;
+    stepsText.push(
+      `## STEP ${stepNum}: Validate and stop`,
+      '1. 🔴 **VALIDATION GATE**: Run `bun moon run :validate` on all affected projects. Do not proceed until it passes cleanly.',
+      '2. Run `git status --porcelain=v1 --untracked-files=all` and confirm every modified path is in the git-scoped set above (plus this prompt file). If any out-of-scope or protected file changed, STOP and report it — do NOT revert it (destructive git is forbidden); fix the underlying issue in source instead.',
+      '3. 🔴 **STOP**: Do NOT stage, commit, or push. Repository mutations require explicit caller authorization (`bun autofix --only commit`, or `commit` in `--only`). Report a final diff summary instead.',
+      '',
+    );
   }
 
   if (doCommit) {
@@ -435,7 +456,7 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
     '# WORKFLOW',
     stepsText.join('\n'),
     '# STRICT RULES',
-    '- **🔴 DESTRUCTIVE GIT IS FORBIDDEN**: NEVER run `git checkout --`, `git checkout .`, `git restore`, `git clean`, `git reset --hard`, or `git stash drop`. These destroy uncommitted work. The ONLY git mutations allowed are `git add`, `git commit`, and `git push origin HEAD` (commit step only).',
+    '- **🔴 DESTRUCTIVE GIT IS FORBIDDEN**: NEVER run `git checkout --`, `git checkout .`, `git restore`, `git clean`, `git reset --hard`, or `git stash drop`. These destroy uncommitted work. Git mutations (`git add`, `git commit`, `git push origin HEAD`) are ONLY allowed inside an explicitly authorized commit step (commit-only runs).',
     "- **🔴 WINDOWS CRLF CHURN — IGNORE IT**: On Windows (`core.autocrlf=true`), `bun run fix` (biome --write) rewrites files as LF while git expects CRLF, so `git status` will list MANY 'modified' files with ZERO content change. NEVER 'clean up' or revert them. To see real changes use `git diff --numstat HEAD` — entries like `0\t0` are pure line-ending churn and must be left untouched.",
     '- **🔴 PROTECT PRE-EXISTING WORK**: The working tree may contain uncommitted changes from before your run. If you ever lose or accidentally revert work, STOP and restore from the baseline snapshot (`bun run autofix:restore <timestamp>`) instead of improvising.',
     '- **Load Conventions First**: Before writing ANY code, load the `aikami-conventions` skill. Read `.context/CONTEXT.md` and `.context/index.md` before making structural changes (file moves, new packages, boundary changes).',
@@ -443,7 +464,7 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
     '- **Step-by-Step**: Re-run the verification command (`bun run fix`, `typecheck`, etc.) after EVERY file edit to confirm your fix worked.',
     '- **Never Skip**: A step must pass cleanly before you move to the next.',
     '- **No Human Intervention**: Do NOT ask questions. If you are entirely blocked, explain why and stop.',
-    '- **Forbidden Paths**: Do NOT modify .pi/, node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/.',
+    '- **Forbidden Paths**: Do NOT modify node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/. Within .pi/, ONLY the git-scoped .pi files listed above and this prompt file (`.pi/autofix/system_prompt.md`) may be modified — every other .pi/ path is protected.',
     '- **🔴 BRANCH SAFETY — NEVER `git push` alone**: Always use `git push origin HEAD`. Plain `git push` may target the wrong branch if the local branch tracks a different remote branch (e.g. `origin/main` instead of the current feature branch). `git push origin HEAD` ALWAYS pushes to the current branch. If you see an upstream mismatch error, do NOT fall back to `git push origin HEAD:main` — push to the CURRENT branch.',
     baselineDir
       ? `- **Baseline snapshot**: The pre-run working tree is saved at \`${baselineDir}\`. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run \`bun run autofix:restore <timestamp>\`.`
@@ -534,17 +555,22 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
     '',
   ];
   let stepNum = 0;
+  const scopedFileArgs = gitFiles.map((f) => `'${f}'`).join(' ');
 
   if (doFix) {
     stepNum += 1;
     lines.push(
-      `${stepNum}. \`bun run fix\` — Fix errors mechanically. Max 5 retries per error. Escape hatches allowed as last resort.`,
+      isGitScoped
+        ? `${stepNum}. Fix (git-scoped): \`bunx biome check --write ${scopedFileArgs} --error-on-warnings --no-errors-on-unmatched\` — fixes ONLY the git-scoped files. Max 5 retries per error; escape hatches allowed as last resort.`
+        : `${stepNum}. \`bun run fix\` — Fix errors mechanically. Max 5 retries per error. Escape hatches allowed as last resort.`,
     );
   }
   if (doTypecheck) {
     stepNum += 1;
     lines.push(
-      `${stepNum}. \`bun run typecheck\` — Fix types. Max 5 retries per error. Escape hatches allowed as last resort.`,
+      isGitScoped
+        ? `${stepNum}. Typecheck (affected): \`(git diff --name-only; git diff --name-only --cached) | bunx moon run :typecheck --affected --stdin\` — type-checks only the projects touched by git-scoped files. Max 5 retries per error; escape hatches allowed as last resort.`
+        : `${stepNum}. \`bun run typecheck\` — Fix types. Max 5 retries per error. Escape hatches allowed as last resort.`,
     );
   }
   if (doTest) {
@@ -558,7 +584,12 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
   if (doCommit) {
     stepNum += 1;
     lines.push(
-      `${stepNum}. Review diff → \`git add -A\` → \`git commit --no-verify -m "..."\` → \`git push origin HEAD\``,
+      `${stepNum}. Review diff → \`git add -A\` → \`git commit --no-verify -m "..."\` → \`git push origin HEAD\` (explicitly authorized commit — the caller passed \`commit\` in --only).`,
+    );
+  } else {
+    stepNum += 1;
+    lines.push(
+      `${stepNum}. 🔴 STOP after validation — do NOT stage, commit, or push. Repository mutations require explicit caller authorization (\`bun autofix --only commit\`).`,
     );
   }
 

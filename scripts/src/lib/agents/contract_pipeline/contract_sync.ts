@@ -58,8 +58,16 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { runGit } from '../git_worktree.ts';
+
+/**
+ * Normalize a repo-relative path for git by replacing `separator` with `/`.
+ * Pure (no path API) so tests can pin both platform behaviors deterministically:
+ * pass `'\\'` to simulate Windows, `'/'` to simulate POSIX.
+ */
+export const toGitPath = (relPath: string, separator: string = sep): string =>
+  relPath.split(separator).join('/');
 
 /**
  * Repo-relative path in git's format (forward slashes).
@@ -67,10 +75,12 @@ import { runGit } from '../git_worktree.ts';
  * Windows `relative()` returns backslash paths (`docs\contracts\C-400.md`),
  * which git rejects — `update-index --cacheinfo` fails with "Invalid path".
  * Every repo-relative path in this module feeds a git command, so normalize
- * once at the source. No-op on POSIX where `relative()` already uses `/`.
+ * once at the source, replacing ONLY the host platform separator (`path.sep`):
+ * on POSIX the path already uses `/`, so literal backslashes in filenames
+ * pass through untouched.
  */
 const gitRelPath = (repoRoot: string, contractPath: string): string =>
-  relative(repoRoot, contractPath).split('\\').join('/');
+  toGitPath(relative(repoRoot, contractPath));
 
 /** Git identity used for pipeline-authored contract commits. */
 const AGENT_ENV = {

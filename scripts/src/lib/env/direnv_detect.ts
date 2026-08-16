@@ -55,6 +55,15 @@ export const hasDirenv = (): boolean => {
   return _hasDirenv;
 };
 
+/**
+ * Reset the `hasDirenv` cache. Test-only: pass an explicit value to force the
+ * decision deterministically (regardless of the machine's PATH), or `undefined`
+ * to re-detect from PATH on the next call.
+ */
+export const resetDirenvCache = (value: boolean | undefined): void => {
+  _hasDirenv = value;
+};
+
 /** True when THIS process was already set up by .envrc (direnv + Nix). */
 export const isDirenvLoaded = (): boolean =>
   process.env.AIKAMI_ENV_LOADED === '1' ||

@@ -9,6 +9,7 @@ import { getScriptsEnv } from '../../env/scripts_env';
 import { findBash, posixQuote } from '../../env/which';
 import {
   bashScriptForPane,
+  detectPaneShell,
   ensureServer,
   findWorkspace,
   herdr,
@@ -55,25 +56,48 @@ type PaneListResult = {
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 /**
+ * Convert a Windows path (`C:\Users\…`) to the Git-Bash form (`/c/Users/…`)
+ * that the temp bash script understands. No-op on POSIX, where the path is
+ * already forward-slash.
+ */
+const toGitBashPath = (path: string): string => {
+  if (process.platform !== 'win32') {
+    return path;
+  }
+  return path
+    .replace(/^([A-Za-z]):[\\/]/, (_match, drive: string) => `/${drive.toLowerCase()}/`)
+    .replaceAll('\\', '/');
+};
+
+/**
  * Build a pane command that tails the pipeline log.
  *
  * Windows herdr panes (PowerShell here) have no `tail` — the raw command
  * fails with "The term 'tail' is not recognized". Route through bash (Git
  * bash ships with Git on PATH) when available, exactly like wrapCommand does
- * for service panes. On POSIX the pane shell is bash, so plain tail works.
+ * for service panes; the Windows path is converted to Git-Bash form
+ * (`/c/…`) before quoting. On POSIX the pane shell is bash, so plain tail
+ * works.
  *
- * The log path is passed as `$1` (a separate argument) instead of being
- * embedded in the `-c` script, so the outer command needs no nested quoting:
- * every quoted token is a single-quoted literal that PowerShell, Nushell and
- * bash all pass through unchanged. PowerShell panes use bashScriptForPane's
- * temp-file transport (native-arg `"` mangling corrupts `-c`).
+ * When bash is missing entirely, PowerShell panes get the native equivalent
+ * `Get-Content -LiteralPath '…' -Tail 10 -Wait` (and cmd panes get the same
+ * via `powershell -Command …`) instead of a `tail` that cannot exist there;
+ * only POSIX/Nushell panes keep plain `tail -f`.
  */
 const logTailCommand = async (paneId: string, log: string): Promise<string> => {
   const bash = findBash();
   if (bash) {
-    return bashScriptForPane(paneId, `tail -f ${posixQuote(log)}`);
+    return bashScriptForPane(paneId, `tail -f ${posixQuote(toGitBashPath(log))}`);
   }
-  return `tail -f ${shellQuote(log)}`;
+  const shell = await detectPaneShell(paneId);
+  if (shell === 'posix' || shell === 'nushell') {
+    return `tail -f ${shellQuote(log)}`;
+  }
+  const psSafeLog = log.replaceAll("'", "''");
+  if (shell === 'cmd') {
+    return `powershell -NoProfile -NonInteractive -Command "Get-Content -LiteralPath '${psSafeLog}' -Tail 10 -Wait"`;
+  }
+  return `Get-Content -LiteralPath '${psSafeLog}' -Tail 10 -Wait`;
 };
 
 const sleep = async (milliseconds: number): Promise<void> =>
