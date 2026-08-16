@@ -257,36 +257,26 @@ See `docs/contracts/PROGRESS.md` for full status of all 159+ contracts.
 >
 > **Priority order:** See `docs/TODO.md` for the canonical implementation sequence.
 
-## MVP Backlog (C-400 … C-416)
+## MVP Backlog (C-400 … C-419)
 
-Seeded 2026-08-16 from a full MVP playthrough. See
-**`docs/contracts/MVP_BACKLOG.md`** for the specifications and
-**`docs/strategy/mvp-assessment-2026-08-16.md`** for the assessment behind
-them.
+Seeded 2026-08-16 from a full MVP playthrough, merged 2026-08-17 into fewer
+files. See **`docs/contracts/MVP_BACKLOG.md`** for the original seed evidence
+and the merge rationale, and **`docs/strategy/mvp-assessment-2026-08-16.md`**
+for the assessment behind them.
 
-| Contract | Name | Priority | Authored? |
+| Contract | Name | Priority | Status |
 |---|---|---|---|
-| C-400 | Unify LPC appearance resolution; no silent slot drops | P0 | ✅ contract file |
-| C-401 | Stream dialogue narrative; collapse the two-call skill-check flow | P0 | ✅ contract file |
-| C-402 | Fix NPC/player movement deadlock | P0 | ✅ contract file |
-| C-405 | Cut world generation from the critical path | P0 | ✅ contract file |
-| C-403 | Propagate equipment changes to the LPC sprite | P1 | seed only |
-| C-404 | Ambient lighting and map readability | P1 | seed only |
-| C-406 | `/capability` correctness and polish | P1 | seed only |
-| C-407 | Dialogue UI overhaul | P1 | seed only |
-| C-408 | Persona creation: inline LPC preview and parallel generation | P1 | seed only |
-| C-409 | Shared design tokens across client, hub, site, docs | P2 | seed only |
-| C-410 | Gate dev routes out of production builds | P2 | seed only |
-| C-411 | Repository cleanup | P2 | seed only |
-| C-412 | Retire Firebase Functions into the hub's Elysia API | P2 | seed only |
-| C-413 | Reverse the Cloud Run inference plan (ADR amendment) | P2 | seed only |
-| C-414 | Standalone install script for the local stack | P2 | seed only |
-| C-415 | Character card (V2/V3) import | P3 | seed only |
-| C-416 | Merchant UI refinement | P3 | seed only |
+| C-400 | Unify LPC appearance resolution; no silent slot drops | P0 | 🏁 completed |
+| C-401 | Stream dialogue narrative; collapse the two-call skill-check flow | P0 | 🏁 completed |
+| C-402 | Fix NPC/player movement deadlock | P0 | 📝 implemented |
+| C-405 | Cut world generation from the critical path | P0 | 📝 draft |
+| C-417 | P1 polish batch (absorbs C-403, C-404, C-406, C-407, C-408) | P1 | ✅ contract file |
+| C-418 | P2 cleanup + infrastructure batch (absorbs C-409 … C-414) | P2 | ✅ contract file |
+| C-419 | P3 growth batch (absorbs C-415, C-416) | P3 | ✅ contract file |
 
 C-397 … C-399 remain reserved by `data-layer-target-architecture.md` §5.1 and
-are not MVP work. **P2 infrastructure contracts must not start before the P0
-block lands** — see `mvp-assessment-2026-08-16.md` §1.
+are not MVP work. **The P2 batch (C-418) must not start before the P0 block
+lands** — see `mvp-assessment-2026-08-16.md` §1.
 
 ## Usage
 

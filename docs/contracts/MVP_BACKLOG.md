@@ -1,62 +1,71 @@
-# MVP Contract Backlog — C-400 … C-416
+# MVP Contract Backlog — C-400 … C-419
 
 > **Source:** `docs/strategy/mvp-assessment-2026-08-16.md`
 > **ID range:** C-400 onward. C-397 … C-399 remain reserved by
 > `data-layer-target-architecture.md` §5.1 (client asset migration, member
 > submissions, social metadata) and are **not** MVP work.
 
+## 2026-08-17 merge
+
+The thirteen P1/P2/P3 seeds (C-403, C-404, C-406 … C-416) were never authored
+as separate contract files — thirteen files for backlog items this size was
+more overhead than signal. They have been merged into **three full contracts,
+one per priority tier**, re-verified against `main` as of 2026-08-17 (after
+C-400/401/402 landed, which changed some of the seeds' underlying premises):
+
+| Merged contract | Absorbs | Notes |
+|---|---|---|
+| [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md) | C-403, C-404, C-406, C-407, C-408 | Equipment→sprite sync and persona LPC preview were found already fixed/partially fixed by C-400/401 landings and re-scoped to verification/retargeting; dialogue UI item corrected to target the right component |
+| [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md) | C-409, C-410, C-411, C-412, C-413, C-414 | Repo cleanup narrowed to dangling-alias removal (target packages already deleted); Functions retirement scope grew (new controller files found); install-script framing corrected |
+| [`C-419-p3-growth-features.md`](C-419-p3-growth-features.md) | C-415, C-416 | Character-card import's reference implementation (`examples/Marinara-Engine/`) no longer exists in-repo; reframed against the public SillyTavern spec |
+
+The individual seed sections below are kept **as historical record of the
+original problem evidence** — each merged contract file documents exactly
+what changed since. Do not re-run `bun run contract` against the old
+C-403/404/406…416 IDs; they are superseded by C-417/418/419.
+
 ## How to run these
 
-**The P0 block is already authored as full contracts** — C-400, C-401, C-402,
-and C-405 exist as `TEMPLATE.md` v2.0.0 files on disk. Run them directly; the
-writer stage is unnecessary because the specification already exists:
+**C-400, C-401, C-402 are merged to `main`.** C-405 and the three merged
+contracts (C-417, C-418, C-419) exist as `TEMPLATE.md` v2.0.0 files on disk.
+Run them directly; the writer stage is unnecessary because the specification
+already exists:
 
 ```bash
-bun run contract C-400 --root --critique
+bun run contract C-405 --root --critique
 ```
 
 Path-source skips the writer, `--critique` keeps the critique stage as a
-quality gate. Each of the four has Open Questions that must be resolved before
-its status moves `draft → approved` — they are fact lookups and design calls,
-not blockers on starting.
-
-The remaining entries (C-403, C-404, C-406 … C-416) are **backlog seeds, not
-contracts**. Each carries enough problem evidence, scope, and acceptance shape
-to be expanded into a full contract. Two ways to expand one:
-
-- Author the file directly (highest fidelity — nothing is re-derived), then
-  `bun run contract C-4XX --root --critique`.
-- `bun run contract --source prompt --root`, then point the writer at this
-  file's entry plus the corresponding section of
-  `docs/strategy/mvp-assessment-2026-08-16.md`.
+quality gate. Each has Open Questions that must be resolved before its status
+moves `draft → approved` — they are fact lookups and design calls, not
+blockers on starting.
 
 > 🔴 **ID allocation caveat.** `prepareDirectSource`
 > (`scripts/src/lib/agents/contract_pipeline.ts:463-467`) computes the next ID
 > as `maxId + 1` from **contract filenames on disk** — it does not know about
-> IDs reserved in this document or in the data-layer ADR. With C-405 on disk,
-> the next `--source prompt` or `--source issue` run will allocate **C-406**,
-> colliding with the reservation below. Either author reserved files before
-> using those modes, or accept that the pipeline renumbers and update this
-> document to match. `--source todo` is unusable here: `parse_backlog.ts:70`
+> IDs reserved in this document or in the data-layer ADR. With C-419 now on
+> disk, the next `--source prompt` or `--source issue` run allocates
+> **C-420**. `--source todo` is unusable here: `parse_backlog.ts:70`
 > hardcodes `docs/TODO.md`, which no longer holds structured backlog items.
 
 ## Ordering
 
 ```
 C-400 ─┐
-C-401 ─┼─ P0 playability. Parallel; no shared files except C-400/C-403.
+C-401 ─┼─ P0 playability. Parallel; landed on main.
 C-402 ─┤
 C-405 ─┘
         ↓
-C-403 → (depends on C-400: needs the unified resolver)
-C-404, C-406, C-407, C-408 ─ P1 polish. Parallel.
+C-417 ─ P1 polish batch (absorbs C-403, C-404, C-406, C-407, C-408)
         ↓
-C-409, C-410, C-411 ─ P2 consistency + cleanup. Parallel, independent.
+C-418 ─ P2 cleanup + infrastructure batch (absorbs C-409 … C-414)
         ↓
-C-412, C-413, C-414 ─ P2 infrastructure. Deliberately last.
-        ↓
-C-415, C-416 ─ P3 growth.
+C-419 ─ P3 growth batch (absorbs C-415, C-416)
 ```
+
+Within C-417 and C-418, the absorbed features are independently mergeable —
+see each contract's own Contract Size & Split Rule section. C-418 must not
+start before the P0 block lands, matching the original seeds' ordering.
 
 **Do not start P2 infrastructure before the P0 block lands.** The ordering is
 the point of this document; see `mvp-assessment-2026-08-16.md` §1.
@@ -391,6 +400,12 @@ be fanned out.
 
 ## C-403 — Propagate equipment changes to the LPC sprite
 
+> 🔀 **Superseded — merged into [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md)
+> Feature 1** (2026-08-17). Re-verification found the equip→sprite wiring
+> already exists (predates C-400); the merged contract re-scopes this to
+> verification, not new wiring. The entry below is the original seed,
+> kept as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P1 |
@@ -419,6 +434,12 @@ survives save/load.
 
 ## C-404 — Ambient lighting and map readability
 
+> 🔀 **Superseded — merged into [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md)
+> Feature 2** (2026-08-17). Re-verification found new campaigns default to
+> noon, not night — the merged contract drops the "night-boot" framing and
+> verifies readability at both noon and midnight. The entry below is the
+> original seed, kept as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P1 |
@@ -441,6 +462,10 @@ campaign start state, with props and NPCs distinguishable from terrain.
 ---
 
 ## C-406 — `/capability` correctness and polish
+
+> 🔀 **Superseded — merged into [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md)
+> Feature 3** (2026-08-17). Re-verification confirmed this seed's core claim
+> unchanged. The entry below is the original seed, kept as historical record.
 
 | Field | Value |
 |---|---|
@@ -466,6 +491,13 @@ transition.
 ---
 
 ## C-407 — Dialogue UI overhaul
+
+> 🔀 **Superseded — merged into [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md)
+> Feature 4** (2026-08-17). Re-verification found the choice-overflow claim
+> targets the wrong component (`cyoa-choices` doesn't overflow; the
+> `suggestion-chips` row does) and the portrait-inconsistency claim is false
+> (no raw-LPC-crop path exists in this view). The merged contract corrects
+> both. The entry below is the original seed, kept as historical record.
 
 | Field | Value |
 |---|---|
@@ -500,6 +532,13 @@ size; choice emoji derived from `intentType`.
 
 ## C-408 — Persona creation: inline LPC preview and parallel generation
 
+> 🔀 **Superseded — merged into [`C-417-p1-polish-batch.md`](C-417-p1-polish-batch.md)
+> Feature 5** (2026-08-17). Re-verification found player onboarding already
+> has the inline LPC preview (shipped in C-325); the `/dev` redirect this seed
+> named actually lives in the companion/NPC "Generate Character" flow. The
+> merged contract retargets there. The entry below is the original seed, kept
+> as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P1 |
@@ -528,6 +567,10 @@ without a page change.
 
 ## C-409 — Shared design tokens across client, hub, site, docs
 
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature A** (2026-08-17). Re-verification confirmed this seed unchanged.
+> The entry below is the original seed, kept as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P2 — one day of work |
@@ -553,6 +596,10 @@ colours in light and dark; no app declares its own theme colours.
 
 ## C-410 — Gate dev routes out of production builds
 
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature B** (2026-08-17). Re-verification confirmed this seed unchanged.
+> The entry below is the original seed, kept as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P2 |
@@ -575,6 +622,13 @@ suite passes unchanged against a test build.
 
 ## C-411 — Repository cleanup
 
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature C** (2026-08-17). Re-verification found `packages/frontend/dataconnect`
+> and `packages/frontend/firestore` already deleted (C-385/C-386, predating
+> this seed) — the merged contract narrows scope to removing dangling alias
+> references only. The entry below is the original seed, kept as historical
+> record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P2 — small, unambiguous, safe |
@@ -595,6 +649,13 @@ to the deleted packages remains; `PROGRESS.md` reflects `main`.
 ---
 
 ## C-412 — Retire Firebase Functions into the hub's Elysia API
+
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature D** (2026-08-17). Re-verification found the target directory has
+> grown to 9 files/444 lines (two new surfaces not covered by this seed:
+> `api/discord_interactions.ts` and three Firestore trigger stubs) — the
+> merged contract adds open questions to resolve their disposition. The entry
+> below is the original seed, kept as historical record.
 
 | Field | Value |
 |---|---|
@@ -624,6 +685,13 @@ correspondingly simpler.
 
 ## C-413 — Reverse the Cloud Run inference plan (ADR amendment)
 
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature E** (2026-08-17). Re-verification found `docs/strategy/deferred.md`
+> already carries a `🔴 Under revision (C-413)` marker for this exact change —
+> the merged contract resolves that marker (now pointing at C-418) rather than
+> writing a fresh edit. The entry below is the original seed, kept as
+> historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P2 — a decision and a document, not a build |
@@ -650,6 +718,13 @@ work" to "rejected, see ADR".
 ---
 
 ## C-414 — Standalone install script for the local stack
+
+> 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
+> Feature F** (2026-08-17). Re-verification found `stack init` already
+> handles hardware detection and `.env` generation smoothly — the merged
+> contract corrects the framing to focus specifically on the missing
+> one-command `curl | sh` installer, not general setup friction. The entry
+> below is the original seed, kept as historical record.
 
 | Field | Value |
 |---|---|
@@ -679,6 +754,13 @@ one-liner produces a running stack; CI exercises it.
 
 ## C-415 — Character card (V2/V3) import
 
+> 🔀 **Superseded — merged into [`C-419-p3-growth-features.md`](C-419-p3-growth-features.md)
+> Feature A** (2026-08-17). Re-verification found the cited reference
+> implementation (`examples/Marinara-Engine/`) no longer exists anywhere in
+> this repository — the merged contract reframes this against the public
+> SillyTavern V2/V3 spec directly. The entry below is the original seed, kept
+> as historical record.
+
 | Field | Value |
 |---|---|
 | **Priority** | P3 — highest-leverage growth item in this backlog |
@@ -702,6 +784,11 @@ inference step. That step is the interesting part of this contract.
 ---
 
 ## C-416 — Merchant UI refinement
+
+> 🔀 **Superseded — merged into [`C-419-p3-growth-features.md`](C-419-p3-growth-features.md)
+> Feature B** (2026-08-17). Re-verification confirmed this seed unchanged,
+> line numbers updated. The entry below is the original seed, kept as
+> historical record.
 
 | Field | Value |
 |---|---|
