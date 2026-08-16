@@ -10,10 +10,12 @@ import {
   assertNoRunningServiceConflicts,
   buildServiceCommand,
   expandServices,
+  isKillableProcess,
   isPortReady,
   KNOWN_SERVICES,
   normalizeService,
   parseHerdrStatus,
+  portsToCleanupForService,
   resolveReadyPort,
   SERVICE_DEFS,
   serviceEnvArgs,
@@ -196,6 +198,60 @@ describe('postgres herdr service (C-387)', () => {
 
   it('includes postgres among the known/listed services', () => {
     expect(KNOWN_SERVICES).toContain('postgres');
+  });
+});
+
+describe('isKillableProcess — Firebase emulator JVM cleanup on Windows', () => {
+  // 🔴 `firestack emulate` spawns Firestore/Pub-Sub/Storage-rules as separate
+  // `java.exe` processes, not children of the top-level `firebase`/`node`
+  // wrapper — confirmed on a live Windows machine via their actual command
+  // lines. `herdr tab close` only reliably reaps that top-level process (the
+  // JVMs aren't in the same Windows Job Object), so a stop/restart cycle
+  // left orphaned java.exe processes still holding their ports, which then
+  // fought the next start attempt (or, reproduced directly, destabilized a
+  // concurrently-running contract's Firebase instance through Firebase's own
+  // shared Hub/ADC machinery). `java` must be on the allowlist so killPort's
+  // cleanup sweep is actually allowed to kill them.
+  it('allows killing java (Firebase emulator JVM sub-processes)', () => {
+    expect(isKillableProcess('java')).toBe(true);
+    expect(isKillableProcess('java.exe')).toBe(true);
+  });
+
+  it('still refuses an unrelated bystander process', () => {
+    expect(isKillableProcess('explorer.exe')).toBe(false);
+    expect(isKillableProcess('chrome.exe')).toBe(false);
+  });
+});
+
+describe('portsToCleanupForService', () => {
+  it('sweeps every Firebase emulator port, not just auth, for the firebase service', () => {
+    const offset = 1930;
+    const ports = portsToCleanupForService('firebase', 'emulator', offset);
+    expect(ports).toEqual(
+      expect.arrayContaining([
+        9098 + offset, // auth
+        8081 + offset, // firestore
+        5003 + offset, // functions
+        5002 + offset, // hosting
+        8086 + offset, // pubsub
+        9198 + offset, // storage
+      ]),
+    );
+    expect(ports).toHaveLength(6);
+  });
+
+  it('firebase has no ports to clean up outside emulator mode (no local emulators there)', () => {
+    expect(portsToCleanupForService('firebase', 'staging', 0)).toEqual([]);
+    expect(portsToCleanupForService('firebase', 'production', 0)).toEqual([]);
+  });
+
+  it('a single-process service only sweeps its own readyPort', () => {
+    const offset = 1930;
+    expect(portsToCleanupForService('client', 'emulator', offset)).toEqual([5274 + offset]);
+  });
+
+  it('a service with no readyPort (e.g. tauri) has nothing to sweep', () => {
+    expect(portsToCleanupForService('tauri', 'emulator', 0)).toEqual([]);
   });
 });
 

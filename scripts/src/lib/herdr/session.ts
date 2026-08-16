@@ -48,7 +48,11 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
+import {
+  contractPortOffset,
+  OFFSETTABLE_PORTS,
+  PORTS,
+} from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
 // Re-exported for back-compat — the canonical definition now lives in
 // ../env/mode (single source of truth for mode resolution).
@@ -784,8 +788,13 @@ const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
 /**
  * Process names we're willing to kill to free a port — our own dev servers.
  * Anything else holding the port is someone else's and stays untouched.
+ *
+ * `java` covers the Firebase emulator's JVM sub-processes (Firestore,
+ * Pub/Sub, Storage rules) — see the KNOWN GAP note on stopServices for why
+ * these specifically need this allowlist entry, not just the `firebase`
+ * (top-level Node wrapper) one.
  */
-const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase'];
+const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase', 'java'];
 
 /** True when a port holder is one of our dev servers rather than a bystander. */
 export const isKillableProcess = (name: string): boolean =>
@@ -1021,9 +1030,28 @@ export const SHELL_NAMES = new Set([
   'cmd',
 ]);
 
-/** True when a pane's foreground process name is just an idle shell. */
-export const isIdleShellName = (name: string): boolean =>
-  SHELL_NAMES.has(name.toLowerCase().replace(/\.exe$/, ''));
+/**
+ * True when a pane's foreground process name is just an idle shell.
+ *
+ * 🔴 On Windows, `bash` is excluded even though it's in SHELL_NAMES. herdr
+ * never natively defaults a Windows pane to bash (Nushell/pwsh/cmd only —
+ * see SHELL_NAMES above); every bash.exe seen on a Windows pane got there
+ * via wrapCommand/bashScriptForPane's `& 'bash.exe' 'script.sh'` wrapper,
+ * which stays foreground for the wrapped command's ENTIRE lifetime (the
+ * trailer's `read` only runs after it exits). Treating that as idle made
+ * assessServicePane misread an actively-running, healthy service (vite,
+ * firebase) as crashed, triggering a restart that killed it mid-run —
+ * confirmed on a live Windows run where a healthy `client` (vite) pane got
+ * silently restarted and lost its listening port. POSIX panes are
+ * unaffected: there, bash genuinely is the pane's native idle shell.
+ */
+export const isIdleShellName = (name: string): boolean => {
+  const normalized = name.toLowerCase().replace(/\.exe$/, '');
+  if (process.platform === 'win32' && normalized === 'bash') {
+    return false;
+  }
+  return SHELL_NAMES.has(normalized);
+};
 
 /**
  * How old (seconds) a foreground process must be before a closed port counts
@@ -1046,20 +1074,47 @@ type PaneProcessInfo = {
  *                CRASH_GRACE_SECONDS (wedged).
  *  - 'booting' → port not open yet but the process is young (still starting).
  *  - 'healthy' → port open, or no port defined and a real process is running.
+ *
+ * 🔴 The port check runs FIRST and short-circuits to 'healthy' when defined
+ * — trust it ahead of process-info entirely, not just as a tiebreaker.
+ * `pane process-info` on a Windows PowerShell pane only ever reports the
+ * pane's own top-level shell — it cannot see past `wrapCommand`'s `&
+ * 'bash.exe' 'script.sh'` wrapper into bash/bun/vite/node underneath, even
+ * while they're actively running (confirmed via the real Win32 parent
+ * chain: powershell.exe → bash.exe → bash.exe → bun.exe → vite.exe →
+ * node.exe, all alive, with `foreground_processes` reporting only
+ * powershell.exe). So on win32 process-info can never distinguish "still
+ * booting" from "actually crashed" for a port-based service — treating
+ * `real.length === 0` as instant proof of a crash (the POSIX-only meaning,
+ * where the wrapped command genuinely is the reported foreground process)
+ * made every healthy Windows service register as crashed the moment its
+ * port wasn't open yet, which restarted (killed) it. A missed real Windows
+ * crash — falling back to 'booting' forever, requiring a manual `bun
+ * herdr:start <service>` — is a far cheaper failure mode than that restart
+ * storm, so win32 skips the process-info crash signal for port-based
+ * services entirely once the port check above has already failed. No-port
+ * services (tauri, preview-*) have no such fallback signal to prefer — they
+ * keep the process-info check on every platform, blind spot and all, since
+ * a real early exit (e.g. tauri with no compiled binary) genuinely does
+ * need to be reported and there's nothing else to check it against.
  */
 const assessServicePane = async (
   paneId: string,
   port?: number,
   readyCheck: ReadyCheck = 'http',
 ): Promise<'crashed' | 'booting' | 'healthy'> => {
+  if (port !== undefined && (await isPortReady(port, readyCheck))) {
+    return 'healthy';
+  }
+  if (port !== undefined && process.platform === 'win32') {
+    return 'booting';
+  }
+
   const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
   const procs = r?.result?.process_info?.foreground_processes;
 
-  // process-info unavailable — fall back to the port only, never restart on missing data
+  // process-info unavailable — never restart on missing data
   if (!procs) {
-    if (port !== undefined && (await isPortReady(port, readyCheck))) {
-      return 'healthy';
-    }
     return 'booting';
   }
 
@@ -1069,7 +1124,7 @@ const assessServicePane = async (
     return 'crashed';
   }
 
-  if (port !== undefined && !(await isPortReady(port, readyCheck))) {
+  if (port !== undefined) {
     const pid = real[0]?.pid;
     if (pid !== undefined) {
       const age = await processAgeSeconds(pid);
@@ -1428,12 +1483,48 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
 /**
  * Stop services by closing their herdr tabs or the whole workspace.
  */
+/**
+ * Every port a service's stop-cleanup sweep should check, not just the
+ * single port used for its ready-check poll.
+ *
+ * Needed for `firebase` specifically: `firestack emulate` spawns Firestore,
+ * Pub/Sub, and Storage-rules as separate JVM child processes (confirmed on
+ * a live Windows machine via their actual command lines — e.g.
+ * `java -jar cloud-firestore-emulator-*.jar --port 8081`), not as
+ * subprocesses of the top-level `firebase`/`node` process herdr's `tab
+ * close` reaps. On Windows those JVMs are not in the same Job Object as
+ * their parent (the same class of issue documented on wrapCommand/PR #153's
+ * launcher-pane fix), so closing the tab kills the wrapper but can leave
+ * `java.exe` orphans still bound to their ports — the next `start` for the
+ * same service then hits EADDRINUSE against its own predecessor, or (worse,
+ * reproduced directly) two DIFFERENT contract-scoped instances' JVMs on
+ * unrelated ports interact through Firebase's shared Emulator Hub/ADC
+ * machinery in ways that intermittently take down a healthy instance's Auth
+ * emulator — see fix/emulator-project-id-offset's PR body. Sweeping every
+ * emulator port on stop, not just `auth`, is the mitigation available from
+ * this repo's side; every other service here is a single process on a
+ * single port, so its readyPort alone is already enough.
+ */
+export const portsToCleanupForService = (
+  serviceKey: DevService,
+  mode: AikamiMode,
+  offset: number,
+): number[] => {
+  if (serviceKey === 'firebase' && mode === 'emulator') {
+    const keys = ['auth', 'firestore', 'functions', 'hosting', 'pubsub', 'storage'] as const;
+    return keys.map((key) => OFFSETTABLE_PORTS[key] + offset);
+  }
+  const port = resolveReadyPort(serviceKey, mode, offset);
+  return port === undefined ? [] : [port];
+};
+
 export const stopServices = async (config: {
   mode: AikamiMode;
   services: DevService[] | 'all';
 }): Promise<void> => {
   const { mode, services } = config;
   const workspaceLabel = resolveSessionName(mode);
+  const offset = contractPortOffset(currentContractId());
 
   const workspaceId = await findWorkspace(workspaceLabel);
   if (!workspaceId) {
@@ -1448,15 +1539,21 @@ export const stopServices = async (config: {
     return;
   }
 
-  const targetNames = targets.map((s) => SERVICE_DEFS[s].name);
-
   // Stop tabs individually. Never nuke the workspace — contract-scoped
   // sessions only contain the services we started, so the "all tabs match"
   // optimization would fire on every restart and destroy the workspace.
-  for (const name of targetNames) {
+  for (const service of targets) {
+    const name = SERVICE_DEFS[service].name;
     const tabId = await findTab(workspaceId, name);
     if (tabId) {
       await herdr(['tab', 'close', tabId]);
+      // KNOWN GAP (Windows): `tab close` only reliably reaps the pane's
+      // top-level process — see portsToCleanupForService's doc. Sweep every
+      // port this service could have orphaned a JVM/process on, not just
+      // the tab itself, so a follow-up `start` never fights its own ghost.
+      for (const port of portsToCleanupForService(service, mode, offset)) {
+        await killPort(port);
+      }
       console.log(`  ✓ Stopped ${name}`);
     } else {
       console.log(`  ○ ${name} not running`);
@@ -1493,11 +1590,13 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
   }
 
   // Force-kill any stale processes on the target ports so the cooldown
-  // isn't defeated by orphaned Vite/uwsgi processes from prior runs. Uses
-  // this workspace's own offset — never touches another contract's ports.
+  // isn't defeated by orphaned processes from prior runs — e.g. Firebase's
+  // Firestore/Pub-Sub/Storage JVMs, which stopServices above only reaches
+  // when a workspace already existed (see portsToCleanupForService's doc).
+  // Uses this workspace's own offset — never touches another contract's
+  // ports.
   for (const service of services) {
-    const port = resolveReadyPort(service, mode, offset);
-    if (port !== undefined) {
+    for (const port of portsToCleanupForService(service, mode, offset)) {
       await killPort(port);
     }
   }
