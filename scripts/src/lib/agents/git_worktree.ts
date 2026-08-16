@@ -46,10 +46,14 @@ export const runGit = (
     cwd?: string;
     env?: Record<string, string>;
     timeout?: number;
+    // Windows: execSync runs via cmd.exe — without this every git call
+    // flashes a console window. No-op on POSIX.
+    windowsHide?: boolean;
   } = {
     encoding: 'utf-8' as const,
     stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
     cwd: options?.cwd,
+    windowsHide: true,
   };
   if (options?.timeoutMs !== undefined) {
     opts.timeout = options.timeoutMs;

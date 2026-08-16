@@ -555,6 +555,8 @@ export CONTRACT_PIPELINE_WORKTREE=1
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: checkoutPath,
       timeout: 5000,
+      // Windows: hide the cmd.exe console window this spawn would otherwise flash.
+      windowsHide: true,
     });
   } catch {
     // direnv may not be installed — not fatal. The .envrc stays in place
@@ -613,6 +615,8 @@ export CONTRACT_PIPELINE_WORKTREE=1
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: timeoutMs,
+        // Windows: hide the cmd.exe console window (no-op on POSIX).
+        windowsHide: true,
       });
       installed = true;
     } catch {
@@ -729,6 +733,8 @@ export const removeWorktree = async (
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 30_000,
+          // Windows: hide the cmd.exe console window (no-op on POSIX).
+          windowsHide: true,
         });
         checkoutRemoved = true;
       } catch (rmErr: unknown) {
@@ -871,6 +877,8 @@ export const openPullRequest = async (
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 30_000,
+    // Windows: hide the cmd.exe console window (no-op on POSIX).
+    windowsHide: true,
   }).trim();
   const m = result.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/);
   return { prUrl: m?.[0] ?? result, prNumber: m?.[1] ?? '' };

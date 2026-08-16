@@ -25,6 +25,7 @@ import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { resolveAikamiMode } from '../env/mode';
 import type { AikamiMode } from './session.ts';
 import {
   buildSessionName,
@@ -35,7 +36,7 @@ import {
   herdrJson,
   isPortReady,
   startServices,
-  wrapCommand,
+  wrapCommandForPane,
 } from './session.ts';
 
 const execAsync = promisify(exec);
@@ -288,7 +289,7 @@ const ensureService = async (
   readyCheck: (port: number, timeout: number) => Promise<boolean>,
   timeoutSec: number,
 ): Promise<void> => {
-  const mode: AikamiMode = (process.env.AIKAMI_MODE as AikamiMode) ?? 'emulator';
+  const mode: AikamiMode = resolveAikamiMode();
   const wsLabel = buildSessionName(mode);
   const wsId = await findWorkspace(wsLabel);
 
@@ -675,7 +676,7 @@ if (existingWsId) {
       promptPath,
     ].join(' ');
 
-    await herdr(['pane', 'run', paneId, wrapCommand(command)]);
+    await herdr(['pane', 'run', paneId, await wrapCommandForPane(paneId, command)]);
     ok(`autofix agent starting in ${PI_WORKSPACE}/${AUTOFIX_TAB}`);
 
     await new Promise((r) => setTimeout(r, 3000));
@@ -718,7 +719,7 @@ if (existingWsId) {
   ].join(' ');
 
   await herdr(['tab', 'rename', `${wsId}:1`, AUTOFIX_TAB]);
-  await herdr(['pane', 'run', rootPaneId, wrapCommand(command)]);
+  await herdr(['pane', 'run', rootPaneId, await wrapCommandForPane(rootPaneId, command)]);
   ok(`autofix agent running in ${PI_WORKSPACE}/${AUTOFIX_TAB}`);
 
   await new Promise((r) => setTimeout(r, 3000));

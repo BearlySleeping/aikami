@@ -237,6 +237,22 @@ describe('wrapCommand', () => {
     const wrapped = wrapCommand(`echo it's fine`);
     expect(wrapped).toContain(String.raw`it'\''s`);
   });
+
+  it('emits a PowerShell `&` call-operator invocation for PowerShell panes', () => {
+    // PowerShell rejects the POSIX `'bash' -c '…'` form (parse error at `-c`),
+    // so a PowerShell pane gets `& 'bash' '<temp-script>'` instead. The script
+    // lives in a file to dodge PowerShell's native-arg `"` mangling.
+    const wrapped = wrapCommand('bun run dev', 'powershell');
+    expect(wrapped).toMatch(/^& '.*bash.*' '.*\.sh'$/);
+    expect(wrapped).not.toMatch(/' .* -c /);
+    expect(wrapped).not.toContain('Press Enter to close');
+  });
+
+  it('keeps the POSIX -c form for posix panes', () => {
+    const wrapped = wrapCommand('bun run dev', 'posix');
+    expect(wrapped).toContain('-c');
+    expect(wrapped).toContain('Press Enter to close');
+  });
 });
 
 describe('posixQuote', () => {

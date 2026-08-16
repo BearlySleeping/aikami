@@ -190,6 +190,8 @@ const gh = (args: string[], options?: { timeout?: number }): string => {
     encoding: 'utf-8',
     timeout: options?.timeout ?? 30_000,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Windows: hide the cmd.exe console window this spawn would otherwise flash.
+    windowsHide: true,
   });
   return result.trim();
 };
@@ -266,6 +268,8 @@ const handleIssueSource = (target: string): string => {
     const remote = execSync('git remote get-url origin', {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the cmd.exe console window (no-op on POSIX).
+      windowsHide: true,
     }).trim();
     const match = remote.match(/github\.com[/:]([^/]+)\//);
     if (match?.[1]) {
@@ -518,6 +522,8 @@ const detectDirty = (): boolean => {
     const status = execSync('git status --porcelain', {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the cmd.exe console window (no-op on POSIX).
+      windowsHide: true,
     }).trim();
     return status.split('\n').some((line) => line.length > 2 && !line.startsWith('??'));
   } catch {
@@ -612,6 +618,8 @@ const setupRootBranch = (options: {
     currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the cmd.exe console window (no-op on POSIX).
+      windowsHide: true,
     }).trim();
   } catch {
     // not fatal
@@ -628,6 +636,8 @@ const setupRootBranch = (options: {
     execFileSync('git', ['rev-parse', '--verify', branchName], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the console window (no-op on POSIX).
+      windowsHide: true,
     });
     branchExists = true;
   } catch {
@@ -645,6 +655,8 @@ const setupRootBranch = (options: {
     execFileSync('git', args, {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the console window (no-op on POSIX).
+      windowsHide: true,
     });
     console.log(`✅ Now on branch \`${branchName}\`.`);
 
@@ -723,6 +735,9 @@ const launchBackground = async (options: {
       detached: true,
       stdio: ['ignore', descriptor, descriptor],
       env: process.env,
+      // Windows: hide the background child's console window — without this
+      // every `bun run contract` flashes a popup for the whole pipeline run.
+      windowsHide: true,
     },
   );
   child.unref();
@@ -774,6 +789,8 @@ const launchBackground = async (options: {
   if (ready.workspaceId) {
     const focus = spawn('herdr', ['workspace', 'focus', ready.workspaceId], {
       stdio: 'ignore',
+      // Windows: hide the focus call's console window (no-op on POSIX).
+      windowsHide: true,
     });
     await new Promise<void>((resolve) => focus.once('close', () => resolve()));
   }

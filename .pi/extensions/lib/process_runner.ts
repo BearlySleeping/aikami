@@ -182,6 +182,10 @@ export function startCommand(
     stdio: ['pipe', 'pipe', 'pipe'],
     // Own process group (via setsid) so the whole tree can be killed by -pid.
     detached: true,
+    // Windows: without this, spawning console apps (herdr, bun, node) opens a
+    // visible console window per call — a flash-popup storm under polling.
+    // No-op on POSIX.
+    windowsHide: true,
   });
 
   // Close stdin immediately — prevents CLI tools from hanging on prompts.
@@ -324,6 +328,8 @@ export function runSync(
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     encoding: 'utf8',
+    // Windows: hide the console window this spawn would otherwise flash.
+    windowsHide: true,
   });
 
   const stdout = (result.stdout ?? '').toString().trim();

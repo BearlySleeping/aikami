@@ -470,6 +470,8 @@ const syncMainOnMerge = (repoRoot: string): void => {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: repoRoot,
       timeout: 10_000,
+      // Windows: hide the cmd.exe console window (no-op on POSIX).
+      windowsHide: true,
     }).trim();
   } catch {
     // status failed — fall through and let the pull report the real problem.
@@ -491,6 +493,8 @@ const syncMainOnMerge = (repoRoot: string): void => {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: repoRoot,
       timeout: 30000,
+      // Windows: hide the cmd.exe console window (no-op on POSIX).
+      windowsHide: true,
     });
     console.log('\n📥 Pulled latest main\n');
   } catch (e: unknown) {
@@ -1265,6 +1269,8 @@ export const runContractPipeline = async (options: {
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 15000,
+                  // Windows: hide the cmd.exe console window (no-op on POSIX).
+                  windowsHide: true,
                 });
                 console.log(`📝 PR converted to Draft: ${degradedPrUrl}\n`);
               } catch {
@@ -1392,6 +1398,8 @@ export const runContractPipeline = async (options: {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 cwd: options.repoRoot,
                 timeout: 10000,
+                // Windows: hide the cmd.exe console window (no-op on POSIX).
+                windowsHide: true,
               },
             ).trim();
             if (r) {
@@ -1419,6 +1427,8 @@ export const runContractPipeline = async (options: {
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 15000,
+                  // Windows: hide the cmd.exe console window (no-op on POSIX).
+                  windowsHide: true,
                 });
               } catch {}
               console.log(`\n✅ PR ready: ${prUrl}\n`);
@@ -1438,6 +1448,8 @@ export const runContractPipeline = async (options: {
                     stdio: ['pipe', 'pipe', 'pipe'],
                     cwd: options.repoRoot,
                     timeout: 15000,
+                    // Windows: hide the cmd.exe console window (no-op on POSIX).
+                    windowsHide: true,
                   });
                 } catch {}
                 execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
@@ -1445,6 +1457,8 @@ export const runContractPipeline = async (options: {
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 60000,
+                  // Windows: hide the console window (no-op on POSIX).
+                  windowsHide: true,
                 });
                 syncMainOnMerge(options.repoRoot);
                 manifest = transition({ manifest, next: 'merged' });
@@ -1477,6 +1491,8 @@ export const runContractPipeline = async (options: {
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 15000,
+                  // Windows: hide the cmd.exe console window (no-op on POSIX).
+                  windowsHide: true,
                 });
               } catch {}
             }
@@ -1501,6 +1517,8 @@ export const runContractPipeline = async (options: {
               stdio: ['pipe', 'pipe', 'pipe'],
               cwd: options.repoRoot,
               timeout: 15000,
+              // Windows: hide the cmd.exe console window (no-op on POSIX).
+              windowsHide: true,
             });
           } catch {}
           console.log(`\n✅ PR ready for review: ${prUrl}\n`);
@@ -1527,6 +1545,8 @@ export const runContractPipeline = async (options: {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 cwd: options.repoRoot,
                 timeout: 15000,
+                // Windows: hide the cmd.exe console window (no-op on POSIX).
+                windowsHide: true,
               });
             } catch {}
             execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
@@ -1534,6 +1554,8 @@ export const runContractPipeline = async (options: {
               stdio: ['pipe', 'pipe', 'pipe'],
               cwd: options.repoRoot,
               timeout: 60000,
+              // Windows: hide the console window (no-op on POSIX).
+              windowsHide: true,
             });
             syncMainOnMerge(options.repoRoot);
             manifest = transition({ manifest, next: 'merged' });
@@ -1569,6 +1591,8 @@ export const runContractPipeline = async (options: {
             stdio: ['pipe', 'pipe', 'pipe'],
             cwd: options.repoRoot,
             timeout: 15000,
+            // Windows: hide the cmd.exe console window (no-op on POSIX).
+            windowsHide: true,
           });
           manifest.blockedReason = decision.summary;
           manifest = transition({ manifest, next: 'blocked' });

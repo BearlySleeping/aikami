@@ -1,6 +1,10 @@
 // .pi/extensions/firebase_tools.ts
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+// Direnv env vars (set by .envrc / scripts/direnv/) — always available:
+//   AIKAMI_MODE          — emulator | staging | production
+//   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
+import { isAikamiMode, resolveAikamiMode } from '../../scripts/src/lib/env/mode';
 import {
   type AikamiMode,
   isPortReady,
@@ -8,9 +12,6 @@ import {
   startServices,
   stopServices,
 } from '../../scripts/src/lib/herdr/session';
-// Direnv env vars (set by .envrc / scripts/direnv/) — always available:
-//   AIKAMI_MODE          — emulator | staging | production
-//   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
 import { smartTruncate } from './lib/output_filter';
 import { runCommand } from './lib/process_runner.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
@@ -54,7 +55,7 @@ export default function (pi: ExtensionAPI) {
         }),
         async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
           // Resolve mode: explicit param > direnv env > "emulator" default
-          const mode = params.env ?? (process.env.AIKAMI_MODE as Mode | undefined) ?? 'emulator';
+          const mode: AikamiMode = isAikamiMode(params.env) ? params.env : resolveAikamiMode();
           if (mode === 'emulator') {
             const result = await runCommand(
               'bun',

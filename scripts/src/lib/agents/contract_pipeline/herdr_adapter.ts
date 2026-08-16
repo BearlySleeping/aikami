@@ -4,8 +4,11 @@
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
+import { resolveAikamiMode } from '../../env/mode';
 import { getScriptsEnv } from '../../env/scripts_env';
+import { findBash, posixQuote } from '../../env/which';
 import {
+  bashScriptForPane,
   ensureServer,
   findWorkspace,
   herdr,
@@ -50,6 +53,28 @@ type PaneListResult = {
 };
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+/**
+ * Build a pane command that tails the pipeline log.
+ *
+ * Windows herdr panes (PowerShell here) have no `tail` — the raw command
+ * fails with "The term 'tail' is not recognized". Route through bash (Git
+ * bash ships with Git on PATH) when available, exactly like wrapCommand does
+ * for service panes. On POSIX the pane shell is bash, so plain tail works.
+ *
+ * The log path is passed as `$1` (a separate argument) instead of being
+ * embedded in the `-c` script, so the outer command needs no nested quoting:
+ * every quoted token is a single-quoted literal that PowerShell, Nushell and
+ * bash all pass through unchanged. PowerShell panes use bashScriptForPane's
+ * temp-file transport (native-arg `"` mangling corrupts `-c`).
+ */
+const logTailCommand = async (paneId: string, log: string): Promise<string> => {
+  const bash = findBash();
+  if (bash) {
+    return bashScriptForPane(paneId, `tail -f ${posixQuote(log)}`);
+  }
+  return `tail -f ${shellQuote(log)}`;
+};
 
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -243,7 +268,7 @@ export const buildWorkspaceLabel = (options: {
   contractId: string;
   rootMode?: boolean;
 }): string => {
-  const mode = (process.env.AIKAMI_MODE || 'emulator') as string;
+  const mode = resolveAikamiMode();
   return options.rootMode ? `aikami-${mode}` : `aikami-contract-${options.contractId}`;
 };
 
@@ -360,7 +385,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         if (!active) {
           await runPaneCommand({
             paneId: pipelinePane.pane_id,
-            command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+            command: await logTailCommand(
+              pipelinePane.pane_id,
+              logPath({ runId: this._runId, cwd: this._repoRoot }),
+            ),
           });
         }
         if (!this._rootMode) {
@@ -386,7 +414,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       this._pipelinePaneId = recovered.result.root_pane.pane_id;
       await runPaneCommand({
         paneId: this._pipelinePaneId,
-        command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+        command: await logTailCommand(
+          this._pipelinePaneId,
+          logPath({ runId: this._runId, cwd: this._repoRoot }),
+        ),
       });
       if (!this._rootMode) {
         await this._provisionHerdrWorktree(existingWorkspaceId);
@@ -413,7 +444,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       await runHerdr(['tab', 'rename', result.result.tab.tab_id, 'pipeline']);
       await runPaneCommand({
         paneId: this._pipelinePaneId,
-        command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+        command: await logTailCommand(
+          this._pipelinePaneId,
+          logPath({ runId: this._runId, cwd: this._repoRoot }),
+        ),
       });
       return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
     }
@@ -463,7 +497,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runHerdr(['tab', 'rename', w.tabId || `${this._workspaceId}:1`, 'pipeline']);
     await runPaneCommand({
       paneId: this._pipelinePaneId,
-      command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+      command: await logTailCommand(
+        this._pipelinePaneId,
+        logPath({ runId: this._runId, cwd: this._repoRoot }),
+      ),
     });
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
@@ -536,7 +573,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
             this._pipelinePaneId = tab.result.root_pane.pane_id;
             await runPaneCommand({
               paneId: this._pipelinePaneId,
-              command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+              command: await logTailCommand(
+                this._pipelinePaneId,
+                logPath({ runId: this._runId, cwd: this._repoRoot }),
+              ),
             });
           }
         } else {

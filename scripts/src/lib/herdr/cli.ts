@@ -9,8 +9,10 @@
 //
 //   <services> = comma-separated: firebase,client,voice,image,text  or  all
 //
-// Mode defaults to AIKAMI_MODE env var, required if not set.
+// Mode defaults to AIKAMI_MODE env var, falling back to emulator when
+// neither is set.
 
+import { isAikamiMode, resolveAikamiMode } from '../env/mode';
 import {
   type AikamiMode,
   type DevService,
@@ -57,23 +59,17 @@ export const resolveMode = (args: string[]): AikamiMode => {
   const modeIndex = args.indexOf('--mode');
   if (modeIndex !== -1 && args[modeIndex + 1]) {
     const val = args[modeIndex + 1];
-    if (!VALID_MODES.includes(val as AikamiMode)) {
+    if (!isAikamiMode(val)) {
       console.error(`Invalid mode: ${val}. Valid: ${VALID_MODES.join(', ')}`);
       process.exit(1);
     }
-    return val as AikamiMode;
+    return val;
   }
 
-  const envMode = process.env.AIKAMI_MODE;
-  if (envMode && VALID_MODES.includes(envMode as AikamiMode)) {
-    return envMode as AikamiMode;
-  }
-
-  console.error(
-    `No mode specified. Set AIKAMI_MODE env var or use --mode <mode>.\n` +
-      `Valid modes: ${VALID_MODES.join(', ')}`,
-  );
-  process.exit(1);
+  // No --mode: fall back to AIKAMI_MODE env, defaulting to the local
+  // emulator. Staging/production require credentials that fail fast anyway,
+  // so an accidental default can't hit the cloud.
+  return resolveAikamiMode();
 };
 
 export const parseServiceArgs = (args: string[]): ServiceArgs => {
@@ -82,7 +78,7 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
     console.error(
       'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force] [--force-ports]\n' +
         '  services:      firebase, client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
-        '  mode:          emulator | staging | production (default: $AIKAMI_MODE)\n' +
+        '  mode:          emulator | staging | production (default: emulator)\n' +
         '  --join:        attach to session after starting\n' +
         '  --force:       kill and recreate if workspace already exists\n' +
         '  --force-ports: kill whatever is bound to each target port first (e.g. a leftover process from a crashed prior run) instead of failing with EADDRINUSE\n',
