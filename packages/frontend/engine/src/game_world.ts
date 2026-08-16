@@ -28,6 +28,7 @@ import { ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
+import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
@@ -197,6 +198,13 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    * logged — never the old global TextureCache lookup.
    */
   propFrameResolver?: PropTextureResolver;
+  /**
+   * Projected LPC slot catalog (C-400) — the six engine slots with their
+   * variant asset IDs, forwarded to the simulation worker so the worker's
+   * recipe resolver produces the SAME slot/assetId sequences as the main
+   * thread. Build via {@link projectLpcCatalog} from the generated catalog.
+   */
+  lpcCatalog?: readonly LpcSlotCatalog[];
 };
 
 /**
@@ -280,6 +288,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;
+
+  /** Projected LPC slot catalog forwarded to the worker (C-400). */
+  private readonly _lpcCatalog?: readonly LpcSlotCatalog[];
 
   /** Weather overlay quad for procedural rain/fog (C-213). */
   private _weatherOverlay: WeatherOverlay | undefined;
@@ -490,6 +501,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
     this._textureManager = options.textureManager;
     this._propFrameResolver = options.propFrameResolver;
+    this._lpcCatalog = options.lpcCatalog;
   }
 
   /**
@@ -569,6 +581,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       initialPayload,
       playerData,
       options.collisionGrid,
+      this._lpcCatalog,
     );
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
@@ -814,6 +827,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const state = {
       frozen: !this._running,
       entityCount: this._renderEntries.size,
+      // C-400 AC-1: authored NPC count (spawned NPC entities with a manifest
+      // entry) — asserted by game_boot.spec.ts against the manifest count.
+      npcCount: this._npcMeta.size,
       playerEntityId: this._playerEntityId,
       cameraX: this._cameraX,
       cameraY: this._cameraY,
@@ -855,6 +871,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     loadPayload?: string,
     playerData?: PlayerInitData,
     collisionGrid?: CollisionGrid,
+    lpcCatalog?: readonly LpcSlotCatalog[],
   ): Promise<void> {
     if (this._workerFactory) {
       this.debug('spawnWorker:using-workerFactory');
@@ -952,6 +969,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         loadPayload,
         playerData,
         collisionGrid,
+        lpcCatalog,
       },
       // ── RC-1 FIX: Transfer buffers to worker, don't structure-clone ──
       // Without the transferables array, postMessage clones the 3 buffers
@@ -2810,6 +2828,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           playerY: y,
           playerEid: eid,
           playerVisibleByMask: this._playerVisibleByMask,
+          // C-400 AC-1: authored NPC count for the loaded map — asserted by
+          // game_boot.spec.ts against the manifest NPC count.
+          npcCount: this._npcMeta.size,
         };
       }
 

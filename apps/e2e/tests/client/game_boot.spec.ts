@@ -54,4 +54,38 @@ test.describe('Game Boot Pipeline', () => {
 
     await expect(playerHud).toBeVisible();
   });
+
+  // C-400 AC-1: every map's authored NPC must spawn from the content pack
+  // manifest. The Emberwatch village declares exactly one authored NPC
+  // (village_elder); the debug bridge exposes the spawned authored-NPC count.
+  test('AC-1: spawned NPC count matches the manifest NPC count for the loaded map', async ({
+    page,
+  }) => {
+    await page.goto('/game');
+
+    // Wait for the game canvas container
+    await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 15000 });
+
+    // Poll the debug bridge until NPCs spawn (map load completes).
+    await page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { npcCount?: number }
+          | undefined;
+        return typeof debug?.npcCount === 'number' && debug.npcCount > 0;
+      },
+      undefined,
+      { timeout: 30000 },
+    );
+
+    const npcCount = await page.evaluate(() => {
+      const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | { npcCount?: number }
+        | undefined;
+      return debug?.npcCount ?? 0;
+    });
+
+    // Village declares exactly one authored NPC (village_elder).
+    expect(npcCount).toBe(1);
+  });
 });

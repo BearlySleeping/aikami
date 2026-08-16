@@ -750,6 +750,22 @@ export const PackConfigSchema = Type.Object({
   terrains: Type.Optional(
     Type.Array(ContentPackTerrainSchema, { description: 'Terrain definitions' }),
   ),
+  /**
+   * NPC appearance definitions keyed by npcId (C-400). Carried across the
+   * worker boundary so the entity spawner reads appearance from the content
+   * pack manifest instead of Tiled spawn-point properties. Only the fields
+   * the worker needs are projected.
+   */
+  npcs: Type.Optional(
+    Type.Record(
+      Type.String(),
+      Type.Object({
+        /** LPC appearance layer IDs (1-indexed variant numbers). */
+        appearanceLayers: Type.Optional(Type.Array(Type.Number())),
+      }),
+      { description: 'NPC appearance definitions keyed by npcId' },
+    ),
+  ),
 });
 
 export type PackConfig = Static<typeof PackConfigSchema>;

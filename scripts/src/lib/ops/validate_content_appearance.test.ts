@@ -1,0 +1,150 @@
+// scripts/src/lib/ops/validate_content_appearance.test.ts
+//
+// C-400 AC-5 — content appearance validator unit tests.
+//
+// Verifies:
+//   - parseGeneratedCatalog extracts slot → assetId lists from the real
+//     generated catalog text
+//   - in-range indices pass; out-of-range indices fail naming slot/range
+//   - head-slot indices must resolve to head/heads/* assets
+//   - 0 (intentionally empty) and short arrays (whispering-caves policy)
+//     never fail validation
+//   - both committed packs (emberwatch + whispering-caves) pass the validator
+
+import { describe, expect, it } from 'bun:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  loadCatalog,
+  parseGeneratedCatalog,
+  validateContentAppearance,
+  validateNpcAppearance,
+} from './validate_content_appearance.js';
+
+const REPO_ROOT = join(import.meta.dir, '../../../..');
+const GENERATED_CATALOG = join(
+  REPO_ROOT,
+  'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',
+);
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+
+const CATALOG = loadCatalog();
+
+// ---------------------------------------------------------------------------
+// parseGeneratedCatalog
+// ---------------------------------------------------------------------------
+
+describe('parseGeneratedCatalog', () => {
+  it('parses the committed generated catalog into slot → variant lists', () => {
+    expect(existsSync(GENERATED_CATALOG)).toBe(true);
+    const source = readFileSync(GENERATED_CATALOG, 'utf-8');
+    const slots = parseGeneratedCatalog(source);
+
+    const slotsByName = new Map(slots.map((s) => [s.slot, s.variants]));
+    expect(slotsByName.has('head')).toBe(true);
+    expect(slotsByName.has('body')).toBe(true);
+    expect(slotsByName.has('hair')).toBe(true);
+    expect(slotsByName.has('torso')).toBe(true);
+    expect(slotsByName.has('legs')).toBe(true);
+    expect(slotsByName.has('feet')).toBe(true);
+
+    // OQ-1 fact-check: head has 142 variants; index 97 → female_elderly.
+    const head = slotsByName.get('head') ?? [];
+    expect(head.length).toBe(142);
+    expect(head[96]).toBe('head/heads/human/female_elderly');
+  });
+
+  it('handles a minimal fixture without crashing', () => {
+    const slots = parseGeneratedCatalog(`export const X = [{
+      slot: 'head',
+      variants: [{ assetId: 'head/heads/human_male' }],
+    }];`);
+    expect(slots).toEqual([{ slot: 'head', variants: ['head/heads/human_male'] }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateNpcAppearance
+// ---------------------------------------------------------------------------
+
+describe('validateNpcAppearance', () => {
+  const base = { packId: 'test', npcId: 'npc' } as const;
+
+  it('accepts all three Emberwatch NPC arrays unchanged', () => {
+    const cases = [
+      [2, 3, 65, 21, 20, 97], // village_elder
+      [3, 123, 23, 22, 7, 95], // rollo_grasper
+      [3, 91, 127, 22, 19, 95], // merchant
+    ];
+    for (const layers of cases) {
+      const errors = validateNpcAppearance({ ...base, appearanceLayers: layers, catalog: CATALOG });
+      expect(errors, `layers ${layers.join(',')}`).toEqual([]);
+    }
+  });
+
+  it('accepts an index of 0 (intentionally empty) without validation errors', () => {
+    const errors = validateNpcAppearance({
+      ...base,
+      appearanceLayers: [3, 3, 0, 22, 0, 95],
+      catalog: CATALOG,
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts short arrays (whispering-caves 4-layer policy)', () => {
+    const errors = validateNpcAppearance({
+      ...base,
+      appearanceLayers: [1, 3, 7, 14],
+      catalog: CATALOG,
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects an out-of-range index naming slot, index, and valid range', () => {
+    const errors = validateNpcAppearance({
+      ...base,
+      appearanceLayers: [3, 3, 99999, 22, 7, 95],
+      catalog: CATALOG,
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.slot).toBe('torso');
+    expect(errors[0]?.index).toBe(99999);
+    expect(errors[0]?.packId).toBe('test');
+    expect(errors[0]?.npcId).toBe('npc');
+    expect(errors[0]?.validRange).toMatch(/^1\.\.\d+$/);
+  });
+
+  it('rejects a head-slot index that resolves to a non-head asset', () => {
+    // head slot index 1 → head/ears/avyon_adult (not a head/heads/* asset).
+    const errors = validateNpcAppearance({
+      ...base,
+      appearanceLayers: [3, 3, 23, 22, 7, 1],
+      catalog: CATALOG,
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.slot).toBe('head');
+    expect(errors[0]?.detail).toContain('head/heads/');
+  });
+
+  it('rejects a negative index as out of range', () => {
+    const errors = validateNpcAppearance({
+      ...base,
+      appearanceLayers: [-1, 3, 23, 22, 7, 95],
+      catalog: CATALOG,
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.slot).toBe('body');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateContentAppearance — integration against committed packs
+// ---------------------------------------------------------------------------
+
+describe('validateContentAppearance (integration)', () => {
+  it('passes both committed packs (emberwatch + whispering-caves)', () => {
+    expect(existsSync(CONTENT_PACKS_ROOT)).toBe(true);
+    const errors = validateContentAppearance();
+    expect(errors).toEqual([]);
+  });
+});

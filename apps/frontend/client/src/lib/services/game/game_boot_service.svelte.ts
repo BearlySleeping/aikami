@@ -11,12 +11,17 @@
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  type LpcSlotCatalog,
+  projectLpcCatalog,
+  resolveLpcAppearance,
+} from '@aikami/frontend/engine';
+import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AssetHashesFile, Campaign, PersonaData } from '@aikami/types';
-import { LPC_DEFAULT_BODY_ASSET_ID } from '$lib/data/lpc_asset_catalog';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -862,6 +867,9 @@ class GameBootService
       bridge: this._bridge,
       recipeResolver,
       assetUrlResolver,
+      // C-400: forward the projected catalog so the worker resolves the
+      // same slot/assetId sequences as the main-thread resolver.
+      lpcCatalog: projectLpcCatalog(generatedLpcSlots),
       // C-374: merge equipped items onto the player's base LPC render
       equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
@@ -1186,71 +1194,23 @@ class GameBootService
     recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
     assetUrlResolver: (_slot: string, assetId: string, state: string) => string | null;
   } {
+    // C-400: single source of truth — the engine's pure resolver, fed the
+    // projected catalog. This is the resolver the production /game route
+    // uses (gameBootService.boot → GameWorld.create).
     this._cachedLpcSlots = generatedLpcSlots;
-
-    const SlotCatalogIndex: Record<string, number> = {};
-    for (let idx = 0; idx < generatedLpcSlots.length; idx++) {
-      const entry = generatedLpcSlots[idx];
-      if (!entry) {
-        continue;
-      }
-      SlotCatalogIndex[entry.slot] = idx;
-    }
-
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+    const catalog: readonly LpcSlotCatalog[] = projectLpcCatalog(generatedLpcSlots);
 
     const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
-      const recipes: LpcLayerRecipe[] = [];
-      for (let i = 0; i < EngineSlots.length; i++) {
-        const rawId = layerIds[i];
-        const slotName = EngineSlots[i] ?? `layer_${i}`;
-        const catalogIdx = SlotCatalogIndex[slotName];
-        if (catalogIdx === undefined) {
-          continue;
-        }
-        const slotDef = generatedLpcSlots[catalogIdx];
-        let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
-        if (slotName === 'head') {
-          if (effectiveIdx < 0) {
-            effectiveIdx = 94;
-          }
-          const headVariant = slotDef?.variants[effectiveIdx];
-          if (!headVariant?.assetId.startsWith('head/heads/')) {
-            effectiveIdx = 94;
-          }
-        }
-        const variant = slotDef?.variants[effectiveIdx];
-        if (!variant) {
-          // C-370: body fallback — if body slot variant lookup fails, inject default
-          if (slotName === 'body') {
-            recipes.push({
-              slot: 'body',
-              assetId: LPC_DEFAULT_BODY_ASSET_ID,
-              hexPalette: new Uint8Array(1024),
-            });
-          }
-          continue;
-        }
-        recipes.push({
-          slot: slotName,
-          assetId: variant.assetId,
-          hexPalette: new Uint8Array(1024),
-        });
-      }
-      // C-370: ensure body recipe exists — inject default if missing
-      const hasBody = recipes.some((r) => r.slot === 'body');
-      if (!hasBody) {
-        recipes.unshift({
-          slot: 'body',
-          assetId: LPC_DEFAULT_BODY_ASSET_ID,
-          hexPalette: new Uint8Array(1024),
-        });
-      }
-      this.debug('lpc.boot.recipeResolver.call', {
-        input: JSON.stringify(layerIds),
-        output: JSON.stringify(recipes.map((r) => `${r.slot}=${r.assetId}`)),
+      const result = resolveLpcAppearance({
+        layerIds,
+        catalog,
+        fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
       });
-      return recipes;
+      return result.recipes.map((r) => ({
+        slot: r.slot,
+        assetId: r.assetId,
+        hexPalette: r.hexPalette,
+      }));
     };
 
     const assetUrlResolver = (_slot: string, assetId: string, state: string): string | null => {

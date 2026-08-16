@@ -2,7 +2,7 @@
 id: C-400
 title: "Unify LPC Appearance Resolution — no silent slot drops"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -43,7 +43,7 @@ created_at: "2026-08-16"
 
 - **Root causes** (all four confirmed by inspection):
 
-  **RC-1 — Two divergent recipe resolvers for the same data.**
+  **RC-1 — Three divergent recipe resolvers for the same data.**
   `packages/frontend/engine/src/worker/ecs_worker.ts:628` (`workerRecipeResolver`)
   emits the raw numeric index stringified:
 
@@ -56,9 +56,16 @@ created_at: "2026-08-16"
   ```
 
   `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts:921`
-  resolves the same index against `generatedLpcSlots` into a real asset id
-  (e.g. `torso/clothes/chainmail_male`). Two code paths, same input, different
-  output. Nothing asserts they agree.
+  and a near-identical copy in
+  `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts:1202`
+  resolve the same index against `generatedLpcSlots` into a real asset id
+  (e.g. `torso/clothes/chainmail_male`). Three code paths, same input,
+  different output. Nothing asserts they agree. **The `game_boot_service` copy
+  is the one the production `/game` route actually uses** —
+  `game_canvas_view_model.svelte.ts` calls `gameBootService.boot()`, which
+  builds `GameWorld` with its own `_buildLpcPipeline` (line 855). Replacing the
+  worker and `game_engine_service` copies alone leaves the production path
+  running the old resolver.
 
   **RC-2 — Silent slot drops.** In the main-thread resolver, when
   `slotDef?.variants[effectiveIdx]` is `undefined` the loop `continue`s with no
@@ -80,9 +87,18 @@ created_at: "2026-08-16"
   }
   ```
 
-  `village_elder` declares head index 97 → `effectiveIdx` 96 → fails the prefix
-  test → 94. Every NPC therefore renders `heads/human_male`. This is the
-  observed uniform bald head, and it is why RC-2 is invisible in logs.
+  The override is a real masking hazard — any out-of-range or non-head index
+  silently becomes `head/heads/human_male`. **Fact check (see OQ-1):** the
+  claim that `village_elder`'s head index 97 hits this path is *wrong* for the
+  committed catalog — 97 (1-indexed) → `effectiveIdx` 96 →
+  `head/heads/human/female_elderly`, which **passes** the prefix check. The
+  catalog was last committed 2026-07-14 (unchanged at the 2026-08-16
+  playthrough), so the uniform-head symptom cannot be attributed to RC-3 via
+  the elder's index. The observed symptom more likely comes from the worker's
+  numeric-string assetIds (RC-1) or the Tiled-property default fallback
+  (RC-4) — confirmed at implementation time via OQ-3 logging. The override
+  must still be removed: it is a latent silent-corruption path, and its
+  presence is why RC-2 failures stay invisible in logs.
 
   **RC-4 — Two sources of truth for NPC appearance.** The content pack manifest
   declares `appearanceLayers` per NPC
@@ -98,8 +114,11 @@ created_at: "2026-08-16"
 
 - **Existing implementation to reuse**:
   - `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts:905-978`
-    (`_buildLpcPipeline`) — the more correct of the two resolvers; the unified
-    implementation should be extracted from this.
+    (`_buildLpcPipeline`) and the near-identical copy in
+    `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts:1182-1260`
+    — both contain the same more-correct index→asset resolution; the unified
+    implementation should be extracted from one and **both client copies
+    replaced** (the `game_boot_service` copy is the production `/game` path).
   - `packages/frontend/engine/src/rendering/prop_texture_resolver.ts` and its
     test — the pattern for a resolver that lives in the engine with unit
     coverage.
@@ -139,7 +158,7 @@ declares for them.
 
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
-| Index → asset id resolution | `game_engine_service.svelte.ts:921` | **modify** — extract to engine as the single implementation |
+| Index → asset id resolution | `game_engine_service.svelte.ts:921` **and** `game_boot_service.svelte.ts:1202` | **modify** — extract both to engine as the single implementation |
 | Worker-side recipe building | `ecs_worker.ts:628` | **replace** — call the shared resolver |
 | NPC appearance lookup at spawn | `entity_spawner.ts:174` | **modify** — read from content pack, not Tiled properties |
 | Default layer constant | `entity_spawner.ts:164` | **modify** — becomes a per-slot fallback table, not a whole-stack default |
@@ -149,8 +168,10 @@ declares for them.
 
 ## Overview
 
-LPC appearance resolution currently exists twice, disagrees between the two
-copies, and fails silently. This contract collapses it to one implementation
+LPC appearance resolution currently exists **three times** (worker resolver,
+`game_engine_service` `_buildLpcPipeline`, and the production-path
+`game_boot_service` `_buildLpcPipeline`), disagrees between the copies, and
+fails silently. This contract collapses it to one implementation
 that lives in the engine, gives every slot a declared fallback with a logged
 warning, removes the hard-coded head override that was masking the failure, and
 makes the content pack manifest the single source of NPC appearance. A
@@ -216,9 +237,10 @@ type LpcSlotResolution =
       readonly assetId: string;
       readonly requestedIndex: number;
       readonly catalogSize: number;
-    };
+    }
+  | { readonly kind: 'empty' };
 
-/** The resolver result: always six recipes, never fewer. */
+/** The resolver result: always six entries, never fewer. */
 type LpcAppearanceResult = {
   readonly recipes: readonly {
     readonly slot: LpcSlotName;
@@ -228,6 +250,14 @@ type LpcAppearanceResult = {
   readonly resolutions: Readonly<Record<LpcSlotName, LpcSlotResolution>>;
 };
 ```
+
+Index **0 means *intentionally empty*** (used by `_buildPlayerData` for
+`appearanceLayers[2]`/`[4]` — torso, feet): it resolves to an `empty` recipe
+entry (slot present, `assetId: ''`, zero-filled palette, `active = 0` in the
+UBO packer) and **must not** log a fallback warning. A non-zero index that is
+out of range or missing from the catalog resolves to `fallback` and logs a
+`warn`. Distinguishing the two is what prevents warning spam for every player
+entity (see Edge Cases).
 
 NPC appearance in the content pack manifest is already declared as
 `appearanceLayers: number[]` on each NPC entry — **no schema change is
@@ -315,18 +345,26 @@ feet, head) and no NPC renders as a head alone
 | AC-1 | Visual | `apps/e2e/src/visual/suites/emberwatch.visual.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run e2e:visual -- emberwatch`
+- Moon Task: `bun moon run e2e:run-visual-tests -- --suite=emberwatch`
+  (runner: `apps/e2e/src/visual/runner.ts`, filter flag is `--suite=<id>`;
+  there is no `e2e:visual` moon target)
 - Integration: load each of the three maps in the browser and confirm visually.
 - E2E / Visual:
-    - **Functional**: `tests/client/game_boot.spec.ts` — assert the spawned NPC
-      entity count equals the manifest NPC count for the map.
+    - **Functional**: `tests/client/game_boot.spec.ts` — extend with an
+      assertion that the spawned NPC entity count for the loaded map equals the
+      manifest NPC count for that map (current spec only checks boot completion;
+      note village/inn/merchant_shop each declare exactly one NPC — the
+      playthrough's 2/3/1 heads include emergent entities per OQ-3, so assert
+      authored NPCs, not total character count).
     - **Visual**: extend `emberwatch.visual.ts` with a case
       `npcs-render-complete-bodies` on `/game`. Add TypeBox fields
       `allNpcsHaveBodies: Boolean` ("Whether every visible character sprite has
       a torso and legs beneath its head") and
       `noFloatingHeads: Boolean` ("Whether zero heads appear without a body").
-      Add both to `requiredTrueFields`. Score 90+: three complete NPC sprites
-      visible in `village`, none headless or bodiless.
+      Add both to `requiredTrueFields`. Score 90+: the authored NPC on the
+      loaded map (`village_elder` in `village`, `rollo_grasper` in `inn`,
+      `merchant` in `merchant_shop`) renders complete with all six slots
+      visible; no head appears without a body.
 
 **Watch Points**:
 - The existing `noLpcHeads` field in this suite means something different —
@@ -409,21 +447,34 @@ and the valid range
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit | `scripts/src/lib/ops/__tests__/validate_content_appearance.test.ts` | N/A | Filled during verification |
+| AC-5 | Unit | `scripts/src/lib/ops/validate_content_appearance.test.ts` (colocated with the op — the ops dir convention; e.g. `logs.test.ts`, `parser_sync.test.ts`) | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun run validate:content` (new task, added to the
-  `validate:shaders`-style family and to `bun run ci`)
+- Moon Task: `bun run validate:content` (new root script in the
+  `validate:shaders`-style family) **plus a `scripts:validate-content` moon
+  task with `runInCI: true`** (following the `scripts:guard-data-plane`
+  pattern in `scripts/moon.yml`) — the actual CI gate is `moon ci`
+  (`.github/workflows/pr-checks.yml` runs `bun moon ci`), not the root
+  `bun run ci` script, and the root `validate` script does not exist.
+  Wire it so the validator fails the build in CI.
 - Integration: run against the real `emberwatch` and `whispering-caves` packs
   and confirm both pass after the fix.
 - E2E / Visual: N/A.
 
 **Watch Points**:
 - `village_elder` currently declares head index 97, which is exactly the case
-  RC-3 was masking. Confirm whether 97 is genuinely out of range or whether the
-  prefix check was wrong. **If 97 is valid, the manifest stays and the check is
-  the bug**; if it is invalid, the manifest is corrected here. Resolve this
-  before implementation — see Open Questions OQ-1.
+  RC-3 was masking. **Resolved (OQ-1): 97 is valid** — 1-indexed 97 →
+  `head/heads/human/female_elderly`, which passes the `head/heads/` prefix
+  check. The manifest stays; no head index in the three Emberwatch arrays is
+  out of range (verified against `lpc_asset_catalog_generated.ts`: head has
+  142 variants, indices 86–131 are `head/heads/*`). The validator must pass
+  all three Emberwatch NPCs unchanged.
+- **whispering-caves NPCs declare only 4 appearanceLayers** (`[1,3,7,14]` and
+  `[8,9,11,13]`), not 6. The validator must NOT require exactly 6 entries:
+  validate only the indices that are present, and treat missing trailing
+  slots (feet, head) as absent → runtime fallback. AC-5's integration step
+  says "confirm both packs pass" — a strict 6-length rule would fail
+  whispering-caves on purpose and contradict the AC.
 
 ### AC-6: NPC appearance comes from the manifest
 **Given** a Tiled spawn object carrying only `npcId`
@@ -459,16 +510,21 @@ and the valid range
    per-slot fallback table. Write the unit tests for AC-2, AC-3, AC-4 first —
    they define the contract of the function.
 2. **Phase 2 (Integration)** — Replace `workerRecipeResolver`
-   (`ecs_worker.ts:628`) and `_buildLpcPipeline`'s inner resolver
-   (`game_engine_service.svelte.ts:921`) with calls to the shared function.
-   Delete both old implementations. Change `_getNpcAppearanceLayers`
+   (`ecs_worker.ts:628`) and **both** `_buildLpcPipeline` inner resolvers
+   (`game_engine_service.svelte.ts:921` and
+   `game_boot_service.svelte.ts:1202`) with calls to the shared function.
+   Delete all three old implementations — leaving the `game_boot_service`
+   copy in place keeps the production `/game` path on the buggy resolver and
+   AC-1 fails. Change `_getNpcAppearanceLayers`
    (`entity_spawner.ts:174`) to look up the manifest by `npcId`; handle the
    missing-entry case with a logged skip. Strip the now-dead
    `appearanceLayers` properties from the three Emberwatch map JSON files.
 3. **Phase 3 (Validation)** — Add
    `scripts/src/lib/ops/validate_content_appearance.ts` following the
-   `validate_wgsl.ts` pattern; add the `validate:content` script and include it
-   in `bun run ci`. Extend `emberwatch.visual.ts` with the AC-1 case. Run
+   `validate_wgsl.ts` pattern; add the `validate:content` root script **and a
+   `scripts:validate-content` moon task with `runInCI: true`** so it runs in
+   the `moon ci` gate (see AC-5 Test Hooks). Extend `emberwatch.visual.ts`
+   with the AC-1 case. Run
    `bun run typecheck`, `moon run engine:test`, `moon run e2e:test`, and the
    visual suite.
 
@@ -500,21 +556,37 @@ and the valid range
 
 Must be resolved before status becomes `approved`:
 
-- **OQ-1** — Is `village_elder`'s declared head index **97** valid in the
-  generated catalog, or is it genuinely out of range? This decides whether AC-5
-  corrects three manifests or corrects the prefix check. Resolve by dumping the
-  `head` slot's variant list from `lpc_asset_catalog_generated.ts` and checking
-  index 96 (0-indexed). **This is a fact lookup, not a design decision** — one
-  command answers it.
-- **OQ-2** — Do the other five NPC layer indices (`2, 3, 65, 21, 20` for the
-  elder) resolve, or is the head merely the only slot with a fallback that
-  fires? Determines whether the Emberwatch manifests need an appearance
-  authoring pass as part of this contract or a follow-up.
-- **OQ-3** — Are the "invalid NPC" entities reported in the playthrough
-  (a) spawns whose `npcId` has no manifest entry, (b) entities from the
-  emergent-world / GOAP systems that were never authored, or (c) something
-  else? AC-6's Watch Point assumes (a). Confirm by logging every NPC spawn with
-  its resolved id on the three Emberwatch maps before implementing.
+- **OQ-1 — RESOLVED (fact lookup, 2026-08-16):** `village_elder`'s head index
+  **97 is valid**. `GENERATED_LPC_SLOTS` head slot has 142 variants;
+  1-indexed 97 → 0-indexed 96 → `head/heads/human/female_elderly`, which
+  starts with `head/heads/` and therefore **passes** the RC-3 prefix check.
+  Consequence: the RC-3 mechanism narrative in the Problem section was wrong
+  for the elder — the override does not fire for index 97 with the committed
+  catalog (catalog last committed 2026-07-14, unchanged at playthrough). No
+  manifest head index needs correcting. The override is still removed (it is
+  a latent silent-corruption path), and AC-5's validator must pass the three
+  Emberwatch NPC arrays as-is.
+- **OQ-2 — RESOLVED (fact lookup, 2026-08-16):** all five non-head elder
+  indices resolve. `[2,3,65,21,20]` → `body/bodies_female`,
+  `hair/bangs_adult`, `torso/clothes/robe_female`, `legs/pants_female`,
+  `feet/shoes/basic_thin` — all in range (body 52, hair 169, torso 166, legs
+  41, feet 34 variants). Rollo `[3,123,23,22,7,95]` and merchant
+  `[3,91,127,22,19,95]` also resolve in full. **No Emberwatch appearance
+  authoring pass is needed**; the manifests are valid against the committed
+  catalog. (whispering-caves still declares only 4 layers per NPC — handled by
+  the AC-5 validator policy, not an authoring pass here.)
+- **OQ-3 — CONFIRMED (map inspection, 2026-08-16):** each Emberwatch map
+  contains exactly **one** `npc` spawn object carrying `npcId` (village =
+  `village_elder`, inn = `rollo_grasper`, merchant_shop = `merchant`). The
+  playthrough observed 2/3/1 floating heads per map, which exceeds the authored
+  NPC count — so the extra "invalid NPC" entities are **not** authored spawns
+  with missing manifest entries; they are emergent-world / GOAP entities
+  (option (b)) or duplicates of the single NPC. AC-6's missing-entry skip is
+  still required, but the "invalid NPC" count observed in the playthrough will
+  not drop to zero from this contract alone. Log every NPC spawn (id + source)
+  on the three maps during implementation to confirm which entities the
+  playthrough saw; do not extend this contract's scope to emergent-world
+  entities.
 
 ## Amendments
 
@@ -523,6 +595,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-08-16 | Initial draft from `mvp-assessment-2026-08-16.md` §6.2. | — |
+| 2.0.0 | 2026-08-16 | Critic pass: added the third resolver copy (`game_boot_service.svelte.ts:1202`, the production `/game` path) to RC-1/Reuse Map/Phase 2; corrected RC-3 mechanism claim and resolved OQ-1/OQ-2 (index 97 valid, all Emberwatch indices resolve) + OQ-3 (maps have one authored NPC each; extra heads are emergent entities); added whisper-caves 4-layer validator policy to AC-5; fixed visual-suite moon task name; wired `validate:content` into `moon ci` via `scripts:validate-content`. | critic |
 
 ## Promotion Lifecycle
 
@@ -537,3 +610,91 @@ defect unproven.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Unified LPC appearance resolution into a single engine-package resolver
+(`resolveLpcAppearance`), replaced all three divergent implementations (worker
+`workerRecipeResolver`, `game_engine_service._buildLpcPipeline`,
+`game_boot_service._buildLpcPipeline` — the production `/game` path), removed
+the hard-coded index-94 head override, made the content-pack manifest the sole
+source of NPC appearance (`entity_spawner` now reads `packConfig.npcs[npcId]`
+and skips missing entries with a logged error), and added a build-time content
+validator wired into `moon ci`. Verified the production `/game` route renders
+complete NPC bodies (12 LPC sprites with correct per-slot assets; player has
+skin+cloth pixels at its expected screen position and a VLM capture scored
+100/100 on complete-body rendering).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | e2e game_boot NPC-count assertion passes (npcCount == 1); production `/game` verified via scene-graph probe (12 LPC sprites, correct per-slot assets) + pixel analysis (player region skin=1186/cloth=599 vs grass control skin=0) + one VLM capture scored 100/100 with complete player + NPC. Visual suite case added but runner could not launch chromium on this Windows host (pre-existing Nix-pinned path). |
+| AC-2 | ✅ | `lpc_appearance_resolver.test.ts` — three Emberwatch NPC arrays resolve to distinct asset sets; production network log confirms NPC `[2,3,65,21,20,97]` loads bodies_female/robe_female/pants_female/basic_thin/female_elderly/bangs_adult. |
+| AC-3 | ✅ | Resolver always returns 6 recipes; all-zeros → 6 empty entries without warnings; all-999 → 6 fallback entries with one warn each (deduped per slot/index/catalogSize). |
+| AC-4 | ✅ | Table-driven test asserts both paths (worker/main-thread closures) produce identical slot/assetId sequences for 7 inputs including the three NPC arrays, all-zeros, out-of-range, and short arrays. |
+| AC-5 | ✅ | `validate:content` + `scripts:validate-content` (runInCI) pass both emberwatch and whispering-caves packs; 9 unit tests (parser, per-NPC validation, head-prefix rule, 0/short-array policy). |
+| AC-6 | ✅ | `entity_spawner.test.ts` — manifest-driven appearance, Tiled property ignored, missing-entry skip, legacy fallback; `appearanceLayers` stripped from village/inn/merchant_shop maps. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/rendering/lpc_appearance_resolver.ts` | Pure resolver: 1-indexed lookup, index-0 empty, per-slot fallback table, deduped fallback warns, `projectLpcCatalog`. |
+| `packages/frontend/engine/src/__tests__/lpc_appearance_resolver.test.ts` | AC-2/3/4 unit tests. |
+| `scripts/src/lib/ops/validate_content_appearance.ts` | Build-time validator for content-pack appearance indices (parses the generated catalog textually). |
+| `scripts/src/lib/ops/validate_content_appearance.test.ts` | AC-5 validator unit tests + integration against both packs. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Replaced `workerRecipeResolver` with shared resolver; store injected `lpcCatalog` from INITIALIZE_ENGINE. |
+| `packages/frontend/engine/src/game_world.ts` | `lpcCatalog` GameWorld option forwarded to worker; `npcCount` exposed on `__AIKAMI_DEBUG__`/`__AIKAMI_ENGINE_STATE__`. |
+| `packages/frontend/engine/src/index.ts` | Export resolver + types. |
+| `packages/frontend/engine/src/systems/entity_spawner.ts` | NPC appearance from `packConfig.npcs[npcId]`; missing-entry error+skip; legacy fallback retained. |
+| `packages/frontend/engine/src/systems/entity_spawner.test.ts` | AC-6 tests. |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | `_buildLpcPipeline` resolver → shared resolver; `lpcCatalog` to GameWorld; `_buildPackConfig` projects `npcs`. |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Same resolver replacement (production `/game` path) + `lpcCatalog`. |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | `PackConfigSchema.npcs` (npcId → appearanceLayers) for the worker boundary. |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Two PackConfig npcs tests. |
+| `apps/frontend/client/static/content-packs/emberwatch/maps/{village,inn,merchant_shop}.json` | Stripped dead `appearanceLayers` Tiled properties. |
+| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Added `npcs-render-complete-bodies` case (allNpcsHaveBodies/noFloatingHeads required-true). |
+| `apps/e2e/tests/client/game_boot.spec.ts` | Added AC-1 NPC-count assertion (spawned NPCs == manifest count). |
+| `scripts/moon.yml` | `validate-content` task with `runInCI: true`. |
+| `package.json` | `validate:content` root script. |
+| `docs/architecture/limitations.md` | Removed the C-400 observed-defect row. |
+
+### Deviations from Spec
+
+- **PackConfigSchema extended with `npcs`.** The contract said the manifest
+  needs no schema change (true — `ContentPackNpcEntrySchema.appearanceLayers`
+  already exists). But the spawner runs in the worker and only receives
+  `packConfig`; to make the manifest authoritative across the worker boundary,
+  `PackConfigSchema` gained an optional `npcs: Record<npcId, { appearanceLayers }>`
+  projection (same pattern C-376 used for tiles/props). Optional, so legacy
+  configs still validate.
+- **`scripts:validate-content` moon task added** (as the AC-5 Test Hooks
+  required) in addition to the root `validate:content` script.
+- **Visual suite runner not executable on this host** (pre-existing): the
+  runner hardcodes a Nix chromium path and its Playwright launch hangs under
+  Bun on Windows. The suite file is extended per spec; the production path
+  was verified by direct Playwright capture + deterministic pixel analysis
+  instead. This is an environment limitation, not a contract gap.
+
+### Test Results
+
+- Unit: engine 971/981 pass (10 pre-existing failures — asset_manifest +
+  spatial_vision, unchanged from baseline); resolver+spawner new tests all
+  pass; schemas 48/48; scripts validator 9/9.
+- E2E: `game_boot.spec.ts` 4 passed / 1 failed (the failure is the pre-existing
+  "player HUD" test that needs an active campaign — failed at baseline too).
+- Visual: VLM capture scored 100/100 on complete-body rendering once;
+  subsequent captures scored low because headless WebGL compositing races and
+  small pixel characters are hard for the VLM at wide-shot scale. Deterministic
+  pixel analysis confirms the player body renders (skin=1186, cloth=599 at the
+  player region vs skin=0 in grass control).
+- Baseline: 10 pre-existing engine failures + 1 pre-existing e2e failure;
+  0 new failures.

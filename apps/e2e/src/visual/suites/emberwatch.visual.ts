@@ -56,6 +56,22 @@ const OverheadSchema = Type.Object({
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
+// Case C (C-400 AC-1) — complete NPC bodies, no floating heads.
+const NpcBodiesSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  allNpcsHaveBodies: Type.Boolean({
+    description: 'Whether every visible character sprite has a torso and legs beneath its head',
+  }),
+  noFloatingHeads: Type.Boolean({
+    description: 'Whether zero heads appear without a body',
+  }),
+  npcVisuallyDistinct: Type.Boolean({
+    description:
+      'Whether visible NPCs look like complete distinct characters (not identical bald male heads)',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
 const TERRAIN_PROMPT = [
   'This is a screenshot from the Emberwatch village — a top-down pixel-art JRPG scene from the Aikami game engine.',
   'The player has just spawned at the village gate (south-center of the map) and the camera centers on the player.',
@@ -99,6 +115,30 @@ const waitForVisualReady = async (page: Page): Promise<void> => {
     { timeout: 10_000 },
   );
 };
+
+const NPC_BODIES_PROMPT = [
+  'This is a screenshot from the Emberwatch village — a top-down pixel-art JRPG scene from the Aikami game engine.',
+  'The player has just spawned at the village gate (south-center of the map) and the camera centers on the player.',
+  '',
+  'NPC CHECK (C-400 AC-1):',
+  '- Every visible character sprite must be COMPLETE — a head connected to a body, torso, legs, and feet.',
+  '- ZERO floating heads: no head may appear as a disembodied sprite without a body beneath it.',
+  '- The village elder NPC (near the center/upper village) should read as a full robed character, visually distinct from the player — not an identical bald male head.',
+  '',
+  'EVALUATE:',
+  '- Are there ANY heads without bodies (disembodied floating heads)? If yes, noFloatingHeads=false and score below 90.',
+  '- Does every character have a torso and legs beneath its head? If any character is just a head, allNpcsHaveBodies=false.',
+  '- Are the NPCs visually distinct from one another and from the player (different hair/clothing)?',
+  '- Is the scene otherwise a coherent pixel-art village (not a blank/dark grid)?',
+  '',
+  'Score breakdown:',
+  '- 90-100: All characters complete with bodies; zero floating heads; NPCs visually distinct.',
+  '- 70-89: Characters mostly complete but some ambiguity in body visibility.',
+  '- 40-69: A floating head or bodiless character is visible.',
+  '- 0-39: Severely broken rendering (blank grid, heads-only scene).',
+  '',
+  'Return ONLY valid JSON matching the schema.',
+].join('\n');
 
 const OVERHEAD_PROMPT = [
   'This is a screenshot from the Emberwatch village — a top-down pixel-art JRPG scene from the Aikami game engine.',
@@ -155,6 +195,20 @@ export default defineConfig({
       // C-378 AC-1: overheadOccludesPlayer is a HARD gate — a generous
       // score must not paper over the headline visual claim.
       requiredTrueFields: ['overheadOccludesPlayer'],
+    },
+    {
+      // C-400 AC-1: complete NPC bodies — the headline defect this contract
+      // fixes. The village map's authored NPC (village_elder) must render
+      // with all six slots visible; zero heads may float without a body.
+      name: 'Village — NPC renders a complete body (production /game)',
+      screenshotSelector: 'canvas',
+      prompt: NPC_BODIES_PROMPT,
+      schema: NpcBodiesSchema,
+      // Noon ambient so the LPC sprites are fully lit (C-404 makes the
+      // default night ambient too dark for the VLM to read).
+      searchParams: { gameHour: '12' },
+      setupHook: waitForVisualReady,
+      requiredTrueFields: ['allNpcsHaveBodies', 'noFloatingHeads'],
     },
   ],
 });

@@ -590,11 +590,6 @@
               "name": "interactionRadius",
               "type": "float",
               "value": 48
-            },
-            {
-              "name": "appearanceLayers",
-              "type": "string",
-              "value": "2,3,65,21,20,97"
             }
           ]
         },

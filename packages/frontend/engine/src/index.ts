@@ -332,6 +332,22 @@ export {
   WORLD_Z_BANDS,
 } from './rendering/layer_bands.ts';
 export type {
+  LpcAppearanceResult,
+  LpcSlotCatalog,
+  LpcSlotFallbacks,
+  LpcSlotName,
+  LpcSlotResolution,
+  ResolveLpcAppearanceOptions,
+} from './rendering/lpc_appearance_resolver.ts';
+// LPC appearance resolver (C-400) — unified worker/client resolution
+export {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  LPC_SLOT_ORDER,
+  projectLpcCatalog,
+  resetLpcFallbackWarnings,
+  resolveLpcAppearance,
+} from './rendering/lpc_appearance_resolver.ts';
+export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,
   PropSpritesheet,
