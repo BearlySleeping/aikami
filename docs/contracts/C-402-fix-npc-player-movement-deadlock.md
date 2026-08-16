@@ -2,7 +2,7 @@
 id: C-402
 title: "Fix NPC/Player Movement Deadlock"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -470,3 +470,85 @@ adds nothing.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Removed the NPC/player movement deadlock **class** rather than resolving it
+per frame. `CollisionLayer.npc` was dropped from `PLAYER_COLLISION_MASK` and
+`CollisionLayer.player` from `NPC_COLLISION_MASK`, so a moving NPC pathing
+into the player's tile and a player pathing into the NPC's tile can no
+longer block each other symmetrically. NPCs now halt at their declared
+`interactionRadius` via a per-tick halt rule in `path_follow_system.ts`
+(velocity zeroed, `NpcHaltReason.player_proximity` recorded, path kept live
+so the GOAP executor does not re-request every tick), and
+`goap_movement_executor.ts` selects pursue-target goal cells at
+`interactionRadius` from the player rather than the player's own cell so A*
+never routes through the player's tile. A rate-limited stuck detector in the
+movement loop logs actor-blocked movers as a safety net. Combat masks,
+turn-manager walkability, and combat positioning are untouched.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `movement_system.test.ts` — NPC pathed into the player, player displacement non-zero over frames; E2E `/game` production test proves input recovers with NPCs present |
+| AC-2 | ✅ | Four cardinal directions covered in `movement_system.test.ts`; wall-behind-NPC case verified; stale C-375 test updated to assert pass-through |
+| AC-3 | ✅ | `path_follow_system.test.ts` — NPC stops at `>= interactionRadius` and `< interactionRadius + tileSize` with `NpcHaltReason.player_proximity`; companion exclusion locked in; radius-aware GOAP goal unit tests added |
+| AC-4 | ✅ | `COMBATANT_COLLISION_MASK` untouched; combat engine suites pass unmodified (goap_combat_tactics, turn_manager, combat_sync = 72 tests) |
+| AC-5 | ✅ | Stuck detector logs exactly one warning per rate-limit window when actor-blocked; terrain-press never logs |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/systems/goap_movement_executor.test.ts` | Unit tests for radius-aware pursue-target goal selection (C-402 AC-3) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/systems/movement_system.ts` | Dropped `npc` from `PLAYER_COLLISION_MASK`; added `StuckWatch` stuck detector + `_findBlockingActor` helper + `resetStuckWatch`/`getStuckWatch` exports |
+| `packages/frontend/engine/src/systems/entity_spawner.ts` | Dropped `player` from `NPC_COLLISION_MASK`; updated stale comments; exported `DEFAULT_INTERACTION_RADIUS` |
+| `packages/frontend/engine/src/systems/path_follow_system.ts` | Added `NpcHaltReason` + per-tick halt rule (look-ahead step so final distance stays `>= interactionRadius`); `updatePathFollow(world, deltaMs, playerEntityId)` |
+| `packages/frontend/engine/src/systems/goap_movement_executor.ts` | Radius-aware pursue-target goal selection (`_pickPursueGoal`); combat move-to-range unchanged |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Passes `playerEntityId` into `updatePathFollow` |
+| `packages/frontend/engine/src/index.ts` | Exports `NpcHaltReason`/`getNpcHaltReason`, `resetStuckWatch`/`getStuckWatch` |
+| `packages/frontend/engine/src/systems/movement_system.test.ts` | AC-1/AC-2/AC-5 tests; updated stale C-375 NPC-block assertion |
+| `packages/frontend/engine/src/systems/path_follow_system.test.ts` | AC-3 halt-rule + companion-exclusion tests; SoA cleanup for module-global slots |
+| `packages/frontend/engine/src/__tests__/entity_spawner.test.ts` | Updated NPC mask assertion to `wall|npc` (no player layer) |
+| `apps/e2e/tests/game/collision_e2e.spec.ts` | Offset-aware BASE_URL; added C-402 production `/game` functional test |
+
+### Deviations from Spec
+
+- **Party-follower gating**: the contract says the halt rule is "gated to
+  NPCs carrying `NPCDialog` so party followers (no `NPCDialog`) never halt" —
+  but in this codebase `_spawnNpc` attaches `NPCDialog` to ALL NPCs,
+  including companions. The halt rule therefore gates on
+  `NPCDialog && !Companion`, honoring the stated intent (party followers
+  never halt) with the correct component check. OQ-1 resolved: party
+  followers do not rely on the player blocking them (they path to a
+  formation slot via A*, and the mask change lets them pass the player's
+  tile — no deadlock, verified by the companion-exclusion unit test).
+- **Stuck-detector threshold**: the contract does not name a tick count; the
+  implementation uses `STUCK_THRESHOLD_TICKS = 60` (~1s at 60fps) and
+  `STUCK_REPORT_INTERVAL_MS = 5000`, both module constants for easy tuning.
+- **No scope leaks**: `COMBATANT_COLLISION_MASK`, `turn_manager_system`,
+  `goap_combat_tactics_system`, and `PROP_COLLISION_MASK` are unchanged.
+
+### Test Results
+
+- Unit (engine): 983 pass / 10 fail — the 10 failures are the pre-existing
+  baseline (`buildManifest` ×5, `SpatialVisionSystem` ×5), identical before
+  and after; 12 new contract tests added, all passing.
+- Combat (engine): 72 pass / 0 fail (goap_combat_tactics, turn_manager,
+  combat_sync) — AC-4 unmodified.
+- E2E: C-402 production `/game` test passes (offset-aware). Pre-existing
+  game/client specs that hardcode `:5274` fail to connect in the
+  contract-scoped worktree (client on the offset port) — environmental,
+  reproduced identically at HEAD with the new tests stashed.
+- Visual: production `/game` screenshot (noon, player moved off the gate
+  arch) validated at 85/100 via `ai_validate_image` — village renders,
+  player character visible, input works with NPC present.
+- Baseline: 10 pre-existing failures, 0 new failures.
