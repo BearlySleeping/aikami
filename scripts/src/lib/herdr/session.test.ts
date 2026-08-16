@@ -253,10 +253,12 @@ describe('buildServiceCommand / serviceEnvArgs — F-07', () => {
     expect(args).toHaveLength(2);
   });
 
-  it('serviceEnvArgs omits PORT when the service has no readyPort (e.g. tauri)', () => {
-    const args = serviceEnvArgs('tauri', 'emulator', 60);
-    // tauri isn't offset-aware either, but this also covers the readyPort-undefined branch.
-    expect(args).toEqual([]);
+  it('serviceEnvArgs carries the offset but omits PORT when an offset-aware service has no readyPort for the mode (firebase in staging)', () => {
+    // firebase IS offset-aware, but its readyPort is emulator-only
+    // (readyPort('staging') === undefined) — so execution reaches the
+    // missing-port branch: the offset is returned, no PORT entry is added.
+    const args = serviceEnvArgs('firebase', 'staging', 60);
+    expect(args).toEqual(['PUBLIC_EMULATOR_PORT_OFFSET=60']);
   });
 });
 

@@ -249,13 +249,13 @@ export const commitAll = (options: {
 };
 
 const stagedPaths = (options: { cwd: string; env: Record<string, string> }): string[] => {
-  try {
-    return runGit('diff --cached --name-only', { cwd: options.cwd, env: options.env })
-      .split('\n')
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  // 🔴 No catch-and-return-[]: if the staged-path query fails, protection
+  // validation cannot be completed, and unstageProtectedPaths must refuse
+  // the commit rather than silently assume nothing is staged. Let the error
+  // propagate so commitAll aborts on a protection check it could not run.
+  return runGit('diff --cached --name-only', { cwd: options.cwd, env: options.env })
+    .split('\n')
+    .filter(Boolean);
 };
 
 /** See `commitAll`'s `protectedPaths` doc — the last-mile guard itself. */

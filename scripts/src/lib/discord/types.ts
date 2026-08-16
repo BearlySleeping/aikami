@@ -27,6 +27,10 @@ export type GuildRole = {
   mentionable: boolean;
   permissions: string;
   position: number;
+  /** Integration-managed (bot roles, etc.) — outside declarative
+   *  synchronization: the structure seed filters these out so they never
+   *  enter generated sync plans (Discord forbids editing them). */
+  managed?: boolean;
 };
 
 export type ChannelCreateBody = {
@@ -37,7 +41,12 @@ export type ChannelCreateBody = {
   nsfw?: boolean;
 };
 
-export type ChannelUpdateBody = Partial<Omit<ChannelCreateBody, 'name'>>;
+export type ChannelUpdateBody = Partial<Omit<ChannelCreateBody, 'name' | 'parent_id'>> & {
+  /** Null moves a categorized channel to the top level; OMITTING parent_id
+   *  leaves the channel where it is. The update payload must permit null so
+   *  a planned top-level move can actually be applied. */
+  parent_id?: string | null;
+};
 
 export type RoleCreateBody = {
   name: string;

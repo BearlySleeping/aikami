@@ -23,7 +23,7 @@
   --sl-color-black: #17152b;
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --sl-color-accent-low: #dcd3f7;
   --sl-color-accent: #6d28d9;
   --sl-color-accent-high: #35186b;

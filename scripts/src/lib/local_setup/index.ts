@@ -610,6 +610,16 @@ const probeHerdrCompat = async (): Promise<ExtraCheck> => {
       hint: 'herdr server stop && herdr   — restarts the server on the current client binary.',
     };
   }
+  if (status.compatible !== true) {
+    // herdr reported no `compatible:` verdict at all (unparseable output or
+    // an older format) — that is NOT "compatible", so do not report success.
+    return {
+      name: 'herdr protocol',
+      ok: false,
+      note: 'could not confirm protocol compatibility — herdr status reported no compatible verdict',
+      hint: 'herdr server stop && herdr   — restarts the server on the current client binary.',
+    };
+  }
   return { name: 'herdr protocol', ok: true, note: 'client/server compatible' };
 };
 

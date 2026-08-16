@@ -28,6 +28,32 @@
 //
 //   Aikami apps:  client=5274  voice=8089  stt=8087  postgres=5433
 
+// ── Reserved ranges (single source of truth) ─────────────────────────────
+// The Nordclaw-owned ranges from the table above, plus the 5432 system
+// PostgreSQL reservation, as machine-checkable constants. The port-collision
+// test (development_ports.test.ts) asserts that every contract-shifted
+// offsettable port stays OUTSIDE these ranges — change STEP/SLOTS and the
+// test fails if any shifted port lands inside one. 5432 is deliberately not
+// Aikami's (C-387) but is still reserved in the table, so a shifted port
+// must never land on a developer's system postgres either.
+export const NORDCLAW_RESERVED_RANGES: readonly (readonly [start: number, end: number])[] = [
+  [3000, 3009], // Nordclaw internal services (edge-proxy, audit-worker)
+  [4400, 4400], // Nordclaw Firebase emulator hub
+  [5000, 5001], // Nordclaw Firebase emulator (hosting, functions)
+  [5170, 5189], // Nordclaw frontend app dev servers
+  [5432, 5432], // system PostgreSQL — reserved, never Aikami's (C-387)
+  [8080, 8080], // Nordclaw Firebase emulator (firestore)
+  [8085, 8085], // Nordclaw Firebase emulator (pubsub)
+  [9099, 9099], // Nordclaw Firebase emulator (auth)
+  [9199, 9199], // Nordclaw Firebase emulator (storage)
+];
+
+/** First port of the OS ephemeral-port range. Linux's default (32768) is the
+ *  lowest start across the platforms Aikami runs on (macOS/Windows default
+ *  to 49152), so staying below 32768 keeps every shifted port clear of the
+ *  ephemeral range on all three. */
+export const EPHEMERAL_PORT_START = 32768;
+
 // ── Firebase Emulator (unique for Aikami) ────────────────────────────────
 
 const FB_EMULATOR_PORTS = {

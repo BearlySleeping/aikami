@@ -23,6 +23,13 @@ export const InteractionResponseType = {
 
 export type DiscordUser = { id: string; username: string };
 
+/** Partial guild member object as it appears on a guild interaction. */
+export type DiscordMember = {
+  user?: DiscordUser;
+  /** Role snowflakes the member holds in the guild. */
+  roles?: string[];
+};
+
 /** A submitted modal text input, nested one level under an action row. */
 export type DiscordModalComponent = { type: 4; custom_id: string; value: string };
 export type DiscordModalActionRow = { type: 1; components: DiscordModalComponent[] };
@@ -44,8 +51,10 @@ export type DiscordInteraction = {
   type: (typeof InteractionType)[keyof typeof InteractionType];
   token: string;
   data?: DiscordInteractionData;
+  /** Guild snowflake — absent when the interaction fired in a DM. */
+  guild_id?: string;
   /** Present when the interaction fires inside a guild. */
-  member?: { user?: DiscordUser };
+  member?: DiscordMember;
   /** Present when the interaction fires in a DM. */
   user?: DiscordUser;
 };
