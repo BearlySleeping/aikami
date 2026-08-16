@@ -60,6 +60,9 @@ const SCRIPT_MAP: Record<string, string> = {
   'herdr:list': 'herdr/list.ts',
   hlist: 'herdr/list.ts',
 
+  // Discord server management (channels, roles) — see discord/structure.ts
+  discord: 'discord/index.ts',
+
   // Swarm director
 };
 

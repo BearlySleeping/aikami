@@ -16,7 +16,9 @@
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "@discordjs/rest": "2.6.3",
+    "discord-api-types": "0.38.53"
   },
   "devDependencies": {
     "firebase-tools": "15.27.0",

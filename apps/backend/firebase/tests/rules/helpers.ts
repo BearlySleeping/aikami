@@ -47,9 +47,11 @@ export async function getTestHelpers(): Promise<TestHelpers> {
           if (doc === undefined) {
             throw new Error(`seed: path must be alternating collection/doc: ${path.join('/')}`);
           }
-          ref = (ref.collection(collection) as unknown as {
-            doc(id: string): unknown;
-          }).doc(doc) as unknown as typeof ref;
+          ref = (
+            ref.collection(collection) as unknown as {
+              doc(id: string): unknown;
+            }
+          ).doc(doc) as unknown as typeof ref;
         }
         await (ref as unknown as { set(data: Record<string, unknown>): Promise<void> }).set(data);
       });

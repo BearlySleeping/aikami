@@ -9,7 +9,12 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getAuth } from '@aikami/backend/configs/auth';
 import { uploadToFirebase } from '@aikami/backend/utils/storage';
-import { EMULATOR_GOOGLE_USERS, EMULATOR_NPCS, EMULATOR_PASSWORD, EMULATOR_USERS } from '@aikami/mocks';
+import {
+  EMULATOR_GOOGLE_USERS,
+  EMULATOR_NPCS,
+  EMULATOR_PASSWORD,
+  EMULATOR_USERS,
+} from '@aikami/mocks';
 
 import type { UserCreateData } from '@aikami/types';
 import { logger } from '$logger';
