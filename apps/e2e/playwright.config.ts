@@ -38,14 +38,6 @@ const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
 
-/**
- * Worker-specific project ID for emulator data isolation.
- * Playwright sets TEST_WORKER_INDEX per worker process.
- * Each worker uses a distinct project namespace in the emulator
- * so parallel tests don't mutate each other's data.
- */
-const PROJECT_ID = `demo-aikami-worker-${process.env.TEST_WORKER_INDEX || '0'}`;
-
 // ── Environment binding for Firebase Admin SDK ─────────────────
 
 // Protocol-free host strings (no http:// prefix — Firebase Admin SDK requires this)
@@ -53,7 +45,6 @@ process.env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FIRESTORE_PORT}`;
 process.env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${AUTH_PORT}`;
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = `127.0.0.1:${STORAGE_PORT}`;
 process.env.PUBSUB_EMULATOR_HOST = `127.0.0.1:${PUBSUB_PORT}`;
-process.env.GCLOUD_PROJECT = PROJECT_ID;
 
 // ── Dev server base URLs ──────────────────────────────────────
 

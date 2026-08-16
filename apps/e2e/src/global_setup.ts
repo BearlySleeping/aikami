@@ -4,16 +4,16 @@
 //
 // C-054 AC-3: Uses shared emulator_helper for REST API purging.
 
-import { clearAllWorkerProjects } from './emulator_helper';
+import { clearAllEmulatorData } from './emulator_helper';
 
 /**
  * Playwright global setup hook.
- * Purges emulator state for ALL worker projects so tests start
- * with deterministic, empty databases for every worker.
+ * Purges emulator state so tests start with a deterministic, empty
+ * database for every worker.
  */
 const globalSetup = async (): Promise<void> => {
-  console.log('\n🧹 Global Setup: Purging all worker emulator projects...');
-  await clearAllWorkerProjects();
+  console.log('\n🧹 Global Setup: Purging emulator data...');
+  await clearAllEmulatorData();
   console.log('✓ Global setup complete\n');
 };
 

@@ -95,11 +95,11 @@ Behavioral tests for PWA client and game engine.
 playwright.config.ts      # setup, client, game projects
 src/
 ├── auth.setup.ts         # Per-worker auth state generation
-├── config.ts             # EMULATOR_PORTS, getWorkerProjectId()
+├── config.ts             # EMULATOR_PORTS, EMULATOR_PROJECT_ID
 ├── emulator_helper.ts    # Emulator purge utilities
 ├── fixtures.ts           # Shared fixtures (guestUser, etc.)
-├── global_setup.ts       # Pre-suite purge (all workers)
-├── global_teardown.ts    # Post-suite purge (all workers)
+├── global_setup.ts       # Pre-suite purge (single project)
+├── global_teardown.ts    # Post-suite purge (single project)
 └── pom/                  # Page Object Models
     ├── combat_page.ts
     ├── inventory_page.ts
@@ -141,7 +141,9 @@ test.describe('My Test', () => {
 
 ### Worker Isolation
 
-Each worker uses a distinct Firebase project ID (`demo-aikami-worker-{N}`) for data isolation. Auth states are per-worker. Setup/teardown purges all worker projects. Max 4 parallel workers.
+All Playwright workers run against the **single emulator project** (`demo-aikami-emulator`). Parallel workers isolate test state via separate browser contexts and per-worker auth state files (`.auth/user-worker-{N}.json`). Global setup/teardown purges the emulator project before and after each run.
+
+> Per-worker emulator project IDs (`demo-aikami-worker-{N}`) were removed — nothing ever wrote to those projects, and their Auth purges tripped the emulator's single-project-mode warnings.
 
 ### Auth Setup
 
