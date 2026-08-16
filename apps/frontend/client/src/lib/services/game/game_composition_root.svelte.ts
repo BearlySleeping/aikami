@@ -383,7 +383,9 @@ export class GameCompositionRoot
             systemPrompt,
             signal: opts.signal,
           });
-          return { text: userText, structured };
+          // Call 2 is extraction — the input prompt is not generated text.
+          // Return an empty text value so no caller can mistake it for model output.
+          return { text: '', structured };
         }
 
         // Call 1: stream narrative prose, forwarding tokens to the caller.

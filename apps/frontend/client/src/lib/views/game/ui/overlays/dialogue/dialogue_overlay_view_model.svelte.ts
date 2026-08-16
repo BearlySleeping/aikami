@@ -628,11 +628,9 @@ class DialogueOverlayViewModel
 
     if (this._isAbortError(message)) {
       // AC-3: remove the placeholder — no partial turn written, no error toast.
+      // The player's message stays in history; inputText stays cleared so a
+      // retry cannot submit the same text twice (finding: abort restore dup).
       this.messages = this.messages.filter((m) => m.id !== npcMessageId);
-      const lastPlayer = [...this.messages].reverse().find((m) => m.role === 'player');
-      if (lastPlayer) {
-        this.inputText = lastPlayer.content;
-      }
       return;
     }
 
@@ -1196,10 +1194,12 @@ class DialogueOverlayViewModel
       const gmResponse = await this._npcDialogueService.analyzeIntent({
         npcId: this._npcData.npcId,
         npcName: 'Game Master',
-        messages: this.messages.map((m) => ({
-          role: m.role === 'player' ? 'player' : ('npc' as const),
-          content: m.content,
-        })),
+        messages: this.messages
+          .filter((m) => m.id !== npcMessageId) // exclude the empty placeholder
+          .map((m) => ({
+            role: m.role === 'player' ? 'player' : ('npc' as const),
+            content: m.content,
+          })),
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
         playerContext: {
@@ -1239,6 +1239,7 @@ class DialogueOverlayViewModel
   private async _sendWithIntentAnalysis(_content: string, npcMessageId?: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
+    this.streamError = null;
     this._resetStreaming();
 
     const controller = new AbortController();
@@ -1952,7 +1953,7 @@ class DialogueOverlayViewModel
       // Delegate to the NPC dialogue orchestrator with the dice result
       // as part of the conversation so the model can respond contextually.
       const diceOutcome = `[Dice result: Skill=${skill}, DC=${difficultyClass}, Roll=${rollValue}, ${isSuccess ? 'SUCCESS' : 'FAILURE'}]`;
-      const playerMessage = `\${this._npcData.npcName}, I attempt a ${skill} check. ${diceOutcome}`;
+      const playerMessage = `${this._npcData.npcName}, I attempt a ${skill} check. ${diceOutcome}`;
 
       this._activeAbortController = controller;
       this.messages = [
@@ -1999,17 +2000,10 @@ class DialogueOverlayViewModel
       }
     } catch (error) {
       this._flushStreamNow();
-      const message = error instanceof Error ? error.message : String(error);
-      if (this._isAbortError(message)) {
-        // AC-3: abort — remove the placeholder, no partial turn, no error.
-        const placeholderId = this.messages.at(-1)?.id ?? '';
-        this.messages = this.messages.filter((m) => m.id !== placeholderId);
-      } else {
-        this.warn('_executeSkillCheckAction:failed', { message });
-        this.streamError = `Skill check failed: ${message}`;
-        const placeholderId = this.messages.at(-1)?.id ?? '';
-        this.messages = this.messages.filter((m) => m.id !== placeholderId);
-      }
+      this.warn('_executeSkillCheckAction:failed', {
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      this._handleTurnFailure({ npcMessageId, error });
     } finally {
       this.isResolvingSkillCheck = false;
       this._resetStreaming();

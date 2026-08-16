@@ -259,15 +259,9 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     },
     resolveRoll: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
       // C-401: stream the resolution narrative (AC-2).
-      if (STALL_MODE) {
-        await new Promise((resolve) => setTimeout(resolve, 1600));
-        mockTurnState = { kind: 'failed', reason: 'timeout', fallbackOffered: true };
-        return {
-          narrativeResult: '*Elder Thrain waits for your next move.*',
-          stateDeltas: [],
-          suggestedChips: [],
-        };
-      }
+      // Note: no STALL_MODE branch here — in stall mode analyzeIntent returns
+      // requiresRoll:false, so resolveRoll is never called (the AC-4 timeout
+      // path is exercised through analyzeIntent).
       const narrativeChunks = [
         '*Elder Thrain nods slowly.*\n',
         '"The dice have spoken. Fate has a way of guiding us, ',

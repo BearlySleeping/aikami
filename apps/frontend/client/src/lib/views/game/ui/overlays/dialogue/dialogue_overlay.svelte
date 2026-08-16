@@ -254,10 +254,12 @@ const formatNpcText = (
                       {/if}
                     {/each}
                   {/if}
-                {:else if viewModel.isStreaming && isLast && viewModel.streamingText}
-                  <!-- C-401: streamed narrative — ARIA live region announces the
-                       settled reply without interrupting per token -->
-                  <span class="inline-block" role="status" aria-live="polite">
+                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast && viewModel.streamingText}
+                  <!-- C-401: streamed narrative — live region announces the
+                       settled reply without interrupting per token. role=status
+                       already implies aria-live=polite, so only the role is set.
+                       The testid is the E2E anchor for the streaming span. -->
+                  <span class="inline-block" role="status" data-testid="dialogue-streaming-text">
                     {#each formatNpcText(viewModel.streamingText) as segment}
                       {#if segment.type === 'action'}
                         <span class="italic text-base-content/60">*{segment.content}*</span>
@@ -266,7 +268,7 @@ const formatNpcText = (
                       {/if}
                     {/each}
                   </span>
-                {:else if viewModel.isStreaming && isLast}
+                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast}
                   <span
                     class="inline-flex items-center gap-1"
                     role="status"

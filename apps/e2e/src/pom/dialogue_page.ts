@@ -8,7 +8,7 @@
 //
 // Contract: C-401 Stream Dialogue Narrative
 
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export class DialoguePage {
   readonly page: Page;
@@ -61,9 +61,10 @@ export class DialoguePage {
     return this.page.getByRole('button', { name: 'End Chat' });
   }
 
-  /** The ARIA live region where streamed narrative renders (C-401). */
+  /** The streaming narrative span (C-401) — targeted by testid so strict
+   *  locator failures are unambiguous (the overlay also uses role=status). */
   get streamingRegion() {
-    return this.page.locator('[aria-live="polite"]');
+    return this.page.locator('[data-testid="dialogue-streaming-text"]');
   }
 
   /** NPC message bubbles (left-aligned, base-100). */
@@ -127,14 +128,23 @@ export class DialoguePage {
 
   /** Asserts the dialogue overlay is visible. */
   async expectDialogueVisible(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.overlay).toBeVisible({ timeout: 10_000 });
   }
 
-  /** Reads the current length of the streamed narrative text. */
+  /**
+   * Reads the current length of the streamed narrative text.
+   * Returns -1 when the streaming span is absent (the turn settled and the
+   * placeholder was filled) so callers can stop sampling without polling
+   * after the stream completes. A present-but-unreadable span still throws
+   * (strict mode) so selector drift stays visible.
+   */
   async getStreamingTextLength(): Promise<number> {
-    const text = await this.streamingRegion.textContent().catch(() => '');
-    return (text ?? '').length;
+    const locator = this.streamingRegion.first();
+    if (!(await locator.isVisible().catch(() => false))) {
+      return -1;
+    }
+    const text = await locator.textContent();
+    return text?.length ?? 0;
   }
 
   /** Waits until at least one streamed token is visible. */
@@ -144,20 +154,17 @@ export class DialoguePage {
 
   /** Asserts no error banner is rendered (AC-3: no error surfaced). */
   async expectNoError(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.errorBanner).toHaveCount(0);
   }
 
   /** Asserts the timeout error banner is visible (AC-4). */
   async expectTimeoutError(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.errorBanner).toBeVisible({ timeout: 5_000 });
     await expect(this.errorBanner).toContainText('did not respond in time');
   }
 
   /** Asserts a given text appears in a settled NPC bubble. */
   async expectNpcText(text: string): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.npcBubbles.filter({ hasText: text }).first()).toBeVisible({
       timeout: 10_000,
     });
@@ -165,7 +172,6 @@ export class DialoguePage {
 
   /** Asserts the player message bubble is present. */
   async expectPlayerMessage(text: string): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.playerBubbles.filter({ hasText: text }).first()).toBeVisible({
       timeout: 5_000,
     });

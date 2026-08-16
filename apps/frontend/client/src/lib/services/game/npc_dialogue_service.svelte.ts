@@ -255,16 +255,6 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   endDialogue(options: { clearOverlay: () => void; resumeEngine: () => void }): void;
 
   /**
-   * Configures the orchestrator with its required dependencies.
-   * Must be called once before {@link generateTurn}.
-   */
-  configure(options: {
-    contentProvider: NpcDialogueContentProvider;
-    textGenerator: NpcDialogueTextGenerator;
-    executors: NpcDialogueExecutors;
-  }): void;
-
-  /**
    * Generates one NPC turn: AI or authored fallback.
    *
    * @param options.npcId — the content-pack NPC ID
@@ -410,6 +400,12 @@ export class NpcDialogueService
 
   /** Streamed narrative accumulator for the current turn (non-reactive). */
   private _streamText = '';
+
+  /**
+   * Per-turn validity token. Bumped on `_startTurnStream` and on timeout so
+   * late onChunk/_forwardChunk callbacks from a superseded turn are dropped.
+   */
+  private _streamTurnId = 0;
 
   /** Whether a rAF flush of `_streamText` is already scheduled. */
   private _streamFlushScheduled = false;
@@ -1078,12 +1074,20 @@ export class NpcDialogueService
   }): Promise<string> {
     const { adapterMessages, signal, onChunk, path, call } = options;
     const callStart = performance.now();
+    // Capture the turn token: a timeout bumps `_streamTurnId`, so chunks
+    // arriving after the timeout from the still-running provider are dropped
+    // (they must never regress the failed turn state or reach the view after
+    // the placeholder was removed).
+    const streamTurnId = this._streamTurnId;
     let firstToken = false;
 
     const result = await this._textGenerator!({
       messages: adapterMessages,
       signal,
       onChunk: (text: string) => {
+        if (streamTurnId !== this._streamTurnId) {
+          return;
+        }
         if (!firstToken) {
           firstToken = true;
           this.info('dialogue:ttft', {
@@ -1135,10 +1139,16 @@ export class NpcDialogueService
   /**
    * Wraps a generation promise with the configured timeout. A stalled
    * provider (never resolves) rejects with {@link DialogueTimeoutError}.
+   *
+   * On timeout the current turn is invalidated: the per-turn stream token
+   * is bumped so late onChunk/_forwardChunk callbacks from the still-running
+   * provider are dropped (they must never regress the `failed` turn state or
+   * write streamed text after the placeholder was removed).
    */
   private _withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
+        this._streamTurnId++;
         reject(new DialogueTimeoutError(this._timeoutMs, label));
       }, this._timeoutMs);
       promise.then(
@@ -1159,6 +1169,7 @@ export class NpcDialogueService
     this._streamText = '';
     this._streamFlushScheduled = false;
     this._currentCallIndex = 1;
+    this._streamTurnId++;
     this.turnState = { kind: 'idle' };
   }
 
@@ -1408,8 +1419,8 @@ export class NpcDialogueService
     lines.push(
       '',
       '[ALLOWED ACTIONS]',
-      `The NPC may perform these actions: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'Only output actions from this list. Other actions will be ignored.',
+      `In this scene the NPC has these actions available: ${projection.allowedCommands.join(', ') || 'none'}.`,
+      'These are scene context only — do not output actions in your reply.',
     );
 
     return lines.join('\n');

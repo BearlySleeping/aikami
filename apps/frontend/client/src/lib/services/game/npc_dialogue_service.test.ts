@@ -113,6 +113,8 @@ const makeStreamingTextGenerator = (options?: {
   call2Error?: Error;
   /** Call 1 never resolves — used for the AC-4 timeout test. */
   neverResolve?: boolean;
+  /** Emits this many chunks on call 1, then never resolves (stall-after-chunks). */
+  stallAfterChunks?: number;
 }) => {
   const chunks = options?.chunks ?? [];
   return mock(async (opts: Record<string, unknown>) => {
@@ -128,8 +130,13 @@ const makeStreamingTextGenerator = (options?: {
     if (options?.neverResolve) {
       await new Promise<void>(() => {});
     }
-    for (const chunk of chunks) {
-      onChunk?.(chunk);
+    const emitCount = options?.stallAfterChunks ?? chunks.length;
+    for (let i = 0; i < emitCount; i++) {
+      onChunk?.(chunks[i]);
+    }
+    if (options?.stallAfterChunks !== undefined && emitCount < chunks.length) {
+      // Emitted the requested prefix, then the provider hangs mid-stream.
+      await new Promise<void>(() => {});
     }
     return { text: chunks.join('') };
   });
@@ -994,6 +1001,41 @@ describe('C-401: two-call narrative streaming', () => {
     });
 
     // Authored fallback is offered as the recovery
+    expect(turn.source).toBe('authored');
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+    if (npcDialogueService.turnState.kind === 'failed') {
+      expect(npcDialogueService.turnState.reason).toBe('timeout');
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(true);
+    }
+  });
+
+  test('timeout after partial stream stops chunk delivery and fails the turn (AC-4)', async () => {
+    const delivered: string[] = [];
+    const textGenerator = makeStreamingTextGenerator({
+      chunks: ['The guard ', 'shifts, ', 'and speaks.'],
+      stallAfterChunks: 2, // emit two chunks, then hang
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+      timeoutMs: 60,
+    });
+
+    const controller = new AbortController();
+    const turn = await npcDialogueService.generateTurn({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: controller.signal,
+      onChunk: (text) => delivered.push(text),
+    });
+
+    // The two pre-stall chunks reached the caller, then delivery stopped.
+    expect(delivered.join('')).toBe('The guard shifts, ');
+
+    // The turn fails as a timeout with the authored fallback offered; the
+    // failed turn state is not regressed by any late chunk.
     expect(turn.source).toBe('authored');
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {
