@@ -8,6 +8,7 @@ import {
   ALL_SERVICES,
   assertNoPortConflicts,
   assertNoRunningServiceConflicts,
+  buildServiceCommand,
   expandServices,
   isPortReady,
   KNOWN_SERVICES,
@@ -15,6 +16,7 @@ import {
   parseHerdrStatus,
   resolveReadyPort,
   SERVICE_DEFS,
+  serviceEnvArgs,
   wrapCommand,
 } from './session.ts';
 
@@ -216,6 +218,45 @@ describe('isPortReady protocol probe (C-387)', () => {
     const port = (server.address() as net.AddressInfo).port;
     await new Promise<void>((res) => server.close(() => res()));
     expect(await isPortReady(port, 'tcp')).toBe(false);
+  });
+});
+
+describe('buildServiceCommand / serviceEnvArgs — F-07', () => {
+  // 🔴 The offset used to be injected as a POSIX `VAR=x cmd` shell prefix,
+  // which only worked through wrapCommand's bash paths — the no-bash
+  // Windows fallback (`cmd /c "..."`) cannot parse that syntax at all. It
+  // is now passed via `herdr tab create --env` instead, so
+  // buildServiceCommand must return the PLAIN command with no env prefix,
+  // and serviceEnvArgs carries the offset separately as `--env` entries.
+
+  it('buildServiceCommand never prefixes env vars into the command', () => {
+    const command = buildServiceCommand('client', 'emulator');
+    expect(command).not.toContain('PUBLIC_EMULATOR_PORT_OFFSET');
+    expect(command).not.toContain('PORT=');
+    expect(command).toBe(SERVICE_DEFS.client.command('emulator'));
+  });
+
+  it('serviceEnvArgs is empty at offset 0 (manual dev keeps today’s exact ports)', () => {
+    expect(serviceEnvArgs('client', 'emulator', 0)).toEqual([]);
+  });
+
+  it('serviceEnvArgs is empty for a non-offset-aware service regardless of offset', () => {
+    // voice/image/text are shared singletons — never shifted per contract.
+    expect(serviceEnvArgs('voice', 'emulator', 60)).toEqual([]);
+  });
+
+  it('serviceEnvArgs carries PUBLIC_EMULATOR_PORT_OFFSET and the shifted PORT for an offset-aware service', () => {
+    const offset = 60;
+    const args = serviceEnvArgs('client', 'emulator', offset);
+    expect(args).toContain(`PUBLIC_EMULATOR_PORT_OFFSET=${offset}`);
+    expect(args).toContain(`PORT=${resolveReadyPort('client', 'emulator', offset)}`);
+    expect(args).toHaveLength(2);
+  });
+
+  it('serviceEnvArgs omits PORT when the service has no readyPort (e.g. tauri)', () => {
+    const args = serviceEnvArgs('tauri', 'emulator', 60);
+    // tauri isn't offset-aware either, but this also covers the readyPort-undefined branch.
+    expect(args).toEqual([]);
   });
 });
 

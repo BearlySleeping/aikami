@@ -164,6 +164,14 @@ playwright-report/
 playwright/.cache/
 .auth/
 .vscode-test/
+## Ad-hoc debug scripts (not part of the suite)
+*.tmp.js
+*.tmp.cjs
+## Visual snapshots are only baselined for linux (CI's platform) — local
+## runs on other platforms produce their own *-win32.png/*-darwin.png that
+## must never be committed as if they were the golden baseline.
+**/*-snapshots/*-win32.png
+**/*-snapshots/*-darwin.png
 
 # --- 7. OS & Editor Specific ---
 ## 🖥️ OS Generated Files
@@ -242,6 +250,9 @@ apps/backend/packages/
 
 # Contract pipeline runs (new stable pipeline)
 .pi/contract-runs/
+# Infrastructure-issue log (scripts/src/lib/ops/infra_report.ts) — local
+# triage data, not a project artifact.
+.pi/infra-issues.jsonl
 # JiJutsu co-located workspaces for contract pipeline isolation
 .pi/workspaces/
 .pi/swarm/plans/

@@ -41,14 +41,25 @@ const FB_EMULATOR_PORTS = {
 } as const;
 
 // ── Aikami ───────────────────────────────────────────────────────────────
+//
+// Split into two groups because they behave differently under a per-contract
+// port offset (see "Per-contract port offsets" below):
+//   OFFSETTABLE — dev servers with a Firebase-adjacent port that collides
+//     across concurrent contract pipelines. Shifted by contractPortOffset().
+//   FIXED — heavy singleton backends (voice/image/text engines, Postgres)
+//     that stay on one shared port regardless of which contract is running.
+//     Never shifted — withPortOffset() below leaves these untouched by
+//     construction, so a consumer can no longer accidentally look for one
+//     of these at a shifted port that nothing is actually listening on.
 
-export const EMULATOR_PORTS = {
+export const OFFSETTABLE_PORTS = {
   ...FB_EMULATOR_PORTS,
-
-  // Aikami app dev servers (emulator):
   client: 5274,
   site: 5280,
   hub: 5276,
+} as const;
+
+export const FIXED_PORTS = {
   voice: 8089,
   stt: 8087,
   image: 8188,
@@ -56,6 +67,11 @@ export const EMULATOR_PORTS = {
   // Local PostgreSQL (C-387). Emulator-only — there is no local Postgres in
   // staging/production. 5432 is left free for a developer's system Postgres.
   postgres: 5433,
+} as const;
+
+export const EMULATOR_PORTS = {
+  ...OFFSETTABLE_PORTS,
+  ...FIXED_PORTS,
 } as const;
 
 export const STAGING_PORTS = {
@@ -93,9 +109,27 @@ export const PORTS = {
 // offset is a pure function of the contract ID so every consumer (dev
 // service tabs, pi worker/review tabs, cleanup) computes the same value
 // independently — no shared allocation table or IPC needed.
-
-export const CONTRACT_PORT_SLOTS = 200;
-export const CONTRACT_PORT_STEP = 10;
+//
+// 🔴 STEP=66 / SLOTS=163 were chosen by brute-force search, not guesswork —
+// a naive `offset = slot * step` is deceptively easy to get wrong: the
+// previous STEP=10/SLOTS=200 pairing had two live collision classes (proven
+// by exhaustive check, see the rig-audit findings F-03):
+//   1. Slot wraparound — `num % 200` means C-201 and C-1 land on the exact
+//      same offset, so every one of their ports collides outright.
+//   2. Cross-port collisions — OFFSETTABLE_PORTS.storage (9198) and .auth
+//      (9098) differ by exactly 100 = 10 × STEP, so any two contracts whose
+//      slots are 10 apart put one contract's storage port on top of
+//      another's auth port. 760 such pairs existed across ids 1..400.
+// This STEP/SLOTS pair is verified collision-free — by brute force, not by
+// a hand argument — for every (slot, offsettable-port) combination against:
+// every other (slot, offsettable-port) combination, the unshifted baseline
+// (slot 0 — manual `bun run dev`, which runs permanently alongside any
+// number of contract pipelines), every FIXED_PORTS value, and the
+// Nordclaw-reserved ranges documented at the top of this file. See the
+// brute-force check mirrored in development_ports.test.ts — that test is
+// the actual guarantee; this comment is only the summary.
+export const CONTRACT_PORT_SLOTS = 163;
+export const CONTRACT_PORT_STEP = 66;
 
 /** 0 for non-contract workspaces — manual dev keeps today's exact ports. */
 export const contractPortOffset = (contractId: string | undefined): number => {
@@ -106,5 +140,22 @@ export const contractPortOffset = (contractId: string | undefined): number => {
   return ((num % CONTRACT_PORT_SLOTS) + 1) * CONTRACT_PORT_STEP;
 };
 
+/** Port names shifted by a contract offset — see OFFSETTABLE_PORTS above. */
+const OFFSETTABLE_KEYS = new Set<string>(Object.keys(OFFSETTABLE_PORTS));
+
+/**
+ * Shift only the offsettable ports in `ports` by `offset`; FIXED_PORTS keys
+ * (voice/stt/image/text/postgres) pass through unchanged even when present
+ * in the same object (e.g. the merged EMULATOR_PORTS). This used to shift
+ * every key unconditionally, which meant a contract workspace's client
+ * would compute e.g. `voice: 8089 + offset` while the voice engine — a
+ * shared singleton, deliberately never duplicated per contract — was still
+ * listening on the unshifted 8089. apps/e2e/src/config.ts already had to
+ * hardcode a workaround for this; this fix makes the workaround unnecessary
+ * (kept there regardless, since that file can't import this module — see
+ * its own comment).
+ */
 export const withPortOffset = <T extends Record<string, number>>(ports: T, offset: number): T =>
-  Object.fromEntries(Object.entries(ports).map(([k, v]) => [k, v + offset])) as T;
+  Object.fromEntries(
+    Object.entries(ports).map(([k, v]) => [k, OFFSETTABLE_KEYS.has(k) ? v + offset : v]),
+  ) as T;

@@ -45,6 +45,16 @@ export type BackendEnv = {
   readonly DEEPSEEK_MODEL?: string;
   readonly ANTHROPIC_API_KEY?: string;
   readonly VITE_MODE?: string;
+  /** Ed25519 public key from the Discord Developer Portal — verifies interaction request signatures. */
+  readonly DISCORD_PUBLIC_KEY?: string;
+  /** Discord application (client) id — not currently read at runtime, kept alongside the other Discord keys for reference. */
+  readonly DISCORD_APP_ID?: string;
+  /** Fine-grained GitHub PAT, scoped to `issues:write` on this repo only — used by /bug and /feature. */
+  readonly GITHUB_ISSUES_TOKEN?: string;
+  /** OpenRouter API key — used by /ask. */
+  readonly OPENROUTER_API_KEY?: string;
+  /** OpenRouter model slug for /ask, e.g. a `:free`-suffixed model — no default; pick one at https://openrouter.ai/models?max_price=0 since free-model availability changes over time. */
+  readonly OPENROUTER_MODEL?: string;
 };
 
 // ── Multi-source reading ──────────────────────────────────────
@@ -138,6 +148,11 @@ const BACKEND_ENV_KEYS: (keyof BackendEnv)[] = [
   'DEEPSEEK_MODEL',
   'ANTHROPIC_API_KEY',
   'VITE_MODE',
+  'DISCORD_PUBLIC_KEY',
+  'DISCORD_APP_ID',
+  'GITHUB_ISSUES_TOKEN',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
 ];
 
 /**
