@@ -55,6 +55,7 @@ const formatNpcText = (
   role="dialog"
   aria-modal="true"
   aria-label="Dialogue with {viewModel.npcName}"
+  data-testid="dialogue-overlay"
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
   {#if viewModel.hasNpcScreenPosition}
@@ -152,6 +153,7 @@ const formatNpcText = (
     <div
       bind:this={viewModel.messageContainerElement}
       class="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+      aria-busy={viewModel.isStreaming}
     >
       {#snippet imageBlock(image: { id: string; url: string | null; status: string })}
         <div class="flex justify-center py-1">
@@ -252,8 +254,26 @@ const formatNpcText = (
                       {/if}
                     {/each}
                   {/if}
-                {:else if viewModel.isStreaming && isLast}
-                  <span class="inline-flex items-center gap-1">
+                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast && viewModel.streamingText}
+                  <!-- C-401: streamed narrative — live region announces the
+                       settled reply without interrupting per token. role=status
+                       already implies aria-live=polite, so only the role is set.
+                       The testid is the E2E anchor for the streaming span. -->
+                  <span class="inline-block" role="status" data-testid="dialogue-streaming-text">
+                    {#each formatNpcText(viewModel.streamingText) as segment}
+                      {#if segment.type === 'action'}
+                        <span class="italic text-base-content/60">*{segment.content}*</span>
+                      {:else}
+                        {segment.content}
+                      {/if}
+                    {/each}
+                  </span>
+                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast}
+                  <span
+                    class="inline-flex items-center gap-1"
+                    role="status"
+                    aria-label="NPC is typing"
+                  >
                     <span
                       class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce"
                       style="animation-delay: 0ms"

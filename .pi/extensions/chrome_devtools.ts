@@ -23,7 +23,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { PORTS } from '../../packages/shared/constants/src/lib/development_ports';
+import {
+  OFFSETTABLE_PORTS,
+  PORTS,
+} from '../../packages/shared/constants/src/lib/development_ports';
 import { optimizeImage } from '../../scripts/src/lib/ai/image_optimizer';
 import { resolveAikamiMode } from '../../scripts/src/lib/env/mode';
 import { which } from '../../scripts/src/lib/env/which';
@@ -60,8 +63,12 @@ function getAppUrl(app: string): string {
   const modePorts = PORTS[mode as keyof typeof PORTS];
   if (modePorts && app in modePorts) {
     const port = (modePorts as Record<string, number>)[app];
+    // Only client/hub/site (+ the Firebase suite) shift per contract — a
+    // future `app` value naming a fixed singleton backend (voice/image/text)
+    // must not silently compute a port nothing is listening on.
+    const shift = app in OFFSETTABLE_PORTS ? offset : 0;
     if (port !== undefined) {
-      return `http://localhost:${port + offset}`;
+      return `http://localhost:${port + shift}`;
     }
   }
   // Fallback: use emulator client

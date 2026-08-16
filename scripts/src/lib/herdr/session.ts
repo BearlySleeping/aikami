@@ -50,10 +50,10 @@ import { join, resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
-
 // Re-exported for back-compat — the canonical definition now lives in
 // ../env/mode (single source of truth for mode resolution).
 import type { AikamiMode } from '../env/mode';
+import { reportInfraIssue } from '../ops/infra_report.ts';
 
 export type { AikamiMode } from '../env/mode';
 
@@ -301,17 +301,55 @@ export const resolveReadyPort = (
   return port + offset;
 };
 
-/** Build the wrapped shell command for a service, prefixing
- *  PUBLIC_EMULATOR_PORT_OFFSET / PORT env vars for contract-scoped runs so
- *  concurrent contracts never bind the same port. */
-const buildServiceCommand = (serviceKey: DevService, mode: AikamiMode, offset: number): string => {
-  const command = SERVICE_DEFS[serviceKey].command(mode);
+/** The plain service command — no env-var shell prefix. See serviceEnvArgs
+ *  for the contract-offset env vars, passed separately via `herdr tab
+ *  create --env` / `workspace create --env` instead (F-07). */
+export const buildServiceCommand = (serviceKey: DevService, mode: AikamiMode): string =>
+  SERVICE_DEFS[serviceKey].command(mode);
+
+/**
+ * `--env KEY=VALUE` entries for a service tab's PUBLIC_EMULATOR_PORT_OFFSET
+ * / PORT, for contract-scoped runs so concurrent contracts never bind the
+ * same port. Set once, at `tab create` / `workspace create` time — herdr
+ * applies them to the pane's shell process, so they persist for that pane's
+ * whole lifetime (including a later crash-restart, which re-runs the plain
+ * command in the SAME already-configured pane and needs no `--env` of its
+ * own).
+ *
+ * 🔴 Previously injected as a POSIX `VAR=x cmd` shell prefix ahead of the
+ * actual command. That only ever worked through `wrapCommand`'s bash paths;
+ * the no-bash Windows fallback (`cmd /c "..."`) cannot parse
+ * `PUBLIC_EMULATOR_PORT_OFFSET=10 PORT=5284 bun run dev` as a command at
+ * all, so a Windows machine without Git Bash got a hard failure at the
+ * worst moment instead of the offset just... not applying. `--env` needs no
+ * shell to interpret it — herdr sets it directly on the child process.
+ */
+export const serviceEnvArgs = (
+  serviceKey: DevService,
+  mode: AikamiMode,
+  offset: number,
+): string[] => {
   if (offset === 0 || !OFFSET_AWARE_SERVICES.has(serviceKey)) {
-    return command;
+    return [];
   }
+  const env = [`PUBLIC_EMULATOR_PORT_OFFSET=${offset}`];
   const port = resolveReadyPort(serviceKey, mode, offset);
-  const portEnv = port !== undefined ? ` PORT=${port}` : '';
-  return `PUBLIC_EMULATOR_PORT_OFFSET=${offset}${portEnv} ${command}`;
+  if (port !== undefined) {
+    env.push(`PORT=${port}`);
+  }
+  return env;
+};
+
+/** Expand base herdr args with `--env KEY=VALUE` entries (mirrors the same
+ *  helper in contract_pipeline/herdr_adapter.ts — not shared directly since
+ *  that module imports FROM this one, and a shared third file for five
+ *  lines isn't worth the extra indirection). */
+const withEnvArgs = (base: string[], env: string[]): string[] => {
+  const args = [...base];
+  for (const kv of env) {
+    args.push('--env', kv);
+  }
+  return args;
 };
 
 /** Map CLI aliases to canonical names. */
@@ -781,6 +819,12 @@ export const killPort = async (port: number): Promise<void> => {
       console.warn(
         `Port ${port} is busy with unrelated process (PID ${pid}, ${name}). Not killing.`,
       );
+      reportInfraIssue({
+        component: 'killPort',
+        operation: `free port ${port}`,
+        error: new Error(`port held by unrelated process: ${name} (pid ${pid})`),
+        context: { port, holderName: name },
+      });
       continue;
     }
     await killPid(pid);
@@ -1196,15 +1240,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     const cwd = svc.cwd(projectRoot);
 
     console.log(`🚀 Creating workspace ${workspaceLabel} (${mode} mode)...`);
-    const r = await herdrJson<WorkspaceCreateResult>([
-      'workspace',
-      'create',
-      '--cwd',
-      cwd,
-      '--label',
-      workspaceLabel,
-      '--no-focus',
-    ]);
+    const r = await herdrJson<WorkspaceCreateResult>(
+      withEnvArgs(
+        ['workspace', 'create', '--cwd', cwd, '--label', workspaceLabel, '--no-focus'],
+        serviceEnvArgs(first, mode, offset),
+      ),
+    );
     if (!r?.result) {
       throw new Error(`Failed to create workspace ${workspaceLabel}`);
     }
@@ -1218,24 +1259,29 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
       'pane',
       'run',
       rootPaneId,
-      await wrapCommandForPane(rootPaneId, buildServiceCommand(first, mode, offset)),
+      await wrapCommandForPane(rootPaneId, buildServiceCommand(first, mode)),
     ]);
     console.log(`  ✓ Tab: ${svc.name}`);
 
     // Add remaining services as new tabs
     for (const service of services.slice(1)) {
       const s = SERVICE_DEFS[service];
-      const tabR = await herdrJson<TabCreateResult>([
-        'tab',
-        'create',
-        '--workspace',
-        workspaceId,
-        '--cwd',
-        s.cwd(projectRoot),
-        '--label',
-        s.name,
-        '--no-focus',
-      ]);
+      const tabR = await herdrJson<TabCreateResult>(
+        withEnvArgs(
+          [
+            'tab',
+            'create',
+            '--workspace',
+            workspaceId,
+            '--cwd',
+            s.cwd(projectRoot),
+            '--label',
+            s.name,
+            '--no-focus',
+          ],
+          serviceEnvArgs(service, mode, offset),
+        ),
+      );
       if (tabR?.result) {
         await herdr([
           'pane',
@@ -1243,7 +1289,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           tabR.result.root_pane.pane_id,
           await wrapCommandForPane(
             tabR.result.root_pane.pane_id,
-            buildServiceCommand(service, mode, offset),
+            buildServiceCommand(service, mode),
           ),
         ]);
         console.log(`  ✓ Tab: ${s.name}`);
@@ -1266,14 +1312,14 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
             const state = await assessServicePane(servicePane.pane_id, port, svc.readyCheck);
             if (state === 'crashed') {
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
+              // No --env here — this pane already has its offset env vars
+              // from its original `tab create`, and they persist for the
+              // pane's whole lifetime. Only the command needs re-sending.
               await herdr([
                 'pane',
                 'run',
                 servicePane.pane_id,
-                await wrapCommandForPane(
-                  servicePane.pane_id,
-                  buildServiceCommand(service, mode, offset),
-                ),
+                await wrapCommandForPane(servicePane.pane_id, buildServiceCommand(service, mode)),
               ]);
               continue;
             }
@@ -1286,17 +1332,22 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         console.log(`  ✓ Tab: ${svc.name} already running, skipping`);
         continue;
       }
-      const tabR = await herdrJson<TabCreateResult>([
-        'tab',
-        'create',
-        '--workspace',
-        workspaceId,
-        '--cwd',
-        svc.cwd(projectRoot),
-        '--label',
-        svc.name,
-        '--no-focus',
-      ]);
+      const tabR = await herdrJson<TabCreateResult>(
+        withEnvArgs(
+          [
+            'tab',
+            'create',
+            '--workspace',
+            workspaceId,
+            '--cwd',
+            svc.cwd(projectRoot),
+            '--label',
+            svc.name,
+            '--no-focus',
+          ],
+          serviceEnvArgs(service, mode, offset),
+        ),
+      );
       if (tabR?.result) {
         await herdr([
           'pane',
@@ -1304,7 +1355,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           tabR.result.root_pane.pane_id,
           await wrapCommandForPane(
             tabR.result.root_pane.pane_id,
-            buildServiceCommand(service, mode, offset),
+            buildServiceCommand(service, mode),
           ),
         ]);
         console.log(`  ✓ Tab: ${svc.name}`);

@@ -37,7 +37,6 @@ import type {
   NpcIntentAnalysisInput,
   NpcIntentAnalysisOutput,
   NpcQuestActivation,
-  NpcRollResolutionInput,
   NpcRollResolutionOutput,
   NpcStateDelta,
   NpcSuggestionChip,
@@ -92,13 +91,49 @@ export type NpcDialogueContentProvider = {
 /**
  * Text generation callback — wraps aiGatewayService.generateText for the
  * orchestrator. Includes the raw resolution detail for observability.
+ *
+ * C-401: `onChunk` is called with each narrative token as it arrives from a
+ * streaming provider. It is absent for non-streaming callers (authored
+ * fallback, test doubles) and optional so those call paths need not supply it.
  */
 export type NpcDialogueTextGenerator = (options: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   schema?: Record<string, unknown>;
   schemaName?: string;
   signal?: AbortSignal;
+  /** Called with each narrative token as it arrives. */
+  onChunk?: (text: string) => void;
 }) => Promise<{ text: string; structured?: unknown }>;
+
+/**
+ * UI-visible state of a dialogue turn. Drives the generating indicator,
+ * the streamed text, and the error affordance.
+ *
+ * C-401: the machine enters `streaming` only when the first token actually
+ * arrives via `onChunk` — a non-streaming provider never enters `streaming`.
+ */
+export type DialogueTurnState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'streaming'; readonly text: string }
+  | { readonly kind: 'awaiting_envelope'; readonly text: string }
+  | { readonly kind: 'complete'; readonly text: string }
+  | {
+      readonly kind: 'failed';
+      readonly reason: 'timeout' | 'aborted' | 'provider_error' | 'malformed';
+      readonly fallbackOffered: boolean;
+    };
+
+/**
+ * Thrown when a generation call exceeds the configured timeout.
+ * Distinguished from other failures so callers can surface an actionable
+ * error naming the provider (AC-4).
+ */
+export class DialogueTimeoutError extends Error {
+  constructor(timeoutMs: number, label: string) {
+    super(`Dialogue generation timed out after ${timeoutMs}ms (${label})`);
+    this.name = 'DialogueTimeoutError';
+  }
+}
 
 /**
  * Command executor callbacks — one per command kind.
@@ -179,7 +214,19 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     textGenerator: NpcDialogueTextGenerator;
     executors: NpcDialogueExecutors;
     useFreeTextFirst?: boolean;
+    /**
+     * Per-generation-call timeout in milliseconds. A provider that stalls
+     * past this surfaces a `failed` turn state with `reason: 'timeout'` and
+     * the authored fallback is offered (AC-4). Default: {@link DEFAULT_DIALOGUE_TIMEOUT_MS}.
+     */
+    timeoutMs?: number;
   }): void;
+
+  /**
+   * UI-visible state of the current dialogue turn.
+   * Owned by the orchestrator; the dialogue ViewModel renders it reactively.
+   */
+  readonly turnState: DialogueTurnState;
 
   /**
    * Starts a dialogue session with the given NPC.
@@ -208,16 +255,6 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   endDialogue(options: { clearOverlay: () => void; resumeEngine: () => void }): void;
 
   /**
-   * Configures the orchestrator with its required dependencies.
-   * Must be called once before {@link generateTurn}.
-   */
-  configure(options: {
-    contentProvider: NpcDialogueContentProvider;
-    textGenerator: NpcDialogueTextGenerator;
-    executors: NpcDialogueExecutors;
-  }): void;
-
-  /**
    * Generates one NPC turn: AI or authored fallback.
    *
    * @param options.npcId — the content-pack NPC ID
@@ -237,6 +274,8 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     gameStateFacts?: string[];
     /** Active encounter ID — restricts contextual dialogue resolution to this encounter only. */
     activeEncounterId?: string;
+    /** Called with each narrative token as the turn streams (C-401). */
+    onChunk?: (text: string) => void;
   }): Promise<NpcDialogueTurn>;
 
   /**
@@ -294,6 +333,8 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     signal: AbortSignal;
     gameStateFacts?: string[];
     playerContext?: { characterSheetSummary: string; level: number; classId: string };
+    /** Called with each narrative token as the pre-roll narrative streams (C-401). */
+    onChunk?: (text: string) => void;
   }): Promise<NpcIntentAnalysisOutput>;
 
   /**
@@ -315,11 +356,25 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     rollTotal: number;
     outcome: 'pass' | 'fail';
     playerInput: string;
+    /** Called with each narrative token as the resolution narrative streams (C-401). */
+    onChunk?: (text: string) => void;
   }): Promise<NpcRollResolutionOutput>;
 
   /** Whether the two-call free-text-first pipeline is active. */
   readonly useFreeTextFirst: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+/**
+ * Default per-call generation timeout. Generous by design — a CPU-bound
+ * local model on a slow machine can take a while for first token; a value
+ * that fires during normal local play is worse than no timeout (AC-4 watch
+ * point). Configurable via `configure({ timeoutMs })`.
+ */
+export const DEFAULT_DIALOGUE_TIMEOUT_MS = 120_000;
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -333,6 +388,27 @@ export class NpcDialogueService
   private _textGenerator: NpcDialogueTextGenerator | undefined;
   private _executors: NpcDialogueExecutors | undefined;
   private _configured = false;
+
+  /** Per-call generation timeout (AC-4). */
+  private _timeoutMs = DEFAULT_DIALOGUE_TIMEOUT_MS;
+
+  /**
+   * UI-visible state of the current dialogue turn (C-401).
+   * Public by design — the dialogue ViewModel renders it reactively.
+   */
+  turnState = $state<DialogueTurnState>({ kind: 'idle' });
+
+  /** Streamed narrative accumulator for the current turn (non-reactive). */
+  private _streamText = '';
+
+  /**
+   * Per-turn validity token. Bumped on `_startTurnStream` and on timeout so
+   * late onChunk/_forwardChunk callbacks from a superseded turn are dropped.
+   */
+  private _streamTurnId = 0;
+
+  /** Whether a rAF flush of `_streamText` is already scheduled. */
+  private _streamFlushScheduled = false;
 
   /** Feature flag — when false, action menu path is used (C-371). */
   private _useFreeTextFirst = true;
@@ -422,11 +498,13 @@ export class NpcDialogueService
     textGenerator: NpcDialogueTextGenerator;
     executors: NpcDialogueExecutors;
     useFreeTextFirst?: boolean;
+    timeoutMs?: number;
   }): void {
     this._contentProvider = options.contentProvider;
     this._textGenerator = options.textGenerator;
     this._executors = options.executors;
     this._useFreeTextFirst = options.useFreeTextFirst ?? true;
+    this._timeoutMs = options.timeoutMs ?? DEFAULT_DIALOGUE_TIMEOUT_MS;
     this._configured = true;
   }
 
@@ -466,6 +544,7 @@ export class NpcDialogueService
     signal: AbortSignal;
     gameStateFacts?: string[];
     activeEncounterId?: string;
+    onChunk?: (text: string) => void;
   }): Promise<NpcDialogueTurn> {
     this._assertConfigured();
 
@@ -512,15 +591,43 @@ export class NpcDialogueService
           messages: options.messages,
           signal: linkedSignal,
           turnCtx,
+          onChunk: options.onChunk,
         });
         return aiTurn;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const cause = message.includes('abort') ? 'cancelled' : 'generation_failed';
+
+        // AC-3: abort rejects — the ViewModel removes the placeholder and
+        // never writes a partial turn. Do NOT fall back to authored here.
+        if (this._isAbortError(error)) {
+          this._setTurnStateIfCurrent(controller, {
+            kind: 'failed',
+            reason: 'aborted',
+            fallbackOffered: false,
+          });
+          this.warn('generateTurn:aborted');
+          throw error;
+        }
+
+        // AC-4: a stalled provider (timeout) surfaces an actionable error
+        // and offers the authored fallback turn. Other provider failures
+        // keep the existing resilience behavior (authored fallback).
+        const timedOut = error instanceof DialogueTimeoutError;
+        const cause = timedOut ? ('timeout' as const) : ('provider_error' as const);
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: false,
+        });
         this.warn('generateTurn:fallback-activated', { cause, detail: message });
 
-        // ── Fallback to authored branch ─────────────────────────────
-        return this._buildAuthoredTurn(turnCtx);
+        const authored = this._buildAuthoredTurn(turnCtx);
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: true,
+        });
+        return authored;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -614,6 +721,7 @@ export class NpcDialogueService
     signal: AbortSignal;
     gameStateFacts?: string[];
     playerContext?: { characterSheetSummary: string; level: number; classId: string };
+    onChunk?: (text: string) => void;
   }): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
@@ -641,17 +749,38 @@ export class NpcDialogueService
             level: 1,
             classId: 'fighter',
           },
+          onChunk: options.onChunk,
         });
       } catch (error) {
+        if (this._isAbortError(error)) {
+          this._setTurnStateIfCurrent(controller, {
+            kind: 'failed',
+            reason: 'aborted',
+            fallbackOffered: false,
+          });
+          this.warn('analyzeIntent:aborted');
+          throw error;
+        }
         const message = error instanceof Error ? error.message : String(error);
-        const cause = message.includes('abort') ? 'cancelled' : 'generation_failed';
+        const cause = error instanceof DialogueTimeoutError ? 'timeout' : 'provider_error';
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: false,
+        });
         this.warn('analyzeIntent:fallback', { cause, detail: message });
         const lastPlayerInput =
           [...options.messages].reverse().find((m) => m.role === 'player')?.content ?? '';
-        return this._deriveIntentFallback(options.npcName, allowedCommands, {
+        const fallback = this._deriveIntentFallback(options.npcName, allowedCommands, {
           playerInput: lastPlayerInput,
           npcId: options.npcId,
         });
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: true,
+        });
+        return fallback;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -672,6 +801,7 @@ export class NpcDialogueService
     rollTotal: number;
     outcome: 'pass' | 'fail';
     playerInput: string;
+    onChunk?: (text: string) => void;
   }): Promise<NpcRollResolutionOutput> {
     this._assertConfigured();
 
@@ -696,11 +826,33 @@ export class NpcDialogueService
           rollTotal: options.rollTotal,
           outcome: options.outcome,
           playerInput: options.playerInput,
+          onChunk: options.onChunk,
         });
       } catch (error) {
+        if (this._isAbortError(error)) {
+          this._setTurnStateIfCurrent(controller, {
+            kind: 'failed',
+            reason: 'aborted',
+            fallbackOffered: false,
+          });
+          this.warn('resolveRoll:aborted');
+          throw error;
+        }
         const message = error instanceof Error ? error.message : String(error);
-        this.warn('resolveRoll:fallback', { detail: message });
-        return this._deriveRollFallback(options.outcome, options.checkType);
+        const cause = error instanceof DialogueTimeoutError ? 'timeout' : 'provider_error';
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: false,
+        });
+        this.warn('resolveRoll:fallback', { cause, detail: message });
+        const fallback = this._deriveRollFallback(options.outcome, options.checkType);
+        this._setTurnStateIfCurrent(controller, {
+          kind: 'failed',
+          reason: cause,
+          fallbackOffered: true,
+        });
+        return fallback;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -764,18 +916,25 @@ export class NpcDialogueService
 
   /**
    * Calls the gateway text generator with the projected context.
-   * Streams narrative tokens; parses the structured command envelope
-   * from the final result. Falls back to authored on any failure.
+   *
+   * C-401: split into two calls — call 1 streams plain narrative prose
+   * (no schema, via `onChunk`), call 2 extracts the structured command
+   * envelope from the completed narrative under the TypeBox schema. If
+   * call 2 fails or returns a malformed envelope, the turn degrades to
+   * narrative-only with derived choices — the streamed text the player
+   * already read is never discarded (AC-7).
    */
   private async _generateAiTurn(options: {
     contextProjection: DialogueContextProjection;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     turnCtx?: TurnContext;
+    onChunk?: (text: string) => void;
   }): Promise<NpcDialogueTurn> {
-    const { contextProjection, messages, signal } = options;
+    const { contextProjection, messages, signal, onChunk } = options;
 
-    const systemPrompt = this._buildSystemPrompt(contextProjection);
+    const narrativeSystemPrompt = this._buildNarrativeSystemPrompt(contextProjection);
+    const extractionSystemPrompt = this._buildExtractionSystemPrompt(contextProjection);
 
     // Build adapter messages: system + conversation (bounded window)
     const conversationMessages = messages
@@ -786,34 +945,66 @@ export class NpcDialogueService
       }));
 
     const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: narrativeSystemPrompt },
       ...conversationMessages,
     ];
 
-    try {
-      // Generate with structured output schema for the command envelope.
-      // The gateway streams onChunk for narrative, then returns the full
-      // text + parsed structured object.
-      const result = await this._textGenerator!({
-        messages: adapterMessages,
-        schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>,
-        schemaName: 'NpcDialogueAiEnvelope',
-        signal,
-      });
+    const turnStart = performance.now();
+    this._startTurnStream();
 
-      const narrative = result.text?.trim() || '';
-      const rawEnvelope = result.structured;
+    try {
+      // ── Call 1: stream narrative prose (no schema) ─────────────────
+      const narrative = await this._withTimeout(
+        this._streamNarrative({
+          adapterMessages,
+          signal,
+          onChunk,
+          path: 'turn-narrative',
+          call: 1,
+        }),
+        'narrative',
+      );
+      this._checkAbort(signal);
+
+      // ── Call 2: extract the command envelope from the narrative ────
+      this.turnState = { kind: 'awaiting_envelope', text: narrative };
+      let rawEnvelope: unknown;
+      try {
+        rawEnvelope = await this._withTimeout(
+          this._extractEnvelope({
+            narrative,
+            systemPrompt: extractionSystemPrompt,
+            schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>,
+            schemaName: 'NpcDialogueAiEnvelope',
+            signal,
+            path: 'turn-envelope',
+            call: 2,
+          }),
+          'envelope',
+        );
+      } catch (error) {
+        this._checkAbort(signal);
+        this._logCallFailure({ path: 'turn-envelope', call: 2, error });
+        // AC-7: degrade to narrative-only — never discard streamed text.
+        return this._assembleNarrativeTurn({ narrative, contextProjection });
+      }
+      this._checkAbort(signal);
 
       // ── Parse and validate the structured envelope ────────────────
       const parsedEnvelope = this._parseEnvelope(narrative, rawEnvelope);
 
-      // ── Assemble the turn ─────────────────────────────────────────
-      const finalNarrative = parsedEnvelope?.narrative || narrative;
-      const command = parsedEnvelope?.command;
-      let choices = parsedEnvelope?.choices ?? [];
+      if (!parsedEnvelope) {
+        // Malformed envelope — same AC-7 degrade path.
+        this.warn('_generateAiTurn:malformed-envelope', {
+          narrativeLength: narrative.length,
+        });
+        return this._assembleNarrativeTurn({ narrative, contextProjection });
+      }
 
-      // Filter + cap choices (schema-bounded to 0–4)
-      choices = this._filterChoices(choices);
+      // The streamed narrative is authoritative — the player already read it.
+      const finalNarrative = narrative || parsedEnvelope.narrative || '';
+      const command = parsedEnvelope.command;
+      let choices = this._filterChoices(parsedEnvelope.choices ?? []);
 
       // If no choices came back, derive from context
       if (choices.length === 0) {
@@ -834,6 +1025,8 @@ export class NpcDialogueService
             allowed: contextProjection.allowedCommands,
           });
           // Drop the command — narrative still renders
+          this.turnState = { kind: 'complete', text: finalNarrative };
+          this._logTurnTime({ path: 'turn', ms: performance.now() - turnStart });
           return {
             narrative: finalNarrative,
             choices,
@@ -849,17 +1042,249 @@ export class NpcDialogueService
         source: 'ai',
       };
 
-      // Final validation — throw on failure so generateTurn activates authored fallback
+      // Final validation — degrade to narrative-only rather than discarding
+      // streamed text (AC-7); authored fallback is reserved for call-1 failures.
       if (!Value.Check(NpcDialogueTurnSchema, turn)) {
         this.warn('_generateAiTurn:turn-validation-failed');
-        throw new Error('AI generation produced invalid turn — falling back to authored');
+        return this._assembleNarrativeTurn({ narrative, contextProjection });
       }
 
+      this.turnState = { kind: 'complete', text: finalNarrative };
+      this._logTurnTime({ path: 'turn', ms: performance.now() - turnStart });
       return turn;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`AI generation failed: ${message}`);
+      this._logCallFailure({ path: 'turn', call: this._currentCallIndex, error });
+      throw error;
     }
+  }
+
+  // ── Private: two-call split helpers (C-401) ───────────────────────────
+
+  /**
+   * Call 1 of the split: streams narrative prose (no schema) and returns
+   * the completed narrative. Also accumulates a turnState copy and forwards
+   * tokens to the caller's `onChunk`.
+   */
+  private async _streamNarrative(options: {
+    adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+    signal: AbortSignal;
+    onChunk?: (text: string) => void;
+    path: string;
+    call: number;
+  }): Promise<string> {
+    const { adapterMessages, signal, onChunk, path, call } = options;
+    const callStart = performance.now();
+    // Capture the turn token: a timeout bumps `_streamTurnId`, so chunks
+    // arriving after the timeout from the still-running provider are dropped
+    // (they must never regress the failed turn state or reach the view after
+    // the placeholder was removed).
+    const streamTurnId = this._streamTurnId;
+    let firstToken = false;
+
+    const result = await this._textGenerator!({
+      messages: adapterMessages,
+      signal,
+      onChunk: (text: string) => {
+        if (streamTurnId !== this._streamTurnId) {
+          return;
+        }
+        if (!firstToken) {
+          firstToken = true;
+          this.info('dialogue:ttft', {
+            path,
+            call,
+            ms: Math.round(performance.now() - callStart),
+          });
+        }
+        this._forwardChunk(onChunk, text);
+      },
+    });
+
+    return result.text?.trim() || this._streamText.trim() || '';
+  }
+
+  /**
+   * Call 2 of the split: schema-constrained extraction of the structured
+   * envelope from the completed narrative. Non-streamed by design.
+   */
+  private async _extractEnvelope(options: {
+    narrative: string;
+    systemPrompt: string;
+    schema: Record<string, unknown>;
+    schemaName: string;
+    signal: AbortSignal;
+    path: string;
+    call: number;
+  }): Promise<unknown> {
+    const { narrative, systemPrompt, schema, schemaName, signal, path, call } = options;
+    const callStart = performance.now();
+    this._currentCallIndex = call;
+    try {
+      const result = await this._textGenerator!({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: narrative },
+        ],
+        schema,
+        schemaName,
+        signal,
+      });
+      return result.structured;
+    } catch (error) {
+      this._logCallFailure({ path, call, error, ms: performance.now() - callStart });
+      throw error;
+    }
+  }
+
+  /**
+   * Wraps a generation promise with the configured timeout. A stalled
+   * provider (never resolves) rejects with {@link DialogueTimeoutError}.
+   *
+   * On timeout the current turn is invalidated: the per-turn stream token
+   * is bumped so late onChunk/_forwardChunk callbacks from the still-running
+   * provider are dropped (they must never regress the `failed` turn state or
+   * write streamed text after the placeholder was removed).
+   */
+  private _withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._streamTurnId++;
+        reject(new DialogueTimeoutError(this._timeoutMs, label));
+      }, this._timeoutMs);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /** Resets per-turn stream state and enters `idle`. */
+  private _startTurnStream(): void {
+    this._streamText = '';
+    this._streamFlushScheduled = false;
+    this._currentCallIndex = 1;
+    this._streamTurnId++;
+    this.turnState = { kind: 'idle' };
+  }
+
+  /**
+   * Accumulates a chunk into turnState (frame-batched) and forwards it to
+   * the caller's onChunk. Enters `streaming` on the first chunk — a
+   * non-streaming provider never enters `streaming` (AC-6).
+   */
+  private _forwardChunk(onChunk: ((text: string) => void) | undefined, text: string): void {
+    this._streamText += text;
+    if (this.turnState.kind !== 'streaming') {
+      this.turnState = { kind: 'streaming', text: this._streamText };
+    }
+    this._scheduleStreamFlush();
+    onChunk?.(text);
+  }
+
+  /**
+   * Batches turnState text updates to at most one per animation frame —
+   * never one rune write per token (limitations.md §Svelte update threshold).
+   */
+  private _scheduleStreamFlush(): void {
+    if (this._streamFlushScheduled) {
+      return;
+    }
+    this._streamFlushScheduled = true;
+    const raf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (callback: FrameRequestCallback) =>
+            setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame;
+    raf(() => {
+      this._streamFlushScheduled = false;
+      // Only update while still streaming — never regress complete/failed.
+      if (this.turnState.kind === 'streaming' && this._streamText.length > 0) {
+        this.turnState = { kind: 'streaming', text: this._streamText };
+      }
+    });
+  }
+
+  /** Throws an AbortError if the caller aborted between calls (AC-3). */
+  private _checkAbort(signal: AbortSignal): void {
+    if (signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+  }
+
+  /** Whether the error represents cancellation. */
+  private _isAbortError(error: unknown): boolean {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return true;
+    }
+    if (error instanceof Error && error.name === 'AbortError') {
+      return true;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return /abort/i.test(message);
+  }
+
+  /**
+   * Assembles a narrative-only turn (AC-7) — keeps the streamed text and
+   * derives choices; no command is derived, so no command executes and
+   * `_validateCommandPreconditions` never runs.
+   */
+  private _assembleNarrativeTurn(options: {
+    narrative: string;
+    contextProjection: DialogueContextProjection;
+  }): NpcDialogueTurn {
+    const { narrative, contextProjection } = options;
+    const turn: NpcDialogueTurn = {
+      narrative: narrative || this._genericFallbackLine(contextProjection.npcName),
+      choices: this._deriveChoices({ npcName: contextProjection.npcName }),
+      source: 'ai' as const,
+    };
+    this.turnState = { kind: 'complete', text: turn.narrative };
+    return turn;
+  }
+
+  /** Sets turnState only if this turn is still the active one. */
+  private _setTurnStateIfCurrent(controller: AbortController, state: DialogueTurnState): void {
+    if (this._activeAbortController === controller) {
+      this.turnState = state;
+    }
+  }
+
+  /** AC-5 instrumentation: time-to-first-token / per-call failure. */
+  private _currentCallIndex = 1;
+
+  private _logCallFailure(options: {
+    path: string;
+    call: number;
+    error: unknown;
+    ms?: number;
+  }): void {
+    const { path, call, error, ms } = options;
+    const reason = this._isAbortError(error)
+      ? 'aborted'
+      : error instanceof DialogueTimeoutError
+        ? 'timeout'
+        : 'provider_error';
+    this.warn('dialogue:call-failed', {
+      path,
+      call,
+      reason,
+      ms: ms !== undefined ? Math.round(ms) : undefined,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  /** AC-5 instrumentation: total turn time. */
+  private _logTurnTime(options: { path: string; ms: number }): void {
+    this.info('dialogue:turn-time', {
+      path: options.path,
+      ms: Math.round(options.ms),
+    });
   }
 
   // ── Private: authored fallback path ───────────────────────────────────
@@ -962,8 +1387,12 @@ export class NpcDialogueService
     };
   }
 
-  /** Builds the full system prompt string from a context projection. */
-  private _buildSystemPrompt(projection: DialogueContextProjection): string {
+  /**
+   * Builds the system prompt for the streamed narrative call (call 1 of the
+   * C-401 split). Asks for plain prose — never JSON — so tokens stream as
+   * readable narrative.
+   */
+  private _buildNarrativeSystemPrompt(projection: DialogueContextProjection): string {
     const lines = [
       '[NPC CONTEXT]',
       projection.persona,
@@ -972,6 +1401,7 @@ export class NpcDialogueService
       '',
       'Keep responses concise — 1 to 3 sentences. Be immersive and natural.',
       'Do not break character. Do not mention being an AI.',
+      "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
     ];
 
     if (projection.gameStateFacts.length > 0) {
@@ -989,21 +1419,35 @@ export class NpcDialogueService
     lines.push(
       '',
       '[ALLOWED ACTIONS]',
-      `The NPC may perform these actions: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'Only output actions from this list. Other actions will be ignored.',
-    );
-
-    // Add structured output instructions
-    lines.push(
-      '',
-      '[OUTPUT FORMAT]',
-      'You must output a JSON object with: "narrative" (string, required),',
-      'optionally "command" (one of the allowed actions above),',
-      'and optionally "choices" (array of player options, at most 4).',
-      'Each choice has "id", "label", and optionally "command" or "nextDialogueKey".',
+      `In this scene the NPC has these actions available: ${projection.allowedCommands.join(', ') || 'none'}.`,
+      'These are scene context only — do not output actions in your reply.',
     );
 
     return lines.join('\n');
+  }
+
+  /**
+   * Builds the system prompt for the envelope extraction call (call 2 of
+   * the C-401 split). Operating on the completed narrative, it asks for the
+   * structured `{narrative, command, choices}` envelope — the same shape the
+   * single-call path used to request.
+   */
+  private _buildExtractionSystemPrompt(projection: DialogueContextProjection): string {
+    return [
+      '[NPC CONTEXT]',
+      projection.persona,
+      `You are ${projection.npcName}, staying in character.`,
+      '',
+      '[EXTRACTION]',
+      'You are given an NPC narrative that was just spoken to the player.',
+      'Extract the structured dialogue envelope from it:',
+      '"narrative" (string, required),',
+      'optionally "command" (one of the allowed actions),',
+      'and optionally "choices" (array of player options, at most 4).',
+      'Each choice has "id", "label", and optionally "command" or "nextDialogueKey".',
+      `Allowed actions: ${projection.allowedCommands.join(', ') || 'none'}.`,
+      'Do not invent new narrative — reuse the given narrative verbatim.',
+    ].join('\n');
   }
 
   // ── Private: precondition derivation ──────────────────────────────────
@@ -1286,8 +1730,14 @@ export class NpcDialogueService
   // ── Private: two-call pipeline (C-371) ────────────────────────────────
 
   /**
-   * Call #1: Intent analysis — determines if a mechanical roll is needed.
-   * Sends player text + NPC context + player context to the LLM.
+   * Call #1 of the two-call pipeline: intent analysis — determines if a
+   * mechanical roll is needed.
+   *
+   * C-401: split — the NPC's narrative response streams first (no schema),
+   * then the intent envelope (requiresRoll, checkType, DC, chips) is
+   * extracted from the completed narrative. The streamed narrative is
+   * authoritative for `npcResponse` (AC-2: narrative fully streamed and
+   * visible before the dice prompt).
    */
   private async _analyzeIntent(options: {
     npcName: string;
@@ -1296,10 +1746,11 @@ export class NpcDialogueService
     signal: AbortSignal;
     gameStateFacts: string[];
     playerContext: { characterSheetSummary: string; level: number; classId: string };
+    onChunk?: (text: string) => void;
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
-    const { npcName, allowedCommands, messages, gameStateFacts, playerContext } = options;
+    const { npcName, allowedCommands, messages, gameStateFacts, playerContext, onChunk } = options;
 
     // Build the input for the LLM
     const input: NpcIntentAnalysisInput = {
@@ -1317,60 +1768,108 @@ export class NpcDialogueService
       gameStateFacts: gameStateFacts,
     };
 
-    // Build system prompt for intent analysis
-    const systemPrompt = buildIntentAnalysisSystemPrompt();
+    // Call 1 streams prose; call 2 extracts the intent envelope.
+    const narrativeSystemPrompt = buildIntentNarrativeSystemPrompt();
+    const extractionSystemPrompt = buildIntentAnalysisSystemPrompt();
 
     const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: narrativeSystemPrompt },
       { role: 'user', content: JSON.stringify(input) },
     ];
 
+    const turnStart = performance.now();
+    this._startTurnStream();
+
     try {
-      const result = await this._textGenerator!({
-        messages: adapterMessages,
-        schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
-        schemaName: 'NpcIntentAnalysisOutput',
-        signal: options.signal,
-      });
+      // ── Call 1: stream the NPC's narrative response (no schema) ─────
+      const narrative = await this._withTimeout(
+        this._streamNarrative({
+          adapterMessages,
+          signal: options.signal,
+          onChunk,
+          path: 'intent-narrative',
+          call: 1,
+        }),
+        'intent-narrative',
+      );
+      this._checkAbort(options.signal);
 
-      const rawOutput = result.structured ?? {};
+      // ── Call 2: extract the intent envelope from the narrative ──────
+      this.turnState = { kind: 'awaiting_envelope', text: narrative };
+      let rawOutput: unknown;
+      try {
+        rawOutput = await this._withTimeout(
+          this._extractEnvelope({
+            // Keep the player's action alongside the narrative so the
+            // requiresRoll decision survives extraction.
+            narrative: `${input.playerInput}\n\n${narrative}`,
+            systemPrompt: extractionSystemPrompt,
+            schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+            schemaName: 'NpcIntentAnalysisOutput',
+            signal: options.signal,
+            path: 'intent-envelope',
+            call: 2,
+          }),
+          'intent-envelope',
+        );
+      } catch (error) {
+        this._checkAbort(options.signal);
+        this.warn('_analyzeIntent:call2-failed', {
+          detail: error instanceof Error ? error.message : String(error),
+        });
+        rawOutput = undefined;
+      }
+      this._checkAbort(options.signal);
 
-      // Validate against schema
-      if (Value.Check(NpcIntentAnalysisOutputSchema, rawOutput)) {
-        const output = rawOutput as NpcIntentAnalysisOutput;
+      let output: NpcIntentAnalysisOutput | undefined;
+      if (rawOutput !== undefined && Value.Check(NpcIntentAnalysisOutputSchema, rawOutput)) {
+        output = rawOutput as NpcIntentAnalysisOutput;
         this.debug('_analyzeIntent:complete', {
           requiresRoll: output.requiresRoll,
           checkType: output.checkType,
           chipCount: output.suggestedChips.length,
         });
-        return output;
       }
 
-      // Repair attempt: salvage narrative from raw text using shared helper
-      this.warn('_analyzeIntent:invalid-output');
+      if (!output) {
+        // Repair attempt: salvage narrative from the streamed text
+        this.warn('_analyzeIntent:invalid-output');
+        const recovered = recoverIntentAnalysisOutput(
+          narrative.trim(),
+          NpcIntentAnalysisOutputSchema,
+        );
+        output = {
+          requiresRoll: false,
+          checkType: undefined,
+          difficultyClass: undefined,
+          modifierSource: undefined,
+          npcResponse: recovered.npcResponse,
+          suggestedChips: recovered.suggestedChips,
+          questActivation: recovered.questActivation,
+        };
+      }
 
-      const recovered = recoverIntentAnalysisOutput(
-        result.text?.trim(),
-        NpcIntentAnalysisOutputSchema,
-      );
-
-      return {
-        requiresRoll: false,
-        checkType: undefined,
-        difficultyClass: undefined,
-        modifierSource: undefined,
-        npcResponse: recovered.npcResponse,
-        suggestedChips: recovered.suggestedChips,
-        questActivation: recovered.questActivation,
+      // The streamed narrative is authoritative — the player already read it.
+      const finalOutput: NpcIntentAnalysisOutput = {
+        ...output,
+        npcResponse: narrative || output.npcResponse,
       };
+      this.turnState = { kind: 'complete', text: finalOutput.npcResponse };
+      this._logTurnTime({ path: 'intent', ms: performance.now() - turnStart });
+      return finalOutput;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Intent analysis failed: ${msg}`);
+      this._logCallFailure({ path: 'intent', call: this._currentCallIndex, error });
+      throw error;
     }
   }
 
   /**
    * Call #2: Roll resolution — sends dice outcome to LLM for narrative.
+   *
+   * C-401: the resolution narrative streams first (no schema), then the
+   * NpcRollResolutionOutput envelope (stateDeltas, chips) is extracted from
+   * the completed narrative. The streamed narrative is authoritative for
+   * `narrativeResult` (AC-2: resolution narrative streams after the roll).
    */
   private async _resolveRoll(options: {
     npcId: string;
@@ -1383,6 +1882,7 @@ export class NpcDialogueService
     rollTotal: number;
     outcome: 'pass' | 'fail';
     playerInput: string;
+    onChunk?: (text: string) => void;
   }): Promise<NpcRollResolutionOutput> {
     this.debug('_resolveRoll:start', {
       checkType: options.checkType,
@@ -1390,69 +1890,113 @@ export class NpcDialogueService
       outcome: options.outcome,
     });
 
-    const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput } = options;
+    const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput, onChunk } =
+      options;
 
-    const _input: NpcRollResolutionInput = {
-      checkType: checkType,
-      difficultyClass: difficultyClass,
-      rollTotal: rollTotal,
-      outcome,
-      playerInput: playerInput,
-    };
+    const userPrompt = `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`;
 
-    const systemPrompt = [
+    // Call 1 streams prose; call 2 extracts the roll-resolution envelope.
+    const narrativeSystemPrompt = [
       'You are a game master resolving a dice roll outcome in an RPG dialogue.',
       'Given the skill check result, write a narrative NPC response and propose',
       'any state changes (trust, flags, inventory).',
       '',
-      'Respond with a JSON object matching the NpcRollResolutionOutput schema.',
+      "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
+    ].join('\n');
+
+    const extractionSystemPrompt = [
+      'You are a game master resolving a dice roll outcome in an RPG dialogue.',
+      'Given the skill check result, write a narrative NPC response and propose',
+      'any state changes (trust, flags, inventory).',
+      '',
+      'Extract the structured NpcRollResolutionOutput from the given narrative:',
+      '"narrativeResult" (string, required), "stateDeltas" (array),',
+      'and "suggestedChips" (array of player options).',
+      'Do not invent new narrative — reuse the given narrative verbatim.',
     ].join('\n');
 
     const adapterMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`,
-      },
+      { role: 'system', content: narrativeSystemPrompt },
+      { role: 'user', content: userPrompt },
     ];
 
+    const turnStart = performance.now();
+    this._startTurnStream();
+
     try {
-      const result = await this._textGenerator!({
-        messages: adapterMessages,
-        schema: NpcRollResolutionOutputSchema as unknown as Record<string, unknown>,
-        schemaName: 'NpcRollResolutionOutput',
-        signal: options.signal,
-      });
+      // ── Call 1: stream the resolution narrative (no schema) ─────────
+      const narrative = await this._withTimeout(
+        this._streamNarrative({
+          adapterMessages,
+          signal: options.signal,
+          onChunk,
+          path: 'roll-narrative',
+          call: 1,
+        }),
+        'roll-narrative',
+      );
+      this._checkAbort(options.signal);
 
-      const rawOutput = result.structured ?? {};
-
-      if (Value.Check(NpcRollResolutionOutputSchema, rawOutput)) {
-        const output = rawOutput as NpcRollResolutionOutput;
-
-        // Validate and apply state deltas
-        const validatedDeltas = this._validateAndApplyDeltas({
-          deltas: output.stateDeltas,
-          npcId: options.npcId,
+      // ── Call 2: extract the roll-resolution envelope ────────────────
+      this.turnState = { kind: 'awaiting_envelope', text: narrative };
+      let rawOutput: unknown;
+      try {
+        rawOutput = await this._withTimeout(
+          this._extractEnvelope({
+            narrative: `${userPrompt}\n\n${narrative}`,
+            systemPrompt: extractionSystemPrompt,
+            schema: NpcRollResolutionOutputSchema as unknown as Record<string, unknown>,
+            schemaName: 'NpcRollResolutionOutput',
+            signal: options.signal,
+            path: 'roll-envelope',
+            call: 2,
+          }),
+          'roll-envelope',
+        );
+      } catch (error) {
+        this._checkAbort(options.signal);
+        this.warn('_resolveRoll:call2-failed', {
+          detail: error instanceof Error ? error.message : String(error),
         });
-        output.stateDeltas = validatedDeltas;
+        rawOutput = undefined;
+      }
+      this._checkAbort(options.signal);
 
+      let output: NpcRollResolutionOutput | undefined;
+      if (rawOutput !== undefined && Value.Check(NpcRollResolutionOutputSchema, rawOutput)) {
+        output = rawOutput as NpcRollResolutionOutput;
         this.debug('_resolveRoll:complete', {
           narrativeLength: output.narrativeResult.length,
-          deltaCount: validatedDeltas.length,
+          deltaCount: output.stateDeltas.length,
           chipCount: output.suggestedChips.length,
         });
-        return output;
       }
 
-      this.warn('_resolveRoll:invalid-output');
-      return {
-        narrativeResult: result.text?.trim() || `*${npcName} waits for your next move.*`,
-        stateDeltas: [],
-        suggestedChips: [],
-      };
+      if (!output) {
+        this.warn('_resolveRoll:invalid-output');
+        output = {
+          narrativeResult: narrative || `*${npcName} waits for your next move.*`,
+          stateDeltas: [],
+          suggestedChips: [],
+        };
+      }
+
+      // The streamed narrative is authoritative — the player already read it.
+      output.narrativeResult = narrative || output.narrativeResult;
+
+      // Validate and apply state deltas
+      const validatedDeltas = this._validateAndApplyDeltas({
+        deltas: output.stateDeltas,
+        npcId: options.npcId,
+      });
+      output.stateDeltas = validatedDeltas;
+
+      this.turnState = { kind: 'complete', text: output.narrativeResult };
+      this._logTurnTime({ path: 'roll', ms: performance.now() - turnStart });
+      return output;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Roll resolution failed: ${msg}`);
+      this._logCallFailure({ path: 'roll', call: this._currentCallIndex, error });
+      throw error;
     }
   }
 
@@ -1711,6 +2255,26 @@ export const npcDialogueService: NpcDialogueServiceInterface = NpcDialogueServic
 // ---------------------------------------------------------------------------
 // Exported helpers for intent analysis (C-371) — shared with sandbox
 // ---------------------------------------------------------------------------
+
+/**
+ * Builds the system prompt for the streamed intent-narrative call (call 1
+ * of the C-401 split inside `_analyzeIntent`). Asks for plain prose — the
+ * NPC's spoken response — never JSON, so tokens stream as readable text.
+ * Exported for the dev sandbox's real-LLM path.
+ */
+export function buildIntentNarrativeSystemPrompt(): string {
+  return [
+    'You are a game master assistant analyzing player intent in an RPG dialogue.',
+    "Given the player's message and NPC context, respond as the NPC.",
+    "Write the NPC's spoken response — in FIRST-PERSON as the NPC speaking directly to the player.",
+    '   Include actions in asterisks for flavor (e.g. *strokes beard* "Ah, a fine question!").',
+    '   NEVER write third-person narration like "The elder considers your words."',
+    '',
+    'The response will be analyzed afterward for intent (skill check, quest acceptance),',
+    'so naturally reflect what the player is attempting.',
+    "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
+  ].join('\n');
+}
 
 /**
  * Builds the system prompt for intent analysis (call #1).

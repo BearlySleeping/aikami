@@ -544,13 +544,14 @@ export class DialogueDevViewModel
   }): Promise<void> {
     const { skill, difficultyClass, rollValue, isSuccess } = options;
     this.isResolvingSkillCheck = true;
+    this._resetStreaming();
 
-    // Pick a narrative from the persona's array
+    // Pick the first narrative from the persona's array (deterministic for E2E)
     const personaNarratives = isSuccess
       ? (MOCK_SUCCESS_NARRATIVES[this.mockNpcPreset] ?? MOCK_SUCCESS_NARRATIVES.sage)
       : (MOCK_FAIL_NARRATIVES[this.mockNpcPreset] ?? MOCK_FAIL_NARRATIVES.sage);
 
-    const narrative = personaNarratives[Math.floor(Math.random() * personaNarratives.length)];
+    const narrative = personaNarratives[0] ?? '';
 
     this.debug('DialogueDevVM:_mockSkillCheckResolution', {
       skill,
@@ -560,14 +561,31 @@ export class DialogueDevViewModel
       narrativeLength: narrative.length,
     });
 
-    // Simulate LLM latency
-    await new Promise<void>((resolve) => setTimeout(resolve, 800));
+    // C-401: stream the resolution narrative into a placeholder, then fill it.
+    const npcMessageId = crypto.randomUUID();
+    this.messages = [
+      ...this.messages,
+      {
+        id: npcMessageId,
+        content: '',
+        role: 'npc' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
 
-    // Append the NPC's response (just the narrative, no dev tag in the bubble)
-    const self = this as unknown as {
-      _appendNpcMessage: (content: string) => void;
-    };
-    self._appendNpcMessage(narrative);
+    // Simulate streaming: emit the narrative word-by-word on a fixed cadence.
+    const words = narrative.split(/(\s+)/);
+    for (const word of words) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      this._handleStreamChunk(word);
+    }
+    this._flushStreamNow();
+    const streamedText = this.streamingText || narrative;
+    this._setMessageContent(npcMessageId, streamedText);
+    this._resetStreaming();
 
     // Auto-generate scene image if enabled (fire-and-forget)
     if (this.autoGenerateImage) {
