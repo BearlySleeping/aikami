@@ -14,7 +14,7 @@ import {
   getWorkspaceTabNames,
   herdr,
   herdrJson,
-  wrapCommand,
+  wrapCommandForPane,
 } from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
@@ -76,7 +76,12 @@ if (existingWsId) {
     ]);
 
     if (tabR?.result) {
-      await herdr(['pane', 'run', tabR.result.root_pane.pane_id, wrapCommand(PI_COMMAND)]);
+      await herdr([
+        'pane',
+        'run',
+        tabR.result.root_pane.pane_id,
+        await wrapCommandForPane(tabR.result.root_pane.pane_id, PI_COMMAND),
+      ]);
       ok(`pi tab added to ${PI_WORKSPACE}`);
     } else {
       console.error('❌ Failed to create pi tab');
@@ -104,7 +109,7 @@ if (existingWsId) {
   wsId = createR.result.workspace.workspace_id;
   const rootPaneId = createR.result.root_pane.pane_id;
   await herdr(['tab', 'rename', `${wsId}:1`, PI_TAB]);
-  await herdr(['pane', 'run', rootPaneId, wrapCommand(PI_COMMAND)]);
+  await herdr(['pane', 'run', rootPaneId, await wrapCommandForPane(rootPaneId, PI_COMMAND)]);
   ok(`pi running in ${PI_WORKSPACE}`);
 }
 

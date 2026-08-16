@@ -26,6 +26,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { type AikamiMode, isAikamiMode } from './mode';
 import { findBash, posixQuote, which } from './which';
 
 // ── Mode → project map ──────────────────────────────────────────────────
@@ -38,8 +39,6 @@ const MODE_PROJECT_MAP: Record<string, string> = {
   staging: 'aikami-staging',
   production: 'aikami-production',
 };
-
-const VALID_MODES = new Set(['emulator', 'staging', 'production']);
 
 let _hasDirenv: boolean | undefined;
 
@@ -56,6 +55,15 @@ export const hasDirenv = (): boolean => {
   return _hasDirenv;
 };
 
+/**
+ * Reset the `hasDirenv` cache. Test-only: pass an explicit value to force the
+ * decision deterministically (regardless of the machine's PATH), or `undefined`
+ * to re-detect from PATH on the next call.
+ */
+export const resetDirenvCache = (value: boolean | undefined): void => {
+  _hasDirenv = value;
+};
+
 /** True when THIS process was already set up by .envrc (direnv + Nix). */
 export const isDirenvLoaded = (): boolean =>
   process.env.AIKAMI_ENV_LOADED === '1' ||
@@ -63,7 +71,7 @@ export const isDirenvLoaded = (): boolean =>
   process.env.IN_NIX_SHELL !== undefined;
 
 export type AikamiEnv = {
-  mode: 'emulator' | 'staging' | 'production';
+  mode: AikamiMode;
   projectId: string;
   isEmulator: boolean;
 };
@@ -74,16 +82,16 @@ export type AikamiEnv = {
  * emulator, matching .envrc behavior.
  */
 export const resolveAikamiEnv = (root: string): AikamiEnv => {
-  let mode = 'emulator';
+  let mode: AikamiMode = 'emulator';
   const envLocal = join(root, '.env.local');
   if (existsSync(envLocal)) {
     const match = readFileSync(envLocal, 'utf8').match(/^AIKAMI_MODE=(\S+)\s*$/m);
-    if (match?.[1] && VALID_MODES.has(match[1])) {
+    if (match?.[1] && isAikamiMode(match[1])) {
       mode = match[1];
     }
   }
   const projectId = MODE_PROJECT_MAP[mode] ?? 'demo-aikami-emulator';
-  return { mode: mode as AikamiEnv['mode'], projectId, isEmulator: mode === 'emulator' };
+  return { mode, projectId, isEmulator: mode === 'emulator' };
 };
 
 /**

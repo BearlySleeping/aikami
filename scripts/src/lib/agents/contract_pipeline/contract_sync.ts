@@ -58,8 +58,29 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { runGit } from '../git_worktree.ts';
+
+/**
+ * Normalize a repo-relative path for git by replacing `separator` with `/`.
+ * Pure (no path API) so tests can pin both platform behaviors deterministically:
+ * pass `'\\'` to simulate Windows, `'/'` to simulate POSIX.
+ */
+export const toGitPath = (relPath: string, separator: string = sep): string =>
+  relPath.split(separator).join('/');
+
+/**
+ * Repo-relative path in git's format (forward slashes).
+ *
+ * Windows `relative()` returns backslash paths (`docs\contracts\C-400.md`),
+ * which git rejects — `update-index --cacheinfo` fails with "Invalid path".
+ * Every repo-relative path in this module feeds a git command, so normalize
+ * once at the source, replacing ONLY the host platform separator (`path.sep`):
+ * on POSIX the path already uses `/`, so literal backslashes in filenames
+ * pass through untouched.
+ */
+const gitRelPath = (repoRoot: string, contractPath: string): string =>
+  toGitPath(relative(repoRoot, contractPath));
 
 /** Git identity used for pipeline-authored contract commits. */
 const AGENT_ENV = {
@@ -136,7 +157,7 @@ export const isolateContractInWorktree = (options: {
     return { ok: true, message: 'Contract file does not exist yet.', committed: false };
   }
 
-  const relPath = relative(repoRoot, contractPath);
+  const relPath = gitRelPath(repoRoot, contractPath);
   const worktreeCopy = join(worktreePath, relPath);
 
   try {
@@ -208,6 +229,8 @@ const readContentAt = (options: {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 10_000,
+      // Windows: hide the console window (no-op on POSIX).
+      windowsHide: true,
     });
   } catch {
     return undefined;
@@ -458,7 +481,7 @@ export const commitContractToMain = (options: {
     };
   }
 
-  const relPath = relative(repoRoot, contractPath);
+  const relPath = gitRelPath(repoRoot, contractPath);
   const content = readFileSync(contractPath, 'utf-8');
 
   return commitContentToMain({ repoRoot, relPath, content, message });
@@ -487,7 +510,7 @@ export const commitContractContent = (options: {
   message: string;
 }): ContractSyncResult => {
   const { repoRoot, contractPath, content, message } = options;
-  const relPath = relative(repoRoot, contractPath);
+  const relPath = gitRelPath(repoRoot, contractPath);
   return commitContentToMain({ repoRoot, relPath, content, message });
 };
 
@@ -525,7 +548,7 @@ export const pullContractFromWorktree = (options: {
     return { ok: true, message: 'No worktree — nothing to pull back.', committed: false };
   }
 
-  const relPath = relative(repoRoot, contractPath);
+  const relPath = gitRelPath(repoRoot, contractPath);
   const worktreeCopy = join(worktreePath, relPath);
   if (!existsSync(worktreeCopy)) {
     return { ok: true, message: 'No contract copy in worktree.', committed: false };

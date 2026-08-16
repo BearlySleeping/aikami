@@ -203,7 +203,11 @@ async function main() {
 async function checkHerdrAvailable(): Promise<boolean> {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve) => {
-    const proc = spawn('herdr', ['--version'], { stdio: 'ignore' });
+    const proc = spawn('herdr', ['--version'], {
+      stdio: 'ignore',
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
+    });
     proc.on('close', (code) => resolve(code === 0));
     proc.on('error', () => resolve(false));
   });

@@ -148,6 +148,8 @@ const _getChangedFiles = async (baseRef: string): Promise<string[]> => {
     const proc = spawn('git', ['diff', '--name-only', baseRef, 'HEAD'], {
       cwd: PROJECT_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
     });
 
     let out = '';
@@ -321,6 +323,8 @@ const _runBiomeCheck = async (files: string[]): Promise<GateViolation[]> => {
     const proc = spawn('bun', ['biome', 'check', ...files, '--error-on-warnings'], {
       cwd: PROJECT_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Windows: hide the console window this spawn would otherwise flash.
+      windowsHide: true,
     });
 
     let stderr = '';

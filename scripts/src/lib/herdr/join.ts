@@ -3,7 +3,7 @@
 // Join (attach to) the herdr session displaying aikami workspaces.
 //
 // Usage:
-//   bun herdr:join                 # uses $AIKAMI_MODE to verify workspace exists
+//   bun herdr:join                 # uses $AIKAMI_MODE, defaults to emulator
 //   bun herdr:join --mode emulator
 
 import { resolveMode } from './cli.ts';

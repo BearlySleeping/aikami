@@ -4,7 +4,7 @@
 //
 // C-054 AC-3: Extracted from global_setup.ts / global_teardown.ts.
 
-import { EMULATOR_PORTS, EMULATOR_PROJECT_ID, getWorkerProjectId, MAX_WORKERS } from './config';
+import { EMULATOR_PORTS, EMULATOR_PROJECT_ID } from './config';
 
 /** Firestore emulator host without protocol prefix (for Admin SDK). */
 export const FIRESTORE_EMULATOR_HOST = `127.0.0.1:${EMULATOR_PORTS.firestore}` as const;
@@ -60,7 +60,11 @@ export const clearAuthEmulatorData = async (projectId: string): Promise<void> =>
 };
 
 /**
- * Clear ALL emulator data (Firestore + Auth) for a single project.
+ * Clear ALL emulator data (Firestore + Auth) for the emulator project.
+ *
+ * The suite uses a single shared emulator project (demo-aikami-emulator);
+ * parallel Playwright workers isolate state via separate browser contexts
+ * and per-worker auth state files, not separate emulator projects.
  */
 export const clearAllEmulatorData = async (projectId?: string): Promise<void> => {
   const pid = projectId ?? EMULATOR_PROJECT_ID;
@@ -80,21 +84,4 @@ export const clearAllEmulatorData = async (projectId?: string): Promise<void> =>
   } else {
     console.log(`[e2e:lifecycle] Project ${pid} emulator data purged successfully`);
   }
-};
-
-/**
- * Purge emulator data for ALL worker projects.
- *
- * Iterates through MAX_WORKERS project IDs (demo-aikami-worker-0 through
- * demo-aikami-worker-N) and purges each. Called from global setup/teardown
- * to ensure no stale data from previous runs interferes with the current run.
- */
-export const clearAllWorkerProjects = async (): Promise<void> => {
-  console.log('[e2e:lifecycle] Purging all worker emulator projects');
-
-  for (let i = 0; i < MAX_WORKERS; i++) {
-    const pid = getWorkerProjectId(i);
-    await clearAllEmulatorData(pid);
-  }
-  console.log('[e2e:lifecycle] All worker projects purged successfully');
 };

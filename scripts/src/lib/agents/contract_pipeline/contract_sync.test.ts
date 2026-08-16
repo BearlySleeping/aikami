@@ -32,6 +32,7 @@ import {
   hasUncommittedChanges,
   isolateContractInWorktree,
   pullContractFromWorktree,
+  toGitPath,
 } from './contract_sync.ts';
 
 const git = (args: string[], cwd: string): string =>
@@ -91,6 +92,27 @@ afterEach(() => {
       // best effort — temp dirs
     }
   }
+});
+
+describe('toGitPath (gitRelPath separator normalization)', () => {
+  it('converts Windows backslash separators for git', () => {
+    expect(toGitPath(String.raw`docs\contracts\C-400-test.md`, '\\')).toBe(
+      'docs/contracts/C-400-test.md',
+    );
+  });
+
+  it('preserves literal backslashes in POSIX filenames', () => {
+    // On POSIX `path.sep` is '/', so a repo-relative filename containing a
+    // literal `\` must pass through unchanged — git treats `\` as a plain
+    // character in POSIX paths, and the old blanket `split('\\')` mangled it.
+    expect(toGitPath(String.raw`docs\contracts\C-400-test.md`, '/')).toBe(
+      String.raw`docs\contracts\C-400-test.md`,
+    );
+  });
+
+  it('is a no-op on already-forward-slash paths on any platform', () => {
+    expect(toGitPath('docs/contracts/C-400-test.md')).toBe('docs/contracts/C-400-test.md');
+  });
 });
 
 describe('currentBranch', () => {

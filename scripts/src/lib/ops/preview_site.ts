@@ -13,6 +13,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PORTS } from '@aikami/constants';
 import { c, error, info, ok } from '../cli_utils.ts';
+import { resolveAikamiMode } from '../env/mode';
 import type { AikamiMode } from '../herdr/session.ts';
 import { findWorkspace, isPortReady, resolveSessionName, startServices } from '../herdr/session.ts';
 
@@ -93,10 +94,7 @@ const launchChromium = async (port: number) => {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
-const mode: AikamiMode =
-  process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
-    ? process.env.AIKAMI_MODE
-    : 'emulator';
+const mode: AikamiMode = resolveAikamiMode();
 
 console.log(`\n${c.bold}Aikami Site Preview${c.reset}\n`);
 info(`Mode: ${mode}`);

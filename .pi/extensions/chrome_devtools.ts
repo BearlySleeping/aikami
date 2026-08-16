@@ -25,6 +25,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { PORTS } from '../../packages/shared/constants/src/lib/development_ports';
 import { optimizeImage } from '../../scripts/src/lib/ai/image_optimizer';
+import { resolveAikamiMode } from '../../scripts/src/lib/env/mode';
 import { which } from '../../scripts/src/lib/env/which';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
@@ -39,7 +40,7 @@ let spawnedChromePid: number | null = null;
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function getMode(): string {
-  return process.env.AIKAMI_MODE || 'emulator';
+  return resolveAikamiMode();
 }
 
 function getRoot(): string {
