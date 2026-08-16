@@ -2,7 +2,7 @@
 id: C-402
 title: "Fix NPC/Player Movement Deadlock"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-16"
 | **Target** | `packages/frontend/engine/src/systems/` — collision masks, movement, GOAP movement execution |
 | **Priority** | P0 — soft-locks play; the player loses control with no recovery short of reload |
 | **Dependencies** | — |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -59,23 +59,33 @@ created_at: "2026-08-16"
 
 - **Reproduction**:
   1. Load Emberwatch `village`.
-  2. Stand still and wait for an NPC to path toward the player (GOAP idle
-     patrol is enabled at `entity_spawner.ts:458`).
+  2. Stand still and wait for an NPC to path toward the player (GOAP
+     locomotion for wanderers is enabled at `entity_spawner.ts:461-478`).
   3. Once adjacent, movement input no longer moves the player.
 
 - **Existing implementation to reuse**:
   - `packages/frontend/engine/src/systems/collision_system.ts` — mask
     evaluation.
   - `packages/frontend/engine/src/systems/goap_movement_executor.ts` (249
-    lines) — where an NPC commits to a step; the natural place for a halt rule.
+    lines) — requests A* paths (goal cell → PathFollow) on a repath cadence
+    and skips entities with an active path; its pursue-target goal selection
+    must become radius-aware.
+  - `packages/frontend/engine/src/systems/path_follow_system.ts` (142 lines) —
+    the per-tick locomotion executor that writes Velocity; the halt rule
+    lives here (see Architecture Directives).
   - `packages/frontend/engine/src/systems/interaction_proximity_system.ts`
     (138 lines) — already computes player proximity; `interactionRadius` is
-    declared per NPC in map data (`village.json`, value `48`).
-  - `packages/frontend/engine/src/systems/path_follow_system.ts` (142 lines).
+    declared per NPC in map data (`village.json`, value `48`) and stored per
+    NPC on `NPCDialog.interactionRadius` (spawner default
+    `DEFAULT_INTERACTION_RADIUS = 50`, `entity_spawner.ts:96`).
   - `COMBATANT_COLLISION_MASK` (`movement_system.ts:67`) — combat correctly
     requires mutual blocking and must keep it.
-  - `apps/e2e/engine_replay.test.ts` — the deterministic replay harness this
-    contract's regression test belongs in.
+  - `packages/frontend/engine/src/systems/movement_system.test.ts` — the
+    established headless bitECS Bun-test pattern for deterministic movement
+    regression (spawn entities, tick the world, assert positions). ⚠️ The
+    C-335/C-336 replay harness (`apps/e2e/tests/engine_replay.test.ts`) is a
+    `test.skip()` placeholder gated on the unimplemented deterministic rules
+    kernel — it is NOT usable as this contract's regression vehicle.
 
 - **Known gaps**: no stuck detection exists anywhere; a blocked player is
   indistinguishable from a player not pressing a key.
@@ -104,10 +114,11 @@ distance, and the player can always walk away.
 | Player collision mask | `movement_system.ts:55` | **modify** — drop `npc` |
 | NPC collision mask | `entity_spawner.ts:115` | **modify** — drop `player` |
 | Combatant mask | `movement_system.ts:67` | **reuse unchanged** — combat needs mutual blocking |
-| NPC step commit | `goap_movement_executor.ts` | **modify** — add the halt rule |
+| NPC per-tick locomotion | `path_follow_system.ts` | **modify** — add the halt rule |
+| NPC path request | `goap_movement_executor.ts` | **modify** — radius-aware pursue-target goal selection |
 | Proximity computation | `interaction_proximity_system.ts` | **reuse** — supplies the halt distance |
 | Per-NPC interaction radius | map data (`interactionRadius: 48`) | **reuse** as the halt distance |
-| Deterministic replay | `apps/e2e/engine_replay.test.ts` | **reuse** the harness |
+| Headless movement tests | `packages/frontend/engine/src/systems/movement_system.test.ts` | **reuse** the pattern — deterministic bitECS world tests are the regression vehicle |
 
 ## Overview
 
@@ -155,9 +166,20 @@ touch it.
   movement loop. Do not special-case entity kinds inside the movement loop
   itself — `movement_system.ts:73` already warns that the loop must never fall
   back to the player's mask for a non-player mover.
-- The halt rule lives in the **NPC movement executor**, not in the collision
+- The halt rule lives in the **NPC locomotion executor**, not in the collision
   system. Collision answers "can this cell be entered"; halting is a behaviour
-  decision and belongs with the behaviour.
+  decision and belongs with the behaviour. Concretely:
+  `path_follow_system.ts` is the single per-tick locomotion executor (it
+  writes Velocity toward waypoints every frame) — the per-tick halt check
+  (distance to player < `interactionRadius` → zero Velocity, set
+  `NpcHaltReason.player_proximity`) runs there, gated to NPCs carrying
+  `NPCDialog` so party followers (no `NPCDialog`) never halt.
+  `goap_movement_executor.ts` only requests paths on a repath cadence and
+  skips entities with an active path, so a halt implemented only there could
+  never stop an in-flight approach nor track a moving player. Its
+  pursue-target goal selection should additionally choose a goal cell at
+  `interactionRadius` from the player rather than the player's own cell, so
+  A* never routes through the player's tile.
 - Combat masks and the turn-based walkability composites
   (`turn_manager_system`, `goap_combat_tactics_system`) are **out of scope and
   must not change**.
@@ -171,7 +193,7 @@ touch it.
 
 ```ts
 /** Why an NPC stopped moving this tick — carried for observability
- *  and asserted in the replay test. */
+ *  and asserted in the halt-rule unit test. */
 type NpcHaltReason =
   | 'none'
   | 'reached_goal'
@@ -196,7 +218,9 @@ is already present in map data and read by the proximity system.
 
 - **Offline/degraded mode**: N/A — pure engine logic.
 - **Accessibility/input**: this contract *restores* input responsiveness; that
-  is its point. Verify keyboard and click-to-move (C-380) both recover.
+  is its point. Verify keyboard input recovers. Click-to-move (C-380) is a
+  `draft` contract — verify its recovery only if it has landed by
+  implementation time; keyboard is the gate.
 - **Performance budget**: the halt check is one distance comparison per moving
   NPC per tick, using a value the proximity system already computes. Must add
   no measurable cost to the 60fps loop. The stuck detector is a counter, not a
@@ -219,9 +243,10 @@ from constants; rollback is a revert.
 - **In Scope:**
   - Remove `CollisionLayer.npc` from `PLAYER_COLLISION_MASK`.
   - Remove `CollisionLayer.player` from `NPC_COLLISION_MASK`.
-  - Halt rule in the NPC movement executor at `interactionRadius`.
+  - Halt rule in the NPC locomotion executor (`path_follow_system.ts`) at
+    `interactionRadius`.
   - Stuck detection with logging as a safety net.
-  - Deterministic replay regression test for both directions of approach.
+  - Headless movement regression test for both directions of approach.
   - Update the now-stale comments at `entity_spawner.ts:112-115` and `:396`.
 
 - **Out of Scope:**
@@ -230,9 +255,9 @@ from constants; rollback is a revert.
   - Prop collision (`PROP_COLLISION_MASK`) — props are static and correctly
     block.
   - Crowd simulation, flow fields, or local avoidance steering.
-  - Party-follow behaviour (`party_follow_system.ts`) unless the replay test
-    shows it deadlocks too — if it does, record an amendment rather than
-    widening scope silently.
+  - Party-follow behaviour (`party_follow_system.ts`) unless the headless
+    movement regression test shows it deadlocks too — if it does, record an
+    amendment rather than widening scope silently.
   - Click-to-move path planning (C-380) beyond verifying it recovers.
 
 ## Contract Size & Split Rule
@@ -255,13 +280,13 @@ prove the invariant holds.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Integration | `apps/e2e/engine_replay.test.ts` | `/game` | Filled during verification |
+| AC-1 | Integration | `packages/frontend/engine/src/systems/movement_system.test.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run e2e:test -- engine_replay.test.ts`
-- Integration: deterministic replay — spawn one NPC, path it into the player,
-  then apply movement input for N ticks and assert player displacement is
-  non-zero.
+- Moon Task: `moon run engine:test -- movement_system.test.ts`
+- Integration: headless bitECS world — spawn one NPC, attach a PathFollow
+  path into the player, tick `updateMovement` for N frames with player
+  velocity set, assert player displacement is non-zero.
 - E2E / Visual: **Functional**: extend
   `apps/e2e/tests/game/collision_e2e.spec.ts`. **Visual**: N/A — a deadlock is
   not visible in a still frame.
@@ -278,11 +303,13 @@ prove the invariant holds.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Integration | `apps/e2e/engine_replay.test.ts` | `/game` | Filled during verification |
+| AC-2 | Integration | `packages/frontend/engine/src/systems/movement_system.test.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run e2e:test -- engine_replay.test.ts`
-- Integration: replay covering all four cardinal approach directions.
+- Moon Task: `moon run engine:test -- movement_system.test.ts`
+- Integration: headless bitECS world — player walks into a stationary NPC,
+  assert the player keeps displacing; cover all four cardinal approach
+  directions.
 - E2E / Visual: **Functional**: `collision_e2e.spec.ts`. **Visual**: N/A.
 
 **Watch Points**:
@@ -299,19 +326,25 @@ player's tile
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit | `packages/frontend/engine/src/systems/__tests__/goap_movement_executor.test.ts` | N/A | Filled during verification |
+| AC-3 | Unit | `packages/frontend/engine/src/systems/path_follow_system.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run engine:test`
 - Integration: assert final NPC distance from the player is `>= interactionRadius`
   and `< interactionRadius + tileSize`.
-- E2E / Visual: **Visual**: a case in `emberwatch.visual.ts` asserting NPCs
-  stand at conversational distance rather than overlapping the player — pairs
+- E2E / Visual: **Visual**: a case in
+  `apps/e2e/src/visual/suites/emberwatch.visual.ts` asserting NPCs stand at
+  conversational distance rather than overlapping the player — pairs
   naturally with C-400's visual work if that contract lands first.
 
 **Watch Points**:
 - An NPC whose spawn point omits `interactionRadius` must use a sane default,
   not `0` — a `0` radius reintroduces the deadlock for that NPC specifically.
+  The spawner already guarantees this (`DEFAULT_INTERACTION_RADIUS = 50`,
+  `entity_spawner.ts:96`); the halt rule only reads `NPCDialog.interactionRadius`.
+- Unit distance check uses pixels (the radius is in pixels, tileSize is 32px);
+  assert final NPC distance is `>= interactionRadius` and
+  `< interactionRadius + tileSize`.
 
 ### AC-4: Combat positioning is unchanged
 **Given** the existing combat test suite
@@ -343,7 +376,7 @@ entity, rate-limited to avoid per-tick spam
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit | `packages/frontend/engine/src/systems/__tests__/movement_system.test.ts` | N/A | Filled during verification |
+| AC-5 | Unit | `packages/frontend/engine/src/systems/movement_system.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run engine:test`
@@ -362,15 +395,19 @@ entity, rate-limited to avoid per-tick spam
    `PLAYER_COLLISION_MASK` (`movement_system.ts:55`) and
    `CollisionLayer.player` from `NPC_COLLISION_MASK`
    (`entity_spawner.ts:115`). Update both stale comments. Add `NpcHaltReason`
-   and the halt rule to `goap_movement_executor.ts`, reading
-   `interactionRadius` via the proximity system with a documented default.
+   and the per-tick halt rule to `path_follow_system.ts` (the locomotion
+   executor — see Architecture Directives), reading `interactionRadius`
+   from `NPCDialog` (already populated at spawn, default
+   `DEFAULT_INTERACTION_RADIUS = 50`). Make `goap_movement_executor.ts`
+   pursue-target goal selection radius-aware.
 2. **Phase 2 (Integration)** — Add the stuck detector to the movement loop,
-   distinguishing terrain-blocked from actor-blocked. Verify click-to-move
-   (C-380) and keyboard input both recover. Run the full combat suite to prove
-   AC-4 before writing new tests.
-3. **Phase 3 (Validation)** — Add replay cases for AC-1 and AC-2 across four
-   approach directions, the halt-rule unit test, and the stuck-detector test.
-   Run `moon run engine:test`, `moon run e2e:test`, `bun run typecheck`.
+   distinguishing terrain-blocked from actor-blocked. Verify keyboard input
+   recovers (and click-to-move if C-380 has landed). Run the full combat
+   suite to prove AC-4 before writing new tests.
+3. **Phase 3 (Validation)** — Add headless movement test cases for AC-1 and
+   AC-2 across four approach directions, the halt-rule unit test, and the
+   stuck-detector test. Run `moon run engine:test`, `moon run e2e:test`,
+   `bun run typecheck`.
 
 ## Edge Cases & Gotchas
 
@@ -399,13 +436,18 @@ Must be resolved before status becomes `approved`:
   followers? If yes, the follower needs its own halt rule in this contract or
   an explicit follow-up. Verify by running `tests/client/party-follow` sandbox
   before implementing.
-- **OQ-2** — What is the default `interactionRadius` for an NPC spawn that
-  omits it? Must be non-zero. Recommend `tileSize * 1.5` (48px at
-  `tileSize: 32`), matching the value Emberwatch already declares.
-- **OQ-3** — Should the player also pass through *enemies* outside combat?
-  `PLAYER_COLLISION_MASK` retains `CollisionLayer.enemy`. If overworld enemies
-  can move, they have the same deadlock. Determine whether any currently do; if
-  so, decide here rather than shipping a half-fix.
+- **OQ-2** — RESOLVED: the spawner already defaults an omitted
+  `interactionRadius` to `DEFAULT_INTERACTION_RADIUS = 50`
+  (`entity_spawner.ts:96`, applied at `:409-412`). Reuse that constant — do
+  NOT introduce a new one. (Emberwatch declares 48; the codebase default is
+  50 — the 2px difference is immaterial at 32px tiles, and the existing
+  constant is the source of truth.)
+- **OQ-3** — Codebase evidence: `_spawnEnemy` (`entity_spawner.ts:633`) does
+  not attach `GoapAgent`/`PathFollow`, so overworld enemies have no
+  locomotion today and cannot deadlock the player. Keeping
+  `CollisionLayer.enemy` in `PLAYER_COLLISION_MASK` is safe. If enemy
+  locomotion lands later, revisit this mask decision then — record an
+  amendment, not a scope widening here.
 
 ## Amendments
 
@@ -419,8 +461,9 @@ Changes to ACs or scope require a version bump and user approval.
 
 > 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
 
-Target: **`integrated`** — production route plus deterministic replay and E2E
-coverage. A deadlock is a temporal behaviour, so visual assessment adds nothing.
+Target: **`integrated`** — production route plus headless engine regression
+and E2E coverage. A deadlock is a temporal behaviour, so visual assessment
+adds nothing.
 
 ## Status Lifecycle
 
