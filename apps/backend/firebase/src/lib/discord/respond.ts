@@ -13,6 +13,11 @@ import { logger } from '$logger';
 /** Discord hard-caps message content at 2000 chars. */
 const DISCORD_MESSAGE_MAX = 2000;
 
+/** Bounded wait for the Discord webhook PATCH — a stalled request must not
+ *  hang the interaction handler forever. On abort the error is logged and
+ *  swallowed, entering the same error path as a non-OK response below. */
+const DISCORD_FETCH_TIMEOUT_MS = 10_000;
+
 export function truncateForDiscord(text: string): string {
   return text.length <= DISCORD_MESSAGE_MAX ? text : `${text.slice(0, DISCORD_MESSAGE_MAX - 1)}…`;
 }
@@ -23,11 +28,23 @@ export async function editOriginalInteractionResponse(
   content: string,
 ): Promise<void> {
   const url = `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`;
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: truncateForDiscord(content) }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: truncateForDiscord(content) }),
+      signal: AbortSignal.timeout(DISCORD_FETCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    // fetch only throws on network failure or the abort above — both mean
+    // the edit could not be delivered. Log and continue (this function
+    // never throws; the caller already reported the underlying failure).
+    logger.error(
+      `discord/respond: failed to edit interaction response: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
   if (!res.ok) {
     logger.error(
       `discord/respond: failed to edit interaction response (${res.status}): ${await res.text().catch(() => '')}`,

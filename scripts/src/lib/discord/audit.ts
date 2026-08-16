@@ -47,7 +47,7 @@ function printStructureSeed(
   lines.push('{');
 
   lines.push('  roles: [');
-  for (const role of roles.filter((r) => r.name !== '@everyone')) {
+  for (const role of roles.filter((r) => r.name !== '@everyone' && !r.managed)) {
     lines.push(
       `    { name: ${quote(role.name)}, color: ${role.color}, hoist: ${role.hoist}, mentionable: ${role.mentionable}, permissions: ${quote(role.permissions)} },`,
     );

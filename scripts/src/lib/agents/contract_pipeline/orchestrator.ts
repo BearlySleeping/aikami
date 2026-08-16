@@ -11,8 +11,9 @@ import {
 } from '../../herdr/worktree.ts';
 import {
   formatInfraNotesForPrompt,
-  readInfraIssues,
+  readInfraIssuesForRun,
   reportInfraIssue,
+  setActiveInfraRun,
   summarizeInfraIssues,
 } from '../../ops/infra_report.ts';
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
@@ -792,6 +793,12 @@ export const runContractPipeline = async (options: {
   // persisted mode from the manifest so `bun run contract --resume <run-id>`
   // keeps the original --root/--worktree decision.
   const rootMode = options.rootMode ?? manifest.rootMode ?? false;
+  // 🔴 Stamp every degradation event recorded from this point on with this
+  // run's id (helpers in session/worktree/git_worktree have no run context
+  // of their own). The review prompt's infra notes are filtered to this run,
+  // so historical gh/worktree/herdr failures from PREVIOUS runs are excluded
+  // — only what THIS run worked around is reported.
+  setActiveInfraRun(manifest.runId);
   if (options.dryRun) {
     return manifest;
   }
@@ -1340,7 +1347,7 @@ export const runContractPipeline = async (options: {
           // here — the single point every review-captain launch passes
           // through, regardless of profile.
           const infraNotes = formatInfraNotesForPrompt(
-            summarizeInfraIssues(readInfraIssues(options.repoRoot)),
+            summarizeInfraIssues(readInfraIssuesForRun(options.repoRoot, manifest.runId)),
           );
           const prompt = infraNotes ? `${basePrompt}\n${infraNotes}` : basePrompt;
           const started = await adapter.startReview({
@@ -1459,7 +1466,8 @@ export const runContractPipeline = async (options: {
               component: 'gh_pr_lookup',
               operation: 'gh pr list --head <branch>',
               error: err,
-              context: { headBranch, runId: manifest.runId },
+              context: { headBranch },
+              runId: manifest.runId,
               cwd: options.repoRoot,
             });
             return undefined;
@@ -1629,7 +1637,7 @@ export const runContractPipeline = async (options: {
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
       const infraNotes = formatInfraNotesForPrompt(
-        summarizeInfraIssues(readInfraIssues(options.repoRoot)),
+        summarizeInfraIssues(readInfraIssuesForRun(options.repoRoot, manifest.runId)),
       );
       if (infraNotes) {
         console.log(infraNotes);

@@ -42,3 +42,6 @@ diagnostics/
 # chrome_devtools extension
 .chromium-profile/
 .screenshots/
+
+# ad-hoc scratch files agents drop directly in .pi/ instead of a temp dir
+tmp-*

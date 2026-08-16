@@ -49,6 +49,10 @@ export type BackendEnv = {
   readonly DISCORD_PUBLIC_KEY?: string;
   /** Discord application (client) id — not currently read at runtime, kept alongside the other Discord keys for reference. */
   readonly DISCORD_APP_ID?: string;
+  /** Guild snowflake allowed to submit /bug and /feature — the interactions endpoint rejects any other guild (and DMs) before creating issues. */
+  readonly DISCORD_ALLOWED_GUILD_ID?: string;
+  /** Role snowflake whose members may submit /bug and /feature — submissions without this role are rejected. */
+  readonly DISCORD_ALLOWED_ROLE_ID?: string;
   /** Fine-grained GitHub PAT, scoped to `issues:write` on this repo only — used by /bug and /feature. */
   readonly GITHUB_ISSUES_TOKEN?: string;
   /** OpenRouter API key — used by /ask. */
@@ -150,6 +154,8 @@ const BACKEND_ENV_KEYS: (keyof BackendEnv)[] = [
   'VITE_MODE',
   'DISCORD_PUBLIC_KEY',
   'DISCORD_APP_ID',
+  'DISCORD_ALLOWED_GUILD_ID',
+  'DISCORD_ALLOWED_ROLE_ID',
   'GITHUB_ISSUES_TOKEN',
   'OPENROUTER_API_KEY',
   'OPENROUTER_MODEL',

@@ -66,7 +66,9 @@ function getAppUrl(app: string): string {
     // Only client/hub/site (+ the Firebase suite) shift per contract — a
     // future `app` value naming a fixed singleton backend (voice/image/text)
     // must not silently compute a port nothing is listening on.
-    const shift = app in OFFSETTABLE_PORTS ? offset : 0;
+    // Object.hasOwn, not `in`: `app in OFFSETTABLE_PORTS` also matches
+    // prototype-chain keys (e.g. "constructor"), which would wrongly shift.
+    const shift = Object.hasOwn(OFFSETTABLE_PORTS, app) ? offset : 0;
     if (port !== undefined) {
       return `http://localhost:${port + shift}`;
     }

@@ -6,8 +6,21 @@ import adapter from 'svelte-adapter-bun';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const packagesDirectory = resolve(projectDirectory, '../../../packages');
-const toPackagesPath = (path) => join(packagesDirectory, path);
-const toSrcPath = (path) => join(projectDirectory, 'src', path);
+/**
+ * Convert a path to use forward slashes.
+ *
+ * SvelteKit's tsconfig generator strips a trailing `/*` from alias values by
+ * checking `value.endsWith('/*')` (literal forward slash). `node:path`'s
+ * `join()` emits backslashes on Windows, so that check silently fails there
+ * and SvelteKit appends its own `/*`, producing a broken `**\/*\/*` pattern.
+ * Keeping alias values posix-style avoids that on every platform.
+ *
+ * @param {string} path
+ * @returns {string}
+ */
+const toPosixPath = (path) => path.split('\\').join('/');
+const toPackagesPath = (path) => toPosixPath(join(packagesDirectory, path));
+const toSrcPath = (path) => toPosixPath(join(projectDirectory, 'src', path));
 
 const config = {
   preprocess: [vitePreprocess()],
