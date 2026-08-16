@@ -2,7 +2,7 @@
 id: C-405
 title: "Cut World Generation from the Critical Path"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §6.1 (MVP playthrough)"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -19,11 +19,11 @@ created_at: "2026-08-16"
 |---|---|
 | **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §6.1 — live MVP playthrough 2026-08-16 |
 | **Target** | `apps/frontend/client/src/lib/views/start/`, `views/setup/`, `views/worldgen/` — the new-campaign entry flow |
-| **Priority** | P0 — the front door of the product is a wizard whose output is thrown away |
+| **Priority** | P0 — the front door of the product is a wizard whose output never shapes the playable map |
 | **Dependencies** | — |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `—` |
-| **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/` setup/getting-started page |
+| **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/start/installation.md` (getting started) |
 | **Contract version** | 2.0.0 |
 
 ## Problem & Baseline Evidence
@@ -44,25 +44,33 @@ created_at: "2026-08-16"
   ```
 
   The problem is downstream. `_proceedWithPack` branches on character count
-  (line 360: *"0→/setup, 1→/game, 2+→/characters"*), and the zero-character
+  (line 360: *"0→/setup, 1→/game, 2+→/personas"*), and the zero-character
   branch — commented *"go to character creation with pack selected"* (line
   ~545) — routes to `/setup`, which fronts the world-generation wizard before
   character creation.
 
-- **The generated world is almost entirely discarded.** `onWorldAccepted`
+- **The generated world never reaches the playable map.** `onWorldAccepted`
   (`setup_view_model.svelte.ts:68`) calls
-  `worldStateService.setWorldGenOutput(output)`, but tracing every consumer of
-  `worldGenOutput` finds only three, all cosmetic:
+  `worldStateService.setWorldGenOutput(output)`, and `acceptWorld`
+  (`world_gen_wizard_view_model.svelte.ts:384`) seeds NPCs, locations, arcs,
+  and HUD widgets into game state. But those seeds are loose state and prompt
+  context — the player still enters Emberwatch's `village` map, and nothing
+  generated compiles into the authored `ContentPackManifest` shape the game
+  loads maps from (that compiler is issue #81). The consumers today:
 
   | Consumer | Use |
   |---|---|
-  | `session_summary_service.svelte.ts:92` | `worldName ?? 'Unknown'` |
-  | `session_summary_service.svelte.ts:217` | `worldName ?? 'Unknown'` |
+  | `services/gm/session_summary_service.svelte.ts:92` | `worldName ?? 'Unknown'` (synopsis) |
+  | `services/gm/session_summary_service.svelte.ts:217` | `worldName ?? 'Unknown'` (resume id) |
   | `game_overlay_service.svelte.ts:1357` | `worldName ?? 'default'` as a game id |
+  | `services/gm/gm_prompt_service.svelte.ts:248` | full output → GM prompt context |
+  | `combat_view_model.svelte.ts:1462` | full output → combat LLM context |
+  | `autonomous_message_service.svelte.ts:264` | generated NPC names as message targets |
+  | `world_gen_seeding_service.svelte.ts` | seeds NPCs/locations/arcs/HUD on accept |
 
-  **The world's name survives. The world does not.** The generated NPCs,
-  locations, story arcs, objectives, quest-giver bindings, and HUD widget
-  configuration are never read by anything.
+  **The world's name and loose context survive. The playable world does not.**
+  The generated NPCs, locations, story arcs, and HUD configuration never shape
+  the map or quest chain the player actually plays.
 
 - **This violates a standing directive.**
   `docs/strategy/vision-and-directives.md:88`: *"Do not make AI world
@@ -95,8 +103,15 @@ created_at: "2026-08-16"
     does not change.
   - `game_state_service.svelte.ts:202` `_getDefaultWorldGenOutput()` — the
     existing default that keeps `worldName` populated when no wizard has run.
+  - `pack_registry_service.svelte.ts` + `components/pack_browser_view.svelte`
+    (C-345) — an existing, schema-validated pack picker with 1-pack skip logic;
+    needs wiring, not building.
 
-- **Known gaps**: there is no content-pack picker, despite two packs shipping.
+- **Known gaps**: the C-345 pack picker (`packRegistryService`,
+  `PackBrowserView`, `openPackBrowser()`) ships but is **not wired** to the
+  New Game button — `startNewGame()` hardcodes `emberwatch`, and the picker
+  methods are only covered by `test.todo` cases in
+  `start_view_model.test.ts`.
 
 - **Baseline tests**: `moon run e2e:test -- tests/client/world_gen.spec.ts`,
   `tests/client/game_boot.spec.ts`,
@@ -107,8 +122,9 @@ created_at: "2026-08-16"
 
 After this contract, a **first-time player** pressing "Start campaign" reaches
 character creation and then a playable Emberwatch, without passing through a
-wizard whose result is discarded. A **curious player** can still reach world
-generation deliberately, where it is labelled honestly as a preview.
+wizard whose result never shapes the playable map. A **curious player** can
+still reach world generation deliberately, where it is labelled honestly as a
+preview.
 
 ## Success Measures
 
@@ -119,8 +135,8 @@ generation deliberately, where it is labelled honestly as a preview.
   AI call at all, so a slow or failing provider cannot block starting a
   campaign. A text provider is still required to *play* (directive #3).
 - **Production journey enabled**: the cold-start playtest becomes possible —
-  today a stranger's first five minutes are spent on a wizard that does
-  nothing.
+  today a stranger's first five minutes are spent on a wizard that produces
+  nothing playable.
 
 ## Existing System & Reuse Map
 
@@ -132,12 +148,15 @@ generation deliberately, where it is labelled honestly as a preview.
 | World-gen wizard | `views/worldgen/world_gen_wizard_view_model.svelte.ts` | **reuse unchanged** — relocated behind Advanced |
 | `/setup` route host | `views/setup/setup_view_model.svelte.ts` (97 lines) | **modify** — no longer fronts the wizard |
 | Default world name | `game_state_service.svelte.ts:202` | **reuse** — already covers the no-wizard case |
-| Content packs on disk | `static/content-packs/{emberwatch,whispering-caves}` | **reuse** — feed the new picker |
+| Pack registry | `pack_registry_service.svelte.ts` (C-345) — reads `static/content-packs/index.json`, validates via `PackIndexSchema` | **reuse** — already correct |
+| Pack picker UI | `components/pack_browser_view.svelte` + `openPackBrowser()/selectPack()/confirmPackSelection()` in `start_view_model` (C-345) | **wire** — exists but not connected to the New Game button |
+| Content packs on disk | `static/content-packs/{emberwatch,whispering-caves}` | **reuse** — both already listed in `index.json` |
 
 ## Overview
 
 "Start campaign" currently routes first-time players through an AI
-world-generation wizard whose output is read only for its `worldName`. This
+world-generation wizard whose output is consumed only as loose state and
+prompt context, never as a playable map. This
 contract makes the authored content pack the default front door, adds a pack
 picker now that two packs ship, moves world generation behind an explicit
 Advanced entry labelled as a preview, and parallelizes the generation calls that
@@ -190,15 +209,12 @@ exactly this reason.
 ## State & Data Models
 
 ```ts
-/** An installed content pack, as surfaced by the picker. */
-type ContentPackSummary = {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly version: string;
-  /** Rough play length, shown so the player can pick deliberately. */
-  readonly estimatedMinutes?: number;
-};
+// Installed packs come from the existing C-345 registry:
+//   import type { PackIndexEntry } from '@aikami/types';
+// `packRegistryService.availablePacks` is `readonly PackIndexEntry[]`,
+// derived from `PackIndexSchema` in @aikami/schemas. Do not introduce a
+// parallel `ContentPackSummary` type — `PackIndexEntry` already carries
+// `id`, `name`, `description`, and `version` (plus `updatedAt`).
 
 /** Where "Start campaign" sends the player, resolved from existing state. */
 type NewCampaignDestination =
@@ -215,7 +231,8 @@ type WorldGenPreviewState = {
 
 No persisted schema changes. `WorldGenOutput` and its storage in
 `game_state_service` are unchanged — the wizard still stores its result, and
-`worldName` continues to flow to the three cosmetic consumers.
+`worldName` continues to flow to the naming consumers listed in Problem &
+Baseline Evidence.
 
 ## Quality Requirements
 
@@ -286,12 +303,18 @@ the contract's size; if so, record an amendment.
 **Given** a fresh install with zero personas
 **When** the player presses "Start campaign"
 **Then** they arrive at persona creation without passing through the
-world-generation wizard, and no world-generation AI call is made
+world-generation wizard, and no world-generation AI call is made. "Persona
+creation" means the onboarding coordinator
+(`views/onboarding/onboarding_coordinator_view.svelte`, C-319) — note it
+currently has **no route**; the implementer must mount it, either on the
+existing `personaCreate` route (`/personas/create`, which `routes.ts` already
+declares with an `onboarding` query parameter) or on a new `/onboarding`
+route.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | E2E | `apps/e2e/tests/client/new_campaign_flow.spec.ts` | `/` → onboarding | Filled during verification |
+| AC-1 | E2E | `apps/e2e/tests/client/new_campaign_flow.spec.ts` | `/` → (pack picker when 2+ packs) → onboarding | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run e2e:test -- tests/client/new_campaign_flow.spec.ts`
@@ -327,8 +350,10 @@ generation
 ### AC-3: Pack picker appears when multiple packs are installed
 **Given** both `emberwatch` and `whispering-caves` are installed
 **When** a new campaign is started
-**Then** a picker lists both with name and description, and the chosen pack id
-is what `startNewCampaign` receives
+**Then** the existing C-345 picker (`PackBrowserView`) lists both with name and
+description, and the chosen pack id is what `startNewCampaign` receives —
+wire `startNewGame()` through `openPackBrowser()` instead of hardcoding
+`emberwatch`
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -362,13 +387,18 @@ preview and not yet playable
 
 **Test Hooks**:
 - Moon Task: `moon run e2e:test -- tests/client/world_gen.spec.ts`
-- Integration: existing world-gen spec, retargeted at the new entry point.
+- Integration: keep the sandbox-based spec for wizard behaviour; assert the
+  preview notice on the Advanced entry's own route.
 - E2E / Visual: **Functional**: existing spec updated. **Visual**: assert the
   preview notice is visible and not truncated.
 
 **Watch Points**:
-- The existing `world_gen.spec.ts` navigates to `/setup`. Update it rather than
-  duplicating; a stale spec still passing against a dead route is a false
+- The existing `world_gen.spec.ts` does **not** navigate to `/setup` — it uses
+  `WorldGenWizardPage.gotoDevSandbox()` (`/dev/world-gen`); the POM's
+  `gotoSetup()` is currently unused. Since the Advanced entry must not live
+  under `/dev` (OQ-1), assert the preview notice on the Advanced entry's own
+  route (in `new_campaign_flow.spec.ts`) and keep the sandbox spec for wizard
+  behaviour. A spec that passes against the dead `/setup` route is a false
   green.
 
 ### AC-5: Independent generation calls run in parallel
@@ -398,12 +428,14 @@ decreases measurably against the sequential baseline
 ## Implementation Sequence
 
 1. **Phase 1 (Data/Logic)** — Introduce `NewCampaignDestination` and resolve it
-   in `start_view_model`. Point the zero-character branch at onboarding. Add
-   `ContentPackSummary` loading from the content-pack index. Unit-test all
+   in `start_view_model`. Point the zero-character branch at onboarding. Load
+   packs via the existing `packRegistryService` (C-345). Unit-test all
    three branches (AC-2) before touching routes.
-2. **Phase 2 (Integration)** — Add the pack picker. Move the world-generation
-   wizard to the Advanced entry and add the preview notice. Update `/setup` so
-   it no longer fronts the wizard. Retarget `world_gen.spec.ts`.
+2. **Phase 2 (Integration)** — Wire the existing C-345 pack picker into
+   `startNewGame()`. Mount the onboarding coordinator on a route (see AC-1).
+   Move the world-generation wizard to the Advanced entry and add the preview
+   notice. Update `/setup` so it no longer fronts the wizard; review the three
+   other `goToRoute('setup')` callers (see Gotchas).
 3. **Phase 3 (Validation)** — Parallelize independent generation stages, with
    the dependency graph written down in a comment. Add
    `tests/client/new_campaign_flow.spec.ts`. Update the docs getting-started
@@ -412,10 +444,15 @@ decreases measurably against the sequential baseline
 
 ## Edge Cases & Gotchas
 
-- **`/setup` may be linked from elsewhere.** Grep for `'setup'` route usage
-  before changing it; `routerService.goToRoute('setup', …)` appears at
-  `start_view_model.svelte.ts:552` but there may be others, including in tests
-  and docs.
+- **`/setup` has four callers, not one.** `goToRoute('setup')` appears at
+  `start_view_model.svelte.ts:552` (the branch being changed),
+  `capability_view_model.svelte.ts:504` (post-`_startCampaign`),
+  `persona_list_view_model.svelte.ts:159` (`createPersona()`), and
+  `ai_privacy_view_model.svelte.ts:114` (`connectAi()`, passes
+  `from: 'settings'`). Each lands on the world-gen wizard today; decide per
+  caller whether it should route to the onboarding coordinator instead. Docs
+  also mention setup: `docs/src/content/docs/start/*` and
+  `docs/src/content/docs/guides/run-locally.mdx`.
 - **Direct `localStorage` in the view model.** `_proceedWithPack` reads
   `aikami-characters` directly — exactly the pattern the strategy doc flags as
   making lifecycle hard to reason about. Out of scope, but do not extend it;
@@ -426,7 +463,7 @@ decreases measurably against the sequential baseline
   `goToRoute`, so backing out of onboarding leaves a campaign behind. Confirm
   whether it is reused or orphaned, and make it deliberate either way.
 - **`_getDefaultWorldGenOutput()`** keeps `worldName` populated when no wizard
-  runs, so the three cosmetic consumers keep working on the default path.
+  runs, so the naming consumers keep working on the default path.
   Verify the default name is presentable — it will now be what most players
   see in session summaries.
 - **A text provider is still required to play.** The
@@ -441,8 +478,10 @@ Must be resolved before status becomes `approved`:
   screen, an entry in Settings → Advanced, or a `/dev`-adjacent route? Must not
   be `/dev`, which C-410 removes from production builds.
 - **OQ-2** — Is `whispering-caves` complete enough to be offered in the picker?
-  If it cannot be played to a sensible end, either exclude it or mark it
-  explicitly as a work in progress. Determine by playing it.
+  It is structurally complete (manifest with `startingMapId`, a real map file
+  `maps/whispering_caves.json` ~3.9KB vs Emberwatch's 18KB, two NPCs with
+  dialogue keys and combat stats, items) — offerable, but confirm by playing
+  it to a sensible end; if it is not, exclude it or mark it work-in-progress.
 - **OQ-3** — Which world-generation stages are genuinely independent? Requires
   reading `world_gen_wizard_view_model.svelte.ts` and writing the dependency
   graph down before parallelizing. If arcs depend on NPCs and NPCs depend on
@@ -456,6 +495,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-08-16 | Initial draft from `mvp-assessment-2026-08-16.md` §6.1. Option (c) — relocate and label — chosen over deleting the wizard or building the compiler now; rationale in Design Reference. | — |
+| 2.0.0 | 2026-08-16 | Critic pass (codebase inspection): corrected factual claims — output is seeded/consumed as loose state, not discarded; the C-345 pack picker exists but is unwired (AC-3, Reuse Map); `world_gen.spec.ts` runs against the dev sandbox, not `/setup` (AC-4); onboarding coordinator has no route (AC-1 destination clarified); reused `PackIndexEntry` instead of a new `ContentPackSummary`. | critic |
 
 ## Promotion Lifecycle
 
