@@ -122,7 +122,6 @@ Confirmed by a full walkthrough of the Emberwatch slice. Full analysis in
 
 | Defect | Severity | Contract |
 |---|---|---|
-| NPCs render as disembodied heads; all NPC heads identical; "invalid NPC" entities | P0 | C-400 |
 | Production dialogue does **not** stream — `npc_dialogue_service.svelte.ts:795` claims it does, but `NpcDialogueTextGenerator` (line 96) has no `onChunk`. Skill checks compound it with a second non-streamed call (line 1373) | P0 | C-401 |
 | Player soft-locks when an NPC walks into them — two-way collision blocking with no resolution rule (`entity_spawner.ts:112-115`) | P0 | C-402 |
 | `/setup` world-generation output is discarded; the MVP loads Emberwatch regardless | P0 | C-405 |

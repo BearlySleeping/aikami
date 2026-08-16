@@ -184,6 +184,97 @@ describe('spawnEntities', () => {
   });
 
   // -------------------------------------------------------------------------
+  // AC-6 (C-400) — NPC appearance comes from the content pack manifest
+  // -------------------------------------------------------------------------
+
+  it('reads appearance from the manifest by npcId when packConfig declares npcs', () => {
+    const spawnPoint = createNpcSpawnPoint({
+      properties: { npcId: 'village_elder' },
+    });
+    // npcId keys are data identifiers (snake_case) — built via fromEntries to
+    // avoid the camelCase property-name lint on manifest keys.
+    const packNpcs = Object.fromEntries([
+      ['village_elder', { appearanceLayers: [2, 3, 65, 21, 20, 97] }],
+    ]);
+    const packConfig = {
+      tiles: {},
+      props: {},
+      npcs: packNpcs,
+    };
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+    const eid = results[0].eid;
+
+    expect(Appearance.layer0[eid]).toBe(2);
+    expect(Appearance.layer1[eid]).toBe(3);
+    expect(Appearance.layer2[eid]).toBe(65);
+    expect(Appearance.layer3[eid]).toBe(21);
+    expect(Appearance.layer4[eid]).toBe(20);
+    expect(Appearance.layer5[eid]).toBe(97);
+  });
+
+  it('ignores the Tiled appearanceLayers property when the manifest declares appearance', () => {
+    const spawnPoint = createNpcSpawnPoint({
+      properties: {
+        npcId: 'rollo_grasper',
+        // Tiled property must be ignored — manifest is the single source.
+        appearanceLayers: '3,123,23,22,7,95',
+      },
+    });
+    const packNpcs = Object.fromEntries([
+      ['rollo_grasper', { appearanceLayers: [9, 9, 9, 9, 9, 9] }],
+    ]);
+    const packConfig = {
+      tiles: {},
+      props: {},
+      npcs: packNpcs,
+    };
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+    const eid = results[0].eid;
+
+    // Manifest wins over the Tiled property.
+    expect(Appearance.layer0[eid]).toBe(9);
+  });
+
+  it('falls back to the legacy default stack when the manifest entry has no appearanceLayers', () => {
+    const spawnPoint = createNpcSpawnPoint({
+      properties: { npcId: 'npc_no_layers' },
+    });
+    const packNpcs = Object.fromEntries([['npc_no_layers', {}]]);
+    const packConfig = {
+      tiles: {},
+      props: {},
+      npcs: packNpcs,
+    };
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+    const eid = results[0].eid;
+
+    expect(Appearance.layer0[eid]).toBe(3); // legacy default stack
+    expect(Appearance.layer5[eid]).toBe(95);
+  });
+
+  it('skips an NPC whose npcId has no manifest entry (invalid NPC case)', () => {
+    const spawnPoint = createNpcSpawnPoint({
+      properties: { npcId: 'ghost_npc' },
+    });
+    const packNpcs = Object.fromEntries([
+      ['village_elder', { appearanceLayers: [2, 3, 65, 21, 20, 97] }],
+    ]);
+    const packConfig = {
+      tiles: {},
+      props: {},
+      npcs: packNpcs,
+    };
+
+    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+
+    // No partial entity is created and no result is recorded.
+    expect(results).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
   // Prop spawning
   // -------------------------------------------------------------------------
 

@@ -157,34 +157,40 @@ const _addSpatialCollision = (
   addComponent(world, eid, set(CollisionData, { layer, mask }));
 };
 
-/** Default Appearance layer IDs for NPCs — 6-layer stack (body, hair, torso, legs, feet, head).
+/**
+ * Legacy default Appearance layer IDs for NPCs when the content pack
+ * declares no appearance (pack-less spawners / legacy maps).
  * 1-indexed variant numbers within each engine slot.
  * body=3 (bodies_male), hair=3 (bangs), torso=23 (chainmail_male),
- * legs=22 (pants_male), feet=7 (boots/basic_male), head=95 (heads/human_male). */
+ * legs=22 (pants_male), feet=7 (boots/basic_male), head=95 (heads/human_male).
+ *
+ * C-400: kept ONLY as the no-manifest fallback. NPC appearance is read from
+ * the content pack manifest (packConfig.npcs[npcId]) when a pack is loaded;
+ * the whole-stack default is no longer the first source of truth.
+ */
 const NPC_APPEARANCE_LAYERS: readonly number[] = [3, 3, 23, 22, 7, 95];
 
 /**
- * Reads appearance layer indices from a SpawnPoint's properties.
- * Falls back to {@link NPC_APPEARANCE_LAYERS} when not present.
+ * Reads appearance layer indices from the content pack manifest, keyed by
+ * `npcId` (C-400). The Tiled `appearanceLayers` property is IGNORED — the
+ * manifest is the single source of truth.
  *
- * Accepts a comma-separated string of 1-indexed variant numbers
- * (e.g. "3,3,23,22,7,95") matching the engine slot order:
- * body, hair, torso, legs, feet, head.
+ * @param spawnPoint - The Tiled spawn object (npcId property).
+ * @param packConfig - Projected pack config (tiles/props/terrains/npcs).
+ * @returns The manifest's appearanceLayers when present, otherwise undefined
+ *   (caller decides: legacy default vs skip).
  */
-const _getNpcAppearanceLayers = (spawnPoint: SpawnPoint): readonly number[] => {
-  const raw = _getStringProperty(spawnPoint.properties, 'appearanceLayers', '');
-  if (!raw) {
-    return NPC_APPEARANCE_LAYERS;
+const _getNpcAppearanceLayers = (
+  spawnPoint: SpawnPoint,
+  packConfig?: PackConfig,
+): readonly number[] | undefined => {
+  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
+  const entry = packConfig?.npcs?.[npcId];
+  const layers = entry?.appearanceLayers;
+  if (layers && layers.length > 0) {
+    return layers;
   }
-  const parts = raw.split(',').map((s) => Number.parseInt(s.trim(), 10));
-  if (parts.length < 6) {
-    return NPC_APPEARANCE_LAYERS;
-  }
-  // Validate all are finite numbers >= 1
-  if (parts.some((p) => !Number.isFinite(p) || p < 1)) {
-    return NPC_APPEARANCE_LAYERS;
-  }
-  return parts;
+  return undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -245,8 +251,12 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     }
 
     if (spawnPoint.type === 'npc') {
-      const eid = _spawnNpc(world, spawnPoint);
-      results.push({ type: 'npc', eid, spawnPoint });
+      const eid = _spawnNpc(world, spawnPoint, packConfig);
+      // C-400: an NPC whose npcId has no manifest entry is skipped — the
+      // spawner returns 0 and no result is recorded for it.
+      if (eid > 0) {
+        results.push({ type: 'npc', eid, spawnPoint });
+      }
     } else if (spawnPoint.type === 'prop') {
       const eid = _spawnProp(world, spawnPoint, packConfig);
       results.push({ type: 'prop', eid, spawnPoint });
@@ -375,10 +385,25 @@ export const spawnTransitionEntities = (options: SpawnTransitionOptions): number
 /**
  * Creates an NPC entity from a spawn point.
  */
-const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
+const _spawnNpc = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig): number => {
+  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
+
+  // ── C-400: NPC appearance comes from the content pack manifest, keyed by
+  // npcId. A pack that declares npcs but has no entry for this npcId is the
+  // "invalid NPC" case — log an error naming the id and skip the spawn
+  // cleanly instead of creating a partial entity.
+  if (packConfig?.npcs && packConfig.npcs[npcId] === undefined) {
+    logger.error('entity-spawner:npc-missing-manifest-entry', {
+      npcId,
+      spawnPointId: spawnPoint.id,
+      packNpcs: Object.keys(packConfig.npcs).join(','),
+      hint: 'Spawn object references an npcId with no manifest entry — skipping spawn.',
+    });
+    return 0;
+  }
+
   const eid = addEntity(world);
 
-  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
   const npcName = _getStringProperty(spawnPoint.properties, 'npcName', `NPC ${spawnPoint.id}`);
   const dialog = _getStringProperty(spawnPoint.properties, 'dialogueKey', DEFAULT_DIALOG);
   const interactionRadius = _getNumberProperty(
@@ -415,7 +440,7 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   );
 
   addComponent(world, eid, Appearance);
-  const appearanceLayers = _getNpcAppearanceLayers(spawnPoint);
+  const appearanceLayers = _getNpcAppearanceLayers(spawnPoint, packConfig) ?? NPC_APPEARANCE_LAYERS;
   setAppearanceLayers(world, eid, appearanceLayers);
 
   addComponent(world, eid, NPCDialog);

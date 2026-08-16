@@ -60,10 +60,7 @@ import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { registerVisionObserverObservers } from '../components/vision_observer.ts';
-import {
-  registerVisionVisibleObservers,
-  VisionVisible,
-} from '../components/vision_visible.ts';
+import { registerVisionVisibleObservers, VisionVisible } from '../components/vision_visible.ts';
 import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
@@ -73,6 +70,11 @@ import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
+import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  type LpcSlotCatalog,
+  resolveLpcAppearance,
+} from '../rendering/lpc_appearance_resolver.ts';
 import {
   deserializeWorld,
   serializePlayer,
@@ -604,11 +606,12 @@ const _refreshPlayerAppearance = (eid: number): void => {
   });
 };
 
-/** Slot name lookup for converting Appearance layer IDs to recipes. */
-const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
-
-/** Index of the body slot in the layer ID array (layer0). */
-const WORKER_BODY_SLOT_INDEX = 0;
+/**
+ * LPC slot catalog injected from the main thread (C-400) so the worker
+ * resolves layer indices to real asset IDs — identical to the main-thread
+ * resolver. Set once from INITIALIZE_ENGINE.
+ */
+let _workerLpcCatalog: readonly LpcSlotCatalog[] | undefined;
 
 /**
  * Converts entity layer IDs to {@link LpcLayerRecipe} arrays using
@@ -619,29 +622,25 @@ const WORKER_BODY_SLOT_INDEX = 0;
  * This means fingerprint evaluation in the worker matches the main
  * thread even without access to the actual palette textures.
  *
- * **C-370**: Injects a default body recipe when layer0 ≤ 0 to prevent
- * background bleed-through between head and torso sprites.
+ * **C-400**: Delegates to the shared {@link resolveLpcAppearance} resolver
+ * with the injected catalog + fallback table, so the worker emits the same
+ * slot/assetId sequences as the main-thread resolver. The hard-coded head
+ * override and the numeric-string asset IDs are gone. If the catalog was
+ * not injected (legacy callers), falls back to the declared per-slot
+ * fallbacks via the shared resolver with an empty catalog.
  *
  * @param layerIds - Array of 6 layer asset IDs from the Appearance component.
  * @returns Layer recipes with empty palettes for structural tracking.
  */
 const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
-  const recipes: LpcLayerRecipe[] = [];
-  for (let i = 0; i < layerIds.length; i++) {
-    const effectiveId =
-      i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0 ? DEFAULT_BODY_LAYER_ID : layerIds[i];
-    if (effectiveId > 0) {
-      recipes.push({
-        slot: WORKER_SLOT_NAMES[i] ?? `layer_${i}`,
-        assetId: String(effectiveId),
-        hexPalette: new Uint8Array(1024),
-      });
-      if (i === WORKER_BODY_SLOT_INDEX && (layerIds[i] ?? 0) <= 0) {
-        logger.debug('workerRecipeResolver:body-fallback', { effectiveId });
-      }
-    }
-  }
-  return recipes;
+  const result = resolveLpcAppearance({
+    layerIds,
+    catalog: _workerLpcCatalog ?? [],
+    fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
+  });
+  // Shallow mutable copy — recipes are freshly built per call and the
+  // elements are never shared, so spreading is safe and avoids re-mapping.
+  return [...result.recipes];
 };
 
 // -- Initialization ---------------------------------------------------------
@@ -1389,8 +1388,21 @@ self.onmessage = (event: MessageEvent): void => {
   try {
     switch (message.type) {
       case 'INITIALIZE_ENGINE': {
-        const { canvasWidth, canvasHeight, buffers, loadPayload, playerData, collisionGrid } =
-          message;
+        const {
+          canvasWidth,
+          canvasHeight,
+          buffers,
+          loadPayload,
+          playerData,
+          collisionGrid,
+          lpcCatalog,
+        } = message;
+
+        // C-400: store the injected LPC slot catalog so the worker's recipe
+        // resolver produces the same asset IDs as the main thread.
+        _workerLpcCatalog = Array.isArray(lpcCatalog)
+          ? (lpcCatalog as LpcSlotCatalog[])
+          : undefined;
 
         // Reset camera state for fresh engine
         resetCameraTracking();

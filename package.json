@@ -76,6 +76,7 @@
     "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts",
     "validate:wgsl": "bun run scripts/src/lib/ops/validate_wgsl.ts",
     "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",
+    "validate:content": "bun run scripts/src/lib/ops/validate_content_appearance.ts",
     "validate:shaders": "bun run validate:wgsl && bun run validate:gql",
     "update:ai": "bun run scripts/src/lib/ops/update_ai.ts",
     "switch": "bun run scripts/src/lib/ops/switch_mode.ts",

@@ -54,4 +54,73 @@ test.describe('Game Boot Pipeline', () => {
 
     await expect(playerHud).toBeVisible();
   });
+
+  // C-400 AC-1: every map's authored NPC must spawn from the content pack
+  // manifest. The expected count is derived from the manifest + the loaded
+  // map's spawn layer (never hard-coded): the client loads startingMapId,
+  // and the debug bridge exposes the spawned NPC count.
+  test('AC-1: spawned NPC count matches the manifest NPC count for the loaded map', async ({
+    page,
+  }) => {
+    await page.goto('/game');
+
+    // Derive the expected authored-NPC count from the pack manifest and the
+    // loaded map file: count the spawn layer's `npc` objects whose npcId
+    // resolves in the manifest's npcs table.
+    const expectedNpcCount = await page.evaluate(async () => {
+      const manifestResponse = await fetch('content-packs/emberwatch/manifest.json');
+      const manifest = (await manifestResponse.json()) as {
+        startingMapId?: string;
+        maps?: Record<string, { file?: string }>;
+        npcs?: Record<string, unknown>;
+      };
+      const mapId = manifest.startingMapId ?? 'village';
+      const mapFile = manifest.maps?.[mapId]?.file ?? 'maps/village.json';
+      const mapResponse = await fetch(`content-packs/emberwatch/${mapFile}`);
+      const map = (await mapResponse.json()) as {
+        layers?: Array<{
+          name?: string;
+          objects?: Array<{
+            type?: string;
+            properties?: Array<{ name?: string; value?: unknown }>;
+          }>;
+        }>;
+      };
+      const npcSpawns =
+        map.layers
+          ?.find((layer) => layer.name === 'spawns')
+          ?.objects?.filter((object) => object.type === 'npc') ?? [];
+      const manifestNpcIds = new Set(Object.keys(manifest.npcs ?? {}));
+      return npcSpawns.filter((object) => {
+        const npcId = object.properties?.find((prop) => prop.name === 'npcId')?.value;
+        return typeof npcId === 'string' && manifestNpcIds.has(npcId);
+      }).length;
+    });
+    expect(expectedNpcCount).toBeGreaterThan(0);
+
+    // Wait for the game canvas container
+    await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 15000 });
+
+    // Poll the debug bridge until the spawned NPC count equals the
+    // manifest-derived authored count (map load + spawn completes).
+    await page.waitForFunction(
+      (expected) => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { npcCount?: number }
+          | undefined;
+        return typeof debug?.npcCount === 'number' && debug.npcCount === expected;
+      },
+      expectedNpcCount,
+      { timeout: 30000 },
+    );
+
+    const npcCount = await page.evaluate(() => {
+      const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | { npcCount?: number }
+        | undefined;
+      return debug?.npcCount ?? 0;
+    });
+
+    expect(npcCount).toBe(expectedNpcCount);
+  });
 });

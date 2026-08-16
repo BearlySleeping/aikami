@@ -86,3 +86,16 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-400 AC-5: content-pack NPC appearance indices must stay within the
+  # generated LPC catalog (and head slots must resolve to head/heads/*
+  # assets). Runs in moon ci so invalid appearance data fails the build.
+  validate-content:
+    command: 'bun run src/lib/ops/validate_content_appearance.ts'
+    inputs:
+      - 'src/lib/ops/validate_content_appearance.ts'
+      - 'apps/frontend/client/static/content-packs/**/*'
+      - 'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts'
+    options:
+      cache: false
+      runInCI: true

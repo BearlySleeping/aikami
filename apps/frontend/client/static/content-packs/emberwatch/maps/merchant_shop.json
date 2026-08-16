@@ -156,11 +156,6 @@
               "value": 48
             },
             {
-              "name": "appearanceLayers",
-              "type": "string",
-              "value": "3,91,127,22,19,95"
-            },
-            {
               "name": "isVendor",
               "type": "bool",
               "value": true
