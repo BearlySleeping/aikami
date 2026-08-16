@@ -5,6 +5,7 @@ import {
   EMULATOR_PORTS as BASE_EMULATOR_PORTS,
   MODE_PROJECT_MAP,
   withPortOffset,
+  withProjectIdOffset,
 } from '@aikami/constants';
 import { FrontendAppIdSchema, LogLevelSchema, ModeSchema } from '@aikami/schemas';
 import { toAppError } from '@aikami/utils';
@@ -169,7 +170,11 @@ export const getProjectId = (): string => {
   const projectId = (MODE_PROJECT_MAP as Record<string, string>)[currentMode];
 
   if (projectId) {
-    return projectId;
+    // Matches the offset firestack.config.ts applies on the backend side —
+    // must resolve to the SAME project id, or this app's Firebase SDK
+    // connects to a different contract's emulator instance than the one
+    // its own dev server is actually running against.
+    return withProjectIdOffset(projectId, emulatorPortOffset);
   }
 
   const validModes = Object.keys(MODE_PROJECT_MAP)
