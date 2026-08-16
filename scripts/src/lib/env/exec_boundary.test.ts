@@ -138,17 +138,21 @@ describe('execSync calls in the herdr / contract-pipeline layer never hand-POSIX
 describe('execSyncTemplateArgs / hasStrayPosixQuote', () => {
   it('detects the real bug shape but ignores interpolation-internal quotes', () => {
     // Proves the detector actually fires — otherwise the suite above could
-    // pass simply because the regex never matches anything.
-    const broken = "execSync(`gh pr list --head '${headBranch}' --jq '.[0].url'`, opts)";
+    // pass simply because the regex never matches anything. These fixtures
+    // are SOURCE-CODE SNAPSHOTS: they must stay literal text, so they are
+    // template literals with escaped backticks (\`) and escaped
+    // interpolations (\${) — the values are byte-identical to the plain
+    // strings they replaced, but lint-clean (noTemplateCurlyInString).
+    const broken = `execSync(\`gh pr list --head '\${headBranch}' --jq '.[0].url'\`, opts)`;
     expect(execSyncTemplateArgs(broken).some(hasStrayPosixQuote)).toBe(true);
 
     // A `'` used only inside a `${...}` JS expression (e.g. Array#join's
     // separator) is not shell-quoting at all — must not false-positive.
-    const fine = "execSync(`docker ${args.join(' ')}`, opts)";
+    const fine = `execSync(\`docker \${args.join(' ')}\`, opts)`;
     expect(execSyncTemplateArgs(fine).some(hasStrayPosixQuote)).toBe(false);
 
     // Plain interpolation with no quoting anywhere — must not false-positive.
-    const alsoFine = 'execSync(`git ${command}`, opts)';
+    const alsoFine = `execSync(\`git \${command}\`, opts)`;
     expect(execSyncTemplateArgs(alsoFine).some(hasStrayPosixQuote)).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ import { backendEnv, requireEnv } from '@aikami/backend/configs/environment';
 import { onRequest } from '@snorreks/firestack';
 import { askProjectAi } from '$lib/discord/ai_chat';
 import { createGithubIssueFromDiscord } from '$lib/discord/github_issue';
+import { tryReserveIssueSubmission } from '$lib/discord/rate_limit';
 import { editOriginalInteractionResponse } from '$lib/discord/respond';
 import {
   type DiscordInteraction,
@@ -35,6 +36,32 @@ import { logger } from '$logger';
 
 const BUG_MODAL_ID = 'bug_report_modal';
 const FEATURE_MODAL_ID = 'feature_request_modal';
+
+/**
+ * Reject a modal submission before ANY deferred response or GitHub call.
+ * Issue creation must be restricted to the allow-listed guild + role:
+ * this endpoint is reachable from any server that installs the app (and
+ * from DMs), and GITHUB_ISSUES_TOKEN is scoped only to `issues:write` —
+ * anyone outside the team must not be able to spend it. Fail closed when
+ * the allow-list env vars are not configured at all.
+ */
+const submissionAuthorizationFailure = (interaction: DiscordInteraction): string | null => {
+  const allowedGuildId = backendEnv.DISCORD_ALLOWED_GUILD_ID;
+  const allowedRoleId = backendEnv.DISCORD_ALLOWED_ROLE_ID;
+  if (!allowedGuildId || !allowedRoleId) {
+    return 'issue submission is not enabled yet (server allow-list not configured)';
+  }
+  if (!interaction.guild_id) {
+    return 'direct messages are not supported — run this command inside the Aikami server';
+  }
+  if (interaction.guild_id !== allowedGuildId) {
+    return 'this command only works inside the Aikami server';
+  }
+  if (!interaction.member?.roles?.includes(allowedRoleId)) {
+    return 'your role in this server does not have permission to submit issues';
+  }
+  return null;
+};
 
 function reportModal(customId: string, title: string): unknown {
   return {
@@ -155,6 +182,39 @@ export default onRequest(async (request, response) => {
       response.status(200).json({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: { content: 'Unknown form submission.' },
+      });
+      return;
+    }
+
+    // 🔴 Authorize BEFORE the deferred response and GitHub issue creation:
+    // reject DMs and require the allow-listed guild + an authorized member
+    // role (see submissionAuthorizationFailure — fail-closed when unset).
+    const authFailure = submissionAuthorizationFailure(interaction);
+    if (authFailure) {
+      response.status(200).json({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: `❌ ${authFailure}.` },
+      });
+      return;
+    }
+
+    // Persistent per-user rate limit (Firestore-backed, shared across
+    // function instances — NOT process-local) before any GitHub call.
+    const userId = interaction.member?.user?.id ?? interaction.user?.id;
+    if (!userId) {
+      response.status(200).json({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: '❌ Could not identify you — try again.' },
+      });
+      return;
+    }
+    if (!(await tryReserveIssueSubmission(userId))) {
+      logger.warn(`discord_interactions: rate limited user ${userId}`);
+      response.status(200).json({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: "❌ You've reached the issue submission limit — try again later.",
+        },
       });
       return;
     }

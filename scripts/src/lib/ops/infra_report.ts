@@ -74,6 +74,10 @@ export type InfraIssueEvent = {
   error: string;
   /** Free-form extra context — kept small; this is a log line, not a dump. */
   context?: Record<string, string | number | boolean | undefined>;
+  /** Contract-pipeline run this failure belongs to (see
+   *  setActiveInfraRun / reportInfraIssue's `runId` option). Absent for
+   *  events recorded outside any pipeline run (manual scripts, extensions). */
+  runId?: string;
   /** component:operation:normalizedError — groups repeat occurrences. */
   fingerprint: string;
 };
@@ -104,6 +108,21 @@ const errorMessage = (error: unknown): string =>
 const buildFingerprint = (component: string, operation: string, normalizedError: string): string =>
   `${component}:${operation}:${normalizedError}`;
 
+// ── Active run context ────────────────────────────────────────────────────
+// The contract pipeline records degradation events from many shared helpers
+// (session.ts, worktree.ts, git_worktree.ts) that have no run id of their
+// own. The orchestrator sets the ambient active run once per pipeline
+// process; reportInfraIssue stamps it onto every event recorded without an
+// explicit `runId`, so prompt-note injection can filter to THIS run and
+// exclude historical failures from previous runs.
+let activeRunId: string | undefined;
+
+/** Set (or clear, with undefined) the ambient contract-pipeline run id that
+ *  reportInfraIssue stamps onto events recorded without an explicit runId. */
+export const setActiveInfraRun = (runId: string | undefined): void => {
+  activeRunId = runId;
+};
+
 /**
  * Record that a degradation site caught a failure and worked around it.
  * Never throws — a reporting failure must never become THE failure. Safe to
@@ -115,6 +134,9 @@ export const reportInfraIssue = (options: {
   error: unknown;
   context?: Record<string, string | number | boolean | undefined>;
   cwd?: string;
+  /** Contract-pipeline run this failure belongs to — defaults to the
+   *  ambient active run (see setActiveInfraRun). */
+  runId?: string;
 }): void => {
   try {
     const cwd = options.cwd ?? process.cwd();
@@ -125,6 +147,7 @@ export const reportInfraIssue = (options: {
       operation: options.operation,
       error: normalized,
       context: options.context,
+      runId: options.runId ?? activeRunId,
       fingerprint: buildFingerprint(options.component, options.operation, normalized),
     };
     const logPath = resolveLogPath(cwd);
@@ -164,6 +187,14 @@ export const readInfraIssues = (cwd: string): InfraIssueEvent[] => {
   }
   return events;
 };
+
+/** Events recorded during ONE pipeline run — the view injected into that
+ *  run's review prompt. Events without a runId (recorded by manual scripts
+ *  or extensions, outside any pipeline) and events from previous runs are
+ *  excluded, so historical gh/worktree/herdr failures never leak into a
+ *  fresh run's notes. */
+export const readInfraIssuesForRun = (cwd: string, runId: string): InfraIssueEvent[] =>
+  readInfraIssues(cwd).filter((event) => event.runId === runId);
 
 /** Group events by fingerprint into a ranked (most frequent first) summary. */
 export const summarizeInfraIssues = (

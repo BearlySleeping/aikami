@@ -187,7 +187,10 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
     }
     await updateChannel(rest, update.id, {
       type: CHANNEL_TYPE_MAP[desired.type],
-      parent_id: desired.category ? categoryIdByName.get(desired.category) : undefined,
+      // null (not undefined) moves a categorized channel to the top level —
+      // diff.ts only plans the update when a real change exists, so when
+      // desired declares no category, null is exactly the desired state.
+      parent_id: desired.category ? categoryIdByName.get(desired.category) : null,
       topic: desired.topic,
       nsfw: desired.nsfw,
     });
