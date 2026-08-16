@@ -30,8 +30,17 @@ export const EMULATOR_PORTS = {
   voice: 8089,
 } as const;
 
-/** Emulator GCP project ID. The suite runs against one shared project. */
-export const EMULATOR_PROJECT_ID = 'demo-aikami-emulator' as const;
+/**
+ * Emulator GCP project ID. Offset the same way as EMULATOR_PORTS above (and
+ * must match withProjectIdOffset in packages/shared/constants/src/lib/project.ts,
+ * same CJS-loader constraint — can't import it here) so a contract-scoped
+ * test run connects to its own Firebase emulator instance's project instead
+ * of colliding with a concurrently-running contract's.
+ */
+export const EMULATOR_PROJECT_ID =
+  emulatorPortOffset > 0
+    ? (`demo-aikami-emulator-${emulatorPortOffset}` as const)
+    : ('demo-aikami-emulator' as const);
 
 /** Test API key for the Firebase Auth emulator (fake, emulator-only). */
 export const FIREBASE_API_KEY = 'fake-api-key' as const;

@@ -53,3 +53,28 @@ export const MODE_PROJECT_MAP = {
  * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
  */
 export const CLOUD_FUNCTIONS_REGION = 'europe-west4' as const;
+
+/**
+ * Offset a demo Firebase project ID for contract-scoped pipeline runs, so
+ * concurrent `firestack emulate` instances never collide.
+ *
+ * Per-port offsetting (see development_ports.ts's withPortOffset) is not
+ * enough on its own: firebase-tools' Emulator Hub coordinates running
+ * instances via a locator file keyed by the literal project ID
+ * (`hub-${projectId}.json` in the shared OS temp dir, independent of which
+ * port that hub ends up on). Two concurrent instances that both resolve to
+ * the bare `demo-aikami-emulator` collide there and kill each other —
+ * reproduced directly: whichever instance (re)started most recently stays
+ * up, the other's port goes dark within moments, no crash log, because the
+ * hub locator file gets overwritten out from under it. Suffixing the
+ * project id by offset gives each contract its own locator file too.
+ *
+ * Only ever applied to `demo-` project ids (emulator/testing) — a
+ * staging/production project id is a real GCP project and must never be
+ * mutated; `offset <= 0` (manual, non-contract dev) leaves the id
+ * untouched so today's exact project id keeps working everywhere it's
+ * already relied on (e.g. cached emulator data, browser bookmarks to the
+ * Emulator UI).
+ */
+export const withProjectIdOffset = (projectId: string, offset: number): string =>
+  offset > 0 && projectId.startsWith('demo-') ? `${projectId}-${offset}` : projectId;
