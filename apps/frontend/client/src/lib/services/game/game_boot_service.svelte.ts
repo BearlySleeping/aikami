@@ -9,13 +9,8 @@
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { EngineBridge, GameWorld, LpcLayerRecipe } from '@aikami/frontend/engine';
-import {
-  DEFAULT_LPC_SLOT_FALLBACKS,
-  type LpcSlotCatalog,
-  projectLpcCatalog,
-  resolveLpcAppearance,
-} from '@aikami/frontend/engine';
+import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -857,19 +852,18 @@ class GameBootService
       return;
     }
 
-    const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
-      generatedLpcSlots,
-      (slot, assetId, state) => getLpcAssetPath(slot, assetId, state as unknown as number),
+    const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+      getLpcAssetPath(slot, assetId, state as unknown as number),
     );
 
     this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
       className: 'GameWorld',
       bridge: this._bridge,
-      recipeResolver,
-      assetUrlResolver,
+      recipeResolver: pipeline.recipeResolver,
+      assetUrlResolver: pipeline.assetUrlResolver,
       // C-400: forward the projected catalog so the worker resolves the
       // same slot/assetId sequences as the main-thread resolver.
-      lpcCatalog: projectLpcCatalog(generatedLpcSlots),
+      lpcCatalog: pipeline.catalog,
       // C-374: merge equipped items onto the player's base LPC render
       equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
@@ -1190,34 +1184,16 @@ class GameBootService
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
     getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
-  ): {
-    recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
-    assetUrlResolver: (_slot: string, assetId: string, state: string) => string | null;
-  } {
-    // C-400: single source of truth — the engine's pure resolver, fed the
-    // projected catalog. This is the resolver the production /game route
-    // uses (gameBootService.boot → GameWorld.create).
+  ) {
+    // C-400: single source of truth — the engine's shared createLpcPipeline
+    // (projected catalog + pure resolver + asset URL resolver). This is the
+    // resolver the production /game route uses (gameBootService.boot →
+    // GameWorld.create).
     this._cachedLpcSlots = generatedLpcSlots;
-    const catalog: readonly LpcSlotCatalog[] = projectLpcCatalog(generatedLpcSlots);
-
-    const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
-      const result = resolveLpcAppearance({
-        layerIds,
-        catalog,
-        fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
-      });
-      return result.recipes.map((r) => ({
-        slot: r.slot,
-        assetId: r.assetId,
-        hexPalette: r.hexPalette,
-      }));
-    };
-
-    const assetUrlResolver = (_slot: string, assetId: string, state: string): string | null => {
-      return getLpcAssetPath(_slot, assetId, state);
-    };
-
-    return { recipeResolver, assetUrlResolver };
+    return createLpcPipeline({
+      catalog: projectLpcCatalog(generatedLpcSlots),
+      getLpcAssetPath,
+    });
   }
 
   /** Builds player init data from the resolved persona. */

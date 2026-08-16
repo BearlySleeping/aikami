@@ -135,6 +135,23 @@ describe('validateNpcAppearance', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.slot).toBe('body');
   });
+
+  it('rejects non-integer layer values the way raw JSON can provide them', () => {
+    // The manifest is raw JSON — TS types say number[] but the runtime value
+    // can be a string, null, or a fraction. All must be rejected, never
+    // coerced into a "valid" index (e.g. "1" - 1 === 0, null ?? 0 === 0).
+    const badLayers = [
+      ['1', 3, 23, 22, 7, 95], // string index
+      [null, 3, 23, 22, 7, 95], // null index
+      [1.5, 3, 23, 22, 7, 95], // fractional index
+    ] as unknown as readonly (readonly number[])[];
+    for (const layers of badLayers) {
+      const errors = validateNpcAppearance({ ...base, appearanceLayers: layers, catalog: CATALOG });
+      expect(errors, `layers ${JSON.stringify(layers)}`).toHaveLength(1);
+      expect(errors[0]?.slot).toBe('body');
+      expect(errors[0]?.detail).toContain('not a non-negative integer');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

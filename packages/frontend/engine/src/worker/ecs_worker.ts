@@ -638,11 +638,9 @@ const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => 
     catalog: _workerLpcCatalog ?? [],
     fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
   });
-  return result.recipes.map((r) => ({
-    slot: r.slot,
-    assetId: r.assetId,
-    hexPalette: r.hexPalette,
-  }));
+  // Shallow mutable copy — recipes are freshly built per call and the
+  // elements are never shared, so spreading is safe and avoids re-mapping.
+  return [...result.recipes];
 };
 
 // -- Initialization ---------------------------------------------------------

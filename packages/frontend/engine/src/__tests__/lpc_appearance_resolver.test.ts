@@ -156,9 +156,17 @@ describe('AC-3 — unresolvable slots fall back and log', () => {
     const result = resolve([1, 2, 1, 1]);
 
     expect(result.recipes).toHaveLength(6);
-    // Missing trailing slots (feet, head) degrade to fallback assets.
+    // Missing trailing slots (feet, head) degrade to fallback assets,
+    // recorded with an explicit null requestedIndex — never `undefined`.
     expect(result.resolutions.feet.kind).toBe('fallback');
+    if (result.resolutions.feet.kind === 'fallback') {
+      expect(result.resolutions.feet.requestedIndex).toBeNull();
+    }
     expect(result.resolutions.head.kind).toBe('fallback');
+    if (result.resolutions.head.kind === 'fallback') {
+      expect(result.resolutions.head.requestedIndex).toBeNull();
+      expect(result.resolutions.head.catalogSize).toBeGreaterThan(0);
+    }
   });
 });
 

@@ -332,6 +332,7 @@ export {
   WORLD_Z_BANDS,
 } from './rendering/layer_bands.ts';
 export type {
+  CreateLpcPipelineOptions,
   LpcAppearanceResult,
   LpcSlotCatalog,
   LpcSlotFallbacks,
@@ -340,7 +341,9 @@ export type {
   ResolveLpcAppearanceOptions,
 } from './rendering/lpc_appearance_resolver.ts';
 // LPC appearance resolver (C-400) — unified worker/client resolution
+// + shared client pipeline builder (deduped from both game services)
 export {
+  createLpcPipeline,
   DEFAULT_LPC_SLOT_FALLBACKS,
   LPC_SLOT_ORDER,
   projectLpcCatalog,

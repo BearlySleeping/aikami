@@ -32,6 +32,7 @@
 //   never a per-render correction.
 
 import { logger } from '$logger';
+import type { LpcLayerRecipe } from '../components/appearance.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,7 +56,8 @@ export type LpcSlotResolution =
   | {
       readonly kind: 'fallback';
       readonly assetId: string;
-      readonly requestedIndex: number;
+      /** 1-indexed value requested; `null` when the slot was missing from a short input array. */
+      readonly requestedIndex: number | null;
       readonly catalogSize: number;
     }
   | { readonly kind: 'empty' };
@@ -115,8 +117,11 @@ export const LPC_SLOT_ORDER: readonly LpcSlotName[] = [
 /** Fallback warn keys already logged — one warn per entity per slot. */
 const _loggedFallbackKeys = new Set<string>();
 
-const _fallbackKey = (slot: LpcSlotName, requestedIndex: number, catalogSize: number): string =>
-  `${slot}:${requestedIndex}:${catalogSize}`;
+const _fallbackKey = (
+  slot: LpcSlotName,
+  requestedIndex: number | null,
+  catalogSize: number,
+): string => `${slot}:${requestedIndex}:${catalogSize}`;
 
 /** Resets the fallback warn dedup (tests / hot reload). */
 export const resetLpcFallbackWarnings = (): void => {
@@ -128,13 +133,15 @@ export const resetLpcFallbackWarnings = (): void => {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves six appearance layer indices to LPC layer recipes.
+ * Resolves appearance layer indices to LPC layer recipes.
  *
- * Always returns six entries (one per {@link LPC_SLOT_ORDER} slot). Index 0
- * is *intentionally empty* (recipe present with `assetId: ''` and a
- * zero-filled palette — no warning). A non-zero index that is out of range
- * for its slot's catalog resolves to the declared fallback asset and logs a
- * `warn` once per entity per slot.
+ * Always returns six entries (one per {@link LPC_SLOT_ORDER} slot) even for
+ * short input arrays — a missing trailing slot degrades to its declared
+ * fallback (recorded as `requestedIndex: null`). Index 0 is *intentionally
+ * empty* (recipe present with `assetId: ''` and a zero-filled palette — no
+ * warning). A non-zero index that is out of range for its slot's catalog
+ * resolves to the declared fallback asset and logs a `warn` once per entity
+ * per slot.
  *
  * @param options - Layer indices, catalog, and fallback table.
  * @returns Six recipes plus per-slot resolution details.
@@ -148,10 +155,13 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
 
   for (let i = 0; i < LPC_SLOT_ORDER.length; i++) {
     const slot = LPC_SLOT_ORDER[i] ?? 'body';
-    const rawId = layerIds[i];
+    // A slot missing from a short input array (e.g. whispering-caves' 4-layer
+    // declarations) is normalized to null so the fallback resolution records
+    // it explicitly instead of leaking `undefined` into requestedIndex.
+    const rawId = layerIds[i] ?? null;
 
     // 1-indexed layer values → 0-indexed variant lookup.
-    const effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
+    const effectiveIdx = rawId === null ? -1 : rawId - 1;
 
     // Index 0 means intentionally empty — no fallback, no warning.
     if (rawId === 0) {
@@ -226,4 +236,46 @@ export const projectLpcCatalog = (
     }
   }
   return projected;
+};
+
+// ---------------------------------------------------------------------------
+// Client pipeline builder
+// ---------------------------------------------------------------------------
+
+/** Options for {@link createLpcPipeline}. */
+export type CreateLpcPipelineOptions = {
+  /** The projected engine-slot catalog (see {@link projectLpcCatalog}). */
+  catalog: readonly LpcSlotCatalog[];
+  /** Resolves a slot's asset ID to a renderable texture URL. */
+  getLpcAssetPath: (slot: string, assetId: string, state: string) => string | null;
+};
+
+/**
+ * Builds the client LPC pipeline: recipe resolver + asset URL resolver.
+ *
+ * Dedupes the `projectLpcCatalog` + `resolveLpcAppearance` wiring that
+ * previously existed in BOTH game_engine_service and game_boot_service
+ * (C-400). Also returns the projected catalog so callers pass the SAME
+ * instance to GameWorld's `lpcCatalog` option instead of projecting twice.
+ *
+ * @param options - Projected catalog + asset URL resolver.
+ * @returns Recipe resolver, asset URL resolver, and the projected catalog.
+ */
+export const createLpcPipeline = (
+  options: CreateLpcPipelineOptions,
+): {
+  catalog: readonly LpcSlotCatalog[];
+  recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
+  assetUrlResolver: (slot: string, assetId: string, state: string) => string | null;
+} => {
+  const { catalog, getLpcAssetPath } = options;
+
+  const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => [
+    ...resolveLpcAppearance({ layerIds, catalog, fallbacks: DEFAULT_LPC_SLOT_FALLBACKS }).recipes,
+  ];
+
+  const assetUrlResolver = (slot: string, assetId: string, state: string): string | null =>
+    getLpcAssetPath(slot, assetId, state);
+
+  return { catalog, recipeResolver, assetUrlResolver };
 };

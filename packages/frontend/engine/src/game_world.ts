@@ -332,7 +332,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _playerVisibleByMask = 0;
 
-  /** NPC metadata keyed by entity ID (populated from NPC spawn events). */
+  /**
+   * NPC metadata keyed by entity ID.
+   *
+   * Populated from ENTITY_CREATED messages that carry `npcData` — authored
+   * manifest NPCs, restored/hydrated NPCs, and programmatically spawned
+   * NPCs all qualify. It is NOT a manifest lookup at read time: unauthored
+   * Tiled NPCs (or any entity created with npcData) count too.
+   */
   private _npcMeta = new Map<number, NpcMetaEntry>();
 
   /** Public read-only access to NPC metadata for sandbox ViewModels. */
@@ -827,8 +834,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const state = {
       frozen: !this._running,
       entityCount: this._renderEntries.size,
-      // C-400 AC-1: authored NPC count (spawned NPC entities with a manifest
-      // entry) — asserted by game_boot.spec.ts against the manifest count.
+      // C-400 AC-1: spawned NPC count (entities created with npcData — authored
+      // manifest NPCs plus restored/programmatic NPCs) — asserted by
+      // game_boot.spec.ts against the manifest-derived count.
       npcCount: this._npcMeta.size,
       playerEntityId: this._playerEntityId,
       cameraX: this._cameraX,
@@ -2828,8 +2836,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           playerY: y,
           playerEid: eid,
           playerVisibleByMask: this._playerVisibleByMask,
-          // C-400 AC-1: authored NPC count for the loaded map — asserted by
-          // game_boot.spec.ts against the manifest NPC count.
+          // C-400 AC-1: spawned NPC count for the loaded map — asserted by
+          // game_boot.spec.ts against the manifest-derived count.
           npcCount: this._npcMeta.size,
         };
       }

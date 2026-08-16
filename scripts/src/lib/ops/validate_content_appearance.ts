@@ -153,10 +153,28 @@ export const validateNpcAppearance = (options: {
     if (!slot) {
       break; // More than six layers — engine ignores extras; do not fail.
     }
-    const index = appearanceLayers[i] ?? 0;
-    if (index === 0) {
+    // Raw JSON — validate the actual runtime value before any arithmetic:
+    // reject strings, null, and fractional numbers (e.g. "1", null, 1.5).
+    // A missing trailing slot (undefined) stays absent → runtime fallback.
+    const rawIndex = appearanceLayers[i];
+    if (rawIndex === undefined) {
+      continue;
+    }
+    if (typeof rawIndex !== 'number' || !Number.isSafeInteger(rawIndex) || rawIndex < 0) {
+      errors.push({
+        packId,
+        npcId,
+        slot,
+        index: typeof rawIndex === 'number' ? rawIndex : Number.NaN,
+        validRange: 'a non-negative integer (0 = intentionally empty)',
+        detail: `Index ${String(rawIndex)} is not a non-negative integer.`,
+      });
+      continue;
+    }
+    if (rawIndex === 0) {
       continue; // 0 = intentionally empty (torso/feet equipment slots).
     }
+    const index = rawIndex;
 
     const slotDef = catalog.find((s) => s.slot === slot);
     if (!slotDef) {
@@ -267,4 +285,8 @@ function main(): void {
   console.log('✓ All content-pack NPC appearance indices are valid.');
 }
 
-main();
+// CLI entry — run only when executed directly so importing this module
+// (e.g. from its unit test) stays side-effect free.
+if (import.meta.main) {
+  main();
+}
