@@ -376,7 +376,11 @@ test.describe('C-402 NPC/player movement deadlock (production /game)', () => {
   test('player can walk away while NPCs are present (AC-1/AC-2)', async ({ page }) => {
     await page.goto(`${BASE_URL}/game`, { waitUntil: 'domcontentloaded' });
 
-    // Wait for the engine + player position + spawned NPCs.
+    // Wait for the engine + player position + an NPC that has actually
+    // approached the player, not merely spawned (CodeRabbit review,
+    // C-402): the deadlock only exists once an NPC is within collision
+    // range, so npcCount > 0 alone cannot prove the scenario. Keep the
+    // bridge check (playerX/playerY/npcCount) unchanged.
     await page.waitForFunction(
       () => {
         const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
@@ -384,11 +388,26 @@ test.describe('C-402 NPC/player movement deadlock (production /game)', () => {
               playerX?: number;
               playerY?: number;
               npcCount?: number;
+              playerEid?: number;
+              entityPositions?: Record<string, { x: number; y: number }>;
             }
           | undefined;
-        return (
-          debug?.playerX !== undefined && debug?.playerY !== undefined && (debug?.npcCount ?? 0) > 0
-        );
+        const px = debug?.playerX;
+        const py = debug?.playerY;
+        if (px === undefined || py === undefined || (debug?.npcCount ?? 0) <= 0) {
+          return false;
+        }
+        // Any NON-player rendered entity within ~3 tiles of the player —
+        // an NPC that has approached to collision range.
+        const positions = debug?.entityPositions ?? {};
+        return Object.entries(positions).some(([eid, pos]) => {
+          if (Number(eid) === debug?.playerEid) {
+            return false;
+          }
+          const dx = pos.x - px;
+          const dy = pos.y - py;
+          return Math.hypot(dx, dy) < 96;
+        });
       },
       { timeout: 20_000 },
     );
@@ -405,8 +424,9 @@ test.describe('C-402 NPC/player movement deadlock (production /game)', () => {
 
     const endPos = await _readPlayerPosition(page);
 
-    // The player must have displaced — input is not deadlocked by NPCs.
-    // (Either axis may change; the other may be clamped by a wall.)
-    expect(endPos.playerX !== startPos.playerX || endPos.playerY !== startPos.playerY).toBe(true);
+    // The player must have displaced RIGHTWARD — input is not deadlocked by
+    // NPCs. Assert the held direction, not either-axis displacement
+    // (CodeRabbit review, C-402).
+    expect(endPos.playerX - startPos.playerX > 16).toBe(true);
   });
 });

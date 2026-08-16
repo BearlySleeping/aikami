@@ -35,13 +35,15 @@ const PATH_FOLLOW_QUERY_TERMS = [Position, PathFollow];
  * `player_proximity` is set by the C-402 halt rule when an NPC with an
  * interaction radius is within `interactionRadius` of the player; the NPC
  * stops at conversational distance instead of entering the player's tile.
+ *
+ * `reached_goal` marks normal path completion and `missing_waypoints` a
+ * data-integrity failure (PathFollow attached with a non-zero length but
+ * no waypoint buffer). `blocked_terrain`/`blocked_actor` were removed in
+ * review — this system never records them (the stuck detector in the
+ * movement system is the actor-block diagnostic; terrain blocks are
+ * expected and deliberately silent).
  */
-export type NpcHaltReason =
-  | 'none'
-  | 'reached_goal'
-  | 'player_proximity'
-  | 'blocked_terrain'
-  | 'blocked_actor';
+export type NpcHaltReason = 'none' | 'reached_goal' | 'player_proximity' | 'missing_waypoints';
 
 /**
  * Per-entity halt reason, keyed by entity id.
@@ -74,6 +76,41 @@ const _setNpcHaltReason = (eid: number, reason: NpcHaltReason): void => {
     logger.debug('path-follow:halt-reason', { eid, previous, reason });
     _npcHaltReason.set(eid, reason);
   }
+};
+
+/**
+ * Sim-time (ms) an entity has been continuously halted by the
+ * player-proximity rule. Drives the corridor-yield release.
+ */
+const _haltedForMs = new Map<number, number>();
+
+/**
+ * An NPC may hold its pursue path while halted at the interaction radius
+ * for this long (sim time) before the path is released so the NPC cannot
+ * occupy a corridor indefinitely (CodeRabbit review, C-402).
+ */
+const HALT_YIELD_THRESHOLD_MS = 5000;
+
+/**
+ * Clears per-entity halt tracking when the PathFollow component detaches —
+ * a recycled eid must not inherit another entity's halt reason or
+ * halt-duration state (CodeRabbit review, C-402).
+ *
+ * @param eid - The entity ID.
+ */
+const _clearHaltState = (eid: number): void => {
+  _npcHaltReason.delete(eid);
+  _haltedForMs.delete(eid);
+};
+
+/**
+ * Clears ALL module-level NPC halt state (reasons + halt-duration
+ * tracking). Test/observability helper — prevents stale entries for
+ * recycled entity IDs across worlds and tests.
+ */
+export const resetNpcHaltReasons = (): void => {
+  _npcHaltReason.clear();
+  _haltedForMs.clear();
 };
 
 /**
@@ -166,14 +203,36 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
           if (dx * dx + dy * dy < (radius + step) * (radius + step)) {
             addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
             _setNpcHaltReason(eid, 'player_proximity');
-            // Path stays attached (live) so the GOAP executor does not
-            // re-request every tick; steering resumes when the player
-            // moves beyond the radius.
+            // Corridor-yield (CodeRabbit review, C-402): a halted NPC may
+            // hold its pursue path (so the GOAP executor does not
+            // re-request every tick), but not indefinitely — after
+            // HALT_YIELD_THRESHOLD_MS of continuous halt the path is
+            // released and the executor's within-radius gate prevents an
+            // immediate re-request of the same pursue goal. The NPC no
+            // longer occupies the corridor with a live path; GOAP stays
+            // free to re-task it (e.g. wander aside), and pursuit resumes
+            // when the player moves beyond the radius.
+            const haltedForMs = _haltedForMs.get(eid) ?? 0;
+            const nextHaltedForMs = haltedForMs + deltaMs;
+            if (nextHaltedForMs >= HALT_YIELD_THRESHOLD_MS) {
+              _haltedForMs.delete(eid);
+              logger.debug('path-follow:halt-yield', { eid, haltedForMs: nextHaltedForMs });
+              removeComponent(world, eid, PathFollow);
+              PathFollow.repathAtMs[eid] = 0;
+            } else {
+              _haltedForMs.set(eid, nextHaltedForMs);
+            }
+            // Steering resumes when the player moves beyond the radius
+            // (the fall-through below clears the halt-duration state).
             continue;
           }
         }
       }
     }
+
+    // Beyond the interaction radius this tick — a halted NPC resumes;
+    // clear the halt-duration accumulator so a future halt starts fresh.
+    _haltedForMs.delete(eid);
 
     // Path finished — stop and detach the component.
     if (length <= 0 || index >= length) {
@@ -181,15 +240,17 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
       _setNpcHaltReason(eid, 'reached_goal');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
+      _clearHaltState(eid);
       continue;
     }
 
     const waypoints = PathFollow.waypoints[eid];
     if (!waypoints) {
       addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
-      _setNpcHaltReason(eid, 'reached_goal');
+      _setNpcHaltReason(eid, 'missing_waypoints');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
+      _clearHaltState(eid);
       continue;
     }
 
@@ -217,6 +278,7 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
         // provider (party-follow) cannot gate a recycled eid (CodeRabbit
         // review, C-379).
         PathFollow.repathAtMs[eid] = 0;
+        _clearHaltState(eid);
         continue;
       }
       // Intermediate waypoint reached — steer toward the NEXT waypoint in

@@ -1,5 +1,5 @@
 // packages/frontend/engine/src/systems/movement_system.test.ts
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
 import { logger } from '$logger';
@@ -860,7 +860,7 @@ describe('movement_system — axis-independent wall sliding', () => {
   });
 
   describe('C-402 AC-5: stuck detection (safety net that logs)', () => {
-    let originalWarn: typeof logger.warn;
+    let warnSpy: ReturnType<typeof spyOn>;
 
     /** Registers a stationary NPC in the spatial grid at a tile cell. */
     const placeNpc = (eid: number, tileX: number, tileY: number): void => {
@@ -873,18 +873,21 @@ describe('movement_system — axis-independent wall sliding', () => {
       insertIntoSpatialGrid(eid);
     };
 
+    /** Counts movement:stuck-by-actor warnings recorded on the shared spy. */
+    const stuckWarnings = (): unknown[][] =>
+      warnSpy.mock.calls.filter((args: unknown[]) =>
+        String(args[0] ?? '').includes('movement:stuck-by-actor'),
+      );
+
     beforeEach(() => {
       resetStuckWatch();
-      // Spy on the logger's warn method so the test can count reports.
-      originalWarn = logger.warn;
-      logger.warn = (...args: unknown[]) => {
-        // Swallow — the test asserts via _stuckWatch state + call count.
-        void args;
-      };
+      // One Bun spy for the whole block (CodeRabbit review, C-402):
+      // derived assertions, restored in afterEach.
+      warnSpy = spyOn(logger, 'warn');
     });
 
     afterEach(() => {
-      logger.warn = originalWarn;
+      warnSpy.mockRestore();
       resetStuckWatch();
     });
 
@@ -911,14 +914,6 @@ describe('movement_system — axis-independent wall sliding', () => {
       placeNpc(9303, 4, 5);
       placeNpc(9304, 6, 5);
 
-      let warnCount = 0;
-      logger.warn = (...args: unknown[]) => {
-        const message = String(args[0] ?? '');
-        if (message.includes('movement:stuck-by-actor')) {
-          warnCount++;
-        }
-      };
-
       // Press right for more than the threshold (60) ticks. Large velocity
       // so the collision box reaches the NPC tile on frame 1 (blocked from
       // the very first tick — blockedTicks >= 60 after 70 frames).
@@ -928,7 +923,39 @@ describe('movement_system — axis-independent wall sliding', () => {
         updateMovement(world, 16);
       }
 
-      expect(warnCount).toBe(1); // exactly one report within the rate window
+      expect(stuckWarnings().length).toBe(1); // exactly one report within the rate window
+      expect(getStuckWatch(mover)?.blockedTicks ?? 0).toBeGreaterThanOrEqual(60);
+    });
+
+    it('detects a single blocker in the attempted direction (NPC directly right)', () => {
+      // CodeRabbit review (C-402): the stuck detector must scan the
+      // position the mover ATTEMPTED to reach, not the reverted current
+      // box — a single NPC directly right of a mover pressing right sits
+      // outside the mover's current collision box, so only the attempted
+      // position reveals it.
+      setCollisionGrid(ALL_WALKABLE);
+      const mover = addEntity(world);
+      addComponent(world, mover, Position);
+      addComponent(world, mover, set(Position, { x: 160, y: 160 })); // tile (5,5)
+      addComponent(world, mover, Velocity);
+      addComponent(world, mover, CollisionData);
+      addComponent(
+        world,
+        mover,
+        set(CollisionData, {
+          layer: CollisionLayer.player,
+          mask: CollisionLayer.wall | CollisionLayer.npc,
+        }),
+      );
+      placeNpc(9305, 6, 5); // directly right — the tile the mover attempts
+
+      for (let frame = 0; frame < 70; frame++) {
+        Velocity.x[mover] = 2000;
+        Velocity.y[mover] = 0;
+        updateMovement(world, 16);
+      }
+
+      expect(stuckWarnings().length).toBe(1);
       expect(getStuckWatch(mover)?.blockedTicks ?? 0).toBeGreaterThanOrEqual(60);
     });
 
@@ -949,21 +976,13 @@ describe('movement_system — axis-independent wall sliding', () => {
         }),
       );
 
-      let warnCount = 0;
-      logger.warn = (...args: unknown[]) => {
-        const message = String(args[0] ?? '');
-        if (message.includes('movement:stuck-by-actor')) {
-          warnCount++;
-        }
-      };
-
       for (let frame = 0; frame < 70; frame++) {
         Velocity.x[mover] = 60;
         Velocity.y[mover] = 0;
         updateMovement(world, 16);
       }
 
-      expect(warnCount).toBe(0); // terrain blocks are expected — no log
+      expect(stuckWarnings().length).toBe(0); // terrain blocks are expected — no log
     });
   });
 });

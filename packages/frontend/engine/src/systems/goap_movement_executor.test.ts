@@ -64,4 +64,70 @@ describe('goap_movement_executor C-402 radius-aware pursue goal', () => {
       expect(goal.x).toBeLessThan(5);
     }
   });
+
+  it('returns undefined when every ring cell around the target is blocked', () => {
+    // Blocked-ring case (CodeRabbit review, C-402): when no walkable ring
+    // cell exists, _pickPursueGoal returns undefined and the caller falls
+    // back to the target's own cell (the halt rule covers that at runtime).
+    const grid: CollisionGrid = {
+      width: 12,
+      height: 12,
+      tileSize: 32,
+      grid: new Array(144).fill(false),
+    };
+    // Block the whole scan ring around the target (Chebyshev distance
+    // 1..2 for radius 48 / tile 32); the target cell itself stays walkable.
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx === 0 && dy === 0) {
+          continue;
+        }
+        grid.grid[(5 + dy) * 12 + (5 + dx)] = true;
+      }
+    }
+    const terrain = buildTerrainGridFromBoolean(grid);
+    const goal = _pickPursueGoal({
+      fromX: 2,
+      fromY: 5,
+      targetGx: 5,
+      targetGy: 5,
+      radiusPx: 48,
+      tileSize: 32,
+      terrain,
+    });
+    expect(goal).toBeUndefined();
+  });
+
+  it('skips blocked ring candidates and returns an available walkable cell', () => {
+    // Partially blocked ring (CodeRabbit review, C-402): blocked candidates
+    // are skipped, the one remaining walkable ring cell is returned.
+    const grid: CollisionGrid = {
+      width: 12,
+      height: 12,
+      tileSize: 32,
+      grid: new Array(144).fill(false),
+    };
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (dx === 0 && dy === 0) {
+          continue;
+        }
+        if (dx === -2 && dy === 0) {
+          continue; // keep (3,5) walkable
+        }
+        grid.grid[(5 + dy) * 12 + (5 + dx)] = true;
+      }
+    }
+    const terrain = buildTerrainGridFromBoolean(grid);
+    const goal = _pickPursueGoal({
+      fromX: 2,
+      fromY: 5,
+      targetGx: 5,
+      targetGy: 5,
+      radiusPx: 48,
+      tileSize: 32,
+      terrain,
+    });
+    expect(goal).toEqual({ x: 3, y: 5 });
+  });
 });

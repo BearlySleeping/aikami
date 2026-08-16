@@ -53,6 +53,7 @@ export {
 export {
   getStuckWatch,
   resetStuckWatch,
+  type StuckWatch,
   updateMovement,
 } from './systems/movement_system.ts';
 export {
@@ -483,6 +484,7 @@ export {
   getNpcHaltReason,
   hasActivePath,
   type NpcHaltReason,
+  resetNpcHaltReasons,
   updatePathFollow,
 } from './systems/path_follow_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';

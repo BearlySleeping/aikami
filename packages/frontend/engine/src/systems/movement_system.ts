@@ -52,8 +52,12 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
 
 /**
  * Stuck-detector state, tracked per mover.
+ *
+ * Exported (CodeRabbit review, C-402) so the public
+ * {@link getStuckWatch} return type is nameable by package consumers and
+ * declaration emit succeeds.
  */
-type StuckWatch = {
+export type StuckWatch = {
   readonly eid: number;
   /** Consecutive ticks with movement intent but zero displacement. */
   blockedTicks: number;
@@ -330,6 +334,13 @@ const updateMovement = (world: World, deltaMs: number): void => {
     let nextX = pos.x + vel.x * deltaSeconds;
     let nextY = pos.y + vel.y * deltaSeconds;
 
+    // C-402 AC-5: preserve the pre-collision candidate so the stuck
+    // detector can scan where the mover ATTEMPTED to go — after the axis
+    // checks revert a blocked axis, nextX/nextY equal the current position
+    // and a scan there would never find the actor in the way.
+    const attemptedX = nextX;
+    const attemptedY = nextY;
+
     // ── Map pixel bounds for per-entity bounding-box enforcement ──
     const bounds = getMapPixelBounds();
 
@@ -431,10 +442,14 @@ const updateMovement = (world: World, deltaMs: number): void => {
         // for an actor occupant. Cost: only on genuinely blocked frames.
         let blockingActorEid = 0;
         const tileSizeScan = getTerrainTileSize();
-        const boxLeftScan = nextX - ENTITY_HALF_WIDTH;
-        const boxRightScan = nextX + ENTITY_HALF_WIDTH - 1;
-        const boxTopScan = nextY - ENTITY_HEIGHT_ABOVE + 1;
-        const boxBottomScan = nextY;
+        // Scan the ATTEMPTED position (pre-collision candidate), not the
+        // reverted one — the blocking actor sits where the mover tried to
+        // go (e.g. an NPC directly right of a mover pressing right), which
+        // is outside the mover's current collision box.
+        const boxLeftScan = attemptedX - ENTITY_HALF_WIDTH;
+        const boxRightScan = attemptedX + ENTITY_HALF_WIDTH - 1;
+        const boxTopScan = attemptedY - ENTITY_HEIGHT_ABOVE + 1;
+        const boxBottomScan = attemptedY;
         for (
           let ty = Math.floor(boxTopScan / tileSizeScan);
           ty <= Math.floor(boxBottomScan / tileSizeScan);

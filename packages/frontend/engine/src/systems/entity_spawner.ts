@@ -20,7 +20,7 @@ import { GoapAgent } from '../components/goap_agent.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { Interactable } from '../components/interactable.ts';
 import { InteractableState, type InteractableStateMap } from '../components/interactable_state.ts';
-import { NPCDialog } from '../components/npc_dialog.ts';
+import { DEFAULT_INTERACTION_RADIUS, NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
@@ -91,9 +91,6 @@ export type SpawnEntitiesOptions = {
 // ---------------------------------------------------------------------------
 // Default values
 // ---------------------------------------------------------------------------
-
-/** Default interaction radius for NPCs in pixels. */
-export const DEFAULT_INTERACTION_RADIUS = 50;
 
 /** Default NPC dialog text if no dialogueKey property is set. */
 const DEFAULT_DIALOG = 'Hello, traveler!';

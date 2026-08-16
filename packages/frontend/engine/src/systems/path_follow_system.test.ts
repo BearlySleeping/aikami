@@ -20,7 +20,12 @@ import { findPath } from '../math/astar.ts';
 import type { CollisionGrid } from './collision_system.ts';
 import { resetCollisionGrid, setCollisionGrid } from './collision_system.ts';
 import { updateMovement } from './movement_system.ts';
-import { getNpcHaltReason, hasActivePath, updatePathFollow } from './path_follow_system.ts';
+import {
+  getNpcHaltReason,
+  hasActivePath,
+  resetNpcHaltReasons,
+  updatePathFollow,
+} from './path_follow_system.ts';
 
 const ALL_WALKABLE: CollisionGrid = {
   width: 10,
@@ -226,6 +231,14 @@ describe('path_follow_system (C-379 AC-7)', () => {
   // ---------------------------------------------------------------------
 
   describe('C-402 AC-3: NPC halt rule at interaction radius', () => {
+    beforeEach(() => {
+      // CodeRabbit review (C-402): stale module-level halt state from a
+      // previous test must not make this suite's wait-for-halt loops pass
+      // vacuously — an old 'player_proximity' entry for a recycled eid
+      // would break the loop on frame 0 without the NPC ever moving.
+      resetNpcHaltReasons();
+    });
+
     // The halt-rule tests create real bitecs entities (eids 1..N) and write
     // module-global SoA slots (Position, Velocity, PathFollow, NPCDialog,
     // Companion). Those slots are shared across ALL test files — a stale
@@ -303,6 +316,10 @@ describe('path_follow_system (C-379 AC-7)', () => {
 
       const pos = getComponent(world, npcEid, Position) as { x: number; y: number };
       const distance = Math.hypot(pos.x - 160, pos.y - 160);
+      // The NPC actually MOVED toward the player before halting — the
+      // reset in beforeEach guarantees this cannot pass on stale halt
+      // state (CodeRabbit review, C-402). Start x was 96 (tile 3).
+      expect(pos.x).toBeGreaterThan(96);
       // Halted at conversational distance: >= interactionRadius (48) and
       // < interactionRadius + tileSize (48 + 32 = 80). Never entered the
       // player's tile.
@@ -311,6 +328,53 @@ describe('path_follow_system (C-379 AC-7)', () => {
       expect(getNpcHaltReason(npcEid)).toBe('player_proximity');
       // Still within the sim bound — did not spin forever.
       expect(frames).toBeLessThan(2000);
+    });
+
+    it("releases a halted NPC's pursue path after the corridor-yield threshold", () => {
+      // CodeRabbit review (C-402): a halted NPC must not occupy a corridor
+      // indefinitely — after HALT_YIELD_THRESHOLD_MS of continuous halt
+      // the PathFollow component is released so the GOAP executor can
+      // re-task the NPC (its within-radius gate prevents an immediate
+      // re-request of the same pursue goal); the halt reason is preserved
+      // for observability.
+      setCollisionGrid(ALL_WALKABLE);
+
+      const playerEid = addEntity(world);
+      addComponent(world, playerEid, Position);
+      addComponent(world, playerEid, set(Position, { x: 160, y: 160 }));
+
+      const npcEid = nextEid();
+      addComponent(world, npcEid, Position);
+      addComponent(world, npcEid, set(Position, { x: 96, y: 160 })); // tile (3,5)
+      addComponent(world, npcEid, Velocity);
+      addComponent(world, npcEid, set(Velocity, { x: 0, y: 0 }));
+      addComponent(world, npcEid, NPCDialog);
+      addComponent(
+        world,
+        npcEid,
+        set(NPCDialog, {
+          npcId: 'yield_npc',
+          npcName: 'Yield NPC',
+          dialog: 'Hi',
+          interactionRadius: 48,
+          playerInRange: false,
+          isVendor: false,
+          vendorInventory: '',
+        }),
+      );
+      attachPath(npcEid, [96, 160, 160, 160], 60, 6);
+
+      // Tick past the 5000ms yield threshold while the NPC is halted at
+      // the radius (0.1s sim per frame — 60 frames = 6s).
+      for (let frame = 0; frame < 60; frame++) {
+        updatePathFollow(world, 100, playerEid);
+        updateMovement(world, 100);
+      }
+
+      // Path released — the halted NPC no longer holds a live path toward
+      // the player; the halt reason is preserved for observability.
+      expect(hasActivePath(world, npcEid)).toBe(false);
+      expect(getNpcHaltReason(npcEid)).toBe('player_proximity');
     });
 
     it('a party follower (Companion) is NOT halted by the player proximity rule', () => {
