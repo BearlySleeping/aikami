@@ -18,6 +18,15 @@
  * Fix: copy the real PE launcher `firebase-functions.exe` to the extensionless
  * name firebase-tools expects. Idempotent and a no-op on non-Windows platforms.
  *
+ * Runs automatically after every `bun install` (root `postinstall`), wrapped
+ * in `|| true` there so a failure here can never fail `bun install` for the
+ * whole monorepo — this fixes a narrow Windows/firebase-tools interop gap,
+ * it must never become a reason `bun install` itself breaks. `deploy` /
+ * `deploy:local` (apps/backend/firebase/package.json) additionally gate hard
+ * on this script directly (exit 1 on failure) as defense-in-depth, since a
+ * missing shim there means the deploy would fail anyway with a much more
+ * confusing error.
+ *
  * Usage:
  *   bun run scripts/src/lib/ops/ensure_firebase_bin.ts
  */

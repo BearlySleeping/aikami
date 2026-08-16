@@ -1,0 +1,58 @@
+name: Discord Dev Notifications
+
+# Posts PR/issue activity to a dev-activity Discord channel — separate from
+# release.yml's notify-discord job (that's release announcements, this is
+# day-to-day "someone opened a PR" noise). See
+# scripts/src/lib/deploy/discord_dev_notify.ts.
+#
+# Deliberately plain `pull_request` (not `pull_request_target`): secrets
+# aren't available to workflows triggered by a PR from a fork, so a fork PR
+# just silently doesn't get announced (discord_dev_notify.ts no-ops without
+# DISCORD_DEV_WEBHOOK_URL). That's an acceptable gap in exchange for never
+# running with elevated secrets alongside untrusted PR content —
+# `pull_request_target` is the wrong tool even though this workflow never
+# checks out the PR's code, since it's easy to misuse later.
+on:
+  pull_request:
+    types: [opened, closed, reopened]
+  issues:
+    types: [opened, closed, reopened]
+
+jobs:
+  notify:
+    name: Announce to Discord
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Announce PR activity
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=pr
+        env:
+          DISCORD_DEV_WEBHOOK_URL: ${{ secrets.DISCORD_DEV_WEBHOOK_URL }}
+          GH_ACTION: ${{ github.event.action }}
+          GH_MERGED: ${{ github.event.pull_request.merged }}
+          GH_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TITLE: ${{ github.event.pull_request.title }}
+          GH_URL: ${{ github.event.pull_request.html_url }}
+          GH_AUTHOR: ${{ github.event.pull_request.user.login }}
+
+      - name: Announce issue activity
+        if: github.event_name == 'issues'
+        shell: bash
+        run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=issue
+        env:
+          DISCORD_DEV_WEBHOOK_URL: ${{ secrets.DISCORD_DEV_WEBHOOK_URL }}
+          GH_ACTION: ${{ github.event.action }}
+          GH_NUMBER: ${{ github.event.issue.number }}
+          GH_TITLE: ${{ github.event.issue.title }}
+          GH_URL: ${{ github.event.issue.html_url }}
+          GH_AUTHOR: ${{ github.event.issue.user.login }}

@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "moon": "moon",
-    "postinstall": "moon sync",
+    "postinstall": "moon sync && (bun run scripts/src/lib/ops/ensure_firebase_bin.ts || true)",
     "dev": "moon run client:dev",
     "build": "moon run :build",
     "build:affected": "moon run :build --affected",
@@ -49,6 +49,10 @@
     "herdr:stop-all": "bun run scripts/src/lib/herdr/stop_all.ts",
     "herdr:list": "bun run scripts/src/lib/herdr/list.ts",
     "herdr:status": "bun run scripts/src/lib/herdr/status.ts",
+    "discord:audit": "bun run scripts/src/lib/discord/index.ts audit",
+    "discord:diff": "bun run scripts/src/lib/discord/index.ts diff",
+    "discord:sync": "bun run scripts/src/lib/discord/index.ts sync --apply",
+    "discord:commands:sync": "bun run scripts/src/lib/discord/index.ts commands:sync",
     "postgres:init": "bun run scripts/src/lib/postgres/lifecycle.ts init",
     "postgres:start": "bun run scripts/src/lib/postgres/lifecycle.ts start",
     "postgres:stop": "bun run scripts/src/lib/postgres/lifecycle.ts stop",
@@ -84,7 +88,8 @@
     "download-secrets": "bun run scripts/src/lib/ops/download_secrets.ts",
     "setup:env": "bun run download-secrets --mode emulator",
     "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",
-    "sync-env": "bun run scripts/src/lib/ops/sync_env.ts"
+    "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
+    "infra:report": "bun run scripts/src/lib/ops/infra_report.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",

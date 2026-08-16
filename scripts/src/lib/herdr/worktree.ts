@@ -22,13 +22,14 @@
 // scripts/src/lib/agents/git_worktree.ts — do not fork them.
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import {
   copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -42,6 +43,7 @@ import {
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
 import { hasDirenv } from '../env/direnv_detect';
+import { reportInfraIssue } from '../ops/infra_report.ts';
 import { findWorkspace, herdrJson, killPort } from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
@@ -527,11 +529,15 @@ export const findWorktreeByBranch = async (
 
 /**
  * Bootstrap a worktree checkout so pi, moon, bun, and dev servers work:
- *   1. .envrc delegating to the repo root (flake.nix is git-tracked there)
- *   2. skip-worktree for workspace-local tracked files (never in PRs)
+ *   1. skip-worktree for workspace-local tracked files (never in PRs) —
+ *      applied FIRST, before anything writes to those paths
+ *   2. .envrc delegating to the repo root (flake.nix is git-tracked there)
  *   3. .pi/npm/node_modules symlink (pi extensions deps)
  *   4. seed gitignored-but-required files (.env*, paraglide, .secrets)
  *   5. bun install --frozen-lockfile
+ *
+ * Refuses to run when checkoutPath === repoRoot (see the guard below) —
+ * this is a worktree-only bootstrap, never valid against the root checkout.
  */
 export const bootstrapWorktree = async (
   options: BootstrapOptions,
@@ -541,7 +547,54 @@ export const bootstrapWorktree = async (
     throw new Error(`Cannot bootstrap missing checkout: ${checkoutPath}`);
   }
 
-  // ── 1. .envrc — delegate to repo root where flake.nix is git-tracked ──
+  // 🔴 Hard guard: bootstrapWorktree overwrites .envrc unconditionally below.
+  // Called against the repo root itself (checkoutPath === repoRoot — root
+  // mode, or a future caller passing the wrong path) that write would
+  // clobber the REAL .envrc with the worktree-delegation stub. This is
+  // exactly how 763da4d6 merged a corrupted `.envrc` to main (C-400):
+  // resolve() both sides so a trailing slash or drive-letter case difference
+  // can't slip past the check on Windows.
+  if (resolve(checkoutPath) === resolve(repoRoot)) {
+    throw new Error(
+      `bootstrapWorktree refused: checkoutPath equals repoRoot (${repoRoot}). ` +
+        'This would overwrite the real .envrc with the worktree-delegation stub. ' +
+        'bootstrapWorktree is for worktree checkouts only — root-mode runs must not call it.',
+    );
+  }
+
+  // ── 1. skip-worktree — workspace-local tracked files stay local ──
+  // Applied BEFORE the .envrc write below so there is no window where the
+  // corrupted content sits in the index unprotected. Per path: `git
+  // update-index --skip-worktree` fails the WHOLE invocation if any listed
+  // path is not in the index, so one missing file would disable the bit for
+  // all of them — apply one at a time. `.envrc` and `.pi/settings.json`
+  // always exist and must never fail silently: a failure here is exactly
+  // the upstream cause of the corrupted-.envrc-on-main incident (C-400),
+  // so it is reported loudly instead of swallowed.
+  const ALWAYS_PRESENT_SKIP_WORKTREE_PATHS = new Set(['.envrc', '.pi/settings.json']);
+  for (const path of WORKTREE_SKIP_WORKTREE_PATHS) {
+    try {
+      runGit(`update-index --skip-worktree '${path}'`, { cwd: checkoutPath });
+    } catch (err: unknown) {
+      if (ALWAYS_PRESENT_SKIP_WORKTREE_PATHS.has(path)) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(
+          `❌ skip-worktree failed for ${path} — this path can now leak into commits from ` +
+            `this worktree (${checkoutPath}). ${msg}`,
+        );
+        reportInfraIssue({
+          component: 'worktree_bootstrap',
+          operation: `skip-worktree ${path}`,
+          error: err,
+          context: { checkoutPath },
+          cwd: repoRoot,
+        });
+      }
+      // Otherwise non-fatal — the file may not exist in older revisions.
+    }
+  }
+
+  // ── 2. .envrc — delegate to repo root where flake.nix is git-tracked ──
   writeFileSync(
     join(checkoutPath, '.envrc'),
     `# Worktree direnv — delegate to repo root where flake.nix is Git-tracked
@@ -558,10 +611,22 @@ export CONTRACT_PIPELINE_WORKTREE=1
       // Windows: hide the cmd.exe console window this spawn would otherwise flash.
       windowsHide: true,
     });
-  } catch {
+  } catch (err: unknown) {
     // direnv may not be installed — not fatal. The .envrc stays in place
     // for machines that DO use direnv; everyone else runs on their own
     // shell env (manual tool installs + .env.local fallback).
+    if (hasDirenv()) {
+      // direnv IS installed but `direnv allow` still failed — that's a real
+      // degradation (the worktree won't get the flake devShell env even
+      // though the tool is present), worth surfacing.
+      reportInfraIssue({
+        component: 'worktree_bootstrap',
+        operation: 'direnv allow',
+        error: err,
+        context: { checkoutPath },
+        cwd: repoRoot,
+      });
+    }
   }
   if (!hasDirenv()) {
     console.log(
@@ -570,32 +635,55 @@ export CONTRACT_PIPELINE_WORKTREE=1
     );
   }
 
-  // ── 2. skip-worktree — workspace-local tracked files stay local ──
-  // Per path: `git update-index --skip-worktree` fails the WHOLE invocation
-  // if any listed path is not in the index, so one missing file would
-  // disable the bit for all of them.
-  for (const path of WORKTREE_SKIP_WORKTREE_PATHS) {
-    try {
-      runGit(`update-index --skip-worktree '${path}'`, { cwd: checkoutPath });
-    } catch {
-      // Non-fatal — the file may not exist in older revisions.
-    }
-  }
-
   // ── 3. .pi deps — symlink node_modules so pi + extensions resolve deps ──
   // `.pi/node_modules` is bun's resolution path when loading extension files
   // from .pi/extensions/; `.pi/npm/node_modules` serves the pi-extensions
   // package. Both are gitignored and absent in a fresh checkout — link them
   // to the root copies (shared bun cache makes a local install unnecessary).
+  //
+  // 🔴 A real directory symlink ('dir') needs SeCreateSymbolicLinkPrivilege
+  // on Windows — without Developer Mode enabled or an elevated shell,
+  // symlinkSync throws EPERM, and the old code swallowed that silently
+  // ("already exists or unsupported — fall through"), leaving the worktree
+  // with no .pi deps and every pi extension failing to resolve with no
+  // message pointing at the cause. A junction needs no privilege on Windows
+  // for directories specifically (POSIX ignores the type argument and
+  // treats it as 'dir'), so it is the correct type on every platform here —
+  // this isn't a fallback, it removes the privilege requirement entirely.
+  const dirSymlinkType = process.platform === 'win32' ? 'junction' : 'dir';
   mkdirSync(join(checkoutPath, '.pi'), { recursive: true });
   for (const rel of ['.pi/node_modules', '.pi/npm/node_modules']) {
     const src = join(repoRoot, rel);
     const dst = join(checkoutPath, rel);
     if (existsSync(src) && !existsSync(dst)) {
       try {
-        symlinkSync(src, dst, 'dir');
-      } catch {
-        // Already exists or unsupported — fall through.
+        symlinkSync(src, dst, dirSymlinkType);
+      } catch (err: unknown) {
+        // Last resort: a copy is stale the moment the root's deps change,
+        // but a worktree with stale deps beats one with none and no
+        // indication why. Reported either way — this should be rare now
+        // that Windows uses a junction, so a hit here is worth investigating.
+        try {
+          cpSync(src, dst, { recursive: true });
+          console.warn(
+            `⚠️  Could not symlink ${rel} (${err instanceof Error ? err.message : String(err)}) — ` +
+              `copied instead. This copy will go stale if root deps change; re-run bootstrap to refresh.`,
+          );
+        } catch (copyErr: unknown) {
+          console.warn(
+            `⚠️  Could not link or copy ${rel} into ${checkoutPath} — pi extensions may fail to resolve deps there.`,
+          );
+          reportInfraIssue({
+            component: 'worktree_bootstrap',
+            operation: `link .pi deps: ${rel}`,
+            error: copyErr,
+            context: {
+              checkoutPath,
+              symlinkError: err instanceof Error ? err.message : String(err),
+            },
+            cwd: repoRoot,
+          });
+        }
       }
     }
   }
@@ -619,12 +707,19 @@ export CONTRACT_PIPELINE_WORKTREE=1
         windowsHide: true,
       });
       installed = true;
-    } catch {
+    } catch (err: unknown) {
       // Report the failure — a worktree without deps is broken, but the
       // caller may choose to continue (e.g. docs-only tasks).
       console.warn(
         `⚠️  bun install failed in ${checkoutPath}. Run it manually: cd ${checkoutPath} && bun install`,
       );
+      reportInfraIssue({
+        component: 'worktree_bootstrap',
+        operation: 'bun install --frozen-lockfile',
+        error: err,
+        context: { checkoutPath },
+        cwd: repoRoot,
+      });
     }
   }
   return { installed };
@@ -729,14 +824,21 @@ export const removeWorktree = async (
       checkoutRemoved = true;
     } catch (gitErr: unknown) {
       try {
-        execSync(`rm -rf '${options.checkoutPath}'`, {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: 30_000,
-          // Windows: hide the cmd.exe console window (no-op on POSIX).
-          windowsHide: true,
-        });
+        // 🔴 node:fs rmSync, not `execSync('rm -rf ...')` — the latter never
+        // worked on Windows (no `rm` binary) and, independent of that, hand
+        // POSIX-quoting a path for cmd.exe leaks the literal quote
+        // characters into the argument instead of protecting it (F-02).
+        // rmSync needs neither a shell nor an external binary, so there is
+        // nothing to quote and nothing platform-specific to get wrong.
+        rmSync(options.checkoutPath, { recursive: true, force: true });
         checkoutRemoved = true;
+        reportInfraIssue({
+          component: 'worktree_remove',
+          operation: 'git worktree remove (fell back to rmSync)',
+          error: gitErr,
+          context: { checkoutPath: options.checkoutPath },
+          cwd: repoRoot,
+        });
       } catch (rmErr: unknown) {
         const g = gitErr instanceof Error ? gitErr.message : String(gitErr);
         const r2 = rmErr instanceof Error ? rmErr.message : String(rmErr);
@@ -844,6 +946,7 @@ export const publishWorktree = async (
     message,
     authorName: options.authorName,
     authorEmail: options.authorEmail,
+    protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
   });
   pushBranch({ cwd: checkoutPath, branchName: headBranch });
 
@@ -873,7 +976,14 @@ export const openPullRequest = async (
   if (options.draft) {
     args.push('--draft');
   }
-  const result = execSync(`gh ${args.map((a) => `'${a.replaceAll("'", "'\\''")}'`).join(' ')}`, {
+  // 🔴 execFileSync with an argv array, not a hand POSIX-quoted execSync
+  // string. `options.title`/`options.body` are free text and can contain
+  // anything — the manual `'…'` escaping here only ever protected POSIX
+  // shells; on Windows execSync runs through cmd.exe, where a single quote
+  // is a literal character, so every quote leaked straight into `gh`'s
+  // argv instead of delimiting an argument (F-02). execFileSync never
+  // invokes a shell, so there is nothing to escape on either platform.
+  const result = execFileSync('gh', args, {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 30_000,

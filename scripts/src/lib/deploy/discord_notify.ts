@@ -5,6 +5,10 @@
 // artifacts are live on a GitHub Release. Read-only w.r.t. the release itself
 // (fetches title/notes via `gh release view`) — safe to re-run.
 //
+// This is a webhook (message-posting only). For managing the server itself
+// (channels/roles) see ../discord/ — that uses a bot token instead, since a
+// webhook has no permission to touch server structure.
+//
 // Silently no-ops when DISCORD_WEBHOOK_URL isn't configured, so this never
 // blocks a release for anyone who hasn't set up the webhook.
 //

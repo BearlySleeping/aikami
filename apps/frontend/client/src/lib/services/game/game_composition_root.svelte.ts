@@ -14,7 +14,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { ContentPackLootEntry } from '@aikami/types';
-import { aiGatewayService } from '../ai/ai_gateway_service.svelte';
+import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
@@ -367,20 +367,38 @@ export class GameCompositionRoot
         getAllItems: () => contentPack.manifest.items,
       },
       textGenerator: async (opts) => {
-        const result = await aiGatewayService.generateText({
-          messages: opts.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })) as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-          schema: opts.schema,
-          schemaName: opts.schemaName,
+        // C-401 two-call split:
+        //   Call 1 (no schema) → streamChat — narrative prose streaming
+        //   Call 2 (schema) → extractStructure — schema-constrained extraction
+        if (opts.schema && opts.schemaName) {
+          const systemPrompt = opts.messages.find((m) => m.role === 'system')?.content;
+          const userText = opts.messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => m.content)
+            .join('\n\n');
+          const structured = await textGenerationService.extractStructure({
+            schema: opts.schema,
+            schemaName: opts.schemaName,
+            prompt: userText,
+            systemPrompt,
+            signal: opts.signal,
+          });
+          // Call 2 is extraction — the input prompt is not generated text.
+          // Return an empty text value so no caller can mistake it for model output.
+          return { text: '', structured };
+        }
+
+        // Call 1: stream narrative prose, forwarding tokens to the caller.
+        let text = '';
+        await textGenerationService.streamChat({
+          messages: opts.messages,
           signal: opts.signal,
-          onChunk: undefined,
+          onChunk: (chunk) => {
+            text += chunk;
+            opts.onChunk?.(chunk);
+          },
         });
-        return {
-          text: result.text,
-          structured: result.structured,
-        };
+        return { text, structured: undefined };
       },
       executors: {
         trade: (_opts) => {
