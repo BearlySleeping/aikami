@@ -13,6 +13,9 @@
 
 import type { World } from 'bitecs';
 import { addComponent, getComponent, hasComponent, query, removeComponent, set } from 'bitecs';
+import { logger } from '$logger';
+import { Companion } from '../components/companion.ts';
+import { NPCDialog } from '../components/npc_dialog.ts';
 import { PathFollow } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
@@ -20,6 +23,58 @@ import { Velocity } from '../components/velocity.ts';
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */
 const PATH_FOLLOW_QUERY_TERMS = [Position, PathFollow];
+
+// ---------------------------------------------------------------------------
+// C-402: NPC halt rule + observability
+// ---------------------------------------------------------------------------
+
+/**
+ * Why an NPC stopped moving this tick — carried for observability and
+ * asserted in the halt-rule unit test.
+ *
+ * `player_proximity` is set by the C-402 halt rule when an NPC with an
+ * interaction radius is within `interactionRadius` of the player; the NPC
+ * stops at conversational distance instead of entering the player's tile.
+ */
+export type NpcHaltReason =
+  | 'none'
+  | 'reached_goal'
+  | 'player_proximity'
+  | 'blocked_terrain'
+  | 'blocked_actor';
+
+/**
+ * Per-entity halt reason, keyed by entity id.
+ *
+ * Module-level (not a component) — C-402 mandates no component layout
+ * changes; the reason is carried for observability and the halt-rule unit
+ * test. Defaults to `'none'` for entities never seen by the system.
+ */
+const _npcHaltReason = new Map<number, NpcHaltReason>();
+
+/**
+ * Returns the last halt reason recorded for an entity.
+ *
+ * @param eid - The entity ID.
+ * @returns The halt reason, `'none'` when never recorded.
+ */
+export const getNpcHaltReason = (eid: number): NpcHaltReason => {
+  return _npcHaltReason.get(eid) ?? 'none';
+};
+
+/**
+ * Records a halt reason, logging the transition at debug level.
+ *
+ * @param eid - The entity ID.
+ * @param reason - The new halt reason.
+ */
+const _setNpcHaltReason = (eid: number, reason: NpcHaltReason): void => {
+  const previous = _npcHaltReason.get(eid) ?? 'none';
+  if (previous !== reason) {
+    logger.debug('path-follow:halt-reason', { eid, previous, reason });
+    _npcHaltReason.set(eid, reason);
+  }
+};
 
 /**
  * Returns true when the entity has a PathFollow component with a live path.
@@ -42,9 +97,16 @@ export const hasActivePath = (world: World, eid: number): boolean => {
  * Steers entities that carry PathFollow toward their current waypoint.
  *
  * For each entity with Position + PathFollow:
- * 1. If the path is finished (index >= length), zero velocity and clear
+ * 1. C-402 halt rule: an NPC carrying NPCDialog (and NOT a party follower)
+ *    that is within `interactionRadius` of the player is halted — velocity
+ *    is zeroed, `NpcHaltReason.player_proximity` is set, and the path is
+ *    not advanced. This prevents the NPC from entering the player's tile,
+ *    which is the deadlock class C-402 removes (a moving NPC pathing into
+ *    the player's tile and a player pathing into the NPC's tile used to
+ *    block each other with no resolution rule).
+ * 2. If the path is finished (index >= length), zero velocity and clear
  *    the component.
- * 2. Otherwise move toward waypoint[index] at `speed` px/s; when within
+ * 3. Otherwise move toward waypoint[index] at `speed` px/s; when within
  *    `arriveRadius` (final waypoint) or the waypoint itself (intermediate),
  *    advance the index.
  *
@@ -56,8 +118,10 @@ export const hasActivePath = (world: World, eid: number): boolean => {
  *
  * @param world - The bitECS world.
  * @param deltaMs - Elapsed time since last frame in milliseconds.
+ * @param playerEntityId - The player entity ID for the C-402 halt rule;
+ *   `0` (default) disables the halt check (no player known).
  */
-export const updatePathFollow = (world: World, deltaMs: number): void => {
+export const updatePathFollow = (world: World, deltaMs: number, playerEntityId = 0): void => {
   if (!world || deltaMs <= 0) {
     return;
   }
@@ -75,9 +139,46 @@ export const updatePathFollow = (world: World, deltaMs: number): void => {
     const speed = PathFollow.speed[eid] ?? 0;
     const arriveRadius = PathFollow.arriveRadius[eid] ?? 0;
 
+    // ── C-402 halt rule: NPCs halt at their interaction radius ──
+    // Gated to NPCs carrying NPCDialog; party followers (Companion) are
+    // excluded so they can still reach their formation slot behind the
+    // player. An NPC within interactionRadius of the player stops moving
+    // and never enters the player's tile — removing the symmetric-block
+    // deadlock by construction.
+    //
+    // Look-ahead: the halt fires when the NEXT frame step would put the
+    // NPC inside the radius (dist < radius + speed*dt), so the NPC settles
+    // at distance >= interactionRadius rather than overshooting one step
+    // into it — AC-3 asserts final distance >= interactionRadius.
+    if (
+      playerEntityId > 0 &&
+      hasComponent(world, eid, NPCDialog) &&
+      !hasComponent(world, eid, Companion)
+    ) {
+      const radius = NPCDialog.interactionRadius[eid] ?? 0;
+      if (radius > 0) {
+        const playerPos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
+        if (playerPos) {
+          const dx = playerPos.x - pos.x;
+          const dy = playerPos.y - pos.y;
+          const step = speed * deltaSeconds;
+          // Use squared distance — no sqrt in the hot path.
+          if (dx * dx + dy * dy < (radius + step) * (radius + step)) {
+            addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+            _setNpcHaltReason(eid, 'player_proximity');
+            // Path stays attached (live) so the GOAP executor does not
+            // re-request every tick; steering resumes when the player
+            // moves beyond the radius.
+            continue;
+          }
+        }
+      }
+    }
+
     // Path finished — stop and detach the component.
     if (length <= 0 || index >= length) {
       addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+      _setNpcHaltReason(eid, 'reached_goal');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
       continue;
@@ -86,10 +187,13 @@ export const updatePathFollow = (world: World, deltaMs: number): void => {
     const waypoints = PathFollow.waypoints[eid];
     if (!waypoints) {
       addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+      _setNpcHaltReason(eid, 'reached_goal');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
       continue;
     }
+
+    _setNpcHaltReason(eid, 'none');
 
     const targetX = waypoints[index * 2];
     const targetY = waypoints[index * 2 + 1];

@@ -93,7 +93,7 @@ export type SpawnEntitiesOptions = {
 // ---------------------------------------------------------------------------
 
 /** Default interaction radius for NPCs in pixels. */
-const DEFAULT_INTERACTION_RADIUS = 50;
+export const DEFAULT_INTERACTION_RADIUS = 50;
 
 /** Default NPC dialog text if no dialogueKey property is set. */
 const DEFAULT_DIALOG = 'Hello, traveler!';
@@ -109,10 +109,14 @@ const PROP_TINT = 0xffffff;
 // ---------------------------------------------------------------------------
 
 /**
- * NPC collision mask: blocks walls, other NPCs, and the player (two-way
- * blocking so a future GOAP/moving NPC cannot walk through the player).
+ * NPC collision mask: blocks walls and other NPCs. The player layer was
+ * REMOVED (C-402) — an NPC no longer blocks the player, so a moving NPC
+ * pathing into the player's tile and a player pathing into the NPC's tile
+ * can never deadlock (the old two-way blocking with no resolution rule
+ * was the C-402 root cause). NPCs halt at their interaction radius via
+ * the path_follow_system halt rule; the player passes through NPCs.
  */
-const NPC_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player;
+const NPC_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc;
 
 /**
  * Prop collision mask: solid props block walls, NPCs, the player, and
@@ -417,8 +421,10 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  // C-375 AC-3: NPCs are solid — register in the spatial grid so the
-  // player cannot walk through them (PLAYER_COLLISION_MASK includes npc).
+  // C-375 AC-3: NPCs occupy the spatial grid — but the player does NOT
+  // collide with them (C-402: PLAYER_COLLISION_MASK no longer includes
+  // npc; NPCs are soft obstacles and the halt rule stops them at their
+  // interaction radius). Other NPCs and walls still block NPCs.
   _addSpatialCollision(
     world,
     eid,

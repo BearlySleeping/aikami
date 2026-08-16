@@ -19,7 +19,10 @@
 
 import { expect, test } from '@playwright/test';
 
-const BASE_URL = 'http://localhost:5274';
+// Contract-scoped pipeline runs shift the client port (same offset formula
+// as playwright.config.ts). 0 for a manual, non-contract run.
+const CLIENT_PORT = 5274 + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+const BASE_URL = `http://localhost:${CLIENT_PORT}`;
 
 /**
  * Debug position shape exposed by GameWorld._updateRenderFromBuffer
@@ -352,5 +355,58 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
     // Bottom-right OOB/water spawn → clamped inward to nearest interior grass (8,8).
     expect(tileX).toBe(8);
     expect(tileY).toBe(8);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-402: NPC/player movement deadlock — production-path functional tests
+// ---------------------------------------------------------------------------
+//
+// The /game route loads Emberwatch village, which spawns GOAP NPCs that
+// path toward the player (locomotion enabled). AC-1/AC-2 assert the player
+// NEVER loses control because of another character's movement. The deadlock
+// was: player mask blocked npc AND npc mask blocked player, with no
+// resolution rule. C-402 removes npc from the player mask (and player from
+// the NPC mask) plus adds a halt rule, so the player can always walk away.
+//
+// Functional evidence: while NPCs are present and moving on the production
+// route, keyboard movement input must still displace the player.
+
+test.describe('C-402 NPC/player movement deadlock (production /game)', () => {
+  test('player can walk away while NPCs are present (AC-1/AC-2)', async ({ page }) => {
+    await page.goto(`${BASE_URL}/game`, { waitUntil: 'domcontentloaded' });
+
+    // Wait for the engine + player position + spawned NPCs.
+    await page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | {
+              playerX?: number;
+              playerY?: number;
+              npcCount?: number;
+            }
+          | undefined;
+        return (
+          debug?.playerX !== undefined && debug?.playerY !== undefined && (debug?.npcCount ?? 0) > 0
+        );
+      },
+      { timeout: 20_000 },
+    );
+
+    const startPos = await _readPlayerPosition(page);
+
+    // Hold a movement key long enough for the player to displace — if the
+    // deadlock existed, input would have no effect once an NPC reached the
+    // player.
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(1200);
+    await page.keyboard.up('ArrowRight');
+    await page.waitForTimeout(200);
+
+    const endPos = await _readPlayerPosition(page);
+
+    // The player must have displaced — input is not deadlocked by NPCs.
+    // (Either axis may change; the other may be clamped by a wall.)
+    expect(endPos.playerX !== startPos.playerX || endPos.playerY !== startPos.playerY).toBe(true);
   });
 });

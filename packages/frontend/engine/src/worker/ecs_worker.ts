@@ -1015,7 +1015,9 @@ const tickLoop = (): void => {
     // is resolved the same frame (C-379 AC-7 watch point).
     // ────────────────────────────────────────────────────────────────────────
     updateGoapMovement(world);
-    updatePathFollow(world, deltaMs);
+    // C-402: pass the player entity so the halt rule can stop NPCs at
+    // their interaction radius (deadlock-class removal).
+    updatePathFollow(world, deltaMs, playerEntityId);
 
     // ────────────────────────────────────────────────────────────────────────
     // Step 6: Resolution — movement + collision

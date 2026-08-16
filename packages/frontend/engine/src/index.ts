@@ -50,7 +50,11 @@ export {
   resetEconomyTracking,
 } from './systems/economy_system.ts';
 // Systems
-export { updateMovement } from './systems/movement_system.ts';
+export {
+  getStuckWatch,
+  resetStuckWatch,
+  updateMovement,
+} from './systems/movement_system.ts';
 export {
   advanceTurn,
   createSeedableRng,
@@ -476,7 +480,9 @@ export {
 export { updatePartyFollow } from './systems/party_follow_system.ts';
 // PathFollow + party follow (C-379 AC-7)
 export {
+  getNpcHaltReason,
   hasActivePath,
+  type NpcHaltReason,
   updatePathFollow,
 } from './systems/path_follow_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';

@@ -17,10 +17,11 @@ import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
 import { GoapAgent } from '../components/goap_agent.ts';
 import { GridPosition } from '../components/grid_position.ts';
+import { NPCDialog } from '../components/npc_dialog.ts';
 import { PathFollow } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
-import { findPath, type GridCell } from '../math/astar.ts';
+import { type AstarGrid, findPath, type GridCell } from '../math/astar.ts';
 import {
   DEFAULT_ACTION_COMBAT_MOVE,
   DEFAULT_ACTION_GO_TO_PUB,
@@ -29,6 +30,7 @@ import {
   DEFAULT_ACTION_PURSUE_TARGET,
 } from '../math/goap/action_registry.ts';
 import { getTerrainGrid, getTerrainTileSize } from './collision_system.ts';
+import { DEFAULT_INTERACTION_RADIUS } from './entity_spawner.ts';
 import { hasActivePath } from './path_follow_system.ts';
 
 /**
@@ -132,6 +134,76 @@ const _pickWanderGoal = (
 };
 
 /**
+ * Picks a walkable goal cell at approximately `interactionRadius` pixels
+ * from the target's cell centre, preferring cells on the agent's side.
+ *
+ * C-402: pursue-target goals must NOT be the target's own cell — A*
+ * would route through the player's tile and the NPC would walk into the
+ * player, recreating the deadlock the halt rule removes. The goal cell is
+ * the walkable cell whose centre is nearest to `interactionRadius` px
+ * from the target's centre, tie-broken by distance from the agent (so the
+ * NPC approaches from its own side and the path stays short).
+ *
+ * @param fromX - Agent's current grid X.
+ * @param fromY - Agent's current grid Y.
+ * @param targetGx - Target's grid X.
+ * @param targetGy - Target's grid Y.
+ * @param radiusPx - Interaction radius in pixels.
+ * @param tileSize - Map tile size in pixels.
+ * @param terrain - The terrain grid for walkability.
+ * @returns A walkable goal cell, or undefined when none is found in the ring.
+ */
+export const _pickPursueGoal = (options: {
+  fromX: number;
+  fromY: number;
+  targetGx: number;
+  targetGy: number;
+  radiusPx: number;
+  tileSize: number;
+  terrain: AstarGrid;
+}): GridCell | undefined => {
+  const { fromX, fromY, targetGx, targetGy, radiusPx, tileSize, terrain } = options;
+  const targetPx = targetGx * tileSize + tileSize / 2;
+  const targetPy = targetGy * tileSize + tileSize / 2;
+
+  // Scan a ring of cells around the target (2 tiles wide) and score each
+  // walkable candidate by |centre distance − radius| then distance to the
+  // agent. The ring spans roughly [radius − tileSize, radius + tileSize].
+  const ringTiles = Math.max(1, Math.ceil(radiusPx / tileSize));
+  let best: GridCell | undefined;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let dy = -ringTiles; dy <= ringTiles; dy++) {
+    for (let dx = -ringTiles; dx <= ringTiles; dx++) {
+      const gx = targetGx + dx;
+      const gy = targetGy + dy;
+      if (gx < 0 || gx >= terrain.width || gy < 0 || gy >= terrain.height) {
+        continue;
+      }
+      // Never choose the target's own cell.
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      if (terrain.cost[gy * terrain.width + gx] === 0) {
+        continue;
+      }
+
+      const cx = gx * tileSize + tileSize / 2;
+      const cy = gy * tileSize + tileSize / 2;
+      const centreDist = Math.hypot(cx - targetPx, cy - targetPy);
+      const radiusError = Math.abs(centreDist - radiusPx);
+      const agentDist = Math.hypot(gx - fromX, gy - fromY);
+      const score = radiusError * 100 + agentDist;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x: gx, y: gy };
+      }
+    }
+  }
+  return best;
+};
+
+/**
  * Ticks the GOAP movement executor.
  *
  * For each agent with a movement action:
@@ -184,14 +256,38 @@ export const updateGoapMovement = (world: World): void => {
 
     let goal: GridCell | undefined;
 
-    // Target-based actions follow the target's current cell.
+    // Target-based actions follow the target's current cell. C-402: the
+    // pursue-target goal is radius-aware — a walkable cell at roughly the
+    // NPC's interaction radius from the player, NOT the player's own cell,
+    // so A* never routes through the player's tile (the halt rule then
+    // stops the NPC at conversational distance). Combat move-to-range
+    // intentionally keeps the target's own cell — combat positioning is
+    // out of scope (AC-4) and the combatant mask handles mutual blocking.
     if (actionId === DEFAULT_ACTION_PURSUE_TARGET || actionId === DEFAULT_ACTION_COMBAT_MOVE) {
       const targetEid = GoapAgent.targetEntityId[eid] ?? 0;
       if (targetEid > 0) {
         const targetGx = GridPosition.x[targetEid];
         const targetGy = GridPosition.y[targetEid];
         if (targetGx !== undefined && targetGy !== undefined) {
-          goal = { x: targetGx, y: targetGy };
+          if (actionId === DEFAULT_ACTION_PURSUE_TARGET) {
+            // The NPC's own interaction radius (spawner default when a
+            // legacy agent omits NPCDialog). Read the SoA value directly —
+            // the spawner guarantees a sane default.
+            const radiusPx = NPCDialog.interactionRadius[eid] ?? DEFAULT_INTERACTION_RADIUS;
+            const radiusGoal = _pickPursueGoal({
+              fromX,
+              fromY,
+              targetGx,
+              targetGy,
+              radiusPx: radiusPx > 0 ? radiusPx : DEFAULT_INTERACTION_RADIUS,
+              tileSize,
+              terrain,
+            });
+            if (radiusGoal) {
+              goal = radiusGoal;
+            }
+          }
+          goal ??= { x: targetGx, y: targetGy };
         }
       }
     }
