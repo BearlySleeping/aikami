@@ -2,7 +2,7 @@
 id: C-401
 title: "Stream Dialogue Narrative and Collapse the Two-Call Skill-Check Flow"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §5.1 and §6.3 (MVP playthrough)"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -18,10 +18,10 @@ created_at: "2026-08-16"
 | Field | Value |
 |---|---|
 | **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §5.1, §6.3 — live MVP playthrough 2026-08-16 |
-| **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` and the dialogue view layer |
+| **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`, `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts`, and `dialogue_overlay.svelte` |
 | **Priority** | P0 — highest perceived-quality-per-hour change in the repository; blocks any gameplay video |
-| **Dependencies** | — (C-407 lands in the same view and should follow) |
-| **Status** | draft |
+| **Dependencies** | — (no hard dependencies; C-407 dialogue UI layout is a not-yet-drafted follow-up that lands in the same view) |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -61,8 +61,8 @@ created_at: "2026-08-16"
   signal, model })` at line 43. `stream_orchestrator_service.svelte.ts:241` and
   `session_service.svelte.ts:857` both consume it. **The dev routes stream; the
   game does not.** The only view-layer consumers of `onChunk` are
-  `chat_view_model.dev.svelte.ts` (lines 218, 227, 318),
-  `chat_modes_sandbox_view_model.svelte.ts:233`, and
+  `apps/frontend/client/src/lib/views/chat/chat_view_model.dev.svelte.ts` (lines 218, 227, 318),
+  `apps/frontend/client/src/lib/views/chat/chat_modes_sandbox_view_model.svelte.ts:233`, and
   `sandbox_view_model.svelte.ts:260`.
 
 - **Skill checks double the cost.** Line 1373 —
@@ -304,7 +304,10 @@ until the turn completes
     - **Functional**: new spec `tests/client/dialogue_streaming.spec.ts`.
       Sample the dialogue text node across at least three polls and assert
       strictly increasing length before completion. Model on
-      `dev_text_stream.spec.ts`. Needs a dialogue POM in `apps/e2e/src/pom`.
+      `dev_text_stream.spec.ts`. Extend the existing dialogue helpers on the
+      GamePage POM (`apps/e2e/src/pom/game_page.ts` — `expectDialogueVisible`,
+      `sendMessage`, `selectDialogueChoice`, `skipDialogue`) or add a dedicated
+      `dialogue_page.ts`; do not duplicate helpers that already exist.
     - **Visual**: N/A — motion over time is not a still-frame assertion.
 
 **Watch Points**:
@@ -330,8 +333,10 @@ the dice prompt appears, and the resolution narrative streams after the roll
   before the dice panel is visible. **Visual**: N/A.
 
 **Watch Points**:
-- `dice_roll_panel.svelte` and `game_dice.svelte` are separate surfaces.
-  Confirm which one the dialogue path renders before writing the selector.
+- Resolved: the dialogue overlay renders the unified `GameDice` component
+  (`game_dice.svelte`) via `viewModel.diceState` (`dialogue_overlay.svelte:72`);
+  `dice_roll_panel.svelte` is the chat-route panel and is not on the dialogue
+  path. Write selectors against GameDice.
 
 ### AC-3: Abort on End Chat is clean
 **Given** a turn is mid-generation
@@ -356,6 +361,11 @@ written to history, and no error is surfaced
   reaches the adapter's `fetch` — an unused `AbortSignal` is a silent no-op.
 - Abort must cancel **both** calls. Aborting during call 2 is the easy case to
   miss.
+- Today's abort path replaces the placeholder with a `[Generation cancelled]`
+  message (`dialogue_overlay_view_model.svelte.ts`,
+  `_delegateGenerateResponse` catch block). AC-3 requires that no partial turn
+  persists — either remove the placeholder message entirely on abort or mark
+  it non-persisting; do not keep writing it into `messages`.
 
 ### AC-4: Timeout surfaces an actionable error and the authored fallback
 **Given** a provider that never responds
@@ -400,6 +410,56 @@ index recorded on failure
 **Watch Points**:
 - These measurements are the evidence for the 1500 ms Success Measure. Without
   them AC-1 can only be asserted qualitatively.
+
+### AC-6: Non-streaming provider falls back to a single response
+**Given** a configured text provider that does not support SSE streaming
+**When** an NPC dialogue turn generates
+**Then** a single non-streamed response renders with a visible generating
+indicator, and no token-by-token growth occurs
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-6 | Unit | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run client:test-unit`
+- Integration: configure a provider without SSE (or stub a generator that
+  never invokes `onChunk`); assert the turn completes in one step and the
+  generating indicator was visible during the wait.
+- E2E / Visual: **Functional**: N/A — covered at unit level; the E2E suite
+  runs against a stubbed slow SSE provider. **Visual**: N/A.
+
+**Watch Points**:
+- The generating indicator must stay visible for the whole non-streamed wait —
+  this is the degraded-mode contract from the Success Measures.
+- `DialogueTurnState` must not enter `streaming` when no `onChunk` is supplied.
+
+### AC-7: Call-2 failure degrades to narrative-only, never discards streamed text
+**Given** a turn whose narrative call (call 1) streamed successfully
+**When** the envelope extraction call (call 2) fails or returns a malformed
+envelope
+**Then** the turn completes with the already-streamed narrative and
+`_deriveChoices`-derived choices — no error surface, no authored-fallback
+replacement of the player-visible text
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-7 | Unit | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run client:test-unit`
+- Integration: inject a generator that resolves call 1 but throws or returns
+  malformed output on call 2; assert the returned turn keeps the streamed
+  narrative and contains derived (non-empty) choices.
+- E2E / Visual: **Functional**: N/A — unit level. **Visual**: N/A.
+
+**Watch Points**:
+- This is the double-failure-surface guard from Edge Cases. Never discard
+  `streaming` text already rendered to the player when call 2 fails.
+- `_validateCommandPreconditions` must not run on a failed call 2 — no command
+  is derived, so no command executes.
 
 ## Implementation Sequence
 
@@ -464,6 +524,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-08-16 | Initial draft from `mvp-assessment-2026-08-16.md` §5.1/§6.3. Approach (b), the two-call split, chosen over partial-JSON streaming — rationale recorded in Design Reference. | — |
+| 2.0.0 | 2026-08-16 | Critic pass: corrected stale dev view-model paths in Baseline Evidence (`views/chat/chat_view_model.dev.svelte.ts`, `views/chat/chat_modes_sandbox_view_model.svelte.ts`); named the dialogue view files in Target; resolved the AC-2 dice-panel ambiguity (dialogue renders `game_dice.svelte`, not `dice_roll_panel.svelte`); flagged today's `[Generation cancelled]` abort behavior against AC-3; added AC-6 (non-streaming fallback) and AC-7 (call-2 failure degrade) so the Success Measures/Edge Cases each have an observable criterion; clarified the E2E POM approach against the existing GamePage dialogue helpers. | — |
 
 ## Promotion Lifecycle
 
