@@ -23,7 +23,7 @@
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.23.2",
+    "@inlang/paraglide-js": "2.24.1",
     "@sveltejs/kit": "2.70.2",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
