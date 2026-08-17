@@ -2,11 +2,20 @@
 //
 // Unit tests for single-frame LPC icon cropping (C-419 AC-4).
 //
-// Verifies the pitch detection mirrors detectLpcSheetLayout and that the
-// computed background-size maps one 64px/128px cell to the icon box.
+// Verifies pitch detection mirrors detectLpcSheetLayout, background-size
+// maps one cell to the icon box, and hero-frame selection picks the
+// max-content cell (cell (0,0) is blank on many LPC walk sheets, so the
+// position math must align an arbitrary (col,row) cell, and blank sheets
+// must fall back to emoji).
 
 import { describe, expect, test } from 'bun:test';
-import { getLpcIconBackgroundSize, getLpcIconCellPitch } from './lpc_icon_frame.ts';
+import {
+  getLpcGrid,
+  getLpcIconBackgroundPosition,
+  getLpcIconBackgroundSize,
+  getLpcIconCellPitch,
+  pickHeroCell,
+} from './lpc_icon_frame.ts';
 
 describe('getLpcIconCellPitch — C-419 AC-4', () => {
   test('detects standard 64px sheets (576×256, 9×4)', () => {
@@ -35,6 +44,20 @@ describe('getLpcIconCellPitch — C-419 AC-4', () => {
   });
 });
 
+describe('getLpcGrid — C-419 AC-4', () => {
+  test('standard 576×256 → 9×4', () => {
+    expect(getLpcGrid({ width: 576, height: 256 })).toEqual({ cols: 9, rows: 4 });
+  });
+
+  test('universal 1664×512 → 13×4', () => {
+    expect(getLpcGrid({ width: 1664, height: 512 })).toEqual({ cols: 13, rows: 4 });
+  });
+
+  test('clamps tiny sheets to 1×1', () => {
+    expect(getLpcGrid({ width: 32, height: 32 })).toEqual({ cols: 1, rows: 1 });
+  });
+});
+
 describe('getLpcIconBackgroundSize — C-419 AC-4', () => {
   test('standard 576×256 → 900% 400% (one 64px cell fills the box)', () => {
     expect(getLpcIconBackgroundSize({ width: 576, height: 256 })).toBe('900% 400%');
@@ -46,5 +69,95 @@ describe('getLpcIconBackgroundSize — C-419 AC-4', () => {
 
   test('single-row hurt sheet 384×64 → 600% 100%', () => {
     expect(getLpcIconBackgroundSize({ width: 384, height: 64 })).toBe('600% 100%');
+  });
+});
+
+describe('getLpcIconBackgroundPosition — C-419 AC-4', () => {
+  test('standard 9×4: hero at r2c0 → "0% 66.67%"', () => {
+    // 2/(4-1) = 66.67%, 0/(9-1) = 0%
+    expect(getLpcIconBackgroundPosition(0, 2, 9, 4)).toBe('0% 66.67%');
+  });
+
+  test('standard 9×4: hero at r2c7 → "87.5% 66.67%" (dagger walk sheet)', () => {
+    // 7/(9-1) = 87.5%, 2/(4-1) = 66.67%
+    expect(getLpcIconBackgroundPosition(7, 2, 9, 4)).toBe('87.5% 66.67%');
+  });
+
+  test('universal 13×4: hero at r3c12 → "100% 100%"', () => {
+    // 12/(13-1) = 100%, 3/(4-1) = 100%
+    expect(getLpcIconBackgroundPosition(12, 3, 13, 4)).toBe('100% 100%');
+  });
+
+  test('standard 9×4: hero at r0c4 → "50% 0%"', () => {
+    expect(getLpcIconBackgroundPosition(4, 0, 9, 4)).toBe('50% 0%');
+  });
+
+  test('guards 1×1 grid → "0 0"', () => {
+    expect(getLpcIconBackgroundPosition(0, 0, 1, 1)).toBe('0 0');
+  });
+
+  test('guards single-column grid → "0 0" regardless of row', () => {
+    expect(getLpcIconBackgroundPosition(0, 2, 1, 4)).toBe('0 0');
+  });
+
+  test('guards single-row grid → "0 0" regardless of col', () => {
+    expect(getLpcIconBackgroundPosition(3, 0, 9, 1)).toBe('0 0');
+  });
+});
+
+describe('pickHeroCell — C-419 AC-4', () => {
+  test('picks the max-content cell', () => {
+    const counts = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [205, 0, 0],
+    ];
+    expect(pickHeroCell(counts)).toEqual({ col: 0, row: 2 });
+  });
+
+  test('picks the max-content cell on a 9×4 grid (dagger walk content r1c0/r2c7/r3c0)', () => {
+    const counts = [
+      [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [49, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0, 49, 0],
+      [30, 0, 0, 0, 0, 0, 0, 0, 0],
+    ];
+    // argmax is deterministic; any of the three content cells is valid —
+    // assert the chosen cell has content (not the blank (0,0)).
+    const hero = pickHeroCell(counts);
+    expect(hero).toBeDefined();
+    const { col, row } = hero ?? { col: 0, row: 0 };
+    expect(counts[row]?.[col] ?? 0).toBeGreaterThan(0);
+  });
+
+  test('rejects blank sheets (all cells below threshold)', () => {
+    const counts = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+    expect(pickHeroCell(counts)).toBeUndefined();
+  });
+
+  test('rejects cells below the min-content threshold', () => {
+    const counts = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 9, 0],
+    ];
+    expect(pickHeroCell(counts)).toBeUndefined();
+  });
+
+  test('accepts a cell exactly at the threshold', () => {
+    const counts = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 10, 0],
+    ];
+    expect(pickHeroCell(counts)).toEqual({ col: 1, row: 2 });
+  });
+
+  test('handles empty counts array', () => {
+    expect(pickHeroCell([])).toBeUndefined();
   });
 });
