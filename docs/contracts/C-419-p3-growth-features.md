@@ -530,7 +530,7 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | AC-1 | ✅ | V2 PNG/JSON import compiles into PersonaSheetSchema fields with inferred ability scores; persona import UI on `/personas` (screenshot 100/100). |
 | AC-2 | ✅ | V3 `ccv3`/JSON parsing unit-tested; stats-free cards get deterministic standard-array scores; declared `extensions.abilityScores` respected. |
 | AC-3 | ✅ | Haggle panel collapses to slim strip until engaged; collapsed screenshot 95/100, expanded 95/100; gold display, need-X-more, stat deltas, keyboard hints unchanged. |
-| AC-4 | ✅ | Items with `lpcAssetId` render a single cropped LPC sprite frame (via `LpcItemIcon` + `lpc_icon_frame.ts` pitch detection) — 2x 95/100, 4x close-up 100/100; emoji tier + 📦 retained as fallbacks; `_itemIcon` substring match preserved. |
+| AC-4 | ✅ | Items with `lpcAssetId` render a single cropped LPC sprite frame selected by HERO-FRAME analysis (offscreen-canvas opaque-pixel sampling + argmax via `pickHeroCell`; cell (0,0) is blank on dagger/longsword/saber walk sheets, so hero selection is required) — full-page 95/100, 4x close-up 95/100 with all 8 icons distinct and no blanks; blank-cell/canvas-failure falls back to emoji tier; 📦 last resort retained; `_itemIcon` substring match preserved. |
 
 ### Files Created
 | File | Purpose |
@@ -540,9 +540,9 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | `apps/frontend/client/src/lib/services/character/character_import.test.ts` | 18 unit tests: V2/V3 validator, PNG/JSON import, malformed-input rejection, inference, compilation |
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.test.ts` | Persona-list import flow tests (V2 PNG → persona upsert with scores + avatar) |
 | `apps/e2e/tests/client/vendor_import.spec.ts` | E2E functional spec: haggle collapse/expand, item-art rendering, persona Import Card button |
-| `apps/frontend/client/src/lib/data/lpc_icon_frame.ts` | Single-frame LPC icon crop helpers (pitch detection + background-size), mirrors `detectLpcSheetLayout` without pixi |
-| `apps/frontend/client/src/lib/data/lpc_icon_frame.test.ts` | 9 unit tests for pitch detection + background-size math |
-| `apps/frontend/client/src/lib/components/game/lpc_item_icon.svelte` | Presentational icon: loads sheet, crops frame-0 cell via CSS background, emoji fallback |
+| `apps/frontend/client/src/lib/data/lpc_icon_frame.ts` | Single-frame LPC icon crop helpers: pitch detection, grid math, background-size, hero-cell background-position (`getLpcIconBackgroundPosition`), and argmax `pickHeroCell` — mirrors `detectLpcSheetLayout` without pixi |
+| `apps/frontend/client/src/lib/data/lpc_icon_frame.test.ts` | 25 unit tests: pitch detection, grid, background-size, position math (incl. 9×4 r2c0 → `0% 66.67%`), hero-cell argmax + blank rejection |
+| `apps/frontend/client/src/lib/components/game/lpc_item_icon.svelte` | Presentational icon: loads sheet → offscreen-canvas opaque-pixel sampling → hero-frame cell via CSS background; emoji fallback on blank/failure |
 
 ### Files Modified
 | File | Change |
@@ -554,7 +554,7 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts` | `handleFileImport` + avatar upload + refresh |
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte` | Import Card button + hidden file input |
 | `apps/frontend/client/src/lib/views/vendor/vendor_view_model.svelte.ts` | `isHagglePanelCollapsed`, `expandHagglePanel()`, `getItemArtUrl()` |
-| `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` | Collapsed haggle `<aside>`, single-frame art via `LpcItemIcon`, deduped Stats comment |
+| `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` | Collapsed haggle `<aside>`, single-frame hero-cell art via `LpcItemIcon`, deduped Stats comment |
 | `apps/frontend/client/src/lib/views/vendor/vendor_view_model.test.ts` | AC-3 collapse + AC-4 art tests (28 total) |
 | `packages/shared/schemas/src/lib/domain/item.ts` | Widen `BaseItemSchema` with `lpcSlot`, `lpcAssetId`, `lpcAssetIdBehind` |
 | `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/vendor/+page.svelte` | Dev-only `?haggle=expanded` deterministic helper |
@@ -570,13 +570,14 @@ A follow-up amendment could add name/hash dedupe. OQ-4 implemented via the
 widen-`ItemDefinitionSchema` path (contract's stated option).
 
 ### Test Results
-- Unit: 1848/1850 pass (2 pre-existing failures: GameBootService AC-4
+- Unit: 1864/1866 pass (2 pre-existing failures: GameBootService AC-4
   Cancellation, AC-1 single ComfyUI implementation — both present at baseline;
-  57/57 C-419 focused tests incl. 9 new frame-crop tests)
+  73/73 C-419 focused tests incl. 25 frame-crop/hero-cell tests)
 - E2E: visual suite extended (`vendor.visual.ts`, 3 cases); functional spec
   `vendor_import.spec.ts` added. Full `e2e:test` cannot run in this pipeline
   (auth emulator port 15302 + site server 11484 not provisioned).
-- Visual: collapsed 95/100, expanded 95/100, item-art 2x 95/100 and 4x
-  close-up 100/100 (single cropped sprite per icon after AC-4 frame-crop
-  fix), personas 100/100 (headless-shell screenshots + ai_validate_image)
+- Visual: collapsed 95/100, expanded 95/100, item-art full-page 95/100 and
+  4x close-up 95/100 (hero-frame single-sprite crop, all 8 icons distinct,
+  no blanks after AC-4 fix), personas 100/100 (headless-shell screenshots +
+  ai_validate_image)
 - Baseline: 2 pre-existing failures, 0 new failures
