@@ -2,7 +2,7 @@
 id: C-418
 title: "P2 Consistency, Cleanup, and Infrastructure Batch"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-409, C-410, C-411, C-412, C-413, C-414); re-verified against main 2026-08-17"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -619,3 +619,64 @@ visual nature; Feature E has no promotion state — documentation only.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+All six P2 features implemented. A shared brand palette package (`packages/frontend/theme`) now serves client, hub, site, and docs; production builds exclude the `(dev)` route group via a build flag; dangling firestore/dataconnect aliases were removed from 10 config files and the `appearanceLayers` zero-out was deduped into a shared engine helper; `auth` and `poll_device_handoff` moved from Firebase Callables to the hub's Elysia API with the client transport switched and verified end-to-end; the Cloud Run inference decision was recorded in the ADR and the `deferred.md` marker resolved; and a one-command installer (`install.sh`) plus compiled `stack-init` bundle replaces the clone-first Quick Start. The one open item is the documented disposition of `discord_interactions.ts`, which stays on Firebase Functions (see Deviations).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Shared theme package consumed by all four apps; grep confirms no theme-colour declarations remain in app files; visual validation client dark 85 / light 90, site dark 90; hub + docs verified via computed styles and built CSS. |
+| AC-2 | ✅ | Build-time gate (`AIKAMI_INCLUDE_DEV_ROUTES`) + filtered routes copy; production build output has zero `(dev)` routes (no dev page nodes/chunks); emulator/test build retains them; e2e sandbox + release-gate specs pass. |
+| AC-3 | ✅ | 10 existing config files cleaned (`client/.fast-check/tsconfig.json` no longer exists — the 11th file is gone); `appearanceLayers` dedupe into `zeroEquipmentOwnedAppearanceSlots` (both call sites preserved); `daily.ts` deleted (folded into D); typecheck green across all edited projects. |
+| AC-4 | ⚠️ | `auth` + `poll_device_handoff` moved to hub Elysia routes; client transport switched; full device-handoff loop verified live (completeDeviceHandoff 200 + poll returns token; bad token → 401). Logging-only auth/firestore triggers + scheduler deleted; `httpsCallable` usage of auth/poll in the client → zero. **`discord_interactions.ts` kept on Functions with reason (OQ-3 disposition) — the Functions deploy stage remains for that single function; `getProjectId` offset bug in backend-configs fixed to make hub token verification work in shifted emulator runs.** |
+| AC-5 | ✅ | ADR D-16 + amendment A-11 added; `deferred.md` marker resolved and re-pointed C-413 → C-418 with cost comparison + revisit conditions. |
+| AC-6 | ✅ | `install.sh` (POSIX sh, step-logged, never overwrites `.env`), `scripts/bundle_stack.sh` (compiles `stack-init` + tarball), `scripts/install.test.sh` self-test, moon tasks `local-stack:bundle` / `test-install`, publish workflow step; README Quick Start leads with the one-liner and demotes cloning to the contributor path. `aikami.sh` DNS pending (OQ-5) — documented GitHub-releases fallback. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/frontend/theme/` (package.json, moon.yml, tsconfig.json, src/index.ts, src/lib/brand_tokens.css, src/lib/brand_daisy.css) | Shared brand palette: daisyUI tokens (client/hub) + plain CSS custom properties (site/docs) + TS constants |
+| `packages/frontend/engine/src/core/appearance_layers.ts` + `.test.ts` | Shared `zeroEquipmentOwnedAppearanceSlots` helper (C-374/C-417 OQ-1) |
+| `apps/frontend/client/scripts/gate_dev_routes.ts` | Build-time `(dev)` route gate (filtered routes copy) |
+| `apps/frontend/client/src/lib/services/api/hub_api_client.ts` | Client transport to hub Elysia auth endpoints |
+| `apps/backend/local-stack/install.sh` | One-command installer (POSIX sh) |
+| `apps/backend/local-stack/scripts/bundle_stack.sh` | Release bundle builder (compiled `stack-init` + compose files) |
+| `apps/backend/local-stack/scripts/install.test.sh` | Installer self-test |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/configs/src/index.ts` | Export `app_check.ts` (getAppCheckToken) |
+| `packages/backend/configs/src/lib/environment.ts` | `getProjectId()` applies `withProjectIdOffset` in emulator mode (Admin SDK aud match) |
+| `apps/frontend/hub/src/lib/server/api/index.ts` | Added `/api/auth/action` + `/api/auth/poll-device-handoff` Elysia routes |
+| `apps/frontend/hub/src/hooks.server.ts` | Narrow first-party CORS for the two client-facing auth routes |
+| `apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts` | `auth`/`poll_device_handoff` calls → hub client; removed `firebaseFunctionsService` |
+| `apps/frontend/client/src/lib/services/analytics/analytics_service.svelte.ts` | Stale httpsCallable doc comment |
+| `apps/frontend/client/src/lib/test_preload.ts` | Dropped dead `firebaseFunctionsService` mock |
+| `packages/frontend/services/src/…` | Deleted `firebase_functions_service.ts` + exports |
+| `apps/frontend/client/svelte.config.js`, `apps/frontend/hub/svelte.config.js` | Removed dangling firestore aliases; added theme + backend-auth aliases; `$appCss` alias |
+| 8 × tsconfig.json | Removed dangling `@aikami/*/firestore` aliases |
+| `apps/frontend/client/vite.config.ts` | Expose build mode to svelte.config; `/api/hub` dev proxy |
+| `apps/frontend/{client,hub}/src/app.css`, `site/src/lib/styles/global.css`, `docs/src/styles/docs.css` | Consume shared theme; delete duplicated stanzas |
+| `apps/frontend/{client,hub,site,docs}/package.json`, `moon.yml`, `tsconfig.json`, `astro.config.ts` | Theme package wiring |
+| `apps/backend/firebase/src/controllers/…` | Deleted 8 controllers (auth/poll callables, auth + firestore triggers, scheduler/daily); kept `api/discord_interactions.ts` |
+| `scripts/src/lib/deploy/firebase.ts` | Documented trimmed Functions scope (only discord remains) |
+| `docs/architecture/data-layer-target-architecture.md`, `docs/strategy/deferred.md` | D-16/A-11 ADR amendment + resolved marker |
+| `apps/backend/local-stack/README.md`, `moon.yml`, `stack/init.ts`, `tsconfig.json` | One-liner Quick Start, bundle/test-install tasks, embedded manifest for compiled binary |
+| `.moon/workspace.yml`, `bun.lock`, `.github/workflows/publish-local-stack.yml` | New `frontend-theme` project + installer bundle publish step |
+
+### Deviations from Spec
+- **OQ-3 disposition — `discord_interactions.ts` kept on Firebase Functions (not moved/deleted).** It is a live Discord webhook with signature verification, Firestore-backed cross-instance rate limiting, and a deferred-interaction timing contract; moving it would change security/timing semantics and depends on Firestore infra that is itself scheduled for teardown. Consequently the **"remove the Functions deploy stage"** In-Scope line is only partially met: the stage now deploys exactly the one remaining function. **Proposed Amendment:** record the keep-with-reason disposition and trim (rather than remove) the Functions stage until the Firestore teardown lands.
+- **OQ-5 unresolved:** `aikami.sh` DNS not confirmed; installer defaults to the GitHub release asset URL with `AIKAMI_INSTALL_BASE_URL` override, and the README documents both.
+- **Extra scope (justified):** backend-configs `getProjectId()` emulator offset fix — without it the hub cannot verify emulator-issued ID tokens in contract-shifted runs (the old callable ran inside the emulator where the project matched; the hub is a separate process).
+- **Feature C file count:** `apps/frontend/client/.fast-check/tsconfig.json` no longer exists on disk, so 10 of the contract's 11 files were cleaned.
+- **No docs-site page written:** per Docs Impact, Feature F's documentation impact is the local-stack README Quick Start (done); other features are internal.
+
+### Test Results
+- Unit: engine 4/4, local-stack 96/96 + installer self-test 5/5 checks, scripts:test pass, all affected-project typechecks pass (backend-auth, backend-configs, client, docs, firebase, frontend-configs, frontend-engine, frontend-services, frontend-storage, frontend-theme, frontend-utils, hub, local-stack, mocks, scripts, site).
+- E2E: session_mgmt 9/9, release_gate + sandboxes + game_boot 5 passed (client project). Site e2e specs failed environmentally (`ERR_CONNECTION_REFUSED` at :11418 — site dev server not running in this contract session; site content verified via build + screenshot instead).
+- Visual: client dark 85/100, client light 90/100, site dark 90/100 (ai_validate_image PASS); hub verified via computed styles (html bg `oklch(0.13 0.015 260)`, primary `oklch(0.65 0.22 285)`).
+- Baseline: 0 pre-existing failures in affected projects; 0 new failures. (`validate` fix+typecheck phases green; `:test` phase only fails on the environmentally-unavailable site e2e project.)
