@@ -58,6 +58,17 @@ bun run test:blackbox client # Just Client tests
 bun run test:blackbox --no-emulator  # Skip emulator startup
 ```
 
+## Database
+
+Local Postgres, Neon connection strings, and Drizzle migrations are covered in
+[Database](database.md).
+
+```bash
+bun postgres:start   # local PG18 on 127.0.0.1:5433 (herdr service)
+bun run db:migrate   # apply pending migrations locally
+bun run db:status    # how many migrations are applied
+```
+
 ## Firebase Emulators
 
 ```bash

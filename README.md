@@ -4,331 +4,226 @@
 
 ### The self-hosted AI RPG engine where every NPC thinks, remembers, and adapts.
 
-Open-source · Offline-first · BYOK · No subscription required
+Open source · Offline-first · Bring your own key · No subscription
 
-[![License: MIT](https://img.shields.io/github/license/BearlySleeping/aikami?color=6d28d9)](https://github.com/BearlySleeping/aikami/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/github/license/BearlySleeping/aikami?color=6d28d9)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/BearlySleeping/aikami?style=social)](https://github.com/BearlySleeping/aikami/stargazers)
-[![Open issues](https://img.shields.io/github/issues/BearlySleeping/aikami)](https://github.com/BearlySleeping/aikami/issues)
-[![Status](https://img.shields.io/badge/status-early%20development-orange)](#-project-status)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#-contributing)
+[![Status](https://img.shields.io/badge/status-early%20development-orange)](#project-status)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/XuuhWvSxHH)
-[![Built with Bun](https://img.shields.io/badge/runtime-Bun-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
-[![SvelteKit](https://img.shields.io/badge/frontend-SvelteKit%205-ff3e00?logo=svelte&logoColor=white)](https://svelte.dev)
 
-**[🎮 Launch the Web Client](https://aikami.bearlysleeping.com)** · **[🌐 Landing Page](https://bearlysleeping.com)** · **[💬 Discord](https://discord.gg/XuuhWvSxHH)** · **[🐛 Report a Bug](https://github.com/BearlySleeping/aikami/issues)** · **[💡 Request a Feature](https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue+state%3Aopen+label%3Afeature)**
+**[🎮 Play](https://aikami.bearlysleeping.com)** · **[💬 Discord](https://discord.gg/XuuhWvSxHH)** · **[🐛 Issues](https://github.com/BearlySleeping/aikami/issues)**
 
 </div>
 
 ---
 
-## ✨ What is Aikami?
+## What is Aikami?
 
-Aikami is an **open-source AI RPG engine** that fuses tabletop-style D&D mechanics with LLM-driven roleplay. Every NPC is procedurally generated — archetype, personality, full six-stat ability scores, backstory, and a dynamic expression pack — and an **AI Game Master** uses those stats to referee everything you do: skill checks, persuasion attempts, combat, the works. Nothing is pre-scripted. Two players who start in the same tavern can end up in completely different worlds.
+Aikami fuses tabletop D&D mechanics with LLM-driven roleplay. NPCs are
+procedurally generated — archetype, personality, six-stat ability scores,
+backstory, expression pack — and an **AI Game Master** uses those stats to
+referee what you do: skill checks, persuasion, combat. Nothing is pre-scripted.
+Two players who start in the same tavern end up in different worlds.
 
-It's built **game-first, not chat-first**: you launch into a spatial 2D world rendered by PixiJS + bitECS, not a chatbot dashboard. The AI narrates; deterministic rules decide.
+It's **game-first, not chat-first**: you launch into a spatial 2D world
+rendered by PixiJS + bitECS, not a chatbot dashboard. The AI narrates;
+deterministic rules decide.
 
-- 🧠 **AI Game Master** — describe the action you want to take in plain language; the GM decides what check to roll, when a fight starts, and how the world reacts
-- 📜 **D&D-flavored NPCs** — STR/DEX/CON/INT/WIS/CHA, skills, and HP aren't cosmetic, they drive every interaction (a high-Wisdom guard _will_ see through your bluff)
-- 🧵 **Persistent memory & world state** — NPCs remember what you did, relationships and factions evolve across sessions, nothing resets when you close the tab
-- 🎨 **Procedural LPC sprites** — every character is assembled from modular Liberated Pixel Cup layers, no static sprite sheets, zero AI dependency for the visual baseline
+- 🧠 **AI Game Master** — describe what you want to do in plain language; the GM picks the check, calls the roll, and decides how the world reacts
+- 📜 **Stats that matter** — STR/DEX/CON/INT/WIS/CHA, skills, and HP aren't cosmetic; a high-Wisdom guard *will* see through your bluff
+- 🎨 **Procedural LPC sprites** — characters are assembled from modular Liberated Pixel Cup layers, so the visual baseline needs no AI at all
 - 💾 **Offline-first** — campaigns, saves, and chat history live in a local Turso (libSQL) database; the game boots and plays with zero network
-- 🔑 **Vendor-agnostic AI** — run local models (llama.cpp / sd-server / sherpa-onnx via Docker, with Ollama and ComfyUI available as opt-in drop-in swaps), bring your own cloud API key, or (soon) use Aikami's managed hosting
-- 🖥️ **Cross-platform** — Progressive Web App, native desktop via Tauri v2 (Windows/macOS/Linux), and a SvelteKit community hub for sharing assets, maps, and mods
+- 🔑 **Vendor-agnostic AI** — run local models in Docker, bring your own cloud key, or (later) use managed hosting
+- 🖥️ **Cross-platform** — PWA in the browser, native desktop via Tauri v2 (Windows/macOS/Linux)
 
 ---
 
-## 🚧 Project Status
+## Project status
 
-Aikami is **early and moving fast**. Expect rough edges, missing pieces, and breaking changes between commits — that's the deal with building in the open. If you hit a bug, have an idea, or just want to poke around the code, you're exactly who this project is for. See [Contributing](#-contributing) below.
+**Early and moving fast.** Expect rough edges, missing pieces, and breaking
+changes between commits — that's the deal with building in the open. The
+engine, sprite pipeline, and AI gateway are the most solid parts; long-horizon
+memory and persistent world state are still being built. See the
+[roadmap](#roadmap).
 
 ---
 
-## 🚀 Getting Started
+## Run it
 
-Pick whichever fits how you want to run it:
+### Play in the browser
 
-### Option 1 — Web, bring your own key
+Nothing to install. Open the [hosted client](https://aikami.bearlysleeping.com),
+drop an Anthropic / OpenAI / Gemini key (or any OpenAI-compatible endpoint)
+into Settings, and play.
 
-No install at all: open the [hosted client](https://aikami.bearlysleeping.com), drop your Anthropic / OpenAI / Gemini (or any OpenAI-compatible endpoint) key into Settings, and play. Mix and match TTS and image providers per NPC if you want.
-
-More detail: [Setup Guide](docs/intro/setup.md) · [Developer Workflow](docs/guides/dev-workflow.md)
-
-### Option 2 — Desktop app (Tauri v2)
+### Desktop app
 
 ```bash
-# Grab a prebuilt release
-# https://github.com/BearlySleeping/aikami/releases
-
-# ...or build from source
-bun install
-bun tauri build
+# Prebuilt: https://github.com/BearlySleeping/aikami/releases
+bun install && bun tauri build   # or build from source
 ```
 
-Native, Rust-powered, sub-5MB bundle. Works with local Ollama/vLLM or your own cloud keys.
+Linux ships as an AppImage. If it won't launch, install `libfuse2`
+(`sudo apt install libfuse2` / `sudo dnf install fuse-libs`) — some newer
+distros drop it by default.
 
-Linux ships as an AppImage (runs on any distro, no install needed). If it won't launch, install `libfuse2` — some newer distros (Ubuntu 22.04+, Fedora 36+, Debian 12) don't include it by default:
+### Fully local, no API keys (Docker)
 
-```bash
-# Debian/Ubuntu
-sudo apt install libfuse2
-
-# Fedora
-sudo dnf install fuse-libs
-```
-
-### Option 3 — Docker (zero setup, fully local)
-
-One wizard detects your hardware and picks sane defaults (llama.cpp for text, sd-server for image, sherpa-onnx/Kokoro for voice), then a plain `docker compose up -d` starts everything, including a browser client at **http://localhost:5274**:
+A wizard detects your hardware, picks sane engine defaults, and writes `.env`;
+then one `docker compose up -d` starts everything, including a browser client
+at **http://localhost:5274**.
 
 ```bash
 git clone https://github.com/BearlySleeping/aikami
 cd aikami/apps/backend/local-stack
 
-bun run init      # detects GPU/CPU/RAM, writes .env, shows the download plan
+bun run init            # detects GPU/CPU/RAM, writes .env, shows the download plan
 docker compose up -d    # pulls images, fetches models, starts the stack
 ```
 
-That `localhost:5274` client is only relevant if you're accessing Aikami through a browser — if you're using the Tauri desktop app (Option 2) instead, skip it and enable just the engines: `bun run stack init --yes --modalities text,image,voice`.
+Using the desktop app instead? Skip the browser client and enable just the
+engines: `bun run stack init --yes --modalities text,image,voice`.
 
-Full setup — hardware backend matrix, swapping in Ollama/ComfyUI, running without a browser client, STT, model licensing, the no-clone-needed path, and smoke tests — is documented in full in the **[Local Stack README](apps/backend/local-stack/README.md)**, the source of truth for anything Docker/engine-related.
+> The **[Local Stack README](apps/backend/local-stack/README.md)** is the
+> source of truth for anything Docker or engine related — hardware backend
+> matrix, swapping in Ollama/ComfyUI, STT, model licensing, the
+> no-clone-needed install, and smoke tests.
 
-### Option 4 — From source (Bun + Moon)
+### Build from source
 
 ```bash
-git clone https://github.com/BearlySleeping/aikami
-cd aikami
-
-bun run setup       # local machine setup (checks bun, jdk, chromium, ...)
+git clone https://github.com/BearlySleeping/aikami && cd aikami
+bun run setup       # checks bun, jdk, chromium, ...
 bun run setup:env   # generate .env.emulator files (no GCP access needed)
 bun run dev         # client dev server
-bun run dev:all     # client + Firebase emulators (herdr workspace)
 ```
 
-### Local PostgreSQL (dev)
-
-Aikami pins **PostgreSQL 18** in the Nix devShell — the same engine major the
-production provider (Neon) speaks over the wire — and runs it as a herdr dev
-service like any other. No Docker, no system Postgres, no sudo: the server
-runs as your OS user, binds to `127.0.0.1:5433` only (port 5432 is left free
-for your own system Postgres), and keeps all state in the gitignored
-`.postgres/` directory.
-
-> 🔴 **Major-version bump (17 → 18, C-394):** PostgreSQL refuses to start on
-> a data directory initialised by a different major version. If you upgraded
-> from an older checkout, run `bun postgres:stop` → `bun postgres:reset --yes`
-> → `bun postgres:init`. **This destroys all local Postgres data** — any local
-> rows (e.g. applied hub migrations) are gone and must be re-applied via
-> `bun db:migrate`.
-
-```bash
-bun herdr:start postgres   # or: bun postgres:start (background)
-bun herdr:stop postgres    # or: bun postgres:stop
-bun postgres:status        # server state + connection details
-bun postgres:reset --yes   # delete all local data and re-initialise
-bun postgres:psql          # interactive psql
-```
-
-Connection URL (database `aikami_dev` is created for you by `init`):
-
-```
-postgresql://localhost:5433/aikami_dev?sslmode=disable
-```
-
-Lifecycle script: `scripts/src/lib/postgres/lifecycle.ts`. If a previous run
-left a stale `postmaster.pid`, `start` clears it automatically.
-
-### Server data plane — catalog database (C-394)
-
-The hub's server-side write model lives in `packages/backend/database/`
-(Drizzle schema, generated migrations, pooled `pg` connection, catalog
-repositories). Postgres is the WRITE model; the static catalog index is a
-derived read model regenerated at publish time — nothing browses by querying
-Postgres.
-
-Two connection strings, both server-side only:
-
-| Variable                   | Purpose                                                                     | Emulator                                                 | Production (Neon)                                   |
-| -------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
-| `NEON_DATABASE_URL`        | Runtime (pooled)                                                            | `postgresql://localhost:5433/aikami_dev?sslmode=disable` | Pooled endpoint (`-pooler` host), `sslmode=require` |
-| `NEON_DATABASE_URL_DIRECT` | Migrations only (unpooled — DDL under PgBouncer transaction pooling breaks) | same as above (no pooler locally)                        | Direct endpoint                                     |
-
-They live in `apps/frontend/hub/.env.{emulator,production}` and reach Cloud
-Run as GSM secrets via the existing `buildSecretArgsFromEnvFile` path. The
-connection is created LAZILY on first query — a dead database never prevents
-the hub from booting (`GET /api/health/db` reports `unconfigured` /
-`unreachable` instead).
-
-```bash
-bun run db:generate              # drizzle-kit generate → timestamped SQL migration
-bun run db:migrate               # apply pending migrations to LOCAL postgres (idempotent)
-bun run db:status                # how many migrations are applied
-bun run db:migrate --mode=production  # apply to Neon via NEON_DATABASE_URL_DIRECT
-bun run deploy database --mode=production  # canonical deploy path (AC-5): backup + apply
-```
-
-Migrations are forward-only, generated (never hand-edited), transactional
-and NEVER auto-applied on server boot. Adding a table = edit
-`packages/backend/database/src/lib/schema.ts` → `bun run db:generate` →
-commit the generated SQL → apply locally → apply via the deploy pipeline.
+Full contributor setup: [Setup Guide](docs/intro/setup.md) ·
+[Developer Workflow](docs/guides/dev-workflow.md)
 
 ---
 
-## 🤖 How the AI actually works
+## How the AI works
 
-All text, image, and voice generation flows through one abstraction — `AiProviderGateway` — so product code never cares which mode is active:
+Text, image, and voice generation all flow through one abstraction —
+`AiProviderGateway` — so product code never knows which mode is active:
 
-| Mode                        | What it means                                                                                                                                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Offline / local**         | llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) — run as Docker microservices on your own hardware, with Ollama and ComfyUI available as opt-in drop-in swaps |
-| **BYOK**                    | Bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint                                                                 |
-| **Service** _(coming soon)_ | Fully managed, pay-as-you-go hosting on Aikami's infrastructure — no GPU, no Docker, no setup                                                                                 |
+| Mode | What it means |
+| --- | --- |
+| **Local** | llama.cpp (text) · sd-server (image) · sherpa-onnx/Kokoro (voice), as Docker microservices on your hardware. Ollama and ComfyUI are opt-in swaps. |
+| **BYOK** | Your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint. |
+| **Service** *(planned)* | Managed pay-as-you-go hosting — no GPU, no Docker, no setup. |
 
-A text engine is always required to actually play — that's the core of the game. Image and voice generation are optional flourishes; the LPC sprite system covers the visual baseline with zero AI dependency either way.
-
-Everything is **local-first by design**: Firebase (auth + optional cloud sync/backup) is layered on top and is never a boot dependency. Your world plays and saves fine without ever signing in.
-
----
-
-## 🏗️ Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                       Aikami Platform                             │
-├──────────────┬──────────────────────┬──────────────┬─────────────┤
-│ Client+Tauri │   Game Engine        │  Hub (SSR)   │ Site/Docs   │
-│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (Cloud Run)  │ (Astro)     │
-├──────────────┴──────────┬───────────┴──────────────┴─────────────┤
-│    Turso (libSQL) — local source of truth                        │
-├─────────────────────────┴────────────────────────────────────────┤
-│      Firebase — auth, optional sync, infrastructure only         │
-│         Functions │ Auth │ Storage │ Firestore (infra)           │
-├──────────────────────────────────────────────────────────────────┤
-│        Local AI Microservices (Docker/herdr)                     │
-│    sd-server (image) │ llama.cpp (text) │ sherpa-onnx (voice)    │
-├──────────────────────────────────────────────────────────────────┤
-│               Shared Packages (packages/shared/)                  │
-│  constants │ types │ schemas │ parser │ logger │ utils │ mocks   │
-├──────────────────────────────────────────────────────────────────┤
-│              Backend Packages (packages/backend/)                 │
-│  auth │ chat │ configs │ database │ svelte-kit │ utils           │
-├──────────────────────────────────────────────────────────────────┤
-│             Frontend Packages (packages/frontend/)                │
-│  configs │ engine │ ai-gateway │ repositories │ services │ utils │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-The game engine runs behind a strict **Engine Boundary**: the 60fps PixiJS + bitECS render loop is fully decoupled from Svelte's reactivity via a typed `EngineBridge` message channel (`GameCommand` →, `GameEvent` ←). The UI layer never touches per-frame data, and the engine never touches `$state` — which is what lets a real-time game and a reactive UI framework coexist without melting the main thread.
-
-Full write-up: [Architecture](docs/architecture/architecture.md)
+A text engine is required to play; image and voice are optional flourishes.
+Firebase (auth and optional cloud sync) sits on top and is **never** a boot
+dependency — your world plays and saves fine without ever signing in.
 
 ---
 
-## 🧰 Tech Stack
+## Architecture
 
-| Layer                 | Technology                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Runtime               | [Bun](https://bun.sh)                                                                                          |
-| Language              | TypeScript, strict mode                                                                                        |
-| Monorepo              | [Moon](https://moonrepo.dev)                                                                                   |
-| Frontend              | SvelteKit 2 + Svelte 5 Runes                                                                                   |
-| Desktop               | Tauri v2                                                                                                       |
-| Game rendering        | PixiJS v8 (WebGPU)                                                                                             |
-| Game logic            | bitECS (data-oriented ECS)                                                                                     |
-| Local persistence     | Turso (libSQL) — offline-first source of truth                                                                 |
-| Cloud sync (optional) | Firebase (Auth, Storage, Functions)                                                                            |
-| Local AI              | llama.cpp (text) · sd-server (image) · sherpa-onnx/Kokoro (voice), via Docker — Ollama/ComfyUI as opt-in swaps |
-| AI abstraction        | `AiProviderGateway` — offline / BYOK / service                                                                 |
-| Validation            | TypeBox                                                                                                        |
-| Community hub         | SvelteKit SSR on Google Cloud Run (Bun adapter)                                                                |
-| Static sites          | Astro (landing page, docs)                                                                                     |
-| Linting/formatting    | Biome                                                                                                          |
-| Testing               | Playwright · Vitest · Blackbox runner                                                                          |
+The game engine runs behind a strict **Engine Boundary**: the 60fps PixiJS +
+bitECS render loop is fully decoupled from Svelte's reactivity through a typed
+`EngineBridge` message channel (`GameCommand` →, `GameEvent` ←). The UI layer
+never touches per-frame data, and the engine never touches `$state`. That's
+what lets a real-time game and a reactive UI framework coexist without melting
+the main thread.
+
+```
+apps/
+├── frontend/
+│   ├── client/       # Main PWA + Tauri desktop app (SvelteKit 2, Svelte 5)
+│   ├── hub/          # Community hub — assets, maps, mods, personas (Cloud Run)
+│   ├── site/         # Public landing page (Astro)
+│   └── docs/         # Documentation site (Astro)
+└── backend/
+    ├── firebase/     # Cloud Functions, auth triggers, security rules
+    ├── local-stack/  # Publishable Docker topology — text/image/voice/stt + client
+    ├── text/         # llama.cpp text engine
+    ├── image/        # sd-server image engine
+    ├── voice/        # sherpa-onnx/Kokoro voice + STT engine
+    └── worker/       # Background jobs
+
+packages/
+├── shared/     # types, schemas, constants, parser, logger, utils, mocks
+├── backend/    # auth, chat, database, svelte-kit, utils
+└── frontend/   # engine (PixiJS+bitECS), ai-gateway, storage, services, components
+```
+
+The engine itself lives in `packages/frontend/engine`, fully extracted from
+the client and reachable only through `EngineBridge`.
+
+Deeper: [Architecture](docs/architecture/architecture.md) ·
+[Project Structure](docs/guides/STRUCTURE.md)
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Runtime / language | [Bun](https://bun.sh) · TypeScript (strict) |
+| Monorepo | [Moon](https://moonrepo.dev) · Biome |
+| Frontend | SvelteKit 2 + Svelte 5 Runes · Tauri v2 |
+| Game | PixiJS v8 (WebGPU) + bitECS |
+| Local persistence | Turso (libSQL) — offline-first source of truth |
+| Cloud (optional) | Firebase (Auth, Storage, Functions) · Cloud Run · Neon Postgres |
+| AI | `AiProviderGateway` — local / BYOK / service |
+| Validation | TypeBox |
+| Testing | Playwright · Vitest · Blackbox runner |
 
 Full reference: [Tech Stack](docs/guides/STACK.md)
 
 ---
 
-## 📁 Project Structure
+## Documentation
 
-```
-apps/
-├── frontend/
-│   ├── client/     # Main PWA + Tauri desktop app (SvelteKit 2, Svelte 5)
-│   ├── hub/         # Community hub — assets, maps, mods, personas (Cloud Run)
-│   ├── site/        # Public landing page (Astro)
-│   └── docs/         # Documentation site (Astro)
-└── backend/
-    ├── firebase/       # Cloud Functions, auth triggers, security rules
-    ├── local-stack/    # Publishable Docker topology — text/image/voice/stt + client (C-390)
-    ├── image/          # sd-server image engine (dev), ComfyUI as opt-in advanced alt
-    ├── text/           # llama.cpp text engine (dev), Ollama as opt-in advanced alt
-    └── voice/          # sherpa-onnx/Kokoro voice + STT engine (dev)
+| Resource | What it covers |
+| --- | --- |
+| [Setup Guide](docs/intro/setup.md) | Prerequisites, first-time setup, environment config |
+| [Developer Workflow](docs/guides/dev-workflow.md) | Daily commands, testing, emulators |
+| [Architecture](docs/architecture/architecture.md) | System architecture and the engine boundary |
+| [Coding Standards](docs/guides/CODING_STANDARDS.md) | Conventions, including AI-agent coding rules |
+| [Local Stack](apps/backend/local-stack/README.md) | Docker engines, hardware backends, models |
+| [Database](docs/guides/database.md) | Local Postgres, Neon, migrations |
+| [Feature Specs](docs/guides/FEATURES.md) | Personas, memory, lorebooks, world state |
+| [Client Roadmap](docs/guides/CLIENT_FEATURES.md) | Full DND/JRPG feature roadmap |
 
-packages/
-├── shared/     # types, schemas, constants, parser, logger, utils, mocks
-├── backend/    # auth, chat, database, svelte-kit, utils
-└── frontend/   # engine (PixiJS+bitECS), ai-gateway, repositories, services, components
-```
-
-The game engine itself lives in `packages/frontend/engine`, fully extracted from the client and reachable only through `EngineBridge`.
-
-Full reference: [Project Structure](docs/guides/STRUCTURE.md)
+AI coding agents: start at `.context/llms.txt`, then `.context/CONTEXT.md`.
 
 ---
 
-## 📚 Documentation
+## Roadmap
 
-| Resource                                                 | What it covers                                                      |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| [Setup Guide](docs/intro/setup.md)                       | Prerequisites, first-time setup, environment config                 |
-| [Developer Workflow](docs/guides/dev-workflow.md)        | Daily commands, testing, emulator usage                             |
-| [Architecture](docs/architecture/architecture.md)        | System architecture and the engine boundary                         |
-| [Project Structure](docs/guides/STRUCTURE.md)            | Monorepo layout and where things live                               |
-| [Tech Stack](docs/guides/STACK.md)                       | Technologies, frameworks, and services                              |
-| [Coding Standards](docs/guides/CODING_STANDARDS.md)      | Conventions, including AI-agent coding rules                        |
-| [Feature Specs](docs/guides/FEATURES.md)                 | Deep-dive specs: personas, memory, lorebooks, world state, and more |
-| [Client Feature Roadmap](docs/guides/CLIENT_FEATURES.md) | Full DND/JRPG feature roadmap and priority order                    |
+- **Now** — core loop: spatial world, procedural NPCs, dice and skill checks, character cards, persistence
+- **Next** — DND depth: lorebooks, user personas, group chats, world generation
+- **Later** — living world: relationships and factions, chat summarization, cross-session memory
+- **Future** — branching stories, knowledge-graph visualization, voice cloning, managed hosting
 
-For AI coding agents: start at `.context/llms.txt`, then `.context/CONTEXT.md`.
+Open requests: [`feature` label](https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue+state%3Aopen+label%3Afeature)
 
 ---
 
-## 🗺️ Roadmap
+## Contributing
 
-Rough shape of where things are headed — see [Feature Specs](docs/guides/FEATURES.md) and [Client Feature Roadmap](docs/guides/CLIENT_FEATURES.md) for the full detail:
+Contributions, ideas, and bug reports are genuinely welcome — a one-line fix
+or a proposal for something completely new. The project is early enough that
+direction is still up for discussion.
 
-- **Now — Core loop:** chat interface, character cards, dice rolling, single AI backend, chat persistence
-- **Next — DND depth:** character stats, world info/lorebooks, user personas, group chats
-- **Later — Living world:** character relationships, chat summarization, AI-generated lorebooks, persistent world state, cross-chat memory
-- **Future — Premium & scale:** branching stories, knowledge graph visualization, voice cloning, managed pay-as-you-go hosting (no BYOK / no self-hosting required)
-
-Open feature requests: [GitHub Issues → `feature` label](https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue+state%3Aopen+label%3Afeature)
-
----
-
-## 🤝 Contributing
-
-Aikami is free, open-source, and very much still being built — **contributions, new ideas, and bug reports are all genuinely welcome**, whether that's a one-line fix or a proposal for something completely new.
-
-- 🐛 **Found a bug?** [Open an issue](https://github.com/BearlySleeping/aikami/issues)
-- 💡 **Have an idea?** Open an issue or drop it in [Discord](https://discord.gg/XuuhWvSxHH)
-- 🔧 **Want to write code?** Fork the repo, check [Coding Standards](docs/guides/CODING_STANDARDS.md), and open a PR
-- 🗣️ **Just want to chat about the project?** [Join the Discord](https://discord.gg/XuuhWvSxHH) — it's the fastest way to reach the team
-
-No contribution is too small, and no idea is too weird — this is early enough that direction is still very much up for discussion.
+- 🐛 **Bug?** [Open an issue](https://github.com/BearlySleeping/aikami/issues)
+- 💡 **Idea?** Open an issue or drop it in [Discord](https://discord.gg/XuuhWvSxHH)
+- 🔧 **Code?** Fork it, skim [Coding Standards](docs/guides/CODING_STANDARDS.md), open a PR
 
 ---
 
-## 📜 License
+## License
 
-Aikami is [MIT licensed](https://github.com/BearlySleeping/aikami/blob/main/LICENSE) — free and open source, forever. Self-hosting will always be an option; a managed pay-as-you-go tier is planned for people who'd rather not run their own AI, but it will never be required.
-
----
+[MIT](LICENSE) — free and open source, forever. Self-hosting will always be an
+option; the planned managed tier is for people who'd rather not run their own
+AI, and will never be required.
 
 <div align="center">
 
-**BearlySleeping** — _Dreaming big, one line of code at a time._
-
-[Website](https://bearlysleeping.com) · [Web Client](https://aikami.bearlysleeping.com) · [Discord](https://discord.gg/XuuhWvSxHH) · [GitHub](https://github.com/BearlySleeping/aikami)
+**BearlySleeping** — *Dreaming big, one line of code at a time.*
 
 </div>
