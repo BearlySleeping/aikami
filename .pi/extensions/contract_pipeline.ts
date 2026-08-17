@@ -40,6 +40,10 @@ const environment = (name: string): string => {
 const hashContract = (path: string): string =>
   existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : '';
 
+/** Normalizes backslashes to forward slashes without changing string length,
+ *  so indices found on the posix form still slice correctly on the original. */
+const toPosix = (path: string): string => path.replace(/\\/g, '/');
+
 /**
  * Derive the absolute repository root from a result or review path env var.
  *
@@ -47,6 +51,10 @@ const hashContract = (path: string): string =>
  * When an agent runs inside a Git Worktree, `process.cwd()` resolves to the worktree
  * directory — which does NOT contain `.pi/contract-runs/`. The repo root is the
  * authoritative location for manifest/store operations.
+ *
+ * On Windows these env vars are backslash-separated, so the search is done on
+ * a posix-normalized copy — same length as the original, so the found index
+ * still slices the original path correctly.
  */
 const deriveRepoRoot = (): string => {
   const candidates = [
@@ -55,7 +63,7 @@ const deriveRepoRoot = (): string => {
   ];
   for (const p of candidates) {
     if (p) {
-      const idx = p.indexOf('/.pi/contract-runs/');
+      const idx = toPosix(p).indexOf('/.pi/contract-runs/');
       if (idx !== -1) {
         return p.slice(0, idx);
       }
@@ -152,7 +160,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                 'Missing CONTRACT_PIPELINE_RUN_ID and CONTRACT_PIPELINE_RESULT_PATH.',
               );
             }
-            const m = resultPath.match(/contract-runs\/(run-[^/]+)\//);
+            const m = toPosix(resultPath).match(/contract-runs\/(run-[^/]+)\//);
             if (!m?.[1]) {
               throw new Error(
                 `Cannot derive run ID from CONTRACT_PIPELINE_RESULT_PATH: ${resultPath}`,
@@ -374,7 +382,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             const m = gitFile.match(/^gitdir:\s*(.+)$/m);
             if (m?.[1]) {
               const gitDir = resolve(m[1].trim());
-              const idx = gitDir.indexOf('/.git/worktrees/');
+              const idx = toPosix(gitDir).indexOf('/.git/worktrees/');
               repoRoot = idx !== -1 ? gitDir.slice(0, idx) : gitDir;
             }
           } catch {

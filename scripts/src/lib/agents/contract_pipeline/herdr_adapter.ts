@@ -844,15 +844,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // - interactiveWriter + writer role → TUI so the user can chat directly
     //   with the writer pi session to describe the feature
     //
-    // 🔴 Herdr PTY drops the first character via pane run — keep the leading
-    // newline so the dropped char is never 'p' of 'pi'. With env vars moved
-    // to tab --env there is no inline env prefix to corrupt.
+    // This command is bash syntax (`export ...; pi ...`) — the caller wraps
+    // it via `bashScriptForPane` before sending, since a pane's actual shell
+    // may be PowerShell on Windows, not bash (see `_createWorkerTab`).
     const useHeadless = this._useJsonMode(request.role);
     if (useHeadless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
       return {
         command: [
-          '\n',
           ghExport,
           'pi',
           '--mode',
@@ -872,7 +871,6 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // TUI mode — no -p, prompt is sent via _sendTaskText to the PTY.
     return {
       command: [
-        '\n',
         ghExport,
         'pi',
         '--approve',
@@ -1001,7 +999,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     mkdirSync(dirname(taskMessagePath), { recursive: true });
     atomicWrite({ path: taskMessagePath, content: parts.join('\n\n') });
 
-    await runPaneCommand({ paneId, command });
+    // `command` is bash syntax (`export ...; pi ...`) — wrap it for the
+    // pane's actual shell (PowerShell on Windows never understands `export`
+    // or `2>/dev/null`; sending it raw silently drops GH_TOKEN and prints
+    // parse errors). 🔴 Herdr PTY drops the first character via `pane run` —
+    // keep the leading newline so the dropped char is never load-bearing.
+    const wrappedCommand = `\n${await bashScriptForPane(paneId, command)}`;
+    await runPaneCommand({ paneId, command: wrappedCommand });
 
     if (!this._useJsonMode(options.request.role)) {
       // TUI mode — send task text via PTY.
@@ -1130,10 +1134,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // Review captain runs in TUI mode — needs interactivity to inspect
     // findings, interrupt if needed, and manually intervene. JSON mode
     // is for automated workers only.
-    // 🔴 Herdr PTY drops the first character via pane run — keep the leading
-    // newline so the dropped char is never the first letter of the command.
+    //
+    // This is bash syntax (`export ...; pi ...`) — wrap it for the pane's
+    // actual shell (PowerShell on Windows never understands `export` or
+    // `2>/dev/null`; sending it raw silently drops GH_TOKEN and prints parse
+    // errors). 🔴 Herdr PTY drops the first character via `pane run` — keep
+    // the leading newline so the dropped char is never load-bearing.
     const command = [
-      '\n',
       ghExport,
       'pi',
       '--approve',
@@ -1148,7 +1155,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     ].join(' ');
 
     const paneId = tab.result.root_pane.pane_id;
-    await runPaneCommand({ paneId, command });
+    const wrappedCommand = `\n${await bashScriptForPane(paneId, command)}`;
+    await runPaneCommand({ paneId, command: wrappedCommand });
     const taskDelivered = await this._sendTaskText({
       paneId,
       text: options.blockedReview
