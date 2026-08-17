@@ -47,10 +47,7 @@ test.describe('C-419 vendor + persona import (production VendorView)', () => {
     // LpcItemIcon component sets background-size after the sheet loads).
     await expect
       .poll(
-        async () =>
-          await page
-            .locator('.vendor-item-icon div[style*="background-image"]')
-            .count(),
+        async () => await page.locator('.vendor-item-icon div[style*="background-image"]').count(),
         { timeout: 15_000, intervals: [500, 1000, 2000] },
       )
       .toBeGreaterThan(0);
