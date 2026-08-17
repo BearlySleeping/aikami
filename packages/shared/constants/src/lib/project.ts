@@ -1,9 +1,5 @@
 // packages/shared/constants/src/lib/project.ts
 
-export const modes = ['staging', 'production', 'emulator', 'testing'] as const;
-
-export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
-
 /**
  * Aikami backend application identifiers.
  *
@@ -35,6 +31,29 @@ export const frontendAppIds = ['docs', 'site', 'client', 'client-tauri', 'hub'] 
  * All Aikami application identifiers (backend + frontend).
  */
 export const appIds = [...backendAppIds, ...frontendAppIds] as const;
+
+/**
+ * Deployment modes that exist across the project. `MODE_PROJECT_MAP`,
+ * `ModeSchema`/`Mode` (packages/shared/schemas), and `liveModes`
+ * (scripts/src/lib/deploy/deployment_config.ts) are all derived from this
+ * tuple — `satisfies` on MODE_PROJECT_MAP below fails to compile if the two
+ * fall out of sync.
+ *
+ * To disable a mode across the whole project (e.g. staging, while there are
+ * no active users to justify its GCP cost): comment out its entry here AND
+ * in MODE_PROJECT_MAP below. Everything downstream (Mode type, liveModes,
+ * deploy scripts) shrinks with it, and the compiler will point at anything
+ * that still assumes it exists.
+ *
+ * Three call sites can't import this (documented at each) and need the same
+ * mode commented out by hand: bash can't import TS
+ * (scripts/direnv/bootstrap.sh's _AIKAMI_PROJECT_MAP), and .pi extensions
+ * run outside the moon project graph (direnv_detect.ts, gcloud_exec.ts).
+ */
+export const modes = ['staging', 'production', 'emulator', 'testing'] as const;
+
+/** Always 'production' regardless of which other modes are enabled/disabled. */
+export const defaultMode = 'production' as const satisfies (typeof modes)[number];
 
 /**
  * Maps each Aikami deployment mode to its Firebase/GCP project ID.

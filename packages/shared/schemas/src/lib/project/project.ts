@@ -3,16 +3,27 @@
 import { MODE_PROJECT_MAP, modes } from '@aikami/constants';
 import Type from 'typebox';
 
+// TypeBox's Static inference needs a literal TUPLE inside Type.Union, not
+// an array — `.map()` on a const tuple widens to T[] and Static collapses
+// to `never`. This recursive tuple helper preserves the literal order (see
+// packages/shared/schemas/src/lib/local_ai/stack_backend.ts for the same
+// pattern).
+type LiteralTupleOf<T extends readonly string[]> = T extends readonly [
+  infer First extends string,
+  ...infer Rest extends string[],
+]
+  ? [ReturnType<typeof Type.Literal<First>>, ...LiteralTupleOf<Rest>]
+  : [];
+
+const modeSchemas = modes.map((mode) => Type.Literal(mode)) as LiteralTupleOf<typeof modes>;
+
 /**
  * TypeBox schema for Aikami deployment mode.
- * modes = ['staging', 'production', 'emulator'] as const
+ * Derived from `modes` (packages/shared/constants) so disabling a mode there
+ * (e.g. commenting out staging in `modes` + MODE_PROJECT_MAP) shrinks this
+ * union too.
  */
-export const ModeSchema = Type.Union([
-  Type.Literal('staging'),
-  Type.Literal('production'),
-  Type.Literal('emulator'),
-  Type.Literal('testing'),
-]);
+export const ModeSchema = Type.Union(modeSchemas);
 
 export type Mode = Type.Static<typeof ModeSchema>;
 /**

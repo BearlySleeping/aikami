@@ -17,7 +17,7 @@
  *   docker-release       → Docker build + push only (image, text, voice)
  */
 
-import { MODE_PROJECT_MAP } from '../../../../packages/shared/constants/src/lib/project.ts';
+import { MODE_PROJECT_MAP, modes } from '../../../../packages/shared/constants/src/lib/project.ts';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 
 export const ALL_SERVICE_TYPES = [
@@ -250,8 +250,15 @@ export const APP_SPECIFIC_KEYS_FOR_PREFIX = new Set([
 /** Re-exported from shared constants for convenience. */
 export { MODE_PROJECT_MAP };
 
-/** Modes that deploy to live GCP (not emulator). */
-export const liveModes = ['staging', 'production'] as const;
+/**
+ * Modes that deploy to live GCP (not emulator), derived from the shared
+ * `modes` tuple so disabling a mode there (e.g. commenting out staging)
+ * removes it here too.
+ */
+export const liveModes = modes.filter(
+  (mode): mode is Exclude<(typeof modes)[number], 'emulator' | 'testing'> =>
+    mode !== 'emulator' && mode !== 'testing',
+);
 export type LiveMode = (typeof liveModes)[number];
 
 /**
