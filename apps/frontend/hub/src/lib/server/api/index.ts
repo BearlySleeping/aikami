@@ -156,18 +156,20 @@ const handleAuthAction = async ({
       type: body.type as never,
     });
   } catch (error) {
-    const err = error as { errorType?: string; errorMessage?: string };
-    const errorType = err.errorType ?? 'internal';
+    // toAppError (packages/shared/utils/src/lib/common/error.ts) stores the
+    // taxonomy in `error.cause`, not on the top-level Error — read it from
+    // there so the hub returns the same `unauthorized` / `invalid-argument`
+    // codes the Callable surfaced (C-418 Feature D parity).
+    const err = error as { cause?: { errorType?: string }; message?: string };
+    const errorType = err.cause?.errorType ?? 'internal';
+    const errorMessage = err.message ?? 'Unknown error';
     set.status = AUTH_ERROR_STATUS[errorType] ?? 500;
     logger.warn('/api/auth/action:failed', {
       type: body.type,
       errorType,
-      errorMessage: err.errorMessage,
+      errorMessage,
     });
-    return {
-      errorType,
-      errorMessage: err.errorMessage ?? 'Unknown error',
-    };
+    return { errorType, errorMessage };
   }
 };
 
