@@ -26,7 +26,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
       </div>
     </div>
   {:else}
-    <div class="hero min-h-screen bg-base-200">
+    <div class="hero min-h-screen bg-base-200" data-testid="start-menu">
       <div class="hero-content text-center">
         <div class="max-w-md">
           <!-- Title -->
@@ -83,6 +83,28 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
               </button>
             {/if}
           </div>
+
+          <!-- C-405 AC-4: Advanced entry for the world-generation preview -->
+          <details class="mt-8 text-left">
+            <summary
+              class="text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer select-none"
+            >
+              Advanced
+            </summary>
+            <div class="mt-3 flex flex-col gap-2 w-64 mx-auto">
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                onclick={() => viewModel.startWorldGeneration()}
+              >
+                World Generation (Preview)
+              </button>
+              <p class="text-[11px] text-base-content/40 leading-snug">
+                Generates a world preview that is not yet playable — used to prototype story
+                content.
+              </p>
+            </div>
+          </details>
         </div>
       </div>
     </div>

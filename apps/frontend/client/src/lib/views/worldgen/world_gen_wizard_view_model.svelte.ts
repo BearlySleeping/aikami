@@ -15,7 +15,14 @@ import {
 } from '@aikami/frontend/services';
 import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
-import { WorldGenSchema } from '$lib/data/ai_prompts/world_gen_schema';
+import {
+  WorldGenHudWidgetsStageSchema,
+  WorldGenLocationsStageSchema,
+  WorldGenNpcsStageSchema,
+  WorldGenPartyArcsStageSchema,
+  WorldGenSchema,
+  WorldGenSettingStageSchema,
+} from '$lib/data/ai_prompts/world_gen_schema';
 import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
 import {
   campaignService,
@@ -125,6 +132,49 @@ const GENERATING_STEP_INDEX = 3;
 
 /** Maximum auto-retries on LLM failure before showing error. */
 const MAX_RETRIES = 3;
+
+// ---------------------------------------------------------------------------
+// C-405 AC-5: parallel generation stages
+// ---------------------------------------------------------------------------
+//
+// Dependency graph (written down before parallelizing — OQ-3):
+//   setting | npcs | locations | hudWidgets  — mutually independent
+//   partyArcs                                 — DEPENDS on npcs: arcs reference
+//                                               NPC names as questGivers, so
+//                                               the arcs call runs only after
+//                                               the NPC roster resolves.
+
+/** The five generation stages. */
+type GenerationStage = 'setting' | 'npcs' | 'locations' | 'hudWidgets' | 'partyArcs';
+
+/** Per-stage TypeBox schema used for LLM structured-output validation. */
+const STAGE_SCHEMAS: Record<GenerationStage, Record<string, unknown>> = {
+  setting: WorldGenSettingStageSchema,
+  npcs: WorldGenNpcsStageSchema,
+  locations: WorldGenLocationsStageSchema,
+  hudWidgets: WorldGenHudWidgetsStageSchema,
+  partyArcs: WorldGenPartyArcsStageSchema,
+} as const;
+
+/** Human-readable label for each stage (used in stage prompts). */
+const STAGE_LABELS: Record<GenerationStage, string> = {
+  setting: 'the world name and description',
+  npcs: 'the NPC roster',
+  locations: 'the location list',
+  hudWidgets: 'the HUD widget blueprints',
+  partyArcs: 'the party story arcs',
+} as const;
+
+/** Minimal JSON shape hint embedded in each stage prompt. */
+const STAGE_SHAPE_HINTS: Record<GenerationStage, string> = {
+  setting: '{ "worldName": "...", "worldDescription": "..." }',
+  npcs: '{ "npcs": [ { "name": "...", "race": "...", "class": "...", "role": "...", "description": "...", "personality": "..." } ] }',
+  locations: '{ "locations": [ "...", "...", "..." ] }',
+  hudWidgets:
+    '{ "hudWidgets": [ { "slot": "...", "label": "...", "icon": "...", "defaultVisibility": true } ] }',
+  partyArcs:
+    '{ "partyArcs": [ { "chapter": "...", "description": "...", "objectives": [ "..." ], "questGivers": [ "<NPC name from the roster>" ] } ] }',
+} as const;
 
 /** Fallback step label if not found. */
 const FALLBACK_LABEL = 'Unknown';
@@ -467,19 +517,35 @@ export class WorldGenWizardViewModel
   /**
    * Calls the LLM to generate a world from current inputs.
    * On failure, triggers auto-retry logic.
+   * C-405 AC-5: independent stages (setting, npcs, locations, hudWidgets) are
+   * issued concurrently; partyArcs run after npcs resolves.
    */
   private async _performGeneration(): Promise<void> {
     try {
       const input = this._buildInput();
-      const prompt = this._assembleGmPrompt();
 
-      const rawOutput = await this._callLlm(input, prompt);
+      // Stage A — mutually independent sections, issued concurrently.
+      const [settingRaw, npcsRaw, locationsRaw, hudWidgetsRaw] = await Promise.all([
+        this._generateStage(input, 'setting'),
+        this._generateStage(input, 'npcs'),
+        this._generateStage(input, 'locations'),
+        this._generateStage(input, 'hudWidgets'),
+      ]);
 
-      if (!rawOutput) {
-        throw new Error('LLM returned empty response');
-      }
+      // Stage B — party arcs reference NPC names as quest-givers, so they
+      // must wait for the NPC roster before resolving.
+      const npcNames = (Array.isArray(npcsRaw.npcs) ? npcsRaw.npcs : []).map(
+        (npc: unknown) => (npc as { name?: unknown }).name as string,
+      );
+      const arcsRaw = await this._generateStage(input, 'partyArcs', npcNames);
 
-      const parsed: WorldGenOutput = JSON.parse(rawOutput);
+      const parsed = this._mergeStages({
+        settingRaw,
+        npcsRaw,
+        locationsRaw,
+        hudWidgetsRaw,
+        arcsRaw,
+      });
 
       if (!parsed.worldName || !parsed.worldDescription || !Array.isArray(parsed.npcs)) {
         throw new Error('LLM response missing required fields');
@@ -543,16 +609,21 @@ export class WorldGenWizardViewModel
 
   /**
    * Calls the LLM to generate a world.
-   * Routes through textGenerationService.extractStructure() with the
-   * TypeBox WorldGenSchema for structured output validation.
-   * In the dev sandbox, this is overridden to return mock data.
+   * C-405 AC-5: generation is split into stages; `schema` selects the
+   * per-stage TypeBox schema for structured output validation. The dev
+   * sandbox overrides this method with a fixed signature and returns the
+   * full mock output — each stage parser extracts its own section from it.
    */
-  protected async _callLlm(_input: WorldGenInput, prompt: string): Promise<string | undefined> {
+  protected async _callLlm(
+    _input: WorldGenInput,
+    prompt: string,
+    schema: Record<string, unknown> = WorldGenSchema as unknown as Record<string, unknown>,
+  ): Promise<string | undefined> {
     this.debug('_callLlm:calling-textGenerationService');
 
     try {
       const result = await textGenerationService.extractStructure({
-        schema: WorldGenSchema as unknown as Record<string, unknown>,
+        schema,
         schemaName: 'WorldGenOutput',
         prompt,
         systemPrompt: WORLD_GEN_SYSTEM_PROMPT,
@@ -568,6 +639,78 @@ export class WorldGenWizardViewModel
       this.error('_callLlm:failed', { error });
       throw error;
     }
+  }
+
+  /**
+   * Runs one generation stage: assembles the stage prompt, calls the LLM with
+   * the stage schema, and parses the JSON response. Throws 'LLM returned
+   * empty response' when the LLM yields nothing — the same contract the
+   * retry logic in {@link _performGeneration} already handles.
+   */
+  private async _generateStage(
+    input: WorldGenInput,
+    stage: GenerationStage,
+    npcNames?: string[],
+  ): Promise<Record<string, unknown>> {
+    const prompt = this._assembleStagePrompt(input, stage, npcNames);
+    const rawOutput = await this._callLlm(input, prompt, STAGE_SCHEMAS[stage]);
+
+    if (!rawOutput) {
+      throw new Error('LLM returned empty response');
+    }
+
+    return JSON.parse(rawOutput) as Record<string, unknown>;
+  }
+
+  /**
+   * Assembles a stage-specific prompt. For partyArcs, the resolved NPC roster
+   * is embedded so questGivers reference real NPC names.
+   */
+  private _assembleStagePrompt(
+    input: WorldGenInput,
+    stage: GenerationStage,
+    npcNames?: string[],
+  ): string {
+    const lines = [WORLD_GEN_SYSTEM_PROMPT, '', '## User Input', JSON.stringify(input, null, 2)];
+
+    if (stage === 'partyArcs') {
+      lines.push('', '## NPC Roster (already generated)', JSON.stringify(npcNames ?? [], null, 2));
+      lines.push('The questGivers array MUST contain only names from this roster.');
+    }
+
+    lines.push(
+      '',
+      `## Task`,
+      `Generate ONLY ${STAGE_LABELS[stage]} for this world. Do NOT generate any other section.`,
+      '',
+      '## Response',
+      `Return ONLY valid JSON matching this shape: ${STAGE_SHAPE_HINTS[stage]}. No markdown fences, no explanations.`,
+    );
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Merges the per-stage results into a full WorldGenOutput.
+   * Runtime validation of the merged shape happens in _performGeneration.
+   */
+  private _mergeStages(options: {
+    settingRaw: Record<string, unknown>;
+    npcsRaw: Record<string, unknown>;
+    locationsRaw: Record<string, unknown>;
+    hudWidgetsRaw: Record<string, unknown>;
+    arcsRaw: Record<string, unknown>;
+  }): WorldGenOutput {
+    const { settingRaw, npcsRaw, locationsRaw, hudWidgetsRaw, arcsRaw } = options;
+
+    return {
+      worldName: String(settingRaw.worldName ?? ''),
+      worldDescription: String(settingRaw.worldDescription ?? ''),
+      npcs: Array.isArray(npcsRaw.npcs) ? npcsRaw.npcs : [],
+      locations: Array.isArray(locationsRaw.locations) ? locationsRaw.locations : [],
+      partyArcs: Array.isArray(arcsRaw.partyArcs) ? arcsRaw.partyArcs : [],
+      hudWidgets: Array.isArray(hudWidgetsRaw.hudWidgets) ? hudWidgetsRaw.hudWidgets : [],
+    } as WorldGenOutput;
   }
 }
 

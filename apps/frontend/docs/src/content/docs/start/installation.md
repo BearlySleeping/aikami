@@ -118,3 +118,17 @@ However you install it, campaigns, saves, and chat history live in a local
 Turso (libSQL) database on your machine — that's the source of truth, not a
 server-side copy. Firebase (auth and optional cloud sync) layers on top and is
 never a boot dependency: the game plays and saves fine without ever signing in.
+
+## Starting a campaign
+
+Press **New Game** and you go straight to character creation — no AI
+world-generation wait. When more than one adventure is installed you first
+pick one from the adventure list (each pack ships its own map and quests);
+with a single adventure installed the picker is skipped. After you create
+or pick a hero you land directly in the world.
+
+A separate **Advanced → World Generation (Preview)** entry on the start screen
+lets you prototype AI-generated settings. It produces a world preview for
+story inspiration — it is **not playable yet** (the generated map compiler is
+still in progress); the playable world always comes from the authored
+adventure pack you selected.

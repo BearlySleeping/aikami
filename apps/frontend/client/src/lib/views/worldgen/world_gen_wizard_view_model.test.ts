@@ -10,8 +10,10 @@
 // Contract: C-233
 
 import { describe, expect, test } from 'bun:test';
+import type { WorldGenInput } from '@aikami/types';
 import {
   getWorldGenWizardViewModel,
+  WorldGenWizardViewModel,
   type WorldGenWizardViewModelOptions,
 } from './world_gen_wizard_view_model.svelte.ts';
 
@@ -284,6 +286,117 @@ describe('WorldGenWizardViewModel — C-233', () => {
       expect(prompt).toContain('Heroic');
       expect(prompt).toContain('master world-builder');
       expect(prompt).toContain('## User Input');
+    });
+  });
+
+  // ── C-405 AC-5: parallel generation ──────────────────────────────────
+
+  describe('parallel generation (C-405 AC-5)', () => {
+    /** Compact valid full-world mock that every stage parser can extract from. */
+    const MockFullOutput = JSON.stringify({
+      worldName: 'Duskhollow',
+      worldDescription:
+        'Duskhollow is a lantern-lit frontier town in a perpetual twilight valley, where the ember-crowned mountains swallow the sun by midday.',
+      npcs: [
+        {
+          name: 'Maren',
+          race: 'Human',
+          class: 'Innkeeper',
+          role: 'Quest Giver',
+          description: 'A weathered innkeeper with a knowing smile and a ledger full of secrets.',
+          personality: 'Hospitable but sharp-tongued, she sizes up every traveler within seconds.',
+        },
+        {
+          name: 'Thorn',
+          race: 'Elf',
+          class: 'Ranger',
+          role: 'Ally',
+          description: 'A quiet elf ranger whose cloak is stitched with dried silverleaf.',
+          personality: 'Speaks in short sentences and trusts actions over words.',
+        },
+        {
+          name: 'Grimble',
+          race: 'Gnome',
+          class: 'Tinkerer',
+          role: 'Merchant',
+          description: 'A goggle-wearing gnome surrounded by humming brass contraptions.',
+          personality: 'Bubbly and distractible, he will trade anything for rare cogs.',
+        },
+      ],
+      locations: ['The Ember Market', 'Sunken Chapel', 'Ashfall Bridge', 'Cinder Mines'],
+      partyArcs: [
+        {
+          chapter: 'Chapter 1: The Fading Ward',
+          description:
+            'Maren tasks the party with rekindling the wardstone before the valley dims.',
+          objectives: ['Find the wardstone', 'Collect three ember shards', 'Return to Maren'],
+          questGivers: ['Maren'],
+        },
+      ],
+      hudWidgets: [
+        { slot: 'top-left', label: 'Ember Compass', icon: 'compass', defaultVisibility: true },
+      ],
+    });
+
+    test('independent stages are issued concurrently, arcs after npcs', async () => {
+      let activeCalls = 0;
+      let maxConcurrent = 0;
+
+      class RecordingViewModel extends WorldGenWizardViewModel {
+        protected override async _callLlm(
+          _input: WorldGenInput,
+          _prompt: string,
+          _schema?: Record<string, unknown>,
+        ): Promise<string | undefined> {
+          activeCalls++;
+          maxConcurrent = Math.max(maxConcurrent, activeCalls);
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          activeCalls--;
+          return MockFullOutput;
+        }
+      }
+
+      const vm = RecordingViewModel.create({
+        className: 'WorldGenConcurrencyTest',
+        initialInputs: DEFAULT_INPUTS,
+      });
+
+      await vm.generateWorld();
+
+      // 4 independent stages overlap (concurrent); the 5th (partyArcs) runs
+      // only after the NPC roster resolves, so it never raises the max.
+      expect(maxConcurrent).toBe(4);
+      expect(vm.isGenerating).toBe(false);
+      expect(vm.currentStep).toBe('preview');
+      expect(vm.worldOutput?.worldName).toBe('Duskhollow');
+      expect(vm.worldOutput?.npcs).toHaveLength(3);
+      expect(vm.worldOutput?.partyArcs?.[0]?.questGivers).toContain('Maren');
+      expect(vm.worldOutput?.locations).toHaveLength(4);
+      expect(vm.worldOutput?.hudWidgets).toHaveLength(1);
+    });
+
+    test('a failed stage propagates the empty-response error into retry state', async () => {
+      class FailingViewModel extends WorldGenWizardViewModel {
+        protected override async _callLlm(
+          _input: WorldGenInput,
+          _prompt: string,
+          _schema?: Record<string, unknown>,
+        ): Promise<string | undefined> {
+          return undefined;
+        }
+      }
+
+      const vm = FailingViewModel.create({
+        className: 'WorldGenFailureTest',
+        initialInputs: DEFAULT_INPUTS,
+      });
+
+      await vm.generateWorld();
+
+      expect(vm.isGenerating).toBe(false);
+      expect(vm.generationError).toBe('LLM returned empty response');
+      expect(vm.retriesRemaining).toBe(0);
+      expect(vm.worldOutput).toBeUndefined();
     });
   });
 });

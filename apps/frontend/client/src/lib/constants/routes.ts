@@ -72,6 +72,12 @@ export const routes = {
     routeId: '/setup',
     type: 'public',
   },
+  worldgen: {
+    getPath: () => '/worldgen',
+    queryParameters: undefined,
+    routeId: '/worldgen',
+    type: 'public',
+  },
   personaCreate: {
     getPath: () => '/personas/create',
     queryParameters: undefined as
