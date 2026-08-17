@@ -34,6 +34,16 @@ import type { SaveSlotInfo } from '$types';
 
 export type StartViewModelOptions = BaseViewModelOptions;
 
+/**
+ * Where "Start campaign" sends the player, resolved from existing state.
+ * C-405: the default path must never route through the world-generation
+ * wizard — the generated world is a preview, not a playable map (issue #81).
+ */
+type NewCampaignDestination =
+  | { readonly kind: 'onboarding'; readonly contentPackId: string }
+  | { readonly kind: 'persona_picker'; readonly contentPackId: string }
+  | { readonly kind: 'game'; readonly contentPackId: string };
+
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
@@ -90,6 +100,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-334 AC-5: Declines recovery — clears the session marker silently. */
   declineRecovery(): Promise<void>;
+
+  /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
+  startWorldGeneration(): Promise<void>;
 
   // ── Pack Browser (C-345) ──
 
@@ -244,8 +257,17 @@ class StartViewModel
 
   /** @inheritdoc */
   async startNewGame(): Promise<void> {
-    // Campaign generation is beta; default to Emberwatch directly.
-    await this._proceedWithPack('emberwatch');
+    // C-405 AC-3: route through the pack browser — it shows the picker when
+    // multiple packs are installed and proceeds directly for a single pack.
+    await this.openPackBrowser();
+  }
+
+  /** @inheritdoc */
+  async startWorldGeneration(): Promise<void> {
+    await routerService.goToRoute('worldgen', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
   }
 
   /** @inheritdoc */
@@ -357,7 +379,7 @@ class StartViewModel
 
   /**
    * Returns the number of saved characters in localStorage.
-   * Used to determine the New Game flow: 0→/setup, 1→/game, 2+→/characters.
+   * Used to determine the New Game flow: 0→onboarding, 1→/game, 2+→/personas.
    */
   private _getCharacterCount(): number {
     try {
@@ -489,70 +511,101 @@ class StartViewModel
   }
 
   /**
+   * Resolves where a new campaign should send the player, based on the
+   * number of existing characters. C-405: the zero-character branch targets
+   * persona creation (onboarding), never the world-generation wizard.
+   */
+  private _resolveNewCampaignDestination(packId: string): NewCampaignDestination {
+    const characterCount = this._getCharacterCount();
+
+    if (characterCount === 1) {
+      return { kind: 'game', contentPackId: packId };
+    }
+
+    if (characterCount > 1) {
+      return { kind: 'persona_picker', contentPackId: packId };
+    }
+
+    return { kind: 'onboarding', contentPackId: packId };
+  }
+
+  /**
    * Proceeds with campaign creation using the given pack ID.
-   * Handles existing-character branching from the original startNewGame logic.
+   * The resolved NewCampaignDestination is the single routing decision —
+   * character-count branching lives only in _resolveNewCampaignDestination.
+   * C-405: the onboarding branch routes to persona creation, not /setup.
    */
   private async _proceedWithPack(packId: string): Promise<void> {
     try {
-      // Check for existing characters from previous sessions
-      const characterCount = this._getCharacterCount();
+      const destination = this._resolveNewCampaignDestination(packId);
+      this.debug('_proceedWithPack:destination', {
+        kind: destination.kind,
+        contentPackId: destination.contentPackId,
+      });
 
-      if (characterCount === 1) {
-        // One character — load it directly into /game with this pack
-        inventoryService.reset();
-        worldStateService.reset();
-        playerStateService.reset();
-        equipmentService.reset();
-        gameModeService.reset();
+      switch (destination.kind) {
+        case 'game': {
+          // One character — load it directly into /game with this pack
+          inventoryService.reset();
+          worldStateService.reset();
+          playerStateService.reset();
+          equipmentService.reset();
+          gameModeService.reset();
 
-        try {
-          const stored = localStorage.getItem('aikami-characters');
-          if (stored) {
-            const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-            if (characters.length > 0) {
-              try {
-                await personaService.setActivePersona(characters[0].persona.id);
-              } catch {
-                // Non-critical
+          try {
+            const stored = localStorage.getItem('aikami-characters');
+            if (stored) {
+              const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
+              if (characters.length > 0) {
+                try {
+                  await personaService.setActivePersona(characters[0].persona.id);
+                } catch {
+                  // Non-critical
+                }
               }
             }
+          } catch (error) {
+            this.warn('_proceedWithPack:persona-set-failed', error);
           }
-        } catch (error) {
-          this.warn('_proceedWithPack:persona-set-failed', error);
+
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+          campaignService.completeSetup();
+          await routerService.goToRoute('game', {
+            queryParameters: undefined,
+            pathParameters: undefined,
+          });
+          return;
         }
 
-        await campaignService.startNewCampaign({ contentPackId: packId });
-        campaignService.completeSetup();
-        await routerService.goToRoute('game', {
-          queryParameters: undefined,
-          pathParameters: undefined,
-        });
-        return;
+        case 'persona_picker': {
+          // Multiple characters — create campaign, let user choose character
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+          await routerService.goToRoute('personas', {
+            queryParameters: undefined,
+            pathParameters: undefined,
+          });
+          return;
+        }
+
+        case 'onboarding': {
+          // Zero characters — go to persona creation (onboarding) with the pack
+          // selected. C-405 AC-1: this must NOT pass through the world-generation
+          // wizard; the onboarding coordinator is the default destination.
+          inventoryService.reset();
+          worldStateService.reset();
+          playerStateService.reset();
+          equipmentService.reset();
+          gameModeService.reset();
+
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+
+          await routerService.goToRoute('personaCreate', {
+            queryParameters: { onboarding: '1' },
+            pathParameters: undefined,
+          });
+          return;
+        }
       }
-
-      if (characterCount > 1) {
-        // Multiple characters — create campaign, let user choose character
-        await campaignService.startNewCampaign({ contentPackId: packId });
-        await routerService.goToRoute('personas', {
-          queryParameters: undefined,
-          pathParameters: undefined,
-        });
-        return;
-      }
-
-      // Zero characters — go to character creation with pack selected
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
-
-      await campaignService.startNewCampaign({ contentPackId: packId });
-
-      await routerService.goToRoute('setup', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
     } catch (error) {
       if (isAiTextProviderRequiredError(error)) {
         this.warn('_proceedWithPack:no-text-provider', { error: String(error) });
