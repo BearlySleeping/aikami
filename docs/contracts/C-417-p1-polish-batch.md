@@ -2,7 +2,7 @@
 id: C-417
 title: "P1 Polish Batch — Equipment Sprite Sync, Lighting Readability, Capability Correctness, Dialogue UI, Persona Preview"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-403, C-404, C-406, C-407, C-408); re-verified against main 2026-08-17"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -18,13 +18,13 @@ created_at: "2026-08-17"
 | Field | Value |
 |---|---|
 | **Source** | `docs/contracts/MVP_BACKLOG.md` seeds C-403, C-404, C-406, C-407, C-408 (`mvp-assessment-2026-08-16.md`), re-verified against `main` 2026-08-17 after C-400/C-401/C-402 landed |
-| **Target** | `apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts`; `packages/frontend/engine/src/environment/`; `apps/frontend/client/src/lib/views/capability/`; `apps/frontend/client/src/lib/views/game/ui/dialogue_overlay.svelte`; `apps/frontend/client/src/lib/views/character/persona/create/` |
+| **Target** | `apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts`; `packages/frontend/engine/src/environment/environment_ubo.ts` + `packages/frontend/engine/src/systems/environment_system.ts`; `apps/frontend/client/src/lib/views/capability/`; `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte`; `apps/frontend/client/src/lib/views/character/persona/create/` |
 | **Priority** | P1 — MVP coherence and polish, sequenced after the P0 block (C-400/401/402/405) |
 | **Dependencies** | C-400 (landed — unified LPC resolver), C-401 (landed — streaming dialogue) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.0.1 |
 
 This contract absorbs five originally-separate backlog seeds (C-403, C-404,
 C-406, C-407, C-408) into one file per explicit user direction to reduce
@@ -79,8 +79,10 @@ rather than copied verbatim from the seed.
   save/reload, confirm it survives.
 - **Existing implementation to reuse**: the full chain listed above — this is
   a verify-and-close-the-gap task, not a from-scratch wiring task.
-- **Baseline tests**: `equipment_service.svelte.ts` unit tests (if present),
-  `game_world.test.ts` coverage of `_mergeEquipmentRecipes`.
+- **Baseline tests**: `apps/frontend/client/src/lib/services/game/equipment_service.test.ts`
+  exists (verified 2026-08-17). No test currently covers
+  `_mergeEquipmentRecipes` — `packages/frontend/engine/src/__tests__/game_world.test.ts`
+  does not reference it — so AC-1's regression spec is the first coverage.
 
 ### Feature 2 — Ambient lighting and map readability (absorbs seed C-404)
 
@@ -107,20 +109,27 @@ rather than copied verbatim from the seed.
 
 ### Feature 3 — `/capability` correctness and polish (absorbs seed C-406)
 
-- **Current behavior**: `capability_view_model.svelte.ts:103` sets
-  `voiceStatus: 'detected'` as a literal initial-state default, unchanged from
-  the seed. `_seedDetectedConnections` (lines 397-443) creates connections
-  with `source: 'detected'` at line 483.
+- **Current behavior**: `capability_view_model.svelte.ts:106` sets
+  `voiceStatus: 'detected'` as a literal initial-state default (its text/image
+  siblings are `'pending'`), unchanged from the seed.
+  `_seedDetectedConnections` (lines 405-475) creates connections with
+  `source: 'detected'` at line 507.
 - **Nuance found during re-verification**: `_seedDetectedConnections` is only
   invoked from `startDetection()` (line 231) using the **real** result of
-  `capabilityService.detect()` — not the literal default at line 103.
+  `capabilityService.detect()` — not the literal default at line 106.
   `capability_service.svelte.ts:47-71` performs genuine concurrent probes via
   `aiGatewayService.detect(...)`. So today, the literal default is dead
   initial state that the current UI path does not surface as a false
   positive. It remains a latent risk: any future code path that reads
   `snapshot.voiceStatus` before `startDetection()` completes would see a
-  false `'detected'`. The fix (explicit `unknown` initial state) is still
-  correct; the severity is lower than the seed implied.
+  false `'detected'`. The fix (explicit non-`detected` initial state matching
+  the text/image siblings) is still correct; the severity is lower than the
+  seed implied. **Note:** the shared `DetectionStatusSchema` in
+  `packages/shared/schemas/src/lib/capability.ts` defines
+  `pending | detected | not_found | configured | error | skipped` — there is
+  no `unknown`/`unavailable`/`probing` status in this codebase. The correct
+  pre-detection default is the existing `'pending'` literal, not a new
+  status value.
 - **Reproduction**: with no local voice engine running, inspect
   `capabilityViewModel.snapshot.voiceStatus` immediately after construction
   and before `startDetection()` resolves.
@@ -151,7 +160,8 @@ described and one applies to a different element than named.
 - **Portrait art direction — seed's premise is false.** Both `npcAvatarUrl`
   and `playerAvatarUrl` resolve exclusively through pre-rendered portrait
   busts in `npc_avatar_catalog.ts` (`resolveNpcAvatarUrl` /
-  `resolvePlayerAvatarUrl`, lines 101-184). The catalog's own header comment
+  `resolvePlayerAvatarUrl`, lines 101-184) — lives at
+  `apps/frontend/client/src/lib/data/npc_avatar_catalog.ts`. The catalog's own header comment
   states the in-world LPC spritesheet "is NEVER used as a portrait avatar."
   There is no raw-LPC-crop code path in this view to be inconsistent with an
   AI-generated one. **Dropped from scope as a bug fix**; recorded as an Open
@@ -224,9 +234,9 @@ After this contract:
 - **Time/latency target**: N/A for lighting/capability/persona (visual and
   correctness changes, not perf-critical paths); equipment sprite update
   within one rendered frame of the equip action.
-- **Offline/degraded behavior**: capability probes must resolve to `unknown`
-  or `unavailable`, never a false `detected`, when no local engine is
-  reachable.
+- **Offline/degraded behavior**: capability probes must never report a false
+  `detected` when no local engine is reachable; pre-detection state stays at
+  the existing `pending` status until a probe result lands.
 - **Production journey enabled**: gear changes read visually during play; the
   night portion of the day/night cycle stops being a readability regression;
   first-run capability detection is trustworthy; dialogue is fully navigable
@@ -241,7 +251,7 @@ After this contract:
 | Torso/feet zero-out | `game_boot_service.svelte.ts:1296-1297`, `game_engine_service.svelte.ts:893-894` | **verify intent, dedupe** (coordinate with C-418 Feature C) |
 | Diurnal ambient interpolation | `environment_ubo.ts`, `environment_system.ts:73-79` | **modify** — raise night floor, decouple interiors |
 | Capability probing | `capability_service.svelte.ts:47-71` | **reuse** — probe logic is correct |
-| Capability initial state | `capability_view_model.svelte.ts:103` | **modify** — remove literal `'detected'` default |
+| Capability initial state | `capability_view_model.svelte.ts:106` | **modify** — remove literal `'detected'` default, use `'pending'` |
 | Suggestion chip row | `dialogue_overlay.svelte:524-564` | **modify** — fix overflow, keep intentType emoji mapping |
 | Chip emoji-by-intent | `dialogue_overlay.svelte:546-558` | **reuse** — extend only if leftover hardcoded emoji found |
 | LPC preview component | `views/character/lpc_preview/` | **reuse** — already embedded in onboarding; embed in companion flow too |
@@ -284,9 +294,9 @@ re-verification on 2026-08-17.
   must not require per-map special-casing — it should be a property the
   content pack manifest or map data can declare generically.
 - **Feature 3**: every capability status field must derive from an explicit
-  probe result (`unknown | probing | detected | unavailable`), never a
-  literal default. `_seedDetectedConnections` must only run after a
-  confirmed probe.
+  probe result (shared `DetectionStatus` values: `pending | detected |
+  not_found | configured | error | skipped`), never a literal `detected`
+  default. `_seedDetectedConnections` must only run after a confirmed probe.
 - **Feature 4**: `suggestion-chips` overflow fix should apply the same
   pattern already used successfully for `cyoa-choices` (full-width vertical
   stacking or wrapping) rather than inventing a new layout primitive.
@@ -297,15 +307,15 @@ re-verification on 2026-08-17.
 ## State & Data Models
 
 ```ts
-/** Explicit capability probe state — replaces the literal 'detected' default. */
-type CapabilityProbeStatus = 'unknown' | 'probing' | 'detected' | 'unavailable';
+/** Pre-detection state matches the text/image siblings — no literal 'detected'. */
+// The status union is the EXISTING shared DetectionStatusSchema
+// (packages/shared/schemas/src/lib/capability.ts):
+//   'pending' | 'detected' | 'not_found' | 'configured' | 'error' | 'skipped'
+// Consume it via `DetectionStatus` from '@aikami/types' — do NOT introduce a
+// new status union or schema (Pillar 2: shared schemas are the single source).
 
-/** A capability snapshot field, one per modality (text/image/voice). */
-type CapabilitySnapshot = {
-  readonly textStatus: CapabilityProbeStatus;
-  readonly imageStatus: CapabilityProbeStatus;
-  readonly voiceStatus: CapabilityProbeStatus; // was a literal 'detected'
-};
+// Fix: capability_view_model.svelte.ts:106 changes the literal default
+//   voiceStatus: 'detected'  →  voiceStatus: 'pending'
 ```
 
 No new persisted schema for the other four features — they are rendering,
@@ -313,9 +323,10 @@ layout, and routing changes over existing data shapes.
 
 ## Quality Requirements
 
-- **Offline/degraded mode**: capability probes must default to `unknown`
-  with no network/engine present (Feature 3); dialogue chip layout must not
-  depend on network state (Feature 4).
+- **Offline/degraded mode**: capability probes must stay `pending` (the
+  existing pre-detection status) with no network/engine present, and only
+  transition to `detected` on a confirmed probe (Feature 3); dialogue chip
+  layout must not depend on network state (Feature 4).
 - **Accessibility/input**: TTS toggle needs an `aria-label` (Feature 4);
   suggestion chips must remain keyboard-reachable after the overflow fix.
 - **Performance budget**: N/A for all five — none are on a hot path.
@@ -408,11 +419,12 @@ outdoor clock
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Visual | client visual suite | N/A | Filled during verification |
+| AC-2 | Visual | extend `apps/e2e/src/visual/suites/environment.visual.ts` (noon + midnight cases) and/or `emberwatch.visual.ts` | `/game` (Emberwatch village, inn, merchant_shop) | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run client:test-visual`
-- Integration: manual clock advance in dev sandbox, compare screenshots.
+- Moon Task: `moon run e2e:run-visual-tests` (filter: `--suite environment`)
+- Integration: manual clock advance in dev sandbox (`?gameHour=`), compare
+  screenshots.
 - E2E / Visual: **Visual**: two cases per map (noon, midnight); score 90+:
   props/NPCs distinguishable from terrain, interiors readable regardless of
   outdoor time.
@@ -476,13 +488,19 @@ controls
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit | `dialogue_overlay` component test | `/game` dialogue overlay | Filled during verification |
+| AC-5 | E2E | `apps/e2e/tests/client/dialogue_tts_toggle.spec.ts` (asserts `aria-label` + visible label on the TTS toggle) | `/game` dialogue overlay | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run client:test-unit`
-- Integration: axe/a11y check on the dialogue overlay.
+- Moon Task: `moon run e2e:test-client -- tests/client/dialogue_tts_toggle.spec.ts`
+- Integration: axe/a11y check on the dialogue overlay — `@axe-core/playwright`
+  is already a dependency of `apps/e2e`.
 - E2E / Visual: **Visual**: confirm styled toggle in the suggestion/action bar
   screenshot.
+
+**Note**: there is no component-test infrastructure in `apps/frontend/client`
+(no `@testing-library/svelte`; unit tests are service/ViewModel `.test.ts`
+only), so the `aria-label` assertion belongs in the e2e project, not a unit
+spec.
 
 **Watch Points**:
 - Keep the fix scoped to labelling/styling — do not touch TTS behaviour
@@ -513,15 +531,18 @@ controls
 ## Implementation Sequence
 
 1. **Phase 1 (Verify & Data)** — Run the equipment sync repro (AC-1) and
-   record whether it passes as-is. Add `CapabilityProbeStatus` and rewire
-   `capability_view_model.svelte.ts:103`. Confirm the noon default and write
-   down the night-ambient floor change.
+   record whether it passes as-is. Change the literal
+   `voiceStatus: 'detected'` default at `capability_view_model.svelte.ts:106`
+   to `'pending'` (no new status type — reuse the existing shared
+   `DetectionStatus` union). Confirm the noon default and write down the
+   night-ambient floor change.
 2. **Phase 2 (Integration)** — Fix `suggestion-chips` overflow, label the TTS
    toggle, wire `LpcPreviewView` into `persona_create_view.svelte` following
    the onboarding pattern, decouple interior lighting from the world clock.
 3. **Phase 3 (Validation)** — Add the five new/extended specs listed in the
    Evidence Matrices, run `moon run client:test-unit`,
-   `moon run e2e:test`, `moon run client:test-visual`, `bun run typecheck`.
+   `moon run e2e:test-client`, `moon run e2e:run-visual-tests`,
+   `bun run typecheck`.
 
 ## Edge Cases & Gotchas
 
@@ -569,6 +590,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-08-17 | Initial draft merging seeds C-403, C-404, C-406, C-407, C-408. Features 1 and 5 re-scoped from "build the wiring" to "verify/retarget" after re-checking current code against seeds written 2026-08-16, before C-400/401/402 landed. Feature 4 dropped the CYOA-choice-overflow and portrait-unification items after confirming both premises are false today; retargeted the overflow fix at suggestion chips. | — |
+| 2.0.1 | 2026-08-17 | Critic review corrections (no scope change): Feature 3 aligned with the real shared `DetectionStatusSchema` union (`pending \| detected \| not_found \| configured \| error \| skipped`) — the proposed `unknown/probing/unavailable` union does not exist in this codebase, and the fix is the literal `'pending'` default, not a new status type; corrected capability line refs (103→106, 483→507); corrected `dialogue_overlay` path (lives under `views/game/ui/overlays/dialogue/`) and `npc_avatar_catalog` path (`lib/data/`); replaced nonexistent `moon run client:test-visual` with `moon run e2e:run-visual-tests`; AC-5 evidence moved from impossible client component test to e2e spec (`dialogue_tts_toggle.spec.ts`, `@axe-core/playwright` lives in `apps/e2e`); corrected Feature 1 baseline (no test currently covers `_mergeEquipmentRecipes`). | critic review |
 
 ## Promotion Lifecycle
 
