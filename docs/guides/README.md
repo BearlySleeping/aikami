@@ -11,6 +11,7 @@ These files were consolidated from the root-level `docs/` directory:
 | `AI_RESEARCH.md` | AI tooling research and evaluation |
 | [Architecture](../architecture/architecture.md) | System architecture overview |
 | `CI_CD.md` | CI/CD pipeline setup |
+| [`database.md`](database.md) | Local Postgres, Neon connection strings, Drizzle migrations |
 | `CODING_STANDARDS.md` | Coding standards and conventions |
 | `FEATURES.md` | Feature specifications |
 | `PLAYWRIGHT.md` | Playwright E2E testing setup |
