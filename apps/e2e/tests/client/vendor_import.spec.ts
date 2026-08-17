@@ -37,18 +37,22 @@ test.describe('C-419 vendor + persona import (production VendorView)', () => {
   test('AC-4: inventory items render art instead of a uniform 📦', async ({ page }) => {
     // The dev catalog (rustySword, ironSword, steelSword, woodenShield,
     // leatherArmor, ironArmor, healthPotion, manaPotion) declares lpcAssetId
-    // for gear items — art <img> tags should appear for them once the LPC
-    // manifest resolves.
+    // for gear items — cropped sprite frames should appear once the LPC
+    // sheets load (rendered as a background-image div, not an <img>).
     await expect(page.locator('.badge-warning', { hasText: '🪙' })).toBeVisible({
       timeout: 15_000,
     });
 
-    // Wait for the manifest-backed art to resolve (async fetch).
+    // Wait for at least one item icon to render its background art (the
+    // LpcItemIcon component sets background-size after the sheet loads).
     await expect
-      .poll(async () => await page.locator('.vendor-item-icon img').count(), {
-        timeout: 15_000,
-        intervals: [500, 1000, 2000],
-      })
+      .poll(
+        async () =>
+          await page
+            .locator('.vendor-item-icon div[style*="background-image"]')
+            .count(),
+        { timeout: 15_000, intervals: [500, 1000, 2000] },
+      )
       .toBeGreaterThan(0);
 
     // Items that have art must NOT show the generic 📦 in their icon cell.

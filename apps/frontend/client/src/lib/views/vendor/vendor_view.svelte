@@ -1,4 +1,5 @@
 <script lang="ts">
+import LpcItemIcon from '$lib/components/game/lpc_item_icon.svelte';
 // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { logger } from '$logger';
 import { gameModeService } from '$services';
@@ -438,11 +439,7 @@ const _itemIcon = (itemId: string): string => {
                       ? 'bg-primary/10'
                       : 'bg-base-300'}"
                   >
-                    {#if artUrl}
-                      <img src={artUrl} alt="" class="h-full w-full object-cover" loading="lazy">
-                    {:else}
-                      <span class="text-lg">{icon}</span>
-                    {/if}
+                    <LpcItemIcon {artUrl} fallbackEmoji={icon} />
                   </div>
                   <div class="flex-1 min-w-0">
                     <h4 class="text-sm font-semibold text-base-content truncate">{item.label}</h4>
