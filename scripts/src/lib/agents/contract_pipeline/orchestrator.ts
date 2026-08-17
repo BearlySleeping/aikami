@@ -1550,6 +1550,15 @@ export const runContractPipeline = async (options: {
             }
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
+            // 🔴 Clear HERE, not only in the implement-stage launch code below —
+            // a crash/restart between this writeManifest and the next loop
+            // iteration would otherwise persist a 'change' decision that the
+            // implement stage never got to consume, and the NEXT review-stage
+            // entry replays it via `manifest.reviewDecision ?? await
+            // waitForReviewDecision(...)`, skipping a real captain entirely
+            // (observed on C-419: no PR ever got created, orchestrator crashed
+            // looking for one).
+            manifest.reviewDecision = undefined;
             // Status tracked in run manifest — don't touch main contract.
             manifest = transition({ manifest, next: 'implement' });
           } else {
@@ -1632,6 +1641,10 @@ export const runContractPipeline = async (options: {
           }
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
+          // 🔴 Same defense-in-depth as the isBlockedReview 'change' branch
+          // above — clear immediately rather than relying solely on the
+          // implement-stage launch code to do it on the next iteration.
+          manifest.reviewDecision = undefined;
           // Status tracked in run manifest — don't touch main contract.
           manifest = transition({ manifest, next: 'implement' });
         } else {
