@@ -108,7 +108,12 @@ class CapabilityViewModel
     isComplete: false,
     textStatus: 'pending',
     imageStatus: 'pending',
-    voiceStatus: 'detected',
+    // C-417 AC-3: never default to 'detected' — every capability status must
+    // derive from an explicit probe result (shared DetectionStatus union).
+    // The text/image siblings already use 'pending'; voice was the lone
+    // literal 'detected' outlier. Pre-detection state is 'pending' until
+    // startDetection() lands a real probe result.
+    voiceStatus: 'pending',
     summary: 'Connect an AI provider to get started.',
   });
 

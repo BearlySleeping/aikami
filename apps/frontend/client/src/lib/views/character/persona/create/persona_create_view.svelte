@@ -1,6 +1,12 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
+import { onDestroy } from 'svelte';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
+import {
+  getLpcPreviewViewModel,
+  type LpcPreviewViewModelInterface,
+} from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
 import type { PersonaCreateViewModelInterface } from './persona_create_view_model.svelte.ts';
 
 type Props = {
@@ -8,6 +14,23 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+// ── Inline LPC preview (C-417 AC-6) ───────────────────────────────────
+// Same component + recipe-sync shape the onboarding appearance step uses:
+// a dedicated preview ViewModel whose recipes follow the extracted
+// lpcRecipe reactively. Replaces the old “View LPC Sprite” /dev/lpc tab.
+const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
+  className: 'LpcPreviewViewModel',
+});
+
+onDestroy(() => {
+  previewVm.dispose();
+});
+
+$effect(() => {
+  void viewModel.lpcRecipe;
+  previewVm.setRecipes(viewModel.lpcPreviewRecipes);
+});
 
 let messagesContainer = $state<HTMLDivElement>();
 
@@ -216,18 +239,15 @@ function handleAvatarUpload(event: Event) {
                 {/if}
               </div>
 
-              <!-- LPC Sprite Preview -->
-              {#if viewModel.lpcPreviewUrl}
+              <!-- LPC Sprite Preview (C-417 AC-6) — inline, no /dev tab -->
+              {#if viewModel.lpcRecipe}
                 <div class="divider text-xs text-base-content/40 my-0">LPC Sprite</div>
-                <a
-                  href={viewModel.lpcPreviewUrl}
-                  target="_blank"
-                  rel="noopener"
-                  class="btn btn-xs btn-outline btn-accent"
-                >
-                  🎮 View LPC Sprite
-                </a>
-                <p class="text-[10px] text-base-content/40">Opens in LPC debugger</p>
+                <div class="w-full">
+                  <LpcPreviewView viewModel={previewVm} />
+                </div>
+                <p class="text-[10px] text-base-content/40">
+                  Preview updates live from the extracted appearance recipe
+                </p>
               {/if}
             </div>
           </div>

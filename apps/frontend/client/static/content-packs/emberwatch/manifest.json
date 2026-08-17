@@ -477,14 +477,16 @@
       "name": "The Guttering Candle Inn",
       "defaultSpawnId": "inn_entrance",
       "defaultX": 256,
-      "defaultY": 320
+      "defaultY": 320,
+      "interior": true
     },
     "merchant_shop": {
       "file": "maps/merchant_shop.json",
       "name": "Mara's Provisions",
       "defaultSpawnId": "shop_entrance",
       "defaultX": 256,
-      "defaultY": 320
+      "defaultY": 320,
+      "interior": true
     }
   },
   "npcs": {
