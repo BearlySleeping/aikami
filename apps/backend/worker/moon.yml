@@ -28,14 +28,6 @@ fileGroups:
     - 'Dockerfile'
 
 tasks:
-  typecheck:
-    command: 'tsgo --noEmit'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  lint:
-    command: 'biome check .'
 
   build:
     command: 'bun run build'

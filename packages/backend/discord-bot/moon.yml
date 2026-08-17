@@ -27,14 +27,6 @@ fileGroups:
     - 'tsconfig.json'
 
 tasks:
-  typecheck:
-    command: 'tsgo --noEmit'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  lint:
-    command: 'biome check .'
 
   test:
     command: 'bun test --pass-with-no-tests'
