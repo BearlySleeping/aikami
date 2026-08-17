@@ -2,7 +2,7 @@
 id: C-417
 title: "P1 Polish Batch — Equipment Sprite Sync, Lighting Readability, Capability Correctness, Dialogue UI, Persona Preview"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-403, C-404, C-406, C-407, C-408); re-verified against main 2026-08-17"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -605,3 +605,61 @@ evidence given their visual nature.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented all five C-417 features. Feature 1 (equipment sprite sync) was verified as already-wired (C-374 chain intact) — added the first regression coverage for `_mergeEquipmentRecipes` (engine unit tests) plus an e2e spec + before/after visual evidence proving the sprite updates on equip/unequip. Feature 2 raised the night ambient floor (new `COLOR_NIGHT_FLOOR` clamp in the diurnal interpolator) and made interior lighting clock-independent via a generic manifest-declared `interior` flag projected through `PackConfig` and consumed by the engine tilemap tint. Feature 3 replaced the literal `voiceStatus: 'detected'` pre-detection default with `'pending'` and pinned it with unit tests. Feature 4 changed the suggestion-chip row from `overflow-x-auto` to `flex-wrap` and added a `?manyChips=1` deterministic overflow hook; Feature 5 labelled/styled the TTS toggle with an accessible name. Feature 6 embedded the production `LpcPreviewView` inline in the companion persona TWEAK phase (same recipe-sync shape as onboarding) and removed the `/dev/lpc` tab link. Five new e2e specs (10 tests) added; two production-path visual-suite cases added (noon 95/100, midnight 90/100).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Existing wiring verified end-to-end; `_mergeEquipmentRecipes` regression tests (engine) + `equipment_visual.spec.ts` (2 tests) + before/after screenshots (95/100 each) showing chainmail → plate torso change. No production code change needed — verification-only as the contract anticipated. |
+| AC-2 | ✅ | Night ambient floor (`COLOR_NIGHT_FLOOR`, clamped in `_interpolateDiurnal`) + interior independence (`interior` manifest flag → `PackConfig` → `COLOR_INTERIOR` tilemap tint). Engine unit tests, manifest audit test, production visual cases (noon 95/100, midnight 90/100). Interior mechanism covered by unit/schema/manifest tests; production interior screenshot attempted but wandering-NPC collision made deterministic walking to the inn unreliable — recorded as a residual visual-verification gap (code path identical to the verified outdoor tint path). |
+| AC-3 | ✅ | Literal `'detected'` default → `'pending'`; 2 new unit tests assert pre-detection state + no auto-seed; `/capability` production screenshot validated 100/100. `_seedDetectedConnections` was already gated on a real probe result (no change needed). |
+| AC-4 | ✅ | `suggestion-chips` row now `flex-wrap` (same wrapping pattern as `cyoa-choices`); `?manyChips=1` sandbox hook; `dialogue_chips.spec.ts` asserts 8 chips wrap with no horizontal overflow at 1280×720 and 800×600; screenshot validated 95/100. |
+| AC-5 | ✅ | TTS toggle wrapped in a labelled control: visible "🔊 TTS" label + `aria-label="Toggle text-to-speech"` + `toggle-primary` styling; `dialogue_tts_toggle.spec.ts` (3 tests incl. axe-core a11y check on the overlay) — no serious/critical violations. |
+| AC-6 | ✅ | `LpcPreviewView` embedded inline in the TWEAK phase avatar card with `$effect`-driven recipe sync from `lpcRecipe` via new `lpcPreviewRecipes` getter (mirrors onboarding); `/dev/lpc` link removed (getter kept — no other consumers after grep); dev mock now seeds an LPC recipe; `persona_create_preview.spec.ts` (2 tests) asserts inline canvas + no `/dev/lpc` link + no popup; screenshot validated 95/100. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/__tests__/equipment_merge.test.ts` | AC-1 regression: `_mergeEquipmentRecipes` replace/append/revert semantics (6 tests). |
+| `packages/frontend/engine/src/__tests__/environment_lighting.test.ts` | AC-2: night-floor clamp + noon baseline + interior constant (4 tests). |
+| `apps/e2e/tests/client/equipment_visual.spec.ts` | AC-1 e2e: equip/unequip Iron Armor state change + DEF badge delta (2 tests). |
+| `apps/e2e/tests/client/dialogue_chips.spec.ts` | AC-4 e2e: 8 chips wrap with no horizontal overflow at 1280×720 + 800×600 (2 tests). |
+| `apps/e2e/tests/client/dialogue_tts_toggle.spec.ts` | AC-5 e2e: accessible name, visible label, keyboard toggle, axe-core overlay audit (3 tests). |
+| `apps/e2e/tests/client/persona_create_preview.spec.ts` | AC-6 e2e: inline preview renders, no `/dev/lpc` link/popup (2 tests). |
+| `apps/e2e/screenshots/c417_capability.png`, `c417_dialogue_chips_tts.png`, `c417_equipment_before.png`, `c417_equipment_after_equip.png`, `c417_persona_inline_preview.png` | Phase-3 production-path visual evidence (validated 95–100/100 via `ai_validate_image`). |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/environment/environment_ubo.ts` | AC-2: added `COLOR_NIGHT_FLOOR` and `COLOR_INTERIOR` constants. |
+| `packages/frontend/engine/src/systems/environment_system.ts` | AC-2: clamp diurnal ambient to the night floor. |
+| `packages/frontend/engine/src/game_world.ts` | AC-2: `_isInteriorMap` from `packConfig.interior`; tilemap tint uses `COLOR_INTERIOR` on interiors; import. |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | AC-2: `interior?: boolean` on `ContentPackMapEntrySchema` and `PackConfigSchema`. |
+| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | AC-2: `"interior": true` on `inn` + `merchant_shop`. |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | AC-2: `_buildPackConfig` accepts `mapId` and projects the manifest `interior` flag; both call sites pass the map id. |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts` | AC-3: pre-detection `voiceStatus` default `'detected'` → `'pending'`. |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts` | AC-3: 2 new tests (pre-detection pending, no auto-seed). |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | AC-4/5: chips row `flex-wrap`; TTS toggle labelled + styled. |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | AC-4: `?manyChips=1` mock produces 8 chips. |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts` | AC-6: `lpcPreviewRecipes` getter (slot-ordered `LpcLayerRecipe[]`); interface updated. |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte` | AC-6: inline `LpcPreviewView` + `$effect` sync + `onDestroy` dispose; `/dev/lpc` link removed. |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.dev.svelte.ts` | AC-6: mock generate seeds `lpcRecipe` so the inline preview renders in the dev sandbox. |
+| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | AC-2: production `/game` noon + midnight readability cases (2 cases). |
+| `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts` | AC-2: manifest interior-declaration fixture test. |
+
+### Deviations from Spec
+- **AC-2 interior visual evidence**: the Evidence Matrix expects production `/game` interior screenshots for `inn`/`merchant_shop`. The inn/shop are reachable only by walking through the village, and the wandering elder NPC's collision blocks deterministic Playwright walking. Interior independence is instead verified by (a) engine unit tests on the interior constant + floor, (b) schema support for the generic `interior` flag, (c) manifest audit asserting `inn`/`merchant_shop` declare `interior: true`, and (d) the tint code path (identical to the visually-verified outdoor path). Recommend a follow-up to capture an interior screenshot via a spawn hook if full visual evidence is required.
+- **OQ-5 (generation parallelism)**: not addressed — `generateCharacter` calls `_extractCharacter` once (single call); there is no sequential multi-call to parallelize. Recorded rather than expanded.
+- **OQ-1 (torso/feet zero-out intent)**: not re-litigated — the C-374 comment + `_mergeEquipmentRecipes` overlay mechanism confirm the zero-out is intentional (equipment owns torso/feet). Recorded.
+- Pre-existing failures not introduced by this contract: `client:test-unit` `GameBootService AC-4 cancellation` (1), emberwatch visual suite requiredTrueFields (3: terrainTransitionsLookNatural, overheadOccludesPlayer, allNpcsHaveBodies), and `e2e:test` site specs (site dev server cannot start in this worktree — `PUBLIC_MODE`/`PUBLIC_APP_ID` missing for the Astro env; site is not among the registered herdr services).
+
+### Test Results
+- Unit (client): 1815/1817 pass (2 new capability tests), 1 pre-existing failure, 0 new failures.
+- Unit (engine): 1008 pass / 0 fail (997 baseline + 11 new).
+- E2E (new specs): 10/10 pass.
+- Visual: production emberwatch — C-417 noon 95/100 (PASS), C-417 midnight 90/100 (PASS); 3 pre-existing requiredTrueFields failures unchanged.
+- Baseline: client 1 pre-existing failure, engine 0 — no new failures introduced.
