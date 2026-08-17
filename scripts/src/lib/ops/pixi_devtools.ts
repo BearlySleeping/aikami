@@ -38,19 +38,25 @@ const findManifestDir = (root: string): string | null => {
     if (!dir) {
       continue;
     }
-    try {
-      const entries = execSync(
-        `find "${dir}" -name manifest.json -printf '%h\n' -quit 2>/dev/null`,
-        {
-          encoding: 'utf-8',
-          cwd: root,
-        },
-      ).trim();
-      if (entries) {
-        return entries;
+    // `find -printf` is GNU-only; on Windows it resolves to the built-in
+    // find.exe (incompatible syntax, hangs waiting on stdin), so skip the
+    // shellout there and go straight to the Node walk below.
+    if (process.platform !== 'win32') {
+      try {
+        const entries = execSync(
+          `find "${dir}" -name manifest.json -printf '%h\n' -quit 2>/dev/null`,
+          {
+            encoding: 'utf-8',
+            cwd: root,
+            timeout: 5_000,
+          },
+        ).trim();
+        if (entries) {
+          return entries;
+        }
+      } catch {
+        // find may fail on some dirs, skip
       }
-    } catch {
-      // find may fail on some dirs, skip
     }
     // Fallback: manual walk using Node
     try {
@@ -73,6 +79,40 @@ const findManifestDir = (root: string): string | null => {
 // ── Download and unpack ────────────────────────────────────────────────────
 
 /**
+ * Windows equivalent of downloadAndUnpack's python3 path. `python3` on
+ * Windows is often just the Microsoft Store app-execution alias stub (not a
+ * real interpreter), so use PowerShell's built-in Invoke-WebRequest /
+ * Expand-Archive instead — no extra dependency required.
+ */
+const downloadAndUnpackWindows = (): string | null => {
+  const zipPath = join(tmpdir(), 'aikami-pixi-devtools.zip');
+
+  try {
+    execSync(
+      `powershell -NoProfile -NonInteractive -Command "$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '${PIXI_DEVTOOLS_RELEASE_URL}' -OutFile '${zipPath}'; Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${PIXI_DEVTOOLS_DIR}' -Force"`,
+      { encoding: 'utf-8', timeout: 60_000 },
+    );
+  } catch (e) {
+    error(`Download/unpack failed: ${e}`);
+    return null;
+  } finally {
+    try {
+      rmSync(zipPath, { force: true });
+    } catch {}
+  }
+
+  const manifestDir = findManifestDir(PIXI_DEVTOOLS_DIR);
+  if (manifestDir && existsSync(join(manifestDir, 'manifest.json'))) {
+    writeFileSync(PIXI_DEVTOOLS_VERSION_FILE, 'installed', 'utf-8');
+    ok(`PixiJS DevTools installed to ${manifestDir}`);
+    return manifestDir;
+  }
+
+  warn('Devtools archive unpacked but manifest.json not found');
+  return null;
+};
+
+/**
  * Download the latest PixiJS DevTools from GitHub releases and unpack to
  * the destination directory. Returns the path to the extension directory
  * (where manifest.json lives), or null on failure.
@@ -85,6 +125,10 @@ const downloadAndUnpack = (): string | null => {
   mkdirSync(PIXI_DEVTOOLS_DIR, { recursive: true });
 
   info('Downloading PixiJS DevTools from GitHub releases…');
+
+  if (process.platform === 'win32') {
+    return downloadAndUnpackWindows();
+  }
 
   // Write a small Python script to a temp file for clean execution
   const scriptPath = join(tmpdir(), 'aikami-pixi-devtools-download.py');
