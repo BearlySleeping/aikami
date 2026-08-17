@@ -5,7 +5,7 @@ import { AIKAMI_PNG_CHUNK_KEYWORD } from '@aikami/constants';
 import type { AikamiCharacterCard, Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
-import { isV1Card, isV2Card } from './character_validator.ts';
+import { isV1Card, isV2Card, isV3Card } from './character_validator.ts';
 import { extractTextChunks, isPng } from './png_utils.ts';
 
 export type CharacterImportResult = {
@@ -20,6 +20,11 @@ const parseBase64Json = (options: { base64: string }) => {
     const decoded = new TextDecoder().decode(bytes);
     const json = JSON.parse(decoded);
 
+    // C-419: V3 cards arrive in the `ccv3` chunk; their data shape is the
+    // same `Character` record as V2 (V3-only fields ride in `data.assets`).
+    if (isV3Card(json)) {
+      return json.data;
+    }
     if (isV2Card(json)) {
       return json.data;
     }
@@ -144,8 +149,13 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
     }
   }
 
-  if (textChunks.ccv3) {
-    logger.debug('character-importer', { message: 'CCV3 chunk found, attempting parse' });
+  // C-419: Parse V3 character cards (tEXt chunk with ccv3 keyword).
+  // Previously only detected with a debug log — now parsed like V2 `chara`.
+  if (!character && textChunks.ccv3) {
+    character = parseBase64Json({ base64: textChunks.ccv3 });
+    if (character) {
+      logger.debug('character-importer', { message: 'ccv3 chunk parsed' });
+    }
   }
 
   if (!character && textChunks.chara) {
@@ -210,6 +220,15 @@ export const importFromJson = async (options: { file: File }): Promise<Character
 
   if (!character && isV2Card(json)) {
     character = json.data as Character;
+  } else if (!character && isV3Card(json)) {
+    // C-419: V3 JSON cards parse identically to V2; `data.assets` stays in
+    // the character's extensions bag for downstream compilation.
+    const data = (json as { data: Record<string, unknown> }).data;
+    const assets = (json as { data: { assets?: Record<string, unknown> } }).data.assets;
+    character = data as Character;
+    if (assets && character) {
+      character.extensions = { ...character.extensions, assets };
+    }
   } else if (isV1Card(json)) {
     character = convertV1ToV2({ data: json });
   } else if ((json as Record<string, unknown>).data) {
