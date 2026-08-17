@@ -10,7 +10,11 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
+import {
+  createLpcPipeline,
+  projectLpcCatalog,
+  zeroEquipmentOwnedAppearanceSlots,
+} from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -1290,11 +1294,9 @@ class GameBootService
       appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
     }
 
-    // C-374: torso (index 2) and feet (index 4) are equipment-owned — force
-    // them out of the base appearance so unequipping reveals the bare body
-    // and the base outfit renders via the equipment service instead.
-    appearanceLayers[2] = 0;
-    appearanceLayers[4] = 0;
+    // C-374: torso (index 2) and feet (index 4) are equipment-owned — forced
+    // out here so unequipping reveals the bare body (C-417 OQ-1 resolved).
+    zeroEquipmentOwnedAppearanceSlots(appearanceLayers);
     playerData.appearanceLayers = appearanceLayers;
 
     // C-374: seed the base outfit (chainmail + boots by default) into the

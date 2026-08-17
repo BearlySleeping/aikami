@@ -188,7 +188,10 @@ const onMaskChange = (e: Event) => {
                 </select>
               </label>
               {#if supportsSampler || enginePending}
-                <label class="form-control" title={enginePending ? 'Waiting for engine detection…' : undefined}>
+                <label
+                  class="form-control"
+                  title={enginePending ? 'Waiting for engine detection…' : undefined}
+                >
                   <div class="label py-0.5">
                     <span class="label-text text-xs font-semibold">Sampler</span>
                   </div>
@@ -218,7 +221,10 @@ const onMaskChange = (e: Event) => {
                 </select>
               </label>
               {#if supportsSeed || enginePending}
-                <label class="form-control" title={enginePending ? 'Waiting for engine detection…' : undefined}>
+                <label
+                  class="form-control"
+                  title={enginePending ? 'Waiting for engine detection…' : undefined}
+                >
                   <div class="label py-0.5">
                     <span class="label-text text-xs font-semibold">Seed (-1 = random)</span>
                   </div>
@@ -330,7 +336,10 @@ const onMaskChange = (e: Event) => {
               ></textarea>
             </label>
             {#if supportsNegative || enginePending}
-              <label class="form-control w-full" title={enginePending ? 'Waiting for engine detection…' : undefined}>
+              <label
+                class="form-control w-full"
+                title={enginePending ? 'Waiting for engine detection…' : undefined}
+              >
                 <div class="label">
                   <span class="label-text font-semibold text-base-content/70">Negative Prompt</span
                   ><span class="label-text-alt text-base-content/40">things to avoid</span>

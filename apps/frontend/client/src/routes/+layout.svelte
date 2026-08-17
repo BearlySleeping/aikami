@@ -1,6 +1,9 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/+layout.svelte
-import '../app.css';
+// `$appCss` is an absolute alias (svelte.config.js) so the same layout
+// resolves correctly from the filtered production routes copy at
+// `.svelte-kit/routes-prod` (C-418 Feature B).
+import '$appCss';
 
 // Required side-effect import for dynamic shader
 // compilation under strict CSP. Must evaluate before any PixiJS

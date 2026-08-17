@@ -1,6 +1,7 @@
 // apps/frontend/site/astro.config.ts
 /** biome-ignore-all lint/style/useNamingConvention: We are setting environment variables to uppercase */
 
+import { fileURLToPath } from 'node:url';
 import type { Mode } from '@aikami/types';
 import mdx from '@astrojs/mdx';
 import partytown from '@astrojs/partytown';
@@ -202,5 +203,15 @@ export default defineConfig({
   vite: {
     // biome-ignore lint/suspicious/noExplicitAny: Vite version mismatch in monorepo
     plugins: [tailwindcss()] as any[],
+    resolve: {
+      alias: {
+        '@aikami/frontend/theme': fileURLToPath(
+          new URL('../../../packages/frontend/theme/src/index.ts', import.meta.url),
+        ),
+        '@aikami/frontend/theme/': fileURLToPath(
+          new URL('../../../packages/frontend/theme/src/lib/', import.meta.url),
+        ),
+      },
+    },
   },
 });

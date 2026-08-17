@@ -39,9 +39,8 @@ export type AnalyticServiceOptions = BaseFrontendClassOptions & {
 
 export type AnalyticServiceInterface = BaseFrontendClassInterface & {
   /**
-   * @param eventName The functions.httpsCallable function from the firebase
-   *   api
-   * @param eventParameters The request data to send to the cloud function
+   * @param eventName The analytics event to log.
+   * @param eventParameters The event parameters to send with the event.
    */
   logEvent<T extends AnalyticsEventName>(
     eventName: T,

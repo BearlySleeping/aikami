@@ -19,6 +19,7 @@ dependsOn:
   - 'schemas'
   - 'types'
   - 'utils'
+  - 'frontend-theme'
 
 fileGroups:
   sources:

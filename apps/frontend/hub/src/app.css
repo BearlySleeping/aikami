@@ -1,9 +1,8 @@
 /* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
 @import "tailwindcss";
+@import "@aikami/frontend/theme/brand_daisy.css";
 @plugin "daisyui" {
-  themes:
-    light --default,
-    dark --prefersdark;
+  themes: false;
 }
 
 @theme {

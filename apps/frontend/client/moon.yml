@@ -18,6 +18,7 @@ dependsOn:
   - 'parser'
   - 'frontend-utils'
   - 'frontend-services'
+  - 'frontend-theme'
   - 'schemas'
   - 'types'
   - 'constants'
@@ -45,6 +46,10 @@ tasks:
   dev:
     command: 'bun run dev'
     preset: 'server'
+    env:
+      # C-418 Feature B: dev server must keep the (dev) sandbox routes even
+      # when CI sets NODE_ENV=production (the gate strips them otherwise).
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   build:
     command: 'bun run build'
     inputs:
@@ -55,6 +60,9 @@ tasks:
       # moon's cache key can't cover those files, and a stale cache shipped
       # old shared-code to prod. Fresh build = few seconds, always correct.
       cache: false
+      # C-418 Feature B decision (M5): staging builds intentionally SHIP the
+      # (dev) sandbox routes (AC-2 excludes only production). Set
+      # AIKAMI_INCLUDE_DEV_ROUTES=false to strip them from a staging build.
     outputs:
       - '.svelte-kit'
       - 'build'
@@ -69,6 +77,8 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
+    env:
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
     command: 'bun run test:unit'
     inputs:
@@ -77,6 +87,8 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
+    env:
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'

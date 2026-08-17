@@ -226,6 +226,36 @@ jobs:
           cache-from: type=gha,scope=aikami-client
           cache-to: type=gha,mode=max,scope=aikami-client
 
+      # ── C-418 Feature F: one-command installer bundle ─────────────────
+      # Compiles `stack-init` to a single-file Bun binary and packs the
+      # compose topology + .env.example into local-stack-<version>.tar.gz
+      # (+ SHA256SUMS), then uploads them to the GitHub release tagged
+      # `local-stack-<version>` (the install.sh default download source).
+      # Runs on every publish (workflow_dispatch / push), creating the
+      # release if it does not exist yet — the tag is never gated on the
+      # run ref, because the workflow's only trigger is dispatch on a
+      # branch (H3).
+      - name: Build the one-command installer bundle
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          sh scripts/bundle_stack.sh
+          ls -lh dist/local-stack-*.tar.gz dist/SHA256SUMS
+
+      - name: Upload installer bundle to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          version=$(jq -r .version package.json)
+          tag="local-stack-${version}"
+          # Create the release on first publish; --clobber makes re-runs
+          # idempotent. The tag/asset naming matches install.sh exactly.
+          gh release view "${tag}" >/dev/null 2>&1 \
+            || gh release create "${tag}" --title "Aikami Local Stack ${version}" --generate-notes
+          gh release upload "${tag}" "dist/local-stack-${version}.tar.gz" dist/SHA256SUMS --clobber
+
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
       # Runs AFTER all three images are published. AC-5 names aikami-client
       # and aikami-voice: no weights in any layer, and the compressed image

@@ -47,6 +47,10 @@ const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
 export default defineConfig(({ mode }) => {
+  // Expose the Vite mode to svelte.config.js (loaded later by the SvelteKit
+  // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
+  // `(dev)` route group from production builds without a runtime check.
+  process.env.AIKAMI_BUILD_MODE = mode;
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
   // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline
   // runs so this app's Firebase Auth emulator proxy targets its own
@@ -211,6 +215,15 @@ export default defineConfig(({ mode }) => {
                 target: `http://localhost:${PORTS.emulator.image}`,
                 changeOrigin: true,
                 rewrite: (path) => path.replace(/^\/api\/image/, ''),
+              },
+              // C-418 Feature D: proxy hub-hosted auth endpoints (formerly
+              // Firebase Callable Functions) to the hub's dev server. The
+              // hub's Elysia app lives under its own /api prefix, so strip
+              // the /api/hub prefix after forwarding.
+              '/api/hub': {
+                target: `http://localhost:${PORTS.emulator.hub + emulatorPortOffset}`,
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/api\/hub/, '/api'),
               },
               '/api/kokoro-tts': {
                 target: 'http://localhost:8880',

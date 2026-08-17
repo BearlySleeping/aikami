@@ -93,3 +93,20 @@ tasks:
       # CLI-only interactive/flag-driven command; never part of `moon ci`.
       # NB: moon 2.4.6 refuses `moon run` for runInCI:false tasks, so the
       # root `stack` script drives the package.json `init` script directly.
+
+  # C-418 Feature F: one-command installer assets.
+  # bundle — compiles `stack-init` to a single-file Bun binary and packs the
+  # release tarball consumed by install.sh (AC-6).
+  bundle:
+    command: 'sh scripts/bundle_stack.sh'
+    options:
+      cache: false
+      runInCI: true
+
+  # test-install — self-test for install.sh against a local bundle (AC-6
+  # integration hook; no Docker, no network).
+  test-install:
+    command: 'sh scripts/install.test.sh'
+    options:
+      cache: false
+      runInCI: true

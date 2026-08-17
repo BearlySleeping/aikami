@@ -276,8 +276,7 @@ describe('SdCppEngine', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () =>
-            Promise.resolve({ id: 'job-noimg', state: 'completed', result: 'queued' }),
+          json: () => Promise.resolve({ id: 'job-noimg', state: 'completed', result: 'queued' }),
         } as Response);
       }
       return Promise.resolve({
@@ -414,10 +413,7 @@ describe('SdCppEngine', () => {
       } as Response);
     });
 
-    const first = busyEngine.generate(
-      { positivePrompt: 'first' },
-      { signal: controller.signal },
-    );
+    const first = busyEngine.generate({ positivePrompt: 'first' }, { signal: controller.signal });
 
     await expect(busyEngine.generate({ positivePrompt: 'second' })).rejects.toThrow(/single-slot/);
 

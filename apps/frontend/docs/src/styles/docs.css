@@ -1,40 +1,44 @@
 /* apps/frontend/docs/src/styles/docs.css
  *
- * Starlight theme overrides — aligns the docs site with the landing page's
- * "rune purple" accent (see apps/frontend/site/src/lib/styles/global.css).
- * Only the accent + gray scales are overridden; Starlight's own layout,
+ * Starlight theme overrides — aligns the docs site with the shared Aikami
+ * brand palette (packages/frontend/theme, C-418 Feature A).
+ *
+ * All colour values come from the shared brand tokens; this file only wires
+ * Starlight's `--sl-color-*` variables to them. Starlight's own layout,
  * spacing, and dark/light switching are left untouched.
  */
 
-:root {
-  /* Accent — rune purple, matching the landing page's --rune. */
-  --sl-color-accent-low: #241a4a;
-  --sl-color-accent: #6d28d9;
-  --sl-color-accent-high: #c4b5fd;
+@import "@aikami/frontend/theme/brand_tokens.css";
 
-  /* Slightly violet-tinted neutrals so the accent doesn't read as an outlier. */
-  --sl-color-white: #ffffff;
-  --sl-color-gray-1: #eceaf3;
-  --sl-color-gray-2: #c2bfcc;
-  --sl-color-gray-3: #8b879b;
-  --sl-color-gray-4: #575269;
-  --sl-color-gray-5: #383350;
-  --sl-color-gray-6: #272341;
-  --sl-color-black: #17152b;
+/* Dark theme (Starlight default) — rune purple accent on obsidian. */
+:root {
+  --sl-color-accent-low: color-mix(in oklab, var(--rune) 35%, var(--background));
+  --sl-color-accent: var(--rune);
+  --sl-color-accent-high: color-mix(in oklab, var(--rune) 80%, var(--foreground));
+
+  --sl-color-white: var(--foreground);
+  --sl-color-gray-1: color-mix(in oklab, var(--foreground) 96%, var(--background));
+  --sl-color-gray-2: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  --sl-color-gray-3: color-mix(in oklab, var(--foreground) 60%, var(--background));
+  --sl-color-gray-4: color-mix(in oklab, var(--foreground) 42%, var(--background));
+  --sl-color-gray-5: color-mix(in oklab, var(--foreground) 28%, var(--background));
+  --sl-color-gray-6: color-mix(in oklab, var(--foreground) 18%, var(--background));
+  --sl-color-black: var(--background);
 }
 
+/* Light theme — Starlight's gray ramp runs darkest-first in light mode. */
 :root[data-theme='light'] {
-  --sl-color-accent-low: #dcd3f7;
-  --sl-color-accent: #6d28d9;
-  --sl-color-accent-high: #35186b;
+  --sl-color-accent-low: color-mix(in oklab, var(--rune) 22%, var(--background));
+  --sl-color-accent: var(--rune);
+  --sl-color-accent-high: color-mix(in oklab, var(--rune) 78%, var(--foreground));
 
-  --sl-color-white: #17152b;
-  --sl-color-gray-1: #272341;
-  --sl-color-gray-2: #383350;
-  --sl-color-gray-3: #575269;
-  --sl-color-gray-4: #8b879b;
-  --sl-color-gray-5: #c2bfcc;
-  --sl-color-gray-6: #eceaf3;
-  --sl-color-gray-7: #f5f4f9;
-  --sl-color-black: #ffffff;
+  --sl-color-white: var(--foreground);
+  --sl-color-gray-1: color-mix(in oklab, var(--foreground) 18%, var(--background));
+  --sl-color-gray-2: color-mix(in oklab, var(--foreground) 28%, var(--background));
+  --sl-color-gray-3: color-mix(in oklab, var(--foreground) 42%, var(--background));
+  --sl-color-gray-4: color-mix(in oklab, var(--foreground) 60%, var(--background));
+  --sl-color-gray-5: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  --sl-color-gray-6: color-mix(in oklab, var(--foreground) 96%, var(--background));
+  --sl-color-gray-7: var(--background);
+  --sl-color-black: var(--background);
 }

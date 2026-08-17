@@ -1,0 +1,17 @@
+{
+  "name": "@aikami/frontend/theme",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./brand_tokens.css": "./src/lib/brand_tokens.css",
+    "./brand_daisy.css": "./src/lib/brand_daisy.css"
+  },
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings"
+  },
+  "dependencies": {}
+}

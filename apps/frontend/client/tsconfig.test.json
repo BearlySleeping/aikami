@@ -31,11 +31,6 @@
         "../../../packages/frontend/utils/src/lib/*",
         "../../../packages/frontend/utils/src/*"
       ],
-      "@aikami/frontend/firestore": ["../../../packages/frontend/firestore/src/index.ts"],
-      "@aikami/frontend/firestore/*": [
-        "../../../packages/frontend/firestore/src/lib/*",
-        "../../../packages/frontend/firestore/src/*"
-      ],
       "@aikami/frontend/storage": ["../../../packages/frontend/storage/src/index.ts"],
       "@aikami/frontend/storage/*": [
         "../../../packages/frontend/storage/src/lib/*",
@@ -56,10 +51,6 @@
       "@aikami/backend/auth/*": [
         "../../../packages/backend/auth/src/lib/*",
         "../../../packages/backend/auth/src/*"
-      ],
-      "@aikami/backend/firestore/*": [
-        "../../../packages/backend/firestore/src/lib/*",
-        "../../../packages/backend/firestore/src/*"
       ],
       "@aikami/backend/utils/*": [
         "../../../packages/backend/utils/src/lib/*",
