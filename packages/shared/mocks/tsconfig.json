@@ -17,8 +17,6 @@
       "@aikami/utils/*": ["../utils/src/lib/*"],
       "@aikami/backend/configs/*": ["../../backend/configs/src/lib/*"],
       "@aikami/backend/utils/*": ["../../backend/utils/src/lib/*"],
-      "@aikami/backend/firestore": ["../../backend/firestore/src/index.ts"],
-      "@aikami/backend/firestore/*": ["../../backend/firestore/src/lib/*"],
       "$env/*": ["../../../config/tsconfig/stubs/env/*"],
       "$logger": ["../logger/src/index.ts"],
       "$logger/*": ["../logger/src/lib/*"]

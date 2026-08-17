@@ -226,6 +226,29 @@ jobs:
           cache-from: type=gha,scope=aikami-client
           cache-to: type=gha,mode=max,scope=aikami-client
 
+      # ── C-418 Feature F: one-command installer bundle ─────────────────
+      # Compiles `stack-init` to a single-file Bun binary and packs the
+      # compose topology + .env.example into local-stack-<version>.tar.gz,
+      # then uploads it to the GitHub release when this run is on a version
+      # tag (the install.sh default download source).
+      - name: Build the one-command installer bundle
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          sh scripts/bundle_stack.sh
+          ls -lh dist/local-stack-*.tar.gz
+
+      - name: Upload installer bundle to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          version=$(jq -r .version package.json)
+          gh release upload "local-stack-${version}" "dist/local-stack-${version}.tar.gz" --clobber \
+            || echo "release local-stack-${version} not found — create it first (gh release create)"
+
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
       # Runs AFTER all three images are published. AC-5 names aikami-client
       # and aikami-voice: no weights in any layer, and the compressed image

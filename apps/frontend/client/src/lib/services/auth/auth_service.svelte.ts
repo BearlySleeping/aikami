@@ -19,7 +19,6 @@ import {
   type BaseFrontendClassOptions,
   type FirebaseAuthServiceInterface,
   firebaseAuthService,
-  firebaseFunctionsService,
   type SocialSignInError,
   type SocialSignInResponse,
 } from '@aikami/frontend/services';
@@ -36,6 +35,7 @@ import type {
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { analyticService } from '../analytics/analytics_service.svelte.ts';
+import { callHubAuthAction, pollHubDeviceHandoff } from '../api/hub_api_client';
 
 /**
  * Where the desktop app sends users to sign in — a normal page load of the
@@ -464,10 +464,7 @@ export class AuthService
    */
   private async _awaitDeviceHandoffToken(code: string): Promise<string | null> {
     const exchange = async (): Promise<string | null> => {
-      const { customFirebaseSignInToken } = await firebaseFunctionsService.call(
-        'poll_device_handoff',
-        { code },
-      );
+      const { customFirebaseSignInToken } = await pollHubDeviceHandoff(code);
       return customFirebaseSignInToken;
     };
 
@@ -737,7 +734,10 @@ export class AuthService
   protected async callAuthEndpoint<T extends AuthMessageType>(
     data: AuthMessageData<T>,
   ): Promise<AuthMessageResponse<T>> {
-    return await firebaseFunctionsService.call('auth', data);
+    // C-418 Feature D: the `auth` callable moved to the hub's Elysia API.
+    // Authenticated with the Firebase ID token so the hub can derive the
+    // same `currentUser` the callable context used to provide.
+    return await callHubAuthAction(data, await this.getIdToken());
   }
 
   async completeDeviceHandoff(options: {

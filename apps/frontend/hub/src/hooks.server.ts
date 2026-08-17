@@ -45,6 +45,18 @@ const enforceAppCheck = isAppCheckEnabled();
 // HTTP sink is fire-and-forget and cannot attach an App Check token.
 const appCheckExcludePaths = ['/api/internal_logging'];
 
+// C-418 Feature D: hub-hosted auth endpoints that replaced the Firebase
+// Callable Functions `auth` / `poll_device_handoff`. The client app calls
+// them cross-origin in staging/production (the client runs on Firebase
+// Hosting, the hub on Cloud Run), so CORS is allowed for first-party
+// *.bearlysleeping.com origins on exactly these two paths — never a
+// wildcard, and never on any other /api route. Credentials are NOT
+// included: the auth route authenticates via the Authorization header
+// (Firebase ID token), not cookies.
+const clientAuthApiPaths = ['/api/auth/action', '/api/auth/poll-device-handoff'];
+
+const isClientAuthPath = (pathname: string): boolean => clientAuthApiPaths.includes(pathname);
+
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
 logger.addSink(new SSRLogSink(logContextStore));
@@ -146,19 +158,23 @@ export const handle: Handle = async ({ event, resolve }) => {
     // Only /api/internal_logging gets the *.bearlysleeping.com allowance —
     // scoped narrowly so other /api/ routes don't inherit broadened CORS.
     const isLoggingEndpoint = isPathExcluded(pathname, appCheckExcludePaths);
+    const isClientAuthRoute = isClientAuthPath(pathname);
 
-    if (method === 'OPTIONS' && (allowExtensionCors || isLoggingEndpoint)) {
+    if (method === 'OPTIONS' && (allowExtensionCors || isLoggingEndpoint || isClientAuthRoute)) {
       const origin = request.headers.get('origin');
       // Only answer preflight for trusted origins — never fall back to a
       // wildcard, and omit CORS headers for disallowed origins.
       const isExtensionOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
       const isLoggingOrigin = isLoggingEndpoint && isAikamiWebOrigin(origin);
+      const isClientAuthOrigin = isClientAuthRoute && isAikamiWebOrigin(origin);
       const preflightHeaders = new Headers();
-      if (origin && (isExtensionOrigin || isLoggingOrigin)) {
+      if (origin && (isExtensionOrigin || isLoggingOrigin || isClientAuthOrigin)) {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
         preflightHeaders.set(
           'Access-Control-Allow-Headers',
-          'Content-Type, Cookie, x-aikami-session',
+          isClientAuthOrigin
+            ? 'Content-Type, Authorization, X-Firebase-AppCheck'
+            : 'Content-Type, Cookie, x-aikami-session',
         );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
         // The logging endpoint needs no cookies/credentials — only grant
@@ -196,6 +212,8 @@ export const handle: Handle = async ({ event, resolve }) => {
       response.headers.set('Access-Control-Allow-Origin', origin);
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     } else if (isLoggingEndpoint && isAikamiWebOrigin(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+    } else if (isClientAuthRoute && isAikamiWebOrigin(origin)) {
       response.headers.set('Access-Control-Allow-Origin', origin);
     }
 

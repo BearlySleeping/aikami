@@ -108,6 +108,12 @@ export default defineConfig({
   ],
 
   vite: {
+    resolve: {
+      alias: {
+        '@aikami/frontend/theme': `${monorepoRoot}packages/frontend/theme/src/index.ts`,
+        '@aikami/frontend/theme/': `${monorepoRoot}packages/frontend/theme/src/lib/`,
+      },
+    },
     server: {
       fs: {
         // Allow Vite to serve files from the monorepo root

@@ -16,6 +16,7 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+export { zeroEquipmentOwnedAppearanceSlots } from './core/appearance_layers.ts';
 export {
   createSafeRef,
   EntityGeneration,

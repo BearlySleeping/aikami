@@ -1,0 +1,97 @@
+/* packages/frontend/theme/src/lib/brand_daisy.css
+ *
+ * Aikami brand palette for daisyUI — same values as brand_tokens.css,
+ * expressed as daisyUI `--color-*` tokens (C-418 Feature A).
+ *
+ * Consumed by the client and hub apps via:
+ *
+ *   @import "@aikami/frontend/theme/brand_daisy.css";
+ *
+ * The apps keep `@plugin "daisyui" { themes: false; }` so daisyUI's
+ * components load without any stock theme; this file defines the brand
+ * theme as plain CSS custom properties (light default, dark via
+ * prefers-color-scheme), matching the previous
+ * `themes: light --default, dark --prefersdark` behaviour.
+ */
+
+/* ── Light theme (parchment / warm slate) ── */
+:root {
+  color-scheme: light;
+
+  --color-base-100: oklch(0.985 0.006 270);
+  --color-base-200: oklch(0.94 0.01 270);
+  --color-base-300: oklch(0.87 0.01 270);
+  --color-base-content: oklch(0.18 0.03 270);
+
+  --color-primary: oklch(0.52 0.22 285);
+  --color-primary-content: oklch(0.985 0.006 270);
+
+  --color-secondary: oklch(0.25 0.05 270);
+  --color-secondary-content: oklch(0.985 0.006 270);
+
+  --color-accent: oklch(0.62 0.18 48);
+  --color-accent-content: oklch(0.18 0.03 270);
+
+  --color-neutral: oklch(0.25 0.01 260);
+  --color-neutral-content: oklch(0.985 0.006 270);
+
+  --color-info: oklch(74% 0.16 232.661);
+  --color-info-content: oklch(29% 0.066 243.157);
+  --color-success: oklch(76% 0.177 163.223);
+  --color-success-content: oklch(37% 0.077 168.94);
+  --color-warning: oklch(82% 0.189 84.429);
+  --color-warning-content: oklch(41% 0.112 45.904);
+  --color-error: oklch(0.45 0.18 25);
+  --color-error-content: oklch(0.985 0.006 270);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+/* ── Dark theme (obsidian / rune-glow) ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --color-base-100: oklch(0.13 0.015 260);
+    --color-base-200: oklch(0.16 0.018 260);
+    --color-base-300: oklch(0.24 0.02 260);
+    --color-base-content: oklch(0.9 0.01 270);
+
+    --color-primary: oklch(0.65 0.22 285);
+    --color-primary-content: oklch(0.13 0.015 260);
+
+    --color-secondary: oklch(0.9 0.01 270);
+    --color-secondary-content: oklch(0.13 0.015 260);
+
+    --color-accent: oklch(0.65 0.18 48);
+    --color-accent-content: oklch(0.13 0.015 260);
+
+    --color-neutral: oklch(0.32 0.01 260);
+    --color-neutral-content: oklch(0.9 0.01 270);
+
+    --color-info: oklch(74% 0.16 232.661);
+    --color-info-content: oklch(29% 0.066 243.157);
+    --color-success: oklch(76% 0.177 163.223);
+    --color-success-content: oklch(37% 0.077 168.94);
+    --color-warning: oklch(82% 0.189 84.429);
+    --color-warning-content: oklch(41% 0.112 45.904);
+    --color-error: oklch(0.55 0.18 25);
+    --color-error-content: oklch(0.9 0.01 270);
+
+    --radius-selector: 0.5rem;
+    --radius-field: 0.25rem;
+    --radius-box: 0.5rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+  }
+}

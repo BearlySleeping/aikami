@@ -20,14 +20,18 @@ Phase 1:
 - Aikami-hosted "no setup required" pay-per-use service mode — the
   `AiProviderGateway`'s `service` adapter interface exists from C-320, but
   billing is Phase 5 work, not Phase 1.
-  🔴 **Under revision (C-413):** the Cloud Run cold-start optimization (model
-  weights in Storage instead of the Docker image) and GCP Model Garden
-  evaluation named here are recommended for **rejection**, not scheduling —
-  Cloud Run GPU cold starts (20–30 s) sit directly in the player's first
-  dialogue turn, and self-hosted inference only wins at sustained high
-  utilization. The recommendation is that `service` mode be a thin metered
-  proxy over frontier APIs. See
-  `docs/strategy/mvp-assessment-2026-08-16.md` §2.4;
+  ✅ **Resolved (C-418):** `service` mode is a thin **metered proxy over
+  Anthropic / OpenAI / Gemini** — not GCP-hosted GPUs. Cloud Run GPU (L4)
+  inference is rejected: ~$0.71/hr billed while warm, 20–30 s cold start
+  that lands in the player's first dialogue turn, and quality capped by a
+  single L4. Self-hosted inference only wins at sustained high utilization,
+  which a pre-revenue project does not have. The former
+  "Cloud Run cold-start optimization (model weights in Storage)" line item
+  is deleted rather than scheduled. Revisit only if a paying user base
+  sustains near-continuous GPU utilization or a single-hosted-model quality
+  gap becomes product-limiting. See
+  `docs/strategy/mvp-assessment-2026-08-16.md` §2.4 and
+  `docs/architecture/data-layer-target-architecture.md` D-16;
 - Data Connect migration for NPC/chat/items — Turso is the campaign-runtime
   source of truth (C-321); Data Connect is revisited only if a genuine
   dashboard/reporting/admin use case emerges;

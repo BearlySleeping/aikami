@@ -41,10 +41,12 @@
   },
   "dependencies": {
     "@aikami/backend-database": "workspace:*",
+    "@aikami/backend-auth": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
+    "@aikami/frontend/theme": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
     "@google-analytics/data": "*",
     "@google-cloud/secret-manager": "*",

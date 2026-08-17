@@ -14,6 +14,8 @@
 @import "tailwindcss";
 
 /* ── Design tokens ── */
+@import "@aikami/frontend/theme/brand_tokens.css";
+
 @theme inline {
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;
   --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
@@ -67,92 +69,6 @@
   --shadow-card-hover:
     0 8px 32px oklch(0.1 0.02 270 / 0.5), 0 2px 4px oklch(0.3 0.02 270 / 0.4),
     0 0 16px oklch(0.65 0.2 285 / 0.2);
-}
-
-/* ── Light theme (parchment / warm slate) ── */
-:root {
-  --radius: 0.5rem;
-
-  --brand: oklch(0.52 0.22 285);
-  --brand-soft: oklch(0.72 0.16 285);
-
-  --slate: oklch(0.25 0.01 260);
-  --slate-light: oklch(0.45 0.01 260);
-  --obsidian: oklch(0.12 0.01 260);
-  --ember: oklch(0.62 0.18 48);
-  --rune: oklch(0.58 0.2 285);
-  --rune-glow: oklch(0.72 0.18 285 / 0.4);
-  --parchment: oklch(0.92 0.03 85);
-  --magic-dust: oklch(0.72 0.18 285 / 0.15);
-
-  --background: oklch(0.985 0.006 270);
-  --foreground: oklch(0.18 0.03 270);
-
-  --card: oklch(0.99 0.005 270);
-  --card-foreground: oklch(0.18 0.03 270);
-  --popover: oklch(0.99 0.005 270);
-  --popover-foreground: oklch(0.18 0.03 270);
-
-  --primary: oklch(0.25 0.05 270);
-  --primary-foreground: oklch(0.985 0.006 270);
-
-  --secondary: oklch(0.94 0.01 270);
-  --secondary-foreground: oklch(0.25 0.05 270);
-
-  --muted: oklch(0.94 0.01 270);
-  --muted-foreground: oklch(0.45 0.03 270);
-
-  --accent: oklch(0.94 0.01 270);
-  --accent-foreground: oklch(0.25 0.05 270);
-
-  --destructive: oklch(0.45 0.18 25);
-  --destructive-foreground: oklch(0.985 0.006 270);
-
-  --border: oklch(0.87 0.01 270);
-  --input: oklch(0.91 0.01 270);
-  --ring: oklch(0.52 0.22 285);
-}
-
-/* ── Dark theme (obsidian / rune-glow) ── */
-.dark {
-  --brand: oklch(0.54 0.22 285);
-  --brand-soft: oklch(0.78 0.14 285);
-
-  --slate: oklch(0.32 0.01 260);
-  --slate-light: oklch(0.48 0.01 260);
-  --obsidian: oklch(0.14 0.01 260);
-  --ember: oklch(0.65 0.18 48);
-  --rune: oklch(0.65 0.22 285);
-  --rune-glow: oklch(0.6 0.2 285 / 0.5);
-  --parchment: oklch(0.85 0.04 85);
-  --magic-dust: oklch(0.68 0.18 285 / 0.2);
-
-  --background: oklch(0.13 0.015 260);
-  --foreground: oklch(0.9 0.01 270);
-
-  --card: oklch(0.16 0.018 260);
-  --card-foreground: oklch(0.9 0.01 270);
-  --popover: oklch(0.16 0.018 260);
-  --popover-foreground: oklch(0.9 0.01 270);
-
-  --primary: oklch(0.9 0.01 270);
-  --primary-foreground: oklch(0.13 0.015 260);
-
-  --secondary: oklch(0.2 0.02 260);
-  --secondary-foreground: oklch(0.9 0.01 270);
-
-  --muted: oklch(0.2 0.02 260);
-  --muted-foreground: oklch(0.65 0.03 270);
-
-  --accent: oklch(0.2 0.02 260);
-  --accent-foreground: oklch(0.9 0.01 270);
-
-  --destructive: oklch(0.55 0.18 25);
-  --destructive-foreground: oklch(0.9 0.01 270);
-
-  --border: oklch(0.24 0.02 260);
-  --input: oklch(0.24 0.02 260);
-  --ring: oklch(0.54 0.22 285);
 }
 
 /* ── Base styles ── */

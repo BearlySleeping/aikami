@@ -44,6 +44,7 @@ projects:
   frontend-ai-gateway: "packages/frontend/ai-gateway"
   frontend-storage: "packages/frontend/storage"
   frontend-configs: "packages/frontend/configs"
+  frontend-theme: "packages/frontend/theme"
 
 vcs:
   provider: "github"

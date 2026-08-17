@@ -42,11 +42,12 @@ import type {
   StackModality,
   StackPlan,
 } from '@aikami/local-ai';
-import { detectHardware, loadManifest, recommend } from '@aikami/local-ai';
+import { detectHardware, loadManifest, parseManifest, recommend } from '@aikami/local-ai';
 import { HardwareProfileSchema, StackPlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { probeOllama } from './detect_ollama.ts';
 import { cudaExtras, diffEnv, readExistingEnv, renderEnv, writeEnvAtomic } from './env_writer.ts';
+import manifestJson from './models.manifest.json';
 import { probeExecutor } from './probe_executor.ts';
 
 export type CliOptions = {
@@ -167,10 +168,16 @@ export const renderPlan = (options: {
   return out.join('\n') + '\n';
 };
 
-/** Reads the manifest from the default or provided path. */
+/** Reads the manifest from the provided path, or the embedded copy. */
 const readManifest = async (manifestPath?: string): Promise<ModelManifest> => {
-  const path = manifestPath ?? join(import.meta.dir, 'models.manifest.json');
-  return loadManifest({ executor: probeExecutor, path });
+  if (manifestPath) {
+    return loadManifest({ executor: probeExecutor, path: manifestPath });
+  }
+  // The manifest is embedded at compile time (bun build --compile) so the
+  // standalone `stack-init` binary is self-contained (C-418 Feature F);
+  // source runs resolve the same on-disk file through the import. Explicit
+  // --manifest-path still reads from disk.
+  return parseManifest(JSON.stringify(manifestJson));
 };
 
 /** Asks one yes/no question on the TTY. Returns the default when non-TTY. */

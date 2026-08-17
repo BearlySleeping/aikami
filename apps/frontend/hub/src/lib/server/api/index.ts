@@ -6,6 +6,7 @@
 // The client consumes this server with the Eden treaty client
 // (src/lib/client/services/api/internal.svelte.ts).
 
+import { handleAuthEndpoint, pollDeviceHandoff } from '@aikami/backend/auth';
 import { sessionAge } from '@aikami/backend/svelte-kit/cookies.ts';
 import { createSessionCookie, verifyIdToken } from '@aikami/backend/utils/auth.ts';
 import { AUTH_COOKIE_NAME } from '@aikami/constants';
@@ -74,6 +75,160 @@ const clearSessionCookieHeader = (existingStore: Record<string, string>): string
 const sessionRequestSchema = t.Object({
   token: t.Optional(t.String()),
 });
+
+// ─── Auth action + device handoff (C-418 Feature D) ───────────────────────
+//
+// These two routes replace the Firebase Callable Functions `auth` and
+// `poll_device_handoff` (apps/backend/firebase/src/controllers/callable/*).
+// Transport changes only — the same shared handlers are invoked, and the
+// same request/response shapes are preserved.
+
+/**
+ * POST /api/auth/action
+ *
+ * Multiplexed auth endpoint, formerly the `auth` callable. The caller's
+ * Firebase ID token is verified from the Authorization header; an anonymous
+ * caller (no header) reaches `handleAuthEndpoint` with no currentUser, which
+ * yields the same `unauthorized` result the callable produced for missing
+ * auth context. Error mapping follows the callable's `toAppError` taxonomy.
+ */
+const authActionRequestSchema = t.Object({
+  type: t.String(),
+  payload: t.Unknown(),
+});
+
+const authErrorSchema = t.Object({
+  errorType: t.String(),
+  errorMessage: t.String(),
+});
+
+const AUTH_ERROR_STATUS: Record<string, number> = {
+  'invalid-argument': 400,
+  'failed-precondition': 400,
+  unauthorized: 401,
+  'not-found': 404,
+  'already-exists': 409,
+  'resource-exhausted': 429,
+  internal: 500,
+};
+
+const extractBearerToken = (header: string | undefined): string | undefined => {
+  if (!header) {
+    return undefined;
+  }
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return match?.[1];
+};
+
+const handleAuthAction = async ({
+  body,
+  headers,
+  set,
+}: {
+  body: { type: string; payload: unknown };
+  headers: { authorization?: string };
+  set: { status: number };
+}) => {
+  if (!body || typeof body.type !== 'string') {
+    set.status = 400;
+    return { errorType: 'invalid-argument', errorMessage: 'Missing or invalid type field' };
+  }
+
+  const idToken = extractBearerToken(headers.authorization);
+  let currentUser: { id: string; email?: string } | undefined;
+  if (idToken) {
+    try {
+      const decoded = await verifyIdToken(idToken);
+      currentUser = { id: decoded.uid, email: decoded.email ?? undefined };
+    } catch {
+      logger.warn('/api/auth/action: invalid id token');
+      set.status = 401;
+      return { errorType: 'unauthorized', errorMessage: 'Invalid or expired session token' };
+    }
+  }
+
+  logger.debug('/api/auth/action', { type: body.type, authenticated: !!currentUser });
+
+  try {
+    return await handleAuthEndpoint({
+      currentUser,
+      payload: body.payload,
+      type: body.type as never,
+    });
+  } catch (error) {
+    const err = error as { errorType?: string; errorMessage?: string };
+    const errorType = err.errorType ?? 'internal';
+    set.status = AUTH_ERROR_STATUS[errorType] ?? 500;
+    logger.warn('/api/auth/action:failed', {
+      type: body.type,
+      errorType,
+      errorMessage: err.errorMessage,
+    });
+    return {
+      errorType,
+      errorMessage: err.errorMessage ?? 'Unknown error',
+    };
+  }
+};
+
+/**
+ * POST /api/auth/poll-device-handoff
+ *
+ * Unauthenticated single-use poll, formerly the `poll_device_handoff`
+ * callable. Carries over the per-instance token bucket (App Check is
+ * disabled for the Tauri client, so rate limiting is the abuse defense).
+ */
+const deviceHandoffRequestSchema = t.Object({
+  code: t.String(),
+});
+
+const deviceHandoffResponseSchema = t.Object({
+  customFirebaseSignInToken: t.Union([t.String(), t.Null()]),
+});
+
+const POLL_RATE_MAX_TOKENS = 30; // burst allowance
+const POLL_RATE_REFILL_PER_SECOND = 2; // steady-state 2 req/s
+let pollTokens = POLL_RATE_MAX_TOKENS;
+let pollLastRefill = Date.now();
+
+const tryConsumePollToken = (): boolean => {
+  const now = Date.now();
+  pollTokens = Math.min(
+    POLL_RATE_MAX_TOKENS,
+    pollTokens + ((now - pollLastRefill) / 1000) * POLL_RATE_REFILL_PER_SECOND,
+  );
+  pollLastRefill = now;
+  if (pollTokens >= 1) {
+    pollTokens -= 1;
+    return true;
+  }
+  return false;
+};
+
+const handlePollDeviceHandoff = async ({
+  body,
+  set,
+}: {
+  body: { code: string };
+  set: { status: number };
+}) => {
+  if (!body || typeof body.code !== 'string') {
+    logger.warn('/api/auth/poll-device-handoff: invalid request — missing code');
+    set.status = 400;
+    return { errorType: 'invalid-argument', errorMessage: 'Missing or invalid code field' };
+  }
+
+  if (!tryConsumePollToken()) {
+    logger.warn('/api/auth/poll-device-handoff: rate limited');
+    set.status = 429;
+    return {
+      errorType: 'resource-exhausted',
+      errorMessage: 'Too many polling requests — slow down and retry.',
+    };
+  }
+
+  return await pollDeviceHandoff({ code: body.code });
+};
 
 // ─── Handlers ────────────────────────────────────────────────────────
 
@@ -173,6 +328,14 @@ export const app = new Elysia({ prefix: '/api' })
   .post('/auth/session', handleSession, {
     body: sessionRequestSchema,
     response: t.Null(),
+  })
+  .post('/auth/action', handleAuthAction, {
+    body: authActionRequestSchema,
+    response: t.Union([authErrorSchema, t.Unknown()]),
+  })
+  .post('/auth/poll-device-handoff', handlePollDeviceHandoff, {
+    body: deviceHandoffRequestSchema,
+    response: deviceHandoffResponseSchema,
   })
   .get('/health/db', handleDbHealth, {
     response: dbHealthResponseSchema,
