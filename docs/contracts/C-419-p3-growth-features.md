@@ -2,7 +2,7 @@
 id: C-419
 title: "P3 Growth Batch — Character Card Import and Merchant UI Refinement"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-415, C-416); re-verified against main 2026-08-17"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-17"
 | **Target** | client persona/NPC import (schema TBD); `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` |
 | **Priority** | P3 — growth, after the P0/P1/P2 blocks land |
 | **Dependencies** | — |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -30,13 +30,16 @@ This contract absorbs two originally-separate backlog seeds (C-415, C-416)
 into one file per explicit user direction. Each feature below is
 independently mergeable — see [Contract Size & Split Rule](#contract-size--split-rule).
 
-**Re-verification note:** a fact-check pass on 2026-08-17 found Feature A's
-seed reference implementation no longer exists in this repository — the
-`examples/Marinara-Engine/` tree is gone, and neither `examples/` nor any
-`Marinara-Engine` directory exists anywhere in the tree. Feature A is
-reframed to reference the external SillyTavern card format directly rather
-than a now-nonexistent local reference implementation. Feature B holds as
-written, with corrected line numbers.
+**Re-verification note:** a fact-check pass on 2026-08-17 found the seed's
+cited `examples/Marinara-Engine/` files no longer exist (no `examples/` or
+`Marinara*` anywhere in the tree). Critic re-verification (2026-08-17)
+found the seed's other assumption — "no local reference to lean on" — is
+also false: a complete SillyTavern-format import pipeline (types, PNG
+`tEXt` extraction, V1/V2/RisuAI/Aikami parsing, NPC import UI) exists from
+C-246 and is in production. Feature A is reframed as an *extension* of that
+pipeline (V3 `ccv3` parsing, ability-score inference, persona-targeted
+UI), not a from-spec greenfield build. Feature B holds as written, with
+corrected line numbers and corrected test-task references.
 
 ---
 
@@ -51,15 +54,43 @@ written, with corrected line numbers.
 - **Reference implementation, corrected from the seed**: the seed pointed at
   `examples/Marinara-Engine/packages/client/src/lib/character-import.ts` and
   three sibling files (`card-asset-links.ts`, `card-version-history.ts`,
-  `character-token-count.ts`) as local code to read. **None of these exist in
-  this repository** — a full-tree glob for `examples/` and for
-  `*Marinara*` returns nothing. The only surviving trace is a stray comment,
+  `character-token-count.ts`) as local code to read. **Those specific files
+  do not exist** — a full-tree glob for `examples/` and for `*Marinara*`
+  returns nothing; the only surviving trace is a stray comment,
   `// ── Narrative Traits (Marinara-inspired) ──`, at
-  `packages/shared/schemas/src/lib/domain/character.ts:211`, suggesting
-  Marinara Engine was a design inspiration at some point, not a vendored
-  package still present to read. **Implementation must work from the public
-  SillyTavern character-card V2/V3 spec directly** — there is no local
-  reference to lean on.
+  `packages/shared/schemas/src/lib/domain/character.ts:211`. **However, a
+  complete SillyTavern-format import pipeline already exists in this repo
+  (built by C-246, completed + `integrated`)** — the seed's "no local
+  reference" framing is false and must not be treated as greenfield work:
+  - `packages/shared/types/src/lib/domain/character_card.ts` defines
+    `Character` (card-format persona), `CharacterCardV1`, and
+    `CharacterCardV2` (`spec: 'chara_card_v2'`, `spec_version: '2.0'`) — the
+    exact shapes this contract's State & Data Models section previously
+    proposed as *new* types. **Reuse these; do not redeclare them.**
+  - `apps/frontend/client/src/lib/services/character/character_importer.ts`
+    implements `importFromPng`/`importFromJson` with PNG `tEXt` chunk
+    extraction (`chara` for V2, `cbar` for RisuAI, `aikami_character` for
+    Aikami cards), V1→V2 conversion, and V2 validation.
+  - `character_validator.ts` (`isV1Card`/`isV2Card`), `png_utils.ts`
+    (`extractTextChunks`, `isPng`), and `png_writer.ts` (export side) round
+    out the pipeline.
+  - An **NPC import UI already exists**:
+    `apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte`
+    + `npc_list_view_model.svelte.ts` (`handleFileImport`/`handleUrlImport`)
+    → `npcService.importFromFile`/`importFromUrl`
+    (`npc_service.svelte.ts:103,165-228`) maps cards into `NpcCreateData`
+    (`name`, `notes`←description, `personality`, `scenario`,
+    `firstMessage`←`first_mes`, `systemPrompt`) and uploads the avatar.
+  - A player-character import path exists via
+    `character.svelte.ts:116-126` (`importFileWithAvatar`).
+  **The real delta for this contract is therefore: (1) V3 (`ccv3` chunk)
+  parsing — currently only *detected* with a debug log, never parsed
+  (`character_importer.ts:147`); (2) ability-score inference — no import
+  path populates `abilityScores` today; (3) a *persona*-targeted import UI
+  (only NPC and player-character flows exist); (4) dedupe/re-import policy
+  (OQ-3). The public SillyTavern V2/V3 spec is still the source of truth
+  for field semantics, but it is an *extension* task on top of the C-246
+  pipeline, not a from-spec rewrite.
 - **Design constraint, confirmed accurate**: an imported card must compile
   into the existing NPC/persona schema, including six ability scores. Cards
   do not carry stats natively.
@@ -80,8 +111,9 @@ written, with corrected line numbers.
     from a 2024 standard array when the source material doesn't discuss them
     explicitly. This is a directly reusable pattern for card import's
     inference step.
-- **Reproduction**: N/A — new feature, no existing broken behavior to
-  reproduce.
+- **Reproduction**: N/A — no broken behavior to reproduce; the V2 import
+  path already exists (C-246) and the new work (V3 parsing, ability-score
+  inference, persona-targeted wiring) is additive.
 - **Existing implementation to reuse**: `AbilityScoresSchema`,
   `NpcSheetSchema`/`PersonaSheetSchema`, and the inference-prompt pattern in
   `character_extraction_schema.ts`.
@@ -149,31 +181,45 @@ After this contract:
 | Six ability scores | `AbilityScoresSchema` (`character.ts:8-31`) | **reuse** |
 | NPC/Persona sheet schemas | `npc.ts:9-35`, `persona.ts:8` | **reuse** — import target shape |
 | Stat-inference prompt pattern | `character_extraction_schema.ts:95-103` | **reuse** as the inference-step template |
+| Card-format types (V1/V2) | `packages/shared/types/src/lib/domain/character_card.ts` (`Character`, `CharacterCardV1`, `CharacterCardV2`) | **reuse** — do NOT redeclare; the old State & Data Models `CharacterCardV2` proposal collides with this export |
+| PNG `tEXt` extraction + PNG validation | `services/character/png_utils.ts` (`extractTextChunks`, `isPng`) | **reuse** |
+| V1/V2/RisuAI/Aikami card parser | `services/character/character_importer.ts` (`importFromPng`, `importFromJson`) | **extend** — add V3 (`ccv3`) parsing; keep existing format handling |
+| Card validation | `services/character/character_validator.ts` (`isV1Card`, `isV2Card`) | **extend** — add `isV3Card` |
+| NPC import UI + service mapping | `views/character/npc/list/npc_list_view*.svelte.ts`, `npc_service.svelte.ts:165-228` | **reuse** — NPC side largely done; add ability-score mapping |
+| Player-character import UI | `character.svelte.ts:116-126` | **reuse** — persona-adjacent path; verify whether it satisfies AC-1's persona flow or a persona-targeted UI is needed |
+| Duplicate `parsePngCard` helpers | `utils/character_importer.ts` and `views/utils/character_importer.ts` (near-identical) | **consolidate** — do not add a third copy; prefer the `services/character` pipeline |
 | Vendor haggle panel | `vendor_view.svelte:246-248` | **modify** — collapse when empty |
 | Vendor item icon | `vendor_view.svelte:180-205, 386` | **replace** — content-pack art, 📦 as last-resort fallback only |
+| Per-item art reference | `lpcAssetId` on content-pack item schema (`packages/shared/schemas/src/lib/game/content_pack.ts:155-156`) + runtime `ITEM_CATALOG` (`inventory_service.svelte.ts:42-296`) | **reuse** — already declared; shared `ItemDefinition` type (`schemas/src/lib/domain/item.ts:95-100`) does NOT expose it, so widen the type or resolve art via the content-pack catalog |
+| Vendor visual suite | `apps/e2e/src/visual/suites/vendor.visual.ts` (C-331 AC-3, targets `/dev/vendor`) | **extend** — add collapsed-panel + item-art cases |
 
 ## Overview
 
 Two independent P3 items, batched into one contract file. Character card
-import is scoped against the public SillyTavern V2/V3 spec rather than a
-local reference implementation, since the seed's cited example package no
-longer exists in this repo. Merchant UI refinement proceeds as originally
-scoped, with corrected line numbers.
+import extends the existing C-246 import pipeline (V3 parsing, ability-
+score inference, persona-targeted wiring) rather than starting from the
+public SillyTavern V2/V3 spec cold, since the seed's cited example package
+is gone but a production V1/V2 importer already exists. Merchant UI
+refinement proceeds as originally scoped, with corrected line numbers.
 
 ## Design Reference
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
-- **Feature A**: implement against the public SillyTavern character-card
-  V2/V3 JSON spec (embedded in PNG `tEXt`/`zTXt` chunks, base64-encoded).
-  No local reference implementation exists to port from — this is a
-  from-spec implementation, which changes the size/risk profile from what
-  the original seed implied ("read this file and adapt it").
+- **Feature A**: **extend the existing C-246 pipeline**, treating the public
+  SillyTavern character-card V2/V3 JSON spec (embedded in PNG `tEXt`/`zTXt`
+  chunks, base64-encoded) as the source of truth for field semantics. The
+  V2 path is already implemented and in production (`importFromPng`); the
+  new work is V3 (`ccv3` chunk) parsing, ability-score inference, and
+  persona-targeted wiring. Do not redeclare `CharacterCardV2` — import it
+  from `@aikami/types`.
 - **Feature B**: collapse the haggle panel to a slim "Start a conversation"
-  affordance until engaged, following whatever collapsed/expanded pattern
-  already exists elsewhere in the client (check `dialogue_overlay.svelte`'s
-  suggestion-chip collapse behavior, touched by C-417, for a precedent
-  before inventing a new one).
+  affordance until engaged, following a collapsed/expanded precedent that
+  actually exists. Note: `dialogue_overlay.svelte` (C-417) has *no*
+  collapse behavior — its suggestion chips scroll horizontally but never
+  collapse. Verified collapse precedents to copy instead:
+  `combat_sidebar.svelte`, `initiative_tracker.svelte`,
+  `style_profile_editor.svelte`, `connection_editor_panel.svelte`.
 
 ## Architecture Directives
 
@@ -191,19 +237,21 @@ scoped, with corrected line numbers.
 ## State & Data Models
 
 ```ts
-/** Parsed SillyTavern V2/V3 card, before schema compilation. */
+// Reuse — already exported from @aikami/types (packages/shared/types/src/lib/domain/character_card.ts).
+// Do NOT redeclare. This is the parsed V2 card shape.
 type CharacterCardV2 = {
-  readonly spec: 'chara_card_v2';
-  readonly spec_version: '2.0';
-  readonly data: {
-    readonly name: string;
-    readonly description: string;
-    readonly personality: string;
-    readonly scenario: string;
-    readonly first_mes: string;
-    readonly mes_example: string;
-    // ...remaining V2 fields per the public spec
-  };
+  spec: 'chara_card_v2';
+  spec_version: '2.0';
+  data: Character; // { name, description, personality, scenario, first_mes,
+  //   mes_example, creator_notes, system_prompt, post_history_instructions,
+  //   alternate_greetings, tags, creator, character_version, extensions }
+};
+
+/** V3 card — add to character_card.ts; `data` may carry `assets` (V3-only). */
+type CharacterCardV3 = {
+  spec: 'chara_card_v3';
+  spec_version: '3.0';
+  data: Character & { assets?: Record<string, unknown> };
 };
 
 /** Result of compiling a parsed card into Aikami's schema, before ability-score inference. */
@@ -214,7 +262,10 @@ type CardCompilationResult = {
 ```
 
 No new persisted schema — imported cards land in the existing NPC/persona
-tables via `NpcSheetSchema`/`PersonaSheetSchema`.
+tables via `NpcSheetSchema`/`PersonaSheetSchema`. The compiler output must
+carry the card's six inferred/declared scores into `abilityScores`, which is
+`Type.Optional` on `BaseCharacterSheetSchema` (`character.ts:273`) — the
+schema already accepts a fully-populated sheet.
 
 ## Quality Requirements
 
@@ -264,20 +315,22 @@ their own commits.
 **For this contract:** bundles two unrelated P3 items — no shared data model
 or invariant — per explicit user direction. Each feature has its own
 Problem, Scope, and AC block and is independently mergeable. Feature A is
-substantially larger and riskier than Feature B (it is a from-spec
-implementation with no local reference, unlike what the original seed
-assumed); if its scope grows enough to threaten review quality on its own,
-split it into its own contract and record that as an amendment rather than
-shrinking Feature B to compensate.
+larger than Feature B (V3 parsing + inference + persona wiring on top of
+the existing C-246 pipeline); if its scope grows enough to threaten review
+quality on its own, split it into its own contract and record that as an
+amendment rather than shrinking Feature B to compensate.
 
 ## Acceptance Criteria
 
 ### AC-1: A SillyTavern V2 card imports as a persona
 **Given** a valid SillyTavern V2-format character-card PNG
 **When** the player imports it as a persona
-**Then** name, description, personality, and scenario map into
-`PersonaSheetSchema` fields, and ability scores are populated (inferred if
-absent from the card)
+**Then** the card maps into `PersonaSheetSchema` fields (name → `name`;
+description → `background`; personality → `personalityTraits`; scenario →
+`notes` — `PersonaSheetSchema` has no `description`/`personality`/`scenario`
+keys, so follow the established `convertAikamiCardToCharacter` precedent at
+`character_importer.ts:74-95`), and ability scores are populated (inferred
+if absent from the card)
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -327,10 +380,10 @@ validation
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Visual | client visual suite | `/game` vendor view | Filled during verification |
+| AC-3 | Visual | `apps/e2e/src/visual/suites/vendor.visual.ts` (extend existing C-331 suite) | `/game` vendor overlay (`game_ui_view.svelte:169-170`); suite routes `/dev/vendor` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run client:test-visual`
+- Moon Task: `moon run e2e:run-visual-tests` (visual runner at `apps/e2e/src/visual/runner.ts`; `client:test-visual` does not exist)
 - Integration: open vendor view, screenshot before/after conversation start.
 - E2E / Visual: **Visual**: score 90+: collapsed panel takes up a minority of
   the layout; expands cleanly once a conversation starts.
@@ -348,10 +401,10 @@ last-resort fallback for items with no art
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Visual | client visual suite | `/game` vendor view | Filled during verification |
+| AC-4 | Visual | `apps/e2e/src/visual/suites/vendor.visual.ts` (extend existing C-331 suite) | `/game` vendor overlay (`game_ui_view.svelte:169-170`); suite routes `/dev/vendor` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run client:test-visual`
+- Moon Task: `moon run e2e:run-visual-tests` (visual runner at `apps/e2e/src/visual/runner.ts`; `client:test-visual` does not exist)
 - Integration: render a vendor with a mixed inventory (some items with art,
   some without), assert icon resolution per item.
 - E2E / Visual: **Visual**: score 90+: distinct item art visible, no
@@ -365,22 +418,28 @@ last-resort fallback for items with no art
 
 ## Implementation Sequence
 
-1. **Phase 1 (Data/Logic)** — Feature A: implement the V2/V3 parser against
-   the public spec, with schema validation, fully unit-tested and
-   AI-independent. Feature B: identify the content-pack item-art resolution
-   pattern to reuse.
-2. **Phase 2 (Integration)** — Feature A: wire the compiler into
-   persona/NPC creation UI, add the ability-score inference step. Feature B:
-   collapse the haggle panel, wire item art into the vendor view.
+1. **Phase 1 (Data/Logic)** — Feature A: add V3 (`ccv3`) parsing to the
+   existing `character_importer.ts` pipeline plus `isV3Card` in
+   `character_validator.ts`, with schema validation, fully unit-tested and
+   AI-independent. Feature B: expose `lpcAssetId` on the vendor's
+   `ItemDefinition` path (widen type or resolve via `content_pack_catalog`).
+2. **Phase 2 (Integration)** — Feature A: add the ability-score inference
+   step (deterministic default + optional LLM), wire the compiler into a
+   persona-targeted import flow (NPC flow already exists via
+   `npc_service.importFromFile`), map scores into
+   `NpcSheetSchema`/`PersonaSheetSchema`. Feature B: collapse the haggle
+   panel, wire item art into the vendor view.
 3. **Phase 3 (Validation)** — Run the four Evidence Matrix checks above,
-   `moon run client:test-unit`, `moon run client:test-visual`,
+   `moon run client:test-unit`, `moon run e2e:run-visual-tests`,
    `bun run typecheck`.
 
 ## Edge Cases & Gotchas
 
-- **Feature A**: card PNGs can carry the character JSON in either `tEXt`
-  (V2, base64 in a `chara` keyword) or newer embedding conventions per V3 —
-  confirm both are handled, do not assume V2's embedding format for V3.
+- **Feature A**: card PNGs carry the character JSON in a `tEXt` chunk
+  (base64 in a `chara` keyword for V2, `cbar` for RisuAI, and `ccv3` for
+  V3 — the existing importer already detects `ccv3` at
+  `character_importer.ts:147` but never parses it). Implement V3 against
+  the `ccv3` chunk; do not assume V2's embedding format for V3.
 - **Feature A**: cards can be malicious/malformed (arbitrary PNG content
   wrapped around adversarial JSON) — treat all card content as untrusted
   input; validate before compiling.
@@ -403,10 +462,18 @@ Must be resolved before status becomes `approved`:
   provider is available? Affects the Offline/degraded quality requirement.
 - **OQ-3** — Feature A: re-import behavior — dedupe by card hash, overwrite
   by name, or always create a new persona/NPC?
-- **OQ-4** — Feature B: does the content-pack format already declare
-  per-item art references, or does this contract also need to add that
-  declaration to the manifest schema? Check `ContentPackManifest` before
-  scoping the art-resolution work.
+- **OQ-4** — Feature B: per-item art references — **resolved by codebase
+  evidence: YES, already declared.** `lpcAssetId` exists on the content-pack
+  item schema (`packages/shared/schemas/src/lib/game/content_pack.ts:155-156`)
+  and is populated per item in the runtime `ITEM_CATALOG`
+  (`inventory_service.svelte.ts:42-296`). The gap is that the shared
+  `ItemDefinition` type (`schemas/src/lib/domain/item.ts:95-100`) does not
+  expose `lpcAssetId`, so the vendor's `getItemDef()` drops it at the type
+  level. **No manifest schema change is needed** — either widen
+  `ItemDefinitionSchema` with `lpcAssetId` or resolve art through the
+  content-pack catalog (`content_pack_catalog.ts`), keyed off
+  `definition.lpcAssetId`. (Was previously an open question; answer is
+  determinable from the codebase, so the contract no longer needs it open.)
 
 ## Amendments
 
@@ -415,6 +482,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-08-17 | Initial draft merging seeds C-415, C-416. Feature A's reference implementation reframed from a local `examples/Marinara-Engine/` package (confirmed not present in this repo) to the public SillyTavern V2/V3 spec directly, which changes the size/risk profile of the feature. Feature B carried forward with corrected line numbers, no scope change. | — |
+| 2.0.0 | 2026-08-17 | Critic re-verification: corrected Feature A's false "no local reference" premise — the C-246 SillyTavern import pipeline (types, PNG `tEXt` extraction, V1/V2/RisuAI/Aikami parsing, NPC import UI) already exists and is in production; Feature A is reframed as an extension (V3 `ccv3` parsing, ability-score inference, persona-targeted UI). Reuse Map expanded; State & Data Models now reuses `@aikami/types` `CharacterCardV2` instead of redeclaring; AC-3/AC-4 test hooks corrected from nonexistent `client:test-visual` to `e2e:run-visual-tests` with the existing `vendor.visual.ts` suite; Design Reference collapse precedent corrected (`dialogue_overlay.svelte` has no collapse behavior); OQ-4 resolved from codebase evidence. Scope unchanged. | — |
 
 ## Promotion Lifecycle
 
