@@ -1,6 +1,6 @@
 // scripts/src/lib/agents/contract_pipeline/review_alarm.test.ts
 import { describe, expect, it } from 'bun:test';
-import { waitForFirstResponse } from './review_alarm.ts';
+import { chimeOnFirstResponse, waitForFirstResponse } from './review_alarm.ts';
 
 const noSleep = async (): Promise<void> => {};
 
@@ -89,5 +89,75 @@ describe('waitForFirstResponse', () => {
       },
     });
     expect(outcome).toBe('responded');
+  });
+});
+
+describe('chimeOnFirstResponse', () => {
+  const respondedRun = (
+    overrides: Partial<Parameters<typeof chimeOnFirstResponse>[0]> = {},
+  ): Promise<void> =>
+    new Promise((resolveDone) => {
+      chimeOnFirstResponse({
+        getStatus: scripted(['idle', 'working', 'working', 'idle', 'idle', 'idle']),
+        isPaneAlive: alive,
+        pollMs: 0,
+        settleSamples: 3,
+        timeoutMs: 60_000,
+        sleepFn: noSleep,
+        onOutcome: () => resolveDone(),
+        ...overrides,
+      });
+    });
+
+  it('chimes when herdr is not active (fallback)', async () => {
+    let chimed = false;
+    await respondedRun({
+      isHerdrActiveFn: async () => false,
+      playAlarmFn: () => {
+        chimed = true;
+      },
+    });
+    expect(chimed).toBe(true);
+  });
+
+  it('does not chime when herdr is active — herdr already notifies', async () => {
+    let chimed = false;
+    await respondedRun({
+      isHerdrActiveFn: async () => true,
+      playAlarmFn: () => {
+        chimed = true;
+      },
+    });
+    expect(chimed).toBe(false);
+  });
+
+  it('falls back to chiming when the herdr check itself throws', async () => {
+    let chimed = false;
+    await respondedRun({
+      isHerdrActiveFn: async () => {
+        throw new Error('herdr socket closed');
+      },
+      playAlarmFn: () => {
+        chimed = true;
+      },
+    });
+    expect(chimed).toBe(true);
+  });
+
+  it('never chimes when the pane disappears before responding', async () => {
+    let chimed = false;
+    let calls = 0;
+    await respondedRun({
+      getStatus: scripted(['working']),
+      isPaneAlive: async () => {
+        calls++;
+        return calls < 3;
+      },
+      isHerdrActiveFn: async () => false,
+      playAlarmFn: () => {
+        chimed = true;
+      },
+    });
+    expect(chimed).toBe(false);
   });
 });

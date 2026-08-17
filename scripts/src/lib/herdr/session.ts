@@ -578,6 +578,19 @@ const serverRunning = async (): Promise<boolean> => {
   return r.code === 0 && /status:\s*running/i.test(r.stdout);
 };
 
+/**
+ * True when the herdr CLI is installed and its server daemon is running —
+ * i.e. herdr's own idle-pane notification will actually fire. Callers that
+ * only want a fallback notification (when herdr can't notify) should check
+ * this before doing their own.
+ */
+export const isHerdrActive = async (): Promise<boolean> => {
+  if (!(await hasHerdr())) {
+    return false;
+  }
+  return serverRunning();
+};
+
 // ── Client/server compatibility ────────────────────────────
 
 /** Structured view of `herdr status` output. */
