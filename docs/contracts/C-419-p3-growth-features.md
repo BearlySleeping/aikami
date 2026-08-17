@@ -2,7 +2,7 @@
 id: C-419
 title: "P3 Growth Batch — Character Card Import and Merchant UI Refinement"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-415, C-416); re-verified against main 2026-08-17"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-17"
 | **Target** | client persona/NPC import (schema TBD); `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` |
 | **Priority** | P3 — growth, after the P0/P1/P2 blocks land |
 | **Dependencies** | — |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -451,7 +451,17 @@ last-resort fallback for items with no art
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved during implementation (C-419, see Execution Report):
+
+- **OQ-1** — resolved: V2 and V3 both from day one (AC-1 + AC-2 cover both).
+- **OQ-2** — resolved: network-free deterministic default (standard array via
+  `ABILITY_KEYS`) as the baseline; LLM-based inference left as an enhancement.
+- **OQ-3** — resolved: always-create-new (matches existing NPC flow); dedupe
+  by name/hash proposed as a future amendment.
+- **OQ-4** — resolved: `ItemDefinitionSchema` widened with `lpcAssetId` (and
+  `lpcSlot`/`lpcAssetIdBehind`), art resolved via the LPC manifest resolver.
+
+Original open-question text (pre-resolution, retained for history):
 
 - **OQ-1** — Feature A: which SillyTavern spec version(s) exactly — V2 only,
   or V2 and V3 both from day one? The seed named "V2/V3" but scoping both at
@@ -496,3 +506,72 @@ Target: **`integrated`** for Feature A (production import flow + tests);
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented both P3 growth features. Feature A extends the existing C-246
+SillyTavern import pipeline: V3 (`ccv3` chunk + JSON) parsing via new
+`isV3Card` validator and `CharacterCardV3` type, a separable deterministic
+ability-score inference module (standard-array default, no network), a card
+compiler that maps cards into `PersonaSheetSchema`/`NpcSheetSchema` with
+ability scores, ability-score mapping added to the NPC import path, and a
+persona-targeted import UI on the persona list screen. Feature B refines the
+vendor view: the haggle panel collapses to a slim affordance until engaged
+(AC-3) and inventory items render content-pack LPC art with the emoji
+substring-map as a secondary fallback and 📦 as last resort (AC-4), backed by
+widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
+(which also fixed 24 pre-existing tsc errors in `inventory_service` and
+`equipment_service`).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | V2 PNG/JSON import compiles into PersonaSheetSchema fields with inferred ability scores; persona import UI on `/personas` (screenshot 100/100). |
+| AC-2 | ✅ | V3 `ccv3`/JSON parsing unit-tested; stats-free cards get deterministic standard-array scores; declared `extensions.abilityScores` respected. |
+| AC-3 | ✅ | Haggle panel collapses to slim strip until engaged; collapsed screenshot 95/100, expanded 95/100; gold display, need-X-more, stat deltas, keyboard hints unchanged. |
+| AC-4 | ✅ | Items with `lpcAssetId` render LPC art `<img>` (2x screenshot 95/100); emoji tier + 📦 retained as fallbacks; `_itemIcon` substring match preserved. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/character/ability_score_inference.ts` | Deterministic ability-score inference (standard array default + declared-scores override), AI-independent |
+| `apps/frontend/client/src/lib/services/character/card_compiler.ts` | Compiles card `Character` → `PersonaSheet`/`NpcSheet` with ability scores; `hasDeclaredAbilityScores` flag |
+| `apps/frontend/client/src/lib/services/character/character_import.test.ts` | 18 unit tests: V2/V3 validator, PNG/JSON import, malformed-input rejection, inference, compilation |
+| `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.test.ts` | Persona-list import flow tests (V2 PNG → persona upsert with scores + avatar) |
+| `apps/e2e/tests/client/vendor_import.spec.ts` | E2E functional spec: haggle collapse/expand, item-art rendering, persona Import Card button |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/types/src/lib/domain/character_card.ts` | Added `CharacterCardV3` type |
+| `apps/frontend/client/src/lib/services/character/character_validator.ts` | Added `isV3Card` |
+| `apps/frontend/client/src/lib/services/character/character_importer.ts` | Parse `ccv3` chunk (was debug-only) + V3 JSON; V3 `assets` preserved into extensions |
+| `apps/frontend/client/src/lib/services/npc/npc_service.svelte.ts` | NPC import now maps `abilityScores` |
+| `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts` | `handleFileImport` + avatar upload + refresh |
+| `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte` | Import Card button + hidden file input |
+| `apps/frontend/client/src/lib/views/vendor/vendor_view_model.svelte.ts` | `isHagglePanelCollapsed`, `expandHagglePanel()`, `getItemArtUrl()` |
+| `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` | Collapsed haggle `<aside>`, art `<img>` rendering, deduped Stats comment |
+| `apps/frontend/client/src/lib/views/vendor/vendor_view_model.test.ts` | AC-3 collapse + AC-4 art tests (28 total) |
+| `packages/shared/schemas/src/lib/domain/item.ts` | Widen `BaseItemSchema` with `lpcSlot`, `lpcAssetId`, `lpcAssetIdBehind` |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/vendor/+page.svelte` | Dev-only `?haggle=expanded` deterministic helper |
+| `apps/e2e/src/visual/suites/vendor.visual.ts` | Added collapsed-panel + item-art visual cases |
+
+### Deviations from Spec
+None — all four ACs implemented as scoped. OQ-2 resolved in favor of the
+network-free deterministic default (standard array), with LLM-based inference
+left as a future enhancement per the contract's offline-degraded requirement.
+OQ-3 (re-import) is not explicitly resolved by this contract's ACs; current
+behavior always creates a new persona/NPC (matches the existing NPC flow).
+A follow-up amendment could add name/hash dedupe. OQ-4 implemented via the
+widen-`ItemDefinitionSchema` path (contract's stated option).
+
+### Test Results
+- Unit: 1839/1841 pass (2 pre-existing failures: GameBootService AC-4
+  Cancellation, AC-1 single ComfyUI implementation — both present at baseline)
+- E2E: visual suite extended (`vendor.visual.ts`, 3 cases); functional spec
+  `vendor_import.spec.ts` added. Full `e2e:test` cannot run in this pipeline
+  (auth emulator port 15302 + site server 11484 not provisioned).
+- Visual: collapsed 95/100, expanded 95/100, item-art 95/100, personas
+  100/100 (via headless-shell screenshots + ai_validate_image)
+- Baseline: 2 pre-existing failures, 0 new failures
