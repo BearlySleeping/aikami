@@ -12,6 +12,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PORTS } from '@aikami/constants';
+import { findChromiumExecutable } from '../chromium.ts';
 import { c, error, info, ok } from '../cli_utils.ts';
 import { resolveAikamiMode } from '../env/mode';
 import type { AikamiMode } from '../herdr/session.ts';
@@ -70,24 +71,49 @@ const launchChromium = async (port: number) => {
 
   const targetUrl = `http://localhost:${port}`;
 
+  // Prefer chromium-unwrapped (bypasses the flake.nix wrapper that forces
+  // --enable-automation) where it exists; falls back to a real browser
+  // install elsewhere, including Windows (see scripts/src/lib/chromium.ts).
+  const chromiumExe = findChromiumExecutable([
+    'chromium-unwrapped',
+    'chromium',
+    'chromium-browser',
+    'google-chrome',
+  ]);
+  if (!chromiumExe) {
+    error(
+      'Chromium not found. Install chromium or set CHROMIUM_EXECUTABLE env var to the path of your chromium binary.',
+    );
+    process.exit(1);
+  }
+
   info(`Launching Chromium → ${targetUrl}`);
 
-  const proc = Bun.spawn(
-    [
-      'chromium-unwrapped', // Bypasses flake.nix wrapper that forces --enable-automation
-      `--user-data-dir=${CHROMIUM_PROFILE_DIR}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--test-type', // Silences "unsupported command-line flag" warning bars
-      '--disable-extensions',
-      '--disable-background-networking',
-      '--disable-sync',
-      '--no-pings',
-      '--window-size=1440,900',
-      `--app=${targetUrl}`,
-    ],
-    { stdio: ['ignore', 'inherit', 'inherit'] },
-  );
+  const chromiumArgs = [
+    chromiumExe,
+    `--user-data-dir=${CHROMIUM_PROFILE_DIR}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--test-type', // Silences "unsupported command-line flag" warning bars
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-sync',
+    '--no-pings',
+    '--window-size=1440,900',
+    `--app=${targetUrl}`,
+  ];
+
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn(chromiumArgs, { stdio: ['ignore', 'inherit', 'inherit'] });
+  } catch (e) {
+    error(`Failed to launch ${chromiumExe}: ${e}`);
+    error(
+      'The resolved browser executable may be missing or incomplete (e.g. a standalone .exe copied without its adjacent .dll/resource files). ' +
+        'Set CHROMIUM_EXECUTABLE to a full, working Chrome/Chromium/Edge install path.',
+    );
+    process.exit(1);
+  }
 
   await proc.exited;
 };

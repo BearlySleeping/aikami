@@ -30,6 +30,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
+import { findChromiumExecutable } from '../chromium.ts';
 import { c, error, hasFlag, info, ok, parseArg, spawnLabeled, warn } from '../cli_utils.ts';
 import {
   buildSessionName,
@@ -415,30 +416,6 @@ const launchTauriDev = async (
 
 // ── Chromium launch ────────────────────────────────────────────────────────
 
-const findChromiumExecutable = (): string | null => {
-  // Prefer env var if set
-  const envPath = process.env.CHROMIUM_EXECUTABLE || process.env.CHROME_EXECUTABLE;
-  if (envPath) {
-    return envPath;
-  }
-
-  // Try common chromium binaries
-  const candidates = ['chromium', 'chromium-unwrapped', 'chromium-browser', 'google-chrome'];
-  for (const bin of candidates) {
-    try {
-      const result = Bun.spawnSync(['which', bin], { stdout: 'pipe', stderr: 'ignore' });
-      if (result.exitCode === 0) {
-        const path = result.stdout.toString().trim();
-        if (path) {
-          return bin;
-        }
-      }
-    } catch {}
-  }
-
-  return null;
-};
-
 const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => {
   // Ensure devtools are installed
   let devtoolsPath: string | null = getDevtoolsPath();
@@ -473,7 +450,7 @@ const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => 
     '--disable-background-networking',
     '--disable-sync',
     '--no-pings',
-    '--ozone-platform=x11',
+    ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : []),
     '--disable-gcm',
     '--disable-push-notifications',
     '--disable-features=PushMessaging,GCM',
@@ -495,9 +472,19 @@ const launchChromium = async (mode: AikamiMode, live = false): Promise<void> => 
     info(`Auth & settings persisted in ${CHROMIUM_PROFILE_DIR}`);
   }
 
-  const proc = Bun.spawn(chromiumArgs, {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn(chromiumArgs, {
+      stdio: ['ignore', 'inherit', 'inherit'],
+    });
+  } catch (e) {
+    error(`Failed to launch ${chromiumExe}: ${e}`);
+    error(
+      'The resolved browser executable may be missing or incomplete (e.g. a standalone .exe copied without its adjacent .dll/resource files). ' +
+        'Set CHROMIUM_EXECUTABLE to a full, working Chrome/Chromium/Edge install path.',
+    );
+    process.exit(1);
+  }
 
   proc.exited.then((exitCode) => {
     if (exitCode !== 0) {
