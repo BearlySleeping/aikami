@@ -162,6 +162,12 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
+      // Start menu / main menu (C-405 pack-picker visual suite)
+      const startMenu = document.querySelector('[data-testid="start-menu"]');
+      if (startMenu) {
+        return true;
+      }
+
       // E2E test mode — engine state exposed on window (C-217)
       const engineState = (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ as
         | Record<string, unknown>

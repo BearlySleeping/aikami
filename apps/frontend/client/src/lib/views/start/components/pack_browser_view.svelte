@@ -52,7 +52,7 @@ let { packs, selectedPackId, onselect, onconfirm, oncancel }: Props = $props();
             <h4 class="font-semibold text-base">{pack.name}</h4>
             <p class="text-xs text-base-content/60 font-mono">v{pack.version}</p>
             {#if pack.description}
-              <p class="text-sm text-base-content/70 mt-2 line-clamp-2">{pack.description}</p>
+              <p class="text-sm text-base-content/70 mt-2">{pack.description}</p>
             {/if}
           </button>
         {/each}

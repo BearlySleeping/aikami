@@ -140,6 +140,85 @@ export const WorldGenSchema = Type.Object(
 /** Inferred TypeScript type from the output schema. */
 export type WorldGenOutput = Type.Static<typeof WorldGenSchema>;
 
+// ---------------------------------------------------------------------------
+// Per-stage schemas (C-405 AC-5 parallel generation)
+// ---------------------------------------------------------------------------
+//
+// The wizard generates the world in stages so independent sections can be
+// produced concurrently. Each stage validates against its own sub-schema and
+// the results are merged into a full WorldGenOutput.
+//
+// Dependency graph:
+//   setting | npcs | locations | hudWidgets  — mutually independent (parallel)
+//   partyArcs                                  — depends on npcs (questGivers
+//                                                must be names from the roster)
+
+/** Stage: world name + description prose. */
+export const WorldGenSettingStageSchema = Type.Object(
+  {
+    worldName: Type.String({
+      minLength: 1,
+      maxLength: 100,
+      description: 'A compelling name for the generated world',
+    }),
+    worldDescription: Type.String({
+      minLength: 20,
+      maxLength: 2000,
+      description:
+        'A 2-4 paragraph immersive description of the world — its atmosphere, key locations, factions, and overall feel',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+/** Stage: NPC roster only. */
+export const WorldGenNpcsStageSchema = Type.Object(
+  {
+    npcs: Type.Array(WorldGenNpcSchema, {
+      minItems: 3,
+      maxItems: 12,
+      description: 'Key NPCs inhabiting this world (3-12 recommended)',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+/** Stage: location list only. */
+export const WorldGenLocationsStageSchema = Type.Object(
+  {
+    locations: Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 3,
+      maxItems: 20,
+      description: 'Notable location names in this world (3-20)',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+/** Stage: HUD widget blueprints only. */
+export const WorldGenHudWidgetsStageSchema = Type.Object(
+  {
+    hudWidgets: Type.Array(HudWidgetBlueprintSchema, {
+      minItems: 1,
+      maxItems: 8,
+      description: "HUD widget blueprints for this world's UI (1-8)",
+    }),
+  },
+  { additionalProperties: false },
+);
+
+/** Stage: party story arcs only (must reference names from the NPC roster). */
+export const WorldGenPartyArcsStageSchema = Type.Object(
+  {
+    partyArcs: Type.Array(PartyArcSchema, {
+      minItems: 1,
+      maxItems: 6,
+      description: 'Story arcs / chapters for the adventure (1-6)',
+    }),
+  },
+  { additionalProperties: false },
+);
+
 /** Schema for validating LLM world generation input (sent to the LLM). */
 export const WorldGenInputSchema = Type.Object(
   {

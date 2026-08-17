@@ -1,17 +1,16 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/setup/setup_view.svelte
+//
+// Setup route view — hosts the onboarding coordinator (persona creation).
+// C-405: the world-generation wizard no longer lives on this route; it moved
+// to the Advanced entry at /worldgen.
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
-import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
+import OnboardingCoordinatorView from '$views/onboarding/onboarding_coordinator_view.svelte';
 import type { SetupViewModelInterface } from './setup_view_model.svelte';
 
 let { viewModel }: { viewModel: SetupViewModelInterface } = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  {#if viewModel.skipWizard}
-    <PersonaCreateView viewModel={viewModel.personaViewModel} />
-  {:else}
-    <WorldGenWizardView viewModel={viewModel.wizardViewModel} />
-  {/if}
+  <OnboardingCoordinatorView viewModel={viewModel.onboardingViewModel} />
 </BaseViewModelContainer>
