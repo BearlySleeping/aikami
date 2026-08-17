@@ -9,7 +9,7 @@
     "dev:production": "vite dev --mode production",
     "build": "bun scripts/gate_dev_routes.ts && vite build",
     "build:staging": "bun scripts/gate_dev_routes.ts --mode staging && vite build --mode staging",
-    "build:emulator": "bun scripts/gate_dev_routes.ts --mode emulator && vite build --mode emulator",
+    "build:emulator": "bun scripts/gate_dev_routes.ts --mode emulator && AIKAMI_INCLUDE_DEV_ROUTES=true vite build --mode emulator",
     "build:production": "bun scripts/gate_dev_routes.ts --mode production && vite build --mode production",
     "tauri": "tauri",
     "tauri:icon": "tauri icon ../../../assets/default.svg",

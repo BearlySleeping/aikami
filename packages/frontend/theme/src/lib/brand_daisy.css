@@ -1,7 +1,12 @@
 /* packages/frontend/theme/src/lib/brand_daisy.css
  *
- * Aikami brand palette for daisyUI — same values as brand_tokens.css,
- * expressed as daisyUI `--color-*` tokens (C-418 Feature A).
+ * Aikami brand palette for daisyUI — the same brand family as
+ * brand_tokens.css, mapped onto daisyUI's `--color-*` token roles (C-418
+ * Feature A). The role mapping is intentional, not a copy: daisyUI's
+ * `--color-primary` is the brand accent (rune purple), while
+ * brand_tokens.css's `--primary` is the shadcn-style text-adjacent primary
+ * (dark slate) — each app's palette is expressed in the token vocabulary
+ * that app's framework consumes.
  *
  * Consumed by the client and hub apps via:
  *
@@ -55,8 +60,12 @@
 }
 
 /* ── Dark theme (obsidian / rune-glow) ── */
+/* `[data-theme='dark']` included for parity with the stock daisyUI theme
+   selectors — nothing sets data-theme today, but an explicit toggle would
+   otherwise fall back to the light palette. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
+  :root:not([data-theme]),
+  :root[data-theme="dark"] {
     color-scheme: dark;
 
     --color-base-100: oklch(0.13 0.015 260);

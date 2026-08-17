@@ -275,6 +275,10 @@ export const getProjectId = (): string => {
     // herdr contract runs apply withProjectIdOffset) so the Admin SDK's
     // project matches the emulator's — otherwise ID-token verification fails
     // with an "incorrect aud" error (C-418 Feature D verification).
+    // Reads PUBLIC_EMULATOR_PORT_OFFSET (the same var frontend-configs and
+    // firestack use) — a PUBLIC_-prefixed name in a backend package is a
+    // layering smell, but the var is set by the herdr/session tooling for
+    // BOTH sides of the boundary, and withProjectIdOffset no-ops at offset 0.
     const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
     return withProjectIdOffset(MODE_PROJECT_MAP.emulator, emulatorPortOffset);
   }

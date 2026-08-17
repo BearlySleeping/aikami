@@ -41,23 +41,31 @@ cd "$(echo ~/.aikami-stack/bundle/local-stack-*)" && docker compose up -d
 ```
 
 The installer (C-418) downloads the compose topology, the `.env.example`,
-and a **compiled hardware-wizard binary** (`stack-init`), then runs the
-wizard on your machine — never inside a container, because GPU detection
-without the host NVIDIA toolkit is unreliable — to write `.env`. Every step
-is logged; an existing `.env` is **never** overwritten.
+and a **compiled hardware-wizard binary** (`stack-init`), verifies the
+download's SHA-256 against `SHA256SUMS` **before anything is extracted**, then
+runs the wizard on your machine — never inside a container, because GPU
+detection without the host NVIDIA toolkit is unreliable — to write `.env`.
+The wizard writes `.env` into the same directory that holds `compose.yaml`
+(the compose project dir), so `docker compose up -d` reads it directly.
+Every step is logged; an existing `.env` is **never** overwritten.
 
 > **Domain note (C-418 OQ-5):** `aikami.sh` is pending DNS. Until it
-> resolves, point the installer at the GitHub release asset instead:
+> resolves, the installer defaults to GitHub releases and resolves the
+> newest release tag automatically. To pin a specific version explicitly:
 >
 > ```bash
-> curl -fsSL https://github.com/BearlySleeping/aikami/releases/latest/download/local-stack-latest.tar.gz | tar -xz -C ~/.aikami-stack/bundle
-> # then run the wizard manually:
-> ~/.aikami-stack/bundle/local-stack-*/bin/stack-init --env-path ~/.aikami-stack/.env
+> AIKAMI_STACK_VERSION=0.1.0 curl -fsSL https://aikami.sh/install | sh
 > ```
 >
-> The install script honours `AIKAMI_STACK_VERSION`, `AIKAMI_STACK_DIR`, and
-> `AIKAMI_INSTALL_BASE_URL` overrides, so the short URL is a convenience
-> wrapper, not a hard dependency.
+> The install script honours `AIKAMI_STACK_VERSION`, `AIKAMI_STACK_DIR`,
+> `AIKAMI_INSTALL_BASE_URL`, and `AIKAMI_SKIP_WIZARD` overrides, so the
+> short URL is a convenience wrapper, not a hard dependency.
+>
+> Release naming (single source of truth): release tag `local-stack-<ver>`,
+> asset `local-stack-<ver>.tar.gz`, checksums `SHA256SUMS`. The compiled
+> `stack-init` binary is platform-specific (linux-x64/arm64,
+> darwin-x64/arm64) — the installer detects the host platform and fails
+> with a clear message on unsupported OS/arch.
 
 **What the wizard does** (C-391): probes your GPU, RAM, disk, and container
 runtime, recommends a backend and model tier, shows the full download plan,

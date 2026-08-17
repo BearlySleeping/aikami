@@ -182,6 +182,18 @@ const aikamiWebOriginPattern = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.bearlyslee
 export const isAikamiWebOrigin = (origin: string | null | undefined): origin is string =>
   !!origin && aikamiWebOriginPattern.test(origin);
 
+const tauriWebviewOriginPattern = /^(tauri|https?):\/\/(localhost|tauri\.localhost)$/i;
+
+/**
+ * Whether an Origin header value is the Tauri desktop webview origin
+ * (`tauri://localhost`, `http(s)://tauri.localhost`). The webview is not a
+ * first-party browser origin, but the desktop client (apps/frontend/client)
+ * calls the hub's client-auth routes from inside it — C-418 Feature D.
+ * Returns false for null/undefined/empty values.
+ */
+export const isTauriWebviewOrigin = (origin: string | null | undefined): origin is string =>
+  !!origin && tauriWebviewOriginPattern.test(origin);
+
 /**
  * Sanitize the `app` tag from a browser-log-ingestion request body.
  * Trims surrounding whitespace, then returns the tag when it is a non-empty
