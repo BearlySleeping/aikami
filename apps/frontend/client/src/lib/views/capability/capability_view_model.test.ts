@@ -186,6 +186,27 @@ describe('CapabilityViewModel', () => {
     expect(vm.activeTab).toBe('text');
   });
 
+  test('C-417 AC-3: pre-detection snapshot never reports a literal detected status', () => {
+    // Regression: voiceStatus used to default to the literal 'detected' before
+    // any probe ran, which a future code path could surface as a false
+    // positive. Every capability status must start at the shared
+    // 'pending' status and only transition on a real probe result.
+    const vm = createVm();
+    expect(vm.snapshot.voiceStatus).toBe('pending');
+    expect(vm.snapshot.textStatus).toBe('pending');
+    expect(vm.snapshot.imageStatus).toBe('pending');
+    expect(vm.snapshot.voiceStatus).not.toBe('detected');
+  });
+
+  test('C-417 AC-3: no connection is auto-seeded before detection runs', () => {
+    const vm = createVm();
+    // No probe has run — the connection list must stay empty.
+    expect(vm.connectionEntries).toEqual([]);
+    expect(vm.hasTextProvider).toBe(false);
+    expect(vm.hasImageProvider).toBe(false);
+    expect(vm.hasVoiceProvider).toBe(false);
+  });
+
   test('setActiveTab switches tabs', () => {
     const vm = createVm();
     vm.setActiveTab('image');

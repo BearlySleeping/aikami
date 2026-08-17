@@ -376,11 +376,16 @@ class GameEngineService
       // solid, matching the pre-C-375 behavior (reviewer-explicit: a manifest
       // fetch hiccup must never become a LOAD_MAP failure).
       const packId = options.packId ?? this.contentPackId;
+      // Derive the map id from the URL (e.g. .../village.json → 'village')
+      // so the manifest's per-map `interior` flag can be projected (C-417
+      // AC-2). Both supported map extensions (.json and .jton) are stripped,
+      // case-insensitively, so e.g. inn.jton resolves the manifest key `inn`.
+      const mapId = (options.mapUrl.split('/').pop() ?? '').replace(/\.(?:json|jton)$/i, '');
       let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
         const pack = await loadContentPack({ packId });
-        packConfig = this._buildPackConfig(pack.manifest);
+        packConfig = this._buildPackConfig(pack.manifest, mapId);
       } catch (error) {
         this.error('loadMap:pack-config-failed', {
           packId,
@@ -392,9 +397,7 @@ class GameEngineService
         ...options,
         packConfig,
       });
-      // Derive the map id from the URL (e.g. .../emberwatch_village.json).
-      const file = options.mapUrl.split('/').pop() ?? '';
-      this.currentMapId = file.replace(/\.json$/i, '');
+      this.currentMapId = mapId;
       this.debug('loadMap:map-id', { currentMapId: this.currentMapId });
     }
   }
@@ -474,11 +477,20 @@ class GameEngineService
    * crosses the worker boundary once per map load. Replaces the C-375
    * `propWalkability` side channel — future manifest-driven properties
    * (collision rects, movement cost, interaction radius) ride the same field.
+   *
+   * C-417 AC-2: the map's `interior` flag is projected too, so the engine can
+   * pin interior lighting independent of the world clock. The property is
+   * declared per-map in the manifest — no hard-coding in engine code.
    */
   private _buildPackConfig(
-    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains' | 'npcs'>,
+    manifest: Pick<ContentPackManifest, 'tiles' | 'props' | 'terrains' | 'npcs' | 'maps'>,
+    mapId: string,
   ): PackConfig {
     return {
+      // C-417 AC-2: carry the current map's interior flag (declared in the
+      // manifest's per-map entry) only when the map is declared interior —
+      // never emit explicit undefined.
+      ...(manifest.maps?.[mapId]?.interior === true ? { interior: true } : {}),
       tiles: Object.fromEntries(
         Object.entries(manifest.tiles ?? {}).map(([gid, def]) => [
           gid,
@@ -793,7 +805,9 @@ class GameEngineService
         // C-376 AC-2: pass the resolved pack config (tiles + props) so the
         // worker's spawner can skip blocking for walkable props (e.g.
         // village_gate) and derive terrain solidity from the manifest.
-        packConfig: this._buildPackConfig(pack.manifest),
+        // C-417 AC-2: the starting map's `interior` flag rides the same
+        // projection so the engine pins interior lighting on boot.
+        packConfig: this._buildPackConfig(pack.manifest, pack.manifest.startingMapId),
       });
       // Track the starting map id for scene/vibe context.
       this.currentMapId = pack.manifest.startingMapId;

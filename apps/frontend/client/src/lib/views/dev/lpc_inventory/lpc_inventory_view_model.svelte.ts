@@ -100,6 +100,15 @@ export class LpcInventoryViewModel extends InventoryViewModel {
     }
 
     this.lpcPreview.setRecipes(recipes);
+    // E2E hook (C-417 AC-1): expose the composed recipes so the spec can
+    // assert the preview output actually swaps the torso layer (chainmail →
+    // Iron Armour plate) on equip and reverts on unequip — mirrors the
+    // existing __PIXI_LPC_PREVIEW_LOADED__ window hook pattern.
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__LPC_PREVIEW_RECIPES__ = recipes.map(
+        (recipe) => ({ slot: recipe.slot, assetId: recipe.assetId }),
+      );
+    }
   }
 }
 

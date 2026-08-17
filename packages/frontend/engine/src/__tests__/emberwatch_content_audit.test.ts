@@ -82,7 +82,7 @@ type ManifestJson = {
     variants?: string[];
     isWalkable?: boolean;
   }>;
-  maps?: Record<string, { file?: string }>;
+  maps?: Record<string, { file?: string; interior?: boolean }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -438,6 +438,15 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
 
   test('pack version bumped to the fixture version', () => {
     expect(manifest.version).toBe(EMBERWATCH_FIXTURES.version);
+  });
+
+  test('C-417 AC-2: inn and merchant_shop declare interior lighting, village does not', () => {
+    // The interior-lighting property is declared generically per-map in the
+    // manifest (`interior: true`) and projected into PackConfig by the
+    // engine service — the engine never hard-codes map ids.
+    expect(manifest.maps?.['inn']?.interior).toBe(true);
+    expect(manifest.maps?.['merchant_shop']?.interior).toBe(true);
+    expect(manifest.maps?.['village']?.interior).toBeUndefined();
   });
 });
 

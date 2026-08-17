@@ -78,6 +78,21 @@ const MOCK_CHARACTER: PersonaData = {
 
 const MOCK_AVATAR_URL = 'https://placehold.co/400x400/2a1a4a/c9b8e8?text=Lysandra';
 
+/**
+ * C-417 AC-6: LPC recipe mirroring what the real AI extraction produces
+ * (slot → assetId from the generated catalog). The mock generate path sets
+ * it so the inline LpcPreviewView has something to render — the production
+ * path populates it from the LLM extraction.
+ */
+const MOCK_LPC_RECIPE: Record<string, string> = {
+  body: 'body/bodies_female',
+  hair: 'hair/bangs_adult',
+  torso: 'torso/aprons/apron_female',
+  legs: 'legs/armour/plate_male',
+  feet: 'feet/accessory/plate_toe_male',
+  head: 'head/ears/avyon_adult',
+};
+
 const MOCK_MESSAGES = [
   {
     role: 'system' as const,
@@ -126,8 +141,21 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
 
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    personaCreationService.persona = { ...MOCK_CHARACTER };
+    // C-417 AC-6: mirror the real extraction's lpcRecipe persistence (the
+    // production path writes it onto persona.appearance in _extractCharacter
+    // so it survives _persistCharacter / entering the world) — the mock must
+    // do the same, not just set this.lpcRecipe for preview rendering.
+    const persona: PersonaData = {
+      ...MOCK_CHARACTER,
+      appearance: {
+        ...MOCK_CHARACTER.appearance,
+      },
+    };
+    (persona.appearance as Record<string, unknown>).lpcRecipe = { ...MOCK_LPC_RECIPE };
+    personaCreationService.persona = persona;
     personaCreationService.avatarUrl = MOCK_AVATAR_URL;
+    // Keep the preview rendering in sync with the persisted persona data.
+    this.lpcRecipe = { ...MOCK_LPC_RECIPE };
     this.phase = 'TWEAK';
   }
 

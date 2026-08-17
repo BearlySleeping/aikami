@@ -524,13 +524,13 @@ const formatNpcText = (
     {#if viewModel.suggestedChips.length > 0}
       {#key viewModel.suggestedChips.map(c => c.id).join('|')}
         <div
-          class="flex shrink-0 gap-1.5 overflow-x-auto border-t border-base-content/5 px-4 py-2"
+          class="flex flex-wrap gap-1.5 border-t border-base-content/5 px-4 py-2"
           data-testid="suggestion-chips"
         >
           {#each viewModel.suggestedChips as chip (chip.id)}
             <button
               type="button"
-              class="btn btn-xs gap-1 shrink-0 normal-case border-base-content/15 {chip.intentType === 'combat'
+              class="btn btn-xs gap-1 normal-case border-base-content/15 {chip.intentType === 'combat'
                 ? 'btn-outline btn-error'
                 : chip.intentType === 'skill_check'
                   ? 'btn-outline btn-accent'
@@ -641,16 +641,17 @@ const formatNpcText = (
           </div>
         </div>
         <div class="mt-2 flex items-center justify-between">
-          <!-- TTS toggle -->
-          <div class="flex items-center gap-1">
-            <span class="text-xs text-base-content/50">TTS</span>
+          <!-- TTS toggle (C-417 AC-5: accessible name + visible label) -->
+          <label class="flex cursor-pointer items-center gap-1.5">
+            <span class="text-xs font-medium text-base-content/60">🔊 TTS</span>
             <input
               type="checkbox"
-              class="toggle toggle-xs"
+              class="toggle toggle-xs toggle-primary"
+              aria-label="Toggle text-to-speech"
               checked={viewModel.streamingTtsEnabled}
               onclick={() => viewModel.toggleStreamingTts()}
             >
-          </div>
+          </label>
           <!-- Draft recovery badge -->
           {#if viewModel.showDraftRecovery}
             <span class="badge badge-info badge-sm gap-1" aria-live="polite">

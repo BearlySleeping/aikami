@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
 
 import { STARTER_KIT } from '@aikami/constants';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -39,6 +40,13 @@ for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
     slot.variants.map((v) => v.assetId),
   );
 }
+
+/**
+ * Engine slot priority order (C-417 AC-6) — mirrors the onboarding
+ * coordinator's ENGINE_SLOTS so both preview integrations build recipes in
+ * the same deterministic order.
+ */
+const _ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,6 +89,13 @@ export type PersonaCreateViewModelInterface = BaseViewModelInterface & {
   readonly generateButtonLabel: string;
   /** LPC sprite recipe from AI extraction. */
   readonly lpcRecipe: Record<string, string> | null;
+  /**
+   * LpcLayerRecipe[] projection of {@link lpcRecipe} for the inline
+   * LpcPreviewView (C-417 AC-6). Mirrors the onboarding coordinator's
+   * recipe-sync shape so both preview integrations stay structurally
+   * consistent.
+   */
+  readonly lpcPreviewRecipes: readonly LpcLayerRecipe[];
   /** LPC dev page URL for previewing the character's sprite. */
   readonly lpcPreviewUrl: string | null;
   /** Whether an avatar file upload is in progress. */
@@ -197,6 +212,27 @@ export class PersonaCreateViewModel
 
   get generateButtonLabel(): string {
     return this.hasMessages ? '✨ Generate Character' : '🎲 Try My Luck';
+  }
+
+  /**
+   * Builds LpcLayerRecipe[] from the extracted lpcRecipe (C-417 AC-6).
+   * Ordered by engine slot priority so the inline preview matches the
+   * in-game composite. `hexPalette` is a zero LUT — extraction carries no
+   * palette overrides.
+   */
+  get lpcPreviewRecipes(): readonly LpcLayerRecipe[] {
+    if (!this.lpcRecipe) {
+      return [];
+    }
+    const recipes: LpcLayerRecipe[] = [];
+    for (const slot of _ENGINE_SLOTS) {
+      const assetId = this.lpcRecipe[slot];
+      if (!assetId) {
+        continue;
+      }
+      recipes.push({ slot, assetId, hexPalette: new Uint8Array(1024) });
+    }
+    return recipes;
   }
 
   /** LPC preview URL — opens the LPC dev page with this character's recipe. */
