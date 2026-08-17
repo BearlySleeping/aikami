@@ -1,4 +1,4 @@
-// apps/backend/firebase/src/discord/verify.ts
+// packages/backend/discord-bot/src/lib/interactions/verify.ts
 //
 // Verifies the Ed25519 signature Discord attaches to every Interactions
 // Endpoint request (X-Signature-Ed25519 / X-Signature-Timestamp headers).
@@ -6,7 +6,7 @@
 // by anyone who finds the URL, since there's no other auth on this route.
 //
 // Uses tweetnacl directly rather than the `discord-interactions` package —
-// it's the same primitive that package wraps, and this app already avoids
+// it's the same primitive that package wraps, and this repo already avoids
 // pulling in Discord SDKs beyond what's strictly needed (see scripts/src/
 // lib/discord/client.ts's REST-only rationale).
 

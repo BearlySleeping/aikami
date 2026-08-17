@@ -1,0 +1,12 @@
+{
+  "name": "@aikami/backend-project-ai",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test --pass-with-no-tests",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings"
+  }
+}

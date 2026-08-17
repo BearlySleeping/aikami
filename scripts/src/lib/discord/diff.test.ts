@@ -89,3 +89,77 @@ describe('computePlan — channel category handling', () => {
     ).toThrow(/Missing/);
   });
 });
+
+describe('computePlan — channel permission overwrites', () => {
+  const everyone: DesiredRole = { name: '@everyone', permissions: '0' };
+  const guildRole = (id: string, name: string) => ({
+    id,
+    name,
+    color: 0,
+    hoist: false,
+    mentionable: false,
+    permissions: '0',
+    position: 0,
+  });
+
+  it('plans an update when a declared overwrite differs from live', () => {
+    const plan = computePlan(
+      structure(
+        [],
+        [
+          {
+            name: 'mod-only',
+            type: 'text',
+            permissionOverwrites: [{ role: '@everyone', deny: ['ViewChannel'] }],
+          },
+        ],
+        [everyone],
+      ),
+      {
+        channels: [{ ...textChannel('t1', 'mod-only'), permission_overwrites: [] }],
+        roles: [guildRole('g1', '@everyone')],
+      },
+    );
+    expect(plan.updateChannels).toHaveLength(1);
+    expect(plan.updateChannels[0]?.changes).toContain('permissions changed');
+  });
+
+  it('reports no change when live overwrites already match by role name', () => {
+    const plan = computePlan(
+      structure(
+        [],
+        [
+          {
+            name: 'mod-only',
+            type: 'text',
+            permissionOverwrites: [{ role: '@everyone', deny: ['ViewChannel'] }],
+          },
+        ],
+        [everyone],
+      ),
+      {
+        channels: [
+          {
+            ...textChannel('t1', 'mod-only'),
+            permission_overwrites: [{ id: 'g1', type: 0, allow: '0', deny: '1024' }],
+          },
+        ],
+        roles: [guildRole('g1', '@everyone')],
+      },
+    );
+    expect(plan.updateChannels).toHaveLength(0);
+  });
+
+  it('leaves a channel with no declared overwrites untouched even if live has some', () => {
+    const plan = computePlan(structure([], [{ name: 'general', type: 'text' }], [everyone]), {
+      channels: [
+        {
+          ...textChannel('t1', 'general'),
+          permission_overwrites: [{ id: 'g1', type: 0, allow: '0', deny: '1024' }],
+        },
+      ],
+      roles: [guildRole('g1', '@everyone')],
+    });
+    expect(plan.updateChannels).toHaveLength(0);
+  });
+});

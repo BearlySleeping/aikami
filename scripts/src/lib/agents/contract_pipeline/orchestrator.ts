@@ -914,6 +914,16 @@ export const runContractPipeline = async (options: {
         // pausing for a real review.
         if (stage === 'implement' && manifest.reviewDecision?.decision === 'change') {
           manifest.reviewDecision = undefined;
+          // 🔴 The review captain's pane persists across the whole run — it is
+          // never re-spawned for a second round. Without resetting these two
+          // guard flags here, the review-stage handler below finds
+          // `reviewPaneId` still set and `reviewTaskDelivered` still `true`
+          // from the FIRST round, so it takes the silent "already tasked"
+          // reattach branch and never actually tells the captain new commits
+          // are ready — it sits idle forever after its one decision (C-418).
+          // Resetting them re-arms the retask path for this new round.
+          manifest.reviewTaskDelivered = false;
+          manifest.reviewResumeNudgedAt = undefined;
         }
 
         const interactiveStage =
@@ -1238,19 +1248,30 @@ export const runContractPipeline = async (options: {
         // lands so the detached poller stops shelling out to herdr.
         let chime: { cancel: () => void } | undefined;
 
-        // Reconnect to a live pane on resume — only when no decision is pending.
+        // Reconnect to a live pane — either a genuine process resume, or the
+        // pipeline looping back here after a `change` decision sent work to
+        // the implementer/verifier and a new round is starting. Only when no
+        // decision is pending.
         //
-        // 🔴 Reattaching is SILENT by default. The captain does not need to be
-        // told the orchestrator is back: it was given `reviewDecisionPath` in
-        // its original prompt and the orchestrator simply polls that file, so
-        // a resume changes nothing on the captain's side. The nudge that used
-        // to be sent here carried no information and cost a user their
-        // half-typed message (C-390 — see review_pane.ts).
+        // 🔴 Reattaching is SILENT by default. On a true resume the captain
+        // does not need to be told the orchestrator is back: it was given
+        // `reviewDecisionPath` in its original prompt and the orchestrator
+        // simply polls that file, so a resume changes nothing on the
+        // captain's side. The nudge that used to be sent here unconditionally
+        // carried no information and cost a user their half-typed message
+        // (C-390 — see review_pane.ts).
         //
-        // The one case that genuinely needs a message is a captain that never
-        // received its task at all (`_sendTaskText` bailed before the crash).
-        // That is recorded, not guessed, and even then the send is gated on an
-        // empty composer and capped at one attempt per run.
+        // Two cases genuinely need a message, and both are recorded via
+        // `reviewTaskDelivered`, not guessed: (1) a captain that never
+        // received its task at all (`_sendTaskText` bailed before the
+        // crash), and (2) a NEW review round — `reviewTaskDelivered` is
+        // deliberately reset to `false` where the `change` decision is
+        // consumed (see the implement-stage block above), so this looks
+        // identical to case 1 and reuses the same retask path instead of
+        // silently reattaching to a captain that already spent its one
+        // decision and is idling with nothing left to do (C-418). Either
+        // way the send is gated on an empty composer and capped at one
+        // attempt per round.
         if (!existingDecision && manifest.reviewPaneId) {
           const alive = await adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false);
           if (!alive) {
@@ -1266,14 +1287,14 @@ export const runContractPipeline = async (options: {
               writeManifest({ manifest, cwd: options.repoRoot });
               const delivered = await adapter.sendReviewMessage({
                 paneId: manifest.reviewPaneId,
-                message: `Review contract run ${manifest.runId}. Present the verified status from the manifest. Do NOT re-run tests. Your LAST action MUST call contract_review_decision.`,
+                message: `Review contract run ${manifest.runId}. If the implementer addressed a prior change request, new commits are ready — review them now. Present the verified status from the manifest. Do NOT re-run tests. Your LAST action MUST call contract_review_decision.`,
               });
               manifest.reviewTaskDelivered = delivered;
               writeManifest({ manifest, cwd: options.repoRoot });
               pipelineLog({
                 runId: manifest.runId,
                 cwd: options.repoRoot,
-                message: `Review pane re-tasked on resume (delivered=${delivered}).`,
+                message: `Review pane re-tasked (delivered=${delivered}).`,
               });
             } else {
               console.log(

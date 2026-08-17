@@ -37,6 +37,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index.ts';
+import { APP_CONFIG } from '../deploy/deployment_config.ts';
 import {
   commitAll,
   pushBranch,
@@ -155,6 +156,48 @@ export const WORKTREE_SKIP_WORKTREE_PATHS = [
   'docs/contracts/PROMOTION.md',
 ];
 
+type WorktreeSeedEntry = {
+  from: string;
+  to: string;
+  kind: 'file' | 'dir';
+  optional?: boolean;
+};
+
+/** Per-app env files a worktree may need. Missing ones are silently skipped
+ *  (optional: true below), so it's safe to list every suffix for every app
+ *  rather than tracking which app actually has which file on disk. */
+const ENV_FILE_SUFFIXES = [
+  '.env.emulator',
+  '.env.local',
+  '.env.staging',
+  '.env.production',
+  '.env.testing',
+];
+
+/**
+ * Env-file seed entries for every app in APP_CONFIG, derived from its `path`
+ * so a new app or a new env file automatically gets seeded into worktrees
+ * without touching this file — this is what fixed C-417's missing
+ * `apps/frontend/site/.env.emulator` (added by hand and immediately went
+ * stale for `hub`, `docs`, etc.). Dedupes by path since `client-tauri`
+ * reuses `client`'s path.
+ */
+const appConfigEnvSeedPaths = (): WorktreeSeedEntry[] => {
+  const seenPaths = new Set<string>();
+  const entries: WorktreeSeedEntry[] = [];
+  for (const config of Object.values(APP_CONFIG)) {
+    if (seenPaths.has(config.path)) {
+      continue;
+    }
+    seenPaths.add(config.path);
+    for (const suffix of ENV_FILE_SUFFIXES) {
+      const relPath = `${config.path}/${suffix}`;
+      entries.push({ from: relPath, to: relPath, kind: 'file', optional: true });
+    }
+  }
+  return entries;
+};
+
 /**
  * Gitignored-but-required files copied from the root checkout during
  * bootstrap. Without these, dev servers / typecheck / tests can't run
@@ -162,92 +205,14 @@ export const WORKTREE_SKIP_WORKTREE_PATHS = [
  * Each entry: { from (relative to repoRoot), to (relative to checkout),
  * kind: 'file' | 'dir', optional: true }.
  */
-export const WORKTREE_SEED_PATHS: Array<{
-  from: string;
-  to: string;
-  kind: 'file' | 'dir';
-  optional?: boolean;
-}> = [
+export const WORKTREE_SEED_PATHS: WorktreeSeedEntry[] = [
   // Root env files
   { from: '.env', to: '.env', kind: 'file', optional: true },
   { from: '.env.emulator', to: '.env.emulator', kind: 'file', optional: true },
   { from: '.env.local', to: '.env.local', kind: 'file', optional: true },
-  // Client env files (SvelteKit dev servers need these)
-  {
-    from: 'apps/frontend/client/.env.emulator',
-    to: 'apps/frontend/client/.env.emulator',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/client/.env.local',
-    to: 'apps/frontend/client/.env.local',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/client/.env.staging',
-    to: 'apps/frontend/client/.env.staging',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/client/.env.production',
-    to: 'apps/frontend/client/.env.production',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/client/.env.testing',
-    to: 'apps/frontend/client/.env.testing',
-    kind: 'file',
-    optional: true,
-  },
-  // Site + hub env files
-  {
-    from: 'apps/frontend/site/.env.local',
-    to: 'apps/frontend/site/.env.local',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/site/.env.staging',
-    to: 'apps/frontend/site/.env.staging',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/site/.env.production',
-    to: 'apps/frontend/site/.env.production',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/frontend/hub/.env.local',
-    to: 'apps/frontend/hub/.env.local',
-    kind: 'file',
-    optional: true,
-  },
-  // Firebase function env files
-  {
-    from: 'apps/backend/firebase/.env.emulator',
-    to: 'apps/backend/firebase/.env.emulator',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/backend/firebase/.env.staging',
-    to: 'apps/backend/firebase/.env.staging',
-    kind: 'file',
-    optional: true,
-  },
-  {
-    from: 'apps/backend/firebase/.env.production',
-    to: 'apps/backend/firebase/.env.production',
-    kind: 'file',
-    optional: true,
-  },
-  // E2E + scripts env
+  // Per-app env files (client, site, hub, docs, firebase, ...) — see APP_CONFIG.
+  ...appConfigEnvSeedPaths(),
+  // E2E + scripts env (not APP_CONFIG entries)
   { from: 'apps/e2e/.env', to: 'apps/e2e/.env', kind: 'file', optional: true },
   { from: 'scripts/.env', to: 'scripts/.env', kind: 'file', optional: true },
   // GCP service-account keys (needed by gcloud/firebase deploys)

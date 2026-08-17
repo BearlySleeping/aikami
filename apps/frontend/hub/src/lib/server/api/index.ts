@@ -13,6 +13,7 @@ import { AUTH_COOKIE_NAME } from '@aikami/constants';
 import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
+import { handleAsk } from './ask.ts';
 import { handleCatalogStats } from './catalog_stats.ts';
 import { handleDbHealth } from './health_db.ts';
 
@@ -326,6 +327,17 @@ const dbHealthResponseSchema = t.Union([
 // resolves to `null` — never a 500.
 const catalogStatsResponseSchema = t.Union([CategoryStatsSchema, AssetStatsSchema, t.Null()]);
 
+// POST /api/ask — the one route in this file meant for a THIRD-PARTY origin
+// (the static landing page, apps/frontend/site) rather than the hub's own
+// client — see hooks.server.ts's narrowly-scoped CORS allowance for it.
+const askRequestSchema = t.Object({ question: t.String({ minLength: 1, maxLength: 2000 }) });
+const askResponseSchema = t.Union([
+  t.Object({ answer: t.String() }),
+  t.Object({
+    error: t.Union([t.Literal('unconfigured'), t.Literal('rate_limited'), t.Literal('failed')]),
+  }),
+]);
+
 export const app = new Elysia({ prefix: '/api' })
   .post('/auth/session', handleSession, {
     body: sessionRequestSchema,
@@ -344,6 +356,10 @@ export const app = new Elysia({ prefix: '/api' })
   })
   .get('/catalog/stats', handleCatalogStats, {
     response: catalogStatsResponseSchema,
+  })
+  .post('/ask', handleAsk, {
+    body: askRequestSchema,
+    response: askResponseSchema,
   });
 
 export type App = typeof app;

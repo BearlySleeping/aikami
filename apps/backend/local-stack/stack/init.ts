@@ -180,13 +180,9 @@ const readManifest = async (manifestPath?: string): Promise<ModelManifest> => {
   return parseManifest(JSON.stringify(manifestJson));
 };
 
-/** Asks one yes/no question on the TTY. Returns the default when non-TTY. */
-const confirm = async (prompt: string, defaultValue: boolean): Promise<boolean> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return defaultValue;
-  }
-  process.stdout.write(`${prompt} ${defaultValue ? '[Y/n]' : '[y/N]'} `);
-  const input = await new Promise<string>((resolve) => {
+/** Reads one line from stdin. Caller writes the prompt first. */
+const readLine = (): Promise<string> =>
+  new Promise<string>((resolve) => {
     const stdin = process.stdin;
     stdin.resume();
     let data = '';
@@ -201,13 +197,21 @@ const confirm = async (prompt: string, defaultValue: boolean): Promise<boolean> 
     };
     stdin.on('data', onData);
   });
+
+/** Asks one yes/no question on the TTY. Returns the default when non-TTY. */
+const confirm = async (prompt: string, defaultValue: boolean): Promise<boolean> => {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return defaultValue;
+  }
+  process.stdout.write(`${prompt} ${defaultValue ? '[Y/n]' : '[y/N]'} `);
+  const input = await readLine();
   if (input.length === 0) {
     return defaultValue;
   }
   return /^y(es)?$/i.test(input);
 };
 
-/** Asks a choice question on the TTY, returning the default when non-TTY. */
+/** Asks a single-choice question on the TTY, returning the default when non-TTY. */
 const choose = async (
   prompt: string,
   choices: readonly string[],
@@ -217,26 +221,66 @@ const choose = async (
     return defaultValue;
   }
   process.stdout.write(`${prompt} [${choices.join('/')}] (default: ${defaultValue}) `);
-  const input = await new Promise<string>((resolve) => {
-    const stdin = process.stdin;
-    stdin.resume();
-    let data = '';
-    stdin.setEncoding('utf8');
-    const onData = (chunk: string): void => {
-      data += chunk;
-      if (data.includes('\n') || data.includes('\r')) {
-        stdin.pause();
-        stdin.off('data', onData);
-        resolve(data.trim());
-      }
-    };
-    stdin.on('data', onData);
-  });
+  const input = await readLine();
   if (input.length === 0) {
     return defaultValue;
   }
   const match = choices.find((choice) => choice.toLowerCase() === input.toLowerCase());
-  return match ?? defaultValue;
+  if (!match) {
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.warn(`  (unrecognized "${input}" — using default: ${defaultValue})`);
+    return defaultValue;
+  }
+  return match;
+};
+
+/**
+ * Asks a comma-separated multi-choice question (e.g. modalities) on the
+ * TTY, returning the default when non-TTY. Unlike `choose()`, this never
+ * matches the raw input against `choices` as a single token — that would
+ * make every multi-value answer ("text,image,client") silently fall back
+ * to the default, which is exactly what happened before this fix: nobody
+ * could ever select a non-default modality combination interactively.
+ * Unrecognized tokens (typos) are dropped with a warning, not treated as
+ * grounds to discard the whole answer.
+ */
+const chooseMulti = async <T extends string>(
+  prompt: string,
+  choices: readonly T[],
+  defaultValue: readonly T[],
+): Promise<readonly T[]> => {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return defaultValue;
+  }
+  process.stdout.write(`${prompt} [${choices.join('/')}] (default: ${defaultValue.join(',')}) `);
+  const input = await readLine();
+  if (input.length === 0) {
+    return defaultValue;
+  }
+  const tokens = input
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  const picked: T[] = [];
+  const unknown: string[] = [];
+  for (const token of tokens) {
+    const match = choices.find((choice) => choice.toLowerCase() === token);
+    if (match) {
+      picked.push(match);
+    } else {
+      unknown.push(token);
+    }
+  }
+  if (unknown.length > 0) {
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.warn(`  (ignoring unrecognized: ${unknown.join(', ')})`);
+  }
+  if (picked.length === 0) {
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.warn(`  (nothing recognized — using default: ${defaultValue.join(',')})`);
+    return defaultValue;
+  }
+  return picked;
 };
 
 /** Injectable dependencies for `runInit` — overridden only by tests, real adapters by default. */
@@ -278,17 +322,20 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   }
 
   // ── Modalities (flag > TTY prompt > default) ─────────────────────────
-  let modalities = options.modalities ?? DEFAULT_MODALITIES;
+  let modalities: readonly StackModality[] = options.modalities ?? DEFAULT_MODALITIES;
   if (!options.yes && !options.modalities) {
-    const picked = await choose(
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.log(
+      c(
+        '2',
+        '  (client = the browser web app at :5274. Using the downloadable Tauri desktop app instead? Skip client — it talks to the engines directly.)',
+      ),
+    );
+    modalities = await chooseMulti(
       'Which engines do you want?',
       MODALITY_CHOICES,
-      DEFAULT_MODALITIES.join(','),
+      DEFAULT_MODALITIES,
     );
-    modalities = picked
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part): part is StackModality => MODALITY_CHOICES.includes(part as StackModality));
   }
 
   // ── Host Ollama detection (auto by default) ───────────────────────────

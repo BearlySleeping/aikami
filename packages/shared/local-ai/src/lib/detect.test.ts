@@ -141,6 +141,72 @@ describe('AC-12 — NVIDIA GPU present, toolkit absent', () => {
   });
 });
 
+describe('Podman + NVIDIA CDI — gpuPassthroughReady without a named runtime', () => {
+  // Podman (including Docker-compat shims common on NixOS) never lists a
+  // distinct "nvidia" OCI runtime in `info` output the way Docker does —
+  // it grants GPU access via a CDI spec file instead. A host with that
+  // file present is genuinely GPU-ready even though the runtime-name
+  // substring check alone would say otherwise (verified 2026-08-17
+  // against a real NixOS + podman + CDI host that regressed to the CPU
+  // fallback before this fix, despite a working GPU).
+  test('podman info has no "nvidia" substring, but a CDI spec exists → passthrough ready', async () => {
+    const executor = createFixtureExecutor({
+      table: {
+        commands: [
+          {
+            command: 'nvidia-smi',
+            args: ['--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'],
+            result: ok(NVIDIA_SINGLE),
+          },
+          // "docker" here is Podman's docker-compat shim — succeeds, but
+          // its info output is Podman's own shape (buildahVersion, conmon,
+          // ociRuntime: runc, ...), never the string "nvidia".
+          {
+            command: 'docker',
+            args: ['info'],
+            result: ok(
+              'buildahVersion: 1.43.2\nconmon:\n  version: 2.2.1\nociRuntime:\n  name: runc\n',
+            ),
+          },
+        ],
+        files: [
+          { path: '/proc/meminfo', result: ok('MemTotal:       67108864 kB\n') },
+          {
+            path: '/etc/cdi/nvidia.yaml',
+            result: ok('cdiVersion: "0.6.0"\nkind: nvidia.com/gpu\n'),
+          },
+        ],
+        statfs: [{ path: '.', result: { freeBytes: 1 << 40 } }],
+      },
+      unmatched: { ok: false, reason: 'not-found' },
+    });
+    const profile = await detectHardware({ executor, platform: 'linux', arch: 'x64' });
+    expect(profile.gpu.vendor).toBe('nvidia');
+    expect(profile.containerRuntime).toBe('docker');
+    expect(profile.gpuPassthroughReady).toBe(true);
+  });
+
+  test('no CDI spec anywhere and no named runtime → still not ready (AC-12 unchanged)', async () => {
+    const executor = createFixtureExecutor({
+      table: {
+        commands: [
+          {
+            command: 'nvidia-smi',
+            args: ['--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'],
+            result: ok(NVIDIA_SINGLE),
+          },
+          { command: 'docker', args: ['info'], result: ok('ociRuntime:\n  name: runc\n') },
+        ],
+        files: [{ path: '/proc/meminfo', result: ok('MemTotal:       67108864 kB\n') }],
+        statfs: [{ path: '.', result: { freeBytes: 1 << 40 } }],
+      },
+      unmatched: { ok: false, reason: 'not-found' },
+    });
+    const profile = await detectHardware({ executor, platform: 'linux', arch: 'x64' });
+    expect(profile.gpuPassthroughReady).toBe(false);
+  });
+});
+
 describe('Apple detection (AC-4)', () => {
   test('darwin → apple vendor, unified memory, RAM from sysctl', async () => {
     const executor = createFixtureExecutor({

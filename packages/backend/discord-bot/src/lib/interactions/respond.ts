@@ -1,21 +1,21 @@
-// apps/backend/firebase/src/discord/respond.ts
+// packages/backend/discord-bot/src/lib/interactions/respond.ts
 //
 // Edits a deferred interaction's original response. Used after the initial
-// ACK (DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) once the async work — creating
-// a GitHub issue, calling OpenRouter — finishes.
+// ACK (DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) once the async work — calling
+// OpenRouter — finishes.
 //
 // No Authorization header: this webhook endpoint is authenticated by the
 // interaction token itself (Discord's design — see the Interactions docs),
 // so this function never needs DISCORD_BOT_TOKEN.
 
-import { logger } from '$logger';
+import { logger } from '@aikami/logger';
 
 /** Discord hard-caps message content at 2000 chars. */
 const DISCORD_MESSAGE_MAX = 2000;
 
 /** Bounded wait for the Discord webhook PATCH — a stalled request must not
- *  hang the interaction handler forever. On abort the error is logged and
- *  swallowed, entering the same error path as a non-OK response below. */
+ *  hang forever. On abort the error is logged and swallowed, entering the
+ *  same error path as a non-OK response below. */
 const DISCORD_FETCH_TIMEOUT_MS = 10_000;
 
 export function truncateForDiscord(text: string): string {
@@ -41,13 +41,13 @@ export async function editOriginalInteractionResponse(
     // the edit could not be delivered. Log and continue (this function
     // never throws; the caller already reported the underlying failure).
     logger.error(
-      `discord/respond: failed to edit interaction response: ${err instanceof Error ? err.message : String(err)}`,
+      `discord-bot/interactions/respond: failed to edit interaction response: ${err instanceof Error ? err.message : String(err)}`,
     );
     return;
   }
   if (!res.ok) {
     logger.error(
-      `discord/respond: failed to edit interaction response (${res.status}): ${await res.text().catch(() => '')}`,
+      `discord-bot/interactions/respond: failed to edit interaction response (${res.status}): ${await res.text().catch(() => '')}`,
     );
   }
 }

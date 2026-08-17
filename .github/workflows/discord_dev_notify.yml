@@ -8,7 +8,7 @@ name: Discord Dev Notifications
 # Deliberately plain `pull_request` (not `pull_request_target`): secrets
 # aren't available to workflows triggered by a PR from a fork, so a fork PR
 # just silently doesn't get announced (discord_dev_notify.ts no-ops without
-# DISCORD_DEV_WEBHOOK_URL). That's an acceptable gap in exchange for never
+# DISCORD_GITHUB_FEED_WEBHOOK_URL). That's an acceptable gap in exchange for never
 # running with elevated secrets alongside untrusted PR content —
 # `pull_request_target` is the wrong tool even though this workflow never
 # checks out the PR's code, since it's easy to misuse later.
@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=pr
         env:
-          DISCORD_DEV_WEBHOOK_URL: ${{ secrets.DISCORD_DEV_WEBHOOK_URL }}
+          DISCORD_GITHUB_FEED_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_FEED_WEBHOOK_URL }}
           GH_ACTION: ${{ github.event.action }}
           GH_MERGED: ${{ github.event.pull_request.merged }}
           GH_NUMBER: ${{ github.event.pull_request.number }}
@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=issue
         env:
-          DISCORD_DEV_WEBHOOK_URL: ${{ secrets.DISCORD_DEV_WEBHOOK_URL }}
+          DISCORD_GITHUB_FEED_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_FEED_WEBHOOK_URL }}
           GH_ACTION: ${{ github.event.action }}
           GH_NUMBER: ${{ github.event.issue.number }}
           GH_TITLE: ${{ github.event.issue.title }}

@@ -542,7 +542,7 @@ jobs:
   # manifest can now exit non-zero on a partial manifest (see
   # updater_manifest.ts) while still having published real download links,
   # and that shouldn't block the announcement. discord_notify.ts itself
-  # no-ops when DISCORD_WEBHOOK_URL isn't configured for the mode.
+  # no-ops when DISCORD_RELEASES_WEBHOOK_URL isn't configured for the mode.
   notify-discord:
     name: Announce Release (Discord)
     runs-on: ubuntu-latest

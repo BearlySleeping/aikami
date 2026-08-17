@@ -14,6 +14,7 @@ projects:
   hub: "apps/frontend/hub"
   e2e: "apps/e2e"
   firebase: "apps/backend/firebase"
+  worker: "apps/backend/worker"
   voice: "apps/backend/voice"
   image: "apps/backend/image"
   text: "apps/backend/text"
@@ -31,11 +32,13 @@ projects:
 
   # Backend Packages
   backend-chat: "packages/backend/chat"
+  backend-discord-bot: "packages/backend/discord-bot"
   backend-configs: "packages/backend/configs"
   backend-database: "packages/backend/database"
   backend-utils: "packages/backend/utils"
   backend-auth: "packages/backend/auth"
   backend-svelte-kit: "packages/backend/svelte-kit"
+  backend-project-ai: "packages/backend/project-ai"
 
   # Frontend Packages
   frontend-engine: "packages/frontend/engine"

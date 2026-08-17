@@ -9,7 +9,7 @@
 // (channels/roles) see ../discord/ — that uses a bot token instead, since a
 // webhook has no permission to touch server structure.
 //
-// Silently no-ops when DISCORD_WEBHOOK_URL isn't configured, so this never
+// Silently no-ops when DISCORD_RELEASES_WEBHOOK_URL isn't configured, so this never
 // blocks a release for anyone who hasn't set up the webhook.
 //
 // Exported as notifyDiscordRelease() so BOTH the CI job (release.yml calls
@@ -23,7 +23,7 @@
 // Usage (CLI):
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0 --mode=staging
-//   env: DISCORD_WEBHOOK_URL (via scripts/.env.{mode}, loaded through
+//   env: DISCORD_RELEASES_WEBHOOK_URL (via scripts/.env.{mode}, loaded through
 //        scripts_env.ts's initScriptsEnv — works identically in CI and local)
 
 import { c, error, log, ok, parseCliArgs, warn } from '../cli_utils';
@@ -102,17 +102,17 @@ async function postToDiscord(options: {
 
 /**
  * Announce a published release to Discord. No-ops (returns without throwing)
- * when DISCORD_WEBHOOK_URL isn't set for `mode` — safe to call unconditionally
+ * when DISCORD_RELEASES_WEBHOOK_URL isn't set for `mode` — safe to call unconditionally
  * after any real release upload, CI or local.
  */
 export async function notifyDiscordRelease(tag: string, mode = 'production'): Promise<void> {
   initScriptsEnv(mode);
 
-  if (!process.env.DISCORD_WEBHOOK_URL) {
-    warn('DISCORD_WEBHOOK_URL not set — skipping Discord announcement.');
+  if (!process.env.DISCORD_RELEASES_WEBHOOK_URL) {
+    warn('DISCORD_RELEASES_WEBHOOK_URL not set — skipping Discord announcement.');
     return;
   }
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  const webhookUrl = process.env.DISCORD_RELEASES_WEBHOOK_URL;
 
   const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
   const downloadBase = `https://github.com/${repo}/releases/latest/download`;

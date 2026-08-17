@@ -190,6 +190,22 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     enabled: false,
   },
   /**
+   * Always-on Compute Engine VM (Discord Gateway bot + Interactions
+   * Endpoint) — see apps/backend/worker/README.md. Own build→push→restart
+   * script (scripts/src/lib/worker/deploy.ts), NOT the generic docker-release
+   * gcloud flow this service type otherwise implies — `enabled: false` is
+   * what skips that. Listed here purely so download-secrets/upload-secrets
+   * manage its .env.{mode} — same shape as image/text/voice above.
+   */
+  worker: {
+    serviceType: 'docker-release',
+    path: 'apps/backend/worker',
+    shortName: 'worker',
+    prefix: 'WORKER',
+    needsDist: false,
+    enabled: false,
+  },
+  /**
    * Server-data-plane migrations (C-394 AC-5). Not a service — this app
    * runs `applyMigrations` against NEON_DATABASE_URL_DIRECT (the DIRECT,
    * unpooled endpoint — DDL under PgBouncer transaction pooling breaks).

@@ -207,6 +207,54 @@ describe('AC-7 — plan is shown before anything is written', () => {
   });
 });
 
+describe('interactive modality prompt accepts a comma-separated multi-value answer', () => {
+  test('typing "text,image,voice,stt,client" selects exactly those, not the default', async () => {
+    const base = await baseOptions();
+    // Simulate a real TTY session answering each prompt in turn. Before the
+    // fix, `choose()` matched the WHOLE raw line against the single-token
+    // choices array — a multi-value answer never matched anything and
+    // silently fell back to the default every time, so nobody could ever
+    // pick a non-default modality set (including "client") interactively.
+    const answers = ['text,image,voice,stt,client', 'cpu', 'auto', 'y'];
+    let answerIndex = 0;
+    const originalInIsTTY = process.stdin.isTTY;
+    const originalOutIsTTY = process.stdout.isTTY;
+    const originalOn = process.stdin.on.bind(process.stdin);
+    const originalPause = process.stdin.pause.bind(process.stdin);
+    const originalOff = process.stdin.off?.bind(process.stdin) ?? (() => {});
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    process.stdin.on = ((event: string, handler: (chunk: string) => void) => {
+      if (event === 'data') {
+        const answer = answers[answerIndex] ?? '';
+        answerIndex += 1;
+        queueMicrotask(() => handler(`${answer}\n`));
+      }
+      return process.stdin;
+    }) as typeof process.stdin.on;
+    process.stdin.pause = (() => process.stdin) as typeof process.stdin.pause;
+    process.stdin.off = (() => process.stdin) as typeof process.stdin.off;
+    let code: number;
+    try {
+      code = await runInit({ ...base, yes: false });
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', { value: originalInIsTTY, configurable: true });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalOutIsTTY,
+        configurable: true,
+      });
+      process.stdin.on = originalOn;
+      process.stdin.pause = originalPause;
+      if (process.stdin.off) {
+        process.stdin.off = originalOff;
+      }
+    }
+    expect(code).toBe(0);
+    const content = await readFile(base.envPath, 'utf8');
+    expect(content).toContain('COMPOSE_PROFILES=text,image,voice,stt,client');
+  });
+});
+
 describe('AC-11 — platform-correct separator', () => {
   test('renderEnv uses ":" on linux and ";" on win32', async () => {
     const { renderEnv } = await import('./env_writer.ts');

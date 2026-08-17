@@ -9,6 +9,8 @@
 // there's no type-safety lost by keeping our own narrower shape here
 // instead of fighting the full union.
 
+export type PermissionOverwrite = { id: string; type: 0 | 1; allow: string; deny: string };
+
 export type GuildChannel = {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ export type GuildChannel = {
   topic?: string | null;
   nsfw?: boolean;
   position?: number;
+  permission_overwrites?: PermissionOverwrite[];
 };
 
 export type GuildRole = {
@@ -39,6 +42,7 @@ export type ChannelCreateBody = {
   parent_id?: string;
   topic?: string;
   nsfw?: boolean;
+  permission_overwrites?: PermissionOverwrite[];
 };
 
 export type ChannelUpdateBody = Partial<Omit<ChannelCreateBody, 'name' | 'parent_id'>> & {
