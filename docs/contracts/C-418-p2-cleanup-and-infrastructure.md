@@ -2,7 +2,7 @@
 id: C-418
 title: "P2 Consistency, Cleanup, and Infrastructure Batch"
 source: "docs/contracts/MVP_BACKLOG.md (seeds C-409, C-410, C-411, C-412, C-413, C-414); re-verified against main 2026-08-17"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-17"
 | **Target** | `packages/frontend/configs`, four app `app.css` files; `apps/frontend/client/src/routes/(dev)/`; tsconfig/svelte.config alias references; `apps/backend/firebase/`, `apps/frontend/hub/`; `docs/architecture/`, `docs/strategy/deferred.md`; `apps/backend/local-stack/` |
 | **Priority** | P2 — consistency, cleanup, infrastructure. **Do not start before the P0 block (C-400/401/402/405) lands.** |
 | **Dependencies** | — |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/backend/local-stack/README.md` Quick Start (Feature F only); rest internal |
 | **Contract version** | 2.0.0 |
@@ -63,7 +63,7 @@ drift.
   overrides Starlight's `--sl-color-accent*` / `--sl-color-gray-*`
   (`src/styles/docs.css`) to match the site's palette — zero sharing with
   client/hub's daisyUI setup.
-- **Explicitly not in scope: removing daisyUI.** 135 of 227 client `.svelte`
+- **Explicitly not in scope: removing daisyUI.** 135 of 228 client `.svelte`
   files use daisy classes (~4,700 occurrences).
 - **Reproduction**: diff the four apps' theme files; all four render stock
   daisyUI/Tailwind defaults with no brand colour.
@@ -76,9 +76,10 @@ drift.
 - **Current behavior, confirmed unchanged**:
   `apps/frontend/client/src/routes/(dev)/+layout.svelte` has no guard beyond
   an `isScreenshot` branch (via `BaseDevViewModel.isScreenshot()`). 46
-  `+page.svelte` files plus one nested sandbox `+layout.svelte` (48 files
-  total) ship under `(dev)/`. Neither `svelte.config.js` nor `vite.config.ts`
-  contains any route-exclusion mechanism.
+  `+page.svelte` files plus two `+layout.svelte` files (the group root and
+  one nested sandbox) — 48 files total — ship under `(dev)/`. Neither
+  `svelte.config.js` nor `vite.config.ts` contains any route-exclusion
+  mechanism.
 - **Reproduction**: build for production, inspect the output for `(dev)`
   routes — they are present and reachable.
 - **Existing implementation to reuse**: none — this is a new build-time gate.
@@ -99,13 +100,40 @@ drift.
   - `apps/frontend/client/svelte.config.js` and
     `apps/frontend/hub/svelte.config.js` still declare an
     `@aikami/frontend/firestore` alias pointing at the deleted directory.
-- **The `appearanceLayers` dedupe item is still accurate**: the identical
-  `appearanceLayers[2] = 0; appearanceLayers[4] = 0` block lives at
+- **The alias inventory is wider than the seed knew — two families, 11
+  files.** Repo-wide scan (2026-08-17, excluding generated `.svelte-kit`
+  tsconfigs and moon cache) finds dangling aliases in **11 non-generated
+  config files**:
+  - `@aikami/frontend/firestore` family (8 files):
+    `apps/frontend/client/svelte.config.js:93-94`,
+    `apps/frontend/hub/svelte.config.js:67-68`,
+    `apps/frontend/client/tsconfig.test.json:34-37`,
+    `apps/frontend/client/.fast-check/tsconfig.json:157-161`,
+    `apps/frontend/hub/.fast-check/tsconfig.json:106-110`,
+    `packages/frontend/storage/tsconfig.json:14-15`,
+    `packages/frontend/services/tsconfig.json:13-14`,
+    `packages/frontend/utils/tsconfig.json:11-12` (**new since the seed**).
+  - `@aikami/backend/firestore` family (8 files, pointing at the equally
+    deleted `packages/backend/firestore`):
+    `apps/frontend/client/svelte.config.js:64-65`,
+    `apps/frontend/hub/svelte.config.js:51`,
+    `apps/frontend/client/tsconfig.test.json:60-62`,
+    `apps/frontend/client/.fast-check/tsconfig.json:55-59`,
+    `apps/frontend/hub/.fast-check/tsconfig.json:61-62`,
+    `packages/backend/auth/tsconfig.json:9-10` (**new since the seed**),
+    `packages/shared/mocks/tsconfig.json:20-21` (**new since the seed**),
+    `apps/backend/firebase/tsconfig.json:13-14` (**new since the seed**).
+  Verified: **no source file imports either alias family** — they are dead
+  config, safe to remove without breaking typecheck.
+- **The `appearanceLayers` dedupe item is resolved, not open**: C-417 is
+  `implemented` and its OQ-1 settled — the
+  `appearanceLayers[2] = 0; appearanceLayers[4] = 0` block is **intentional
+  and load-bearing** (equipment owns torso/feet, per the C-374 comment and
+  the `_mergeEquipmentRecipes` overlay mechanism). The block lives at
   `game_boot_service.svelte.ts:1296-1297` and
-  `game_engine_service.svelte.ts:893-894`. **Coordinate with C-417 Feature 1**
-  before deduping — that contract may determine this block is load-bearing,
-  not leftover, and the dedupe must preserve whatever behavior OQ-1 there
-  settles on.
+  `game_engine_service.svelte.ts:907-908`. Dedupe must therefore **extract a
+  shared helper that both services invoke** — deleting either call site
+  erases intentional equipment-overlay behavior.
 - **`daily.ts` still a no-op**:
   `apps/backend/firebase/src/controllers/scheduler/daily.ts` is unchanged —
   21 lines, logs a static object, returns. Its deletion overlaps Feature D
@@ -120,7 +148,7 @@ drift.
 ### Feature D — Retire Firebase Functions into the hub's Elysia API (absorbs seed C-412)
 
 - **Current behavior, materially changed from the seed**:
-  `apps/backend/firebase/src/controllers/` now holds **9 files, 444 lines**,
+  `apps/backend/firebase/src/controllers/` now holds **9 files, 303 lines**,
   not the ~150 lines across 5 files the seed described:
   - `callable/auth.ts` (39 lines) — seed's original target, move to hub.
   - `callable/poll_device_handoff.ts` (63 lines) — seed's original target,
@@ -129,7 +157,7 @@ drift.
   - `auth/deleted.ts` (logs only) — seed's original target, delete.
   - `scheduler/daily.ts` (21 lines, no-op) — seed's original target, delete
     (overlaps Feature C).
-  - `api/discord_interactions.ts` (**256 lines, new since the seed**) — a
+  - `api/discord_interactions.ts` (**115 lines, new since the seed**) — a
     real feature (Discord interactions webhook), not accounted for by the
     original scope. Needs a disposition decision — see OQ-3.
   - `firestore/users/[uid]/created.ts`, `.../deleted.ts`, `.../updated.ts`
@@ -192,8 +220,10 @@ After this contract:
   palette in light and dark.
 - A production build ships zero `(dev)` routes; E2E/visual suites still pass
   against a test build with the gate enabled.
-- No dangling references to deleted packages remain anywhere in the repo;
-  the `appearanceLayers` hard-zero block exists in exactly one place.
+- No dangling references to deleted packages (both
+  `@aikami/frontend/firestore` and `@aikami/backend/firestore` alias
+  families) remain anywhere in the repo; the `appearanceLayers` hard-zero
+  logic exists in exactly one shared helper that both services invoke.
 - Firebase Functions carries only what cannot move to the hub; auth and
   device handoff work identically through the hub's Elysia API.
 - The data-layer ADR and `deferred.md` state, unambiguously, that
@@ -220,7 +250,7 @@ After this contract:
 | Brand palette seed | `apps/frontend/site/src/lib/styles/global.css` `@theme inline` | **reuse** as the starting palette |
 | Dev route host | `routes/(dev)/+layout.svelte` | **modify** — add production guard |
 | Deleted-package aliases | 5 tsconfig files + 2 `svelte.config.js` | **remove** |
-| `appearanceLayers` zero-out | `game_boot_service.svelte.ts:1296-1297`, `game_engine_service.svelte.ts:893-894` | **dedupe** (blocked on C-417 OQ-1) |
+| `appearanceLayers` zero-out | `game_boot_service.svelte.ts:1296-1297`, `game_engine_service.svelte.ts:907-908` | **dedupe into shared helper** (C-417 OQ-1 resolved: zero-out intentional — preserve both call sites) |
 | Firebase auth/handoff controllers | `callable/auth.ts`, `callable/poll_device_handoff.ts` | **move** to hub Elysia routes |
 | Firebase logging-only triggers | `auth/created.ts`, `auth/deleted.ts`, `scheduler/daily.ts` | **delete** |
 | New Firebase surfaces (undecided) | `api/discord_interactions.ts`, `firestore/users/[uid]/*.ts` | **investigate, then decide** (OQ-3, OQ-4) |
@@ -319,10 +349,14 @@ Elysia route), not a schema change.
     duplicated theme stanzas deleted.
   - Feature B: production builds contain no `(dev)` route; test builds keep
     the gate enabled for E2E/visual suites.
-  - Feature C: remove dangling `dataconnect`/`firestore` path aliases from
-    the five tsconfig files and two `svelte.config.js` files; dedupe the
-    `appearanceLayers` zero-out (after C-417 OQ-1 resolves); delete
-    `daily.ts` (fold into Feature D if it lands first).
+  - Feature C: remove dangling `dataconnect`/`firestore` path aliases — both
+    the `@aikami/frontend/firestore` and `@aikami/backend/firestore` families
+    — from the 11 affected config files (six package tsconfigs, the two app
+    `tsconfig.test`/`.fast-check` sets, two `svelte.config.js` files, and the
+    firebase app tsconfig); dedupe the `appearanceLayers` zero-out into a
+    shared helper, preserving both call sites (C-417 OQ-1 resolved — the
+    zero-out is intentional); delete `daily.ts` (fold into Feature D if it
+    lands first).
   - Feature D: move `auth` and `poll_device_handoff` to hub Elysia routes;
     delete the logging-only triggers and no-op scheduler; decide and act on
     `discord_interactions.ts` and the three Firestore trigger stubs; remove
@@ -373,8 +407,9 @@ app file declares its own theme colours
 | AC-1 | Visual | visual suite per app | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run client:test-visual`, `moon run hub:test-visual` (if
-  present), or a manual screenshot comparison for site/docs.
+- Moon Task: `moon run e2e:run-visual-tests` — the visual runner lives in
+  `apps/e2e` (there is no `client:test-visual`/`hub:test-visual` task), or a
+  manual screenshot comparison for site/docs.
 - Integration: grep all four apps for theme-colour declarations outside the
   shared package — must return nothing.
 - E2E / Visual: **Visual**: one snapshot per app in light and dark.
@@ -406,9 +441,11 @@ and the existing E2E/visual suite passes unchanged
 
 ### AC-3: No dangling references to deleted packages
 **Given** the repo after cleanup
-**When** searching for `frontend/dataconnect` or `frontend/firestore`
-**Then** no tsconfig or `svelte.config.js` reference remains, and
-`bun run typecheck` passes
+**When** searching for `frontend/dataconnect`, `frontend/firestore`, or
+`backend/firestore`
+**Then** no tsconfig or `svelte.config.js` reference remains (both the
+`@aikami/frontend/firestore` and `@aikami/backend/firestore` alias families
+are gone), and `bun run typecheck` passes
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -417,13 +454,17 @@ and the existing E2E/visual suite passes unchanged
 
 **Test Hooks**:
 - Moon Task: `bun run typecheck`
-- Integration: `grep -r "frontend/firestore\|frontend/dataconnect"` across
-  the repo → zero matches outside historical docs/changelogs.
+- Integration:
+  `grep -rE "frontend/firestore|backend/firestore|frontend/dataconnect"`
+  across `**/tsconfig*.json` + `**/svelte.config.js` → zero matches outside
+  historical docs/changelogs and generated `.svelte-kit` tsconfigs (which
+  regenerate from `svelte.config.js`).
 - E2E / Visual: N/A.
 
 **Watch Points**:
 - Don't confuse this AC with actually deleting packages — they're already
-  gone; this is alias cleanup only.
+  gone; this is alias cleanup only. Clean both alias families (frontend AND
+  backend) — a repo-wide grep found 11 affected files, not 7.
 
 ### AC-4: Auth and device handoff work through the hub
 **Given** a user signing in or completing device handoff
@@ -435,14 +476,20 @@ remains in the pipeline
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | E2E | existing auth/device-handoff E2E specs, retargeted | hub API routes | Filled during verification |
+| AC-4 | E2E | existing sign-in/device-handoff E2E specs pass unchanged against hub-hosted routes | hub API routes | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run e2e:test -- tests/**/auth*.spec.ts`
+- Moon Task: `moon run e2e:test` — there is no dedicated `auth*.spec.ts`
+  today; sign-in is exercised by the `session_mgmt`, `game_boot`, and
+  `sandboxes` specs. The retarget is the client transport:
+  `auth_service.svelte.ts` and its `firebaseFunctionsService` caller
+  (`packages/frontend/services/src/lib/firebase/firebase_functions_service.ts`)
+  switch from the `auth` / `poll_device_handoff` callables to the hub route.
 - Integration: sign in, complete device handoff, against the hub-hosted
-  routes in a local/emulated environment.
-- E2E / Visual: **Functional**: existing specs retargeted at the new
-  endpoints, not duplicated.
+  routes in a local/emulated environment; grep the client for remaining
+  `httpsCallable` usage of `auth` / `poll_device_handoff` → zero matches.
+- E2E / Visual: **Functional**: existing specs exercising sign-in/handoff
+  pass unchanged against the new endpoints, not duplicated.
 
 **Watch Points**:
 - Verify auth guarantees are preserved (see Quality Requirements) — this is
@@ -452,7 +499,7 @@ remains in the pipeline
   AC can close — don't leave them stranded mid-migration.
 
 ### AC-5: Cloud Run inference decision is recorded and resolved
-**Given** the existing `🔴 Under revision (C-418)` marker in `deferred.md`
+**Given** the existing `🔴 Under revision (C-413)` marker in `deferred.md`
 **When** the ADR amendment lands
 **Then** the marker is resolved, the ADR states the `service` mode is a thin
 metered proxy over hosted providers (not GCP GPUs), and the revisit
@@ -516,12 +563,14 @@ conditions are written down
 - **Feature B**: don't gate at the component level only — a flag that hides
   UI but still ships the route in the JS bundle doesn't satisfy "contains no
   `(dev)` route."
-- **Feature C**: the `appearanceLayers` dedupe is blocked on C-417's OQ-1 —
-  do not dedupe before that's resolved, or the dedupe may erase intentional
-  equipment-overlay behavior.
-- **Feature D**: `discord_interactions.ts` (256 lines) is substantial and
-  new — treat it as a real feature requiring its own disposition decision,
-  not folded silently into "delete the small stuff."
+- **Feature C**: C-417's OQ-1 has **resolved** — the `appearanceLayers`
+  zero-out is intentional (equipment owns torso/feet). Dedupe by extracting
+  a shared helper; do not delete either call site, or the dedupe erases
+  intentional equipment-overlay behavior.
+- **Feature D**: `discord_interactions.ts` (115 lines) is a real feature
+  (Discord `/ask` webhook with signature verification + deferred async
+  OpenRouter work) — treat it as requiring its own disposition decision
+  (OQ-3), not folded silently into "delete the small stuff."
 - **Feature E**: no code changes — resist scope creep into touching the
   `service` adapter itself.
 - **Feature F**: GPU detection inside a container without the NVIDIA
@@ -538,7 +587,7 @@ Must be resolved before status becomes `approved`:
 - **OQ-2** — Feature B: build flag name and default (on for `dev`/`test`
   builds, off for `production`) — confirm the existing build-mode
   conventions to hook into.
-- **OQ-3** — Feature D: is `api/discord_interactions.ts` (256 lines, new) in
+- **OQ-3** — Feature D: is `api/discord_interactions.ts` (115 lines, new) in
   active use? If yes, does it move to the hub too, or does it have a reason
   to stay on Cloud Functions (e.g., webhook verification requirements)?
 - **OQ-4** — Feature D: are the three `firestore/users/[uid]/*.ts` triggers
