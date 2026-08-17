@@ -35,13 +35,13 @@ export type RecommendOptions = {
   readonly tierOverride?: 'cpu' | '8gb' | '16gb';
 };
 
-/** User-facing modality → manifest modality. `web`/`ollama`/`comfyui` have no models. */
+/** User-facing modality → manifest modality. `client`/`ollama`/`comfyui` have no models. */
 const MANIFEST_MODALITY: Readonly<Record<StackModality, string | undefined>> = {
   text: 'text',
   image: 'image',
   voice: 'tts',
   stt: 'stt',
-  web: undefined,
+  client: undefined,
   ollama: undefined,
   comfyui: undefined,
 } as const;
@@ -72,6 +72,8 @@ const selectEntry = (options: {
   readonly profileName: string;
   /** When set, never select above this tier (--tier override). */
   readonly tierCap?: 'cpu' | '8gb' | '16gb';
+  /** Ids referenced as someone else's companion — never independently selected. */
+  readonly companionIds: ReadonlySet<string>;
 }):
   | {
       readonly entry: ModelManifest['entries'][number];
@@ -79,7 +81,9 @@ const selectEntry = (options: {
     }
   | undefined => {
   const { manifestModality, usableBytes, nominalTier } = options;
-  const entries = options.manifest.entries.filter((entry) => entry.modality === manifestModality);
+  const entries = options.manifest.entries.filter(
+    (entry) => entry.modality === manifestModality && !options.companionIds.has(entry.id),
+  );
   if (entries.length === 0) {
     return undefined;
   }
@@ -222,11 +226,18 @@ export const recommend = (options: RecommendOptions): StackPlan => {
   });
   warnings.push(...backendWarnings);
 
+  // Companion files (e.g. Anima's VAE + text encoder) are never
+  // independently tier-selected — only reachable by riding along with the
+  // "primary" entry that lists them.
+  const companionIds = new Set(
+    manifest.entries.flatMap((entry) => (entry.companions ?? []).map((c) => c.id)),
+  );
+
   const models: StackPlan['models'] = [];
   for (const modality of modalities) {
     const manifestModality = MANIFEST_MODALITY[modality];
     if (!manifestModality) {
-      continue; // web / ollama / comfyui — no models to download
+      continue; // client / ollama / comfyui — no models to download
     }
     const picked = selectEntry({
       manifest,
@@ -235,6 +246,7 @@ export const recommend = (options: RecommendOptions): StackPlan => {
       nominalTier,
       profileName: modality,
       tierCap: tierOverride,
+      companionIds,
     });
     if (!picked) {
       warnings.push(`no manifest entry for modality ${modality}`);
@@ -255,6 +267,22 @@ export const recommend = (options: RecommendOptions): StackPlan => {
           ? 'universal tier — fits anywhere'
           : `${formatGb(usableBytes)} usable → tier ${entry.tier} (${formatGb(entry.bytes)})`,
     });
+    for (const companion of entry.companions ?? []) {
+      const companionEntry = manifest.entries.find((e) => e.id === companion.id);
+      if (!companionEntry) {
+        warnings.push(`${entry.id} references unknown companion ${companion.id}`);
+        continue;
+      }
+      models.push({
+        manifestId: companionEntry.id,
+        modality,
+        bytes: companionEntry.bytes,
+        license: companionEntry.license,
+        requiresAcknowledgement: companionEntry.requiresAcknowledgement,
+        rationale: `required ${companion.role} for ${entry.id}`,
+        role: companion.role,
+      });
+    }
   }
 
   if (models.length === 0 && modalities.length > 0) {

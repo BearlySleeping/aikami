@@ -178,19 +178,36 @@ describe('model manifest integrity', () => {
         targetPath: string;
         bytes: number;
         sha256: string;
+        companions?: { role: string; id: string }[];
       }>;
     };
     expect(manifest.schemaVersion).toBe(1);
     expect(manifest.entries.length).toBeGreaterThanOrEqual(7);
+    const byId = new Map(manifest.entries.map((e) => [e.id, e]));
     for (const entry of manifest.entries) {
       expect(entry.id).toBeTruthy();
       expect(entry.targetPath).toBeTruthy();
       expect(entry.bytes).toBeGreaterThan(0);
       expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/);
+      // Every referenced companion must resolve to a real entry and share
+      // the referencing entry's licence gate (a companion that silently
+      // downloads ungated would defeat the acknowledgement it rides on).
+      for (const companion of entry.companions ?? []) {
+        const companionEntry = byId.get(companion.id);
+        expect(companionEntry).toBeDefined();
+        expect(companionEntry?.requiresAcknowledgement).toBe(entry.requiresAcknowledgement);
+        expect(companionEntry?.license).toBe(entry.license);
+      }
     }
-    // The acknowledgement-gated entry exists (SD 1.5, OpenRAIL-M).
-    const ack = manifest.entries.find((e) => e.requiresAcknowledgement);
-    expect(ack).toBeDefined();
-    expect(ack?.license).toContain('OpenRAIL');
+    // The acknowledgement-gated entries exist and are correctly licensed
+    // (SD 1.5 → OpenRAIL-M, Anima's diffusion model → its own non-commercial
+    // licence, each ridden along by its companions).
+    const acknowledged = manifest.entries.filter((e) => e.requiresAcknowledgement);
+    expect(acknowledged.length).toBeGreaterThan(0);
+    const sd15 = manifest.entries.find((e) => e.id === 'image-sd15-pruned-q4_0');
+    expect(sd15?.license).toContain('OpenRAIL');
+    const anima = manifest.entries.find((e) => e.id === 'image-anima-aesthetic-v1.1');
+    expect(anima?.requiresAcknowledgement).toBe(true);
+    expect(anima?.companions?.length).toBe(2);
   });
 });

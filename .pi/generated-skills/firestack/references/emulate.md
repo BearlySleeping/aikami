@@ -59,6 +59,54 @@ The emulator runs in the foreground. To stop it:
 - Press `Ctrl+C` in the terminal.
 - Or run `firestack emulate --mode <mode> --force` to kill and restart.
 
+## Running Multiple Emulator Instances
+
+Two emulator suites (e.g. a contract test run + a manual dev run) can run
+concurrently. Each suite needs its own set of ports. Three ways to offset a
+suite, in precedence order:
+
+1. **Per-process environment variables** (recommended for process managers
+   like herdr/overmind — each process gets its own env):
+
+   ```
+   FIRESTACK_EMULATOR_UI_PORT=4001
+   FIRESTACK_EMULATOR_HUB_PORT=4401
+   FIRESTACK_EMULATOR_AUTH_PORT=9199
+   FIRESTACK_EMULATOR_FIRESTORE_PORT=8180
+   FIRESTACK_EMULATOR_FUNCTIONS_PORT=5101
+   FIRESTACK_EMULATOR_PUBSUB_PORT=8185
+   FIRESTACK_EMULATOR_STORAGE_PORT=9299
+   FIRESTACK_EMULATOR_DATABASE_PORT=9100
+   FIRESTACK_EMULATOR_HOSTING_PORT=5100
+   FIRESTACK_EMULATOR_DATACONNECT_PORT=9499
+   ```
+
+   The resolved ports are written into the generated `firebase.json`, so the
+   spawned Firebase CLI binds exactly those ports.
+
+2. **Mode-dependent config** — `defineConfig(({ mode }) => ...)` is
+   re-evaluated with the resolved mode, so ports can branch per mode:
+
+   ```ts
+   export default defineConfig(({ mode }) => ({
+     modes: { manual: 'demo-manual', contract: 'demo-contract' },
+     emulatorPorts:
+       mode === 'contract'
+         ? { ui: 4001, hub: 4401, auth: 9199, firestore: 8180 }
+         : { ui: 4000, hub: 4400, auth: 9099, firestore: 8080 },
+   }));
+   ```
+
+   Run with `firestack emulate --mode contract` / `--mode manual`.
+
+3. **Static `emulatorPorts` in the config** — same ports for every run;
+   use different project directories for the second suite.
+
+`--force` only kills processes on the ports this suite actually binds (the
+enabled emulators + UI + hub). It never touches default ports of emulators
+this suite does not run, so starting a second suite with `--force` cannot
+bring down another suite's emulators.
+
 ## Troubleshooting
 
 | Issue | Resolution |

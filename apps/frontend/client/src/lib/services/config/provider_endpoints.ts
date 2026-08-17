@@ -217,6 +217,25 @@ export const getOllamaRuntimeEndpoints = (): {
 };
 
 /**
+ * Resolves the runtime-configured text engine's OpenAI-compatible models-
+ * list URL (C-389/C-406). This is a DIFFERENT server shape from
+ * `getOllamaRuntimeEndpoints` — the local-stack's bundled default (llama.cpp's
+ * llama-server) speaks OpenAI's `/v1/models`, not Ollama's native `/api/tags`,
+ * even though it commonly shares Ollama's default port. Returns undefined
+ * when no text engine is configured.
+ */
+export const getOpenAiCompatRuntimeModelsUrl = (): string | undefined => {
+  const base = runtimeConfigService.getTextUrl()?.replace(/\/+$/, '');
+  if (!base) {
+    return undefined;
+  }
+  // getTextUrl() is already an OpenAI-compatible base (e.g. ".../v1" per
+  // apps/backend/local-stack/scripts/emit_config.sh) — append the standard
+  // models-list path directly, no stripping.
+  return `${base}/models`;
+};
+
+/**
  * Fetches available models from a provider using its registry config.
  *
  * @returns A parsed array of `{ id, name }` model entries, or an empty

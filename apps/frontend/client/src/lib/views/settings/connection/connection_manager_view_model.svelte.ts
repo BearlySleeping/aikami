@@ -194,7 +194,7 @@ class ConnectionManagerViewModel
     if (capability === 'voice') {
       return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
     }
-    return ['ollama', 'ooba', 'custom'].includes(provider);
+    return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(provider);
   }
 
   /** True when the draft provider runs locally (no API key, no cloud auth). */

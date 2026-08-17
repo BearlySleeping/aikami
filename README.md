@@ -67,8 +67,8 @@ Open **http://localhost:5274** and you're playing. No internet required after th
 # Explicit backend + modalities (CPU/CUDA/ROCm/Vulkan/Intel/MUSA)
 bun run stack init --yes --backend cuda --modalities text,image,voice
 
-# ...or just the web client, bringing your own cloud key / remote endpoints
-echo "COMPOSE_PROFILES=web" >> .env && docker compose up -d
+# ...or just the client, bringing your own cloud key / remote endpoints
+echo "COMPOSE_PROFILES=client" >> .env && docker compose up -d
 ```
 
 **Prefer Ollama or ComfyUI?** Both are supported drop-in swaps on the same ports — set these in `.env` instead of the defaults:
@@ -80,7 +80,7 @@ COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on :8188
 
 Full backend matrix (CUDA/ROCm/Vulkan/Intel/MUSA), STT setup, the macOS native path (Docker Desktop has no Metal passthrough), model licensing, and smoke tests all live in the [Local Stack README](apps/backend/local-stack/README.md) — that's the source of truth for anything Docker/engine-related.
 
-**Don't want to clone the repo at all?** You don't have to — `model-fetcher`, `voice`, and `web` all pull prebuilt images from GHCR by default. Grab just the `compose*.yaml` files and a hand-written `.env` (from `.env.example`) into an empty directory and `docker compose up -d` works standalone; you only lose the hardware-detection wizard (`stack init` needs the repo).
+**Don't want to clone the repo at all?** You don't have to — `model-fetcher`, `voice`, and `client` all pull prebuilt images from GHCR by default. Grab just the `compose*.yaml` files and a hand-written `.env` (from `.env.example`) into an empty directory and `docker compose up -d` works standalone; you only lose the hardware-detection wizard (`stack init` needs the repo).
 
 ### Option 2 — From source (Bun + Moon)
 
@@ -278,7 +278,7 @@ apps/
 │   └── docs/         # Documentation site (Astro)
 └── backend/
     ├── firebase/       # Cloud Functions, auth triggers, security rules
-    ├── local-stack/    # Publishable Docker topology — text/image/voice/stt + web (C-390)
+    ├── local-stack/    # Publishable Docker topology — text/image/voice/stt + client (C-390)
     ├── image/          # sd-server image engine (dev), ComfyUI as opt-in advanced alt
     ├── text/           # llama.cpp text engine (dev), Ollama as opt-in advanced alt
     └── voice/          # sherpa-onnx/Kokoro voice + STT engine (dev)

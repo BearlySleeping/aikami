@@ -82,7 +82,15 @@ export type CapabilityViewModelOptions = BaseViewModelOptions;
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const LOCAL_PROVIDERS = new Set(['ollama', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox']);
+const LOCAL_PROVIDERS = new Set([
+  'ollama',
+  'llamacpp',
+  'ooba',
+  'comfyui',
+  'webui',
+  'kokoro',
+  'voicevox',
+]);
 
 const CAPABILITY_TABS: readonly { id: ConnectionCapability; label: string }[] = [
   { id: 'text', label: 'Text' },
@@ -413,6 +421,22 @@ class CapabilityViewModel
         capability: 'text',
         provider: 'ollama',
         name: 'Ollama (local)',
+        model: result.textModelName ?? '',
+        baseUrl: textBaseUrl ?? '',
+      });
+    } else if (result.textStatus === 'detected' && result.textProviderId === 'llamacpp') {
+      // C-406: the local-stack's bundled default (llama.cpp) — a genuine
+      // OpenAI-compatible local server, not Ollama, even though it commonly
+      // shares Ollama's default port. Keeping this a distinct provider id
+      // (not folded into 'ollama') matters beyond labelling: the chat
+      // adapter special-cases provider === 'ollama' to disable streaming
+      // and use Ollama's own /api/chat shape — misapplying that to
+      // llama.cpp would silently kill streaming for the common case.
+      const textBaseUrl = runtimeConfigService.getTextUrl();
+      this._seedConnection({
+        capability: 'text',
+        provider: 'llamacpp',
+        name: 'llama.cpp (local)',
         model: result.textModelName ?? '',
         baseUrl: textBaseUrl ?? '',
       });

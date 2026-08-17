@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
 
 /**
  * Firestack runs this script automatically when the emulator starts.
@@ -22,7 +21,6 @@ const app = initializeApp({
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
 
 // 1. Seed Auth users
 console.log('Creating sample users...');
@@ -54,7 +52,7 @@ await db.collection('system').doc('status').set({
 });
 
 // 3. Seed Storage (optional — uncomment and customize)
-// const bucket = storage.bucket();
+// const bucket = getStorage(app).bucket();
 // await bucket.file('assets/sample.txt').save('Hello, world!', {
 //   metadata: { contentType: 'text/plain' },
 // });

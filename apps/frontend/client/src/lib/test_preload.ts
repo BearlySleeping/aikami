@@ -346,6 +346,7 @@ const _localServicesMock = () => ({
   runtimeConfigService: _createServiceStub(),
   RuntimeConfigService: class {},
   getOllamaRuntimeEndpoints: _createCallableStub(),
+  getOpenAiCompatRuntimeModelsUrl: _createCallableStub(),
   authService: _createServiceStub(),
   AuthService: class {},
   personaCreationService: _createServiceStub(),

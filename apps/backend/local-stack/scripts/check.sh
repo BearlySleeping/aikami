@@ -166,7 +166,7 @@ check "compose parses: musa override" docker compose -f compose.yaml -f compose.
 check "compose parses: models-path override" docker compose -f compose.yaml -f compose.models-path.yaml config --quiet
 check "compose parses: stt override" docker compose -f compose.yaml -f compose.cpu.yaml -f compose.stt.yaml config --quiet
 
-for profile in text image voice stt web; do
+for profile in text image voice stt client; do
     svcs=$(profile_services "$profile")
     case "$profile" in
         text) expected="model-fetcher
@@ -177,7 +177,7 @@ image" ;;
 voice" ;;
         stt) expected="model-fetcher
 voice" ;;
-        web) expected="web" ;;
+        client) expected="client" ;;
     esac
     if [ "$svcs" = "$expected" ]; then
         ok "AC-2: profile '$profile' starts exactly: $svcs"
@@ -261,7 +261,7 @@ done
 # constrains the HOST publish binding, which must be 127.0.0.1. The
 # all-profiles render includes compose.stt.yaml so the STT port publish is
 # asserted where it actually lives (C-393 AC-7).
-rendered_all=$(COMPOSE_FILE="compose.yaml:compose.cpu.yaml:compose.stt.yaml" COMPOSE_PROFILES=text,image,voice,stt,web docker compose config 2>/dev/null)
+rendered_all=$(COMPOSE_FILE="compose.yaml:compose.cpu.yaml:compose.stt.yaml" COMPOSE_PROFILES=text,image,voice,stt,client docker compose config 2>/dev/null)
 for port in 8080; do
     if printf '%s' "$rendered_all" | grep -qE "published: *[\"']?${port}[\"']?"; then
         bad "AC-11: host port $port is published (Nordclaw-owned)"
@@ -376,7 +376,7 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
         else
             bad "AC-1: $resolve_ref does not resolve"
         fi
-    done < <(COMPOSE_PROFILES=text,image,voice,stt,web,ollama,comfyui docker compose config 2>/dev/null \
+    done < <(COMPOSE_PROFILES=text,image,voice,stt,client,ollama,comfyui docker compose config 2>/dev/null \
         | grep -oE 'image: *"?[^"]+' | sed -E 's/image: *"?//;s/"//' \
         | grep -vE 'aikami-sd-server' \
         | sort -u)
@@ -427,7 +427,7 @@ fi
 #    here we assert the image contract is in place). ─────────────────────
 echo "== AC-9 client-image contract =="
 if grep -q "listen 5274" docker/client/nginx.conf; then
-    ok "AC-9: nginx listens on the Aikami web port 5274"
+    ok "AC-9: nginx listens on the Aikami client port 5274"
 else
     bad "AC-9: nginx does not listen on 5274"
 fi
@@ -465,9 +465,9 @@ if [ "${LOCAL_STACK_LIVE:-0}" = "1" ]; then
         bad "AC-4: voice /v1/audio/speech returned audio"
     fi
     if curl -fsS -o /dev/null http://127.0.0.1:5274/ >/dev/null 2>&1; then
-        ok "AC-4: web client HTTP 200"
+        ok "AC-4: client HTTP 200"
     else
-        bad "AC-4: web client HTTP 200"
+        bad "AC-4: client HTTP 200"
     fi
 
     # ── C-393 live STT probes (AC-1..AC-10) ────────────────────────────

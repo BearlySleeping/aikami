@@ -5,7 +5,7 @@
 # Modality → Compose profile; backend → Compose override file. All variation
 # lives in .env, which Compose reads automatically:
 #
-#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_PROFILES=text,image,voice,stt,client
 #   COMPOSE_FILE=compose.yaml:compose.cuda.yaml
 #
 # The user's runtime command is therefore plain `docker compose up -d` with
@@ -14,11 +14,11 @@
 #
 # Hardware backends (override files): cpu, cuda, rocm, vulkan, intel, musa.
 # 'metal' deliberately has no compose override — on macOS the setup emits the
-# native plan (bin/run-native-*.sh) and only the web client is containerised,
+# native plan (bin/run-native-*.sh) and only the client container runs,
 # because Docker Desktop provides no Metal passthrough.
 #
 # Ports (from packages/shared/constants/src/lib/development_ports.ts):
-#   text=11434  image=8188  voice=8089  stt=8087  web=5274
+#   text=11434  image=8188  voice=8089  stt=8087  client=5274
 # Host 8080 is abandoned — it belongs to Nordclaw's Firestore emulator.
 
 name: aikami-local-stack
@@ -108,36 +108,67 @@ services:
   # published leejet variants. The sd.cpp images ship `/sd-cli` as their
   # entrypoint, so the command must run `/sd-server` explicitly (verified
   # 2026-08-14).
+  #
+  # Two invocation shapes, chosen by whether IMAGE_DIFFUSION_MODEL is set
+  # (env_writer.ts writes it only when the selected model has companions):
+  #   single-file  (e.g. SD1.5, a full checkpoint) — `--model`.
+  #   multi-file   (e.g. Anima — diffusion weights ship without a VAE or
+  #                text encoder) — `--diffusion-model` + `--vae`/`--llm`/
+  #                `--clip_l`/`--clip_g`/`--t5xxl`, whichever are set.
+  # A shell entrypoint is needed to branch on that at container start; the
+  # sd.cpp images still ship /sd-cli as ENTRYPOINT so /sd-server must be
+  # invoked explicitly either way (C-392 verified).
   image:
     profiles: ["image"]
     image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-sd-server:cpu
-    # The sd.cpp images ship /sd-cli as their ENTRYPOINT; sd-server must be
-    # selected explicitly or the engine boots the CLI and errors on the
-    # first argument. (C-392 verified on leejet/stable-diffusion.cpp
-    # master-vulkan; the C-390 "verified" comment missed this.) The command
-    # is therefore flags-only — no leading binary.
-    entrypoint: /sd-server
+    entrypoint: /bin/sh
     ports:
       - "127.0.0.1:${IMAGE_PORT:-8188}:8188"
     command:
-      - --listen-ip
-      - 0.0.0.0
-      - --listen-port
-      - "8188"
-      - --model
-      - /models/image/${IMAGE_MODEL:-flux1-schnell-q4_k.gguf}
-      # refresh_lora_cache recursively walks this dir on every job; with no
-      # --lora-model-dir sd-server defaults to the container root and dies
-      # with EPERM when it reaches /proc/1/map_files (C-392 verified).
-      - --lora-model-dir
-      - /models/image
+      - -c
+      - |
+        set -e
+        # Every IMAGE_-prefixed token below is resolved by docker compose
+        # from .env at config-render time (same mechanism the single-line
+        # --model form used before) -- by the time this script runs in the
+        # container these are already plain literal text, not a runtime env
+        # lookup. Deliberately not copied into lowercase shell variables
+        # first: compose interpolation also matches bare dollar-prefixed
+        # shell references, which would silently blank them out before the
+        # container ever starts. (Keep this comment free of a dollar sign
+        # followed by a brace or asterisk -- compose interpolates comments
+        # inside this block too and a malformed pattern fails config render.)
+        # refresh_lora_cache recursively walks this dir on every job; with
+        # no --lora-model-dir sd-server defaults to the container root and
+        # dies with EPERM when it reaches /proc/1/map_files (C-392 verified).
+        set -- --listen-ip 0.0.0.0 --listen-port 8188 --lora-model-dir /models/image
+        if [ -n "${IMAGE_DIFFUSION_MODEL:-}" ]; then
+          set -- "$$@" --diffusion-model "/models/image/${IMAGE_DIFFUSION_MODEL:-}"
+          [ -n "${IMAGE_VAE_MODEL:-}" ] && set -- "$$@" --vae "/models/image/${IMAGE_VAE_MODEL:-}"
+          [ -n "${IMAGE_LLM_MODEL:-}" ] && set -- "$$@" --llm "/models/image/${IMAGE_LLM_MODEL:-}"
+          [ -n "${IMAGE_CLIP_L_MODEL:-}" ] && set -- "$$@" --clip_l "/models/image/${IMAGE_CLIP_L_MODEL:-}"
+          [ -n "${IMAGE_CLIP_G_MODEL:-}" ] && set -- "$$@" --clip_g "/models/image/${IMAGE_CLIP_G_MODEL:-}"
+          [ -n "${IMAGE_T5XXL_MODEL:-}" ] && set -- "$$@" --t5xxl "/models/image/${IMAGE_T5XXL_MODEL:-}"
+        else
+          set -- "$$@" --model "/models/image/${IMAGE_MODEL:-stable-diffusion-v1-5-pruned-emaonly-q4_0.gguf}"
+        fi
+        exec /sd-server "$$@"
     volumes:
       - *model-volume
     depends_on:
       model-fetcher:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "bash", "-c", "curl -fsS http://127.0.0.1:8188/sdapi/v1/sd-models >/dev/null 2>&1"]
+      # Neither curl nor wget ships in the upstream leejet/stable-diffusion.cpp
+      # images (verified 2026-08-17 against master-cuda) — bash does, and its
+      # /dev/tcp pseudo-device can do a real HTTP request without either.
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/127.0.0.1/8188 && printf 'GET /sdapi/v1/sd-models HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -204,15 +235,17 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ── Web client — prebuilt SPA behind nginx (opt-in `web` profile) ──────
+  # ── Client — the game client/app, prebuilt SPA behind nginx (opt-in
+  # `client` profile; named `web` before it was renamed — this isn't a
+  # generic "web" service, it's the Aikami client) ────────────────────────
   # Tauri users and dist-servers start no client container. The runtime
   # engine config.json (AC-9) is generated inside the container at start by
   # docker/client/generate_config.sh from the env vars below (defaulting to
   # the standard local-stack ports), so one image works across any topology
   # with zero rebuild and no bind mount.
-  web:
-    profiles: ["web"]
-    # Pulls the published image by default; `docker compose build web`
+  client:
+    profiles: ["client"]
+    # Pulls the published image by default; `docker compose build client`
     # builds from Dockerfile.client locally instead (needs `bun run
     # build:client` run first to stage .build/client).
     image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-client:${LOCAL_STACK_VERSION:-latest}
@@ -220,7 +253,7 @@ services:
       context: .
       dockerfile: Dockerfile.client
     ports:
-      - "127.0.0.1:${WEB_PORT:-5274}:5274"
+      - "127.0.0.1:${CLIENT_PORT:-5274}:5274"
     environment:
       LLM_ENDPOINT: "${LLM_ENDPOINT:-}"
       IMAGE_ENDPOINT: "${IMAGE_ENDPOINT:-}"

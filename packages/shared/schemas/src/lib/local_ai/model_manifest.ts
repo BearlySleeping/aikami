@@ -48,6 +48,20 @@ const ManifestEntrySourceSchema = Type.Union([
   }),
 ]);
 
+/**
+ * Role a companion file plays alongside a "primary" entry (e.g. Anima,
+ * FLUX-family models: the primary diffusion weights ship without a VAE or
+ * text encoder, and sd-server needs each passed as its own flag —
+ * `--vae` / `--llm` / `--clip_l` / `--clip_g` / `--t5xxl`).
+ */
+export const ManifestEntryCompanionRoleSchema = Type.Union([
+  Type.Literal('vae'),
+  Type.Literal('llm'),
+  Type.Literal('clip_l'),
+  Type.Literal('clip_g'),
+  Type.Literal('t5xxl'),
+]);
+
 export const ModelManifestEntrySchema = Type.Intersect([
   Type.Object({
     id: Type.String(),
@@ -58,6 +72,15 @@ export const ModelManifestEntrySchema = Type.Intersect([
     targetPath: Type.String(),
     bytes: Type.Integer({ minimum: 0 }),
     sha256: Type.String({ pattern: '^[0-9a-fA-F]{64}$' }),
+    /**
+     * Other manifest entry ids that MUST be fetched and passed alongside
+     * this one — e.g. Anima's VAE + text encoder. Referenced ids are never
+     * independently tier-selected (recommend.ts excludes them from the
+     * per-modality candidate pool); they ride along with this entry only.
+     */
+    companions: Type.Optional(
+      Type.Array(Type.Object({ role: ManifestEntryCompanionRoleSchema, id: Type.String() })),
+    ),
   }),
   ManifestEntrySourceSchema,
 ]);

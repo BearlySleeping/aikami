@@ -804,6 +804,7 @@ const launchBackground = async (options: {
     throw new Error(`Failed to create herdr launcher workspace ${launcherLabel}.`);
   }
   const launcherPaneId = wsResult.result.root_pane.pane_id;
+  const launcherWorkspaceId = wsResult.result.workspace.workspace_id;
   const command = ['bun', 'run', import.meta.path, ...childArgs].map(posixQuote).join(' ');
   // 🔴 Capture the pane-run result and fail fast on a nonzero code instead of
   // blindly polling readyPath for the full 180s deadline: a herdr-level
@@ -864,6 +865,35 @@ const launchBackground = async (options: {
     workspaceId?: string;
   };
   console.log(`Pipeline ${ready.runId ?? token} ready in ${ready.workspaceId ?? 'Herdr'}.`);
+
+  // 🔴 Relocate the launcher's hosting pane into the real contract workspace
+  // the child just created, then drop the now-empty temporary one. Grouping
+  // only — never fail an otherwise-successful launch over this.
+  // `pane move --new-tab --workspace` auto-closes the vacated source
+  // workspace (verified against herdr 0.8.0), so the explicit `workspace
+  // close` below is a defensive no-op, not the primary cleanup path.
+  if (ready.workspaceId && ready.workspaceId !== launcherWorkspaceId) {
+    try {
+      await herdr([
+        'pane',
+        'move',
+        launcherPaneId,
+        '--new-tab',
+        '--workspace',
+        ready.workspaceId,
+        '--label',
+        'launcher',
+        '--no-focus',
+      ]);
+      await herdr(['workspace', 'close', launcherWorkspaceId]).catch(() => {});
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `⚠️  Could not relocate launcher pane into ${ready.workspaceId}: ${msg.slice(0, 200)}`,
+      );
+    }
+  }
+
   if (options.noAttach) {
     console.log(
       'Running detached — pipeline continues in background. Use herdr session attach default to view.',

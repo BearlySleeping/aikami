@@ -69,7 +69,7 @@ meaningfully faster — see the backend matrix below. If you're bringing your
 own endpoints / API keys instead, run just the client:
 
 ```bash
-echo "COMPOSE_PROFILES=web" >> .env
+echo "COMPOSE_PROFILES=client" >> .env
 docker compose up -d
 ```
 
