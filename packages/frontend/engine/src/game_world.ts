@@ -24,7 +24,7 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import { ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
+import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
@@ -473,6 +473,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _environmentUbo: Float32Array | undefined;
 
   /**
+   * C-417 AC-2: whether the currently loaded map is an interior whose
+   * lighting is independent of the world clock. Set at loadMap from the
+   * content-pack manifest's per-map `interior` flag (projected through
+   * PackConfig) — never hard-coded per map id. When true, the tilemap
+   * ambient tint is pinned to COLOR_INTERIOR instead of following the
+   * worker's diurnal UBO.
+   */
+  private _isInteriorMap = false;
+
+  /**
    * C-378 AC-9: whether the day/night tint has been sampled in screenshot
    * mode. The first ambient value (once the worker UBO arrives) is retained
    * for the whole capture instead of refreshing from the advancing worker
@@ -621,13 +631,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         if (!screenshotMode || !this._screenshotTintSampled) {
           const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
           if (tintArr && this._environmentUbo) {
-            // Ambient color from the worker UBO — same factor the rest of the
-            // scene uses. Neutral (1,1,1) when the worker hasn't sent a UBO
-            // yet (boot) → pixel-identical to an untinted render.
-            const ambient = this._environmentUbo;
-            tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
-            tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
-            tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+            // C-417 AC-2: interior maps pin their ambient tint to a fixed
+            // warm colour so they stay readable regardless of the outdoor
+            // clock; outdoor maps follow the worker's diurnal UBO ambient
+            // (same factor the rest of the scene uses). Neutral (1,1,1) when
+            // the worker hasn't sent a UBO yet (boot) → pixel-identical to
+            // an untinted render.
+            if (this._isInteriorMap) {
+              tintArr[0] = COLOR_INTERIOR[0] ?? 0.82;
+              tintArr[1] = COLOR_INTERIOR[1] ?? 0.78;
+              tintArr[2] = COLOR_INTERIOR[2] ?? 0.68;
+            } else {
+              const ambient = this._environmentUbo;
+              tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
+              tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
+              tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
+            }
             if (screenshotMode) {
               this._screenshotTintSampled = true;
             }
@@ -2316,6 +2335,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       packConfig,
     } = options;
     this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
+
+    // C-417 AC-2: interior maps pin their ambient to a fixed warm colour
+    // independent of the outdoor clock. The flag is declared generically in
+    // the content-pack manifest (per-map `interior`) and projected through
+    // PackConfig — reset to false for non-interior/legacy maps.
+    this._isInteriorMap = packConfig?.interior === true;
 
     try {
       // 1. Pause the engine

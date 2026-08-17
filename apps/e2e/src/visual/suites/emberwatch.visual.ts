@@ -140,6 +140,85 @@ const NPC_BODIES_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// C-417 AC-2 — midnight readability on the production village.
+const NightReadabilitySchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  terrainDistinguishable: Type.Boolean({
+    description: 'Whether terrain/floor tiles are individually distinguishable at night',
+  }),
+  propsVisible: Type.Boolean({
+    description: 'Whether props (gate, well, notice board) are visible as distinct art',
+  }),
+  playerVisible: Type.Boolean({
+    description: 'Whether the player character is clearly visible against the terrain',
+  }),
+  nightTintVisible: Type.Boolean({
+    description: 'Whether the scene reads as night (blue-dark tint), not full daylight',
+  }),
+  notBlackBlur: Type.Boolean({
+    description: 'Whether the scene is NOT a near-black undifferentiated blur',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+const NIGHT_READABILITY_PROMPT = [
+  'This is a screenshot from the Emberwatch village at MIDNIGHT (game hour 0) — a top-down pixel-art JRPG scene from the Aikami game engine. The camera centers on the player at the village gate.',
+  '',
+  'C-417 AC-2 NIGHT READABILITY CHECK:',
+  '- The scene has a dark blue night tint, clearly darker than noon — but NOT near-black.',
+  '- Individual terrain/floor tiles are still distinguishable from each other (grass, dirt path, stone walls).',
+  '- Props (wooden gate, stone posts, well) are visible as distinct art against the terrain.',
+  '- The player character is clearly visible against the dark terrain.',
+  '- No rain, no fog overlay.',
+  '',
+  'EVALUATE:',
+  '- Can you distinguish individual tiles, props, and the player without squinting?',
+  '- Is it clearly night (blue-dark tint) yet still readable? If the scene is a black blur, notBlackBlur=false.',
+  '',
+  'Score breakdown:',
+  '- 90-100: Night tint present AND terrain/props/player all distinguishable.',
+  '- 70-89: Night scene readable but some elements ambiguous.',
+  '- 40-69: Partially dark — some elements disappear into the background.',
+  '- 0-39: Near-black blur or broken rendering.',
+  '',
+  'Return ONLY valid JSON matching the schema.',
+].join('\n');
+
+// C-417 AC-2 — noon (the actual campaign default) readability baseline.
+const NoonReadabilitySchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  terrainDistinguishable: Type.Boolean({
+    description: 'Whether terrain/floor tiles are individually distinguishable at noon',
+  }),
+  propsVisible: Type.Boolean({
+    description: 'Whether props (gate, well, notice board) are visible as distinct art',
+  }),
+  playerVisible: Type.Boolean({
+    description: 'Whether the player character is clearly visible against the terrain',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+const NOON_READABILITY_PROMPT = [
+  'This is a screenshot from the Emberwatch village at NOON (game hour 12, the actual campaign default) — a top-down pixel-art JRPG scene from the Aikami game engine. The camera centers on the player at the village gate.',
+  '',
+  'C-417 AC-2 NOON BASELINE CHECK:',
+  '- Bright full daylight: terrain/floor tiles (grass, dirt path, stone walls) are crisply distinguishable.',
+  '- Props (wooden gate, stone posts) are visible as distinct art.',
+  '- The player character is clearly visible against the terrain.',
+  '- No rain, no fog.',
+  '',
+  'EVALUATE:',
+  '- Is the scene brightly lit and every element (terrain, props, player) clearly distinguishable?',
+  '',
+  'Score breakdown:',
+  '- 90-100: Bright, coherent village with all elements distinguishable.',
+  '- 70-89: Mostly bright but some elements ambiguous.',
+  '- 0-69: Dark, broken, or undifferentiated render.',
+  '',
+  'Return ONLY valid JSON matching the schema.',
+].join('\n');
+
 const OVERHEAD_PROMPT = [
   'This is a screenshot from the Emberwatch village — a top-down pixel-art JRPG scene from the Aikami game engine.',
   'The player has just spawned at the village gate (south-center of the map) and the camera centers on the player.',
@@ -209,6 +288,29 @@ export default defineConfig({
       searchParams: { gameHour: '12' },
       setupHook: waitForVisualReady,
       requiredTrueFields: ['allNpcsHaveBodies', 'noFloatingHeads'],
+    },
+    {
+      // C-417 AC-2: the village stays readable at midnight after the night
+      // ambient floor change — terrain, floor, props, and the player must
+      // remain distinguishable under the darkest part of the day/night cycle.
+      name: 'Village — readable at midnight (C-417 AC-2)',
+      screenshotSelector: 'canvas',
+      prompt: NIGHT_READABILITY_PROMPT,
+      schema: NightReadabilitySchema,
+      searchParams: { gameHour: '0' },
+      setupHook: waitForVisualReady,
+      requiredTrueFields: ['terrainDistinguishable', 'playerVisible'],
+    },
+    {
+      // C-417 AC-2: the actual campaign default (noon) is the readability
+      // baseline — everything must be crisply distinguishable in full light.
+      name: 'Village — readable at noon baseline (C-417 AC-2)',
+      screenshotSelector: 'canvas',
+      prompt: NOON_READABILITY_PROMPT,
+      schema: NoonReadabilitySchema,
+      searchParams: { gameHour: '12' },
+      setupHook: waitForVisualReady,
+      requiredTrueFields: ['terrainDistinguishable', 'playerVisible'],
     },
   ],
 });

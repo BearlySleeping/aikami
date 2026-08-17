@@ -43,6 +43,15 @@ export const ContentPackMapEntrySchema = Type.Object({
   defaultX: Type.Optional(Type.Number({ description: 'Fallback spawn X pixel coordinate' })),
   /** Pixel Y fallback if no spawn entity matches */
   defaultY: Type.Optional(Type.Number({ description: 'Fallback spawn Y pixel coordinate' })),
+  /**
+   * C-417 AC-2: whether this map is an interior whose lighting is
+   * independent of the world clock. Interiors keep a fixed warm ambient
+   * regardless of the outdoor day/night cycle. Generic map-declared
+   * property — no per-map special-casing in the engine.
+   */
+  interior: Type.Optional(
+    Type.Boolean({ description: 'Fixed lighting independent of the world clock' }),
+  ),
 });
 
 export type ContentPackMapEntry = Static<typeof ContentPackMapEntrySchema>;
@@ -746,6 +755,12 @@ export const PackConfigSchema = Type.Object({
   props: Type.Record(Type.String(), ContentPackPropSchema, {
     description: 'Prop definitions keyed by prop ID',
   }),
+  /**
+   * C-417 AC-2: whether the map this pack config was built for is an
+   * interior with clock-independent lighting. Projected from the manifest's
+   * per-map `interior` flag (declared generically, never hard-coded).
+   */
+  interior: Type.Optional(Type.Boolean({ description: 'Map is an interior with fixed lighting' })),
   /** Terrain definitions (C-378) — carried across the worker boundary for the autotiler. */
   terrains: Type.Optional(
     Type.Array(ContentPackTerrainSchema, { description: 'Terrain definitions' }),

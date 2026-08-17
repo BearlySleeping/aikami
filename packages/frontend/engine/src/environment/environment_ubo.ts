@@ -53,6 +53,26 @@ export const ENV_UBO_OFFSETS = {
 /** Colour preset for midnight (00:00 / 24:00). Deep blue-black. */
 export const COLOR_MIDNIGHT: ReadonlyArray<number> = [0.18, 0.18, 0.3, 1.0];
 
+/**
+ * C-417 AC-2: minimum ambient floor for the night portion of the cycle.
+ *
+ * The raw midnight colour was too dark for terrain/props/floor to stay
+ * distinguishable at night. `COLOR_MIDNIGHT` (the keyframe endpoint) stays
+ * the authored deep-blue, but the diurnal interpolator clamps the computed
+ * ambient so the scene never drops below this readability floor.
+ */
+export const COLOR_NIGHT_FLOOR: ReadonlyArray<number> = [0.34, 0.36, 0.52, 1.0];
+
+/**
+ * C-417 AC-2: fixed ambient for interior maps.
+ *
+ * Interiors (inn, merchant shop) are lit independently of the world clock —
+ * a warm, comfortably bright lantern glow that stays constant whether it is
+ * noon or midnight outside. Consumed by the engine when the loaded map
+ * declares `interior: true` in the content-pack manifest.
+ */
+export const COLOR_INTERIOR: ReadonlyArray<number> = [0.82, 0.78, 0.68, 1.0];
+
 /** Colour preset for dawn (06:00). Soft orange-pink. */
 export const COLOR_DAWN: ReadonlyArray<number> = [0.45, 0.25, 0.15, 1.0];
 

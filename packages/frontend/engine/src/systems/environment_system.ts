@@ -15,6 +15,7 @@
 
 import {
   COLOR_MIDNIGHT,
+  COLOR_NIGHT_FLOOR,
   createEnvironmentUBO,
   DIURNAL_KEYFRAMES,
   ENV_UBO_OFFSETS,
@@ -191,7 +192,17 @@ const _interpolateDiurnal = (
   const phase = (((clamped + 12) % 24) / 12) * Math.PI;
   const intensity = (Math.cos(phase) + 1) / 2; // Maps to [0, 1]
 
-  return { ambient, shadow, intensity };
+  // C-417 AC-2: clamp the night ambient to a readability floor so terrain,
+  // floor, props, and NPCs stay visually distinguishable at midnight.
+  // The authored keyframe colour (COLOR_MIDNIGHT) remains the interpolation
+  // target; the clamp only prevents the rendered scene from dropping below
+  // the floor when the clock is deep in the night.
+  const flooredAmbient = ambient.map((channel, index) => {
+    const floor = COLOR_NIGHT_FLOOR[index] ?? channel;
+    return Math.max(channel, floor);
+  });
+
+  return { ambient: flooredAmbient, shadow, intensity };
 };
 
 // ---------------------------------------------------------------------------

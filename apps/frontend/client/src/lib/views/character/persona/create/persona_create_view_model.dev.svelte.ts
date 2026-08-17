@@ -78,6 +78,21 @@ const MOCK_CHARACTER: PersonaData = {
 
 const MOCK_AVATAR_URL = 'https://placehold.co/400x400/2a1a4a/c9b8e8?text=Lysandra';
 
+/**
+ * C-417 AC-6: LPC recipe mirroring what the real AI extraction produces
+ * (slot → assetId from the generated catalog). The mock generate path sets
+ * it so the inline LpcPreviewView has something to render — the production
+ * path populates it from the LLM extraction.
+ */
+const MOCK_LPC_RECIPE: Record<string, string> = {
+  body: 'body/bodies_female',
+  hair: 'hair/bangs_adult',
+  torso: 'torso/aprons/apron_female',
+  legs: 'legs/armour/plate_male',
+  feet: 'feet/accessory/plate_toe_male',
+  head: 'head/ears/avyon_adult',
+};
+
 const MOCK_MESSAGES = [
   {
     role: 'system' as const,
@@ -128,6 +143,10 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
 
     personaCreationService.persona = { ...MOCK_CHARACTER };
     personaCreationService.avatarUrl = MOCK_AVATAR_URL;
+    // C-417 AC-6: mirror the real extraction's lpcRecipe side effect so the
+    // inline LPC preview renders in the TWEAK phase (the real path sets it
+    // in _extractCharacter when the LLM returns lpcRecipe).
+    this.lpcRecipe = { ...MOCK_LPC_RECIPE };
     this.phase = 'TWEAK';
   }
 

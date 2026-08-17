@@ -59,6 +59,14 @@ let mockTurnState: {
 const STALL_MODE = typeof window !== 'undefined' && window.location.search.includes('stall=1');
 
 /**
+ * C-417 AC-4: when `?manyChips=1`, the mock returns more suggestion chips
+ * than fit a 1280×720 viewport so the E2E spec can assert the chip row
+ * wraps instead of hiding chips behind a horizontal scrollbar.
+ */
+const MANY_CHIPS_MODE =
+  typeof window !== 'undefined' && window.location.search.includes('manyChips=1');
+
+/**
  * Emits chunks to onChunk on a fixed cadence, respecting the abort signal.
  * Resolves after the last chunk; rejects with AbortError on cancel (AC-3).
  */
@@ -235,26 +243,80 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       }
       const requiresRoll = checkType !== undefined;
 
+      // C-417 AC-4: produce a chip overflow deterministically.
+      const suggestedChips = MANY_CHIPS_MODE
+        ? [
+            {
+              id: 'talk',
+              label: 'Ask about the ward',
+              intentType: 'dialogue' as const,
+              prefillText: 'Tell me about the village ward.',
+            },
+            {
+              id: 'quest',
+              label: 'Offer to help',
+              intentType: 'quest' as const,
+              prefillText: 'Is there anything I can help with?',
+            },
+            {
+              id: 'trade',
+              label: 'Browse the wares',
+              intentType: 'trade' as const,
+              prefillText: 'I would like to see your wares.',
+            },
+            {
+              id: 'skill_persuade',
+              label: 'Persuade the elder',
+              intentType: 'skill_check' as const,
+              prefillText: 'Let me try to convince you.',
+            },
+            {
+              id: 'skill_intimidate',
+              label: 'Intimidate the elder',
+              intentType: 'skill_check' as const,
+              prefillText: 'You will do as I say.',
+            },
+            {
+              id: 'combat',
+              label: 'Attack the elder',
+              intentType: 'combat' as const,
+              prefillText: 'Enough talk — draw your weapon.',
+            },
+            {
+              id: 'leave',
+              label: 'Turn back',
+              intentType: 'dialogue' as const,
+              prefillText: 'This is not worth my time.',
+            },
+            {
+              id: 'news',
+              label: 'Ask for news',
+              intentType: 'dialogue' as const,
+              prefillText: 'What news do you have?',
+            },
+          ]
+        : [
+            {
+              id: 'talk',
+              label: 'Ask about the ward',
+              intentType: 'dialogue' as const,
+              prefillText: 'Tell me about the village ward.',
+            },
+            {
+              id: 'quest',
+              label: 'Offer to help',
+              intentType: 'quest' as const,
+              prefillText: 'Is there anything I can help with?',
+            },
+          ];
+
       return {
         requiresRoll,
         checkType,
         difficultyClass: requiresRoll ? 12 : undefined,
         modifierSource: requiresRoll ? 'CHA' : undefined,
         npcResponse: narrativeChunks.join(''),
-        suggestedChips: [
-          {
-            id: 'talk',
-            label: 'Ask about the ward',
-            intentType: 'dialogue' as const,
-            prefillText: 'Tell me about the village ward.',
-          },
-          {
-            id: 'quest',
-            label: 'Offer to help',
-            intentType: 'quest' as const,
-            prefillText: 'Is there anything I can help with?',
-          },
-        ],
+        suggestedChips,
       };
     },
     resolveRoll: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
