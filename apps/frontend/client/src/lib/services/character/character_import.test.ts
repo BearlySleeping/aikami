@@ -44,16 +44,16 @@ const V2_CARD = {
   },
 } as const;
 
-/** Minimal valid SillyTavern V3 card JSON with V3-only `assets`. */
+/** Minimal valid SillyTavern V3 card JSON with a spec-conforming `assets` array. */
 const V3_CARD = {
   spec: 'chara_card_v3',
   spec_version: '3.0',
   data: {
     ...V2_CARD.data,
-    assets: {
-      card_url: 'https://example.com/cards/lyra.png',
-      thumbnail_url: 'https://example.com/cards/lyra-thumb.png',
-    },
+    assets: [
+      { type: 'card', uri: 'https://example.com/cards/lyra.png', name: 'Lyra Card' },
+      { type: 'thumbnail', uri: 'https://example.com/cards/lyra-thumb.png', name: 'Lyra Thumb' },
+    ],
   },
 } as const;
 
@@ -91,6 +91,24 @@ describe('character_validator', () => {
     expect(isV3Card(undefined)).toBe(false);
     expect(isV3Card('string')).toBe(false);
     expect(isV3Card({ spec: 'chara_card_v3' })).toBe(false);
+  });
+
+  test('isV3Card rejects a card whose extensions is null', () => {
+    const card = {
+      spec: 'chara_card_v3',
+      spec_version: '3.0',
+      data: { ...V3_CARD.data, extensions: null },
+    };
+    expect(isV3Card(card)).toBe(false);
+  });
+
+  test('isV3Card rejects a card whose extensions is an array', () => {
+    const card = {
+      spec: 'chara_card_v3',
+      spec_version: '3.0',
+      data: { ...V3_CARD.data, extensions: [] },
+    };
+    expect(isV3Card(card)).toBe(false);
   });
 });
 
@@ -157,6 +175,9 @@ describe('importFromPng — V3 cards (AC-2)', () => {
     const result = await importFromPng({ file: pngFileFromCard(V3_CARD, 'ccv3') });
     expect(result.character.name).toBe('Lyra Sunweaver');
     expect(result.character.description).toBe('A wandering elven bard with a silver tongue.');
+    // V3 `data.assets` is normalized into extensions.assets on the PNG path
+    // too, preserving the exact asset array for downstream compilation.
+    expect(result.character.extensions.assets).toEqual(V3_CARD.data.assets);
   });
 });
 
@@ -165,9 +186,8 @@ describe('importFromJson — V3 cards (AC-2)', () => {
     const file = new File([JSON.stringify(V3_CARD)], 'card.json', { type: 'application/json' });
     const result = await importFromJson({ file });
     expect(result.character.name).toBe('Lyra Sunweaver');
-    // The V3 `assets` block is preserved on the compiled character via the
-    // extensions bag (see card_compiler) — assert no crash and core fields.
-    expect(result.character.extensions).toBeDefined();
+    // The V3 `assets` array is preserved exactly under extensions.assets.
+    expect(result.character.extensions.assets).toEqual(V3_CARD.data.assets);
   });
 });
 
@@ -214,6 +234,23 @@ describe('compileCardToPersona — AC-1', () => {
     // ability scores populated (inferred since the card declares none)
     expect(compiled.abilityScores).toBeDefined();
     expect(compiled.abilityScores?.strength).toBeGreaterThanOrEqual(8);
+  });
+
+  test('preserves declared ability scores through compilation when extensions also carry V3 assets', () => {
+    // A V3 card compiles with its declared scores even when the extensions
+    // bag additionally holds the normalized `assets` array (C-419 CR fix).
+    const character = {
+      ...V2_CARD.data,
+      extensions: {
+        abilityScores: { strength: 16, dexterity: 14, charisma: 13 },
+        assets: V3_CARD.data.assets,
+      },
+    };
+    const compiled = compileCardToPersona({ character });
+    expect(compiled.abilityScores?.strength).toBe(16);
+    expect(compiled.abilityScores?.dexterity).toBe(14);
+    expect(compiled.abilityScores?.charisma).toBe(13);
+    expect(compiled.name).toBe('Lyra Sunweaver');
   });
 });
 

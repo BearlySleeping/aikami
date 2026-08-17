@@ -425,9 +425,10 @@ const _itemIcon = (itemId: string): string => {
               {@const isDiscounted = finalPrice < item.basePrice}
               {@const isPenalized = finalPrice > item.basePrice}
               {@const artUrl = viewModel.getItemArtUrl(item.itemId)}
-              {@const icon = artUrl ? '' : _itemIcon(item.itemId)}
+              {@const icon = _itemIcon(item.itemId)}
               {@const definition = viewModel.getItemDef(item.itemId)}
               <div
+                data-item-id={item.itemId}
                 class="flex flex-col gap-2 rounded-xl border-2 {canAfford && !viewModel.refusesToSell
                   ? 'border-base-300 hover:border-primary/50 hover:shadow-md'
                   : 'border-base-300 opacity-40'} bg-base-200 p-3 transition-all duration-200"

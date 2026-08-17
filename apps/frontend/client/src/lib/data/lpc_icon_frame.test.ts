@@ -92,16 +92,18 @@ describe('getLpcIconBackgroundPosition — C-419 AC-4', () => {
     expect(getLpcIconBackgroundPosition(4, 0, 9, 4)).toBe('50% 0%');
   });
 
-  test('guards 1×1 grid → "0 0"', () => {
-    expect(getLpcIconBackgroundPosition(0, 0, 1, 1)).toBe('0 0');
+  test('guards 1×1 grid → "0% 0%"', () => {
+    expect(getLpcIconBackgroundPosition(0, 0, 1, 1)).toBe('0% 0%');
   });
 
-  test('guards single-column grid → "0 0" regardless of row', () => {
-    expect(getLpcIconBackgroundPosition(0, 2, 1, 4)).toBe('0 0');
+  test('single-column grid: origin on x-axis, valid offset preserved on y', () => {
+    // cols=1 → x is the origin; rows=4 → y keeps 2/(4-1) = 66.67%.
+    expect(getLpcIconBackgroundPosition(0, 2, 1, 4)).toBe('0% 66.67%');
   });
 
-  test('guards single-row grid → "0 0" regardless of col', () => {
-    expect(getLpcIconBackgroundPosition(3, 0, 9, 1)).toBe('0 0');
+  test('single-row grid: origin on y-axis, valid offset preserved on x', () => {
+    // rows=1 → y is the origin; cols=9 → x keeps 3/(9-1) = 37.5%.
+    expect(getLpcIconBackgroundPosition(3, 0, 9, 1)).toBe('37.5% 0%');
   });
 });
 

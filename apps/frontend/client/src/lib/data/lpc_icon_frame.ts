@@ -95,13 +95,12 @@ export const getLpcIconBackgroundPosition = (
   cols: number,
   rows: number,
 ): string => {
-  // Guards mirror getLpcIconBackgroundSize's Math.max(1, ...): a 1-wide or
-  // 1-tall grid has no slack, so the position is always the origin.
-  if (cols <= 1 || rows <= 1) {
-    return '0 0';
-  }
-  const x = (col / (cols - 1)) * 100;
-  const y = (row / (rows - 1)) * 100;
+  // Each axis is handled independently: a 1-wide grid has no horizontal
+  // slack (position is always the origin), but a multi-column grid keeps
+  // its calculated percentage — and vice versa for rows. Guards mirror
+  // getLpcIconBackgroundSize's Math.max(1, ...).
+  const x = cols <= 1 ? 0 : (col / (cols - 1)) * 100;
+  const y = rows <= 1 ? 0 : (row / (rows - 1)) * 100;
   return `${_roundPct(x)}% ${_roundPct(y)}%`;
 };
 

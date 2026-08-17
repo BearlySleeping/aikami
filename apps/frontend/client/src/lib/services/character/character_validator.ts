@@ -43,10 +43,14 @@ export const isV2Card = (data: unknown): data is CharacterCardV2 => {
     return false;
   }
 
+  const extensions = (cardData as Record<string, unknown>).extensions;
+
   return (
     Array.isArray((cardData as Record<string, unknown>).alternate_greetings) &&
     Array.isArray((cardData as Record<string, unknown>).tags) &&
-    typeof (cardData as Record<string, unknown>).extensions === 'object'
+    typeof extensions === 'object' &&
+    extensions !== null &&
+    !Array.isArray(extensions)
   );
 };
 
@@ -92,10 +96,17 @@ export const isV3Card = (data: unknown): data is CharacterCardV3 => {
     return false;
   }
 
+  // C-419 hardening: extensions must be a non-null, non-array object —
+  // malformed cards (null/array) must not be treated as CharacterCardV3
+  // before inferAbilityScores dereferences extensions.abilityScores.
+  const extensions = (cardData as Record<string, unknown>).extensions;
+
   return (
     Array.isArray((cardData as Record<string, unknown>).alternate_greetings) &&
     Array.isArray((cardData as Record<string, unknown>).tags) &&
-    typeof (cardData as Record<string, unknown>).extensions === 'object'
+    typeof extensions === 'object' &&
+    extensions !== null &&
+    !Array.isArray(extensions)
   );
 };
 

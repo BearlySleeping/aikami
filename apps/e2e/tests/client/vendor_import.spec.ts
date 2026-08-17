@@ -37,25 +37,41 @@ test.describe('C-419 vendor + persona import (production VendorView)', () => {
   test('AC-4: inventory items render art instead of a uniform 📦', async ({ page }) => {
     // The dev catalog (rustySword, ironSword, steelSword, woodenShield,
     // leatherArmor, ironArmor, healthPotion, manaPotion) declares lpcAssetId
-    // for gear items — cropped sprite frames should appear once the LPC
-    // sheets load (rendered as a background-image div, not an <img>).
+    // for the six gear items — cropped sprite frames should appear once the
+    // LPC sheets load (rendered as a background-image div, not an <img>).
     await expect(page.locator('.badge-warning', { hasText: '🪙' })).toBeVisible({
       timeout: 15_000,
     });
 
-    // Wait for at least one item icon to render its background art (the
-    // LpcItemIcon component sets background-size after the sheet loads).
-    await expect
-      .poll(
-        async () => await page.locator('.vendor-item-icon div[style*="background-image"]').count(),
-        { timeout: 15_000, intervals: [500, 1000, 2000] },
-      )
-      .toBeGreaterThan(0);
+    // Every fixture item that declares lpcAssetId must render its art cell,
+    // targeted by its stable item id — not just "at least one icon".
+    const artItems = [
+      'rustySword',
+      'ironSword',
+      'steelSword',
+      'woodenShield',
+      'leatherArmor',
+      'ironArmor',
+    ];
+    for (const itemId of artItems) {
+      await expect
+        .poll(
+          async () =>
+            await page
+              .locator(`[data-item-id="${itemId}"] .vendor-item-icon div[style*="background-image"]`)
+              .count(),
+          { timeout: 15_000, intervals: [500, 1000, 2000] },
+        )
+        .toBeGreaterThan(0);
+    }
 
-    // Items that have art must NOT show the generic 📦 in their icon cell.
-    const boxed = await page.locator('.vendor-item-icon').filter({ hasText: '📦' }).count();
-    const total = await page.locator('.vendor-item-icon').count();
-    expect(boxed).toBeLessThan(total);
+    // Consumables (healthPotion, manaPotion) declare no lpcAssetId and
+    // legitimately fall back to the emoji tier (🧪), never a blank cell.
+    for (const itemId of ['healthPotion', 'manaPotion']) {
+      await expect(page.locator(`[data-item-id="${itemId}"] .vendor-item-icon`)).toContainText('🧪', {
+        timeout: 10_000,
+      });
+    }
   });
 });
 

@@ -110,8 +110,16 @@ $effect(() => {
   if (!artUrl) {
     return;
   }
+  // Tracks whether THIS artUrl's load is still the active request. When
+  // the effect reruns (artUrl changed) or the component unmounts, the
+  // cleanup deactivates it so an obsolete image load can never update
+  // state for a URL that is no longer current.
+  let active = true;
   const img = new Image();
   img.onload = () => {
+    if (!active) {
+      return;
+    }
     const width = img.naturalWidth;
     const height = img.naturalHeight;
     const grid = getLpcGrid({ width, height });
@@ -127,9 +135,15 @@ $effect(() => {
     bgPosition = getLpcIconBackgroundPosition(hero.col, hero.row, grid.cols, grid.rows);
   };
   img.onerror = () => {
+    if (!active) {
+      return;
+    }
     loadFailed = true;
   };
   img.src = artUrl;
+  return () => {
+    active = false;
+  };
 });
 </script>
 

@@ -2,7 +2,12 @@
 // apps/frontend/client/src/lib/services/character/character-importer.ts
 
 import { AIKAMI_PNG_CHUNK_KEYWORD } from '@aikami/constants';
-import type { AikamiCharacterCard, Character } from '@aikami/types';
+import type {
+  AikamiCharacterCard,
+  Character,
+  CharacterCardV3,
+  CharacterCardV3Asset,
+} from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 import { isV1Card, isV2Card, isV3Card } from './character_validator.ts';
@@ -11,6 +16,27 @@ import { extractTextChunks, isPng } from './png_utils.ts';
 export type CharacterImportResult = {
   character: Character;
   avatarFile?: File;
+};
+
+/**
+ * Normalizes a V3 card's `data.assets` array into `extensions.assets`.
+ *
+ * SillyTavern V3 keeps its extra fields in `data.assets` (an array of
+ * {@link CharacterCardV3Asset} descriptors), but the established output
+ * contract for imported characters stores card extras in
+ * `character.extensions` — the same bag that carries `abilityScores`.
+ * Both the PNG (`ccv3`) and JSON import paths route through this so
+ * consumers see one shape: `extensions.assets`.
+ */
+const normalizeV3Data = (options: {
+  data: Character & { assets?: CharacterCardV3Asset[] };
+}): Character => {
+  const { data } = options;
+  const { assets, ...rest } = data;
+  return {
+    ...rest,
+    extensions: assets ? { ...rest.extensions, assets } : rest.extensions,
+  };
 };
 
 const parseBase64Json = (options: { base64: string }) => {
@@ -22,8 +48,9 @@ const parseBase64Json = (options: { base64: string }) => {
 
     // C-419: V3 cards arrive in the `ccv3` chunk; their data shape is the
     // same `Character` record as V2 (V3-only fields ride in `data.assets`).
+    // Normalize the assets array into extensions.assets like the JSON path.
     if (isV3Card(json)) {
-      return json.data;
+      return normalizeV3Data({ data: (json as CharacterCardV3).data });
     }
     if (isV2Card(json)) {
       return json.data;
@@ -221,14 +248,10 @@ export const importFromJson = async (options: { file: File }): Promise<Character
   if (!character && isV2Card(json)) {
     character = json.data as Character;
   } else if (!character && isV3Card(json)) {
-    // C-419: V3 JSON cards parse identically to V2; `data.assets` stays in
-    // the character's extensions bag for downstream compilation.
-    const data = (json as { data: Record<string, unknown> }).data;
-    const assets = (json as { data: { assets?: Record<string, unknown> } }).data.assets;
-    character = data as Character;
-    if (assets && character) {
-      character.extensions = { ...character.extensions, assets };
-    }
+    // C-419: V3 JSON cards parse identically to V2; `data.assets` (an array
+    // of asset descriptors) is normalized into extensions.assets for
+    // downstream compilation.
+    character = normalizeV3Data({ data: (json as CharacterCardV3).data });
   } else if (isV1Card(json)) {
     character = convertV1ToV2({ data: json });
   } else if ((json as Record<string, unknown>).data) {
