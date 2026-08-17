@@ -106,6 +106,10 @@ const spawnPlayer = (file: string): void => {
     const child = spawn(cmd, args, {
       stdio: 'ignore',
       detached: true,
+      // Windows: powershell.exe is a console app — without windowsHide the
+      // chime flashes a visible console window for the duration of
+      // playback. No-op on POSIX.
+      windowsHide: true,
     });
     // Async spawn failures (player vanished between the `which` probe and
     // spawn, ENOENT, …) surface as an 'error' event — without a listener

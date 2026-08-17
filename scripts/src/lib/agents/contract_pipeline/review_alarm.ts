@@ -11,6 +11,7 @@
 // the pane actually wants a human. Detection is delegated to the pure state
 // machine in review_pane.ts; this module owns only the polling loop, the
 // timeouts and the fallback.
+import { isHerdrActive } from '../../herdr/session.ts';
 import { playAlarm } from './alarm.ts';
 import {
   advanceFirstResponse,
@@ -103,6 +104,12 @@ export const waitForFirstResponse = async (options: {
  * abandoned-review path handles that, with the error cue), and none when
  * cancelled — a decision that already landed needs no callback to the human.
  *
+ * Only a FALLBACK when herdr can't notify on its own: while its server
+ * daemon is running, herdr already surfaces an idle pane wanting attention
+ * (bell/indicator), so playing our own chime on top would just double up.
+ * Skip it only when herdr isn't reachable at all (not installed, daemon
+ * down) — then this is the only cue the user gets.
+ *
  * @returns a `cancel` that stops the polling. Call it once the decision is in:
  *   otherwise the loop keeps shelling out to `herdr` every poll for the rest
  *   of the timeout, long after anyone cares about the answer.
@@ -111,12 +118,26 @@ export const chimeOnFirstResponse = (options: {
   getStatus: () => Promise<string | undefined>;
   isPaneAlive: () => Promise<boolean>;
   onOutcome?: (outcome: FirstResponseOutcome) => void;
+  /** Injected for tests; defaults to checking the real herdr daemon. */
+  isHerdrActiveFn?: () => Promise<boolean>;
+  /** Injected for tests; defaults to the real chime. */
+  playAlarmFn?: () => void;
+  /** Pass-throughs to waitForFirstResponse; injected for tests. */
+  timeoutMs?: number;
+  pollMs?: number;
+  settleSamples?: number;
+  sleepFn?: (ms: number) => Promise<void>;
 }): { cancel: () => void } => {
   let cancelled = false;
+  const checkHerdrActive = options.isHerdrActiveFn ?? isHerdrActive;
+  const chime = options.playAlarmFn ?? playAlarm;
   void waitForFirstResponse({ ...options, isCancelled: () => cancelled })
-    .then((outcome) => {
+    .then(async (outcome) => {
       if (outcome === 'responded' || outcome === 'timeout') {
-        playAlarm();
+        const herdrActive = await checkHerdrActive().catch(() => false);
+        if (!herdrActive) {
+          chime();
+        }
       }
       options.onOutcome?.(outcome);
     })
