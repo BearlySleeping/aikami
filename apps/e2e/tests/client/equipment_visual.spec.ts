@@ -18,6 +18,19 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
+  /**
+   * Reads the composed preview recipes exposed by the sandbox VM
+   * (window.__LPC_PREVIEW_RECIPES__) and returns the torso layer's assetId.
+   * Mirrors the __PIXI_LPC_PREVIEW_LOADED__ hook pattern.
+   */
+  const getPreviewTorso = async (page: import('playwright').Page): Promise<string | undefined> =>
+    page.evaluate(() => {
+      const recipes = (window as unknown as Record<string, unknown>).__LPC_PREVIEW_RECIPES__ as
+        | Array<{ slot: string; assetId: string }>
+        | undefined;
+      return recipes?.find((recipe) => recipe.slot === 'torso')?.assetId;
+    });
+
   test('equipping Iron Armor changes the equipped state and keeps the preview rendering', async ({
     page,
   }) => {
@@ -34,11 +47,18 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
       { timeout: 15_000 },
     );
 
+    // Baseline: the preview torso layer is the base chainmail recipe.
+    await expect.poll(() => getPreviewTorso(page)).toBe('torso/chainmail_male');
+
     // Equip Iron Armor → the body paperdoll slot shows it + an Unequip button.
     await equipIronArmor.click();
     const unequipIronArmor = page.getByRole('button', { name: 'Unequip Iron Armor' });
     await unequipIronArmor.waitFor({ state: 'visible', timeout: 10_000 });
     await expect(page.getByText('Iron Armor').first()).toBeVisible();
+
+    // The preview output must change to the Iron Armor torso recipe — not
+    // just the UI state (C-417 AC-1: the rendered sprite actually updates).
+    await expect.poll(() => getPreviewTorso(page)).toBe('torso/armour/plate_male');
 
     // The live preview canvas is still mounted after the re-compose.
     await expect(page.locator('canvas').first()).toBeVisible();
@@ -48,6 +68,12 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
     await expect(page.getByRole('button', { name: 'Unequip Iron Armor' })).toHaveCount(0);
     // The Equip button is available again.
     await expect(page.getByRole('button', { name: 'Equip Iron Armor' })).toBeVisible();
+    // The preview output reverts — the Iron Armor plate torso is gone. In
+    // the engine's merge semantics torso/feet are equipment-owned (base
+    // torso is zeroed behind C-374), so with no body armor equipped the
+    // layer is removed entirely rather than falling back to chainmail —
+    // assert the plate recipe is no longer rendered.
+    await expect.poll(() => getPreviewTorso(page)).not.toBe('torso/armour/plate_male');
   });
 
   test('equipped stats update when Iron Armor is equipped (defense bonus reflects gear)', async ({
@@ -59,14 +85,24 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
     await equipIronArmor.waitFor({ state: 'visible', timeout: 15_000 });
 
     const defenseBadge = page.locator('.badge').filter({ hasText: 'DEF' }).first();
-    const before = (await defenseBadge.textContent()) ?? '';
+    const readDefense = async (): Promise<number> => {
+      const text = (await defenseBadge.textContent()) ?? '';
+      const match = text.match(/(\d+)/);
+      return match ? Number.parseInt(match[1], 10) : Number.NaN;
+    };
+    const before = await readDefense();
 
     await equipIronArmor.click();
-    await page.waitForTimeout(400);
 
-    const after = (await defenseBadge.textContent()) ?? '';
-    // Iron Armor grants +5 DEF (manifest: ironArmor defenseBonus 5) — the
-    // badge must change, proving the equip actually mutated service state.
-    expect(after).not.toBe(before);
+    // Iron Armor grants +5 DEF (manifest: ironArmor defenseBonus 5), but the
+    // sandbox pre-equips chainmail (+4 DEF) in the same body slot — equipping
+    // Iron Armor replaces it, so the badge moves by the net delta (+1), not
+    // the full +5. Wait until the badge reflects exactly that value, proving
+    // the equip mutated service state.
+    const IRON_ARMOR_DEFENSE_BONUS = 5;
+    const CHAINMAIL_DEFENSE_BONUS = 4;
+    await expect
+      .poll(readDefense)
+      .toBe(before + (IRON_ARMOR_DEFENSE_BONUS - CHAINMAIL_DEFENSE_BONUS));
   });
 });

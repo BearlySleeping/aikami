@@ -376,9 +376,11 @@ class GameEngineService
       // solid, matching the pre-C-375 behavior (reviewer-explicit: a manifest
       // fetch hiccup must never become a LOAD_MAP failure).
       const packId = options.packId ?? this.contentPackId;
-      // Derive the map id from the URL (e.g. .../village.json → 'village') so
-      // the manifest's per-map `interior` flag can be projected (C-417 AC-2).
-      const mapId = (options.mapUrl.split('/').pop() ?? '').replace(/\.json$/i, '');
+      // Derive the map id from the URL (e.g. .../village.json → 'village')
+      // so the manifest's per-map `interior` flag can be projected (C-417
+      // AC-2). Both supported map extensions (.json and .jton) are stripped,
+      // case-insensitively, so e.g. inn.jton resolves the manifest key `inn`.
+      const mapId = (options.mapUrl.split('/').pop() ?? '').replace(/\.(?:json|jton)$/i, '');
       let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');

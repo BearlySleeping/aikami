@@ -378,6 +378,7 @@ let devToolsOpen = $state(true);
         <button
           type="button"
           class="btn btn-ghost btn-xs text-base-content/60"
+          data-testid="devtools-close"
           onclick={() => (devToolsOpen = false)}
         >
           ✕

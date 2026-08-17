@@ -13,10 +13,25 @@ import { expect, test } from '@playwright/test';
 test.describe('Dialogue suggestion chips overflow (C-417 AC-4)', () => {
   const MANY_CHIPS_URL = '/dev/sandbox/dialogue?manyChips=1';
 
+  /**
+   * Closes the sandbox DevTools panel — it is open by default and overlays
+   * the right 320px of the viewport at z-50, which could visually block
+   * wrapped chips and let allChipsWithinRow pass on hidden elements.
+   * Uses a programmatic DOM click: the sandbox chrome's EXPLORE badge
+   * (fixed top-right, z-60) intercepts pointer events on the ✕ button.
+   */
+  const closeDevTools = async (page: import('playwright').Page): Promise<void> => {
+    await page.evaluate(() => {
+      document.querySelector<HTMLElement>('[data-testid="devtools-close"]')?.click();
+    });
+  };
+
   /** Navigates, waits for the overlay, and triggers a turn with 8 chips. */
   const openWithManyChips = async (page: import('playwright').Page): Promise<void> => {
     await page.goto(MANY_CHIPS_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('textarea', { state: 'visible', timeout: 15_000 });
+    // Ensure the chips row is unobstructed before any measurement.
+    await closeDevTools(page);
     await page.getByText('Ah, a traveler!').waitFor({ state: 'visible', timeout: 10_000 });
     // Send a free-text message so the mock analyzeIntent returns 8 chips.
     await page.locator('textarea').first().fill('Tell me about the ward');

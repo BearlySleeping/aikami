@@ -141,11 +141,20 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
 
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    personaCreationService.persona = { ...MOCK_CHARACTER };
+    // C-417 AC-6: mirror the real extraction's lpcRecipe persistence (the
+    // production path writes it onto persona.appearance in _extractCharacter
+    // so it survives _persistCharacter / entering the world) — the mock must
+    // do the same, not just set this.lpcRecipe for preview rendering.
+    const persona: PersonaData = {
+      ...MOCK_CHARACTER,
+      appearance: {
+        ...MOCK_CHARACTER.appearance,
+      },
+    };
+    (persona.appearance as Record<string, unknown>).lpcRecipe = { ...MOCK_LPC_RECIPE };
+    personaCreationService.persona = persona;
     personaCreationService.avatarUrl = MOCK_AVATAR_URL;
-    // C-417 AC-6: mirror the real extraction's lpcRecipe side effect so the
-    // inline LPC preview renders in the TWEAK phase (the real path sets it
-    // in _extractCharacter when the LLM returns lpcRecipe).
+    // Keep the preview rendering in sync with the persisted persona data.
     this.lpcRecipe = { ...MOCK_LPC_RECIPE };
     this.phase = 'TWEAK';
   }

@@ -299,7 +299,17 @@ export default defineConfig({
       schema: NightReadabilitySchema,
       searchParams: { gameHour: '0' },
       setupHook: waitForVisualReady,
-      requiredTrueFields: ['terrainDistinguishable', 'playerVisible'],
+      // Every mandatory schema condition is a hard gate — a high score must
+      // not paper over a scene that is actually still daylight
+      // (nightTintVisible false), near-black (notBlackBlur false), or missing
+      // props (propsVisible false).
+      requiredTrueFields: [
+        'terrainDistinguishable',
+        'propsVisible',
+        'playerVisible',
+        'nightTintVisible',
+        'notBlackBlur',
+      ],
     },
     {
       // C-417 AC-2: the actual campaign default (noon) is the readability
@@ -310,7 +320,10 @@ export default defineConfig({
       schema: NoonReadabilitySchema,
       searchParams: { gameHour: '12' },
       setupHook: waitForVisualReady,
-      requiredTrueFields: ['terrainDistinguishable', 'playerVisible'],
+      // All three schema conditions are hard gates: terrain/floor, props, and
+      // the player must all be distinguishable in full daylight — an
+      // undifferentiated or prop-less render cannot pass on score alone.
+      requiredTrueFields: ['terrainDistinguishable', 'propsVisible', 'playerVisible'],
     },
   ],
 });
