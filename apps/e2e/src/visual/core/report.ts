@@ -7,7 +7,7 @@
 // pass/fail status in a responsive grid layout.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import type { CaptureResult } from './capture';
 import type { EvaluateResult } from './evaluate';
 
@@ -371,7 +371,7 @@ export const buildReportEntry = (options: {
 
   return {
     name: capture.name,
-    screenshotPath: capture.filepath ? (capture.filepath.split('/').pop() ?? capture.filepath) : '',
+    screenshotPath: capture.filepath ? basename(capture.filepath) : '',
     prompt: capture.prompt,
     passed: evaluate.passed && !capture.error,
     error: capture.error ?? evaluate.error,

@@ -16,7 +16,7 @@
 // Requires OPENROUTER_API_KEY env var for AI evaluation.
 
 import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
 import type { CaptureResult, VisualTestSuite } from './core/capture';
 import { captureSuite } from './core/capture';
@@ -258,7 +258,7 @@ const main = async (): Promise<void> => {
     for (const capture of allCaptures) {
       reportEntries.push({
         name: capture.name,
-        screenshotPath: capture.filepath ? (capture.filepath.split('/').pop() ?? '') : '',
+        screenshotPath: capture.filepath ? basename(capture.filepath) : '',
         prompt: capture.prompt,
         passed: !capture.error,
         error: capture.error,

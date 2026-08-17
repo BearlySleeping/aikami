@@ -35,9 +35,11 @@ export const repoRoot = (): string => {
   }
 
   // Worktree paths look like `<root>/.pi/workspaces/run-xxx`; the main repo
-  // root is the parent of `.pi/`.
+  // root is the parent of `.pi/`. On Windows this env var is backslash-
+  // separated, so search on a posix-normalized copy (same length as the
+  // original, so the found index still slices the original path correctly).
   const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
-  const piIndex = workspacePath?.indexOf('/.pi/') ?? -1;
+  const piIndex = workspacePath?.replace(/\\/g, '/').indexOf('/.pi/') ?? -1;
   _repoRoot = workspacePath && piIndex !== -1 ? workspacePath.slice(0, piIndex) : process.cwd();
   return _repoRoot;
 };
