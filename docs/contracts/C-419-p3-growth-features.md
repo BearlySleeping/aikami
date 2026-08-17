@@ -530,7 +530,7 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | AC-1 | ✅ | V2 PNG/JSON import compiles into PersonaSheetSchema fields with inferred ability scores; persona import UI on `/personas` (screenshot 100/100). |
 | AC-2 | ✅ | V3 `ccv3`/JSON parsing unit-tested; stats-free cards get deterministic standard-array scores; declared `extensions.abilityScores` respected. |
 | AC-3 | ✅ | Haggle panel collapses to slim strip until engaged; collapsed screenshot 95/100, expanded 95/100; gold display, need-X-more, stat deltas, keyboard hints unchanged. |
-| AC-4 | ✅ | Items with `lpcAssetId` render LPC art `<img>` (2x screenshot 95/100); emoji tier + 📦 retained as fallbacks; `_itemIcon` substring match preserved. |
+| AC-4 | ✅ | Items with `lpcAssetId` render a single cropped LPC sprite frame (via `LpcItemIcon` + `lpc_icon_frame.ts` pitch detection) — 2x 95/100, 4x close-up 100/100; emoji tier + 📦 retained as fallbacks; `_itemIcon` substring match preserved. |
 
 ### Files Created
 | File | Purpose |
@@ -540,6 +540,9 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | `apps/frontend/client/src/lib/services/character/character_import.test.ts` | 18 unit tests: V2/V3 validator, PNG/JSON import, malformed-input rejection, inference, compilation |
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.test.ts` | Persona-list import flow tests (V2 PNG → persona upsert with scores + avatar) |
 | `apps/e2e/tests/client/vendor_import.spec.ts` | E2E functional spec: haggle collapse/expand, item-art rendering, persona Import Card button |
+| `apps/frontend/client/src/lib/data/lpc_icon_frame.ts` | Single-frame LPC icon crop helpers (pitch detection + background-size), mirrors `detectLpcSheetLayout` without pixi |
+| `apps/frontend/client/src/lib/data/lpc_icon_frame.test.ts` | 9 unit tests for pitch detection + background-size math |
+| `apps/frontend/client/src/lib/components/game/lpc_item_icon.svelte` | Presentational icon: loads sheet, crops frame-0 cell via CSS background, emoji fallback |
 
 ### Files Modified
 | File | Change |
@@ -551,11 +554,11 @@ widening `ItemDefinitionSchema` with `lpcSlot`/`lpcAssetId`/`lpcAssetIdBehind`
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts` | `handleFileImport` + avatar upload + refresh |
 | `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte` | Import Card button + hidden file input |
 | `apps/frontend/client/src/lib/views/vendor/vendor_view_model.svelte.ts` | `isHagglePanelCollapsed`, `expandHagglePanel()`, `getItemArtUrl()` |
-| `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` | Collapsed haggle `<aside>`, art `<img>` rendering, deduped Stats comment |
+| `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` | Collapsed haggle `<aside>`, single-frame art via `LpcItemIcon`, deduped Stats comment |
 | `apps/frontend/client/src/lib/views/vendor/vendor_view_model.test.ts` | AC-3 collapse + AC-4 art tests (28 total) |
 | `packages/shared/schemas/src/lib/domain/item.ts` | Widen `BaseItemSchema` with `lpcSlot`, `lpcAssetId`, `lpcAssetIdBehind` |
 | `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/vendor/+page.svelte` | Dev-only `?haggle=expanded` deterministic helper |
-| `apps/e2e/src/visual/suites/vendor.visual.ts` | Added collapsed-panel + item-art visual cases |
+| `apps/e2e/src/visual/suites/vendor.visual.ts` | Added collapsed-panel + item-art visual cases |tem_icon.svelte` | Presentational icon: loads sheet, crops frame 0 cell via CSS background, emoji fallback |
 
 ### Deviations from Spec
 None — all four ACs implemented as scoped. OQ-2 resolved in favor of the
@@ -567,11 +570,13 @@ A follow-up amendment could add name/hash dedupe. OQ-4 implemented via the
 widen-`ItemDefinitionSchema` path (contract's stated option).
 
 ### Test Results
-- Unit: 1839/1841 pass (2 pre-existing failures: GameBootService AC-4
-  Cancellation, AC-1 single ComfyUI implementation — both present at baseline)
+- Unit: 1848/1850 pass (2 pre-existing failures: GameBootService AC-4
+  Cancellation, AC-1 single ComfyUI implementation — both present at baseline;
+  57/57 C-419 focused tests incl. 9 new frame-crop tests)
 - E2E: visual suite extended (`vendor.visual.ts`, 3 cases); functional spec
   `vendor_import.spec.ts` added. Full `e2e:test` cannot run in this pipeline
   (auth emulator port 15302 + site server 11484 not provisioned).
-- Visual: collapsed 95/100, expanded 95/100, item-art 95/100, personas
-  100/100 (via headless-shell screenshots + ai_validate_image)
+- Visual: collapsed 95/100, expanded 95/100, item-art 2x 95/100 and 4x
+  close-up 100/100 (single cropped sprite per icon after AC-4 frame-crop
+  fix), personas 100/100 (headless-shell screenshots + ai_validate_image)
 - Baseline: 2 pre-existing failures, 0 new failures
