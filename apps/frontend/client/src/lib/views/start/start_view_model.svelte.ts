@@ -531,78 +531,81 @@ class StartViewModel
 
   /**
    * Proceeds with campaign creation using the given pack ID.
-   * Handles existing-character branching from the original startNewGame logic.
-   * C-405: the zero-character branch routes to onboarding, not /setup.
+   * The resolved NewCampaignDestination is the single routing decision —
+   * character-count branching lives only in _resolveNewCampaignDestination.
+   * C-405: the onboarding branch routes to persona creation, not /setup.
    */
   private async _proceedWithPack(packId: string): Promise<void> {
     try {
-      // Check for existing characters from previous sessions
-      const characterCount = this._getCharacterCount();
       const destination = this._resolveNewCampaignDestination(packId);
       this.debug('_proceedWithPack:destination', {
         kind: destination.kind,
-        contentPackId: packId,
-        characterCount,
+        contentPackId: destination.contentPackId,
       });
 
-      if (characterCount === 1) {
-        // One character — load it directly into /game with this pack
-        inventoryService.reset();
-        worldStateService.reset();
-        playerStateService.reset();
-        equipmentService.reset();
-        gameModeService.reset();
+      switch (destination.kind) {
+        case 'game': {
+          // One character — load it directly into /game with this pack
+          inventoryService.reset();
+          worldStateService.reset();
+          playerStateService.reset();
+          equipmentService.reset();
+          gameModeService.reset();
 
-        try {
-          const stored = localStorage.getItem('aikami-characters');
-          if (stored) {
-            const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-            if (characters.length > 0) {
-              try {
-                await personaService.setActivePersona(characters[0].persona.id);
-              } catch {
-                // Non-critical
+          try {
+            const stored = localStorage.getItem('aikami-characters');
+            if (stored) {
+              const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
+              if (characters.length > 0) {
+                try {
+                  await personaService.setActivePersona(characters[0].persona.id);
+                } catch {
+                  // Non-critical
+                }
               }
             }
+          } catch (error) {
+            this.warn('_proceedWithPack:persona-set-failed', error);
           }
-        } catch (error) {
-          this.warn('_proceedWithPack:persona-set-failed', error);
+
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+          campaignService.completeSetup();
+          await routerService.goToRoute('game', {
+            queryParameters: undefined,
+            pathParameters: undefined,
+          });
+          return;
         }
 
-        await campaignService.startNewCampaign({ contentPackId: packId });
-        campaignService.completeSetup();
-        await routerService.goToRoute('game', {
-          queryParameters: undefined,
-          pathParameters: undefined,
-        });
-        return;
+        case 'persona_picker': {
+          // Multiple characters — create campaign, let user choose character
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+          await routerService.goToRoute('personas', {
+            queryParameters: undefined,
+            pathParameters: undefined,
+          });
+          return;
+        }
+
+        case 'onboarding': {
+          // Zero characters — go to persona creation (onboarding) with the pack
+          // selected. C-405 AC-1: this must NOT pass through the world-generation
+          // wizard; the onboarding coordinator is the default destination.
+          inventoryService.reset();
+          worldStateService.reset();
+          playerStateService.reset();
+          equipmentService.reset();
+          gameModeService.reset();
+
+          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
+
+          await routerService.goToRoute('personaCreate', {
+            queryParameters: { onboarding: '1' },
+            pathParameters: undefined,
+          });
+          return;
+        }
       }
-
-      if (characterCount > 1) {
-        // Multiple characters — create campaign, let user choose character
-        await campaignService.startNewCampaign({ contentPackId: packId });
-        await routerService.goToRoute('personas', {
-          queryParameters: undefined,
-          pathParameters: undefined,
-        });
-        return;
-      }
-
-      // Zero characters — go to persona creation (onboarding) with the pack
-      // selected. C-405 AC-1: this must NOT pass through the world-generation
-      // wizard; the onboarding coordinator is the default destination.
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
-
-      await campaignService.startNewCampaign({ contentPackId: packId });
-
-      await routerService.goToRoute('personaCreate', {
-        queryParameters: { onboarding: '1' },
-        pathParameters: undefined,
-      });
     } catch (error) {
       if (isAiTextProviderRequiredError(error)) {
         this.warn('_proceedWithPack:no-text-provider', { error: String(error) });

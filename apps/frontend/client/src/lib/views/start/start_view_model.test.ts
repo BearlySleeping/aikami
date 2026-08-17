@@ -193,6 +193,7 @@ const createViewModel = () => {
     selectedPackId: string | undefined;
     initialize(): Promise<void>;
     startNewGame(): Promise<void>;
+    startWorldGeneration(): Promise<void>;
     continueGame(): Promise<void>;
     acceptRecovery(): Promise<void>;
     declineRecovery(): Promise<void>;
@@ -637,6 +638,31 @@ describe('StartViewModel', () => {
       const vm = createViewModel();
       await vm.confirmPackSelection();
       expect(routeCalls).toHaveLength(0);
+    });
+
+    test('startWorldGeneration routes to the worldgen preview', async () => {
+      const vm = createViewModel();
+
+      await vm.startWorldGeneration();
+
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('worldgen');
+    });
+
+    test('openPackBrowser falls back to emberwatch when no packs are installed', async () => {
+      mockAvailablePacks = [];
+      setCharacters(0);
+      const vm = createViewModel();
+
+      await vm.openPackBrowser();
+
+      expect(vm.showPackBrowser).toBe(false);
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('personaCreate');
+      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
+      expect(
+        (_svcStubs.campaignService.startNewCampaign as ReturnType<typeof mock>).mock.calls[0]?.[0],
+      ).toEqual({ contentPackId: 'emberwatch' });
     });
   });
 });

@@ -72,8 +72,16 @@ const PACK_PICKER_PROMPT = [
  */
 const openPackPicker = async (page: import('playwright').Page): Promise<void> => {
   await page.getByRole('button', { name: 'New Game' }).click();
-  await page.getByText('Choose Your Adventure').waitFor({ timeout: 10_000 });
-  await page.waitForTimeout(800);
+  await page.getByRole('heading', { name: 'Choose Your Adventure' }).waitFor({
+    timeout: 10_000,
+  });
+  // Both cards and the detail panel must be painted before capture: wait for
+  // the second pack card, the detail panel's metadata row (only rendered once
+  // the default selection is applied), and the confirm button instead of a
+  // fixed sleep.
+  await page.getByRole('button', { name: 'Select Whispering Caves' }).waitFor();
+  await page.getByText('Updated', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Start New Game' }).waitFor();
 };
 
 // ── Suite ────────────────────────────────────────────────────

@@ -99,9 +99,18 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
               >
                 World Generation (Preview)
               </button>
-              <p class="text-[11px] text-base-content/40 leading-snug">
+              <p class="text-[11px] text-base-content/60 leading-snug">
                 Generates a world preview that is not yet playable — used to prototype story
-                content.
+                content. See
+                <a
+                  href="https://github.com/BearlySleeping/aikami/issues/81"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link link-primary"
+                >
+                  issue #81
+                </a>
+                for the content-pack compiler that will make generated worlds playable.
               </p>
             </div>
           </details>
