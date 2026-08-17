@@ -29,6 +29,20 @@ export type CharacterCardV2 = {
   data: Character;
 };
 
+/**
+ * V3 character card wrapper (C-419).
+ *
+ * SillyTavern V3 (`chara_card_v3`) carries the same `data` fields as V2 plus
+ * optional V3-only extensions such as `assets`. The `data` shape is the same
+ * `Character` record — extra V3 fields ride along in `assets` and are not
+ * flattened into `Character`.
+ */
+export type CharacterCardV3 = {
+  spec: 'chara_card_v3';
+  spec_version: '3.0';
+  data: Character & { assets?: Record<string, unknown> };
+};
+
 /** V1 character card (subset of Character fields). */
 export type CharacterCardV1 = {
   name: string;

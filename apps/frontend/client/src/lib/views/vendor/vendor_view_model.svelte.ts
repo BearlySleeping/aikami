@@ -9,6 +9,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { LpcAnimationState } from '$lib/data/lpc_models';
 import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 
@@ -36,6 +38,8 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   readonly pendingSellItemId: string | undefined;
   readonly pendingSellLabel: string;
   readonly pendingSellPrice: number;
+  /** Whether the haggle panel is collapsed until a conversation starts (C-419 AC-3). */
+  readonly isHagglePanelCollapsed: boolean;
 
   getFinalPrice(basePrice: number): number;
   haggle(message: string): Promise<void>;
@@ -48,6 +52,10 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   cancelSell(): void;
   closeVendor(): void;
   getItemDef(itemId: string): ItemDefinition;
+  /** Expands the collapsed haggle panel (C-419 AC-3). */
+  expandHagglePanel(): void;
+  /** Resolves content-pack art URL for an item, or undefined when none (C-419 AC-4). */
+  getItemArtUrl(itemId: string): string | undefined;
 };
 
 export type VendorViewModelOptions = BaseViewModelOptions & _VendorSessionOptions;
@@ -56,6 +64,10 @@ class VendorViewModel
   extends BaseViewModel<VendorViewModelOptions>
   implements VendorViewModelInterface
 {
+  /** C-419 AC-3: UI flag — the haggle panel collapses until the player
+   * explicitly expands it or a conversation starts. */
+  hagglePanelExpanded = $state(false);
+
   constructor(options: VendorViewModelOptions) {
     super(options);
     vendorService.startSession({
@@ -97,6 +109,27 @@ class VendorViewModel
   }
   get transactionSuccess(): boolean {
     return vendorService.transactionSuccess;
+  }
+
+  /** C-419 AC-3: collapsed until the player expands or a message exists. */
+  get isHagglePanelCollapsed(): boolean {
+    return !this.hagglePanelExpanded && vendorService.messages.length === 0;
+  }
+
+  /** @inheritdoc */
+  expandHagglePanel(): void {
+    this.hagglePanelExpanded = true;
+  }
+
+  /** C-419 AC-4: resolves the item's LPC art URL (walk sheet) when the
+   * content-pack catalog declares lpcAssetId. Falls back to undefined so
+   * the view can render the emoji tier. */
+  getItemArtUrl(itemId: string): string | undefined {
+    const lpcAssetId = vendorService.getItemDef(itemId).lpcAssetId;
+    if (!lpcAssetId) {
+      return undefined;
+    }
+    return getLpcAssetPath('', lpcAssetId, LpcAnimationState.Walk) ?? undefined;
   }
 
   /** Item ID awaiting sell confirmation (C-331 AC-3). */

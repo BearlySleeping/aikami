@@ -70,6 +70,14 @@ const BaseItemSchema = Type.Object({
   basePrice: Type.Union([Type.Literal(0), Type.Number({ minimum: 2 })], {
     description: 'Vendor base price in gold (0 = unsellable, or >= 2)',
   }),
+  /** LPC character layer this item renders into when equipped (e.g. "weapon", "shield", "hat"). */
+  lpcSlot: Type.Optional(Type.String({ description: 'LPC layer slot this item renders into' })),
+  /** LPC spritesheet asset ID used for the item's art (C-419 AC-4). */
+  lpcAssetId: Type.Optional(Type.String({ description: 'LPC spritesheet asset ID for the item' })),
+  /** Optional behind-variant asset ID for per-direction rendering (facing up). */
+  lpcAssetIdBehind: Type.Optional(
+    Type.String({ description: 'LPC spritesheet asset ID rendered behind the character' }),
+  ),
 });
 
 const ConsumableItemSchema = Type.Intersect([
