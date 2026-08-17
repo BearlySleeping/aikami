@@ -22,15 +22,11 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import { EMULATOR_PORTS, EMULATOR_PROJECT_ID } from '@aikami/constants';
+import { EMULATOR_PORTS, MODE_PROJECT_MAP } from '@aikami/constants';
 import { $ } from 'bun';
 
 /** Firebase project ID per mode. */
-const PROJECT_MAP = {
-  emulator: EMULATOR_PROJECT_ID,
-  staging: 'aikami-staging',
-  production: 'aikami-production',
-} as const;
+const PROJECT_MAP = MODE_PROJECT_MAP;
 
 /** Maximum parallel uploads. */
 const CONCURRENCY = 8;

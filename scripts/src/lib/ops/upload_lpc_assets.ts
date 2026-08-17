@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { MODE_PROJECT_MAP } from '@aikami/constants';
 import { $ } from 'bun';
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -34,13 +35,8 @@ const LPC_ASSETS_DIR = join(
 const STORAGE_PREFIX = 'lpc';
 
 const EMULATOR_STORAGE_PORT = 9198;
-const EMULATOR_PROJECT_ID = 'demo-aikami-emulator';
 
-const PROJECT_MAP = {
-  emulator: EMULATOR_PROJECT_ID,
-  staging: 'aikami-staging',
-  production: 'aikami-production',
-} as const;
+const PROJECT_MAP = MODE_PROJECT_MAP;
 
 /** Maximum parallel uploads. */
 const CONCURRENCY = 20;

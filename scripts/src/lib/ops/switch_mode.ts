@@ -12,25 +12,27 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MODE_PROJECT_MAP } from '@aikami/constants';
 import { $ } from 'bun';
 import { hasDirenv } from '../env/direnv_detect';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-const VALID_MODES = ['emulator', 'staging', 'production'] as const;
+const VALID_MODES = Object.keys(MODE_PROJECT_MAP).filter(
+  (mode) => mode !== 'testing',
+) as Exclude<keyof typeof MODE_PROJECT_MAP, 'testing'>[];
 type Mode = (typeof VALID_MODES)[number];
 
-const MODE_PROJECTS: Record<Mode, string> = {
-  emulator: 'demo-aikami-emulator',
-  staging: 'aikami-staging',
-  production: 'aikami-production',
-};
+const MODE_PROJECTS: Record<Mode, string> = MODE_PROJECT_MAP;
 
-const MODE_COLORS: Record<Mode, string> = {
+const MODE_COLORS_BASE: Record<string, string> = {
   emulator: '\x1b[35m', // magenta
   staging: '\x1b[33m', // yellow
   production: '\x1b[31m', // red
 };
+const MODE_COLORS: Record<Mode, string> = Object.fromEntries(
+  VALID_MODES.map((mode) => [mode, MODE_COLORS_BASE[mode] ?? '\x1b[36m']),
+) as Record<Mode, string>;
 const RESET = '\x1b[0m';
 
 // ── Helpers ───────────────────────────────────────────────────────────
