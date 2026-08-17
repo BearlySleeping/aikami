@@ -1,6 +1,6 @@
 // packages/backend/configs/src/lib/environment.ts
 import process from 'node:process';
-import { MODE_PROJECT_MAP } from '@aikami/constants';
+import { MODE_PROJECT_MAP, withProjectIdOffset } from '@aikami/constants';
 import type { Mode } from '@aikami/types';
 import { isEmptyObject, toAppError, toMode } from '@aikami/utils';
 // We need dotenv for firebase functions
@@ -271,7 +271,16 @@ export const getProjectId = (): string => {
   // FIRESTORE_EMULATOR_HOST is set but MODE env var still reads as
   // "staging" from the base .env file.
   if (isEmulatorMode()) {
-    return MODE_PROJECT_MAP.emulator;
+    // Match the offset the emulator suite runs under (firestack.config.ts /
+    // herdr contract runs apply withProjectIdOffset) so the Admin SDK's
+    // project matches the emulator's — otherwise ID-token verification fails
+    // with an "incorrect aud" error (C-418 Feature D verification).
+    // Reads PUBLIC_EMULATOR_PORT_OFFSET (the same var frontend-configs and
+    // firestack use) — a PUBLIC_-prefixed name in a backend package is a
+    // layering smell, but the var is set by the herdr/session tooling for
+    // BOTH sides of the boundary, and withProjectIdOffset no-ops at offset 0.
+    const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+    return withProjectIdOffset(MODE_PROJECT_MAP.emulator, emulatorPortOffset);
   }
   const mode = getMode();
   return (MODE_PROJECT_MAP as Record<string, string>)[mode] ?? MODE_PROJECT_MAP.staging;

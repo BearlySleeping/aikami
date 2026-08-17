@@ -9,6 +9,7 @@ import {
   getClientIp,
   isAikamiWebOrigin,
   isPathExcluded,
+  isTauriWebviewOrigin,
   manageSessionId,
   rewriteForwardedHost,
 } from '@aikami/backend/svelte-kit/hooks_helpers';
@@ -44,6 +45,28 @@ const enforceAppCheck = isAppCheckEnabled();
 // Browser log ingestion must never be gated on App Check — the logger's
 // HTTP sink is fire-and-forget and cannot attach an App Check token.
 const appCheckExcludePaths = ['/api/internal_logging'];
+
+// C-418 Feature D: hub-hosted auth endpoints that replaced the Firebase
+// Callable Functions `auth` / `poll_device_handoff`. The client app calls
+// them cross-origin in staging/production (the client runs on Firebase
+// Hosting, the hub on Cloud Run), so CORS is allowed for first-party
+// *.bearlysleeping.com origins and the Tauri webview origin on exactly
+// these two paths — never a wildcard, and never on any other /api route.
+// Credentials are NOT included: the auth route authenticates via the
+// Authorization header (Firebase ID token), not cookies.
+//
+// These two paths are ALSO excluded from App Check enforcement: the client
+// auth transport (hub_api_client) attaches an App Check token when one is
+// available, but enforcement must not depend on both deployments sharing
+// the same PUBLIC_DISABLE_APP_CHECK/recaptcha configuration — an asymmetry
+// would silently break desktop/browser auth with a misleading 401. The
+// routes carry their own auth surface (ID-token verification on
+// /api/auth/action, unguessable single-use codes + a per-instance token
+// bucket on /api/auth/poll-device-handoff), so App Check adds defense in
+// depth rather than being load-bearing here.
+const clientAuthApiPaths = ['/api/auth/action', '/api/auth/poll-device-handoff'];
+
+const isClientAuthPath = (pathname: string): boolean => clientAuthApiPaths.includes(pathname);
 
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
@@ -146,19 +169,27 @@ export const handle: Handle = async ({ event, resolve }) => {
     // Only /api/internal_logging gets the *.bearlysleeping.com allowance —
     // scoped narrowly so other /api/ routes don't inherit broadened CORS.
     const isLoggingEndpoint = isPathExcluded(pathname, appCheckExcludePaths);
+    const isClientAuthRoute = isClientAuthPath(pathname);
 
-    if (method === 'OPTIONS' && (allowExtensionCors || isLoggingEndpoint)) {
+    if (method === 'OPTIONS' && (allowExtensionCors || isLoggingEndpoint || isClientAuthRoute)) {
       const origin = request.headers.get('origin');
       // Only answer preflight for trusted origins — never fall back to a
       // wildcard, and omit CORS headers for disallowed origins.
       const isExtensionOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
       const isLoggingOrigin = isLoggingEndpoint && isAikamiWebOrigin(origin);
+      // The two client-auth routes are reached from the Tauri desktop webview
+      // (tauri://localhost / http(s)://tauri.localhost) as well as first-party
+      // browser origins — C-418 Feature D. Scoped to exactly those paths.
+      const isClientAuthOrigin =
+        isClientAuthRoute && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin));
       const preflightHeaders = new Headers();
-      if (origin && (isExtensionOrigin || isLoggingOrigin)) {
+      if (origin && (isExtensionOrigin || isLoggingOrigin || isClientAuthOrigin)) {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
         preflightHeaders.set(
           'Access-Control-Allow-Headers',
-          'Content-Type, Cookie, x-aikami-session',
+          isClientAuthOrigin
+            ? 'Content-Type, Authorization, X-Firebase-AppCheck'
+            : 'Content-Type, Cookie, x-aikami-session',
         );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
         // The logging endpoint needs no cookies/credentials — only grant
@@ -176,10 +207,16 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     // ── App Check verification (skip OPTIONS + excluded paths) ──
-    // Exclude /api/internal_logging only when the pathname is EXACTLY that
-    // endpoint or begins with it followed by '/' — never a bare unbounded
-    // startsWith() so similarly prefixed routes stay protected.
-    if (enforceAppCheck && method !== 'OPTIONS' && !isLoggingEndpoint) {
+    // Exclude /api/internal_logging and the two client-auth paths only
+    // when the pathname is EXACTLY that endpoint or begins with it followed
+    // by '/' — never a bare unbounded startsWith() so similarly prefixed
+    // routes stay protected.
+    if (
+      enforceAppCheck &&
+      method !== 'OPTIONS' &&
+      !isLoggingEndpoint &&
+      !isClientAuthPath(pathname)
+    ) {
       try {
         await verifyAppCheck(request);
       } catch {
@@ -196,6 +233,8 @@ export const handle: Handle = async ({ event, resolve }) => {
       response.headers.set('Access-Control-Allow-Origin', origin);
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     } else if (isLoggingEndpoint && isAikamiWebOrigin(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+    } else if (isClientAuthRoute && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin))) {
       response.headers.set('Access-Control-Allow-Origin', origin);
     }
 

@@ -48,7 +48,8 @@ const config = {
       '$views/*': toSrcPath('lib/views/*'),
 
       '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
-      '@aikami/backend/firestore/*': toPackagesPath('backend/firestore/src/lib/*'),
+      '@aikami/backend/auth': toPackagesPath('backend/auth/src'),
+      '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
       '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
       '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),
 
@@ -62,10 +63,10 @@ const config = {
 
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+      '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
+      '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
       '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
-      '@aikami/frontend/firestore': toPackagesPath('frontend/firestore/src'),
-      '@aikami/frontend/firestore/*': toPackagesPath('frontend/firestore/src/lib'),
       '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
       '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
 

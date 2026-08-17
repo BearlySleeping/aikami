@@ -11,8 +11,6 @@
       "@aikami/frontend/configs/*": ["../configs/src/lib/*"],
       "@aikami/frontend/components": ["../components/src/index.ts"],
       "@aikami/frontend/components/*": ["../components/src/lib/*"],
-      "@aikami/frontend/firestore": ["../firestore/src/index.ts"],
-      "@aikami/frontend/firestore/*": ["../firestore/src/lib/*"],
       "@aikami/frontend/storage": ["./src/index.ts"],
       "@aikami/frontend/storage/*": ["./src/lib/*"],
       "@aikami/frontend/services": ["../services/src/index.ts"],

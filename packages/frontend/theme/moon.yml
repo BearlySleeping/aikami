@@ -1,0 +1,29 @@
+# packages/frontend/theme/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'theme'
+  - 'frontend'
+  - 'library'
+
+project:
+  name: 'frontend-theme'
+  description: 'Shared Aikami brand palette — daisyUI theme + Tailwind tokens for client, hub, site, and docs.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  test:
+    command: 'bun test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'

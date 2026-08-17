@@ -18,6 +18,7 @@ dependsOn:
   - 'constants'
   - 'schemas'
   - 'types'
+  - 'frontend-theme'
 
 fileGroups:
   sources:

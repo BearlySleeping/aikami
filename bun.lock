@@ -86,6 +86,7 @@
         "@aikami/frontend-services": "workspace:*",
         "@aikami/frontend-utils": "workspace:*",
         "@aikami/frontend/engine": "workspace:*",
+        "@aikami/frontend/theme": "workspace:*",
         "@aikami/logger": "workspace:*",
         "@aikami/mocks": "workspace:*",
         "@aikami/parser": "workspace:*",
@@ -140,6 +141,7 @@
       "name": "@aikami/docs",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend/theme": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@aikami/utils": "workspace:*",
@@ -154,6 +156,7 @@
       "dependencies": {
         "@aikami/backend-database": "workspace:*",
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend/theme": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@aikami/utils": "workspace:*",
@@ -187,6 +190,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend/theme": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@fontsource/instrument-serif": "5.3.0",
@@ -372,6 +376,9 @@
         "@tursodatabase/database": "0.7.2",
       },
     },
+    "packages/frontend/theme": {
+      "name": "@aikami/frontend/theme",
+    },
     "packages/frontend/utils": {
       "name": "@aikami/frontend-utils",
       "dependencies": {
@@ -514,6 +521,8 @@
     "@aikami/frontend/configs": ["@aikami/frontend/configs@workspace:packages/frontend/configs"],
 
     "@aikami/frontend/engine": ["@aikami/frontend/engine@workspace:packages/frontend/engine"],
+
+    "@aikami/frontend/theme": ["@aikami/frontend/theme@workspace:packages/frontend/theme"],
 
     "@aikami/hub": ["@aikami/hub@workspace:apps/frontend/hub"],
 

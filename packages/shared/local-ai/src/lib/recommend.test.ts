@@ -383,7 +383,7 @@ describe('AC-1 — no GPU degrades to CPU without error', () => {
 });
 
 describe('companion files (e.g. Anima VAE + text encoder) ride along with their primary', () => {
-  const COMPANION_MANIFEST: ModelManifest = {
+  const CompanionManifest: ModelManifest = {
     schemaVersion: 1,
     entries: [
       {
@@ -439,7 +439,7 @@ describe('companion files (e.g. Anima VAE + text encoder) ride along with their 
     const plan = recommend({
       profile: profile({ gpu: { vendor: 'nvidia', unifiedMemory: false }, ramMb: 32768 }),
       modalities: ['image'],
-      manifest: COMPANION_MANIFEST,
+      manifest: CompanionManifest,
     });
     expect(plan.models.map((m) => m.manifestId)).toEqual([
       'image-anima-aesthetic-v1.1',
@@ -461,7 +461,7 @@ describe('companion files (e.g. Anima VAE + text encoder) ride along with their 
     const plan = recommend({
       profile: profile({ gpu: { vendor: 'none', unifiedMemory: false }, ramMb: 512 }),
       modalities: ['image'],
-      manifest: COMPANION_MANIFEST,
+      manifest: CompanionManifest,
     });
     expect(plan.models[0]?.manifestId).toBe('image-anima-aesthetic-v1.1');
   });

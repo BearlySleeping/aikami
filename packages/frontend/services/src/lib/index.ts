@@ -5,7 +5,6 @@ export * from './base/base_view_model.svelte.ts';
 export * from './firebase/firebase_analytics_service.ts';
 export * from './firebase/firebase_auth_service.ts';
 export * from './firebase/firebase_cloud_messaging.ts';
-export * from './firebase/firebase_functions_service.ts';
 export * from './firebase/firebase_remote_config.ts';
 export * from './firebase/firebase_storage.ts';
 // router

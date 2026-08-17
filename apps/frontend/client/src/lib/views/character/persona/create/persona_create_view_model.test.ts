@@ -657,12 +657,13 @@ describe('PersonaCreateViewModel — C-078', () => {
       (vm as unknown as { isRegenerating: boolean }).isRegenerating = true;
       (vm as unknown as { showRegenerationPanel: boolean }).showRegenerationPanel = true;
 
-      globalThis.fetch = mock((): Promise<Response> =>
-        Promise.resolve({
-          ok: false,
-          status: 404,
-          blob: () => Promise.resolve(new Blob()),
-        } as Response),
+      globalThis.fetch = mock(
+        (): Promise<Response> =>
+          Promise.resolve({
+            ok: false,
+            status: 404,
+            blob: () => Promise.resolve(new Blob()),
+          } as Response),
       );
 
       await vm.regenerateAvatar();

@@ -169,11 +169,7 @@ const probeWithTimeout = async (
     // Actually bound the health check: race it against the probe timeout /
     // detection-budget abort so a hung engine cannot stall detection.
     const timeout = new Promise<boolean>((resolve) => {
-      controller.signal.addEventListener(
-        'abort',
-        () => resolve(false),
-        { once: true },
-      );
+      controller.signal.addEventListener('abort', () => resolve(false), { once: true });
     });
     return await Promise.race([engine.healthCheck(), timeout]).catch(() => false);
   } finally {

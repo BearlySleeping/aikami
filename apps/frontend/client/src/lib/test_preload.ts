@@ -229,7 +229,6 @@ const frontendServicesMock = {
   dialogService: {},
   routerService: {},
   gameStateSyncService: {},
-  firebaseFunctionsService: { call: mock(async () => ({})) },
   firebaseAnalyticService: { logEvent: mock(async () => {}) },
   firebaseAuthService: {
     currentUser: null,

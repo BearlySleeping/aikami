@@ -64,6 +64,15 @@ export async function deployFirebaseHosting(
 }
 
 // ── Firebase Functions ───────────────────────────────────────────────────
+//
+// C-418 Feature D trimmed this stage: the `auth` and `poll_device_handoff`
+// callables moved to the hub's Elysia API, and the logging-only auth/
+// firestore triggers plus the no-op `daily` scheduler were deleted. The only
+// remaining controller is `api/discord_interactions.ts` (Discord webhook —
+// signature verification + Firestore-backed rate limiting + deferred
+// interaction timing, kept on Functions per C-418 OQ-3 disposition).
+// firestack auto-discovers controllers, so this stage now deploys exactly
+// that one function.
 
 export async function deployFirebaseFunctions(
   _config: AppConfig,
