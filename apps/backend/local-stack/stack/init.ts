@@ -13,9 +13,13 @@
  * Fully scriptable:
  *   bun run stack init --yes --backend cuda --modalities text,voice --tier auto
  *   bun run stack init --yes --json
+ *   bun run stack init --yes --text-source ollama   # skip the probe, always reuse
  *
  * Behaviour contract (AC-1..AC-13):
- *   - Detection is entirely local, each probe capped at 1 s, no network.
+ *   - Detection is entirely local, each probe capped at 1 s, no network —
+ *     except the loopback-only Ollama probe (`--text-source auto`, the
+ *     default), which exists purely for interop with an already-running
+ *     Ollama server on the text engine's port; see detect_ollama.ts.
  *   - Every probe failure degrades to a partial profile — never an error.
  *   - The plan is shown BEFORE anything is written; declining writes nothing.
  *   - `init` never downloads; use `--fetch` to chain C-390's fetcher.
@@ -41,6 +45,7 @@ import type {
 import { detectHardware, loadManifest, recommend } from '@aikami/local-ai';
 import { HardwareProfileSchema, StackPlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
+import { probeOllama } from './detect_ollama.ts';
 import { cudaExtras, diffEnv, readExistingEnv, renderEnv, writeEnvAtomic } from './env_writer.ts';
 import { probeExecutor } from './probe_executor.ts';
 
@@ -55,10 +60,20 @@ export type CliOptions = {
   manifestPath?: string;
   noColor: boolean;
   diskPath?: string;
+  /**
+   * Where the `text` modality's engine comes from:
+   *   - `auto` (default): probe port 11434 for an already-running Ollama
+   *     server and offer to reuse it instead of starting the bundled
+   *     llama.cpp engine.
+   *   - `bundled`: skip the probe, always use the bundled engine.
+   *   - `ollama`: skip the probe, always reuse an existing Ollama server
+   *     without asking (for scripting when you know one is there).
+   */
+  textSource?: 'auto' | 'bundled' | 'ollama';
 };
 
 const DEFAULT_MODALITIES: readonly StackModality[] = ['text', 'image', 'voice', 'stt'];
-const MODALITY_CHOICES: readonly StackModality[] = ['text', 'image', 'voice', 'stt', 'web'];
+const MODALITY_CHOICES: readonly StackModality[] = ['text', 'image', 'voice', 'stt', 'client'];
 const BACKEND_CHOICES: readonly StackBackend[] = [
   'cpu',
   'cuda',
@@ -84,7 +99,7 @@ const PORTS: Readonly<Partial<Record<StackModality, number>>> = {
   image: 8188,
   voice: 8089,
   stt: 8087,
-  web: 5274,
+  client: 5274,
 } as const;
 
 /**
@@ -96,8 +111,10 @@ export const renderPlan = (options: {
   readonly profile: HardwareProfile;
   readonly plan: StackPlan;
   readonly colorEnabled: boolean;
+  /** Set when `text` was dropped in favour of a detected/forced host Ollama (see detect_ollama.ts). */
+  readonly hostOllamaPort?: number;
 }): string => {
-  const { profile, plan, colorEnabled } = options;
+  const { profile, plan, colorEnabled, hostOllamaPort } = options;
   const c = (code: string, text: string): string => color(code, text, colorEnabled);
   const out: string[] = [];
 
@@ -107,6 +124,11 @@ export const renderPlan = (options: {
     `  Backend          ${c('1', plan.backend)}${plan.nativeEngines ? ' (native engines — macOS)' : ''}`,
   );
   out.push(`  Modalities       ${plan.modalities.join(', ') || '(none)'}`);
+  if (hostOllamaPort !== undefined) {
+    out.push(
+      `  Text engine      existing Ollama on port ${hostOllamaPort} (detected; not started by compose)`,
+    );
+  }
   out.push(
     `  Hardware         ${profile.gpu.vendor === 'none' ? 'CPU-only' : `${profile.gpu.vendor} ${profile.gpu.name ?? ''}`.trim()}${profile.gpu.vramMb ? ` · ${profile.gpu.vramMb} MiB VRAM` : ''}`,
   );
@@ -210,8 +232,15 @@ const choose = async (
   return match ?? defaultValue;
 };
 
+/** Injectable dependencies for `runInit` — overridden only by tests, real adapters by default. */
+export type RunInitDeps = {
+  /** Defaults to `detect_ollama.ts`'s real loopback probe. */
+  readonly probeOllama?: (port: number) => Promise<boolean>;
+};
+
 /** Runs the full init flow. Returns the process exit code. */
-export const runInit = async (options: CliOptions): Promise<number> => {
+export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Promise<number> => {
+  const probeOllamaFn = deps.probeOllama ?? probeOllama;
   const colorEnabled = hasColor(options.noColor);
   const c = (code: string, text: string): string => color(code, text, colorEnabled);
 
@@ -253,6 +282,47 @@ export const runInit = async (options: CliOptions): Promise<number> => {
       .split(',')
       .map((part) => part.trim())
       .filter((part): part is StackModality => MODALITY_CHOICES.includes(part as StackModality));
+  }
+
+  // ── Host Ollama detection (auto by default) ───────────────────────────
+  // 11434 is Ollama's own default and is what the client's Ollama provider
+  // and the Tauri CSP allowlist already expect (README "Ports are
+  // deliberate") — so a user who already runs Ollama there doesn't have a
+  // conflict to resolve, they have a redundant download and a container
+  // that will fail to bind. Offer to just point at what's already running.
+  const textSource = options.textSource ?? 'auto';
+  const textPort = PORTS.text;
+  let hostOllamaPort: number | undefined;
+  if (modalities.includes('text') && textSource !== 'bundled' && textPort !== undefined) {
+    const detected = textSource === 'ollama' ? true : await probeOllamaFn(textPort);
+    if (detected) {
+      const reuse =
+        textSource === 'ollama' || options.yes
+          ? true
+          : await confirm(
+              `Detected an Ollama server already on port ${textPort} — use it instead of starting the bundled text engine?`,
+              true,
+            );
+      if (reuse) {
+        hostOllamaPort = textPort;
+        modalities = modalities.filter((modality) => modality !== 'text');
+        // biome-ignore lint/suspicious/noConsole: CLI output
+        console.log(
+          c(
+            '1;36',
+            `→ using existing Ollama on port ${textPort}; the bundled text engine will not be started.`,
+          ),
+        );
+      } else {
+        // biome-ignore lint/suspicious/noConsole: CLI output
+        console.log(
+          c(
+            '1;33',
+            `⚠ port ${textPort} is already in use by Ollama — stop it before \`docker compose up\`, or the text container will fail to bind. (11434 is fixed by the Tauri CSP allowlist and can't be remapped.)`,
+          ),
+        );
+      }
+    }
   }
 
   // ── Backend (flag > prompt > auto) ────────────────────────────────────
@@ -320,7 +390,7 @@ export const runInit = async (options: CliOptions): Promise<number> => {
   }
 
   // ── Plan presentation (AC-7) ──────────────────────────────────────────
-  process.stdout.write(renderPlan({ profile, plan, colorEnabled }));
+  process.stdout.write(renderPlan({ profile, plan, colorEnabled, hostOllamaPort }));
 
   // ── Confirmation (AC-7): declining writes nothing ────────────────────
   const confirmed = options.yes ? true : await confirm('Write .env?', true);
@@ -338,6 +408,7 @@ export const runInit = async (options: CliOptions): Promise<number> => {
     plan,
     manifest,
     extras: plan.backend === 'cuda' ? cudaExtras(profile) : undefined,
+    hostOllamaPort,
   });
   if (existing !== undefined) {
     process.stdout.write(`\n${diffEnv(existing, content)}\n`);
@@ -435,7 +506,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
           .split(',')
           .map((part) => part.trim())
           .filter((part): part is StackModality =>
-            ['text', 'image', 'voice', 'stt', 'web', 'ollama', 'comfyui'].includes(part),
+            ['text', 'image', 'voice', 'stt', 'client', 'ollama', 'comfyui'].includes(part),
           );
         i += 1;
         break;
@@ -443,6 +514,14 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
         options.tier = next() as 'auto' | 'cpu' | '8gb' | '16gb';
         i += 1;
         break;
+      case '--text-source': {
+        const raw = next();
+        if (raw === 'auto' || raw === 'bundled' || raw === 'ollama') {
+          options.textSource = raw;
+        }
+        i += 1;
+        break;
+      }
       case '--env-path':
         options.envPath = next();
         i += 1;

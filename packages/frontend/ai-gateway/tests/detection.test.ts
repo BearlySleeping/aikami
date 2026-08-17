@@ -85,6 +85,79 @@ describe('detectTextAvailability — parity with capability_service.detectText',
     expect(toDetectionStatus(result)).toBe('detected');
   });
 
+  test('Ollama /api/tags fails, OpenAI-compatible /v1/models responds → detected as llamacpp, not ollama', async () => {
+    // The local-stack's bundled default (llama.cpp's llama-server) doesn't
+    // implement Ollama's native API even though it commonly shares
+    // Ollama's default port — this is the reported bug: /capability
+    // reported "not detected" against a live, healthy llama-server.
+    const result = await detectTextAvailability({
+      nativeUrl: 'http://127.0.0.1:11434/api/tags',
+      openaiCompatUrl: 'http://127.0.0.1:11434/v1/models',
+      fetchFn: routedFetch([
+        {
+          match: '/api/tags',
+          respond: () => Promise.resolve(new Response('Not Found', { status: 404 })),
+        },
+        {
+          match: '/v1/models',
+          respond: () =>
+            Promise.resolve(
+              new Response(
+                JSON.stringify({ object: 'list', data: [{ id: 'qwen2.5-1.5b-instruct' }] }),
+                { status: 200 },
+              ),
+            ),
+        },
+      ]),
+    });
+
+    expect(result.available).toBe(true);
+    expect(result.provider).toBe('llamacpp');
+    expect(result.provider).not.toBe('ollama');
+    expect(toDetectionStatus(result)).toBe('detected');
+  });
+
+  test('Ollama /api/tags responds → reported as ollama, OpenAI-compat probe never attempted', async () => {
+    let openaiCompatCalled = false;
+    const result = await detectTextAvailability({
+      nativeUrl: 'http://127.0.0.1:11434/api/tags',
+      openaiCompatUrl: 'http://127.0.0.1:11434/v1/models',
+      fetchFn: routedFetch([
+        {
+          match: '/api/tags',
+          respond: () =>
+            Promise.resolve(
+              new Response(JSON.stringify({ models: [{ name: 'llama3' }] }), { status: 200 }),
+            ),
+        },
+        {
+          match: '/v1/models',
+          respond: () => {
+            openaiCompatCalled = true;
+            return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+          },
+        },
+      ]),
+    });
+
+    expect(result.provider).toBe('ollama');
+    expect(openaiCompatCalled).toBe(false);
+  });
+
+  test('OpenAI-compat endpoint answers but not in the expected shape → not detected', async () => {
+    const result = await detectTextAvailability({
+      openaiCompatUrl: 'http://127.0.0.1:11434/v1/models',
+      fetchFn: routedFetch([
+        {
+          match: '/v1/models',
+          respond: () => Promise.resolve(new Response('<html>hello</html>', { status: 200 })),
+        },
+      ]),
+    });
+
+    expect(result.available).toBe(false);
+  });
+
   test('no native URL configured → no native ping is attempted (AC-7)', async () => {
     const result = await detectTextAvailability({
       hasCloudConfig: () => false,

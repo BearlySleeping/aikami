@@ -104,7 +104,7 @@ jobs:
           cd apps/backend/local-stack
           for backend in cpu cuda rocm vulkan intel musa; do
             COMPOSE_FILE="compose.yaml:compose.$backend.yaml" \
-            COMPOSE_PROFILES=text,image,voice,stt,web docker compose config \
+            COMPOSE_PROFILES=text,image,voice,stt,client docker compose config \
               >/tmp/render-$backend.yaml
           done
           # Extract every pinned upstream image from the rendered configs.

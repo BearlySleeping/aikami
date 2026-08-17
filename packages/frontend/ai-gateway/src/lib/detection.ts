@@ -59,13 +59,23 @@ const nowIso = (): string => new Date().toISOString();
  * Order (parity with capability_service.detectText):
  * 1. Configured cloud connection (vault/env) → available via `byok`.
  * 2. Ollama via dev proxy (primary; same-origin → no CORS).
- * 3. Fallback: native fetch to localhost:11434/api/tags. Both Ollama
- *    attempts share one aggregate deadline.
+ * 3. Native fetch to the runtime-configured engine's Ollama-shaped
+ *    `/api/tags` endpoint.
+ * 4. Native fetch to the SAME engine's OpenAI-compatible `/v1/models`
+ *    endpoint — the local-stack's bundled default (llama.cpp's
+ *    llama-server) speaks this shape, not Ollama's native API, even
+ *    though it commonly shares Ollama's default port. A server that only
+ *    answers here is labelled `llamacpp`, never `ollama`, so the chat
+ *    adapter's Ollama-specific quirks (disabled streaming, `/api/chat`
+ *    request shape) are never misapplied to it.
+ * All local attempts share one aggregate deadline.
  */
 export const detectTextAvailability = async (options?: {
   hasCloudConfig?: () => boolean;
   proxyUrl?: string;
   nativeUrl?: string;
+  /** Full URL to the runtime-configured engine's OpenAI-compatible models list (e.g. `<base>/v1/models`). */
+  openaiCompatUrl?: string;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   signal?: AbortSignal;
@@ -74,6 +84,7 @@ export const detectTextAvailability = async (options?: {
     hasCloudConfig,
     proxyUrl = DEFAULT_OLLAMA_PROXY_PATH,
     nativeUrl = DEFAULT_OLLAMA_NATIVE_URL,
+    openaiCompatUrl,
     timeoutMs = DETECTION_TIMEOUT_MS,
     fetchFn,
     signal,
@@ -150,6 +161,36 @@ export const detectTextAvailability = async (options?: {
       }
     } catch {
       // CORS rejection or connection refused — expected in browser mode.
+    }
+  }
+
+  // Fallback: the same engine's OpenAI-compatible surface. Only reached
+  // when the Ollama-native probe above didn't already return — a server
+  // that answers /api/tags is genuinely Ollama and is reported as such.
+  if (openaiCompatUrl) {
+    try {
+      const remaining = Math.max(0, deadline - Date.now());
+      const response = await fetchWithTimeout({
+        url: openaiCompatUrl,
+        timeoutMs: remaining,
+        fetchFn,
+        signal,
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { data?: unknown[] };
+        if (Array.isArray(body.data)) {
+          return {
+            capability: 'text',
+            available: true,
+            mode: 'offline',
+            provider: 'llamacpp',
+            detail: `Local OpenAI-compatible server reachable (${body.data.length} models)`,
+            checkedAt: nowIso(),
+          };
+        }
+      }
+    } catch {
+      // Connection refused or CORS rejection — expected when nothing local is running.
     }
   }
 

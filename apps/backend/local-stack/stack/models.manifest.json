@@ -44,18 +44,50 @@
       "sha256": "7c1a10d202d8788dbe5628dc962254d10654c853cae6aaeca0618f05490d4a46"
     },
     {
-      "id": "image-flux1-schnell-q4k",
+      "id": "image-anima-aesthetic-v1.1",
       "modality": "image",
       "tier": "8gb",
-      "license": "Apache-2.0",
-      "requiresAcknowledgement": false,
+      "license": "circlestone-labs-non-commercial-license",
+      "requiresAcknowledgement": true,
       "kind": "file",
-      "repo": "leejet/FLUX.1-schnell-gguf",
-      "revision": "c7f665ddaf9f197ff493f41fc211f5480f5f19ac",
-      "file": "flux1-schnell-q4_k.gguf",
-      "targetPath": "image/flux1-schnell-q4_k.gguf",
-      "bytes": 6884606880,
-      "sha256": "619697cc4c2bf587416aa1afa98d474a44c80eb4e3a3f64ea8f99ab0ed9adb7a"
+      "repo": "circlestone-labs/Anima",
+      "revision": "f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b",
+      "file": "split_files/diffusion_models/anima-aesthetic-v1.1.safetensors",
+      "targetPath": "image/anima-aesthetic-v1.1.safetensors",
+      "bytes": 4182230656,
+      "sha256": "3c1868387a3a1ff504bbb87c33678321965ead381fcf87afbd0264daa600c082",
+      "companions": [
+        { "role": "vae", "id": "image-anima-vae-qwen-image" },
+        { "role": "llm", "id": "image-anima-text-encoder-qwen3-0.6b" }
+      ]
+    },
+    {
+      "id": "image-anima-vae-qwen-image",
+      "modality": "image",
+      "tier": "any",
+      "license": "circlestone-labs-non-commercial-license",
+      "requiresAcknowledgement": true,
+      "kind": "file",
+      "repo": "circlestone-labs/Anima",
+      "revision": "f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b",
+      "file": "split_files/vae/qwen_image_vae.safetensors",
+      "targetPath": "image/qwen_image_vae.safetensors",
+      "bytes": 253806246,
+      "sha256": "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f"
+    },
+    {
+      "id": "image-anima-text-encoder-qwen3-0.6b",
+      "modality": "image",
+      "tier": "any",
+      "license": "circlestone-labs-non-commercial-license",
+      "requiresAcknowledgement": true,
+      "kind": "file",
+      "repo": "circlestone-labs/Anima",
+      "revision": "f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b",
+      "file": "split_files/text_encoders/qwen_3_06b_base.safetensors",
+      "targetPath": "image/qwen_3_06b_base.safetensors",
+      "bytes": 1192135096,
+      "sha256": "cd2a512003e2f9f3cd3c32a9c3573f820bb28c940f73c57b1ddaa983d9223eba"
     },
     {
       "id": "image-sd15-pruned-q4_0",

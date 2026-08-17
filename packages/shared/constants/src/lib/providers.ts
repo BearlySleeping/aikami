@@ -98,6 +98,14 @@ export const TEXT_PROVIDERS = [
     isLocal: true,
   },
   {
+    id: 'llamacpp',
+    label: 'llama.cpp (local)',
+    description: 'Local OpenAI-compatible server (llama.cpp, local-stack default)',
+    needsKey: false,
+    needsUrl: true,
+    isLocal: true,
+  },
+  {
     id: 'ooba',
     label: 'TextGen WebUI',
     description: 'Local Oobabooga server',

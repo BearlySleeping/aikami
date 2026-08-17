@@ -6,7 +6,7 @@
 #
 # .env:
 #   COMPOSE_FILE=compose.yaml:compose.rocm.yaml
-#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_PROFILES=text,image,voice,stt,client
 #
 # Device mapping: ROCm uses the host's /dev/kfd + /dev/dri (AMD GPU), not
 # the NVIDIA toolkit's gpu capability.

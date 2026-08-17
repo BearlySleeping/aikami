@@ -14,16 +14,20 @@ export type StackBackendValue = (typeof STACK_BACKENDS)[number];
 
 /**
  * Modality value set introduced by C-391. Matches C-390's `.env.example`
- * `COMPOSE_PROFILES` (`text`, `image`, `voice`, `stt`, `web`, `ollama`,
+ * `COMPOSE_PROFILES` (`text`, `image`, `voice`, `stt`, `client`, `ollama`,
  * `comfyui`). Note the manifest (C-390) labels the voice model `tts`; the
  * user-facing modality `voice` maps to manifest modality `tts`.
+ *
+ * `client` was `web` before it was renamed (post-C-391) — it's the game
+ * client/app container, not a generic "web" thing; the name was confusing
+ * next to the `text`/`image`/`voice`/`stt` engines.
  */
 export const STACK_MODALITIES = [
   'text',
   'image',
   'voice',
   'stt',
-  'web',
+  'client',
   'ollama',
   'comfyui',
 ] as const;

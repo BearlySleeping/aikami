@@ -382,11 +382,96 @@ describe('AC-1 — no GPU degrades to CPU without error', () => {
   });
 });
 
-describe('web/ollama/comfyui modalities add no models', () => {
-  test('web adds no download entries', () => {
+describe('companion files (e.g. Anima VAE + text encoder) ride along with their primary', () => {
+  const COMPANION_MANIFEST: ModelManifest = {
+    schemaVersion: 1,
+    entries: [
+      {
+        id: 'image-anima-aesthetic-v1.1',
+        modality: 'image',
+        tier: '8gb',
+        license: 'circlestone-labs-non-commercial-license',
+        requiresAcknowledgement: true,
+        kind: 'file',
+        repo: 'circlestone-labs/Anima',
+        revision: 'rev',
+        file: 'split_files/diffusion_models/anima-aesthetic-v1.1.safetensors',
+        targetPath: 'image/anima-aesthetic-v1.1.safetensors',
+        bytes: 4_182_230_656,
+        sha256: '1'.repeat(64),
+        companions: [
+          { role: 'vae', id: 'image-anima-vae-qwen-image' },
+          { role: 'llm', id: 'image-anima-text-encoder-qwen3-0.6b' },
+        ],
+      },
+      {
+        id: 'image-anima-vae-qwen-image',
+        modality: 'image',
+        tier: 'any',
+        license: 'circlestone-labs-non-commercial-license',
+        requiresAcknowledgement: true,
+        kind: 'file',
+        repo: 'circlestone-labs/Anima',
+        revision: 'rev',
+        file: 'split_files/vae/qwen_image_vae.safetensors',
+        targetPath: 'image/qwen_image_vae.safetensors',
+        bytes: 253_806_246,
+        sha256: '2'.repeat(64),
+      },
+      {
+        id: 'image-anima-text-encoder-qwen3-0.6b',
+        modality: 'image',
+        tier: 'any',
+        license: 'circlestone-labs-non-commercial-license',
+        requiresAcknowledgement: true,
+        kind: 'file',
+        repo: 'circlestone-labs/Anima',
+        revision: 'rev',
+        file: 'split_files/text_encoders/qwen_3_06b_base.safetensors',
+        targetPath: 'image/qwen_3_06b_base.safetensors',
+        bytes: 1_192_135_096,
+        sha256: '3'.repeat(64),
+      },
+    ],
+  };
+
+  test('selecting the primary pulls both companions into the plan, sized and gated correctly', () => {
+    const plan = recommend({
+      profile: profile({ gpu: { vendor: 'nvidia', unifiedMemory: false }, ramMb: 32768 }),
+      modalities: ['image'],
+      manifest: COMPANION_MANIFEST,
+    });
+    expect(plan.models.map((m) => m.manifestId)).toEqual([
+      'image-anima-aesthetic-v1.1',
+      'image-anima-vae-qwen-image',
+      'image-anima-text-encoder-qwen3-0.6b',
+    ]);
+    expect(plan.models[0]?.role).toBeUndefined();
+    expect(plan.models[1]?.role).toBe('vae');
+    expect(plan.models[2]?.role).toBe('llm');
+    expect(plan.models.every((m) => m.requiresAcknowledgement)).toBe(true);
+    expect(plan.totalDownloadBytes).toBe(4_182_230_656 + 253_806_246 + 1_192_135_096);
+  });
+
+  test('companions are never independently selected as the primary pick', () => {
+    // A profile whose usable bytes fit ONLY the tiny companions, not the
+    // 4.2 GB primary — the modality must still resolve to the primary
+    // (with a top-tier-fallback warning), never accidentally pick the VAE
+    // or text encoder as "the" image model.
+    const plan = recommend({
+      profile: profile({ gpu: { vendor: 'none', unifiedMemory: false }, ramMb: 512 }),
+      modalities: ['image'],
+      manifest: COMPANION_MANIFEST,
+    });
+    expect(plan.models[0]?.manifestId).toBe('image-anima-aesthetic-v1.1');
+  });
+});
+
+describe('client/ollama/comfyui modalities add no models', () => {
+  test('client adds no download entries', () => {
     const plan = recommend({
       profile: profile({ gpu: { vendor: 'none', unifiedMemory: false }, ramMb: 8192 }),
-      modalities: ['web'],
+      modalities: ['client'],
       manifest: MANIFEST,
     });
     expect(plan.models).toHaveLength(0);

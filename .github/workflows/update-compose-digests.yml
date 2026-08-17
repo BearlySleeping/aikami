@@ -91,7 +91,7 @@ jobs:
           set -euo pipefail
           for backend in cpu cuda rocm vulkan intel musa; do
             COMPOSE_FILE="compose.yaml:compose.$backend.yaml" \
-            COMPOSE_PROFILES=text,image,voice,stt,web docker compose config --quiet
+            COMPOSE_PROFILES=text,image,voice,stt,client docker compose config --quiet
           done
 
       - name: Create or update the digest-bump PR

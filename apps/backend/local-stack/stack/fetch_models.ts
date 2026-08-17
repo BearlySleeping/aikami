@@ -55,6 +55,11 @@ export type ManifestEntry = {
   targetPath: string;
   bytes: number;
   sha256: string;
+  /** Other entry ids that must also be fetched alongside this one (e.g.
+   *  Anima's VAE + text encoder). The fetcher downloads by modality, so
+   *  these are covered automatically as long as they share this entry's
+   *  modality — recorded here only so callers can see the relationship. */
+  companions?: { role: string; id: string }[];
 };
 
 export type Manifest = {
@@ -62,13 +67,13 @@ export type Manifest = {
   entries: ManifestEntry[];
 };
 
-/** Compose profile → manifest modalities. `web` has no models. */
+/** Compose profile → manifest modalities. `client` has no models. */
 export const PROFILE_MODALITY: Readonly<Record<string, readonly Modality[]>> = {
   text: ['text'],
   image: ['image'],
   voice: ['tts'],
   stt: ['stt'],
-  web: [],
+  client: [],
 } as const;
 
 export const ALL_MODALITIES: readonly Modality[] = ['text', 'image', 'tts', 'stt'] as const;

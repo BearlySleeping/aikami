@@ -1,5 +1,6 @@
 // packages/shared/schemas/src/lib/local_ai/stack_plan.ts
 import Type from 'typebox';
+import { ManifestEntryCompanionRoleSchema } from './model_manifest.ts';
 import { StackBackendSchema, StackModalitySchema } from './stack_backend.ts';
 
 export const StackPlanModelSchema = Type.Object({
@@ -10,6 +11,10 @@ export const StackPlanModelSchema = Type.Object({
   requiresAcknowledgement: Type.Boolean(),
   /** One-line human justification shown in the plan. */
   rationale: Type.String(),
+  /** Set when this entry is a companion (vae/llm/clip/...) riding along
+   *  with another entry in this same list, rather than an independently
+   *  selected model. Absent means "primary". */
+  role: Type.Optional(ManifestEntryCompanionRoleSchema),
 });
 
 export const StackPlanSchema = Type.Object({

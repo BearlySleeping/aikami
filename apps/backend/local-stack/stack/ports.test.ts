@@ -15,7 +15,7 @@ const COMPOSE_PORT_MAP = {
   image: 8188,
   voice: 8089,
   stt: 8087,
-  web: 5274,
+  client: 5274,
 } as const;
 
 describe('AC-11 — local stack ports match development_ports.ts', () => {
@@ -39,12 +39,12 @@ describe('AC-11 — local stack ports match development_ports.ts', () => {
     expect(COMPOSE_PORT_MAP.stt).toBe(EMULATOR_PORTS.stt);
   });
 
-  it('web client binds an Aikami-allocated port, not the Nordclaw 3000 range', () => {
-    expect(COMPOSE_PORT_MAP.web).toBe(5274);
+  it('client binds an Aikami-allocated port, not the Nordclaw 3000 range', () => {
+    expect(COMPOSE_PORT_MAP.client).toBe(5274);
     expect(EMULATOR_PORTS.client).toBe(5274);
-    // Nordclaw owns 3000–3009; Aikami web must not land there.
-    expect(COMPOSE_PORT_MAP.web).toBeGreaterThanOrEqual(5270);
-    expect(COMPOSE_PORT_MAP.web).toBeLessThanOrEqual(5289);
+    // Nordclaw owns 3000–3009; Aikami's client must not land there.
+    expect(COMPOSE_PORT_MAP.client).toBeGreaterThanOrEqual(5270);
+    expect(COMPOSE_PORT_MAP.client).toBeLessThanOrEqual(5289);
   });
 
   it('no service binds host 8080 (Nordclaw Firestore emulator)', () => {

@@ -111,6 +111,11 @@ const baseOptions = async (): Promise<CliOptions & { envPath: string; manifestPa
     noColor: true,
     envPath: join(dir, '.env'),
     manifestPath,
+    // Tests below are not exercising host-Ollama detection and must stay
+    // deterministic regardless of whether the machine running them happens
+    // to have a real Ollama server on 11434 — see "text engine source"
+    // below for the dedicated, DI-controlled coverage of `auto`.
+    textSource: 'bundled',
   };
 };
 
@@ -254,6 +259,65 @@ describe('AC-13 — --json output is complete and stable', () => {
     const doc = JSON.parse(text) as { profile: unknown; plan: unknown };
     expect(Value.Check(HardwareProfileSchema, doc.profile)).toBe(true);
     expect(Value.Check(StackPlanSchema, doc.plan)).toBe(true);
+  });
+});
+
+describe('text engine source — host Ollama detection', () => {
+  // The probe is DI'd here (RunInitDeps) rather than exercised against the
+  // real network — whether *this* machine happens to run Ollama on 11434
+  // must not change what these assertions prove.
+
+  test('auto + probe finds nothing → bundled text engine unchanged', async () => {
+    const base = await baseOptions();
+    const code = await runInit({ ...base, textSource: 'auto' }, { probeOllama: async () => false });
+    expect(code).toBe(0);
+    const content = await readFile(base.envPath, 'utf8');
+    expect(content).toContain('COMPOSE_PROFILES=text,image,voice,stt');
+    expect(content).toContain('TEXT_MODEL=');
+  });
+
+  test('auto + probe detects Ollama + --yes → reuses it, text dropped, .env notes it', async () => {
+    const base = await baseOptions();
+    const code = await runInit({ ...base, textSource: 'auto' }, { probeOllama: async () => true });
+    expect(code).toBe(0);
+    const content = await readFile(base.envPath, 'utf8');
+    expect(content).toContain('COMPOSE_PROFILES=image,voice,stt');
+    expect(content).not.toContain('TEXT_MODEL=');
+    expect(content).toContain('using existing Ollama on port 11434');
+  });
+
+  test('--text-source ollama forces reuse without probing — text dropped, .env notes it', async () => {
+    const base = await baseOptions();
+    // Probe stubbed to throw: --text-source ollama must never call it.
+    const code = await runInit(
+      { ...base, textSource: 'ollama' },
+      {
+        probeOllama: async () => {
+          throw new Error('should not probe when textSource is explicit "ollama"');
+        },
+      },
+    );
+    expect(code).toBe(0);
+    const content = await readFile(base.envPath, 'utf8');
+    expect(content).toContain('COMPOSE_PROFILES=image,voice,stt');
+    expect(content).not.toContain('TEXT_MODEL=');
+    expect(content).toContain('using existing Ollama on port 11434');
+  });
+
+  test('--text-source bundled skips the probe — text always kept', async () => {
+    const base = await baseOptions();
+    const code = await runInit(
+      { ...base, textSource: 'bundled' },
+      {
+        probeOllama: async () => {
+          throw new Error('should not probe when textSource is explicit "bundled"');
+        },
+      },
+    );
+    expect(code).toBe(0);
+    const content = await readFile(base.envPath, 'utf8');
+    expect(content).toContain('COMPOSE_PROFILES=text,image,voice,stt');
+    expect(content).toContain('TEXT_MODEL=');
   });
 });
 

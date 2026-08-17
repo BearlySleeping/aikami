@@ -606,12 +606,14 @@ class ConfigService
               (c.source === 'env' &&
                 // Keep env connections that have a real API key
                 ((c.apiKey && c.apiKey.length > 0) ||
-                  // Or local providers (Ollama, etc.) which don't need API keys
+                  // Or local providers (Ollama, llama.cpp, etc.) which don't need API keys
                   c.provider === 'ollama' ||
+                  c.provider === 'llamacpp' ||
                   c.provider === 'ooba')) ||
               // Keep detected connections ONLY if they're local providers
               (c.source === 'detected' &&
                 (c.provider === 'ollama' ||
+                  c.provider === 'llamacpp' ||
                   c.provider === 'ooba' ||
                   c.provider === 'comfyui' ||
                   c.provider === 'kokoro')),

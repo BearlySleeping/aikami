@@ -321,6 +321,37 @@ describe('ConfigService — C-079', () => {
       expect(service.getApiKey('openrouter')).toBe('sk-restored');
     });
 
+    test('load keeps a keyless llamacpp connection (detected or env source), same as ollama/ooba', async () => {
+      // C-406: llamacpp is a distinct local provider from ollama — it must
+      // survive the load-time prune the same way ollama/ooba do, or a
+      // reload would silently drop the auto-seeded local-stack connection.
+      vaultStore.set(
+        '__vault',
+        JSON.stringify({
+          connections: [
+            {
+              id: 'conn-detected',
+              name: 'llama.cpp (local)',
+              provider: 'llamacpp',
+              apiKey: '',
+              baseUrl: 'http://localhost:11434/v1',
+              model: 'qwen2.5-1.5b-instruct',
+              generationParams: {},
+              isDefault: true,
+              source: 'detected',
+            },
+          ],
+          defaultConnectionId: 'conn-detected',
+        }),
+      );
+
+      const service = await createService();
+      await service.load();
+
+      expect(service.state.connections).toHaveLength(1);
+      expect(service.state.connections[0].provider).toBe('llamacpp');
+    });
+
     test('load should restore plain config from localStorage', async () => {
       store.set(
         'aikami_config',
@@ -651,6 +682,28 @@ describe('ConfigService × AiGateway — C-322 connection visibility', () => {
     // The gateway must exercise the real Ollama ping path — the result
     // depends on whether a local Ollama is running, but it must never be
     // reported as byok (cloud-configured).
+    const result = await aiGatewayService.detect('text');
+    expect(result.mode).not.toBe('byok');
+  }, 10_000);
+
+  test('a local llamacpp connection does NOT short-circuit as cloud-configured', async () => {
+    // C-406: llamacpp is a distinct local provider from ollama (the
+    // local-stack's bundled llama.cpp speaks OpenAI's /v1/models, not
+    // Ollama's native API) — it must get the same local-provider treatment
+    // as ollama in _hasCloudTextConnection, or detection would wrongly
+    // report it as byok/cloud-configured and skip the real local ping.
+    const { configService, aiGatewayService } = await _getSingletons();
+
+    configService.addConnection({
+      name: 'llama.cpp (local)',
+      provider: 'llamacpp',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'qwen2.5-1.5b-instruct',
+      generationParams: _params,
+      isDefault: true,
+    });
+
     const result = await aiGatewayService.detect('text');
     expect(result.mode).not.toBe('byok');
   }, 10_000);

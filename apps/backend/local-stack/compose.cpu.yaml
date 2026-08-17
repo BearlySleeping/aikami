@@ -8,7 +8,7 @@
 #
 # .env:
 #   COMPOSE_FILE=compose.yaml:compose.cpu.yaml
-#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_PROFILES=text,image,voice,stt,client
 
 services:
   text:

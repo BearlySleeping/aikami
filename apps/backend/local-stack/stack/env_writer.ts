@@ -46,8 +46,10 @@ export const renderEnv = (options: {
   readonly manifest: ModelManifest;
   /** Extra env lines (e.g. TEXT_SERVER_IMAGE for CUDA 13 hosts). */
   readonly extras?: Readonly<Record<string, string>>;
+  /** Set when `text` was dropped in favour of a detected/forced host Ollama (see detect_ollama.ts). */
+  readonly hostOllamaPort?: number;
 }): string => {
-  const { profile, plan, manifest, extras } = options;
+  const { profile, plan, manifest, extras, hostOllamaPort } = options;
   const separator = composeSeparator(profile.platform);
   // C-393: the STT port lives in compose.stt.yaml (AC-7 — the default stack
   // must bind no STT port). `stack init` appends the override when the plan
@@ -60,32 +62,62 @@ export const renderEnv = (options: {
   lines.push('# Hardware profile: ' + describeProfile(profile));
   lines.push('');
   lines.push('# ── Modality selection ────────────────────────────────────');
+  if (hostOllamaPort !== undefined) {
+    lines.push(
+      `# text intentionally excluded — using existing Ollama on port ${hostOllamaPort} (detected at init). Re-run \`stack init --text-source bundled\` to switch to the bundled engine.`,
+    );
+  }
   lines.push(`COMPOSE_PROFILES=${plan.modalities.join(',')}`);
   lines.push('');
   lines.push('# ── Hardware backend ──────────────────────────────────────');
   lines.push(`COMPOSE_FILE=${composeFile}`);
   if (plan.nativeEngines) {
-    lines.push('# Engines run natively (bin/run-native-*.sh) — only web is containerised.');
+    lines.push('# Engines run natively (bin/run-native-*.sh) — only client is containerised.');
   }
   lines.push('');
 
   // ── Model selection (paths inside the models volume) ──────────────────
-  // The compose services read TEXT_MODEL / IMAGE_MODEL as file names inside
-  // the models volume. Resolve from the manifest entries via the plan's
-  // manifestId → the targetPath the fetcher wrote.
+  // The compose services read TEXT_MODEL / IMAGE_MODEL (single-file
+  // checkpoints, e.g. SD1.5) or IMAGE_DIFFUSION_MODEL + IMAGE_VAE_MODEL /
+  // IMAGE_LLM_MODEL / IMAGE_CLIP_L_MODEL / IMAGE_CLIP_G_MODEL /
+  // IMAGE_T5XXL_MODEL (a diffusion model whose VAE/text-encoder ship as
+  // separate files, e.g. Anima) as file names inside the models volume.
+  // Resolve from the manifest entries via the plan's manifestId → the
+  // targetPath the fetcher wrote.
   const targetOf = (manifestId: string): string | undefined =>
     manifest.entries.find((entry) => entry.id === manifestId)?.targetPath;
   const textEntry = plan.models.find((m) => m.modality === 'text');
-  const imageEntry = plan.models.find((m) => m.modality === 'image');
+  const imageEntry = plan.models.find((m) => m.modality === 'image' && !m.role);
+  const imageCompanions = plan.models.filter((m) => m.modality === 'image' && m.role);
   const textPath = textEntry ? targetOf(textEntry.manifestId) : undefined;
   const imagePath = imageEntry ? targetOf(imageEntry.manifestId) : undefined;
+  const companionEnvVar: Readonly<Record<string, string>> = {
+    vae: 'IMAGE_VAE_MODEL',
+    llm: 'IMAGE_LLM_MODEL',
+    // biome-ignore-start lint/style/useNamingConvention: matches the manifest's companion `role` literals, which match sd-server's own --clip_l/--clip_g flag spelling
+    clip_l: 'IMAGE_CLIP_L_MODEL',
+    clip_g: 'IMAGE_CLIP_G_MODEL',
+    // biome-ignore-end lint/style/useNamingConvention: matches the manifest's companion `role` literals, which match sd-server's own --clip_l/--clip_g flag spelling
+    t5xxl: 'IMAGE_T5XXL_MODEL',
+  };
   if (textPath || imagePath) {
     lines.push('# ── Model selection (paths inside the models volume) ──────');
     if (textPath) {
       lines.push(`TEXT_MODEL=${basename(textPath)}`);
     }
     if (imagePath) {
-      lines.push(`IMAGE_MODEL=${basename(imagePath)}`);
+      if (imageCompanions.length > 0) {
+        lines.push(`IMAGE_DIFFUSION_MODEL=${basename(imagePath)}`);
+        for (const companion of imageCompanions) {
+          const companionPath = targetOf(companion.manifestId);
+          const envVar = companion.role ? companionEnvVar[companion.role] : undefined;
+          if (companionPath && envVar) {
+            lines.push(`${envVar}=${basename(companionPath)}`);
+          }
+        }
+      } else {
+        lines.push(`IMAGE_MODEL=${basename(imagePath)}`);
+      }
     }
     lines.push('');
   }
@@ -95,7 +127,11 @@ export const renderEnv = (options: {
   if (acknowledged.length > 0) {
     lines.push('# ── Licences ─────────────────────────────────────────────');
     lines.push('# The plan includes use-restricted model(s); accepted below.');
-    lines.push(`AIKAMI_ACCEPT_LICENSES=${acknowledged.map((m) => m.license).join(',')}`);
+    // A primary entry and its companions (e.g. Anima's vae/llm) often share
+    // one license — dedupe so AIKAMI_ACCEPT_LICENSES doesn't repeat it.
+    lines.push(
+      `AIKAMI_ACCEPT_LICENSES=${[...new Set(acknowledged.map((m) => m.license))].join(',')}`,
+    );
     lines.push('');
   }
 
@@ -112,7 +148,7 @@ export const renderEnv = (options: {
   lines.push(`IMAGE_PORT=${EMULATOR_PORTS.image}`);
   lines.push(`TTS_PORT=${EMULATOR_PORTS.voice}`);
   lines.push(`STT_PORT=${EMULATOR_PORTS.stt}`);
-  lines.push(`WEB_PORT=${EMULATOR_PORTS.client}`);
+  lines.push(`CLIENT_PORT=${EMULATOR_PORTS.client}`);
   lines.push('');
 
   if (extras) {

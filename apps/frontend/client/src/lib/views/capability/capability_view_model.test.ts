@@ -157,11 +157,12 @@ const setDetectionResult = (
   textStatus: string,
   imageStatus = 'not_found',
   voiceStatus = 'not_found',
+  textProviderId = 'ollama',
 ) => {
   _detectResult.textStatus = textStatus;
   _detectResult.imageStatus = imageStatus;
   _detectResult.voiceStatus = voiceStatus;
-  _detectResult.textProviderId = textStatus === 'detected' ? 'ollama' : undefined;
+  _detectResult.textProviderId = textStatus === 'detected' ? textProviderId : undefined;
   _detectResult.summary =
     textStatus === 'detected' ? 'Local AI detected' : 'No AI providers detected';
 };
@@ -278,6 +279,21 @@ describe('CapabilityViewModel', () => {
     expect(vm.hasTextProvider).toBe(true);
     expect(vm.connectionEntries.length).toBeGreaterThan(0);
     expect(vm.connectionEntries[0].providerLabel).toBe('Ollama (local)');
+  });
+
+  test('startDetection with llamacpp detected seeds a distinct llama.cpp connection, not ollama', async () => {
+    // C-406: the local-stack's bundled default (llama.cpp) is detected via
+    // its OpenAI-compatible /v1/models, not Ollama's native API — the
+    // seeded connection must carry provider 'llamacpp', never 'ollama',
+    // so the chat adapter doesn't disable streaming for it.
+    setDetectionResult('detected', 'not_found', 'not_found', 'llamacpp');
+    const vm = createVm();
+    await vm.startDetection();
+
+    expect(vm.hasTextProvider).toBe(true);
+    expect(vm.connectionEntries.length).toBeGreaterThan(0);
+    expect(vm.connectionEntries[0].providerLabel).toBe('llama.cpp (local)');
+    expect(vm.connectionEntries[0].connection.provider).toBe('llamacpp');
   });
 
   test('startDetection with image detected seeds image connection', async () => {

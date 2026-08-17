@@ -53,7 +53,15 @@ const STORAGE_KEY = 'aikami_ai_privacy_settings';
 
 // Local providers don't need API keys — they are usable out of the box.
 // Cloud providers require a non-empty API key to be usable.
-const LOCAL_PROVIDERS = new Set(['ollama', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox']);
+const LOCAL_PROVIDERS = new Set([
+  'ollama',
+  'llamacpp',
+  'ooba',
+  'comfyui',
+  'webui',
+  'kokoro',
+  'voicevox',
+]);
 
 // ---------------------------------------------------------------------------
 // Implementation

@@ -5,7 +5,7 @@
 #
 # .env:
 #   COMPOSE_FILE=compose.yaml:compose.vulkan.yaml
-#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_PROFILES=text,image,voice,stt,client
 
 services:
   text:

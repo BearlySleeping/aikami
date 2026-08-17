@@ -6,7 +6,7 @@
 #
 # .env:
 #   COMPOSE_FILE=compose.yaml:compose.cuda.yaml
-#   COMPOSE_PROFILES=text,image,voice,stt,web
+#   COMPOSE_PROFILES=text,image,voice,stt,client
 #
 # CUDA 13 hosts (newer drivers) can swap text to `server-cuda13` — see the
 # README. The image engine uses the single published CUDA tag for both.

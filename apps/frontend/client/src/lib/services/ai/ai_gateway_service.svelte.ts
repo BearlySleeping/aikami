@@ -39,6 +39,7 @@ import { configService } from '$lib/services/config/config_service.svelte.ts';
 import {
   aiSettingsService,
   getOllamaRuntimeEndpoints,
+  getOpenAiCompatRuntimeModelsUrl,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   ttsService,
@@ -49,7 +50,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Providers served by the `offline` adapter family (localhost, no key). */
-const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'ooba']);
+const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -155,6 +156,10 @@ class AiGatewayService
             // C-389: native fallback probes the runtime-configured engine.
             // (`?.` keeps detection safe when no engine is configured.)
             nativeUrl: getOllamaRuntimeEndpoints()?.url,
+            // C-406: the local-stack's bundled default (llama.cpp) speaks
+            // OpenAI's /v1/models, not Ollama's /api/tags, even on the same
+            // port — tried only when the Ollama-native probe above fails.
+            openaiCompatUrl: getOpenAiCompatRuntimeModelsUrl(),
             signal,
           }),
         image: ({ signal }) =>
