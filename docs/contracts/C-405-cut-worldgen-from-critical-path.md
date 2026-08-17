@@ -2,7 +2,7 @@
 id: C-405
 title: "Cut World Generation from the Critical Path"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §6.1 (MVP playthrough)"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-16"
 | **Target** | `apps/frontend/client/src/lib/views/start/`, `views/setup/`, `views/worldgen/` — the new-campaign entry flow |
 | **Priority** | P0 — the front door of the product is a wizard whose output never shapes the playable map |
 | **Dependencies** | — |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/start/installation.md` (getting started) |
 | **Contract version** | 2.0.0 |
@@ -509,3 +509,105 @@ for the pack picker but the contract's substance is routing, not appearance.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Cut AI world generation out of the new-campaign critical path. “Start campaign”
+now routes through the C-345 pack picker (both `emberwatch` and
+`whispering-caves` are listed, full descriptions unclamped) and lands on the
+onboarding coordinator (`/personas/create?onboarding=1`) for persona creation —
+zero world-gen AI calls on the default path (verified with a request spy). The
+world-generation wizard moved, unchanged in behaviour, to a new production
+route `/worldgen` reached via an Advanced disclosure on the start screen, with
+an honest “preview, not playable yet” banner linking issue #81. `/setup` no
+longer fronts the wizard — it hosts the onboarding coordinator so all legacy
+callers land on persona creation. Generation was split into parallel stages
+(4 independent sections concurrent, party arcs after the NPC roster) with the
+dependency graph documented and retry/schema behaviour preserved.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `new_campaign_flow.spec.ts` asserts `/` → pack picker → onboarding, and zero AI-provider requests via a route-level request spy (not timing). Onboarding mounted on the existing `personaCreate` route with `onboarding=1`. |
+| AC-2 | ✅ | `start_view_model.test.ts` covers all three branches (0→personaCreate?onboarding=1, 1→/game, 2+→/personas); one-character branch still picks `characters[0]`. |
+| AC-3 | ✅ | `startNewGame()` wired through `openPackBrowser()`; picker listed both packs; single-pack skip preserved; visual suite `start_picker` scores 100/100 (≥90 required). |
+| AC-4 | ✅ | New `/worldgen` production route (not `/dev`) with preview banner + issue #81 link; Advanced entry on the start screen; asserted in `new_campaign_flow.spec.ts` and screenshots. |
+| AC-5 | ✅ | Generation split into 5 stages; setting/npcs/locations/hudWidgets issued concurrently, partyArcs after npcs. Unit test asserts max concurrency = 4. Wall-clock on fixed sandbox provider: 1830ms parallel vs 4000ms sequential-equivalent (~54% reduction). Retry + schema tests still pass. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/routes/worldgen/+page.svelte` | Production Advanced route hosting the relocated wizard with the preview-not-playable banner (AC-4). |
+| `apps/e2e/tests/client/new_campaign_flow.spec.ts` | E2E: default-path route sequence, pack picker contents, request-spy “no world-gen AI call” assertion, and /worldgen preview notice. |
+| `apps/e2e/src/visual/suites/start_picker.visual.ts` | Visual suite for the pack picker (AC-3) — 100/100. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/constants/routes.ts` | Added `worldgen` route (`/worldgen`). |
+| `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` | `NewCampaignDestination` type + `_resolveNewCampaignDestination`; `startNewGame()` → `openPackBrowser()`; zero-char branch → `personaCreate?onboarding=1`; `startWorldGeneration()`; destination + pack id logging. |
+| `apps/frontend/client/src/lib/views/start/start_view.svelte` | Advanced disclosure with “World Generation (Preview)” entry + `data-testid="start-menu"` (visual-suite signal). |
+| `apps/frontend/client/src/lib/views/start/components/pack_browser_view.svelte` | Removed `line-clamp-2` so pack descriptions render fully (AC-3 “no clipped text”). |
+| `apps/frontend/client/src/routes/personas/create/+page.svelte` | Mounts the onboarding coordinator when `?onboarding=1`; legacy persona create otherwise. |
+| `apps/frontend/client/src/lib/views/setup/setup_view_model.svelte.ts` | Replaced wizard + persona VMs with the onboarding coordinator (no longer fronts the wizard). |
+| `apps/frontend/client/src/lib/views/setup/setup_view.svelte` | Renders the onboarding coordinator. |
+| `apps/frontend/client/src/lib/data/ai_prompts/world_gen_schema.ts` | Added per-stage TypeBox schemas (setting/npcs/locations/hudWidgets/partyArcs). |
+| `apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.svelte.ts` | Parallel stage generation (dependency graph in comment), stage prompts, `_callLlm` schema param; retry/schema behaviour unchanged. |
+| `apps/frontend/client/src/lib/views/start/start_view_model.test.ts` | Updated routing expectations (setup→personaCreate), implemented the C-345 pack-browser `test.todo` cases, added AC-2 three-branch tests. |
+| `apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.test.ts` | Added AC-5 concurrency + failure-propagation tests. |
+| `apps/e2e/src/visual/core/capture.ts` | `start-menu` data-testid accepted by `_waitForGameReady` (follows the persona-list precedent). |
+| `apps/frontend/docs/src/content/docs/start/installation.md` | “Starting a campaign” section describing the picker → persona creation flow and the Advanced preview entry. |
+
+### Deviations from Spec
+
+- **OQ-1 (Advanced entry location)** resolved: a link on the start screen under an
+  Advanced disclosure, per the C-333 progressive-disclosure precedent; the
+  wizard itself lives on the new production route `/worldgen` (not `/dev`).
+- **OQ-2 (whispering-caves offerable)** resolved: yes — structurally complete
+  (manifest, starting map, 2 NPCs with dialogue/combat, items, quests,
+  encounters). Offered in the picker; full map-enter verification of
+  `whispering-caves` is deferred to the verifier (the `game_boot` HUD test is a
+  pre-existing environment failure, see Test Results).
+- **OQ-3 (stage dependency graph)** resolved: setting | npcs | locations |
+  hudWidgets are mutually independent and run concurrently; partyArcs depend on
+  npcs (questGivers must be roster names) and run after. The wall-clock
+  improvement is measured against the sequential-equivalent of the same five
+  stages (1830ms vs 4000ms on the fixed 800ms/call sandbox provider); a
+  single-call full-output baseline is inherently faster per round-trip, so the
+  real-world gain depends on per-stage latency scaling.
+- **Campaign back-out behaviour**: deliberate — `startNewCampaign` creates a
+  fresh campaign before navigation; backing out of onboarding orphans a
+  `creating`-state campaign (pre-existing, unchanged, no active half-created
+  campaign).
+- **AC-3 “loaded map is its starting map”**: covered by picker selection unit
+  assertions (pack id reaches `startNewCampaign`) and the E2E route sequence;
+  full `whispering-caves` map boot is not asserted because the game boot HUD
+  test already fails pre-existing in this environment.
+
+### Test Results
+
+- Unit: 1811 pass / 1 fail (1 pre-existing `GameBootService — AC-4
+  Cancellation > cancellation during boot returns cancelled result`, confirmed
+  failing on the pristine base commit) / 2 pre-existing `CampaignService` todos.
+- E2E (focused contract scope): 15 pass / 1 fail — `new_campaign_flow.spec.ts`
+  4/4, `world_gen.spec.ts` 8/8, `game_boot.spec.ts` 3/4 with the same 1
+  pre-existing HUD failure as baseline. The full `e2e:test` aggregate also runs
+  chat/game/ai-services/site projects that require microservices (text/voice/
+  image) or the site server; those failures are environmental and unrelated
+  (site server required `.env.emulator` provisioning in the worktree).
+- Visual: `start_picker` suite 100/100 (≥90 required); production screenshots
+  validated with `ai_validate_image`: start screen 95, pack picker 95, onboarding
+  100, /worldgen preview 95, start-screen Advanced 100.
+- Baseline regression: 1 pre-existing unit failure + 1 pre-existing E2E
+  failure, 0 new failures.
+
+### Suggested Commit
+
+```
+feat(client): cut world generation from the new-campaign critical path (C-405)
+```
