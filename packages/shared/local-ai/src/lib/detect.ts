@@ -81,6 +81,34 @@ export const parseProcMeminfo = (stdout: string): number => {
 };
 
 /**
+ * Well-known NVIDIA CDI (Container Device Interface) spec locations —
+ * Podman's GPU-readiness signal, since it has no named "nvidia" runtime the
+ * way Docker does (see the gpuPassthroughReady call site). Checked in
+ * order; the first one found wins. Covers `nvidia-ctk cdi generate`'s own
+ * default (`/etc/cdi/nvidia.yaml`) and NixOS's
+ * `hardware.nvidia-container-toolkit` module's dynamic path
+ * (`/var/run/cdi/nvidia-container-toolkit.json`, verified 2026-08-17).
+ */
+export const NVIDIA_CDI_SPEC_PATHS = [
+  '/etc/cdi/nvidia.yaml',
+  '/etc/cdi/nvidia.json',
+  '/var/run/cdi/nvidia.yaml',
+  '/var/run/cdi/nvidia.json',
+  '/var/run/cdi/nvidia-container-toolkit.json',
+] as const;
+
+/** True when any known NVIDIA CDI spec file is readable. */
+export const hasNvidiaCdiSpec = async (executor: ProbeExecutor): Promise<boolean> => {
+  for (const path of NVIDIA_CDI_SPEC_PATHS) {
+    const result = await executor.readTextFile(path);
+    if (result.ok) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
  * Parses `sysctl hw.memsize` (Darwin) — bytes on one line.
  */
 export const parseSysctlMemsize = (stdout: string): number => {
@@ -261,6 +289,20 @@ export const detectHardware = async (options: DetectOptions): Promise<HardwarePr
     (async () => {
       // ── Container runtime + GPU passthrough ───────────────────────────
       // podman is only probed when docker is unavailable (short-circuit).
+      // Many "docker" binaries on Linux are actually Podman's docker-compat
+      // shim (common on NixOS) — `docker info`/`podman info` succeeds
+      // either way, but the two report GPU readiness completely
+      // differently: real Docker (with nvidia-container-runtime) lists a
+      // distinct "nvidia" OCI runtime in its info output, which is what
+      // the plain substring check below catches. Podman never does this —
+      // it grants GPU access via CDI (Container Device Interface) device
+      // specs instead, which show up nowhere in `podman info`. Checking
+      // only the runtime-name substring therefore false-negatives on every
+      // Podman host with CDI configured (verified 2026-08-17: a working
+      // NixOS + podman + CDI setup reported gpuPassthroughReady: false,
+      // sending every user through the CPU fallback despite a ready GPU).
+      // A CDI spec file existing is the Podman-side signal to check
+      // instead; only relevant on Linux, where CDI lives.
       const docker = await probe(executor, 'docker', ['info']);
       if (docker.ok) {
         containerRuntime = 'docker';
@@ -271,6 +313,9 @@ export const detectHardware = async (options: DetectOptions): Promise<HardwarePr
           containerRuntime = 'podman';
           gpuPassthroughReady = podman.stdout.toLowerCase().includes('nvidia');
         }
+      }
+      if (!gpuPassthroughReady && platform === 'linux') {
+        gpuPassthroughReady = await hasNvidiaCdiSpec(executor);
       }
     })(),
   ]);

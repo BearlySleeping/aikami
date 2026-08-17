@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Backend Discord Bot",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "types": ["bun"],
+    "paths": {
+      "@aikami/logger": ["../../shared/logger/src/index.ts"],
+      "@aikami/logger/*": ["../../shared/logger/src/lib/*"],
+      "@aikami/constants": ["../../shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
+      "@aikami/types": ["../../shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../shared/types/src/lib/*"],
+      "@aikami/utils": ["../../shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../shared/utils/src/lib/*"],
+      "@aikami/backend-project-ai": ["../project-ai/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

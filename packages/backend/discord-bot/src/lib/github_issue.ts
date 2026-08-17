@@ -1,31 +1,32 @@
-// apps/backend/firebase/src/discord/github_issue.ts
+// packages/backend/discord-bot/src/lib/github_issue.ts
 // biome-ignore-all lint/style/useNamingConvention: mirrors GitHub's REST API JSON keys (html_url, X-GitHub-Api-Version)
 //
-// Opens a GitHub issue from a Discord /bug or /feature modal submission.
-// Plain fetch against the REST API — this repo avoids pulling in Octokit
-// for one or two calls (same reasoning as scripts/src/lib/discord/: raw
-// fetch, no SDK, see discord_notify.ts / notification.ts for prior art).
+// Opens a GitHub issue from a #bugs-features-requests forum thread, once a
+// Moderator/Admin reviews it and @mentions the bot. Same shape as
+// apps/backend/firebase/src/lib/discord/github_issue.ts's
+// createGithubIssueFromDiscord (duplicated rather than imported — this app
+// is a separate deploy target with no dependency on the firebase app's
+// tsconfig aliases), extended to take arbitrary `labels` (derived from the
+// thread's forum tag) instead of a fixed 'bug'|'feature' enum, since a
+// forum thread might carry a "Question" tag with no GitHub-issue label at
+// all.
 //
 // Auth: GITHUB_ISSUES_TOKEN — a fine-grained PAT scoped to ONLY
-// `issues:write` on this repo. Never reuse a broader token here; this
-// endpoint is reachable by anyone who can run a Discord slash command.
+// `issues:write` on this repo. Never reuse a broader token here.
 
 const REPO = 'BearlySleeping/aikami';
 
 export type CreateIssueInput = {
-  kind: 'bug' | 'feature';
   title: string;
-  description: string;
-  reporterUsername: string;
+  body: string;
+  labels: string[];
   token: string;
 };
 
 export type CreateIssueResult = { htmlUrl: string; number: number };
 
-export async function createGithubIssueFromDiscord(
-  input: CreateIssueInput,
-): Promise<CreateIssueResult> {
-  const { kind, title, description, reporterUsername, token } = input;
+export async function createGithubIssue(input: CreateIssueInput): Promise<CreateIssueResult> {
+  const { title, body, labels, token } = input;
 
   const res = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
     method: 'POST',
@@ -36,11 +37,7 @@ export async function createGithubIssueFromDiscord(
       'Content-Type': 'application/json',
       'User-Agent': 'aikami-discord-bot',
     },
-    body: JSON.stringify({
-      title,
-      body: `${description}\n\n---\n_Reported via Discord by @${reporterUsername}_`,
-      labels: [kind === 'bug' ? 'bug' : 'enhancement', 'from-discord'],
-    }),
+    body: JSON.stringify({ title, body, labels: [...labels, 'from-discord'] }),
     signal: AbortSignal.timeout(10_000),
   });
 

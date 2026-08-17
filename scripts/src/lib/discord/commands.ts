@@ -2,11 +2,14 @@
 // biome-ignore-all lint/style/useNamingConvention: mirrors Discord's wire-format JSON keys (custom_id, ...)
 //
 // Registers the app-level slash commands the Interactions Endpoint handles
-// (apps/backend/firebase/src/controllers/api/discord_interactions.ts):
-// /bug and /feature (open a GitHub issue via a modal), /ask (AI Q&A about
-// the project). Global commands — Discord can take up to an hour to
-// propagate them, so this is a one-time/rarely-run setup step, not
-// something sync.ts touches on every run.
+// (packages/backend/discord-bot/src/lib/interactions, hosted by
+// apps/backend/worker — see docs/contracts/C-418-p2 OQ-3): /ask (AI Q&A
+// about the project). Bug reports and feature requests are
+// filed as posts in the #bugs-features-requests forum instead — see
+// scripts/src/lib/discord/structure.ts — not through a slash command.
+// Global commands — Discord can take up to an hour to propagate them, so
+// this is a one-time/rarely-run setup step, not something sync.ts touches
+// on every run.
 //
 // Registration itself needs only DISCORD_BOT_TOKEN + DISCORD_APP_ID — it's
 // a PUT against the application's global command list, independent of any
@@ -17,16 +20,6 @@ import { Routes } from 'discord-api-types/v10';
 import { initScriptsEnv } from '../env/scripts_env';
 
 const COMMANDS = [
-  {
-    name: 'bug',
-    description: 'Report a bug — opens a form, files a GitHub issue',
-    type: 1,
-  },
-  {
-    name: 'feature',
-    description: 'Request a feature — opens a form, files a GitHub issue',
-    type: 1,
-  },
   {
     name: 'ask',
     description: 'Ask the project AI a question about Aikami',

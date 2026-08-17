@@ -1,0 +1,39 @@
+# packages/backend/project-ai/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'ai'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-project-ai'
+  description: 'OpenRouter-backed "ask about Aikami" chat completion, grounded in .context/llms.txt. Framework- and host-agnostic — used by the Discord bot Interactions Endpoint (apps/backend/worker) and the hub Elysia API (public /api/ask).'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn: []
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  typecheck:
+    command: 'tsgo --noEmit'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'biome check .'
+
+  test:
+    command: 'bun test --pass-with-no-tests'
+    inputs:
+      - '@group(sources)'

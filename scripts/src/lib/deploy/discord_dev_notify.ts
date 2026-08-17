@@ -4,7 +4,7 @@
 // Posts a small embed to a dev-activity Discord channel when a PR or issue
 // is opened/closed. Separate from discord_notify.ts (release announcements)
 // — different channel, much higher volume, so it uses its own webhook
-// (DISCORD_DEV_WEBHOOK_URL) rather than DISCORD_WEBHOOK_URL, letting you
+// (DISCORD_GITHUB_FEED_WEBHOOK_URL) rather than DISCORD_RELEASES_WEBHOOK_URL, letting you
 // route "someone opened a PR" noise away from the release-announcements
 // channel. Silently no-ops if that webhook isn't configured, same safety
 // property as discord_notify.ts.
@@ -17,7 +17,7 @@
 //   bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=pr
 //   bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=issue
 //   env: GH_NUMBER, GH_TITLE, GH_URL, GH_AUTHOR, GH_ACTION (opened|closed|reopened),
-//        GH_MERGED ('true'|'false', pr+closed only), DISCORD_DEV_WEBHOOK_URL
+//        GH_MERGED ('true'|'false', pr+closed only), DISCORD_GITHUB_FEED_WEBHOOK_URL
 
 import { c, log, ok, parseCliArgs, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
@@ -83,7 +83,7 @@ async function postToDiscord(webhookUrl: string, input: ActivityInput): Promise<
 
 /**
  * Announce a PR/issue activity event to the dev-activity Discord channel.
- * No-ops (returns without throwing) when DISCORD_DEV_WEBHOOK_URL isn't set
+ * No-ops (returns without throwing) when DISCORD_GITHUB_FEED_WEBHOOK_URL isn't set
  * for `mode` — same safety property as notifyDiscordRelease.
  */
 export async function notifyDiscordActivity(
@@ -92,8 +92,8 @@ export async function notifyDiscordActivity(
 ): Promise<void> {
   initScriptsEnv(mode);
 
-  if (!process.env.DISCORD_DEV_WEBHOOK_URL) {
-    warn('DISCORD_DEV_WEBHOOK_URL not set — skipping dev-activity announcement.');
+  if (!process.env.DISCORD_GITHUB_FEED_WEBHOOK_URL) {
+    warn('DISCORD_GITHUB_FEED_WEBHOOK_URL not set — skipping dev-activity announcement.');
     return;
   }
 
@@ -101,7 +101,7 @@ export async function notifyDiscordActivity(
     `\n${c.bold}📣 Announcing ${input.kind} #${input.number} (${input.action}) to Discord${c.reset}`,
   );
   try {
-    await postToDiscord(process.env.DISCORD_DEV_WEBHOOK_URL, input);
+    await postToDiscord(process.env.DISCORD_GITHUB_FEED_WEBHOOK_URL, input);
     ok(`Posted ${input.kind} activity for #${input.number} to Discord.`);
   } catch (err) {
     // Best-effort, same as discord_notify.ts — never fail the workflow over this.

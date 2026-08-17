@@ -1,10 +1,12 @@
-// apps/backend/firebase/src/discord/types.ts
+// packages/backend/discord-bot/src/lib/interactions/types.ts
 // biome-ignore-all lint/style/useNamingConvention: mirrors Discord's wire-format JSON keys (custom_id, application_id, SCREAMING_SNAKE interaction/response type names) — a translation layer would add code for no benefit
 //
-// Minimal local shapes for the Discord Interactions payloads this endpoint
-// handles (slash commands, modal submits). Not the full Discord API surface
-// — see scripts/src/lib/discord/types.ts for the same "keep it local and
-// narrow" reasoning applied to the guild-management CLI.
+// Minimal local shapes for the Discord Interactions payloads the endpoint
+// in ./handler.ts handles (slash commands, modal submits). Not the full
+// Discord API surface — see scripts/src/lib/discord/types.ts for the same
+// "keep it local and narrow" reasoning applied to the guild-management CLI,
+// and ../types.ts for the unrelated DiscordBotEnv (Gateway bot) shape this
+// file deliberately doesn't share a name with.
 
 export const InteractionType = {
   PING: 1,
@@ -35,9 +37,9 @@ export type DiscordModalComponent = { type: 4; custom_id: string; value: string 
 export type DiscordModalActionRow = { type: 1; components: DiscordModalComponent[] };
 
 export type DiscordInteractionData = {
-  /** Slash command name, e.g. "bug" — present on APPLICATION_COMMAND. */
+  /** Slash command name, e.g. "ask" — present on APPLICATION_COMMAND. */
   name?: string;
-  /** Modal custom_id, e.g. "bug_report_modal" — present on MODAL_SUBMIT. */
+  /** Modal custom_id — present on MODAL_SUBMIT. */
   custom_id?: string;
   /** Slash command string/number/bool options — present on APPLICATION_COMMAND. */
   options?: { name: string; value: string }[];
@@ -82,3 +84,23 @@ export function getOptionValue(interaction: DiscordInteraction, name: string): s
 export function interactionUsername(interaction: DiscordInteraction): string {
   return interaction.member?.user?.username ?? interaction.user?.username ?? 'unknown';
 }
+
+/** Snowflake of the invoking user — present on both guild (member.user) and DM (user) interactions. */
+export function interactionUserId(interaction: DiscordInteraction): string | undefined {
+  return interaction.member?.user?.id ?? interaction.user?.id;
+}
+
+/** Discord's `MESSAGE_FLAGS.EPHEMERAL` — only the invoking user sees the response. */
+export const EPHEMERAL_FLAG = 1 << 6;
+
+/** What the interactions handler needs from its environment — declared here, sourced by whatever process hosts it (apps/backend/worker, today). */
+export const DISCORD_INTERACTIONS_REQUIRED_ENV_KEYS = [
+  'DISCORD_PUBLIC_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
+] as const;
+
+export type DiscordInteractionsEnv = Record<
+  (typeof DISCORD_INTERACTIONS_REQUIRED_ENV_KEYS)[number],
+  string
+>;

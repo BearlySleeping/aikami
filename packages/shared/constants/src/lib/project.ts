@@ -13,8 +13,9 @@ export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
  * | `image`   | `apps/backend/image`            | ComfyUI image generation        |
  * | `text`    | `apps/backend/text`             | Ollama text generation          |
  * | `voice`   | `apps/backend/voice`            | Kokoro voice synthesis          |
+ * | `worker`  | `apps/backend/worker`           | Discord Gateway bot + Interactions Endpoint (always-on Compute Engine VM) |
  */
-export const backendAppIds = ['firebase', 'image', 'text', 'voice'] as const;
+export const backendAppIds = ['firebase', 'image', 'text', 'voice', 'worker'] as const;
 
 /**
  * Aikami frontend application identifiers.
@@ -53,6 +54,14 @@ export const MODE_PROJECT_MAP = {
  * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
  */
 export const CLOUD_FUNCTIONS_REGION = 'europe-west4' as const;
+
+/**
+ * Public HTTPS base URL for the `worker` app's Elysia server
+ * (apps/backend/worker) — a Cloudflare-proxied subdomain in front of the
+ * VM's plain HTTP port, not a GCP-managed domain (see that app's README,
+ * "HTTP surface"). Production only; there is no staging worker VM.
+ */
+export const WORKER_URL = 'https://worker.bearlysleeping.com' as const;
 
 /**
  * Offset a demo Firebase project ID for contract-scoped pipeline runs, so

@@ -9,8 +9,15 @@
 // Matching is by name (see structure.ts's "Matching" note).
 
 import { ChannelType } from 'discord-api-types/v10';
-import type { DesiredCategory, DesiredChannel, DesiredChannelType, DesiredRole } from './structure';
-import type { GuildChannel, GuildRole } from './types';
+import {
+  type DesiredCategory,
+  type DesiredChannel,
+  type DesiredChannelType,
+  type DesiredPermissionOverwrite,
+  type DesiredRole,
+  permissionsToBitfield,
+} from './structure';
+import type { GuildChannel, GuildRole, PermissionOverwrite } from './types';
 
 export const CHANNEL_TYPE_MAP: Record<DesiredChannelType, ChannelType> = {
   text: ChannelType.GuildText,
@@ -103,11 +110,38 @@ function diffCategories(
   return { create, extra, liveByName };
 }
 
+/** Role-type overwrites only, keyed by "roleName|allow|deny" — order-independent set comparison. */
+function overwriteKeySet(
+  overwrites: DesiredPermissionOverwrite[] | undefined,
+  live: PermissionOverwrite[] | undefined,
+  roleNameById: Map<string, string>,
+): { desired: Set<string>; live: Set<string> } | undefined {
+  if (!overwrites) {
+    return undefined;
+  }
+  const desired = new Set(
+    overwrites.map(
+      (o) => `${o.role}|${permissionsToBitfield(o.allow)}|${permissionsToBitfield(o.deny)}`,
+    ),
+  );
+  const liveSet = new Set(
+    (live ?? [])
+      .filter((o) => o.type === 0)
+      .map((o) => `${roleNameById.get(o.id) ?? o.id}|${o.allow}|${o.deny}`),
+  );
+  return { desired, live: liveSet };
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  return a.size === b.size && [...a].every((v) => b.has(v));
+}
+
 function diffChannels(
   desired: DesiredChannel[],
   live: GuildChannel[],
   categoryIdByName: Map<string, string>,
   desiredCategoryNames: Set<string>,
+  roleNameById: Map<string, string>,
 ): { create: DesiredChannel[]; update: ChannelUpdate[]; extra: GuildChannel[] } {
   const nonCategory = live.filter((ch) => ch.type !== ChannelType.GuildCategory);
   const liveByName = new Map(nonCategory.map((ch) => [ch.name, ch]));
@@ -175,6 +209,14 @@ function diffChannels(
     if (channel.nsfw !== undefined && channel.nsfw !== Boolean(existing.nsfw)) {
       changes.push(`nsfw ${Boolean(existing.nsfw)} → ${channel.nsfw}`);
     }
+    const overwriteSets = overwriteKeySet(
+      channel.permissionOverwrites,
+      existing.permission_overwrites,
+      roleNameById,
+    );
+    if (overwriteSets && !setsEqual(overwriteSets.desired, overwriteSets.live)) {
+      changes.push('permissions changed');
+    }
     if (changes.length > 0) {
       update.push({ id: existing.id, name: channel.name, changes });
     }
@@ -202,11 +244,16 @@ export function computePlan(
     categoryIdByName.set(name, ch.id);
   }
   const desiredCategoryNames = new Set(desired.categories.map((cat) => cat.name));
+  // @everyone's role id always equals the guild id, and live.roles always
+  // includes it — so this map alone resolves permissionOverwrites'
+  // `role: '@everyone'` too, no separate guildId parameter needed here.
+  const roleNameById = new Map(live.roles.map((r) => [r.id, r.name]));
   const channelDiff = diffChannels(
     desired.channels,
     live.channels,
     categoryIdByName,
     desiredCategoryNames,
+    roleNameById,
   );
 
   return {

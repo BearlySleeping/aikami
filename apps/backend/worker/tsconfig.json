@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Worker",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "types": ["bun"],
+    "paths": {
+      "@aikami/backend-discord-bot": ["../../../packages/backend/discord-bot/src/index.ts"],
+      "@aikami/logger": ["../../../packages/shared/logger/src/index.ts"],
+      "@aikami/logger/*": ["../../../packages/shared/logger/src/lib/*"],
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../../packages/shared/constants/src/lib/*"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../../packages/shared/types/src/lib/*"],
+      "@aikami/utils/*": ["../../../packages/shared/utils/src/lib/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

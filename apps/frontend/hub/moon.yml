@@ -28,6 +28,7 @@ dependsOn:
   - 'backend-auth'
   - 'backend-configs'
   - 'backend-database'
+  - 'backend-project-ai'
   - 'backend-utils'
 
 fileGroups:

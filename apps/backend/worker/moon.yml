@@ -1,0 +1,45 @@
+# apps/backend/worker/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'worker'
+  - 'backend'
+  - 'application'
+  - 'container'
+
+project:
+  name: 'worker'
+  description: 'Generic always-on background-worker host — a single Compute Engine VM (Always Free e2-micro) for processes that need a persistent connection (Gateway-style), unlike the pay-per-invocation Cloud Functions. Currently starts @aikami/backend-discord-bot; not Discord-specific by design, so future always-on workers share this same VM instead of each needing their own.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'backend-discord-bot'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'Dockerfile'
+
+tasks:
+  typecheck:
+    command: 'tsgo --noEmit'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'biome check .'
+
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+    outputs:
+      - 'dist'

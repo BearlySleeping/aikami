@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Backend Project AI",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -23,8 +23,34 @@ import { initDiscordClient } from './client';
 import type { Plan } from './diff';
 import { CHANNEL_TYPE_MAP, computePlan, planIsEmpty } from './diff';
 import { createRole, deleteRole, listRoles, updateRole } from './roles';
-import { structure } from './structure';
-import type { GuildChannel } from './types';
+import { type DesiredPermissionOverwrite, permissionsToBitfield, structure } from './structure';
+import type { GuildChannel, PermissionOverwrite } from './types';
+
+/**
+ * Resolve declared overwrites (by role name) to the {id, type, allow, deny}
+ * shape Discord's channel endpoints expect. Throws on an unknown role name
+ * — same fail-loud rule diffChannels already applies to category refs,
+ * rather than silently dropping a typo'd overwrite.
+ */
+function resolvePermissionOverwrites(
+  overwrites: DesiredPermissionOverwrite[],
+  roleIdByName: Map<string, string>,
+): PermissionOverwrite[] {
+  return overwrites.map((o) => {
+    const id = roleIdByName.get(o.role);
+    if (!id) {
+      throw new Error(
+        `permissionOverwrites references role "${o.role}", which is not declared in structure.roles.`,
+      );
+    }
+    return {
+      id,
+      type: 0,
+      allow: permissionsToBitfield(o.allow),
+      deny: permissionsToBitfield(o.deny),
+    };
+  });
+}
 
 export type SyncOptions = { apply: boolean; prune: boolean };
 
@@ -132,14 +158,22 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
 
   console.log(`\n${c.bold}Applying...${c.reset}`);
 
+  // @everyone's role id always equals the guild id — seed the map with it
+  // so permissionOverwrites' `role: '@everyone'` resolves too.
+  const roleIdByName = new Map<string, string>([
+    ['@everyone', guildId],
+    ...live.roles.map((r): [string, string] => [r.name, r.id]),
+  ]);
+
   for (const role of plan.createRoles) {
-    await createRole(rest, guildId, {
+    const created = await createRole(rest, guildId, {
       name: role.name,
       color: role.color,
       hoist: role.hoist,
       mentionable: role.mentionable,
       permissions: role.permissions,
     });
+    roleIdByName.set(role.name, created.id);
     ok(`Created role ${role.name}`);
   }
   for (const update of plan.updateRoles) {
@@ -177,6 +211,9 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
       parent_id: channel.category ? categoryIdByName.get(channel.category) : undefined,
       topic: channel.topic,
       nsfw: channel.nsfw,
+      permission_overwrites: channel.permissionOverwrites
+        ? resolvePermissionOverwrites(channel.permissionOverwrites, roleIdByName)
+        : undefined,
     });
     ok(`Created channel ${channel.name}`);
   }
@@ -193,6 +230,9 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
       parent_id: desired.category ? categoryIdByName.get(desired.category) : null,
       topic: desired.topic,
       nsfw: desired.nsfw,
+      permission_overwrites: desired.permissionOverwrites
+        ? resolvePermissionOverwrites(desired.permissionOverwrites, roleIdByName)
+        : undefined,
     });
     ok(`Updated channel ${update.name}`);
   }

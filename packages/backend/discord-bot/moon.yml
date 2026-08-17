@@ -1,0 +1,42 @@
+# packages/backend/discord-bot/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'discord-bot'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-discord-bot'
+  description: 'Discord Gateway bot logic for #bugs-features-requests (forum auto-reply, moderator-triggered GitHub issue creation, in-thread LLM replies). Started by apps/backend/worker — this package has no opinion on hosting or env sourcing.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'logger'
+  - 'utils'
+  - 'backend-project-ai'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  typecheck:
+    command: 'tsgo --noEmit'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'biome check .'
+
+  test:
+    command: 'bun test --pass-with-no-tests'
+    inputs:
+      - '@group(sources)'

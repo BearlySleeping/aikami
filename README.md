@@ -47,42 +47,52 @@ Aikami is **early and moving fast**. Expect rough edges, missing pieces, and bre
 
 Pick whichever fits how you want to run it:
 
-### Option 1 — Docker (zero setup, fully local)
+### Option 1 — Web, bring your own key
 
-**Easy path** — one wizard detects your hardware and picks sane defaults (llama.cpp for text, sd-server for image, sherpa-onnx/Kokoro for voice):
+No install at all: open the [hosted client](https://aikami.bearlysleeping.com), drop your Anthropic / OpenAI / Gemini (or any OpenAI-compatible endpoint) key into Settings, and play. Mix and match TTS and image providers per NPC if you want.
+
+More detail: [Setup Guide](docs/intro/setup.md) · [Developer Workflow](docs/guides/dev-workflow.md)
+
+### Option 2 — Desktop app (Tauri v2)
+
+```bash
+# Grab a prebuilt release
+# https://github.com/BearlySleeping/aikami/releases
+
+# ...or build from source
+bun install
+bun tauri build
+```
+
+Native, Rust-powered, sub-5MB bundle. Works with local Ollama/vLLM or your own cloud keys.
+
+Linux ships as an AppImage (runs on any distro, no install needed). If it won't launch, install `libfuse2` — some newer distros (Ubuntu 22.04+, Fedora 36+, Debian 12) don't include it by default:
+
+```bash
+# Debian/Ubuntu
+sudo apt install libfuse2
+
+# Fedora
+sudo dnf install fuse-libs
+```
+
+### Option 3 — Docker (zero setup, fully local)
+
+One wizard detects your hardware and picks sane defaults (llama.cpp for text, sd-server for image, sherpa-onnx/Kokoro for voice), then a plain `docker compose up -d` starts everything, including a browser client at **http://localhost:5274**:
 
 ```bash
 git clone https://github.com/BearlySleeping/aikami
 cd aikami/apps/backend/local-stack
 
-bun run stack init      # detects GPU/CPU/RAM, writes .env, shows the download plan
+bun run init      # detects GPU/CPU/RAM, writes .env, shows the download plan
 docker compose up -d    # pulls images, fetches models, starts the stack
 ```
 
-Open **http://localhost:5274** and you're playing. No internet required after the first pull.
+That `localhost:5274` client is only relevant if you're accessing Aikami through a browser — if you're using the Tauri desktop app (Option 2) instead, skip it and enable just the engines: `bun run stack init --yes --modalities text,image,voice`.
 
-**Advanced path** — pick the hardware backend and modalities explicitly, or run just the client against your own endpoints:
+Full setup — hardware backend matrix, swapping in Ollama/ComfyUI, running without a browser client, STT, model licensing, the no-clone-needed path, and smoke tests — is documented in full in the **[Local Stack README](apps/backend/local-stack/README.md)**, the source of truth for anything Docker/engine-related.
 
-```bash
-# Explicit backend + modalities (CPU/CUDA/ROCm/Vulkan/Intel/MUSA)
-bun run stack init --yes --backend cuda --modalities text,image,voice
-
-# ...or just the client, bringing your own cloud key / remote endpoints
-echo "COMPOSE_PROFILES=client" >> .env && docker compose up -d
-```
-
-**Prefer Ollama or ComfyUI?** Both are supported drop-in swaps on the same ports — set these in `.env` instead of the defaults:
-
-```bash
-COMPOSE_PROFILES=text,ollama      # Ollama replaces llama.cpp on :11434
-COMPOSE_PROFILES=image,comfyui    # ComfyUI replaces sd-server on :8188
-```
-
-Full backend matrix (CUDA/ROCm/Vulkan/Intel/MUSA), STT setup, the macOS native path (Docker Desktop has no Metal passthrough), model licensing, and smoke tests all live in the [Local Stack README](apps/backend/local-stack/README.md) — that's the source of truth for anything Docker/engine-related.
-
-**Don't want to clone the repo at all?** You don't have to — `model-fetcher`, `voice`, and `client` all pull prebuilt images from GHCR by default. Grab just the `compose*.yaml` files and a hand-written `.env` (from `.env.example`) into an empty directory and `docker compose up -d` works standalone; you only lose the hardware-detection wizard (`stack init` needs the repo).
-
-### Option 2 — From source (Bun + Moon)
+### Option 4 — From source (Bun + Moon)
 
 ```bash
 git clone https://github.com/BearlySleeping/aikami
@@ -104,11 +114,11 @@ for your own system Postgres), and keeps all state in the gitignored
 `.postgres/` directory.
 
 > 🔴 **Major-version bump (17 → 18, C-394):** PostgreSQL refuses to start on
-a data directory initialised by a different major version. If you upgraded
-from an older checkout, run `bun postgres:stop` → `bun postgres:reset --yes`
-→ `bun postgres:init`. **This destroys all local Postgres data** — any local
-rows (e.g. applied hub migrations) are gone and must be re-applied via
-`bun db:migrate`.
+> a data directory initialised by a different major version. If you upgraded
+> from an older checkout, run `bun postgres:stop` → `bun postgres:reset --yes`
+> → `bun postgres:init`. **This destroys all local Postgres data** — any local
+> rows (e.g. applied hub migrations) are gone and must be re-applied via
+> `bun db:migrate`.
 
 ```bash
 bun herdr:start postgres   # or: bun postgres:start (background)
@@ -137,10 +147,10 @@ Postgres.
 
 Two connection strings, both server-side only:
 
-| Variable | Purpose | Emulator | Production (Neon) |
-|---|---|---|---|
-| `NEON_DATABASE_URL` | Runtime (pooled) | `postgresql://localhost:5433/aikami_dev?sslmode=disable` | Pooled endpoint (`-pooler` host), `sslmode=require` |
-| `NEON_DATABASE_URL_DIRECT` | Migrations only (unpooled — DDL under PgBouncer transaction pooling breaks) | same as above (no pooler locally) | Direct endpoint |
+| Variable                   | Purpose                                                                     | Emulator                                                 | Production (Neon)                                   |
+| -------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
+| `NEON_DATABASE_URL`        | Runtime (pooled)                                                            | `postgresql://localhost:5433/aikami_dev?sslmode=disable` | Pooled endpoint (`-pooler` host), `sslmode=require` |
+| `NEON_DATABASE_URL_DIRECT` | Migrations only (unpooled — DDL under PgBouncer transaction pooling breaks) | same as above (no pooler locally)                        | Direct endpoint                                     |
 
 They live in `apps/frontend/hub/.env.{emulator,production}` and reach Cloud
 Run as GSM secrets via the existing `buildSecretArgsFromEnvFile` path. The
@@ -161,46 +171,17 @@ and NEVER auto-applied on server boot. Adding a table = edit
 `packages/backend/database/src/lib/schema.ts` → `bun run db:generate` →
 commit the generated SQL → apply locally → apply via the deploy pipeline.
 
-### Option 3 — Desktop app (Tauri v2)
-
-```bash
-# Grab a prebuilt release
-# https://github.com/BearlySleeping/aikami/releases
-
-# ...or build from source
-bun install
-bun tauri build
-```
-
-Native, Rust-powered, sub-5MB bundle. Works with local Ollama/vLLM or your own cloud keys.
-
-Linux ships as an AppImage (runs on any distro, no install needed). If it won't launch, install `libfuse2` — some newer distros (Ubuntu 22.04+, Fedora 36+, Debian 12) don't include it by default:
-
-```bash
-# Debian/Ubuntu
-sudo apt install libfuse2
-
-# Fedora
-sudo dnf install fuse-libs
-```
-
-### Option 4 — Web, bring your own key
-
-No install at all: open the [hosted client](https://aikami.bearlysleeping.com), drop your Anthropic / OpenAI / Gemini (or any OpenAI-compatible endpoint) key into Settings, and play. Mix and match TTS and image providers per NPC if you want.
-
-More detail: [Setup Guide](docs/intro/setup.md) · [Developer Workflow](docs/guides/dev-workflow.md)
-
 ---
 
 ## 🤖 How the AI actually works
 
 All text, image, and voice generation flows through one abstraction — `AiProviderGateway` — so product code never cares which mode is active:
 
-| Mode                        | What it means                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Mode                        | What it means                                                                                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Offline / local**         | llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) — run as Docker microservices on your own hardware, with Ollama and ComfyUI available as opt-in drop-in swaps |
-| **BYOK**                    | Bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint |
-| **Service** _(coming soon)_ | Fully managed, pay-as-you-go hosting on Aikami's infrastructure — no GPU, no Docker, no setup                 |
+| **BYOK**                    | Bring your own key for Anthropic, OpenAI, Gemini, ElevenLabs, Stability AI, or any OpenAI-compatible endpoint                                                                 |
+| **Service** _(coming soon)_ | Fully managed, pay-as-you-go hosting on Aikami's infrastructure — no GPU, no Docker, no setup                                                                                 |
 
 A text engine is always required to actually play — that's the core of the game. Image and voice generation are optional flourishes; the LPC sprite system covers the visual baseline with zero AI dependency either way.
 
@@ -244,24 +225,24 @@ Full write-up: [Architecture](docs/architecture/architecture.md)
 
 ## 🧰 Tech Stack
 
-| Layer                 | Technology                                                   |
-| --------------------- | ------------------------------------------------------------ |
-| Runtime               | [Bun](https://bun.sh)                                        |
-| Language              | TypeScript, strict mode                                      |
-| Monorepo              | [Moon](https://moonrepo.dev)                                 |
-| Frontend              | SvelteKit 2 + Svelte 5 Runes                                 |
-| Desktop               | Tauri v2                                                     |
-| Game rendering        | PixiJS v8 (WebGPU)                                           |
-| Game logic            | bitECS (data-oriented ECS)                                   |
-| Local persistence     | Turso (libSQL) — offline-first source of truth               |
-| Cloud sync (optional) | Firebase (Auth, Storage, Functions)                          |
+| Layer                 | Technology                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Runtime               | [Bun](https://bun.sh)                                                                                          |
+| Language              | TypeScript, strict mode                                                                                        |
+| Monorepo              | [Moon](https://moonrepo.dev)                                                                                   |
+| Frontend              | SvelteKit 2 + Svelte 5 Runes                                                                                   |
+| Desktop               | Tauri v2                                                                                                       |
+| Game rendering        | PixiJS v8 (WebGPU)                                                                                             |
+| Game logic            | bitECS (data-oriented ECS)                                                                                     |
+| Local persistence     | Turso (libSQL) — offline-first source of truth                                                                 |
+| Cloud sync (optional) | Firebase (Auth, Storage, Functions)                                                                            |
 | Local AI              | llama.cpp (text) · sd-server (image) · sherpa-onnx/Kokoro (voice), via Docker — Ollama/ComfyUI as opt-in swaps |
-| AI abstraction        | `AiProviderGateway` — offline / BYOK / service               |
-| Validation            | TypeBox                                                      |
-| Community hub         | SvelteKit SSR on Google Cloud Run (Bun adapter)              |
-| Static sites          | Astro (landing page, docs)                                   |
-| Linting/formatting    | Biome                                                        |
-| Testing               | Playwright · Vitest · Blackbox runner                        |
+| AI abstraction        | `AiProviderGateway` — offline / BYOK / service                                                                 |
+| Validation            | TypeBox                                                                                                        |
+| Community hub         | SvelteKit SSR on Google Cloud Run (Bun adapter)                                                                |
+| Static sites          | Astro (landing page, docs)                                                                                     |
+| Linting/formatting    | Biome                                                                                                          |
+| Testing               | Playwright · Vitest · Blackbox runner                                                                          |
 
 Full reference: [Tech Stack](docs/guides/STACK.md)
 

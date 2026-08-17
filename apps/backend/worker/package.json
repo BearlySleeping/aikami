@@ -1,0 +1,21 @@
+{
+  "name": "@aikami/worker",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir=dist --target=bun --minify --sourcemap=linked",
+    "typecheck": "tsgo --noEmit",
+    "lint": "biome check .",
+    "format": "biome format .",
+    "fix": "biome check --write . --error-on-warnings",
+    "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@aikami/backend-discord-bot": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "elysia": "^1.4.29"
+  }
+}

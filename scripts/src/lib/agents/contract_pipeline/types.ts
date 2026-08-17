@@ -151,16 +151,20 @@ export type RunManifest = {
   pipelinePaneId?: string;
   reviewPaneId?: string;
   /**
-   * Whether the review captain actually received its initial task text.
-   * False (or a legacy-undefined that predates this field) means the pane may
-   * be idling at an empty prompt — the only condition under which a resume is
+   * Whether the review captain actually received its task text for the
+   * CURRENT round. False (a legacy-undefined that predates this field, or a
+   * deliberate reset when a `change` decision sends work back to the
+   * implementer — see orchestrator.ts) means the pane may be idling with
+   * nothing to do — the only condition under which the orchestrator is
    * allowed to type into the human-shared review pane.
    */
   reviewTaskDelivered?: boolean;
   /**
-   * ISO timestamp of the one resume nudge this run is permitted. Set even
-   * when the guard refuses to send, so a crash-loop cannot retry the injection
-   * on every restart — see the C-390 incident in review_pane.ts.
+   * ISO timestamp of the one retask nudge the current review round is
+   * permitted. Set even when the guard refuses to send, so a crash-loop
+   * cannot retry the injection on every restart — see the C-390 incident in
+   * review_pane.ts. Reset alongside `reviewTaskDelivered` when a new review
+   * round starts (post `change` decision) so that round gets its own nudge.
    */
   reviewResumeNudgedAt?: string;
   /** herdr-native worktree: workspace id (== pipeline workspace in worktree mode). */
