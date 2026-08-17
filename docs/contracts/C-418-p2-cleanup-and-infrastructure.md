@@ -680,3 +680,90 @@ All six P2 features implemented. A shared brand palette package (`packages/front
 - E2E: session_mgmt 9/9, release_gate + sandboxes + game_boot 5 passed (client project). Site e2e specs failed environmentally (`ERR_CONNECTION_REFUSED` at :11418 — site dev server not running in this contract session; site content verified via build + screenshot instead).
 - Visual: client dark 85/100, client light 90/100, site dark 90/100 (ai_validate_image PASS); hub verified via computed styles (html bg `oklch(0.13 0.015 260)`, primary `oklch(0.65 0.22 285)`).
 - Baseline: 0 pre-existing failures in affected projects; 0 new failures. (`validate` fix+typecheck phases green; `:test` phase only fails on the environmentally-unavailable site e2e project.)
+
+### Round 2 — verifier-requested fixes (all applied and re-verified)
+
+**H1 — Tauri → hub CORS (fixed).** `isTauriWebviewOrigin` added to
+`packages/backend/svelte-kit/src/lib/hooks_helpers.ts` and applied on exactly
+the two client-auth paths in `apps/frontend/hub/src/hooks.server.ts`
+(`tauri://localhost`, `http(s)://tauri.localhost`); non-auth `/api` routes
+still deny Tauri origins. Tauri CSP `connect-src` in
+`apps/frontend/client/src-tauri/tauri.conf.json` now includes
+`https://hub.stg.bearlysleeping.com`. **Verified live**: OPTIONS preflight for
+all three Tauri origins → 204 + Access-Control-Allow-Origin on
+`/api/auth/action`; `/api/catalog/stats` with a Tauri origin → 204 with NO
+ACAO header (narrowly scoped); first-party browser origin still allowed.
+AC-4 device-handoff loop re-run through the client proxy: completeDeviceHandoff
+200 + custom token, poll 200 + token returned, invalid token 401.
+
+**H2 — installer .env location (fixed).** The wizard now writes `.env` into
+`BUNDLE_DIR` (the compose project dir that holds `compose.yaml`), so
+`docker compose up -d` reads it. An existing `.env` is preserved across
+re-installs (copied to a temp location before the bundle dir is replaced) and
+never overwritten. **Verified**: install.test.sh now asserts the .env lands in
+the project dir AND runs `docker compose config` there, proving
+COMPOSE_PROFILES from the wizard .env is honored.
+
+**H3 — installer URL/asset naming (fixed).** Single naming contract: release
+tag `local-stack-<version>`, asset `local-stack-<version>.tar.gz`, checksums
+`SHA256SUMS`. install.sh resolves `latest` through the GitHub releases API
+(full-tag form tolerated) instead of the 404'ing `releases/download/latest/…`.
+The publish workflow now creates the release if missing and uploads on every
+run (ref_type gate dropped — the only trigger is workflow_dispatch).
+
+**M1 — platform detection (fixed).** install.sh detects OS/arch (Linux
+x64/arm64, macOS x64/arm64) and fails fast with a clear message on unsupported
+platforms; bundle_stack.sh supports cross-compiling a matrix via
+`AIKAMI_BUNDLE_TARGETS`.
+
+**M2 — checksum verification (fixed).** bundle_stack.sh emits `SHA256SUMS`;
+install.sh downloads and verifies the tarball SHA-256 BEFORE extraction and
+refuses to run from an unverified download. **Verified**: install.test.sh
+serves SHA256SUMS and proves a tampered tarball is rejected with nothing
+extracted.
+
+**M3 — gate guard (fixed).** svelte.config.js keeps the gate DECISION (vite
+build mode is the single source of truth; NODE_ENV is deliberately ignored so
+moon's NODE_ENV=production cannot strip sandbox routes from test builds) and
+guards with a clear error when the filtered routes copy is missing;
+`scripts/gate_dev_routes.ts` was restored as the pre-build materializer in all
+package build scripts. **Verified**: prod → emulator → prod → emulator build
+sequence all succeed; production output has zero (dev) routes, emulator/test
+output retains them, and explicit `AIKAMI_INCLUDE_DEV_ROUTES=true|false`
+overrides work in both directions.
+
+**M4 — explicit test-build flag (fixed).** `AIKAMI_INCLUDE_DEV_ROUTES=true`
+set on the client moon `dev`/`test`/`test-unit` tasks and on
+`build:emulator`.
+
+**M5 — staging decision (documented).** moon.yml `build` task comment records
+the decision: staging intentionally ships the (dev) sandbox routes (AC-2
+excludes only production); `AIKAMI_INCLUDE_DEV_ROUTES=false` strips them.
+
+**M6 — theme constants (fixed).** Deleted the unused `brandPaletteLight`/
+`brandPaletteDark` TS copies from `packages/frontend/theme/src/index.ts`; the
+palette now exists only in the two CSS source-of-truth files.
+
+**L1 — brand_daisy comment (fixed).** Header now documents the intentional
+daisy-role mapping (daisy `--color-primary` = brand accent vs tokens
+`--primary` = text-adjacent slate) instead of claiming identical values.
+
+**L2 — backend-configs comment (fixed).** `getProjectId` documents why it
+reads PUBLIC_EMULATOR_PORT_OFFSET and that `withProjectIdOffset` no-ops at 0.
+
+**L3 — dark selector parity (fixed).** brand_daisy.css dark block now also
+matches `:root[data-theme='dark']`.
+
+**App Check coordination (fixed).** The two client-auth paths are excluded
+from App Check enforcement in the hub hooks (they carry their own ID-token
+auth + single-use codes + per-instance token bucket), preventing asymmetric
+enablement from silently breaking desktop/browser auth; the carried-over rate
+limiter is kept.
+
+**Round-2 verification summary:** all affected typechecks green
+(client, hub, backend-svelte-kit, backend-configs, frontend-theme,
+local-stack); client visual gate re-passed (light 90/100, dark 90/100 with
+exact token match); e2e session_mgmt 9/9; backend-svelte-kit unit tests
+31/31; local-stack installer self-test all checks incl. docker compose reads
+wizard .env + tamper rejection; local-stack unit tests pass; bundle + SHA256SUMS
+generated; AC-3 dangling-alias grep still zero.
