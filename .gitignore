@@ -230,6 +230,9 @@ $RECYCLE.BIN/
 **/script-config.production.ts
 **/script-config.staging.ts
 
+# .pi cache directories (per-project, generated)
+.pi/*/.cache/
+.pi/*/command_durations.json
 
 script-config.*.ts
 test-results/
