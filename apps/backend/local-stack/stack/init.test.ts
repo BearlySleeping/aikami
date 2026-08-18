@@ -14,10 +14,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { HardwareProfileSchema, StackPlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
-import { type CliOptions, runInit } from './init.ts';
+import { type CliOptions, defaultEnvPath, parseArgs, runInit } from './init.ts';
 
 const MANIFEST = JSON.stringify({
   schemaVersion: 1,
@@ -171,11 +171,8 @@ describe('AC-7 — plan is shown before anything is written', () => {
     const originalOn = process.stdin.on.bind(process.stdin);
     const originalPause = process.stdin.pause.bind(process.stdin);
     const originalOff = process.stdin.off?.bind(process.stdin) ?? (() => {});
-    // biome-ignore lint/suspicious/noExplicitAny: test-only TTY stub
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only TTY stub
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only stdin stub
     process.stdin.on = ((event: string, handler: (chunk: string) => void) => {
       if (event === 'data') {
         queueMicrotask(() => handler('n\n'));
@@ -382,5 +379,97 @@ describe('AC-9 — re-run is safe', () => {
     expect(code).toBe(0);
     const after = await readFile(base.envPath, 'utf8');
     expect(after).toBe(original);
+  });
+});
+
+describe('next steps after writing .env', () => {
+  /** Captures console.log for one `runInit` call. */
+  const runCapturingLogs = async (options: CliOptions): Promise<string> => {
+    const lines: string[] = [];
+    // biome-ignore lint/suspicious/noConsole: capturing console.log is the point
+    const originalLog = console.log;
+    const capture = (...args: unknown[]): void => {
+      lines.push(args.map(String).join(' '));
+    };
+    console.log = capture;
+    try {
+      await runInit(options);
+    } finally {
+      console.log = originalLog;
+    }
+    return lines.join('\n');
+  };
+
+  test('tells the user the stack is not started yet', async () => {
+    // "wrote .env" used to be the last line, which reads as "done" — it is
+    // not; nothing is running until `up`.
+    const base = await baseOptions();
+    const text = await runCapturingLogs({ ...base, modalities: ['text'] });
+    expect(text).toContain('Next steps');
+    expect(text).toContain('docker compose up -d');
+  });
+
+  test('separates the browser "client" profile from the desktop app', async () => {
+    // The reason this block exists: selecting the `client` modality starts a
+    // container serving the browser app, and people reasonably expect the
+    // Tauri desktop app to appear. Compose cannot launch a host GUI, so the
+    // two have to be named apart at the point of confusion.
+    const base = await baseOptions();
+    const text = await runCapturingLogs({ ...base, modalities: ['text', 'client'] });
+    expect(text).toContain('http://localhost:5274/');
+    expect(text).toContain('client');
+    expect(text).toMatch(/aikami client/);
+    expect(text).toContain('not a container');
+  });
+
+  test('no client profile → no browser URL, but the desktop line stays', async () => {
+    const base = await baseOptions();
+    const text = await runCapturingLogs({ ...base, modalities: ['text'] });
+    expect(text).not.toContain('http://localhost:5274/');
+    expect(text).toMatch(/aikami client/);
+  });
+});
+
+describe('--help', () => {
+  test('parseArgs recognises --help and -h', () => {
+    expect(parseArgs(['--help']).help).toBe(true);
+    expect(parseArgs(['-h']).help).toBe(true);
+    expect(parseArgs(['--yes']).help).toBeUndefined();
+  });
+
+  test('runInit prints usage and exits 0 without detecting or writing', async () => {
+    const base = await baseOptions();
+    const out: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    // biome-ignore lint/suspicious/noExplicitAny: stdout capture in tests
+    (process.stdout as any).write = (chunk: string): boolean => {
+      out.push(String(chunk));
+      return true;
+    };
+    let code: number;
+    try {
+      code = await runInit({ ...base, help: true });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    const text = out.join('');
+    expect(code).toBe(0);
+    expect(text).toContain('stack init');
+    expect(text).toContain('--env-path');
+    // Usage must not run detection or touch the filesystem.
+    expect(text).not.toContain('Models to download');
+    const envExists = await readFile(base.envPath, 'utf8').then(
+      () => true,
+      () => false,
+    );
+    expect(envExists).toBe(false);
+  });
+});
+
+describe('default .env path', () => {
+  test('resolves inside the package when running from source', () => {
+    // The compiled-binary branch (cwd) cannot be exercised from a source run;
+    // this asserts the source branch still points at the compose project dir.
+    expect(defaultEnvPath().split(sep).join('/')).toEndWith('/local-stack/.env');
   });
 });

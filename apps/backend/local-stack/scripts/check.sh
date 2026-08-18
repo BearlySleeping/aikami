@@ -61,8 +61,28 @@ check "bash syntax: bin/run-native-tts.sh" bash -n bin/run-native-tts.sh
 check "bash syntax: bin/run-native-stt.sh" bash -n bin/run-native-stt.sh
 check "bash syntax: docker/voice/entrypoint.sh" bash -n docker/voice/entrypoint.sh
 check "bash syntax: scripts/emit_config.sh" bash -n scripts/emit_config.sh
-check "python syntax: docker/voice/stt_server.py" python3 -m py_compile docker/voice/stt_server.py
-check "python syntax: docker/voice/tts_server.py" python3 -m py_compile docker/voice/tts_server.py
+check "sh syntax: install.sh" sh -n install.sh
+check "sh syntax: aikami" sh -n aikami
+check "sh syntax: scripts/bundle_stack.sh" sh -n scripts/bundle_stack.sh
+check "sh syntax: scripts/install.test.sh" sh -n scripts/install.test.sh
+
+# Resolve a REAL python: on Windows the `python3` on PATH is usually the
+# Microsoft Store alias stub, which prints an ad and exits without compiling
+# anything, so a bare `python3 -m py_compile` reports a syntax failure for
+# files that are perfectly fine.
+PYTHON=""
+for candidate in python3 python py; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
+        PYTHON="$candidate"
+        break
+    fi
+done
+if [ -n "$PYTHON" ]; then
+    check "python syntax: docker/voice/stt_server.py" "$PYTHON" -m py_compile docker/voice/stt_server.py
+    check "python syntax: docker/voice/tts_server.py" "$PYTHON" -m py_compile docker/voice/tts_server.py
+else
+    skip "python syntax checks — no working python interpreter on PATH"
+fi
 
 # ── C-393 AC-7: STT is off by default ───────────────────────────────────
 echo "== C-393 AC-7: STT off by default =="

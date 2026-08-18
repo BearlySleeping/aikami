@@ -211,3 +211,58 @@ describe('model manifest integrity', () => {
     expect(anima?.companions?.length).toBe(2);
   });
 });
+
+describe('C-418 Feature F — one-command installers', () => {
+  const installerFiles = [
+    'install.sh', // POSIX one-liner (curl | sh)
+    'install.ps1', // Windows one-liner (irm | iex)
+    'aikami', // POSIX control command, shipped in the bundle
+    'aikami.ps1', // Windows control command
+    'aikami.cmd', // PATHEXT shim so a bare `aikami` resolves on Windows
+    'scripts/bundle_stack.sh',
+    'scripts/install.test.sh',
+    'scripts/install.test.ps1',
+  ];
+
+  for (const rel of installerFiles) {
+    it(`ships: ${rel}`, () => {
+      expect(existsSync(join(ROOT, rel))).toBe(true);
+    });
+  }
+
+  it('the bundler packs each platform its own installer and control command', async () => {
+    // A bundle that shipped the wrong platform's installer would still build
+    // and still checksum — it would only fail on the user's machine.
+    const bundler = await readFile(join(ROOT, 'scripts/bundle_stack.sh'), 'utf8');
+    expect(bundler).toContain('cp install.ps1 aikami.ps1 aikami.cmd');
+    expect(bundler).toContain('cp install.sh aikami');
+  });
+
+  it('both installers resolve "latest" by listing releases and filtering the tag prefix', async () => {
+    // This repo publishes desktop releases (`v*`) too, so /releases/latest
+    // returns the wrong one — the installers must list /releases and take the
+    // newest `local-stack-*` tag instead.
+    for (const rel of ['install.sh', 'install.ps1']) {
+      const source = await readFile(join(ROOT, rel), 'utf8');
+      expect(source).toContain('/releases?per_page=100');
+      expect(source).toContain('local-stack-');
+    }
+  });
+
+  it('the publish workflow uploads every platform asset the installers ask for', async () => {
+    const workflow = await readFile(
+      join(ROOT, '../../../.github/workflows/publish-local-stack.yml'),
+      'utf8',
+    );
+    for (const platform of [
+      'linux-x64',
+      'linux-arm64',
+      'darwin-x64',
+      'darwin-arm64',
+      'windows-x64',
+    ]) {
+      expect(workflow).toContain(platform);
+    }
+    expect(workflow).toContain('install.ps1');
+  });
+});

@@ -103,6 +103,17 @@ tasks:
       cache: false
       runInCI: true
 
+  # bundle-all — the full release matrix (every platform's archive), the way
+  # publish-local-stack.yml builds it. Local/CI `bundle` stays host-only so a
+  # PR does not compile five 95 MB binaries.
+  bundle-all:
+    command: 'sh scripts/bundle_stack.sh'
+    env:
+      AIKAMI_BUNDLE_TARGETS: 'bun-linux-x64 bun-linux-arm64 bun-darwin-x64 bun-darwin-arm64 bun-windows-x64'
+    options:
+      cache: false
+      runInCI: false
+
   # test-install — self-test for install.sh against a local bundle (AC-6
   # integration hook; no Docker, no network).
   test-install:
@@ -110,3 +121,12 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # test-install-windows — the same contract for install.ps1. Windows-only
+  # (it needs PowerShell), so it is a developer/manual task rather than part
+  # of the Linux `moon ci` run.
+  test-install-windows:
+    command: 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.test.ps1'
+    options:
+      cache: false
+      runInCI: false
