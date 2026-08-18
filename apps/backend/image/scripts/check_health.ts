@@ -1,4 +1,6 @@
 // apps/backend/image/scripts/check_health.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
+/** biome-ignore-all lint/style/useNamingConvention: sd-server API uses snake_case fields */
 // Health check for the image dev engine (C-392).
 //
 // The default image service is sd-server (stable-diffusion.cpp) from the

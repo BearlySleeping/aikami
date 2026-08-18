@@ -1,3 +1,5 @@
+// apps/backend/firebase/scripts/bucket.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
 import { getBucket } from '@aikami/backend/configs/bucket.ts';
 
 const bucket = getBucket();

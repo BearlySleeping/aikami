@@ -1,4 +1,5 @@
 // apps/backend/text/scripts/check_health.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
 // Health check for the text dev engine (C-392).
 //
 // The default text service is llama-server (llama.cpp) from the C-390

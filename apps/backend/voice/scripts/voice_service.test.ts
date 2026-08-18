@@ -1,4 +1,6 @@
 // apps/backend/voice/scripts/voice_service.test.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI test harness — console is the interface */
+/** biome-ignore-all lint/style/useNamingConvention: sherpa-onnx API uses snake_case fields */
 // Integration tests for the sherpa-onnx voice synthesis service (C-392).
 // Checks if herdr voice is active; if not, spawns it, waits for readiness,
 // runs health/synthesis checks, and stops only if started by us.
@@ -93,7 +95,7 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
       console.log(`  ... ${result.detail}`);
       lastDetail = result.detail;
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((done) => setTimeout(done, POLL_INTERVAL_MS));
   }
   throw new Error(
     `sherpa-onnx did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`,

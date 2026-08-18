@@ -1,4 +1,6 @@
 // apps/backend/voice/scripts/synthesize.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
+/** biome-ignore-all lint/style/useNamingConvention: sherpa-onnx API uses snake_case fields */
 // Synthesize speech via the sherpa-onnx voice dev engine (C-392) and play
 // with mpv.
 //
@@ -75,12 +77,14 @@ try {
   const available = players.find((p) => Bun.which(p) !== null);
 
   if (available) {
-    const args =
-      available === 'mpv'
-        ? ['--really-quiet', '--no-terminal', outfile]
-        : available === 'ffplay'
-          ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', outfile]
-          : ['-q', outfile];
+    let args: readonly string[];
+    if (available === 'mpv') {
+      args = ['--really-quiet', '--no-terminal', outfile];
+    } else if (available === 'ffplay') {
+      args = ['-nodisp', '-autoexit', '-loglevel', 'quiet', outfile];
+    } else {
+      args = ['-q', outfile];
+    }
 
     console.log(`🔊 Playing with ${available}...`);
     await Bun.$`${available} ${args}`;

@@ -1,4 +1,5 @@
 // apps/backend/text/scripts/start.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
 // Dev engine launcher for the text modality (C-392).
 //
 // Delegates to the C-390 local-stack compose topology instead of owning a
