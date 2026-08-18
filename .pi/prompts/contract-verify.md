@@ -103,6 +103,21 @@ without visual evidence. Every production path AC must have a corresponding scre
 2. **Screenshot + validate each production path**:
    - `browser_screenshot` at the **production route path** (NOT the dev sandbox route)
    - `ai_validate_image` with explicit AC expectations. Score ≥ 85 required.
+
+   **🔴 Evidence-save rule (never commit screenshots):**
+   - The `browser_screenshot` tool already saves into the gitignored
+     `.pi/.screenshots/` dir — use it for captures.
+   - If you capture with a manual/headless-shell script instead, save the
+     PNG **into `.pi/.screenshots/`** (gitignored) — never the worktree root
+     and never an `artifacts/` dir.
+   - **Never `git add` / commit screenshot evidence.** Screenshots exist to
+     run `ai_validate_image` and to cite in the verify report — the branch
+     must contain code only. Reference captures by filename in your evidence
+     list; do not stage them.
+   - If a screenshot ever ends up in the worktree, delete it before
+     completing the stage (`rm .pi/.screenshots/*.png` or the stray file).
+     Root-level `*.png` and `artifacts/` are gitignored, so a stray file
+     there fails silently — clean it up anyway; do not rely on the ignore.
    - Write a detailed expectation string that references specific AC criteria.
 
 3. **Test error paths + persistence**: reload the page, trigger failures, verify clean degradation.

@@ -135,6 +135,10 @@ Do NOT skip. The contract must pass these before status becomes `implemented`.
    - **`ai_validate_image` with explicit AC expectations**. Score ≥ 85 required.
      Write a detailed expectation string that references specific AC criteria
      (layout, colors, text content, interactive elements).
+   - **🔴 Evidence-save rule**: screenshots live in the gitignored
+     `.pi/.screenshots/` dir (the `browser_screenshot` tool writes there).
+     Never save captures to the worktree root or an `artifacts/` dir, and
+     never `git add`/commit screenshot evidence — the branch is code only.
    - **Test state persistence**: reload the page — state must survive if persistence is an AC.
    - **Test error paths**: trigger failures — must degrade cleanly.
    - **🔴 AUTO-FAIL**: If you claim you "cannot test because the dev server is down" without

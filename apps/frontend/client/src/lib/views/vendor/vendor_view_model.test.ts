@@ -26,6 +26,7 @@ mock.module('$services', () => ({
 }));
 
 import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
+import { setLpcUrlResolver } from '$lib/data/lpc_renderer';
 import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -218,6 +219,50 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
       const viewModel = createViewModel();
       const def = viewModel.getItemDef('nonexistent_item');
       expect(def.label).toBe('nonexistent_item');
+    });
+  });
+
+  describe('haggle panel collapse — C-419 AC-3', () => {
+    test('collapsed by default with no messages', () => {
+      const viewModel = createViewModel();
+      expect(viewModel.isHagglePanelCollapsed).toBe(true);
+    });
+
+    test('expands when expandHagglePanel is called', () => {
+      const viewModel = createViewModel();
+      viewModel.expandHagglePanel();
+      expect(viewModel.isHagglePanelCollapsed).toBe(false);
+    });
+
+    test('auto-expands once a conversation starts', async () => {
+      const viewModel = createViewModel();
+      vendorService.messages = [
+        { id: 'm1', role: 'player', content: 'hello' },
+        { id: 'm2', role: 'vendor', content: 'Welcome!' },
+      ];
+      expect(viewModel.isHagglePanelCollapsed).toBe(false);
+    });
+  });
+
+  describe('item art resolution — C-419 AC-4', () => {
+    test('returns art URL for items with lpcAssetId in the catalog', () => {
+      // Wire a deterministic LPC URL resolver so this test does not depend
+      // on the asset manifest being loaded in the test env (which returns
+      // undefined). rustySword's lpcAssetId is weapon/sword/dagger.
+      setLpcUrlResolver((assetId) =>
+        assetId === 'weapon/sword/dagger'
+          ? 'https://assets.example/dagger-walk.png'
+          : null,
+      );
+      const viewModel = createViewModel({ vendorInventory: 'rustySword' });
+      const url = viewModel.getItemArtUrl('rustySword');
+      expect(url).toBe('https://assets.example/dagger-walk.png');
+      expect(url).toContain('dagger');
+    });
+
+    test('returns undefined for items with no art', () => {
+      const viewModel = createViewModel({ vendorInventory: 'nonexistent_item' });
+      expect(viewModel.getItemArtUrl('nonexistent_item')).toBeUndefined();
     });
   });
 });

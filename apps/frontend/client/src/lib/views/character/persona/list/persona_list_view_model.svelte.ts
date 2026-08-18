@@ -9,6 +9,12 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
+import { toAppError } from '@aikami/utils';
+import {
+  compileCardToPersona,
+  hasDeclaredAbilityScores,
+} from '$lib/services/character/card_compiler.ts';
+import { importFromJson, importFromPng } from '$lib/services/character/character_importer.ts';
 import {
   authService,
   campaignService,
@@ -18,6 +24,7 @@ import {
   personaService,
   playerStateService,
   routerService,
+  storageService,
   worldStateService,
 } from '$services';
 
@@ -44,6 +51,9 @@ export type PersonaListViewModelInterface = BaseViewModelInterface & {
   /** Whether personas are being loaded from Firestore. */
   readonly isLoading: boolean;
 
+  /** Whether a card import is in flight. */
+  readonly isImporting: boolean;
+
   /** Selects a persona and navigates to /game to start playing. */
   selectPersona(options: { id: string }): Promise<void>;
 
@@ -58,6 +68,13 @@ export type PersonaListViewModelInterface = BaseViewModelInterface & {
 
   /** Sets a persona as the active one (game-style). */
   setActivePersona(personaId: string): Promise<void>;
+
+  /**
+   * Imports a SillyTavern V2/V3 character card (PNG or JSON) as a persona.
+   * Compiles the card into PersonaSheetSchema fields with inferred ability
+   * scores and upserts it into the local personas table (C-419 AC-1/AC-2).
+   */
+  handleFileImport(options: { event: Event }): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -70,6 +87,7 @@ class PersonaListViewModel
 {
   personas: SavedPersona[] = $state([]);
   isLoading = $state(false);
+  isImporting = $state(false);
 
   get isEmpty(): boolean {
     return this.personas.length === 0;
@@ -179,7 +197,107 @@ class PersonaListViewModel
     }
   }
 
+  /** @inheritdoc */
+  async handleFileImport(options: { event: Event }): Promise<void> {
+    const { event } = options;
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    this.isImporting = true;
+
+    try {
+      // Reuse the shared card parser (V1/V2/V3/RisuAI/Aikami) — C-419 AC-1/2.
+      const { character, avatarFile } = await this._extractCharacter({ file });
+
+      // Compile into PersonaSheetSchema fields, inferring ability scores.
+      const sheet = compileCardToPersona({ character });
+      const personaId = crypto.randomUUID();
+
+      const persona: PersonaData = {
+        id: personaId,
+        name: sheet.name,
+        background: sheet.background,
+        personalityTraits: sheet.personalityTraits,
+        notes: sheet.notes,
+        abilityScores: sheet.abilityScores,
+        isActive: false,
+      };
+
+      let avatarUrl = '';
+      if (avatarFile) {
+        try {
+          avatarUrl = (await this._uploadAvatar({ file: avatarFile, personaId })) ?? '';
+        } catch (error) {
+          this.warn('handleFileImport:avatar-upload-failed', error);
+        }
+      }
+      persona.avatarUrl = avatarUrl || undefined;
+
+      // Upsert into the local personas table + localStorage mirror.
+      await personaService.updatePersona(personaId, persona);
+      await this._loadFromLocalTable();
+
+      this.info('handleFileImport', {
+        personaId,
+        name: sheet.name,
+        abilityScoresInferred: !hasDeclaredAbilityScores({ character }),
+      });
+    } catch (error) {
+      this.error('handleFileImport:failed', error);
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isImporting = false;
+      target.value = '';
+    }
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────
+
+  private async _extractCharacter(options: { file: File }) {
+    const { file } = options;
+
+    if (file.type === 'image/png') {
+      return await importFromPng({ file });
+    }
+
+    if (file.type === 'application/json' || file.name.endsWith('.json')) {
+      return await importFromJson({ file });
+    }
+
+    throw toAppError({
+      errorType: 'invalid-argument',
+      errorMessage: 'Unsupported file type. Please upload a PNG or JSON file.',
+    });
+  }
+
+  private async _uploadAvatar(options: {
+    file: File;
+    personaId: string;
+  }): Promise<string | undefined> {
+    const { file, personaId } = options;
+    const uid = authService.uid;
+
+    if (!uid) {
+      throw toAppError({
+        errorType: 'unauthorized',
+        errorMessage: 'Cannot upload avatar: User is not logged in.',
+      });
+    }
+
+    try {
+      return await storageService.uploadAvatar({
+        file,
+        uid: `${uid}/personas/${personaId}`,
+      });
+    } catch (error) {
+      this.warn('_uploadAvatar:failed', error);
+      return undefined;
+    }
+  }
 
   private _loadFromStorage(): void {
     try {

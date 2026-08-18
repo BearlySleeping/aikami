@@ -1,4 +1,5 @@
 <script lang="ts">
+import LpcItemIcon from '$lib/components/game/lpc_item_icon.svelte';
 // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { logger } from '$logger';
 import { gameModeService } from '$services';
@@ -221,117 +222,147 @@ const _itemIcon = (itemId: string): string => {
     role="none"
   >
     <!-- ── Left pane: AI Chat ── -->
-    <div class="flex flex-col w-3/5 border-r border-base-300">
-      <!-- Header -->
-      <div
-        class="flex items-center justify-between border-b border-base-300 px-4 py-3 bg-base-100/50"
+    <!-- C-419 AC-3: collapsed to a slim affordance until a conversation
+       starts or the player expands it. When expanded or engaged it
+       renders the full chat pane as before. -->
+    {#if viewModel.isHagglePanelCollapsed}
+      <aside
+        class="flex w-16 flex-col items-center border-r border-base-300 bg-base-100/50"
+        aria-label="Haggle panel — collapsed"
       >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center justify-center w-full border-b border-base-300 px-2 py-3">
           <span class="text-lg">🏪</span>
-          <h3 class="text-sm font-bold text-primary">{viewModel.vendorName}</h3>
         </div>
         <button
           type="button"
-          class="btn btn-ghost btn-xs text-error"
-          onclick={() => viewModel.closeVendor()}
-          aria-label="Close vendor"
+          class="btn btn-ghost btn-xs mt-3 flex flex-col gap-1 py-2 h-auto"
+          onclick={() => viewModel.expandHagglePanel()}
+          aria-label="Start a conversation to haggle with the vendor"
         >
-          ✕ Leave
+          <span class="text-2xl">💬</span>
+          <span class="text-[0.6rem] leading-tight text-center">Start haggling</span>
         </button>
-      </div>
-
-      <!-- Messages -->
-      <div bind:this={messageContainer} class="flex-1 space-y-2 overflow-y-auto px-4 py-3">
-        {#if viewModel.messages.length === 0}
-          <div class="flex flex-col items-center justify-center h-full text-base-content/30 gap-2">
-            <span class="text-4xl">💬</span>
-            <p class="text-sm">Start a conversation to haggle with the vendor</p>
+        <p class="mt-2 px-1 text-center text-[0.55rem] leading-tight text-base-content/30">
+          Haggle with {viewModel.vendorName}
+        </p>
+      </aside>
+    {:else}
+      <div class="flex flex-col w-3/5 border-r border-base-300">
+        <!-- Header -->
+        <div
+          class="flex items-center justify-between border-b border-base-300 px-4 py-3 bg-base-100/50"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🏪</span>
+            <h3 class="text-sm font-bold text-primary">{viewModel.vendorName}</h3>
           </div>
-        {:else}
-          {#each viewModel.messages as message (message.id)}
-            <div class="chat {message.role === 'player' ? 'chat-end' : 'chat-start'}">
-              <div class="chat-header mb-0.5 text-xs text-base-content/50">
-                {message.role === 'player' ? 'You' : viewModel.vendorName}
-              </div>
-              <div
-                class="chat-bubble text-sm {message.role === 'player'
-                  ? 'chat-bubble-primary'
-                  : 'chat-bubble-secondary'}"
-              >
-                {message.content || '...'}
-              </div>
-            </div>
-          {/each}
-        {/if}
-
-        <!-- Loading spinner -->
-        {#if viewModel.isHaggling}
-          <div class="chat chat-start">
-            <div class="chat-bubble chat-bubble-secondary text-sm">
-              <span class="loading loading-dots loading-xs"></span>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Refuses to sell banner -->
-        {#if viewModel.refusesToSell}
-          <div class="alert alert-error mt-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <title>icon</title>
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-            <span class="text-sm font-semibold">The vendor refuses to do business with you.</span>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Input area -->
-      <div class="border-t border-base-300 p-3 bg-base-100/50">
-        <div class="flex gap-2">
-          <textarea
-            bind:this={inputElement}
-            bind:value={haggleInput}
-            class="textarea textarea-bordered flex-1 text-sm resize-none"
-            rows="2"
-            placeholder="{viewModel.refusesToSell ? 'The vendor won\'t talk to you...' : 'Type to haggle, chat, or browse...'}"
-            disabled={viewModel.isHaggling || viewModel.refusesToSell}
-          ></textarea>
           <button
             type="button"
-            class="btn btn-primary btn-sm self-end"
-            onclick={() => submitHaggle()}
-            disabled={viewModel.isHaggling || viewModel.refusesToSell || !haggleInput.trim()}
+            class="btn btn-ghost btn-xs text-error"
+            onclick={() => viewModel.closeVendor()}
+            aria-label="Close vendor"
           >
-            {#if viewModel.isHaggling}
-              <span class="loading loading-spinner loading-xs"></span>
-            {:else}
-              Send
-            {/if}
+            ✕ Leave
           </button>
         </div>
-        <div class="flex items-center gap-2 mt-1.5 text-xs text-base-content/30">
-          <kbd class="kbd kbd-xs">Enter</kbd>
-          send
-          <span>·</span>
-          <kbd class="kbd kbd-xs">Shift+Enter</kbd>
-          newline
+
+        <!-- Messages -->
+        <div bind:this={messageContainer} class="flex-1 space-y-2 overflow-y-auto px-4 py-3">
+          {#if viewModel.messages.length === 0}
+            <div
+              class="flex flex-col items-center justify-center h-full text-base-content/30 gap-2"
+            >
+              <span class="text-4xl">💬</span>
+              <p class="text-sm">Start a conversation to haggle with the vendor</p>
+            </div>
+          {:else}
+            {#each viewModel.messages as message (message.id)}
+              <div class="chat {message.role === 'player' ? 'chat-end' : 'chat-start'}">
+                <div class="chat-header mb-0.5 text-xs text-base-content/50">
+                  {message.role === 'player' ? 'You' : viewModel.vendorName}
+                </div>
+                <div
+                  class="chat-bubble text-sm {message.role === 'player'
+                    ? 'chat-bubble-primary'
+                    : 'chat-bubble-secondary'}"
+                >
+                  {message.content || '...'}
+                </div>
+              </div>
+            {/each}
+          {/if}
+
+          <!-- Loading spinner -->
+          {#if viewModel.isHaggling}
+            <div class="chat chat-start">
+              <div class="chat-bubble chat-bubble-secondary text-sm">
+                <span class="loading loading-dots loading-xs"></span>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Refuses to sell banner -->
+          {#if viewModel.refusesToSell}
+            <div class="alert alert-error mt-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <title>icon</title>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
+              <span class="text-sm font-semibold">The vendor refuses to do business with you.</span>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Input area -->
+        <div class="border-t border-base-300 p-3 bg-base-100/50">
+          <div class="flex gap-2">
+            <textarea
+              bind:this={inputElement}
+              bind:value={haggleInput}
+              class="textarea textarea-bordered flex-1 text-sm resize-none"
+              rows="2"
+              placeholder="{viewModel.refusesToSell ? 'The vendor won\'t talk to you...' : 'Type to haggle, chat, or browse...'}"
+              disabled={viewModel.isHaggling || viewModel.refusesToSell}
+            ></textarea>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm self-end"
+              onclick={() => submitHaggle()}
+              disabled={viewModel.isHaggling || viewModel.refusesToSell || !haggleInput.trim()}
+            >
+              {#if viewModel.isHaggling}
+                <span class="loading loading-spinner loading-xs"></span>
+              {:else}
+                Send
+              {/if}
+            </button>
+          </div>
+          <div class="flex items-center gap-2 mt-1.5 text-xs text-base-content/30">
+            <kbd class="kbd kbd-xs">Enter</kbd>
+            send
+            <span>·</span>
+            <kbd class="kbd kbd-xs">Shift+Enter</kbd>
+            newline
+          </div>
         </div>
       </div>
-    </div>
+    {/if}
 
     <!-- ── Right pane: Items + Gold ── -->
-    <div class="flex flex-col w-2/5 bg-base-100">
+    <!-- C-419 AC-3: when the haggle panel is collapsed, the inventory
+         takes the remaining width (flex-1) instead of a fixed 2/5. -->
+    <div class="flex flex-col {viewModel.isHagglePanelCollapsed ? 'flex-1' : 'w-2/5'} bg-base-100">
       <!-- Gold display -->
       <div
         class="flex items-center justify-between border-b border-base-300 px-4 py-3 bg-gradient-to-r from-amber-900/20 to-amber-700/10"
@@ -393,9 +424,11 @@ const _itemIcon = (itemId: string): string => {
               {@const canAfford = viewModel.playerGold >= finalPrice}
               {@const isDiscounted = finalPrice < item.basePrice}
               {@const isPenalized = finalPrice > item.basePrice}
+              {@const artUrl = viewModel.getItemArtUrl(item.itemId)}
               {@const icon = _itemIcon(item.itemId)}
               {@const definition = viewModel.getItemDef(item.itemId)}
               <div
+                data-item-id={item.itemId}
                 class="flex flex-col gap-2 rounded-xl border-2 {canAfford && !viewModel.refusesToSell
                   ? 'border-base-300 hover:border-primary/50 hover:shadow-md'
                   : 'border-base-300 opacity-40'} bg-base-200 p-3 transition-all duration-200"
@@ -403,11 +436,11 @@ const _itemIcon = (itemId: string): string => {
                 <!-- Item icon + name -->
                 <div class="flex items-center gap-2">
                   <div
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {canAfford
+                    class="vendor-item-icon flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg {canAfford
                       ? 'bg-primary/10'
                       : 'bg-base-300'}"
                   >
-                    <span class="text-lg">{icon}</span>
+                    <LpcItemIcon {artUrl} fallbackEmoji={icon} />
                   </div>
                   <div class="flex-1 min-w-0">
                     <h4 class="text-sm font-semibold text-base-content truncate">{item.label}</h4>
@@ -430,9 +463,6 @@ const _itemIcon = (itemId: string): string => {
                   </div>
                 </div>
 
-                <!-- Stats (if equippable) -->
-                <!-- Stats (if equippable) -->
-                <!-- Stats (if equippable) -->
                 <!-- Stats (if equippable) -->
                 {#if definition && (definition.attackBonus > 0 || definition.defenseBonus > 0)}
                   <div class="flex items-center gap-1.5 text-xs text-base-content/50">

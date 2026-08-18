@@ -272,3 +272,15 @@ firebase.deploy.json
 Aikami-x86_64.AppImage
 .secrets/
 **/.fast-check/
+
+# Pipeline verification evidence — verifier/implementer screenshots must live
+# in the gitignored .pi/.screenshots/ (browser_screenshot tool) or
+# apps/e2e/test-results/visual/ (visual runner). Any screenshot saved to the
+# worktree root or an artifacts/ dir is a leak — never commit it. See
+# .pi/prompts/contract-verify.md Phase 3 for the evidence-save rule.
+artifacts/
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.gif
