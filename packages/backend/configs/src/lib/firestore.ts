@@ -30,6 +30,5 @@ export const arrayUnion = (...elements: unknown[]) => FieldValue.arrayUnion(...e
 export const arrayRemove = (...elements: unknown[]) => FieldValue.arrayRemove(...elements);
 export const timestampNow = () => Timestamp.now();
 
-export const getXDaysFromNowTimestamp = (days: number): Timestamp => {
-  return timestampFromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
-};
+export const getXDaysFromNowTimestamp = (days: number): Timestamp =>
+  timestampFromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000));

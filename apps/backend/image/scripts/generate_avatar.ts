@@ -1,4 +1,5 @@
 // apps/backend/image/scripts/generate_avatar.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
 // Avatar generation CLI for the image dev engine (C-392).
 //
 // The default image service is sd-server (stable-diffusion.cpp) from the

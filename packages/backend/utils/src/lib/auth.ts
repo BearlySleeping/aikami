@@ -213,12 +213,11 @@ export const getEmailVerificationLink = async ({
   }
 };
 
-const convertLink = (link: string, supportedLocale: SupportedLocale) => {
-  return link.replace(
+const convertLink = (link: string, supportedLocale: SupportedLocale) =>
+  link.replace(
     `https://${requireEnv(backendEnv.GCP_PROJECT_ID, 'GCP_PROJECT_ID')}.firebaseapp.com/__/auth/action`,
     `${requireEnv(backendEnv.APP_URL, 'APP_URL')}/${toSupportedLocaleUrlPrefix(supportedLocale)}auth/userMgmt`,
   );
-};
 
 const toSupportedLocaleUrlPrefix = (supportedLocale: SupportedLocale) => {
   switch (supportedLocale) {

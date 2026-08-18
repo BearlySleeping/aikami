@@ -215,9 +215,7 @@ export const requireEnv = (value: string | undefined, name: string): string => {
 /**
  * Returns the mode of the application, normalized to lowercase.
  */
-export const getMode = (): Mode => {
-  return toMode(backendEnv.MODE);
-};
+export const getMode = (): Mode => toMode(backendEnv.MODE);
 
 /**
  * Determines if the application is currently running in emulator mode.
@@ -236,9 +234,7 @@ export const isEmulatorMode = (): boolean => {
 /**
  * @returns true if currently running on Cloud Run
  */
-export const isRunningOnCloudRun = (): boolean => {
-  return !!process.env.K_SERVICE;
-};
+export const isRunningOnCloudRun = (): boolean => !!process.env.K_SERVICE;
 
 /**
  * The Firebase/GCP project ID for the current mode.

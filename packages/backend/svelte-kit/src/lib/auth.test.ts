@@ -18,18 +18,18 @@ let verifySessionCookieImpl: (
 
 mock.module('@aikami/backend/utils/auth', () => ({
   verifyIdToken: mock(async () => ({})),
-  verifySessionCookie: mock(async (cookie: string, checkRevoked?: boolean) => {
-    return verifySessionCookieImpl(cookie, checkRevoked);
-  }),
+  verifySessionCookie: mock(async (cookie: string, checkRevoked?: boolean) =>
+    verifySessionCookieImpl(cookie, checkRevoked),
+  ),
 }));
 
 // auth.ts imports toUserSessionDataFromToken via the '.ts'-suffixed
 // specifier — mock that specifier too so the same module shape is used.
 mock.module('@aikami/backend/utils/auth.ts', () => ({
   verifyIdToken: mock(async () => ({})),
-  verifySessionCookie: mock(async (cookie: string, checkRevoked?: boolean) => {
-    return verifySessionCookieImpl(cookie, checkRevoked);
-  }),
+  verifySessionCookie: mock(async (cookie: string, checkRevoked?: boolean) =>
+    verifySessionCookieImpl(cookie, checkRevoked),
+  ),
   toUserSessionDataFromToken: mock((token: Record<string, unknown>) => ({
     id: token.uid ?? 'user-1',
     userRole: 'player',

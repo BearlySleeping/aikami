@@ -46,13 +46,9 @@ const DEFAULT_CIRCUIT_BREAKER: CircuitBreakerConfig = {
   halfOpenMaxMs: 30000,
 };
 
-const jitter = (delay: number): number => {
-  return Math.random() * delay;
-};
+const jitter = (delay: number): number => Math.random() * delay;
 
-const sleep = (ms: number): Promise<void> => {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-};
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export abstract class BaseAiService implements AiServiceInterface {
   abstract readonly name: string;

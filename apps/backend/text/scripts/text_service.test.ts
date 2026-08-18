@@ -1,4 +1,6 @@
 // apps/backend/text/scripts/text_service.test.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI test harness — console is the interface */
+/** biome-ignore-all lint/style/useNamingConvention: llama-server OpenAI-compatible API uses snake_case fields */
 // Integration tests for the llama-server text inference service (C-392).
 // Checks if herdr text is active; if not, spawns it, waits for readiness,
 // runs health/model/generation checks, and stops only if started by us.
@@ -117,7 +119,7 @@ const waitForReady = async (timeoutMs: number): Promise<void> => {
       console.log(`  ... ${result.detail}`);
       lastDetail = result.detail;
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((done) => setTimeout(done, POLL_INTERVAL_MS));
   }
   throw new Error(
     `llama-server did not become ready within ${timeoutMs / 1000}s (last: ${lastDetail})`,

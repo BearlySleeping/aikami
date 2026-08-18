@@ -1,4 +1,5 @@
 // apps/backend/image/scripts/update.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
 // Pulls the engine images used by the image compose profile (C-392).
 // Delegates to the local-stack topology — there is no per-service image
 // anymore.

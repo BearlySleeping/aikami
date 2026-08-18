@@ -105,9 +105,9 @@ const sendMessage = async (payload: {
 /**
  * Return the list of available AI providers with their names and default models.
  */
-const getProviders = (_payload: { providers: [] }): { providers: typeof PROVIDERS } => {
-  return { providers: PROVIDERS };
-};
+const getProviders = (_payload: { providers: [] }): { providers: typeof PROVIDERS } => ({
+  providers: PROVIDERS,
+});
 
 // ---------------------------------------------------------------------------
 // Handler registry
@@ -123,6 +123,5 @@ export const handleAIEndpoint = async <T extends AIMessageType>(options: {
   currentUser?: UserSessionData;
   payload: AIApiEvents[T][0];
   type: T;
-}): Promise<AIApiEvents[T][1]> => {
-  return await aiApiHandler({ type: options.type, payload: options.payload }, options.currentUser);
-};
+}): Promise<AIApiEvents[T][1]> =>
+  await aiApiHandler({ type: options.type, payload: options.payload }, options.currentUser);

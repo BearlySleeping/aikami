@@ -1,4 +1,6 @@
 // apps/backend/text/scripts/test_generate.ts
+/** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
+/** biome-ignore-all lint/style/useNamingConvention: llama-server OpenAI-compatible API uses snake_case fields */
 // Generation smoke test for the text dev engine (C-392).
 //
 // Talks the OpenAI-compatible /v1/chat/completions surface of llama-server

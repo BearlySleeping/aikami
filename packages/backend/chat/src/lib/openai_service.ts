@@ -129,9 +129,7 @@ export class OpenAiService extends BaseAiService {
   protected _generateCompletionRaw = async (
     prompt: string,
     options?: CompletionOptions,
-  ): Promise<ChatResponse> => {
-    return this._generateChatRaw([{ role: 'user', content: prompt }], options);
-  };
+  ): Promise<ChatResponse> => this._generateChatRaw([{ role: 'user', content: prompt }], options);
 
   /** @inheritDoc */
   protected _extractStructuredJSONRaw = async <T>(
