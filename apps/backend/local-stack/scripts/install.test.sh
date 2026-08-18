@@ -1,24 +1,29 @@
 #!/bin/sh
 # apps/backend/local-stack/scripts/install.test.sh
 #
-# Self-test for the one-command installer (C-418 Feature F AC-6 integration
-# hook). Exercises the installer against a LOCAL bundle served over HTTP —
-# no network, no real hardware wizard (a fake `stack-init` writes the .env).
-# When Docker is available it ALSO proves the wizard-written .env is actually
-# read by `docker compose config` in the compose project dir (H2).
+# Self-test for the POSIX one-command installer (C-418 Feature F AC-6
+# integration hook). Exercises the installer against a LOCAL bundle served
+# over HTTP — no network, no real hardware wizard (a fake `stack-init` writes
+# the .env). When Docker is available it ALSO proves the wizard-written .env is
+# actually read by `docker compose config` in the compose project dir (H2).
 # Run via:  bun moon run local-stack:test-install
+#
+# The Windows twin is scripts/install.test.ps1.
 #
 # Asserts:
 #   1. install.sh + bundle_stack.sh are valid POSIX sh (sh -n).
 #   2. Platform detection runs and accepts the host platform.
 #   3. The installer downloads + checksum-verifies + extracts + runs wizard;
-#      the wizard .env lands in the compose project dir (BUNDLE_DIR/.env).
-#   4. An existing .env is never overwritten.
-#   5. AIKAMI_SKIP_WIZARD=1 skips the wizard (fetch-only).
-#   6. A tampered tarball (checksum mismatch) is rejected before extraction.
-#   7. The bundle script produces the tarball + SHA256SUMS with expected layout.
-#   8. (docker available) docker compose config in BUNDLE_DIR honors the
+#      the wizard .env lands in the compose project dir (<dir>/current/.env).
+#   4. The `aikami` control command is installed and resolves the project dir.
+#   5. An existing .env is never overwritten.
+#   6. AIKAMI_SKIP_WIZARD=1 skips the wizard (fetch-only).
+#   7. A tampered tarball (checksum mismatch) is rejected before extraction.
+#   8. The bundle script produces per-platform archives + SHA256SUMS.
+#   9. (docker available) docker compose config in the project dir honors the
 #      wizard-written COMPOSE_PROFILES.
+#  10. Cancelled wizard (exit 0, no .env) — installer exits gracefully without
+#      continuing to startup prompts.
 
 set -eu
 cd "$(dirname "$0")/.."
@@ -32,14 +37,35 @@ log "syntax check (sh -n)"
 SYNTAX_CHECKER="${POSIX_SH:-sh}"
 $SYNTAX_CHECKER -n install.sh || fail "install.sh is not valid POSIX sh"
 $SYNTAX_CHECKER -n scripts/bundle_stack.sh || fail "bundle_stack.sh is not valid POSIX sh"
+$SYNTAX_CHECKER -n aikami || fail "aikami control script is not valid POSIX sh"
 
-# 2. Platform detection is exercised implicitly by every install run below:
-#    an unsupported host aborts with a clear message at the first step.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    skip "Windows host — install.sh is the POSIX installer; run scripts/install.test.ps1 instead"
+    exit 0
+    ;;
+esac
+
+# 2. The asset name is platform-scoped (one binary per archive), so the fake
+#    bundle has to carry the same platform suffix install.sh will request.
+case "$(uname -s)" in
+  Linux) TEST_OS=linux ;;
+  Darwin) TEST_OS=darwin ;;
+  *) fail "unsupported test host $(uname -s)" ;;
+esac
+case "$(uname -m)" in
+  x86_64|amd64) TEST_ARCH=x64 ;;
+  aarch64|arm64) TEST_ARCH=arm64 ;;
+  *) fail "unsupported test arch $(uname -m)" ;;
+esac
+PLATFORM="${TEST_OS}-${TEST_ARCH}"
+ASSET="local-stack-test-${PLATFORM}.tar.gz"
+log "host platform: ${PLATFORM} (asset ${ASSET})"
 
 # 3. Build a fake bundle (real-enough compose files for the docker check)
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-BUNDLE_DIR="$TMP/bundle/local-stack-test"
+BUNDLE_DIR="$TMP/bundle/local-stack-test-${PLATFORM}"
 mkdir -p "$BUNDLE_DIR/bin"
 
 cat > "$BUNDLE_DIR/bin/stack-init" <<'EOF'
@@ -65,15 +91,17 @@ services:
     profiles: ["text"]
 EOF
 : > "$BUNDLE_DIR/compose.cpu.yaml"
+cp aikami "$BUNDLE_DIR/aikami"
+chmod +x "$BUNDLE_DIR/aikami"
 
 # 4. Create the tarball + SHA256SUMS + serve over HTTP (path mirrors the
 #    GitHub releases scheme: /download/<tag>/<asset>)
-tar -czf "$TMP/local-stack-test.tar.gz" -C "$TMP/bundle" .
+tar -czf "$TMP/${ASSET}" -C "$TMP/bundle" "local-stack-test-${PLATFORM}"
 mkdir -p "$TMP/local-stack-test"
-cp "$TMP/local-stack-test.tar.gz" "$TMP/local-stack-test/local-stack-test.tar.gz"
+cp "$TMP/${ASSET}" "$TMP/local-stack-test/${ASSET}"
 (
   cd "$TMP/local-stack-test"
-  sha256sum local-stack-test.tar.gz > SHA256SUMS
+  sha256sum "${ASSET}" > SHA256SUMS
 )
 PORT="$(shuf -i 20000-40000 -n 1)"
 (cd "$TMP" && python3 -m http.server "$PORT" >/dev/null 2>&1) &
@@ -86,17 +114,29 @@ INSTALL_DIR="$TMP/install-root"
 export AIKAMI_INSTALL_BASE_URL="$BASE_URL"
 export AIKAMI_STACK_VERSION="test"
 export AIKAMI_STACK_DIR="$INSTALL_DIR"
+# Never prompt, never auto-start, never touch the tester's PATH.
+export AIKAMI_YES=1
+export AIKAMI_NO_PATH=1
 
 # 5. First install — wizard runs, .env written INTO the compose project dir
 log "first install (wizard → .env in project dir)"
 INSTALL_OUT="$(sh install.sh 2>&1)" || fail "installer exited non-zero on first run"
 echo "$INSTALL_OUT" | grep -q "checksum OK" || fail "installer did not verify the checksum"
 echo "$INSTALL_OUT" | grep -q "step 6/6" || fail "installer did not complete all steps"
-PROJECT_DIR="$INSTALL_DIR/bundle/local-stack-test"
+PROJECT_DIR="$INSTALL_DIR/current"
 [ -f "$PROJECT_DIR/.env" ] || fail "wizard .env was not written into the compose project dir ($PROJECT_DIR/.env)"
 grep -q "COMPOSE_PROFILES=text,image,voice" "$PROJECT_DIR/.env" || fail ".env content wrong"
+[ -f "$PROJECT_DIR/VERSION" ] || fail "VERSION marker missing from the project dir"
 
-# 6. docker compose actually reads the wizard-written .env (H2)
+# 6. The `aikami` control command is installed at the stable install root and
+#    resolves the project dir through the `current` indirection.
+log "aikami control command"
+[ -x "$INSTALL_DIR/aikami" ] || fail "aikami control command was not installed at $INSTALL_DIR/aikami"
+RESOLVED_DIR="$("$INSTALL_DIR/aikami" dir)" || fail "aikami dir failed"
+[ "$RESOLVED_DIR" = "$PROJECT_DIR" ] || fail "aikami dir resolved '$RESOLVED_DIR', expected '$PROJECT_DIR'"
+"$INSTALL_DIR/aikami" version | grep -q "test" || fail "aikami version did not report the installed version"
+
+# 7. docker compose actually reads the wizard-written .env (H2)
 log "compose reads wizard .env"
 if command -v docker >/dev/null 2>&1; then
   ( cd "$PROJECT_DIR" && docker compose config ) 2>&1 \
@@ -106,52 +146,83 @@ else
   skip "docker not installed — compose-reads-.env check skipped (CI runs it)"
 fi
 
-# 7. Second install — .env must NOT be overwritten
+# 8. Second install — .env must NOT be overwritten
 log "second install (.env protection)"
 printf 'COMPOSE_PROFILES=my-custom-value\n' > "$PROJECT_DIR/.env"
 sh install.sh >/dev/null 2>&1 || fail "installer exited non-zero on second run"
 grep -q "COMPOSE_PROFILES=my-custom-value" "$PROJECT_DIR/.env" \
   || fail "existing .env was overwritten"
 
-# 8. Skip-wizard mode
+# 9. Skip-wizard mode
 log "skip-wizard mode"
 rm -rf "$TMP/install-root2"
 export AIKAMI_STACK_DIR="$TMP/install-root2"
 export AIKAMI_SKIP_WIZARD=1
 sh install.sh >/dev/null 2>&1 || fail "installer exited non-zero with AIKAMI_SKIP_WIZARD=1"
-[ ! -f "$TMP/install-root2/bundle/local-stack-test/.env" ] \
+[ ! -f "$TMP/install-root2/current/.env" ] \
   || fail ".env should not be written in skip-wizard mode"
 unset AIKAMI_SKIP_WIZARD
 
-# 9. Tampered tarball must be rejected before extraction (M2)
+# 10. Tampered tarball must be rejected before extraction (M2)
 log "checksum rejection (tampered tarball)"
 rm -rf "$TMP/install-root3"
 export AIKAMI_STACK_DIR="$TMP/install-root3"
-printf 'COMPOSE_PROFILES=text,image,voice\n' > "$TMP/local-stack-test/local-stack-test.tar.gz"
+printf 'COMPOSE_PROFILES=text,image,voice\n' > "$TMP/local-stack-test/${ASSET}"
 if sh install.sh >/dev/null 2>&1; then
   fail "installer accepted a tampered tarball (checksum mismatch must abort)"
 fi
-[ ! -d "$TMP/install-root3/bundle" ] || fail "tampered tarball was extracted before checksum verification"
+[ ! -d "$TMP/install-root3/current" ] || fail "tampered tarball was extracted before checksum verification"
 log "  tampered tarball rejected, nothing extracted"
 # restore the good tarball for the bundle-layout step
-tar -czf "$TMP/local-stack-test.tar.gz" -C "$TMP/bundle" .
-cp "$TMP/local-stack-test.tar.gz" "$TMP/local-stack-test/local-stack-test.tar.gz"
+tar -czf "$TMP/${ASSET}" -C "$TMP/bundle" "local-stack-test-${PLATFORM}"
+cp "$TMP/${ASSET}" "$TMP/local-stack-test/${ASSET}"
 (
   cd "$TMP/local-stack-test"
-  sha256sum local-stack-test.tar.gz > SHA256SUMS
+  sha256sum "${ASSET}" > SHA256SUMS
 )
 unset AIKAMI_STACK_DIR
 
-# 10. Bundle script layout + SHA256SUMS (M2/H3 naming)
+# 11. Bundle script layout + SHA256SUMS (M2/H3 naming)
 log "bundle script layout"
 AIKAMI_BUNDLE_DIR="$TMP/dist" AIKAMI_STACK_VERSION="test" sh scripts/bundle_stack.sh >/dev/null 2>&1 \
   || fail "bundle_stack.sh failed"
-[ -f "$TMP/dist/local-stack-test.tar.gz" ] || fail "bundle tarball missing"
+BUNDLED_ASSET="$TMP/dist/local-stack-test-${PLATFORM}.tar.gz"
+[ -f "$BUNDLED_ASSET" ] || fail "bundle tarball missing ($BUNDLED_ASSET)"
 [ -f "$TMP/dist/SHA256SUMS" ] || fail "SHA256SUMS missing"
-grep -q "local-stack-test.tar.gz" "$TMP/dist/SHA256SUMS" || fail "SHA256SUMS does not reference the tarball"
-tar -tzf "$TMP/dist/local-stack-test.tar.gz" | grep -q "local-stack-test/bin/stack-init" \
-  || fail "bundle tarball missing bin/stack-init"
-tar -tzf "$TMP/dist/local-stack-test.tar.gz" | grep -q "local-stack-test/compose.yaml" \
-  || fail "bundle tarball missing compose.yaml"
+grep -q "local-stack-test-${PLATFORM}.tar.gz" "$TMP/dist/SHA256SUMS" \
+  || fail "SHA256SUMS does not reference the tarball"
+for entry in bin/stack-init compose.yaml install.sh aikami VERSION; do
+  tar -tzf "$BUNDLED_ASSET" | grep -q "local-stack-test-${PLATFORM}/${entry}" \
+    || fail "bundle tarball missing ${entry}"
+done
+
+# 12. Cancelled wizard (exits 0 but creates no .env) — installer must exit gracefully
+log "cancelled wizard (exit 0, no .env)"
+rm -rf "$TMP/install-root4"
+export AIKAMI_STACK_DIR="$TMP/install-root4"
+# Replace the fake stack-init with one that exits 0 but writes nothing (cancellation contract)
+cat > "$TMP/local-stack-test-${PLATFORM}/bin/stack-init" <<'EOF'
+#!/bin/sh
+# Simulates a successful cancellation: exit 0, no .env created.
+echo "fake-stack-init: user cancelled (simulated)"
+exit 0
+EOF
+chmod +x "$TMP/local-stack-test-${PLATFORM}/bin/stack-init"
+tar -czf "$TMP/${ASSET}" -C "$TMP" "local-stack-test-${PLATFORM}"
+cp "$TMP/${ASSET}" "$TMP/local-stack-test/${ASSET}"
+(
+  cd "$TMP/local-stack-test"
+  sha256sum "${ASSET}" > SHA256SUMS
+)
+INSTALL_CANCEL_OUT="$(sh install.sh 2>&1)" || fail "installer exited non-zero on cancelled wizard"
+echo "$INSTALL_CANCEL_OUT" | grep -q "Setup cancelled" \
+  || fail "installer did not print cancellation guidance when .env is missing after wizard"
+[ ! -f "$TMP/install-root4/current/.env" ] \
+  || fail ".env should not exist when wizard exits successfully with no file created"
+# Installer should NOT continue to startup/desktop-client prompts after cancellation
+echo "$INSTALL_CANCEL_OUT" | grep -q "Start the stack now?" \
+  && fail "installer should not prompt to start the stack after wizard cancellation"
+log "  cancelled wizard detected, installer exited gracefully without startup prompts"
+unset AIKAMI_STACK_DIR
 
 log "all installer checks passed"

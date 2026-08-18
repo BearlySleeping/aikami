@@ -49,6 +49,15 @@ import { probeOllama } from './detect_ollama.ts';
 import { cudaExtras, diffEnv, readExistingEnv, renderEnv, writeEnvAtomic } from './env_writer.ts';
 import manifestJson from './models.manifest.json';
 import { probeExecutor } from './probe_executor.ts';
+import {
+  CANCELLED,
+  type Choice,
+  confirm,
+  multiselect,
+  type PromptOptions,
+  promptStyle,
+  select,
+} from './prompt.ts';
 
 export type CliOptions = {
   yes: boolean;
@@ -71,6 +80,8 @@ export type CliOptions = {
    *     without asking (for scripting when you know one is there).
    */
   textSource?: 'auto' | 'bundled' | 'ollama';
+  /** `--help` / `-h`: print usage and exit without detecting anything. */
+  help?: boolean;
 };
 
 const DEFAULT_MODALITIES: readonly StackModality[] = ['text', 'image', 'voice', 'stt'];
@@ -84,6 +95,49 @@ const BACKEND_CHOICES: readonly StackBackend[] = [
   'musa',
   'metal',
 ];
+
+/**
+ * True when this is running as a `bun build --compile` single-file binary
+ * (the shape `stack-init` ships in as, via scripts/bundle_stack.sh). Bun
+ * mounts the bundled sources on a virtual filesystem — `/$bunfs/root` on
+ * POSIX, `B:\~BUN\root` on Windows — so `import.meta.dir` points at a path
+ * that does not exist on disk.
+ */
+const isCompiledBinary = (): boolean =>
+  import.meta.dir.includes('$bunfs') || import.meta.dir.includes('~BUN');
+
+/**
+ * Where `.env` goes when `--env-path` is not given: next to the package's
+ * compose files in a repo checkout, and the working directory for the
+ * compiled binary — whose own "directory" is a virtual path that no write
+ * can ever land in (it failed with a raw ENOENT on `B:\~BUN\.env` before
+ * this branch existed).
+ */
+export const defaultEnvPath = (): string =>
+  isCompiledBinary() ? join(process.cwd(), '.env') : join(import.meta.dir, '..', '.env');
+
+/** `--help` / `-h` output. Kept in sync with parseArgs below. */
+const USAGE = `stack init — hardware detection and .env generation for the Aikami local stack
+
+Usage:
+  stack init [options]
+
+Options:
+  -y, --yes                    accept the plan without prompting (CI / piped installs)
+      --backend <b>            auto|cpu|cuda|rocm|vulkan|intel|musa|metal (default: auto)
+      --modalities <a,b,c>     text,image,voice,stt,client (default: text,image,voice,stt)
+      --tier <t>               auto|cpu|8gb|16gb (default: auto)
+      --text-source <s>        auto|bundled|ollama — reuse an Ollama server on 11434
+      --fetch                  download the planned models after writing .env
+      --json                   print the hardware profile + plan as JSON and exit
+      --env-path <path>        where to write .env (default: ./.env)
+      --manifest-path <path>   override the model manifest
+      --disk-path <path>       measure free disk on this volume
+      --no-color               plain output (also honours NO_COLOR)
+  -h, --help                   show this help
+
+Nothing is downloaded and nothing is written until the plan is shown and accepted.
+`;
 
 const hasColor = (noColor: boolean): boolean =>
   !noColor && !process.env.NO_COLOR && Boolean(process.stdout.isTTY);
@@ -165,7 +219,57 @@ export const renderPlan = (options: {
       out.push(`    - ${warning}`);
     }
   }
-  return out.join('\n') + '\n';
+  return `${out.join('\n')}\n`;
+};
+
+/**
+ * What to run once the .env exists.
+ *
+ * The wizard writes a file that *describes* a stack; it does not start one.
+ * Two things follow from that, and neither is guessable from the plan block:
+ *
+ *   - Nothing is running yet. `up` is a separate step.
+ *   - The `client` profile is the **browser** app on :5274. The desktop
+ *     (Tauri) app is a native install on the host, so Compose can never
+ *     launch it — no profile setting changes that. It is `aikami client`,
+ *     which pulls the newest signed build from the same release manifest the
+ *     in-app updater uses.
+ *
+ * Commands differ by how the wizard was reached: an installed stack has the
+ * `aikami` control command on PATH, a repo checkout calls it by path.
+ */
+const printNextSteps = (options: {
+  readonly plan: StackPlan;
+  readonly colorEnabled: boolean;
+}): readonly string[] => {
+  const { plan, colorEnabled } = options;
+  const c = (code: string, text: string): string => color(code, text, colorEnabled);
+  const installed = isCompiledBinary();
+  const local = process.platform === 'win32' ? '.\\aikami' : './aikami';
+  const aikami = installed ? 'aikami' : local;
+  const up = installed ? 'aikami up' : 'docker compose up -d';
+  const status = installed ? 'aikami status' : 'docker compose ps';
+
+  const out: string[] = ['', c('1', 'Next steps')];
+  out.push(`  1. ${c('1;36', up)}`);
+  if (plan.totalDownloadBytes > 0) {
+    out.push(
+      `     the first run downloads ${formatGb(plan.totalDownloadBytes)} of models before any engine starts`,
+    );
+  }
+  out.push(`  2. ${c('1;36', status)}   every service should report healthy`);
+
+  const clientPort = PORTS.client;
+  if (plan.modalities.includes('client') && clientPort !== undefined) {
+    out.push(
+      `  3. open ${c('1;36', `http://localhost:${clientPort}/`)}   the browser app — this is the "client" profile`,
+    );
+  }
+
+  out.push('');
+  out.push(`  Desktop app: ${c('1;36', `${aikami} client`)} — a native install, not a container,`);
+  out.push(`  so ${installed ? 'aikami up' : 'docker compose up'} never launches it.`);
+  return out;
 };
 
 /** Reads the manifest from the provided path, or the embedded copy. */
@@ -180,108 +284,43 @@ const readManifest = async (manifestPath?: string): Promise<ModelManifest> => {
   return parseManifest(JSON.stringify(manifestJson));
 };
 
-/** Reads one line from stdin. Caller writes the prompt first. */
-const readLine = (): Promise<string> =>
-  new Promise<string>((resolve) => {
-    const stdin = process.stdin;
-    stdin.resume();
-    let data = '';
-    stdin.setEncoding('utf8');
-    const onData = (chunk: string): void => {
-      data += chunk;
-      if (data.includes('\n') || data.includes('\r')) {
-        stdin.pause();
-        stdin.off('data', onData);
-        resolve(data.trim());
-      }
-    };
-    stdin.on('data', onData);
-  });
-
-/** Asks one yes/no question on the TTY. Returns the default when non-TTY. */
-const confirm = async (prompt: string, defaultValue: boolean): Promise<boolean> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return defaultValue;
-  }
-  process.stdout.write(`${prompt} ${defaultValue ? '[Y/n]' : '[y/N]'} `);
-  const input = await readLine();
-  if (input.length === 0) {
-    return defaultValue;
-  }
-  return /^y(es)?$/i.test(input);
-};
-
-/** Asks a single-choice question on the TTY, returning the default when non-TTY. */
-const choose = async (
-  prompt: string,
-  choices: readonly string[],
-  defaultValue: string,
-): Promise<string> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return defaultValue;
-  }
-  process.stdout.write(`${prompt} [${choices.join('/')}] (default: ${defaultValue}) `);
-  const input = await readLine();
-  if (input.length === 0) {
-    return defaultValue;
-  }
-  const match = choices.find((choice) => choice.toLowerCase() === input.toLowerCase());
-  if (!match) {
-    // biome-ignore lint/suspicious/noConsole: CLI output
-    console.warn(`  (unrecognized "${input}" — using default: ${defaultValue})`);
-    return defaultValue;
-  }
-  return match;
-};
-
 /**
- * Asks a comma-separated multi-choice question (e.g. modalities) on the
- * TTY, returning the default when non-TTY. Unlike `choose()`, this never
- * matches the raw input against `choices` as a single token — that would
- * make every multi-value answer ("text,image,client") silently fall back
- * to the default, which is exactly what happened before this fix: nobody
- * could ever select a non-default modality combination interactively.
- * Unrecognized tokens (typos) are dropped with a warning, not treated as
- * grounds to discard the whole answer.
+ * One-line explanations shown beside each option in the checkbox list, so
+ * "which engines do you want?" is answerable without already knowing what
+ * `stt` is or which port it lands on.
  */
-const chooseMulti = async <T extends string>(
-  prompt: string,
-  choices: readonly T[],
-  defaultValue: readonly T[],
-): Promise<readonly T[]> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return defaultValue;
-  }
-  process.stdout.write(`${prompt} [${choices.join('/')}] (default: ${defaultValue.join(',')}) `);
-  const input = await readLine();
-  if (input.length === 0) {
-    return defaultValue;
-  }
-  const tokens = input
-    .split(',')
-    .map((part) => part.trim().toLowerCase())
-    .filter(Boolean);
-  const picked: T[] = [];
-  const unknown: string[] = [];
-  for (const token of tokens) {
-    const match = choices.find((choice) => choice.toLowerCase() === token);
-    if (match) {
-      picked.push(match);
-    } else {
-      unknown.push(token);
-    }
-  }
-  if (unknown.length > 0) {
-    // biome-ignore lint/suspicious/noConsole: CLI output
-    console.warn(`  (ignoring unrecognized: ${unknown.join(', ')})`);
-  }
-  if (picked.length === 0) {
-    // biome-ignore lint/suspicious/noConsole: CLI output
-    console.warn(`  (nothing recognized — using default: ${defaultValue.join(',')})`);
-    return defaultValue;
-  }
-  return picked;
+const MODALITY_HINTS: Readonly<Record<StackModality, string>> = {
+  text: 'LLM chat — llama.cpp, OpenAI-compatible /v1 on :11434',
+  image: 'image generation — stable-diffusion.cpp on :8188',
+  voice: 'text-to-speech — Kokoro on :8089',
+  stt: 'speech-to-text — Moonshine + whisper.cpp on :8087',
+  client: 'browser app on :5274 — not the desktop app, which installs separately',
+  ollama: 'reuse an Ollama server on :11434 instead of the bundled engine',
+  comfyui: 'ComfyUI on :8188 instead of sd-server',
 };
+
+const BACKEND_HINTS: Readonly<Record<StackBackend | 'auto', string>> = {
+  auto: 'let the wizard pick from the detected hardware',
+  cpu: 'works everywhere, slowest',
+  cuda: 'NVIDIA — needs GPU passthrough in the container runtime',
+  rocm: 'AMD on linux/amd64 — text only, image falls back to Vulkan',
+  vulkan: 'universal GPU fallback — AMD non-ROCm, Intel Arc, iGPUs',
+  intel: 'Intel Arc / recent integrated graphics (SYCL)',
+  musa: 'Moore Threads MUSA GPUs',
+  metal: 'macOS native engines — no container GPU passthrough exists',
+};
+
+const TIER_HINTS: Readonly<Record<string, string>> = {
+  auto: 'largest tier that fits your usable VRAM',
+  cpu: 'smallest models — fastest download, lowest quality',
+  '8gb': 'mid tier — needs roughly 8 GB of usable VRAM',
+  '16gb': 'largest tier — needs roughly 16 GB of usable VRAM',
+};
+
+const withHints = <T extends string>(
+  values: readonly T[],
+  hints: Readonly<Record<string, string>>,
+): readonly Choice<T>[] => values.map((value) => ({ value, hint: hints[value] }));
 
 /** Injectable dependencies for `runInit` — overridden only by tests, real adapters by default. */
 export type RunInitDeps = {
@@ -291,13 +330,34 @@ export type RunInitDeps = {
 
 /** Runs the full init flow. Returns the process exit code. */
 export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Promise<number> => {
+  if (options.help) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
   const probeOllamaFn = deps.probeOllama ?? probeOllama;
   const colorEnabled = hasColor(options.noColor);
   const c = (code: string, text: string): string => color(code, text, colorEnabled);
 
+  // Which prompt UI this session gets: arrow-key/checkbox when it is a real
+  // colour TTY, line-oriented under NO_COLOR / --no-color, and no prompting
+  // at all when either end is a pipe (`curl | sh`, CI, tests).
+  const prompts: PromptOptions = { style: promptStyle({ noColor: options.noColor }) };
+  /** Ctrl-C / Esc at any prompt: stop, write nothing, exit successfully. */
+  const abort = (): number => {
+    // biome-ignore lint/suspicious/noConsole: CLI output
+    console.log('Aborted — nothing written.');
+    return 0;
+  };
+
   // ── Detection (entirely local; probes capped at 1 s each) ────────────
-  const platform =
-    process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
+  let platform: HardwareProfile['platform'];
+  if (process.platform === 'darwin') {
+    platform = 'darwin';
+  } else if (process.platform === 'win32') {
+    platform = 'win32';
+  } else {
+    platform = 'linux';
+  }
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const profile = await detectHardware({
     executor: probeExecutor,
@@ -324,18 +384,16 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   // ── Modalities (flag > TTY prompt > default) ─────────────────────────
   let modalities: readonly StackModality[] = options.modalities ?? DEFAULT_MODALITIES;
   if (!options.yes && !options.modalities) {
-    // biome-ignore lint/suspicious/noConsole: CLI output
-    console.log(
-      c(
-        '2',
-        '  (client = the browser web app at :5274. Using the downloadable Tauri desktop app instead? Skip client — it talks to the engines directly.)',
-      ),
-    );
-    modalities = await chooseMulti(
+    const picked = await multiselect(
       'Which engines do you want?',
-      MODALITY_CHOICES,
+      withHints(MODALITY_CHOICES, MODALITY_HINTS),
       DEFAULT_MODALITIES,
+      prompts,
     );
+    if (picked === CANCELLED) {
+      return abort();
+    }
+    modalities = picked;
   }
 
   // ── Host Ollama detection (auto by default) ───────────────────────────
@@ -350,13 +408,18 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   if (modalities.includes('text') && textSource !== 'bundled' && textPort !== undefined) {
     const detected = textSource === 'ollama' ? true : await probeOllamaFn(textPort);
     if (detected) {
-      const reuse =
+      const answer =
         textSource === 'ollama' || options.yes
           ? true
           : await confirm(
               `Detected an Ollama server already on port ${textPort} — use it instead of starting the bundled text engine?`,
               true,
+              prompts,
             );
+      if (answer === CANCELLED) {
+        return abort();
+      }
+      const reuse = answer;
       if (reuse) {
         hostOllamaPort = textPort;
         modalities = modalities.filter((modality) => modality !== 'text');
@@ -382,27 +445,48 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   // ── Backend (flag > prompt > auto) ────────────────────────────────────
   let backendOverride: StackBackend | undefined = options.backend;
   if (!options.yes && !options.backend) {
-    const detected =
-      profile.gpu.vendor === 'nvidia' && profile.gpuPassthroughReady
-        ? 'cuda'
-        : profile.gpu.vendor === 'amd'
-          ? 'rocm'
-          : profile.gpu.vendor === 'intel'
-            ? 'vulkan'
-            : profile.platform === 'darwin'
-              ? 'metal'
-              : 'cpu';
-    const picked = await choose('Hardware backend?', BACKEND_CHOICES, detected);
+    let detected: StackBackend;
+    if (profile.gpu.vendor === 'nvidia' && profile.gpuPassthroughReady) {
+      detected = 'cuda';
+    } else if (profile.gpu.vendor === 'amd') {
+      detected = 'rocm';
+    } else if (profile.gpu.vendor === 'intel') {
+      detected = 'vulkan';
+    } else if (profile.platform === 'darwin') {
+      detected = 'metal';
+    } else {
+      detected = 'cpu';
+    }
+    // `auto` leads and is the default: the wizard's whole point is that it
+    // already worked the answer out. It was previously absent from the choice
+    // list while the code still branched on it, so the branch was dead and
+    // there was no way to say "just use what you detected".
+    const backendChoices: readonly Choice<StackBackend | 'auto'>[] = [
+      { value: 'auto', hint: `${BACKEND_HINTS.auto} (detected: ${detected})` },
+      ...withHints(BACKEND_CHOICES, BACKEND_HINTS),
+    ];
+    const picked = await select('Hardware backend?', backendChoices, 'auto', prompts);
+    if (picked === CANCELLED) {
+      return abort();
+    }
     if (picked !== 'auto') {
-      backendOverride = picked as StackBackend;
+      backendOverride = picked;
     }
   }
 
   // ── Tier (flag > prompt > auto) ──────────────────────────────────────
   let tierOverride: 'auto' | 'cpu' | '8gb' | '16gb' = options.tier ?? 'auto';
   if (!options.yes && !options.tier) {
-    const picked = await choose('Model tier?', ['auto', 'cpu', '8gb', '16gb'], 'auto');
-    tierOverride = picked as 'auto' | 'cpu' | '8gb' | '16gb';
+    const picked = await select(
+      'Model tier?',
+      withHints(['auto', 'cpu', '8gb', '16gb'] as const, TIER_HINTS),
+      'auto',
+      prompts,
+    );
+    if (picked === CANCELLED) {
+      return abort();
+    }
+    tierOverride = picked;
   }
 
   // ── Recommendation ────────────────────────────────────────────────────
@@ -447,15 +531,15 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   process.stdout.write(renderPlan({ profile, plan, colorEnabled, hostOllamaPort }));
 
   // ── Confirmation (AC-7): declining writes nothing ────────────────────
-  const confirmed = options.yes ? true : await confirm('Write .env?', true);
-  if (!confirmed) {
+  const confirmed = options.yes ? true : await confirm('Write .env?', true, prompts);
+  if (confirmed === CANCELLED || !confirmed) {
     // biome-ignore lint/suspicious/noConsole: CLI output
     console.log('Aborted — nothing written.');
     return 0;
   }
 
   // ── Re-run diff (AC-9) ────────────────────────────────────────────────
-  const envPath = options.envPath ?? join(import.meta.dir, '..', '.env');
+  const envPath = options.envPath ?? defaultEnvPath();
   const existing = await readExistingEnv(envPath);
   const content = renderEnv({
     profile,
@@ -467,8 +551,8 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   if (existing !== undefined) {
     process.stdout.write(`\n${diffEnv(existing, content)}\n`);
     if (!options.yes) {
-      const overwrite = await confirm('An .env already exists — overwrite?', false);
-      if (!overwrite) {
+      const overwrite = await confirm('An .env already exists — overwrite?', false, prompts);
+      if (overwrite === CANCELLED || !overwrite) {
         // biome-ignore lint/suspicious/noConsole: CLI output
         console.log('Aborted — existing .env left untouched.');
         return 0;
@@ -495,6 +579,16 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
     // biome-ignore lint/suspicious/noConsole: CLI output
     console.log(c('1;33', `⚠ ${plan.warnings.length} warning(s) — review above.`));
   }
+
+  // ── Next steps ────────────────────────────────────────────────────────
+  // Writing .env is the middle of the job, not the end, and the wizard used
+  // to stop here without saying so. Two things in particular are not
+  // guessable from the plan: nothing is running yet (the .env only describes
+  // what *would* run), and the `client` profile is the browser app — the
+  // desktop app is a separate native install that Compose cannot launch for
+  // you. Both of those were read as bugs before this block existed.
+  // biome-ignore lint/suspicious/noConsole: CLI output
+  console.log(printNextSteps({ plan, colorEnabled }).join('\n'));
 
   // ── Optional fetcher chaining (--fetch, off by default) ───────────────
   // Chain C-390's fetcher against EXACTLY the planned models: same manifest
@@ -546,6 +640,10 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       case '--no-color':
         options.noColor = true;
         break;
+      case '--help':
+      case '-h':
+        options.help = true;
+        break;
       case '--backend': {
         // `auto` means “decide from the detected profile” — it must not
         // reach planning as a literal backend because selectBackend() and
@@ -591,7 +689,7 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
       default:
         if (arg.startsWith('-')) {
           // biome-ignore lint/suspicious/noConsole: CLI output
-          console.warn(`ignoring unknown flag: ${arg}`);
+          console.warn(`ignoring unknown flag: ${arg} (run with --help for the flag list)`);
         }
         break;
     }

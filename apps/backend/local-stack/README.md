@@ -1,16 +1,16 @@
 # Aikami Local Stack
 
 Run the full Aikami AI stack on your own machine — text, image, voice, and
-speech-to-text engines plus an optional web client — with **two commands and
-no Python, no CUDA toolkit install, no model hunting, and no source build**.
+speech-to-text engines plus the desktop app — with **no Python, no CUDA
+toolkit install, no model hunting, and no source build**.
 
-```
-bun run stack init
-docker compose up -d
-```
+The installer downloads a checksum-verified bundle, runs a hardware wizard
+that detects your GPU and writes `.env`, and leaves you with one command —
+`aikami up` — to run the stack. See [Quick start](#quick-start) below.
 
-`stack init` detects your hardware, picks a backend and model tier, shows
-the full download plan, and writes `.env` — it is the only way `.env` is
+`stack init` (the wizard, also runnable from a repo checkout as
+`bun run stack init`) detects your hardware, picks a backend and model tier,
+shows the full download plan, and writes `.env` — it is the only way `.env` is
 created (there is no `.env.example` copy step, so nothing ever asks you to
 overwrite a hand-edited file).
 
@@ -32,45 +32,128 @@ changes.
 
 ## Quick start
 
-**One command on a machine with only Docker installed — no git clone, no
-Python, no CUDA toolkit install, no model hunting, no source build:**
+**On a machine with only Docker installed — no Python, no CUDA toolkit
+install, no model hunting, no source build.**
+
+macOS / Linux — download and run the installer script:
 
 ```bash
-curl -fsSL https://aikami.sh/install | sh
-cd "$(echo ~/.aikami-stack/bundle/local-stack-*)" && docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/BearlySleeping/aikami/main/apps/backend/local-stack/install.sh | sh
 ```
 
-The installer (C-418) downloads the compose topology, the `.env.example`,
-and a **compiled hardware-wizard binary** (`stack-init`), verifies the
-download's SHA-256 against `SHA256SUMS` **before anything is extracted**, then
-runs the wizard on your machine — never inside a container, because GPU
-detection without the host NVIDIA toolkit is unreliable — to write `.env`.
-The wizard writes `.env` into the same directory that holds `compose.yaml`
-(the compose project dir), so `docker compose up -d` reads it directly.
-Every step is logged; an existing `.env` is **never** overwritten.
+Windows — use the [contributor path](#contributor-path-source-builds) below (clone the repo and run `bun run stack init`).
+
+The installer does six logged steps: checks the platform and Docker, resolves
+the newest `local-stack-*` release, downloads that platform's bundle,
+**verifies its SHA-256 against `SHA256SUMS` before anything is extracted**,
+extracts it to a stable path, and runs the **compiled hardware-wizard binary**
+(`stack-init`) on your machine — never inside a container, because GPU
+detection from inside one is unreliable — to write `.env` next to
+`compose.yaml`. An existing `.env` is **never** overwritten.
+
+Then everything runs through one command:
+
+```
+aikami up        start the stack
+aikami status    per-service state and health
+aikami logs      follow the logs (the first run downloads models)
+aikami doctor    diagnose Docker, topology, GPU passthrough, and endpoints
+aikami client    install / launch the desktop app
+aikami wizard    re-run hardware detection
+aikami down      stop the stack (models are kept)
+aikami dir       print the project dir, for raw `docker compose`
+```
+
+`aikami` is a thin wrapper that prints every `docker compose` command it runs;
+it lives in the install dir (`%LOCALAPPDATA%\Aikami\stack` on Windows,
+`~/.aikami-stack` elsewhere) and the stack itself is always in `current/`
+underneath it — a stable path, never a version glob. Nothing stops you from
+`cd $(aikami dir) && docker compose ...` instead.
+
+### Windows notes
+
+- **Docker Desktop is the prerequisite.** If it is missing, the installer
+  offers to run `winget install --exact --id Docker.DockerDesktop`; if it is
+  installed but stopped, the installer starts it and waits for the engine
+  (a WSL2 cold start takes a minute or two).
+- **GPU:** on Windows there is no NVIDIA Container Toolkit to install. GPU
+  passthrough comes from Docker Desktop on the WSL2 backend plus a current
+  NVIDIA driver. `aikami doctor` reports whether Docker actually advertises an
+  `nvidia` runtime, and the wizard falls back to the CPU backend (with an
+  explanation) when it does not.
+- **Start Docker before installing.** The wizard picks the backend from what
+  it can see; with the engine down it cannot verify GPU passthrough and writes
+  the CPU backend. `aikami wizard` re-runs it once Docker is up.
+- The `aikami` command needs a **new terminal** after install (that is when
+  the updated user PATH is picked up).
+
+### The desktop app
+
+`aikami client` installs the newest desktop build straight from the GitHub
+release manifest the in-app updater already uses
+(`releases/latest/download/latest.json`), picks this platform's artifact
+(`aikami.exe` / `aikami.dmg` / `aikami.appimage`), and launches it. On Windows
+it also writes the app's runtime engine config —
+`%APPDATA%\com.aikami.app\aikami-assets\config.json`, the file the app reads
+before falling back to a bundled default — pointing at the ports this stack
+publishes, so a fresh install talks to your local engines with no manual
+configuration. An existing config is left untouched.
+
+The desktop app replaces the `client` profile: there is no reason to run the
+containerised web client as well.
+
+> **`client` in the wizard is the browser app, not this one.** Ticking
+> `client` starts a container serving the web build on
+> [http://localhost:5274/](http://localhost:5274/). The desktop app is a
+> native install on the host, and Compose cannot launch a host GUI — so
+> `aikami up` / `docker compose up` will never spawn it, however the profiles
+> are set. Launching it is always the explicit `aikami client`.
 
 > **Domain note (C-418 OQ-5):** `aikami.sh` is pending DNS. Until it
-> resolves, the installer defaults to GitHub releases and resolves the
-> newest release tag automatically. To pin a specific version explicitly:
+> resolves, the installers default to GitHub releases and resolve the newest
+> `local-stack-*` release tag automatically (`/releases/latest` is the wrong
+> endpoint here — it returns the desktop app's `v*` release). To pin a
+> version explicitly:
 >
 > ```bash
 > AIKAMI_STACK_VERSION=0.1.0 curl -fsSL https://aikami.sh/install | sh
 > ```
+> ```powershell
+> $env:AIKAMI_STACK_VERSION='0.1.0'; irm https://aikami.sh/install.ps1 | iex
+> ```
 >
-> The install script honours `AIKAMI_STACK_VERSION`, `AIKAMI_STACK_DIR`,
-> `AIKAMI_INSTALL_BASE_URL`, and `AIKAMI_SKIP_WIZARD` overrides, so the
-> short URL is a convenience wrapper, not a hard dependency.
+> Both honour `AIKAMI_STACK_VERSION`, `AIKAMI_STACK_DIR`,
+> `AIKAMI_INSTALL_BASE_URL`, `AIKAMI_SKIP_WIZARD`, `AIKAMI_START`,
+> `AIKAMI_CLIENT`, `AIKAMI_NO_PATH`, and `AIKAMI_YES` — env vars, not flags,
+> because neither `curl | sh` nor `irm | iex` can pass arguments.
 >
 > Release naming (single source of truth): release tag `local-stack-<ver>`,
-> asset `local-stack-<ver>.tar.gz`, checksums `SHA256SUMS`. The compiled
-> `stack-init` binary is platform-specific (linux-x64/arm64,
-> darwin-x64/arm64) — the installer detects the host platform and fails
-> with a clear message on unsupported OS/arch.
+> assets `local-stack-<ver>-<platform>.tar.gz` (`.zip` on Windows), checksums
+> `SHA256SUMS`. `stack-init` is a compiled, platform-specific binary, so each
+> platform gets its own archive (linux-x64/arm64, darwin-x64/arm64,
+> windows-x64) instead of one download carrying five binaries; the installer
+> detects the host platform and fails with a clear message on unsupported
+> OS/arch.
 
 **What the wizard does** (C-391): probes your GPU, RAM, disk, and container
 runtime, recommends a backend and model tier, shows the full download plan,
 and writes `.env` — no manual editing, no needing to know what CUDA 12 vs 13
-means. Non-interactive (CI / power users / piped installs):
+means.
+
+On a real terminal the questions are **arrow-key menus and space-to-toggle
+checkboxes** (`@clack/prompts`), each option carrying a one-line hint, so
+picking modalities is a toggle list rather than typing `text,image,voice,stt`
+by hand. Two fallbacks keep the non-interactive paths honest:
+
+| Session | Prompt UI |
+|---|---|
+| colour TTY | checkboxes / menus |
+| `NO_COLOR` or `--no-color` | line-oriented `[y/N]` and comma-separated lists |
+| either end is a pipe (`curl \| sh`, CI, tests) | no prompts at all — defaults stand |
+
+Ctrl-C at any question aborts without writing anything.
+
+Non-interactive (CI / power users / piped installs):
 
 ```bash
 bun run stack init --yes --backend cuda --modalities text,voice
@@ -447,7 +530,15 @@ provides no Metal passthrough for the engines.
 bun moon run local-stack:test      # static renders + unit tests (no docker pull)
 LOCAL_STACK_LIVE=1 bun moon run local-stack:test   # + real health probes (AC-4)
 bun moon run local-stack:lint
+bun moon run local-stack:test-install          # install.sh against a local bundle
+bun moon run local-stack:test-install-windows  # install.ps1, same contract (Windows only)
 ```
+
+The two installer self-tests serve a fake release over local HTTP and run the
+real installer against it — checksum verification, extraction, the wizard
+writing `.env` into the compose project dir, `.env` never being clobbered on
+reinstall, and a tampered archive being rejected *before* extraction. Neither
+needs Docker or the network.
 
 `scripts/check.sh` asserts every machine-checkable acceptance criterion:
 
