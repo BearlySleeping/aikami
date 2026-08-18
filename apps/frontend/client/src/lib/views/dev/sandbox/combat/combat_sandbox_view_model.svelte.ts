@@ -313,10 +313,12 @@ class CombatSandboxViewModel
       this.debug('combat-ended', event);
 
       // Track defeated enemy for persistence demo (C-147)
-      if (event.victory && event.defeatedEnemyId) {
-        if (!this.defeatedEnemyIds.includes(event.defeatedEnemyId)) {
-          this.defeatedEnemyIds = [...this.defeatedEnemyIds, event.defeatedEnemyId];
-        }
+      if (
+        event.victory &&
+        event.defeatedEnemyId &&
+        !this.defeatedEnemyIds.includes(event.defeatedEnemyId)
+      ) {
+        this.defeatedEnemyIds = [...this.defeatedEnemyIds, event.defeatedEnemyId];
       }
 
       if (event.victory) {
@@ -562,6 +564,4 @@ const _recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
  */
 export const getCombatSandboxViewModel = (
   options: CombatSandboxViewModelOptions,
-): CombatSandboxViewModel => {
-  return new CombatSandboxViewModel(options);
-};
+): CombatSandboxViewModel => new CombatSandboxViewModel(options);

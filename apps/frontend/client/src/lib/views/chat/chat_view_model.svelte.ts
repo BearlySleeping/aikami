@@ -195,7 +195,7 @@ export class ChatViewModel
   private _ttsInitialised = false;
 
   /** The NPC's entity ID in the game engine, for expression macro routing. */
-  private gameEntityId: number | undefined;
+  private _gameEntityId: number | undefined;
 
   /** Cached engine bridge — lazily created on first use. */
   private _engineBridge: EngineBridge | undefined;
@@ -219,7 +219,7 @@ export class ChatViewModel
     super(options);
     this._chatId = options.chatId;
     this._npcId = options.npcId;
-    this.gameEntityId = options.gameEntityId;
+    this._gameEntityId = options.gameEntityId;
     this._agentPipelineViewModel = options.agentPipelineViewModel;
     this.choiceButtonsViewModel = getChoiceButtonsViewModel({
       className: 'ChoiceButtonsViewModel',
@@ -499,7 +499,7 @@ export class ChatViewModel
       timestamp: new Date(),
     };
     chatService.addMessage(userMessage);
-    await this.saveMessage(text, 'user');
+    await this._saveMessage(text, 'user');
 
     // Clear the per-chat draft since the message was sent
     void draftStore.clearDraft({ chatId: this._chatId });
@@ -511,9 +511,8 @@ export class ChatViewModel
     try {
       // ── Agent Pipeline (C-236): wrap AI call through pre/post agents ──
       const pipelineVm = this._agentPipelineViewModel;
-      const generateResponse = async (): Promise<string | undefined> => {
-        return aiService.sendMessageToAI(text, this.npc ?? undefined);
-      };
+      const generateResponse = async (): Promise<string | undefined> =>
+        aiService.sendMessageToAI(text, this.npc ?? undefined);
 
       // Any previously rendered choices are stale once a new turn starts
       this.choiceButtonsViewModel.setChoices([]);
@@ -547,15 +546,15 @@ export class ChatViewModel
           this.debug('macro in response', {
             name: macro.name,
             args: macro.args,
-            entityId: this.gameEntityId,
+            entityId: this._gameEntityId,
           });
-          bridge.triggerMacro(macro.name, macro.args, this.gameEntityId);
+          bridge.triggerMacro(macro.name, macro.args, this._gameEntityId);
         }
 
         const displayText = chunkResult.displayText;
         // Show clean text (macros stripped) in the UI
         chatService.appendAIMessage(displayText);
-        await this.saveMessage(displayText, 'ai');
+        await this._saveMessage(displayText, 'ai');
 
         // Feed through sentence boundary chunker for streaming TTS
         if (this.streamingTtsEnabled) {
@@ -584,7 +583,7 @@ export class ChatViewModel
     }
     msgs[idx] = { ...msgs[idx], text: newText };
     chatService.setMessages(msgs);
-    await this.persistMessages(msgs);
+    await this._persistMessages(msgs);
   }
 
   async deleteMessage(messageId: string): Promise<void> {
@@ -592,7 +591,7 @@ export class ChatViewModel
       (m) => m.id !== messageId,
     );
     chatService.setMessages(msgs);
-    await this.persistMessages(msgs);
+    await this._persistMessages(msgs);
     // Clean up any alternatives for the deleted message
     messageBranchStore.clearAlternatives(messageId);
   }
@@ -940,7 +939,7 @@ export class ChatViewModel
         });
         msgs[idx] = { ...msgs[idx], text: response };
         chatService.setMessages(msgs);
-        await this.persistMessages(msgs);
+        await this._persistMessages(msgs);
 
         // Regenerated response invalidates choices from the old response (C-245)
         this.choiceButtonsViewModel.dismiss();
@@ -997,7 +996,7 @@ export class ChatViewModel
       attachments: [...(msgs[idx].attachments ?? []), { type: 'file', url, name: file.name }],
     };
     chatService.setMessages(msgs);
-    await this.persistMessages(msgs);
+    await this._persistMessages(msgs);
   }
 
   async updateAffection(change: number): Promise<void> {
@@ -1062,7 +1061,7 @@ export class ChatViewModel
     this._chunker.reset();
   }
 
-  private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
+  private async _saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
     const uid = authService.uid;
     const chatId = this.chat?.id;
     if (!uid || !this.npc || !chatId) {
@@ -1083,7 +1082,7 @@ export class ChatViewModel
     }
   }
 
-  private async persistMessages(msgs: MessageData[]): Promise<void> {
+  private async _persistMessages(msgs: MessageData[]): Promise<void> {
     const uid = authService.uid;
     if (!uid || !this.npc) {
       return;

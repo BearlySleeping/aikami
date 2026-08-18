@@ -83,10 +83,8 @@ export const parseBridgeTags = (input: string): TagParseResult => {
         notes.push(content);
       } else if (tagName === 'influence') {
         influences.push(content);
-      } else if (tagName === 'ooc') {
-        if (content.trim().length > 0) {
-          oocContents.push(content);
-        }
+      } else if (tagName === 'ooc' && content.trim().length > 0) {
+        oocContents.push(content);
       }
 
       pos = tagEnd;
@@ -99,10 +97,8 @@ export const parseBridgeTags = (input: string): TagParseResult => {
         notes.push(content);
       } else if (tagName === 'influence') {
         influences.push(content);
-      } else if (tagName === 'ooc') {
-        if (content.trim().length > 0) {
-          oocContents.push(content);
-        }
+      } else if (tagName === 'ooc' && content.trim().length > 0) {
+        oocContents.push(content);
       }
 
       // We've consumed everything — break out

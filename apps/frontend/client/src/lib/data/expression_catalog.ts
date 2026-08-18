@@ -434,9 +434,8 @@ export const EXPRESSION_CATALOG = [
  * Lookup an expression entry by ID.
  * Returns undefined if no entry exists for the given ID.
  */
-export const getExpressionEntry = (expressionId: ExpressionId): ExpressionEntry | undefined => {
-  return EXPRESSION_CATALOG.find((entry) => entry.id === expressionId);
-};
+export const getExpressionEntry = (expressionId: ExpressionId): ExpressionEntry | undefined =>
+  EXPRESSION_CATALOG.find((entry) => entry.id === expressionId);
 
 /**
  * Compiled keyword RegExp cache — keyed by expression ID.

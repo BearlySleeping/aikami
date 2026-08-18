@@ -1,9 +1,8 @@
 /*
  * Get a specific cookie by name
  */
-export const getCookie = (name: string): string | undefined => {
-  return document.cookie.split('; ').find((row: string) => row.startsWith(name));
-};
+export const getCookie = (name: string): string | undefined =>
+  document.cookie.split('; ').find((row: string) => row.startsWith(name));
 
 /*
  * Get the value of a specific cookie by name

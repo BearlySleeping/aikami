@@ -338,8 +338,14 @@ class ConnectionManagerViewModel
     this.editingConnectionId = undefined;
     this.isEditorOpen = true;
     // Default provider per capability
-    const defaultProvider =
-      capability === 'text' ? 'openrouter' : capability === 'image' ? 'comfyui' : 'kokoro';
+    let defaultProvider: string;
+    if (capability === 'text') {
+      defaultProvider = 'openrouter';
+    } else if (capability === 'image') {
+      defaultProvider = 'comfyui';
+    } else {
+      defaultProvider = 'kokoro';
+    }
     this.draft = {
       apiKey: '',
       baseUrl: '',

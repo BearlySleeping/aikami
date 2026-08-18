@@ -428,9 +428,7 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
             `doesn't match map dimensions (expected ${expectedLength}) at "${url}"`,
         );
       }
-      terrain = aikami.terrain.map((v: unknown): string => {
-        return typeof v === 'string' ? v : '';
-      });
+      terrain = aikami.terrain.map((v: unknown): string => (typeof v === 'string' ? v : ''));
     } else if (aikami.terrain !== undefined) {
       // C-378: malformed terrain channel — the map still loads on the
       // legacy baked-GID path, but the author needs to know the channel

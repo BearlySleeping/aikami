@@ -47,8 +47,9 @@ const destroyFn = function (this: { destroyed: boolean }) {
  * Creates an injectable `loadTexture` function that returns mock textures
  * and tracks creation / load counts.
  */
-const createMockLoader = (tracker: MockTracker) => {
-  return async (key: number): Promise<Texture> => {
+const createMockLoader =
+  (tracker: MockTracker) =>
+  async (key: number): Promise<Texture> => {
     tracker.loadCount += 1;
     const mock = {
       width: 32,
@@ -59,7 +60,6 @@ const createMockLoader = (tracker: MockTracker) => {
     tracker.textures.set(key, mock);
     return mock;
   };
-};
 
 /**
  * Creates a valid {@link LpcLayerRecipe} for test purposes.

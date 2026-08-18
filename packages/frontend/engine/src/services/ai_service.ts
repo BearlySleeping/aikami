@@ -26,13 +26,13 @@ export type ItemData = {
  * use static dialog, no procedural content).
  */
 class GameAiService {
-  private aiClient: FrontendAiInterface;
+  private _aiClient: FrontendAiInterface;
 
   /**
    * @param aiClient - The underlying AI provider.
    */
   constructor(aiClient: FrontendAiInterface) {
-    this.aiClient = aiClient;
+    this._aiClient = aiClient;
   }
 
   /**
@@ -44,7 +44,7 @@ class GameAiService {
    * @returns The NPC's spoken response.
    */
   async generateNpcDialogue(npcId: string, playerContext: string, scene?: string): Promise<string> {
-    const response = await this.aiClient.generateDialogue({
+    const response = await this._aiClient.generateDialogue({
       npcId,
       npcName: npcId,
       playerInput: playerContext,
@@ -63,7 +63,7 @@ class GameAiService {
   async generateItemDescription(item: ItemData): Promise<string> {
     const prompt = `Describe the following ${item.category} called "${item.name}"${item.material ? ` made of ${item.material}` : ''} for a fantasy RPG game. Keep it to 2-3 sentences.`;
 
-    return this.aiClient.generateContentDescription(prompt);
+    return this._aiClient.generateContentDescription(prompt);
   }
 
   /**
@@ -76,18 +76,18 @@ class GameAiService {
    * @param text - The dialog text to speak aloud.
    */
   async speakNpcDialog(text: string): Promise<void> {
-    if (!this.aiClient.capabilities.speech) {
+    if (!this._aiClient.capabilities.speech) {
       return;
     }
 
-    await this.aiClient.synthesizeSpeech(text);
+    await this._aiClient.synthesizeSpeech(text);
   }
 
   /**
    * Returns the underlying AI provider's capabilities for runtime checks.
    */
   getCapabilities() {
-    return this.aiClient.capabilities;
+    return this._aiClient.capabilities;
   }
 
   /**

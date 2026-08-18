@@ -17,6 +17,17 @@ import CombatSidebar from '$views/combat/combat_sidebar.svelte';
 import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
 import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
 
+/** Text color for a music status message by prefix. */
+const musicStatusClass = (message: string): string => {
+  if (message.startsWith('✅')) {
+    return 'text-success';
+  }
+  if (message.startsWith('❌')) {
+    return 'text-error';
+  }
+  return 'text-warning';
+};
+
 // ── URL params ──
 const params =
   typeof window !== 'undefined'
@@ -154,10 +165,7 @@ const hideControls = stateParam !== undefined && stateParam !== 'initial';
       <button type="button" class="btn btn-sm btn-ghost" onclick={stopMusic}>⏹</button>
     </div>
     {#if musicStatus}
-      <span
-        class="text-xs font-mono {musicStatus.startsWith('✅') ? 'text-success' : musicStatus.startsWith('❌') ? 'text-error' : 'text-warning'}"
-        >{musicStatus}</span
-      >
+      <span class="text-xs font-mono {musicStatusClass(musicStatus)}">{musicStatus}</span>
     {/if}
   </div>
 

@@ -7,6 +7,7 @@
  */
 
 import { parseArgs } from 'node:util';
+import { logger } from '@aikami/logger';
 import { toMode } from '@aikami/utils';
 import { $, file } from 'bun';
 import {
@@ -30,7 +31,7 @@ const verbose = values.verbose === true;
 const mode = toMode(values.mode || process.env.MODE);
 
 if (!mode) {
-  console.error('Missing --mode argument or MODE env var');
+  logger.error('Missing --mode argument or MODE env var');
   process.exit(1);
 }
 
@@ -38,7 +39,7 @@ if (!mode) {
 const projectId: string | undefined = MODE_PROJECT_MAP[mode];
 
 if (!projectId) {
-  console.error(`Unknown mode: ${mode}`);
+  logger.error(`Unknown mode: ${mode}`);
   process.exit(1);
 }
 
@@ -46,7 +47,7 @@ if (!projectId) {
 const targetSite = resolveHostingSiteId('client', projectId);
 
 if (!targetSite) {
-  console.error('No hosting site ID configured for client');
+  logger.error('No hosting site ID configured for client');
   process.exit(1);
 }
 
@@ -76,10 +77,10 @@ try {
   //    which fails with EBUSY during cache extraction. The pinned version is
   //    a devDependency and resolves locally/offline via `bunx firebase-tools`.
   if (verbose) {
-    console.log(`[deploy] mode=${mode}`);
-    console.log(`[deploy] project=${projectId}`);
-    console.log(`[deploy] hosting site=${targetSite}`);
-    console.log(`[deploy] config=${deployConfigPath}`);
+    logger.info(`[deploy] mode=${mode}`);
+    logger.info(`[deploy] project=${projectId}`);
+    logger.info(`[deploy] hosting site=${targetSite}`);
+    logger.info(`[deploy] config=${deployConfigPath}`);
     // Bun 1.3+: `$` echoes command + output by default (old `$.verbose` was removed).
     await $`bunx firebase-tools deploy --only hosting --project ${projectId} --config ${deployConfigPath} --debug`.cwd(
       process.cwd(),
@@ -91,7 +92,7 @@ try {
   }
 } catch (error) {
   const err = error as { stderr?: string; stdout?: string; message?: string };
-  console.error(err.stderr ?? err.message ?? error);
+  logger.error(err.stderr ?? err.message ?? String(error));
   process.exit(1);
 } finally {
   // 7. Cleanup

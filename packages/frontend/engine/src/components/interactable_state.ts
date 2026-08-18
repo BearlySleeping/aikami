@@ -107,6 +107,5 @@ let _activeLootTableRegistry: LootTableRegistry | undefined;
 /**
  * Returns the active loot table registry (if registered).
  */
-export const getActiveLootTableRegistry = (): LootTableRegistry | undefined => {
-  return _activeLootTableRegistry;
-};
+export const getActiveLootTableRegistry = (): LootTableRegistry | undefined =>
+  _activeLootTableRegistry;

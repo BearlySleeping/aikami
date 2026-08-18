@@ -18,6 +18,17 @@ import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
 import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
 import { inventoryService, routerService, worldStateService } from '$services';
 
+/** Text color for a save-verification message by prefix. */
+const verifyMessageClass = (message: string): string => {
+  if (message.startsWith('✅')) {
+    return 'text-success';
+  }
+  if (message.startsWith('⚠️')) {
+    return 'text-warning';
+  }
+  return 'text-error';
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Available test maps for zone transitions
 // ═══════════════════════════════════════════════════════════════════════════
@@ -127,9 +138,7 @@ if (browser) {
   setInterval(_refreshMemory, 2000);
 }
 
-const _formatMB = (bytes: number): string => {
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
+const _formatMB = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Zone transition actions
@@ -395,9 +404,7 @@ const devActions: DevAction[] = [
           Save Integrity (Position + Items)
         </h3>
         {#if saveVerifyMessage}
-          <p
-            class="text-xs font-mono break-all {saveVerifyMessage.startsWith('✅') ? 'text-success' : saveVerifyMessage.startsWith('⚠️') ? 'text-warning' : 'text-error'}"
-          >
+          <p class="text-xs font-mono break-all {verifyMessageClass(saveVerifyMessage)}">
             {saveVerifyMessage}
           </p>
         {:else}

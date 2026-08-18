@@ -1,11 +1,17 @@
 // @ts-check
 
+import { fileURLToPath } from 'node:url';
+
 import starlight from '@astrojs/starlight';
 import { defineConfig, passthroughImageService } from 'astro/config';
 
 import { PORTS } from '../../../packages/shared/constants/src/index';
 
-const monorepoRoot = new URL('../../..', import.meta.url).pathname;
+// `new URL(...).pathname` yields a leading-slash drive path (`/C:/...`) on
+// Windows, which fs and Vite's fs.allow both reject. fileURLToPath converts
+// correctly; the separators are normalized to posix so the alias values below
+// stay platform-independent.
+const monorepoRoot = fileURLToPath(new URL('../../..', import.meta.url)).replaceAll('\\', '/');
 const port = Number(process.env.PORT || PORTS.emulator.client + 10 || 5284);
 
 /**

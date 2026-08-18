@@ -115,16 +115,13 @@ export abstract class BaseFrontendClass<
       await Promise.all(
         successAnalyticsEvent.map((event) => this.logEvent(event.name, event.parameters)),
       );
-    } else {
+    } else if (errorText) {
       // TODO: add analytic events for errors?
       // or use sentry?
-
-      if (errorText) {
-        this.showSnackbar({
-          text: errorText,
-          type: 'error',
-        });
-      }
+      this.showSnackbar({
+        text: errorText,
+        type: 'error',
+      });
     }
   }
   protected showErrorNotification(error: unknown, fallbackMessage?: string): void {

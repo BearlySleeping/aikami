@@ -85,6 +85,13 @@ export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as c
 
 export const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => {
   const suffix = hour < 12 ? 'AM' : 'PM';
-  const display = hour === 0 ? '12' : hour <= 12 ? String(hour) : String(hour - 12);
+  let display: string;
+  if (hour === 0) {
+    display = '12';
+  } else if (hour <= 12) {
+    display = String(hour);
+  } else {
+    display = String(hour - 12);
+  }
   return `${display}${suffix}`;
 });

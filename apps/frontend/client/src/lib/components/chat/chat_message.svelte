@@ -46,6 +46,18 @@ function formatActionText(text: string): string {
 const messageType = $derived(detectMessageType(message.text));
 const isAction = $derived(messageType === 'action');
 const isSystem = $derived(messageType === 'system');
+const bubbleClass = $derived.by(() => {
+  if (isAction) {
+    return 'chat-bubble-accent';
+  }
+  if (isSystem) {
+    return 'chat-bubble-warning';
+  }
+  if (message.sender === 'user') {
+    return 'chat-bubble-primary';
+  }
+  return 'chat-bubble-secondary';
+});
 </script>
 
 <div class="chat {message.sender === 'user' ? 'chat-end' : 'chat-start'}">
@@ -62,15 +74,7 @@ const isSystem = $derived(messageType === 'system');
     {/if}
     <time class="text-xs opacity-50 ml-2"> {formatTime(message.timestamp)} </time>
   </div>
-  <div
-    class="chat-bubble {isAction
-      ? 'chat-bubble-accent'
-      : isSystem
-        ? 'chat-bubble-warning'
-        : message.sender === 'user'
-          ? 'chat-bubble-primary'
-          : 'chat-bubble-secondary'}"
-  >
+  <div class="chat-bubble {bubbleClass}">
     {#if isAction}
       <span class="italic">* {formatActionText(message.text)} *</span>
     {:else if ttsService.activeMessageId === message.id && ttsService.isPlaying}

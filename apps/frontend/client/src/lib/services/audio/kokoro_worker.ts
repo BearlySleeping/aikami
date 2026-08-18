@@ -135,8 +135,8 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     const response: InitializeResponse = { type: 'ready', backend: activeBackend };
     self.postMessage(response);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown initialization error';
-    const response: ErrorResponse = { type: 'error', message };
+    const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
+    const response: ErrorResponse = { type: 'error', message: errorMessage };
     self.postMessage(response);
   }
 };

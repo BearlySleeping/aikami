@@ -224,9 +224,7 @@ const _isTileBlockedFor = (
   py: number,
   mask: number,
   selfEid: number,
-): boolean => {
-  return isCellBlocked(tx, ty, mask, selfEid) || !isWalkable(px, py);
-};
+): boolean => isCellBlocked(tx, ty, mask, selfEid) || !isWalkable(px, py);
 
 /**
  * Returns the first ACTOR (living) occupant of a spatial-grid cell that the
@@ -345,10 +343,11 @@ const updateMovement = (world: World, deltaMs: number): void => {
     const bounds = getMapPixelBounds();
 
     // ── X-axis: bounding-box boundary wall ──
-    if (bounds.width > 0) {
-      if (nextX - ENTITY_HALF_WIDTH < 0 || nextX + ENTITY_HALF_WIDTH >= bounds.width) {
-        nextX = pos.x;
-      }
+    if (
+      bounds.width > 0 &&
+      (nextX - ENTITY_HALF_WIDTH < 0 || nextX + ENTITY_HALF_WIDTH >= bounds.width)
+    ) {
+      nextX = pos.x;
     }
 
     // ── X-axis: tile-level collision (only when boundary allows movement) ──
@@ -379,10 +378,8 @@ const updateMovement = (world: World, deltaMs: number): void => {
     }
 
     // ── Y-axis: bounding-box boundary wall ──
-    if (bounds.height > 0) {
-      if (nextY - ENTITY_HEIGHT_ABOVE < 0 || nextY >= bounds.height) {
-        nextY = pos.y;
-      }
+    if (bounds.height > 0 && (nextY - ENTITY_HEIGHT_ABOVE < 0 || nextY >= bounds.height)) {
+      nextY = pos.y;
     }
 
     // ── Y-axis: tile-level collision (only when boundary allows movement) ──
@@ -585,11 +582,9 @@ export const clampSpawnToWalkable = (
     }
   }
 
-  if (!found) {
-    if (!isBlocked(centerX, centerY)) {
-      clampedX = centerX;
-      clampedY = centerY;
-    }
+  if (!found && !isBlocked(centerX, centerY)) {
+    clampedX = centerX;
+    clampedY = centerY;
   }
   return { x: clampedX, y: clampedY };
 };

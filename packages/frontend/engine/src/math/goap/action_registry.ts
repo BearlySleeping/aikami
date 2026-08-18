@@ -90,9 +90,7 @@ export const initializeActionRegistry = (actions: StaticActionDefinition[]): voi
 /**
  * Returns the current action registry (read-only reference).
  */
-export const getActionRegistry = (): readonly StaticActionDefinition[] => {
-  return _actionRegistry;
-};
+export const getActionRegistry = (): readonly StaticActionDefinition[] => _actionRegistry;
 
 /**
  * Returns a single action definition by its numeric index.
@@ -100,9 +98,8 @@ export const getActionRegistry = (): readonly StaticActionDefinition[] => {
  * @param index - Action index in the registry.
  * @returns The action definition, or undefined if out of bounds.
  */
-export const getActionByIndex = (index: number): StaticActionDefinition | undefined => {
-  return _actionRegistry[index];
-};
+export const getActionByIndex = (index: number): StaticActionDefinition | undefined =>
+  _actionRegistry[index];
 
 /**
  * Clears the action registry.
@@ -130,9 +127,7 @@ export const clearActionRegistry = (): void => {
 export const evaluatePreconditions = (
   currentState: number,
   action: StaticActionDefinition,
-): boolean => {
-  return (currentState & action.preconditionUsageMask) === action.preconditionValueMask;
-};
+): boolean => (currentState & action.preconditionUsageMask) === action.preconditionValueMask;
 
 /**
  * Applies an action's effects to a world state, returning the new state.
@@ -146,9 +141,8 @@ export const evaluatePreconditions = (
  * @param action - The action whose effects to apply.
  * @returns The new world state after applying effects.
  */
-export const applyEffects = (currentState: number, action: StaticActionDefinition): number => {
-  return (currentState & ~action.effectClearMask) | action.effectSetMask;
-};
+export const applyEffects = (currentState: number, action: StaticActionDefinition): number =>
+  (currentState & ~action.effectClearMask) | action.effectSetMask;
 
 /**
  * Finds all actions whose preconditions are satisfied by the current state.

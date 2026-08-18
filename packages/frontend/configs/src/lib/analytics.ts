@@ -8,8 +8,6 @@ export {
   setUserProperties,
 } from 'firebase/analytics';
 
-const initializeAnalyticsInstance = (): Analytics => {
-  return getAnalytics(app);
-};
+const initializeAnalyticsInstance = (): Analytics => getAnalytics(app);
 
 export const analytics = initializeAnalyticsInstance();

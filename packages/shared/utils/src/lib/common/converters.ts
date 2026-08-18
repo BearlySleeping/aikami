@@ -79,21 +79,21 @@ export const getDate = (
  * @returns a readable time
  */
 export const toDisplayDuration = (time: number, showInDecisecond = false): string => {
-  time = time / 1000;
-  const getSeconds = (time: number) =>
-    showInDecisecond ? toFixedNumber(time, 1) : Math.floor(time);
+  const durationSeconds = time / 1000;
+  const getSeconds = (secondsValue: number) =>
+    showInDecisecond ? toFixedNumber(secondsValue, 1) : Math.floor(secondsValue);
 
-  if (time < 60) {
-    return `00:${time < 10 ? `0${getSeconds(time)}` : getSeconds(time)}`;
+  if (durationSeconds < 60) {
+    return `00:${durationSeconds < 10 ? `0${getSeconds(durationSeconds)}` : getSeconds(durationSeconds)}`;
   }
-  if (time < 3600) {
-    const minutes = Math.trunc(time / 60);
-    const seconds = time - minutes * 60;
+  if (durationSeconds < 3600) {
+    const minutes = Math.trunc(durationSeconds / 60);
+    const seconds = durationSeconds - minutes * 60;
     return `${minutes}:${seconds < 10 ? `0${getSeconds(seconds)}` : getSeconds(seconds)}`;
   }
-  const hours = Math.trunc(time / 3600);
-  const minutes = Math.trunc((time % 3600) / 60);
-  const seconds = Math.trunc((time % 3600) % 60);
+  const hours = Math.trunc(durationSeconds / 3600);
+  const minutes = Math.trunc((durationSeconds % 3600) / 60);
+  const seconds = Math.trunc((durationSeconds % 3600) % 60);
   return `${hours}:${minutes < 10 ? `0${minutes}` : minutes}:${
     seconds < 10 ? `0${getSeconds(seconds)}` : getSeconds(seconds)
   }`;

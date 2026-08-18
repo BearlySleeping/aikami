@@ -203,8 +203,8 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     const fetchFn = ((_input: unknown, init?: RequestInit): Promise<Response> => {
       calls.push({ signal: init?.signal ?? undefined });
       const body = new ReadableStream<Uint8Array>({
-        start(controller): void {
-          controller.enqueue(encoder.encode(sseChunk('partial')));
+        start(streamController): void {
+          streamController.enqueue(encoder.encode(sseChunk('partial')));
           // never closed — simulates a hung provider stream
         },
       });
@@ -412,8 +412,8 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
   test('handles structured response with choices[0].message.content shape', async () => {
     const payload = JSON.stringify({ name: 'Frodo', level: 10 });
     // Mock response using OpenAI's full response shape
-    const fetchFn = ((_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-      return Promise.resolve(
+    const fetchFn = ((_input: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+      Promise.resolve(
         new Response(
           JSON.stringify({
             choices: [{ message: { content: payload } }],
@@ -423,8 +423,7 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
             headers: { 'Content-Type': 'application/json' },
           },
         ),
-      );
-    }) as typeof fetch;
+      )) as typeof fetch;
 
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,

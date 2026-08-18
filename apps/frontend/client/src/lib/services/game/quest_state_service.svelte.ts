@@ -49,6 +49,17 @@ export type QuestTriggerEvent =
 const _isValidWorldStateFlag = (flag: string): boolean =>
   flag.length > 0 && flag !== '__proto__' && flag !== 'constructor' && flag !== 'prototype';
 
+/** Human-readable reward label for a quest reward definition. */
+const _rewardLabel = (reward: { type: string; itemId?: string; amount?: number }): string => {
+  if (reward.type === 'item' && reward.itemId) {
+    return `Item: ${reward.itemId}`;
+  }
+  if (reward.type === 'gold') {
+    return `Gold: ${reward.amount ?? 0}`;
+  }
+  return `XP: ${reward.amount ?? 0}`;
+};
+
 export type QuestStateServiceInterface = BaseFrontendClassInterface & {
   /** Quest data for UI consumption (quest log, tracker HUD). */
   readonly quests: QuestData[];
@@ -448,11 +459,14 @@ class QuestStateService
         }
 
         // Check reveal trigger for hidden objectives (C-339)
-        if (objectiveDef.hidden && !progressEntry.hiddenRevealed && objectiveDef.revealOn) {
-          if (this._matchesRevealTrigger(trigger, objectiveDef.revealOn)) {
-            this._revealObjective(progress, i, progressEntry);
-            changed = true;
-          }
+        if (
+          objectiveDef.hidden &&
+          !progressEntry.hiddenRevealed &&
+          objectiveDef.revealOn &&
+          this._matchesRevealTrigger(trigger, objectiveDef.revealOn)
+        ) {
+          this._revealObjective(progress, i, progressEntry);
+          changed = true;
         }
 
         // Check failure conditions (C-339)
@@ -712,12 +726,7 @@ class QuestStateService
         (questData as { rewards?: Array<{ type: string; label: string }> }).rewards =
           definition.rewards.map((r) => ({
             type: r.type,
-            label:
-              r.type === 'item' && r.itemId
-                ? `Item: ${r.itemId}`
-                : r.type === 'gold'
-                  ? `Gold: ${r.amount ?? 0}`
-                  : `XP: ${r.amount ?? 0}`,
+            label: _rewardLabel(r),
           }));
       }
 
@@ -813,10 +822,12 @@ class QuestStateService
         if (!isOptional) {
           anyRequiredFailed = true;
         }
-      } else if (progressEntry.status !== 'completed' && progressEntry.status !== 'skipped') {
-        if (!isOptional) {
-          allRequiredComplete = false;
-        }
+      } else if (
+        progressEntry.status !== 'completed' &&
+        progressEntry.status !== 'skipped' &&
+        !isOptional
+      ) {
+        allRequiredComplete = false;
       }
     }
 
@@ -1355,12 +1366,7 @@ class QuestStateService
 
     const rewardEntries = definition.rewards.map((r) => ({
       type: r.type,
-      label:
-        r.type === 'item' && r.itemId
-          ? `Item: ${r.itemId}`
-          : r.type === 'gold'
-            ? `Gold: ${r.amount ?? 0}`
-            : `XP: ${r.amount ?? 0}`,
+      label: _rewardLabel(r),
     }));
 
     const worldFlags: string[] = [];
@@ -1440,12 +1446,7 @@ class QuestStateService
           })),
           rewards: questDef.rewards.map((r) => ({
             type: r.type,
-            label:
-              r.type === 'item' && r.itemId
-                ? `Item: ${r.itemId}`
-                : r.type === 'gold'
-                  ? `Gold: ${r.amount ?? 0}`
-                  : `XP: ${r.amount ?? 0}`,
+            label: _rewardLabel(r),
           })),
           worldStateFlags: ending?.worldStateFlag ? [ending.worldStateFlag] : [],
         });

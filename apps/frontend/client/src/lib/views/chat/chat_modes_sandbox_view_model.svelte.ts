@@ -254,6 +254,4 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
  */
 export const getChatModesSandboxViewModel = (
   options: ChatViewModelOptions,
-): ChatModesSandboxViewModel => {
-  return new ChatModesSandboxViewModel(options);
-};
+): ChatModesSandboxViewModel => new ChatModesSandboxViewModel(options);

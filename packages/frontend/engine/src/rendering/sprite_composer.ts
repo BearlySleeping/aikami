@@ -141,9 +141,7 @@ const LPC_SLOT_Z_ORDER: Record<string, number> = {
 /**
  * Returns the z-depth for a slot name, defaulting to 0 for unknown slots.
  */
-const _getSlotZ = (slot: string): number => {
-  return LPC_SLOT_Z_ORDER[slot] ?? 0;
-};
+const _getSlotZ = (slot: string): number => LPC_SLOT_Z_ORDER[slot] ?? 0;
 
 /**
  * Byte size of the std140 UBO buffer.
@@ -441,8 +439,8 @@ const addPlaceholder = (container: Container): Graphics => {
  * @param paletteTexture - The 256×1 RGBA palette LUT texture.
  * @returns A configured PixiJS `Filter` instance.
  */
-const createPaletteFilter = (paletteTexture: Texture): Filter => {
-  return new Filter({
+const createPaletteFilter = (paletteTexture: Texture): Filter =>
+  new Filter({
     glProgram: getLpcProgram(),
     resources: {
       paletteUniforms: {
@@ -450,7 +448,6 @@ const createPaletteFilter = (paletteTexture: Texture): Filter => {
       },
     },
   });
-};
 
 /**
  * Composes layered sprites for an entity, optionally applying a Zero-Branch

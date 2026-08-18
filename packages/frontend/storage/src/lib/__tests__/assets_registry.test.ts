@@ -69,17 +69,15 @@ const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 const HASH_C = 'c'.repeat(64);
 
-const makeHashes = (overrides?: Partial<AssetHashesFile>): AssetHashesFile => {
-  return {
-    scannedAt: '2026-08-03T00:00:00.000Z',
-    hashes: {
-      'sprites:generic-fantasy:hero': { hash: HASH_A, sizeBytes: 1024 },
-      'music:exploration:forest': { hash: HASH_B, sizeBytes: 2048 },
-      'lpc:body:bodies_male:walk': { hash: HASH_C, sizeBytes: 4096 },
-    },
-    ...overrides,
-  };
-};
+const makeHashes = (overrides?: Partial<AssetHashesFile>): AssetHashesFile => ({
+  scannedAt: '2026-08-03T00:00:00.000Z',
+  hashes: {
+    'sprites:generic-fantasy:hero': { hash: HASH_A, sizeBytes: 1024 },
+    'music:exploration:forest': { hash: HASH_B, sizeBytes: 2048 },
+    'lpc:body:bodies_male:walk': { hash: HASH_C, sizeBytes: 4096 },
+  },
+  ...overrides,
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

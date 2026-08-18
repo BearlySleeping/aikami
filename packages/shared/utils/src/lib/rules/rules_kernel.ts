@@ -37,9 +37,8 @@ const parseDamageDice = (notation: string): { count: number; sides: number; bonu
 // ---------------------------------------------------------------------------
 
 /** Clamp a number between min and max. */
-const clamp = (value: number, min: number, max: number): number => {
-  return Math.max(min, Math.min(max, value));
-};
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
 
 /** Roll a single d20, with optional advantage/disadvantage. */
 const rollD20 = (rng: SeedableRng, advantage: boolean, disadvantage: boolean): number => {
@@ -261,25 +260,21 @@ const RESOLVERS: Record<RulesCommand['kind'], CommandResolver> = {
     const { events } = resolveDamage(cmd as Extract<RulesCommand, { kind: 'rollDamage' }>, rng);
     return { newSnapshot: { ...snap }, events };
   },
-  applyDamage: (cmd, snap, _rng) => {
-    return resolveApplyDamage(cmd as Extract<RulesCommand, { kind: 'applyDamage' }>, snap);
-  },
-  applyHealing: (cmd, snap, _rng) => {
-    return resolveApplyHealing(cmd as Extract<RulesCommand, { kind: 'applyHealing' }>, snap);
-  },
-  grantXp: (cmd, snap, _rng) => {
-    return resolveGrantXp(cmd as Extract<RulesCommand, { kind: 'grantXp' }>, snap);
-  },
+  applyDamage: (cmd, snap, _rng) =>
+    resolveApplyDamage(cmd as Extract<RulesCommand, { kind: 'applyDamage' }>, snap),
+  applyHealing: (cmd, snap, _rng) =>
+    resolveApplyHealing(cmd as Extract<RulesCommand, { kind: 'applyHealing' }>, snap),
+  grantXp: (cmd, snap, _rng) =>
+    resolveGrantXp(cmd as Extract<RulesCommand, { kind: 'grantXp' }>, snap),
   rollLoot: (cmd, snap, rng) => {
     const { events } = resolveRollLoot(cmd as Extract<RulesCommand, { kind: 'rollLoot' }>, rng);
     return { newSnapshot: { ...snap }, events };
   },
-  applyRelationshipDelta: (cmd, snap, _rng) => {
-    return resolveRelationshipDelta(
+  applyRelationshipDelta: (cmd, snap, _rng) =>
+    resolveRelationshipDelta(
       cmd as Extract<RulesCommand, { kind: 'applyRelationshipDelta' }>,
       snap,
-    );
-  },
+    ),
 };
 
 // ---------------------------------------------------------------------------
@@ -364,11 +359,9 @@ export const createMechanicalSnapshot = (options: {
   seed: number;
   commandLog: Array<{ index: number; commandKind: string }>;
   finalState: Record<string, unknown>;
-} => {
-  return {
-    version: 1,
-    seed: options.seed,
-    commandLog: options.commandLog,
-    finalState: options.finalState,
-  };
-};
+} => ({
+  version: 1,
+  seed: options.seed,
+  commandLog: options.commandLog,
+  finalState: options.finalState,
+});

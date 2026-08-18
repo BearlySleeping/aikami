@@ -35,9 +35,8 @@ const createTurso = async (): Promise<TursoStorageAdapter> => {
 
 type AdapterKind = 'wasm' | 'turso';
 
-const createAdapter = async (kind: AdapterKind): Promise<LocalDatabaseInterface> => {
-  return kind === 'wasm' ? await createWasm() : await createTurso();
-};
+const createAdapter = async (kind: AdapterKind): Promise<LocalDatabaseInterface> =>
+  kind === 'wasm' ? await createWasm() : await createTurso();
 
 /** Runs the legacy pre-C-384 path: apply schema v1 statements, no version bump. */
 const applyLegacySchema = async (db: LocalDatabaseInterface): Promise<void> => {

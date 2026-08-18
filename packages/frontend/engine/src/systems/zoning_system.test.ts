@@ -124,8 +124,8 @@ describe('zoning_system', () => {
         targetX?: number;
         targetY?: number;
       }> = [];
-      bridge.on('ZONE_TRIGGERED', (event) => {
-        events.push(event);
+      bridge.on('ZONE_TRIGGERED', (evt) => {
+        events.push(evt);
       });
 
       updateZoningSystem(world, playerId, bridge);

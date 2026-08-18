@@ -220,19 +220,17 @@ class LpcWalkTestViewModel
 
         const frameChanged = this.animFrame !== newFrame || this._currentDirection !== direction;
 
-        if (rawVx !== 0 || rawVy !== 0) {
-          // Log every 30 ticks while moving to avoid spam
-          if (this._tickLocal % 30 === 0) {
-            this.debug('lpcWalk.tick.moving', {
-              tick: this._tickLocal,
-              rawVx,
-              rawVy,
-              frame: newFrame,
-              dir: direction,
-              changed: frameChanged,
-              sprites: this._currentSprites.length,
-            });
-          }
+        // Log every 30 ticks while moving to avoid spam
+        if ((rawVx !== 0 || rawVy !== 0) && this._tickLocal % 30 === 0) {
+          this.debug('lpcWalk.tick.moving', {
+            tick: this._tickLocal,
+            rawVx,
+            rawVy,
+            frame: newFrame,
+            dir: direction,
+            changed: frameChanged,
+            sprites: this._currentSprites.length,
+          });
         }
 
         this.animFrame = newFrame;

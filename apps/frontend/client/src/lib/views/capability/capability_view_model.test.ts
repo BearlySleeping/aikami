@@ -149,9 +149,7 @@ mock.module('$services', () => ({
 const { getCapabilityViewModel } = await import('./capability_view_model.svelte');
 type Vm = ReturnType<typeof getCapabilityViewModel>;
 
-const createVm = (): Vm => {
-  return getCapabilityViewModel({ className: 'CapabilityViewModel' });
-};
+const createVm = (): Vm => getCapabilityViewModel({ className: 'CapabilityViewModel' });
 
 const setDetectionResult = (
   textStatus: string,

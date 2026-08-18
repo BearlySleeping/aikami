@@ -16,11 +16,14 @@ let { entry, previewUrl, onSelect }: Props = $props();
 
 const displayName = assetDisplayName(entry);
 
-const licenseBadge = hasNoLicense(entry)
-  ? 'Unknown'
-  : entry.licenses.length === 1
-    ? entry.licenses[0]
-    : `${entry.licenses[0]} +${entry.licenses.length - 1}`;
+let licenseBadge: string;
+if (hasNoLicense(entry)) {
+  licenseBadge = 'Unknown';
+} else if (entry.licenses.length === 1) {
+  licenseBadge = entry.licenses[0];
+} else {
+  licenseBadge = `${entry.licenses[0]} +${entry.licenses.length - 1}`;
+}
 
 const isUnknown = hasNoLicense(entry);
 </script>

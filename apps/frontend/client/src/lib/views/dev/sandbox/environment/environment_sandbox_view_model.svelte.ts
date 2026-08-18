@@ -212,6 +212,4 @@ class EnvironmentSandboxViewModel
 
 export const getEnvironmentSandboxViewModel = (
   options: EnvironmentSandboxViewModelOptions,
-): EnvironmentSandboxViewModel => {
-  return new EnvironmentSandboxViewModel(options);
-};
+): EnvironmentSandboxViewModel => new EnvironmentSandboxViewModel(options);

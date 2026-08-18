@@ -38,9 +38,7 @@ export const isAuthenticatedPage = (_route: string): boolean => {
   // All current routes are public — auth gating is handled by app boot flow.
   return false;
 };
-export const isUnauthenticatedPage = (_route: string): boolean => {
-  return false;
-};
+export const isUnauthenticatedPage = (_route: string): boolean => false;
 
 const getRoute = (routeName: RouteName): AllRoutes[RouteName] => {
   const route = routes[routeName];
@@ -89,7 +87,7 @@ export const toRouteHref = <T extends RouteName>(
 
   newURL.pathname = getRoutePath({
     pathParameters,
-    route: route,
+    route,
   });
 
   if (!clearSearchParameters && searchParametersToKeep) {

@@ -24,6 +24,17 @@ const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
   height: 384,
 });
 
+/** Status color class for an LPC diagnostic entry. */
+const diagnosticColorClass = (status: string): string => {
+  if (status === 'configured') {
+    return 'text-success';
+  }
+  if (status === 'missing_asset') {
+    return 'text-warning';
+  }
+  return 'text-error';
+};
+
 const placeholderText =
   'Paste AI recipe JSON, e.g.:\n{\n  "head": "head/heads/human_male",\n  "body": "body/bodies_male",\n  "hair": "hair/bangs_adult",\n  ...\n}';
 
@@ -107,11 +118,7 @@ $effect(() => {
 
                 <div class="flex flex-col gap-1 max-h-64 overflow-y-auto">
                   {#each viewModel.diagnostics as diag}
-                    {@const statusColor = diag.status === 'configured'
-                      ? 'text-success'
-                      : diag.status === 'missing_asset'
-                        ? 'text-warning'
-                        : 'text-error'}
+                    {@const statusColor = diagnosticColorClass(diag.status)}
 
                     <div
                       class="flex items-start gap-2 text-xs py-0.5 border-b border-base-300 last:border-0"

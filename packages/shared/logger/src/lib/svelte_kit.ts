@@ -82,6 +82,16 @@ const _proxy: LoggerInterface = {
       _logger.setLogLevel(logLevel);
     }
   },
+  get externalLoggingEnabled() {
+    return _logger?.externalLoggingEnabled ?? true;
+  },
+  setExternalLogging(enabled) {
+    if (_logger) {
+      _logger.setExternalLogging(enabled);
+    } else {
+      _buffer.push({ method: 'setExternalLogging', args: [enabled] });
+    }
+  },
   addSink(sink) {
     if (_logger) {
       _logger.addSink(sink);
@@ -136,6 +146,12 @@ export const logger: LoggerInterface = {
   },
   setLogLevel(logLevel) {
     _ensureLoaded().setLogLevel(logLevel);
+  },
+  get externalLoggingEnabled() {
+    return _ensureLoaded().externalLoggingEnabled;
+  },
+  setExternalLogging(enabled) {
+    _ensureLoaded().setExternalLogging(enabled);
   },
   addSink(sink) {
     _ensureLoaded().addSink(sink);

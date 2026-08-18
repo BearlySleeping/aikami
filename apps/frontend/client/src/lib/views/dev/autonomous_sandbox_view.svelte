@@ -14,6 +14,17 @@ type Props = {
 const { viewModel }: Props = $props();
 
 let idleSeconds = $state(10);
+
+/** Poller state label. */
+const pollerLabel = $derived.by(() => {
+  if (!viewModel.isPollerRunning) {
+    return 'STOPPED';
+  }
+  if (viewModel.isPollerPaused) {
+    return 'PAUSED';
+  }
+  return 'RUNNING';
+});
 </script>
 
 <div class="min-h-screen bg-base-200 p-8">
@@ -44,11 +55,7 @@ let idleSeconds = $state(10);
         <p
           class="text-lg font-bold {viewModel.isPollerRunning ? 'text-success' : 'text-base-content/50'}"
         >
-          {viewModel.isPollerRunning
-            ? viewModel.isPollerPaused
-              ? 'PAUSED'
-              : 'RUNNING'
-            : 'STOPPED'}
+          {pollerLabel}
         </p>
       </div>
       <div class="rounded-lg bg-base-100 p-4 border border-base-300">

@@ -702,9 +702,7 @@ const initializeEngine = (
   if (collisionGrid) {
     setTerrainGrid(buildTerrainGridFromBoolean(collisionGrid), world);
 
-    const visionWallCheck = (gx: number, gy: number): boolean => {
-      return isBlocksSight(gx, gy);
-    };
+    const visionWallCheck = (gx: number, gy: number): boolean => isBlocksSight(gx, gy);
     setVisionGrid(visionWallCheck, collisionGrid.width, collisionGrid.height);
   }
 
@@ -2022,9 +2020,7 @@ self.onmessage = (event: MessageEvent): void => {
               | { width: number; height: number }
               | undefined;
             if (cg) {
-              const visionWallCheck = (gx: number, gy: number): boolean => {
-                return isBlocksSight(gx, gy);
-              };
+              const visionWallCheck = (gx: number, gy: number): boolean => isBlocksSight(gx, gy);
               setVisionGrid(visionWallCheck, cg.width, cg.height);
             }
           }

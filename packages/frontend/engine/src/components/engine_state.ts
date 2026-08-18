@@ -44,9 +44,7 @@ let _engineStateEntityId = 0;
  *
  * @returns The singleton entity ID, or 0 if not yet initialized.
  */
-export const getEngineStateEntityId = (): number => {
-  return _engineStateEntityId;
-};
+export const getEngineStateEntityId = (): number => _engineStateEntityId;
 
 /**
  * Creates the EngineState singleton entity in the given world.
@@ -97,9 +95,8 @@ export const getSimulationState = (): number => {
  * Defaults to `true` when the EngineState singleton has not been created
  * (test environments without full engine initialization).
  */
-export const isSimulationActive = (): boolean => {
-  return getSimulationState() !== SimulationState.transitioning;
-};
+export const isSimulationActive = (): boolean =>
+  getSimulationState() !== SimulationState.transitioning;
 
 /**
  * Registers onSet and onGet observers for the EngineState component.

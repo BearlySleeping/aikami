@@ -296,14 +296,12 @@ const allCountries = [
   ['Åland Islands', 'ax', '358', 1, ['18']],
 ] as const;
 
-export const normalizedCountries = allCountries.map((country) => {
-  return {
-    areaCodes: country[4] || null,
-    dialCode: country[2],
-    id: country[1].toUpperCase(),
-    iso2: country[1].toUpperCase(),
-    label: `${country[0]} +${country[2]}`,
-    name: country[0],
-    priority: country[3] || 0,
-  };
-});
+export const normalizedCountries = allCountries.map((country) => ({
+  areaCodes: country[4] || null,
+  dialCode: country[2],
+  id: country[1].toUpperCase(),
+  iso2: country[1].toUpperCase(),
+  label: `${country[0]} +${country[2]}`,
+  name: country[0],
+  priority: country[3] || 0,
+}));

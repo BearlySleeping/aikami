@@ -38,9 +38,7 @@ const _mockLocalStorage = {
 
 // ── Helper: fresh store ─────────────────────────────────────────────────────
 
-const _freshStore = (): MacroPresetStore => {
-  return createMacroPresetStore();
-};
+const _freshStore = (): MacroPresetStore => createMacroPresetStore();
 
 describe('preset_store — CRUD', () => {
   beforeEach(() => {

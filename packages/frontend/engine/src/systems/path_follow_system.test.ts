@@ -54,9 +54,7 @@ describe('path_follow_system (C-379 AC-7)', () => {
   });
 
   /** Creates a fresh entity and returns its real eid. */
-  const nextEid = (): number => {
-    return addEntity(world);
-  };
+  const nextEid = (): number => addEntity(world);
 
   const attachPath = (eid: number, waypoints: number[], speed = 80, arriveRadius = 4): void => {
     addComponent(

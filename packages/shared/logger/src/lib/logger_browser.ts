@@ -21,6 +21,15 @@ export type FrontendLoggerInterface = LoggerInterface;
  * construction time.
  */
 export class HttpLogSink implements LogSink {
+  /**
+   * Master switch for endpoint logging. When `false`, entries are
+   * neither buffered nor flushed to the ingestion endpoint. Flipped by
+   * {@link FrontendLoggerService.setExternalLogging} (the public
+   * `logger.setExternalLogging` API), so it applies to every sink
+   * instance, including the module-level singleton.
+   */
+  static externalLoggingEnabled = true;
+
   private _buffer: LogEntry[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -30,6 +39,10 @@ export class HttpLogSink implements LogSink {
 
   write(entry: LogEntry, ..._data: unknown[]): void {
     if (typeof fetch !== 'function') {
+      return;
+    }
+    // External logging disabled — don't buffer or schedule endpoint flushes.
+    if (!HttpLogSink.externalLoggingEnabled) {
       return;
     }
     // Drop noisy per-frame render logs — they flood /api/internal_logging at 60fps
@@ -55,6 +68,11 @@ export class HttpLogSink implements LogSink {
     if (this._flushTimer) {
       clearTimeout(this._flushTimer);
       this._flushTimer = undefined;
+    }
+    // External logging disabled — drop any buffered entries without POSTing.
+    if (!HttpLogSink.externalLoggingEnabled) {
+      this._buffer.length = 0;
+      return;
     }
     if (this._buffer.length === 0) {
       return;
@@ -99,6 +117,16 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
   /** Flushes the HTTP log sink immediately. */
   flush(): void {
     this._httpSink.flush();
+  }
+
+  /**
+   * Enables or disables endpoint logging. Also flips the
+   * {@link HttpLogSink} static switch, so the sink (and any other
+   * instance) stops buffering / flushing while disabled.
+   */
+  override setExternalLogging(enabled: boolean): void {
+    super.setExternalLogging(enabled);
+    HttpLogSink.externalLoggingEnabled = enabled;
   }
 
   write(entry: LogEntry, ...data: unknown[]): void {

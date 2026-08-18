@@ -9,8 +9,6 @@ export {
   isSupported,
 } from 'firebase/remote-config';
 
-export const initializeRemoteConfigInstance = (): RemoteConfig => {
-  return getRemoteConfig(app);
-};
+export const initializeRemoteConfigInstance = (): RemoteConfig => getRemoteConfig(app);
 
 export const remoteConfig = initializeRemoteConfigInstance();

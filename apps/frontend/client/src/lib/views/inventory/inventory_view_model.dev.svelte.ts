@@ -59,6 +59,5 @@ class InventoryDevViewModel extends InventoryViewModel {
   }
 }
 
-export const getInventoryDevViewModel = (options: BaseViewModelOptions): InventoryDevViewModel => {
-  return InventoryDevViewModel.create(options) as InventoryDevViewModel;
-};
+export const getInventoryDevViewModel = (options: BaseViewModelOptions): InventoryDevViewModel =>
+  InventoryDevViewModel.create(options) as InventoryDevViewModel;

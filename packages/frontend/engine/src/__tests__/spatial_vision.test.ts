@@ -45,19 +45,18 @@ const TEST_GRID_H = 15;
 
 /** Simple wall grid: a Set of "x,y" strings that block vision. */
 const createWallSet = (walls: Array<[number, number]>): Set<string> => {
-  const set = new Set<string>();
+  const wallSet = new Set<string>();
   for (const [x, y] of walls) {
-    set.add(`${x},${y}`);
+    wallSet.add(`${x},${y}`);
   }
-  return set;
+  return wallSet;
 };
 
 /** Creates a wall-check function from a Set of wall coordinates. */
-const makeWallCheck = (walls: Set<string>) => {
-  return (gx: number, gy: number): boolean => {
-    return walls.has(`${gx},${gy}`);
-  };
-};
+const makeWallCheck =
+  (walls: Set<string>) =>
+  (gx: number, gy: number): boolean =>
+    walls.has(`${gx},${gy}`);
 
 // ---------------------------------------------------------------------------
 // bitECS world helpers
@@ -328,10 +327,8 @@ describe('castShadowcastingFov — recursive shadowcasting', () => {
       for (let x = 7; x <= 13; x++) {
         const dx = x - 10;
         const dy = y - 7;
-        if (dx * dx + dy * dy <= 9) {
-          if (visibilityMap[y * TEST_GRID_W + x] === 1) {
-            visibleCount++;
-          }
+        if (dx * dx + dy * dy <= 9 && visibilityMap[y * TEST_GRID_W + x] === 1) {
+          visibleCount++;
         }
       }
     }

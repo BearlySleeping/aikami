@@ -62,43 +62,41 @@ const _createRequest = <T>(result: T) => {
           createIndex: (..._args: unknown[]) => {},
         };
       },
-      transaction: (_storeName: string | string[], _mode: string) => {
-        return {
-          objectStore: (name: string) => {
-            const store = dbStores.get(name) ?? new Map();
-            const indexStore = new Map<string, Map<string, unknown[]>>();
-            return {
-              get: (key: string) => _createRequest(store.get(key)),
-              put: (value: Record<string, unknown>) => {
-                const key =
-                  (value as { id?: string; chatId?: string }).id ??
-                  (value as { chatId?: string }).chatId ??
-                  '';
-                store.set(key, value);
-                return _createRequest(key);
-              },
-              delete: (key: string) => {
-                store.delete(key);
-                return _createRequest(undefined);
-              },
-              getAll: () => _createRequest(Array.from(store.values())),
-              index: (indexName: string) => {
-                if (!indexStore.has(indexName)) {
-                  indexStore.set(indexName, new Map());
-                }
-                return {
-                  getAll: (key: string) => {
-                    const results = Array.from(store.values()).filter(
-                      (doc) => (doc as Record<string, unknown>)[indexName] === key,
-                    );
-                    return _createRequest(results);
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
+      transaction: (_storeName: string | string[], _mode: string) => ({
+        objectStore: (name: string) => {
+          const store = dbStores.get(name) ?? new Map();
+          const indexStore = new Map<string, Map<string, unknown[]>>();
+          return {
+            get: (key: string) => _createRequest(store.get(key)),
+            put: (value: Record<string, unknown>) => {
+              const key =
+                (value as { id?: string; chatId?: string }).id ??
+                (value as { chatId?: string }).chatId ??
+                '';
+              store.set(key, value);
+              return _createRequest(key);
+            },
+            delete: (key: string) => {
+              store.delete(key);
+              return _createRequest(undefined);
+            },
+            getAll: () => _createRequest(Array.from(store.values())),
+            index: (indexName: string) => {
+              if (!indexStore.has(indexName)) {
+                indexStore.set(indexName, new Map());
+              }
+              return {
+                getAll: (key: string) => {
+                  const results = Array.from(store.values()).filter(
+                    (doc) => (doc as Record<string, unknown>)[indexName] === key,
+                  );
+                  return _createRequest(results);
+                },
+              };
+            },
+          };
+        },
+      }),
       onclose: null as (() => void) | null,
       close: () => {},
     };
@@ -602,8 +600,14 @@ const _localServicesMock = () => ({
   campaignService: _createServiceStub(),
   aiGatewayService: Object.assign(_createServiceStub(), {
     detect: mock(async (capability: string) => {
-      const provider =
-        capability === 'image' ? 'comfyui' : capability === 'voice' ? 'kokoro' : 'ollama';
+      let provider: string;
+      if (capability === 'image') {
+        provider = 'comfyui';
+      } else if (capability === 'voice') {
+        provider = 'kokoro';
+      } else {
+        provider = 'ollama';
+      }
       return {
         capability,
         available: true,

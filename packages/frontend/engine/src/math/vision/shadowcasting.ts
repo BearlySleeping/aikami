@@ -66,9 +66,8 @@ const OCTANT_BASE_ANGLES = [
  * slope passes over the top of the cell. Used when transitioning from
  * blocked → unblocked to set the new start slope for recursion.
  */
-const _upperSlope = (col: number, row: number): number => {
-  return col === 0 ? 0 : (row - 0.5) / (col + 0.5);
-};
+const _upperSlope = (col: number, row: number): number =>
+  col === 0 ? 0 : (row - 0.5) / (col + 0.5);
 
 // ---------------------------------------------------------------------------
 // Core recursive shadowcasting for a single octant
@@ -304,9 +303,8 @@ const _computeOctantOverlap = (
 /**
  * Checks whether two intervals [a1, a2] and [b1, b2] overlap.
  */
-const _intervalOverlap = (a1: number, a2: number, b1: number, b2: number): boolean => {
-  return a1 < b2 && b1 < a2;
-};
+const _intervalOverlap = (a1: number, a2: number, b1: number, b2: number): boolean =>
+  a1 < b2 && b1 < a2;
 
 /**
  * Maps absolute angle overlap [overlapStart, overlapEnd] into octant-local

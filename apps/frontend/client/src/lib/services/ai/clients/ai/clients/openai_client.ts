@@ -38,25 +38,25 @@ class OpenAiClient implements FrontendAiInterface {
     isLocal: false,
   };
 
-  private apiClient: GameApiClientInterface;
-  private model: string;
+  private _apiClient: GameApiClientInterface;
+  private _model: string;
 
   /**
    * @param apiClient - API client for backend communication.
    * @param model - Model identifier. Default: 'gpt-4o'.
    */
   constructor(apiClient: GameApiClientInterface, model: string = 'gpt-4o') {
-    this.apiClient = apiClient;
-    this.model = model;
+    this._apiClient = apiClient;
+    this._model = model;
   }
 
   async generateDialogue(
     context: DialogueContext,
     options?: DialogueOptions,
   ): Promise<DialogueResponse> {
-    const response = await this.apiClient.post<DialogueResponse>('/api/prompt_ai', {
+    const response = await this._apiClient.post<DialogueResponse>('/api/prompt_ai', {
       provider: 'openai',
-      model: options?.model ?? this.model,
+      model: options?.model ?? this._model,
       messages: [
         ...(context.systemPrompt
           ? [{ role: 'system' as const, content: context.systemPrompt }]
@@ -78,9 +78,9 @@ class OpenAiClient implements FrontendAiInterface {
     prompt: string,
     options?: ContentDescriptionOptions,
   ): Promise<string> {
-    const response = await this.apiClient.post<DialogueResponse>('/api/prompt_ai', {
+    const response = await this._apiClient.post<DialogueResponse>('/api/prompt_ai', {
       provider: 'openai',
-      model: options?.model ?? this.model,
+      model: options?.model ?? this._model,
       messages: [
         { role: 'system', content: 'You generate concise game content descriptions.' },
         { role: 'user', content: prompt },
@@ -97,7 +97,7 @@ class OpenAiClient implements FrontendAiInterface {
   }
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<ImageResult> {
-    const response = await this.apiClient.post<ImageResult>('/api/generate_image', {
+    const response = await this._apiClient.post<ImageResult>('/api/generate_image', {
       provider: 'openai',
       prompt,
       width: options?.width,
@@ -110,9 +110,9 @@ class OpenAiClient implements FrontendAiInterface {
   async generateStructured<T>(instruction: string, schema: TSchema, context?: string): Promise<T> {
     const fullContext = context ? `${instruction}\n\nContext: ${context}` : instruction;
 
-    const response = await this.apiClient.post<{ data: T }>('/api/prompt_ai', {
+    const response = await this._apiClient.post<{ data: T }>('/api/prompt_ai', {
       provider: 'openai',
-      model: this.model,
+      model: this._model,
       messages: [
         {
           role: 'system',
@@ -129,7 +129,7 @@ class OpenAiClient implements FrontendAiInterface {
   async healthCheck(): Promise<HealthCheckResult> {
     try {
       const start = performance.now();
-      await this.apiClient.get('/api/health');
+      await this._apiClient.get('/api/health');
       const latencyMs = Math.round(performance.now() - start);
 
       return { available: true, latencyMs, message: 'OpenAI backend reachable' };

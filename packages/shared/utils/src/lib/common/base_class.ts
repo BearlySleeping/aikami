@@ -144,7 +144,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
             configurable: true,
             enumerable: descriptor.enumerable,
             writable: descriptor.writable,
-            value: function (this: T, ...args: unknown[]) {
+            value(this: T, ...args: unknown[]) {
               // 1. Auto-log the method execution (spam-deduped to avoid flooding at 60fps).
               // The spam ID is class-qualified so methods with the same name on
               // different classes are throttled independently.

@@ -841,12 +841,20 @@ const _spawnInteractable = (
   const damageDice = _getStringProperty(spawnPoint.properties, 'damageDice', '1d6');
 
   addComponent(world, eid, Interactable);
+  let itemId: string;
+  if (spawnType === 'readable') {
+    itemId = textDialogueKey;
+  } else if (spawnType === 'trap') {
+    itemId = '';
+  } else {
+    itemId = lootTableKey;
+  }
   addComponent(
     world,
     eid,
     set(Interactable, {
       type: spawnType,
-      itemId: spawnType === 'readable' ? textDialogueKey : spawnType === 'trap' ? '' : lootTableKey,
+      itemId,
       quantity: 0,
       spawnId: spawnPoint.id,
       requiredItemId: spawnType === 'trap' ? damageDice : requiredItemId,

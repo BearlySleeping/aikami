@@ -72,9 +72,15 @@ describe('GM System Integration', () => {
     const modes = ['scene', 'party', 'gm'] as const;
     for (const mode of modes) {
       const prompt = gmPromptService.assemblePrompt({ mode });
-      expect(prompt).toContain(
-        `ADDRESS MODE: ${mode === 'scene' ? 'Scene' : mode === 'party' ? 'Party' : 'GM'}`,
-      );
+      let addressLabel: string;
+      if (mode === 'scene') {
+        addressLabel = 'Scene';
+      } else if (mode === 'party') {
+        addressLabel = 'Party';
+      } else {
+        addressLabel = 'GM';
+      }
+      expect(prompt).toContain(`ADDRESS MODE: ${addressLabel}`);
     }
   });
 

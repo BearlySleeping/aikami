@@ -520,9 +520,8 @@ const _getMemberFactionIds = (world: World, eid: number): number[] => {
  * @param eid - The victim entity ID.
  * @returns Array of faction enum IDs.
  */
-const _getMemberFactions = (world: World, eid: number): number[] => {
-  return _getMemberFactionIds(world, eid);
-};
+const _getMemberFactions = (world: World, eid: number): number[] =>
+  _getMemberFactionIds(world, eid);
 
 /**
  * Checks if an entity has an IsMemberOf relation to a specific faction.

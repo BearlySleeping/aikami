@@ -71,16 +71,14 @@ const createFetchMock = (body: unknown) => {
 };
 
 /** Creates a mock fetch that returns a 404. */
-const createNotFoundFetch = () => {
-  return mock(async (_url: string) => new Response('Not Found', { status: 404 }));
-};
+const createNotFoundFetch = () =>
+  mock(async (_url: string) => new Response('Not Found', { status: 404 }));
 
 /** Creates a mock fetch that throws (network failure). */
-const createNetworkErrorFetch = () => {
-  return mock(async (_url: string) => {
+const createNetworkErrorFetch = () =>
+  mock(async (_url: string) => {
     throw new Error('Network failure');
   });
-};
 
 // ---------------------------------------------------------------------------
 // Setup / teardown

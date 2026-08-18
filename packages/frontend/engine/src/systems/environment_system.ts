@@ -340,13 +340,11 @@ export const stepEnvironment = (options: { deltaMs: number }): EnvironmentState 
  *
  * @returns The current environment state.
  */
-export const getEnvironmentState = (): EnvironmentState => {
-  return {
-    gameHour: _gameHour,
-    gameMinute: _gameMinute,
-    gameTimeSeconds: _gameTimeSeconds,
-    windVelocity: _windVelocity,
-    rainIntensity: _rainIntensity,
-    ubo: _environmentUBO,
-  };
-};
+export const getEnvironmentState = (): EnvironmentState => ({
+  gameHour: _gameHour,
+  gameMinute: _gameMinute,
+  gameTimeSeconds: _gameTimeSeconds,
+  windVelocity: _windVelocity,
+  rainIntensity: _rainIntensity,
+  ubo: _environmentUBO,
+});

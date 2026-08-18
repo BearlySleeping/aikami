@@ -380,6 +380,5 @@ export class ChatDevViewModel extends ChatViewModel {
  * Factory function — returns a ChatDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getChatDevViewModel = (options: ChatViewModelOptions): ChatDevViewModel => {
-  return new ChatDevViewModel(options);
-};
+export const getChatDevViewModel = (options: ChatViewModelOptions): ChatDevViewModel =>
+  new ChatDevViewModel(options);

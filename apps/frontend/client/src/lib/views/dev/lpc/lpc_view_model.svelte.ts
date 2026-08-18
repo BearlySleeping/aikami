@@ -565,14 +565,16 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         // Head fallback: if the configured head spritesheet fails to load,
         // retry with the default human male head. The character still renders
         // with the intended palette tint — only the spritesheet geometry changes.
-        if ((!texture || texture === Texture.EMPTY) && recipeSlot === 'head') {
-          if (LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId) {
-            this.warn('lpc.headFallback', {
-              original: recipeAssetId,
-              fallback: LPC_DEFAULT_HEAD_ASSET_ID,
-            });
-            texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
-          }
+        if (
+          (!texture || texture === Texture.EMPTY) &&
+          recipeSlot === 'head' &&
+          LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId
+        ) {
+          this.warn('lpc.headFallback', {
+            original: recipeAssetId,
+            fallback: LPC_DEFAULT_HEAD_ASSET_ID,
+          });
+          texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
         }
 
         if (!texture || texture === Texture.EMPTY) {

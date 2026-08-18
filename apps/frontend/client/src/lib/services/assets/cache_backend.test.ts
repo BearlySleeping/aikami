@@ -58,8 +58,8 @@ const makeMemoryFileHandle = (name: string, dir: MemoryDir): FileSystemFileHandl
   } as unknown as FileSystemFileHandle;
 };
 
-const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle => {
-  return {
+const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle =>
+  ({
     getDirectoryHandle: async (
       name: string,
       options?: { create?: boolean },
@@ -90,7 +90,7 @@ const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle => {
       dir.dirs.delete(name);
       dir.files.delete(name);
     },
-    entries: async function* (): AsyncIterableIterator<[string, unknown]> {
+    async *entries(): AsyncIterableIterator<[string, unknown]> {
       for (const [name, file] of dir.files) {
         yield [name, file];
       }
@@ -98,8 +98,7 @@ const makeMemoryDirHandle = (dir: MemoryDir): FileSystemDirectoryHandle => {
         yield [name, sub];
       }
     },
-  } as unknown as FileSystemDirectoryHandle;
-};
+  }) as unknown as FileSystemDirectoryHandle;
 
 /** Installs the in-memory OPFS root and returns it for assertions. */
 const installMemoryOpfs = (): MemoryDir => {

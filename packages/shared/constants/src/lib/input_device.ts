@@ -95,9 +95,8 @@ const GAMEPAD_ACTION_LABELS: Record<string, string> = {
  * @param actionId - The input action identifier.
  * @returns The gamepad glyph label (e.g. "Ⓐ").
  */
-export const gamepadActionLabel = (actionId: string): string => {
-  return GAMEPAD_ACTION_LABELS[actionId] ?? actionId;
-};
+export const gamepadActionLabel = (actionId: string): string =>
+  GAMEPAD_ACTION_LABELS[actionId] ?? actionId;
 
 // ---------------------------------------------------------------------------
 // Gamepad button mapping

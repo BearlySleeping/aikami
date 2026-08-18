@@ -53,14 +53,10 @@ const makeContentProvider = (overrides?: Partial<typeof STUB_EMBERWATCH>) => {
       const d = (data.dialogues as Record<string, string>)[key];
       return d;
     }),
-    getQuest: mock((questId: string) => {
-      return data.quests.find((q) => q.id === questId);
-    }),
+    getQuest: mock((questId: string) => data.quests.find((q) => q.id === questId)),
     getAllQuests: mock(() => data.quests),
     getAllEncounters: mock(() => data.encounters),
-    getEncounter: mock((encounterId: string) => {
-      return data.encounters.find((e) => e.id === encounterId);
-    }),
+    getEncounter: mock((encounterId: string) => data.encounters.find((e) => e.id === encounterId)),
   };
 };
 
@@ -90,8 +86,8 @@ const makeExecutors = () => {
   };
 };
 
-const makeTextGenerator = (options?: { text?: string; structured?: unknown; error?: Error }) => {
-  return mock(async (_opts: Record<string, unknown>) => {
+const makeTextGenerator = (options?: { text?: string; structured?: unknown; error?: Error }) =>
+  mock(async (_opts: Record<string, unknown>) => {
     if (options?.error) {
       throw options.error;
     }
@@ -100,7 +96,6 @@ const makeTextGenerator = (options?: { text?: string; structured?: unknown; erro
       structured: options?.structured,
     };
   });
-};
 
 /**
  * Two-call-aware generator: call 1 (no schema) streams `chunks` via

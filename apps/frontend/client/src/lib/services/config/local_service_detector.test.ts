@@ -45,25 +45,24 @@ const TEST_ENDPOINTS: ServiceEndpoint[] = [
 const createDetector = (overrides?: {
   endpoints?: ServiceEndpoint[];
   timeoutMs?: number;
-}): LocalServiceDetectorInterface => {
-  return new LocalServiceDetector({
+}): LocalServiceDetectorInterface =>
+  new LocalServiceDetector({
     endpoints: overrides?.endpoints ?? TEST_ENDPOINTS,
     timeoutMs: overrides?.timeoutMs ?? 500,
   });
-};
 
 /** Mocks global fetch to return a successful response. */
 const mockFetchSuccess = (): void => {
-  globalThis.fetch = mock((): Promise<Response> => {
-    return Promise.resolve({ ok: true, status: 200 } as Response);
-  });
+  globalThis.fetch = mock(
+    (): Promise<Response> => Promise.resolve({ ok: true, status: 200 } as Response),
+  );
 };
 
 /** Mocks global fetch to throw a network error. */
 const mockFetchError = (): void => {
-  globalThis.fetch = mock((): Promise<Response> => {
-    return Promise.reject(new TypeError('Failed to fetch'));
-  });
+  globalThis.fetch = mock(
+    (): Promise<Response> => Promise.reject(new TypeError('Failed to fetch')),
+  );
 };
 
 /** Mocks global fetch so it never resolves unless aborted. */

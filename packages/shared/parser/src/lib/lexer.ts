@@ -159,9 +159,7 @@ export const extractMacros = (text: string): MacroNode[] => {
  * @param text - The text containing macros to strip.
  * @returns Clean text with all `{{macro}}` tokens removed.
  */
-export const stripMacros = (text: string): string => {
-  return text.replace(PATTERNS.macro, '');
-};
+export const stripMacros = (text: string): string => text.replace(PATTERNS.macro, '');
 
 /**
  * Check whether a string contains an unclosed macro opening `{{`
@@ -173,6 +171,4 @@ export const stripMacros = (text: string): string => {
  * @param text - The text to inspect.
  * @returns `true` if an unclosed macro opening exists.
  */
-export const hasUnclosedMacro = (text: string): boolean => {
-  return PATTERNS.unclosedMacro.test(text);
-};
+export const hasUnclosedMacro = (text: string): boolean => PATTERNS.unclosedMacro.test(text);

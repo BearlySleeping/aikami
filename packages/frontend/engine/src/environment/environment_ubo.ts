@@ -105,9 +105,7 @@ export const DIURNAL_KEYFRAMES = [
  *
  * @returns A Float32Array of {@link ENVIRONMENT_UBO_SIZE} elements.
  */
-export const createEnvironmentUBO = (): Float32Array => {
-  return new Float32Array(ENVIRONMENT_UBO_SIZE);
-};
+export const createEnvironmentUBO = (): Float32Array => new Float32Array(ENVIRONMENT_UBO_SIZE);
 
 /**
  * Copies the contents of a source environment UBO into a destination.

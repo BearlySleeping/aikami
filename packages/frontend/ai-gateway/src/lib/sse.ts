@@ -55,11 +55,14 @@ export const readChatSseStream = async (options: {
         return;
       }
 
-      const timeout = isFirstChunk
-        ? firstChunkTimeoutMs
-        : hasReceivedContent
-          ? idleTimeoutMs
-          : firstChunkTimeoutMs;
+      let timeout: number;
+      if (isFirstChunk) {
+        timeout = firstChunkTimeoutMs;
+      } else if (hasReceivedContent) {
+        timeout = idleTimeoutMs;
+      } else {
+        timeout = firstChunkTimeoutMs;
+      }
       const result = await Promise.race([
         reader.read(),
         new Promise<never>((_, reject) =>

@@ -158,9 +158,7 @@ export const setScreenSize = (options: { width: number; height: number; scale?: 
  * Called by the serialization pipeline so the main thread can apply the
  * camera offset to the PixiJS world container.
  */
-export const getCameraPosition = (): { x: number; y: number } => {
-  return { x: cameraX, y: cameraY };
-};
+export const getCameraPosition = (): { x: number; y: number } => ({ x: cameraX, y: cameraY });
 
 /**
  * Returns the current camera zoom factor (lerped).
@@ -170,9 +168,7 @@ export const getCameraPosition = (): { x: number; y: number } => {
  *
  * Contract C-161: Spatial UI Camera
  */
-export const getCameraZoom = (): number => {
-  return currentZoom;
-};
+export const getCameraZoom = (): number => currentZoom;
 
 /**
  * Returns the screen-space position of the active dialogue NPC.
@@ -247,9 +243,10 @@ export const endDialogueZoom = (): void => {
 /**
  * Returns the current screen dimensions in CSS pixels.
  */
-export const getScreenSize = (): { width: number; height: number } => {
-  return { width: screenWidth, height: screenHeight };
-};
+export const getScreenSize = (): { width: number; height: number } => ({
+  width: screenWidth,
+  height: screenHeight,
+});
 
 /**
  * Resets all camera tracking state to defaults.

@@ -56,11 +56,14 @@ export const parseNvidiaSmi = (
     const vramMb = memMatch ? Number(memMatch[1]) : undefined;
     // Driver major decides CUDA 12 vs 13: CUDA 13 requires driver >= 570.
     const driverMajor = Number.parseInt(driverRaw ?? '', 10);
-    const cudaMajor: 12 | 13 | undefined = Number.isNaN(driverMajor)
-      ? undefined
-      : driverMajor >= 570
-        ? 13
-        : 12;
+    let cudaMajor: 12 | 13 | undefined;
+    if (Number.isNaN(driverMajor)) {
+      cudaMajor = undefined;
+    } else if (driverMajor >= 570) {
+      cudaMajor = 13;
+    } else {
+      cudaMajor = 12;
+    }
     const candidate = { name, vramMb, cudaMajor };
     if (!best || (vramMb ?? 0) > (best.vramMb ?? 0)) {
       best = candidate;

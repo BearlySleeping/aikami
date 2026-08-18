@@ -42,6 +42,37 @@ const MOCK_NPC_DATA = {
   personaId: 'sage',
 };
 
+/** Label for a dice outcome control. */
+const diceOutcomeLabel = (outcome: string): string => {
+  if (outcome === 'random') {
+    return '🎰 Random';
+  }
+  if (outcome === 'always_succeed') {
+    return '✅ Always Succeed';
+  }
+  return '❌ Always Fail';
+};
+
+/** Label for an NPC persona preset control. */
+const presetLabel = (preset: string): string => {
+  if (preset === 'sage') {
+    return '🧙 Sage';
+  }
+  if (preset === 'guard') {
+    return '🛡️ Guard';
+  }
+  if (preset === 'innkeeper') {
+    return '🍺 Innkeeper';
+  }
+  if (preset === 'blacksmith') {
+    return '⚒️ Smith';
+  }
+  if (preset === 'bandit') {
+    return '🗡️ Bandit';
+  }
+  return '💰 Merchant';
+};
+
 // ── C-401 streaming mock state ──────────────────────────────────────────
 
 /** Turn state owned by the dev mock — mirrors the real service's turnState. */
@@ -399,11 +430,7 @@ let devToolsOpen = $state(true);
                 : 'btn-ghost'}"
               onclick={() => viewModel.setDiceOutcome(outcome as DiceOutcome)}
             >
-              {outcome === 'random'
-                ? '🎰 Random'
-                : outcome === 'always_succeed'
-                  ? '✅ Always Succeed'
-                  : '❌ Always Fail'}
+              {diceOutcomeLabel(outcome)}
             </button>
           {/each}
         </div>
@@ -455,17 +482,7 @@ let devToolsOpen = $state(true);
                 : 'btn-outline'}"
               onclick={() => viewModel.setMockNpcPreset(preset as DevNpcPreset)}
             >
-              {preset === 'sage'
-                ? '🧙 Sage'
-                : preset === 'guard'
-                  ? '🛡️ Guard'
-                  : preset === 'innkeeper'
-                    ? '🍺 Innkeeper'
-                    : preset === 'blacksmith'
-                      ? '⚒️ Smith'
-                      : preset === 'bandit'
-                        ? '🗡️ Bandit'
-                        : '💰 Merchant'}
+              {presetLabel(preset)}
             </button>
           {/each}
         </div>

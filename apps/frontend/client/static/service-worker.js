@@ -21,17 +21,13 @@ const AUDIO_PATH_PREFIXES = ['/game-data/music/', '/game-data/sfx/', '/game-data
  * @param {string} pathname — URL pathname (e.g. '/game-data/music/exploration/Chainsmoker.mp3')
  * @returns {boolean}
  */
-const isAudioPath = (pathname) => {
-  return AUDIO_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-};
+const isAudioPath = (pathname) => AUDIO_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
 /**
  * Opens (or creates) a dedicated cache for audio assets.
  * @returns {Promise<Cache>}
  */
-const openAudioCache = async () => {
-  return caches.open('aikami-audio-v1');
-};
+const openAudioCache = async () => caches.open('aikami-audio-v1');
 
 /**
  * Fetches an audio asset, caches it for future Range requests,
@@ -79,11 +75,14 @@ const handleRangeRequest = async (request) => {
   const rangeHeader = request.headers.get('Range');
   if (!rangeHeader) {
     // No Range header — return full response
-    const contentType = url.endsWith('.webm')
-      ? 'audio/webm; codecs=opus'
-      : url.endsWith('.mp3')
-        ? 'audio/mpeg'
-        : 'audio/wav';
+    let contentType;
+    if (url.endsWith('.webm')) {
+      contentType = 'audio/webm; codecs=opus';
+    } else if (url.endsWith('.mp3')) {
+      contentType = 'audio/mpeg';
+    } else {
+      contentType = 'audio/wav';
+    }
     return new Response(arrayBuffer, {
       status: 200,
       headers: {
@@ -111,11 +110,14 @@ const handleRangeRequest = async (request) => {
   }
 
   const sliced = arrayBuffer.slice(start, end + 1);
-  const contentType = url.endsWith('.webm')
-    ? 'audio/webm; codecs=opus'
-    : url.endsWith('.mp3')
-      ? 'audio/mpeg'
-      : 'audio/wav';
+  let contentType;
+  if (url.endsWith('.webm')) {
+    contentType = 'audio/webm; codecs=opus';
+  } else if (url.endsWith('.mp3')) {
+    contentType = 'audio/mpeg';
+  } else {
+    contentType = 'audio/wav';
+  }
 
   return new Response(sliced, {
     status: 206,

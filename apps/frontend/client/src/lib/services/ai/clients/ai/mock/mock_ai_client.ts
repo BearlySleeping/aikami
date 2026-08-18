@@ -55,22 +55,22 @@ class MockAiClient implements FrontendAiInterface {
   };
 
   /** Seedable dialogue responses — keyed by input text pattern. */
-  private dialogueSeeds: Map<string, DialogueResponse> = new Map();
+  private _dialogueSeeds: Map<string, DialogueResponse> = new Map();
 
   /** Seedable description responses — keyed by prompt. */
-  private descriptionSeeds: Map<string, string> = new Map();
+  private _descriptionSeeds: Map<string, string> = new Map();
 
   /** Seedable structured data responses — keyed by schema name. */
-  private structuredSeeds: Map<string, unknown> = new Map();
+  private _structuredSeeds: Map<string, unknown> = new Map();
 
   /** Call history for test assertions. */
-  private callHistory: CallRecord[] = [];
+  private _callHistory: CallRecord[] = [];
 
   /** Fail mode for simulating errors. */
-  private failModeInternal: FailMode = 'none';
+  private _failModeInternal: FailMode = 'none';
 
   /** Artificial latency in milliseconds (0 = immediate). */
-  private latencyMs = 0;
+  private _latencyMs = 0;
 
   /**
    * Seeds a dialogue response for a given input pattern.
@@ -81,7 +81,7 @@ class MockAiClient implements FrontendAiInterface {
    * @param response — The dialogue response to return.
    */
   seedDialogue(pattern: string, response: DialogueResponse): void {
-    this.dialogueSeeds.set(pattern, response);
+    this._dialogueSeeds.set(pattern, response);
   }
 
   /**
@@ -91,7 +91,7 @@ class MockAiClient implements FrontendAiInterface {
    * @param response — The description text to return.
    */
   seedDescription(pattern: string, response: string): void {
-    this.descriptionSeeds.set(pattern, response);
+    this._descriptionSeeds.set(pattern, response);
   }
 
   /**
@@ -101,7 +101,7 @@ class MockAiClient implements FrontendAiInterface {
    * @param data — The structured data to return.
    */
   seedStructured<T>(pattern: string, data: T): void {
-    this.structuredSeeds.set(pattern, data as unknown);
+    this._structuredSeeds.set(pattern, data as unknown);
   }
 
   /**
@@ -110,7 +110,7 @@ class MockAiClient implements FrontendAiInterface {
    * @param mode — The fail mode.
    */
   setFailMode(mode: FailMode): void {
-    this.failModeInternal = mode;
+    this._failModeInternal = mode;
   }
 
   /**
@@ -119,26 +119,26 @@ class MockAiClient implements FrontendAiInterface {
    * @param ms — Latency in milliseconds.
    */
   setLatency(ms: number): void {
-    this.latencyMs = ms;
+    this._latencyMs = ms;
   }
 
   /**
    * Returns the full call history for test assertions.
    */
   getCallHistory(): ReadonlyArray<CallRecord> {
-    return this.callHistory;
+    return this._callHistory;
   }
 
   /**
    * Clears all seeded responses, call history, and resets fail mode.
    */
   reset(): void {
-    this.dialogueSeeds.clear();
-    this.descriptionSeeds.clear();
-    this.structuredSeeds.clear();
-    this.callHistory = [];
-    this.failModeInternal = 'none';
-    this.latencyMs = 0;
+    this._dialogueSeeds.clear();
+    this._descriptionSeeds.clear();
+    this._structuredSeeds.clear();
+    this._callHistory = [];
+    this._failModeInternal = 'none';
+    this._latencyMs = 0;
   }
 
   // -----------------------------------------------------------------------
@@ -149,9 +149,9 @@ class MockAiClient implements FrontendAiInterface {
     context: DialogueContext,
     options?: DialogueOptions,
   ): Promise<DialogueResponse> {
-    this.recordCall('generateDialogue', [context, options]);
-    await this.simulateLatency();
-    this.checkFailMode();
+    this._recordCall('generateDialogue', [context, options]);
+    await this._simulateLatency();
+    this._checkFailMode();
 
     // Check seeded responses
     for (const [pattern, response] of this.dialogueSeeds) {
@@ -171,9 +171,9 @@ class MockAiClient implements FrontendAiInterface {
     prompt: string,
     options?: ContentDescriptionOptions,
   ): Promise<string> {
-    this.recordCall('generateContentDescription', [prompt, options]);
-    await this.simulateLatency();
-    this.checkFailMode();
+    this._recordCall('generateContentDescription', [prompt, options]);
+    await this._simulateLatency();
+    this._checkFailMode();
 
     for (const [pattern, response] of this.descriptionSeeds) {
       if (prompt.includes(pattern)) {
@@ -185,9 +185,9 @@ class MockAiClient implements FrontendAiInterface {
   }
 
   async synthesizeSpeech(text: string, options?: TtsOptions): Promise<SpeechResult> {
-    this.recordCall('synthesizeSpeech', [text, options]);
-    await this.simulateLatency();
-    this.checkFailMode();
+    this._recordCall('synthesizeSpeech', [text, options]);
+    await this._simulateLatency();
+    this._checkFailMode();
 
     return {
       audioData: null,
@@ -197,9 +197,9 @@ class MockAiClient implements FrontendAiInterface {
   }
 
   async generateImage(prompt: string, options?: ImageOptions): Promise<ImageResult> {
-    this.recordCall('generateImage', [prompt, options]);
-    await this.simulateLatency();
-    this.checkFailMode();
+    this._recordCall('generateImage', [prompt, options]);
+    await this._simulateLatency();
+    this._checkFailMode();
 
     return {
       imageUrl: 'mock://placeholder.png',
@@ -210,9 +210,9 @@ class MockAiClient implements FrontendAiInterface {
   }
 
   async generateStructured<T>(instruction: string, schema: TSchema, context?: string): Promise<T> {
-    this.recordCall('generateStructured', [instruction, schema, context]);
-    await this.simulateLatency();
-    this.checkFailMode();
+    this._recordCall('generateStructured', [instruction, schema, context]);
+    await this._simulateLatency();
+    this._checkFailMode();
 
     const schemaName = String((schema as Record<string, unknown>).description) || instruction;
 
@@ -235,10 +235,10 @@ class MockAiClient implements FrontendAiInterface {
   }
 
   async healthCheck(): Promise<HealthCheckResult> {
-    this.recordCall('healthCheck', []);
-    await this.simulateLatency();
+    this._recordCall('healthCheck', []);
+    await this._simulateLatency();
 
-    if (this.failModeInternal === 'network_error') {
+    if (this._failModeInternal === 'network_error') {
       return { available: false, latencyMs: 0, message: 'Simulated network error' };
     }
 
@@ -249,18 +249,18 @@ class MockAiClient implements FrontendAiInterface {
   // Internal Helpers
   // -----------------------------------------------------------------------
 
-  private recordCall(method: string, args: unknown[]): void {
-    this.callHistory.push({ method, args, timestamp: Date.now() });
+  private _recordCall(method: string, args: unknown[]): void {
+    this._callHistory.push({ method, args, timestamp: Date.now() });
   }
 
-  private async simulateLatency(): Promise<void> {
-    if (this.latencyMs > 0) {
-      return new Promise((resolve) => setTimeout(resolve, this.latencyMs));
+  private async _simulateLatency(): Promise<void> {
+    if (this._latencyMs > 0) {
+      return new Promise((resolve) => setTimeout(resolve, this._latencyMs));
     }
   }
 
-  private checkFailMode(): void {
-    switch (this.failModeInternal) {
+  private _checkFailMode(): void {
+    switch (this._failModeInternal) {
       case 'network_error':
         throw new Error('Simulated network error');
       case 'rate_limited':

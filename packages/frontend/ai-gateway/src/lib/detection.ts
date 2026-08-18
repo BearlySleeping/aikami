@@ -204,11 +204,21 @@ export const detectTextAvailability = async (options?: {
 
 /**
  * Detects image AI availability (parity with capability_service.detectImage):
- * configured provider → available via `byok`; otherwise ComfyUI ping.
+ * configured provider → available via `byok`; otherwise a local-engine
+ * probe, then the ComfyUI dev-proxy ping.
  */
 export const detectImageAvailability = async (options?: {
   hasConfiguredProvider?: () => boolean;
   pingUrl?: string;
+  /**
+   * Probes the runtime-configured image engine and reports which one
+   * answered. The mirror of `openaiCompatUrl` on the text detector: the
+   * local stack's bundled image engine is sd-server, which speaks the
+   * A1111 surface (`/sdapi/v1/sd-models`) and has no ComfyUI
+   * `/object_info` at all, so the ping below can never see it. Without
+   * this, a healthy local image engine is reported unavailable.
+   */
+  resolveLocalEngine?: () => Promise<{ id: string } | undefined>;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   signal?: AbortSignal;
@@ -216,6 +226,7 @@ export const detectImageAvailability = async (options?: {
   const {
     hasConfiguredProvider,
     pingUrl = DEFAULT_COMFYUI_PING_URL,
+    resolveLocalEngine,
     timeoutMs = DETECTION_TIMEOUT_MS,
     fetchFn,
     signal,
@@ -234,6 +245,29 @@ export const detectImageAvailability = async (options?: {
     }
   } catch {
     // Fall through to proxy check.
+  }
+
+  // The runtime-configured engine, probed through the caller's own engine
+  // resolver so detection agrees with what generation will actually use.
+  // Runs before the proxy ping: on a static host `pingUrl` is served the SPA
+  // shell, and only the content-type guard below keeps that from reading as
+  // a live ComfyUI.
+  if (resolveLocalEngine) {
+    try {
+      const engine = await resolveLocalEngine();
+      if (engine) {
+        return {
+          capability: 'image',
+          available: true,
+          mode: 'offline',
+          provider: engine.id,
+          detail: `Local image engine reachable (${engine.id})`,
+          checkedAt: nowIso(),
+        };
+      }
+    } catch {
+      // Probe failure is "not running", never a detection error.
+    }
   }
 
   try {
@@ -261,7 +295,7 @@ export const detectImageAvailability = async (options?: {
   return {
     capability: 'image',
     available: false,
-    detail: 'ComfyUI unreachable and no image provider configured',
+    detail: 'No image engine reachable and no image provider configured',
     checkedAt: nowIso(),
   };
 };

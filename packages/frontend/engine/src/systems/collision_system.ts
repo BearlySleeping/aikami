@@ -218,9 +218,10 @@ export const resetCollisionGrid = (): void => {
  *
  * @returns The map width and height in pixels.
  */
-export const getMapPixelBounds = (): { width: number; height: number } => {
-  return { width: _mapPixelWidth, height: _mapPixelHeight };
-};
+export const getMapPixelBounds = (): { width: number; height: number } => ({
+  width: _mapPixelWidth,
+  height: _mapPixelHeight,
+});
 
 /**
  * Checks whether a pixel coordinate lies within the absolute map bounds.
@@ -481,10 +482,8 @@ export const isCellBlocked = (
   selfEid = 0,
 ): boolean => {
   // ── Absolute map tile boundary — checked FIRST, before any spatial grid ──
-  if (_terrain) {
-    if (destX < 0 || destX >= _terrain.width || destY < 0 || destY >= _terrain.height) {
-      return true;
-    }
+  if (_terrain && (destX < 0 || destX >= _terrain.width || destY < 0 || destY >= _terrain.height)) {
+    return true;
   }
 
   if (!_spatialGrid) {

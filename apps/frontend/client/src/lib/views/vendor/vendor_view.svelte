@@ -11,6 +11,17 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
+/** Price-trend text color: discounted (success), penalized (error), else warning. */
+const priceColorClass = (isDiscounted: boolean, isPenalized: boolean): string => {
+  if (isDiscounted) {
+    return 'text-success';
+  }
+  if (isPenalized) {
+    return 'text-error';
+  }
+  return 'text-warning';
+};
+
 /** Reference to the scrollable message container for auto-scroll. */
 let messageContainer = $state<HTMLDivElement>();
 
@@ -445,13 +456,7 @@ const _itemIcon = (itemId: string): string => {
                   <div class="flex-1 min-w-0">
                     <h4 class="text-sm font-semibold text-base-content truncate">{item.label}</h4>
                     <div class="flex items-center gap-1 mt-0.5">
-                      <span
-                        class="text-xs font-bold {isDiscounted
-                          ? 'text-success'
-                          : isPenalized
-                            ? 'text-error'
-                            : 'text-warning'}"
-                      >
+                      <span class="text-xs font-bold {priceColorClass(isDiscounted, isPenalized)}">
                         🪙 {finalPrice}
                       </span>
                       {#if isDiscounted}

@@ -150,45 +150,53 @@ const _fallbackSceneContext = (text: string): MusicSceneContext => {
     lower.includes('damage') ||
     lower.includes('initiative');
 
-  const locationType =
-    lower.includes('tavern') || lower.includes('inn')
-      ? 'tavern'
-      : lower.includes('dungeon') || lower.includes('cave')
-        ? 'dungeon'
-        : lower.includes('forest')
-          ? 'forest'
-          : lower.includes('town') || lower.includes('city')
-            ? 'town'
-            : 'wilderness';
+  let locationType: MusicSceneContext['locationType'];
+  if (lower.includes('tavern') || lower.includes('inn')) {
+    locationType = 'tavern';
+  } else if (lower.includes('dungeon') || lower.includes('cave')) {
+    locationType = 'dungeon';
+  } else if (lower.includes('forest')) {
+    locationType = 'forest';
+  } else if (lower.includes('town') || lower.includes('city')) {
+    locationType = 'town';
+  } else {
+    locationType = 'wilderness';
+  }
 
-  const timeOfDay =
-    lower.includes('night') || lower.includes('dark')
-      ? 'night'
-      : lower.includes('evening') || lower.includes('dusk')
-        ? 'evening'
-        : lower.includes('morning') || lower.includes('dawn')
-          ? 'morning'
-          : 'afternoon';
+  let timeOfDay: MusicSceneContext['timeOfDay'];
+  if (lower.includes('night') || lower.includes('dark')) {
+    timeOfDay = 'night';
+  } else if (lower.includes('evening') || lower.includes('dusk')) {
+    timeOfDay = 'evening';
+  } else if (lower.includes('morning') || lower.includes('dawn')) {
+    timeOfDay = 'morning';
+  } else {
+    timeOfDay = 'afternoon';
+  }
 
-  const weather =
-    lower.includes('rain') || lower.includes('storm')
-      ? 'storm'
-      : lower.includes('snow')
-        ? 'snow'
-        : lower.includes('fog') || lower.includes('mist')
-          ? 'fog'
-          : 'clear';
+  let weather: MusicSceneContext['weather'];
+  if (lower.includes('rain') || lower.includes('storm')) {
+    weather = 'storm';
+  } else if (lower.includes('snow')) {
+    weather = 'snow';
+  } else if (lower.includes('fog') || lower.includes('mist')) {
+    weather = 'fog';
+  } else {
+    weather = 'clear';
+  }
 
-  const mood =
-    lower.includes('tense') || lower.includes('fear') || lower.includes('danger')
-      ? 'tense'
-      : lower.includes('cheerful') || lower.includes('joy') || lower.includes('happy')
-        ? 'cheerful'
-        : lower.includes('mysterious') || lower.includes('strange')
-          ? 'mysterious'
-          : lower.includes('sad') || lower.includes('grief')
-            ? 'sad'
-            : 'neutral';
+  let mood: MusicSceneContext['mood'];
+  if (lower.includes('tense') || lower.includes('fear') || lower.includes('danger')) {
+    mood = 'tense';
+  } else if (lower.includes('cheerful') || lower.includes('joy') || lower.includes('happy')) {
+    mood = 'cheerful';
+  } else if (lower.includes('mysterious') || lower.includes('strange')) {
+    mood = 'mysterious';
+  } else if (lower.includes('sad') || lower.includes('grief')) {
+    mood = 'sad';
+  } else {
+    mood = 'neutral';
+  }
 
   return {
     locationType,

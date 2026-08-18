@@ -334,7 +334,7 @@ class GameUIViewModel
           className: 'DialogueOverlayViewModel',
           npcData: npc,
           onEndChat: () => gameOverlayService.endDialogue(),
-          npcDialogueService: npcDialogueService,
+          npcDialogueService,
           onStartCombat: (combatNpcData) => {
             gameOverlayService.startCombat({ enemyName: combatNpcData.npcName });
           },
@@ -499,7 +499,7 @@ class GameUIViewModel
           className: 'TalkToPartyViewModel',
           npcId: '', // populated by the party roster button
           npcName: 'Companion',
-          npcDialogueService: npcDialogueService,
+          npcDialogueService,
         });
         this.talkToPartyViewModel = vm;
 

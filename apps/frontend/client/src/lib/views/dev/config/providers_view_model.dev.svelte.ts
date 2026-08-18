@@ -66,6 +66,4 @@ export class DevProvidersViewModel extends ProvidersViewModel {
  */
 export const getDevProvidersViewModel = (
   options: ProvidersViewModelOptions,
-): DevProvidersViewModel => {
-  return new DevProvidersViewModel(options);
-};
+): DevProvidersViewModel => new DevProvidersViewModel(options);

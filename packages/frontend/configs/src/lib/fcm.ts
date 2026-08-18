@@ -4,8 +4,6 @@ import app from './app.ts';
 
 export { deleteToken, getToken, onMessage } from 'firebase/messaging';
 
-const initializeMessagingInstance = (): Messaging => {
-  return getMessaging(app);
-};
+const initializeMessagingInstance = (): Messaging => getMessaging(app);
 
 export const messaging = initializeMessagingInstance();

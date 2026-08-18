@@ -63,9 +63,7 @@ export const computeSaveModifier = (
   abilityMod: number,
   isProficient: boolean,
   proficiencyBonus: number,
-): number => {
-  return abilityMod + (isProficient ? proficiencyBonus : 0);
-};
+): number => abilityMod + (isProficient ? proficiencyBonus : 0);
 
 // ── Factory functions ────────────────────────────────────
 
@@ -128,8 +126,8 @@ export const recomputeSkills = (
   skills: CharacterSkill[],
   abilities: AbilityScores,
   proficiencyBonus: number,
-): CharacterSkill[] => {
-  return skills.map((skill) => {
+): CharacterSkill[] =>
+  skills.map((skill) => {
     const abilityMod = abilities[skill.ability]?.modifier ?? 0;
     return {
       ...skill,
@@ -141,7 +139,6 @@ export const recomputeSkills = (
       ),
     };
   });
-};
 
 /**
  * Recompute all saving throw modifiers.
@@ -150,15 +147,14 @@ export const recomputeSavingThrows = (
   saves: CharacterSavingThrow[],
   abilities: AbilityScores,
   proficiencyBonus: number,
-): CharacterSavingThrow[] => {
-  return saves.map((save) => {
+): CharacterSavingThrow[] =>
+  saves.map((save) => {
     const abilityMod = abilities[save.ability]?.modifier ?? 0;
     return {
       ...save,
       modifier: computeSaveModifier(abilityMod, save.isProficient, proficiencyBonus),
     };
   });
-};
 
 // ── AI Serialization ─────────────────────────────────────
 

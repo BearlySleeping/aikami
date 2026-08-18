@@ -7,11 +7,9 @@ import { logger } from '$logger';
  */
 export const isPWASupported = (): boolean => {
   // Check if service workers are supported
-  if ('serviceWorker' in navigator) {
+  if ('serviceWorker' in navigator && 'Manifest' in globalThis) {
     // Check if manifest is supported
-    if ('Manifest' in globalThis) {
-      return true;
-    }
+    return true;
   }
   return false;
 };

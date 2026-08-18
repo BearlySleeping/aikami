@@ -236,7 +236,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     // only when the pathname is EXACTLY that endpoint or begins with it
     // followed by '/' — never a bare unbounded startsWith() so similarly
     // prefixed routes stay protected.
-    if (enforceAppCheck && method !== 'OPTIONS' && !isAppCheckExcluded && !isClientAuthPath(pathname)) {
+    if (
+      enforceAppCheck &&
+      method !== 'OPTIONS' &&
+      !isAppCheckExcluded &&
+      !isClientAuthPath(pathname)
+    ) {
       try {
         await verifyAppCheck(request);
       } catch {

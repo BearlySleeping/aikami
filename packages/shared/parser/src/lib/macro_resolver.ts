@@ -476,6 +476,4 @@ const restoreUnknownMarkers = (text: string): string => {
 /**
  * Escapes special regex characters in a string for use in a RegExp.
  */
-const escapeRegex = (value: string): string => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

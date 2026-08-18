@@ -18,6 +18,17 @@ type Props = {
 };
 
 const { viewModel = getMusicPlayerViewModel({ className: 'MusicPlayerVM' }) }: Props = $props();
+
+/** Tooltip label for the play/pause control. */
+const playPauseTitle = $derived.by(() => {
+  if (viewModel.isPlaying) {
+    return 'Pause';
+  }
+  if (viewModel.isPaused) {
+    return 'Resume';
+  }
+  return 'Play';
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -60,7 +71,7 @@ const { viewModel = getMusicPlayerViewModel({ className: 'MusicPlayerVM' }) }: P
           class="btn btn-primary btn-sm btn-circle"
           onclick={() => viewModel.togglePlayPause()}
           aria-label={viewModel.isPlaying ? 'Pause music' : 'Play music'}
-          title={viewModel.isPlaying ? 'Pause' : viewModel.isPaused ? 'Resume' : 'Play'}
+          title={playPauseTitle}
         >
           {#if viewModel.isPlaying}
             ⏸

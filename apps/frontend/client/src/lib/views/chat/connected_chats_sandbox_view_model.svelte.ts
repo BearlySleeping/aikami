@@ -252,7 +252,7 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
     try {
       await connectedChatsService.createLink({
         sourceChatId: 'dev-ooc-chat-mock',
-        targetChatId: ConnectedChatsSandboxViewModel.DEV_CHAT_ID,
+        targetChatId: ConnectedChatsSandboxViewModel._devChatId,
       });
       this.debug('sandbox: demo link created');
     } catch {
@@ -287,7 +287,7 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
   // ── Internal helpers ───────────────────────────────────────────────
 
   /** Uses the mock chat ID directly instead of redeclaring the parent's private _chatId. */
-  private static readonly DEV_CHAT_ID = 'dev-connected-chats-game';
+  private static readonly _devChatId = 'dev-connected-chats-game';
 }
 
 /**
@@ -296,9 +296,8 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
  */
 export const getConnectedChatsSandboxViewModel = (
   options: Omit<ChatViewModelOptions, 'chatId'> & { chatId?: string },
-): ConnectedChatsSandboxViewModel => {
-  return new ConnectedChatsSandboxViewModel({
+): ConnectedChatsSandboxViewModel =>
+  new ConnectedChatsSandboxViewModel({
     ...options,
     chatId: options.chatId ?? 'dev-connected-chats-game',
   });
-};

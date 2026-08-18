@@ -217,14 +217,13 @@ const createNpcData = (overrides?: Partial<DialogueOverlayViewModelOptions['npcD
 const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
-}): DialogueOverlayViewModelInterface => {
-  return getDialogueOverlayViewModel({
+}): DialogueOverlayViewModelInterface =>
+  getDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
     npcDialogueService: mockNpcDialogueService,
   });
-};
 
 // ---------------------------------------------------------------------------
 // Tests

@@ -39,12 +39,11 @@ export const registerSerializable = (key: string, service: SerializableService<u
  * Serializes all registered services into an array of snapshots.
  * Called by GameSaveService when saving the game.
  */
-export const serializeAllServices = (): ServiceSnapshot[] => {
-  return _registry.map(({ key, service }) => ({
+export const serializeAllServices = (): ServiceSnapshot[] =>
+  _registry.map(({ key, service }) => ({
     serviceKey: key,
     data: service.serialize(),
   }));
-};
 
 /**
  * Hydrates all registered services from an array of snapshots.

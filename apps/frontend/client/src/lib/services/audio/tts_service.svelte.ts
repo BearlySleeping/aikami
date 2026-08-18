@@ -221,14 +221,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _abortController: AbortController | undefined;
-  private currentAudio: HTMLAudioElement | null = null;
+  private _currentAudio: HTMLAudioElement | null = null;
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
-  private nextStartTime = 0;
-  private wordBoundaries: WordBoundary[] = [];
-  private sourceNodes: AudioBufferSourceNode[] = [];
-  private rafId: ReturnType<typeof requestAnimationFrame> | undefined;
+  private _nextStartTime = 0;
+  private _wordBoundaries: WordBoundary[] = [];
+  private _sourceNodes: AudioBufferSourceNode[] = [];
+  private _rafId: ReturnType<typeof requestAnimationFrame> | undefined;
 
   /** Whether a server-mode TTS endpoint was detected (C-389 AC-8). */
   isKokoroServerAvailable = $state(false);
@@ -326,33 +326,33 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     // Stop HTMLAudioElement playback
-    if (this.currentAudio) {
-      this.currentAudio.pause();
-      this.currentAudio = null;
+    if (this._currentAudio) {
+      this._currentAudio.pause();
+      this._currentAudio = null;
     }
 
     // Stop all scheduled source nodes
-    for (const node of this.sourceNodes) {
+    for (const node of this._sourceNodes) {
       try {
         node.stop();
       } catch {
         // Already stopped — ignore
       }
     }
-    this.sourceNodes = [];
+    this._sourceNodes = [];
 
     // Cancel rAF loop
-    if (this.rafId !== undefined) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = undefined;
+    if (this._rafId !== undefined) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = undefined;
     }
 
     this.isPlaying = false;
     this.isSynthesizing = false;
     this.currentWordIndex = -1;
     this.activeMessageId = undefined;
-    this.nextStartTime = 0;
-    this.wordBoundaries = [];
+    this._nextStartTime = 0;
+    this._wordBoundaries = [];
     this._streamEnded = false;
   }
 
@@ -363,20 +363,20 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     // Split text into words for proportional timing
     const words = options.text.split(/\s+/).filter(Boolean);
-    this.wordBoundaries = new Array(words.length);
+    this._wordBoundaries = new Array(words.length);
 
     // Pre-compute boundary slots — actual times filled as chunks arrive
     for (let i = 0; i < words.length; i++) {
-      this.wordBoundaries[i] = { startTime: 0, endTime: 0 };
+      this._wordBoundaries[i] = { startTime: 0, endTime: 0 };
     }
 
     audioContextManager.unlock();
-    this.nextStartTime = audioContextManager.context.currentTime;
+    this._nextStartTime = audioContextManager.context.currentTime;
 
     this.isPlaying = true;
 
     // Start the rAF word-tracking loop
-    this.startWordTrackingLoop();
+    this._startWordTrackingLoop();
   }
 
   async enqueueChunk(options: { buffer: ArrayBuffer; words?: string[] }): Promise<void> {
@@ -399,16 +399,16 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     source.connect(ctx.destination);
 
     // Schedule gapless playback
-    const scheduleTime = Math.max(ctx.currentTime, this.nextStartTime);
+    const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);
     source.start(scheduleTime);
 
     // Track source for cleanup
-    this.sourceNodes.push(source);
+    this._sourceNodes.push(source);
 
     source.onended = () => {
-      const idx = this.sourceNodes.indexOf(source);
+      const idx = this._sourceNodes.indexOf(source);
       if (idx !== -1) {
-        this.sourceNodes.splice(idx, 1);
+        this._sourceNodes.splice(idx, 1);
       }
     };
 
@@ -420,15 +420,15 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       const perWordDuration = chunkDuration / words.length;
 
       let boundaryIdx = 0;
-      for (let i = 0; i < this.wordBoundaries.length; i++) {
-        if (this.wordBoundaries[i].endTime <= 0) {
+      for (let i = 0; i < this._wordBoundaries.length; i++) {
+        if (this._wordBoundaries[i].endTime <= 0) {
           boundaryIdx = i;
           break;
         }
       }
 
-      for (let w = 0; w < words.length && boundaryIdx + w < this.wordBoundaries.length; w++) {
-        this.wordBoundaries[boundaryIdx + w] = {
+      for (let w = 0; w < words.length && boundaryIdx + w < this._wordBoundaries.length; w++) {
+        this._wordBoundaries[boundaryIdx + w] = {
           startTime: chunkStartTime + w * perWordDuration,
           endTime: chunkStartTime + (w + 1) * perWordDuration,
         };
@@ -436,7 +436,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     // Advance the scheduling clock
-    this.nextStartTime = scheduleTime + chunkDuration;
+    this._nextStartTime = scheduleTime + chunkDuration;
   }
 
   endStream(): void {
@@ -530,7 +530,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
                 durationSec: (payload.pcmData.length / payload.sampleRate).toFixed(2),
               });
               audioContextManager.unlock();
-              this.nextStartTime = 0;
+              this._nextStartTime = 0;
               this.playAudioBuffer({
                 pcmData: payload.pcmData,
                 sampleRate: payload.sampleRate,
@@ -558,12 +558,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       };
 
       // Vendored ORT WASM lives in the app's static assets (C-389).
-      const baseHref =
-        typeof document !== 'undefined'
-          ? document.baseURI
-          : typeof location !== 'undefined'
-            ? location.href
-            : undefined;
+      let baseHref: string | undefined;
+      if (typeof document !== 'undefined') {
+        baseHref = document.baseURI;
+      } else if (typeof location !== 'undefined') {
+        baseHref = location.href;
+      } else {
+        baseHref = undefined;
+      }
       const wasmPath = baseHref ? new URL('/ort/', baseHref).href : '/ort/';
       this._worker.postMessage({
         action: 'initialize',
@@ -698,13 +700,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       // Track the source so stop()/dispose() can terminate this playback,
       // and drop it on ended so a stale onended cannot clear isPlaying while
       // a newer source is active.
-      this.sourceNodes.push(source);
+      this._sourceNodes.push(source);
       source.onended = () => {
-        const idx = this.sourceNodes.indexOf(source);
+        const idx = this._sourceNodes.indexOf(source);
         if (idx !== -1) {
-          this.sourceNodes.splice(idx, 1);
+          this._sourceNodes.splice(idx, 1);
         }
-        if (this.sourceNodes.length === 0) {
+        if (this._sourceNodes.length === 0) {
           this.isPlaying = false;
         }
       };
@@ -813,19 +815,19 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     source.connect(ctx.destination);
 
     // Schedule gapless playback
-    const scheduleTime = Math.max(ctx.currentTime, this.nextStartTime);
+    const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);
     source.start(scheduleTime);
 
     // Update scheduling clock
-    this.nextStartTime = scheduleTime + audioBuffer.duration;
+    this._nextStartTime = scheduleTime + audioBuffer.duration;
 
     // Track source for cleanup
-    this.sourceNodes.push(source);
+    this._sourceNodes.push(source);
 
     source.onended = () => {
-      const idx = this.sourceNodes.indexOf(source);
+      const idx = this._sourceNodes.indexOf(source);
       if (idx !== -1) {
-        this.sourceNodes.splice(idx, 1);
+        this._sourceNodes.splice(idx, 1);
       }
     };
   }
@@ -855,37 +857,37 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     await super.dispose();
   }
 
-  private startWordTrackingLoop(): void {
+  private _startWordTrackingLoop(): void {
     const ctx = audioContextManager.context;
 
     const tick = () => {
       const now = ctx.currentTime;
 
       // Find current word via binary search over boundaries
-      let wordIdx = this.findWordIndex(now);
+      let wordIdx = this._findWordIndex(now);
 
       // If we're past the last word, check if sources are all done
-      if (wordIdx >= this.wordBoundaries.length && this.sourceNodes.length === 0) {
+      if (wordIdx >= this._wordBoundaries.length && this._sourceNodes.length === 0) {
         this._cleanupStream();
         return;
       }
 
       // Fallback: if the stream has explicitly ended and all audio nodes
       // are consumed, clean up regardless of word boundary tracking state.
-      if (this._streamEnded && this.sourceNodes.length === 0) {
+      if (this._streamEnded && this._sourceNodes.length === 0) {
         this._cleanupStream();
         return;
       }
 
-      if (wordIdx >= this.wordBoundaries.length) {
-        wordIdx = this.wordBoundaries.length - 1;
+      if (wordIdx >= this._wordBoundaries.length) {
+        wordIdx = this._wordBoundaries.length - 1;
       }
 
       this.currentWordIndex = wordIdx;
-      this.rafId = requestAnimationFrame(tick);
+      this._rafId = requestAnimationFrame(tick);
     };
 
-    this.rafId = requestAnimationFrame(tick);
+    this._rafId = requestAnimationFrame(tick);
   }
 
   /**
@@ -898,20 +900,20 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this.isPlaying = false;
     this.currentWordIndex = -1;
     this.activeMessageId = undefined;
-    this.nextStartTime = 0;
-    this.wordBoundaries = [];
+    this._nextStartTime = 0;
+    this._wordBoundaries = [];
     this._streamEnded = false;
-    this.rafId = undefined;
+    this._rafId = undefined;
   }
 
-  private findWordIndex(currentTime: number): number {
+  private _findWordIndex(currentTime: number): number {
     // Binary search for the word whose time window contains currentTime
     let lo = 0;
-    let hi = this.wordBoundaries.length - 1;
+    let hi = this._wordBoundaries.length - 1;
 
     while (lo <= hi) {
       const mid = (lo + hi) >>> 1;
-      const b = this.wordBoundaries[mid];
+      const b = this._wordBoundaries[mid];
 
       if (b.startTime <= 0) {
         // Not yet filled — return previous word

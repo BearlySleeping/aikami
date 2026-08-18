@@ -224,7 +224,7 @@ class EquipmentService
     }
 
     // Find the item in inventory
-    const index = this._inventoryService.inventory.findIndex((item) => item.itemId === itemId);
+    const index = this._inventoryService.inventory.findIndex((entry) => entry.itemId === itemId);
     if (index < 0) {
       this.debug('equipItem:not-in-inventory', { itemId });
       return false;
@@ -240,7 +240,7 @@ class EquipmentService
     // Remove from inventory (reduce quantity or remove entirely).
     // Re-resolve the index — the unequip above may have mutated the array.
     const inventory = this._inventoryService.inventory;
-    const currentIndex = inventory.findIndex((item) => item.itemId === itemId);
+    const currentIndex = inventory.findIndex((entry) => entry.itemId === itemId);
     if (currentIndex < 0) {
       this.debug('equipItem:vanished-from-inventory', { itemId });
       return false;

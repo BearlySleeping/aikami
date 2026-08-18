@@ -158,9 +158,9 @@ export const getTaxIdType = (
   }
 
   // if the taxIdType is not found, try to find the correct taxId based on the value
-  for (const [taxIdType, regex] of Object.entries(TAX_ID_TYPE_REGEX_MAP)) {
+  for (const [candidateTaxIdType, regex] of Object.entries(TAX_ID_TYPE_REGEX_MAP)) {
     if (regex.test(taxIdValue)) {
-      return taxIdType as TaxIdType;
+      return candidateTaxIdType as TaxIdType;
     }
   }
 
@@ -191,9 +191,9 @@ const COUNTRY_CODE_TAX_ID_REGEX_MAP = {
  */
 export const frontendValidateTaxId = (taxIdValue: string, countryCode: CountryCode): boolean => {
   const isInCountryCodeMap = (
-    countryCode: CountryCode,
-  ): countryCode is keyof typeof COUNTRY_CODE_TAX_ID_REGEX_MAP =>
-    countryCode in COUNTRY_CODE_TAX_ID_REGEX_MAP;
+    candidateCountryCode: CountryCode,
+  ): candidateCountryCode is keyof typeof COUNTRY_CODE_TAX_ID_REGEX_MAP =>
+    candidateCountryCode in COUNTRY_CODE_TAX_ID_REGEX_MAP;
 
   if (!isInCountryCodeMap(countryCode)) {
     return taxIdValue.length > 8;

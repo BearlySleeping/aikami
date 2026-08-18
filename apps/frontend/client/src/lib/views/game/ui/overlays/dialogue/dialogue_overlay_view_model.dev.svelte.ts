@@ -220,7 +220,7 @@ export class DialogueDevViewModel
   private _npcSpriteName = $state('gandalf');
 
   /** Maps sandbox persona presets to NPC sprite folder names. */
-  private static readonly PERSONA_SPRITE_MAP: Record<DevNpcPreset, string> = {
+  private static readonly _personaSpriteMap: Record<DevNpcPreset, string> = {
     sage: 'gandalf',
     guard: 'aragon',
     innkeeper: 'gandalf',
@@ -283,7 +283,7 @@ export class DialogueDevViewModel
     self._npcData.personaId = info.personaId;
 
     // Update sprite and reset expression
-    this._npcSpriteName = DialogueDevViewModel.PERSONA_SPRITE_MAP[preset] ?? 'gandalf';
+    this._npcSpriteName = DialogueDevViewModel._personaSpriteMap[preset] ?? 'gandalf';
     this.npcExpression = 'neutral';
 
     self.messages = [

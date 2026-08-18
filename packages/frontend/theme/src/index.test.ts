@@ -14,12 +14,11 @@
 //   3. Light and dark selectors are distinct so neither mode falls back to
 //      the other.
 
+import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
 
-const readCss = (name: string): string =>
-  readFileSync(join(import.meta.dir, 'lib', name), 'utf-8');
+const readCss = (name: string): string => readFileSync(join(import.meta.dir, 'lib', name), 'utf-8');
 
 const daisyCss = readCss('brand_daisy.css');
 const tokensCss = readCss('brand_tokens.css');

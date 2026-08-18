@@ -253,7 +253,14 @@ export const formatDeepSeek = (messages: AIChatMessage[]): string => {
     if (msg.content.length === 0) {
       continue;
     }
-    const label = msg.role === 'system' ? 'System' : msg.role === 'user' ? 'User' : 'Assistant';
+    let label: string;
+    if (msg.role === 'system') {
+      label = 'System';
+    } else if (msg.role === 'user') {
+      label = 'User';
+    } else {
+      label = 'Assistant';
+    }
     parts.push(`### ${label}:\n${msg.content}`);
   }
 

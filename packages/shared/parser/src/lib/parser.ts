@@ -53,9 +53,7 @@ export type StreamBuffer = {
  *
  * @returns A new, empty StreamBuffer.
  */
-export const createStreamBuffer = (): StreamBuffer => {
-  return { buffer: '', emitted: '' };
-};
+export const createStreamBuffer = (): StreamBuffer => ({ buffer: '', emitted: '' });
 
 /**
  * Result of processing one chunk of an AI stream.
@@ -132,10 +130,8 @@ export const flushStreamBuffer = (buffer: StreamBuffer): StreamChunkResult => {
  * @param text - The display text for the system message.
  * @returns A TextNode representing a system message.
  */
-export const buildSystemMessage = (text: string): TextNode => {
-  return {
-    type: 'text' as const,
-    content: text,
-    raw: text,
-  };
-};
+export const buildSystemMessage = (text: string): TextNode => ({
+  type: 'text' as const,
+  content: text,
+  raw: text,
+});

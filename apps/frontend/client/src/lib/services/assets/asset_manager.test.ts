@@ -92,7 +92,14 @@ const installFetchMock = (handler: (url: string, init?: RequestInit) => Promise<
   const original = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    let url: string;
+    if (typeof input === 'string') {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
     calls.push(url);
     return handler(url, init);
   }) as typeof fetch;
@@ -252,8 +259,8 @@ describe('AssetManager', () => {
     // Priority-0 serves WRONG bytes (hash mismatch → discarded); priority-1
     // serves the correct bytes.
     fetchMock.restore();
-    fetchMock = installFetchMock(async (url: string) => {
-      if (url === '/mirror/source-0.png') {
+    fetchMock = installFetchMock(async (reqUrl: string) => {
+      if (reqUrl === '/mirror/source-0.png') {
         return new Response(new Blob(['wrong-bytes']));
       }
       return new Response(goodBlob);

@@ -36,17 +36,14 @@ const DEFAULT_INPUTS = {
   goals: 'Find the Heart of the Forest and seal the void rift.',
 };
 
-const createViewModel = (options?: Partial<WorldGenWizardViewModelOptions>) => {
-  return getWorldGenWizardViewModel({
+const createViewModel = (options?: Partial<WorldGenWizardViewModelOptions>) =>
+  getWorldGenWizardViewModel({
     className: 'WorldGenWizardViewModelTest',
     ...options,
   });
-};
 
 /** Create a VM pre-filled with inputs at the goals step. */
-const createPrefilledViewModel = () => {
-  return createViewModel({ initialInputs: DEFAULT_INPUTS });
-};
+const createPrefilledViewModel = () => createViewModel({ initialInputs: DEFAULT_INPUTS });
 
 // ---------------------------------------------------------------------------
 // Tests

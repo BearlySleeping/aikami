@@ -19,8 +19,13 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { logger } from '@aikami/logger';
 
-const projectDirectory = new URL('..', import.meta.url).pathname;
+// `new URL(...).pathname` keeps the URL form of the path, which on Windows is
+// a leading-slash drive path (`/C:/...`) that fs rejects. fileURLToPath is the
+// only correct file-URL → path conversion (matches svelte.config.js).
+const projectDirectory = fileURLToPath(new URL('..', import.meta.url));
 const sourceRoutes = join(projectDirectory, 'src', 'routes');
 const outputRoutes = join(projectDirectory, '.svelte-kit', 'routes-prod');
 const excludedDir = '(dev)';
@@ -36,8 +41,14 @@ const cliMode =
 const buildMode = cliMode || process.env.AIKAMI_BUILD_MODE || 'production';
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
 const isProductionBuild = buildMode === 'production';
-const includeDevRoutes =
-  devGateOverride === 'true' ? true : devGateOverride === 'false' ? false : !isProductionBuild;
+let includeDevRoutes: boolean;
+if (devGateOverride === 'true') {
+  includeDevRoutes = true;
+} else if (devGateOverride === 'false') {
+  includeDevRoutes = false;
+} else {
+  includeDevRoutes = !isProductionBuild;
+}
 
 // Keep svelte.config.js and this script on the same decision.
 process.env.AIKAMI_BUILD_MODE = buildMode;
@@ -46,10 +57,10 @@ process.env.AIKAMI_BUILD_MODE = buildMode;
 rmSync(outputRoutes, { recursive: true, force: true });
 
 if (includeDevRoutes) {
-  console.log('[gate-dev-routes] dev routes INCLUDED — no filtered copy needed');
+  logger.info('[gate-dev-routes] dev routes INCLUDED — no filtered copy needed');
 } else {
   if (!existsSync(sourceRoutes)) {
-    console.error(`[gate-dev-routes] source routes not found: ${sourceRoutes}`);
+    logger.error(`[gate-dev-routes] source routes not found: ${sourceRoutes}`);
     process.exit(1);
   }
 
@@ -59,7 +70,7 @@ if (includeDevRoutes) {
   const copyEntries = (from: string, to: string): void => {
     for (const entry of readdirSync(from, { withFileTypes: true })) {
       if (entry.isDirectory() && entry.name === excludedDir) {
-        console.log(`[gate-dev-routes] excluding (dev) route group: ${join(from, entry.name)}`);
+        logger.info(`[gate-dev-routes] excluding (dev) route group: ${join(from, entry.name)}`);
         continue;
       }
       const fromPath = join(from, entry.name);
@@ -74,5 +85,5 @@ if (includeDevRoutes) {
   };
 
   copyEntries(sourceRoutes, outputRoutes);
-  console.log(`[gate-dev-routes] wrote filtered routes to ${outputRoutes}`);
+  logger.info(`[gate-dev-routes] wrote filtered routes to ${outputRoutes}`);
 }

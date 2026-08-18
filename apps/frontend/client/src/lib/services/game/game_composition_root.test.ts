@@ -111,7 +111,14 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     // Bun rejects relative URLs (ERR_INVALID_URL); serve the content-pack
     // manifest that GameCompositionRoot.initialize() fetches via loadContentPack.
     globalThis.fetch = mock((input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.href;
+      } else {
+        url = input.url;
+      }
       if (url.endsWith('/content-packs/emberwatch/manifest.json')) {
         return Promise.resolve({
           ok: true,

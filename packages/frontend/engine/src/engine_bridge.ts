@@ -115,22 +115,22 @@ let nextListenerId = 0;
 
 class EngineBridgeImpl implements EngineBridge {
   /** Ordered map of listener entries keyed by incrementing ID. */
-  private readonly listeners = new Map<number, ListenerEntry>();
+  private readonly _listeners = new Map<number, ListenerEntry>();
 
   /** Lookup: command type → set of command handlers. */
-  private readonly commandHandlers = new Map<
+  private readonly _commandHandlers = new Map<
     GameCommand['type'],
     Set<(cmd: GameCommand) => void>
   >();
 
   /** Whether the game engine is initialized and running. */
-  private ready = false;
+  private _ready = false;
 
   // ---- EngineBridge implementation ------------------------------------
 
   /** @inheritdoc */
   send(command: GameCommand): void {
-    const handlers = this.commandHandlers.get(command.type);
+    const handlers = this._commandHandlers.get(command.type);
     if (!handlers) {
       return;
     }
@@ -150,16 +150,16 @@ class EngineBridgeImpl implements EngineBridge {
       eventType,
       handler: handler as (event: GameEvent) => void,
     };
-    this.listeners.set(id, entry);
+    this._listeners.set(id, entry);
 
     return (): void => {
-      this.listeners.delete(id);
+      this._listeners.delete(id);
     };
   }
 
   /** @inheritdoc */
   emit(event: GameEvent): void {
-    for (const entry of this.listeners.values()) {
+    for (const entry of this._listeners.values()) {
       if (entry.eventType === event.type) {
         entry.handler(event);
       }
@@ -168,7 +168,7 @@ class EngineBridgeImpl implements EngineBridge {
 
   /** @inheritdoc */
   isReady(): boolean {
-    return this.ready;
+    return this._ready;
   }
 
   /** @inheritdoc */
@@ -230,19 +230,19 @@ class EngineBridgeImpl implements EngineBridge {
     commandType: T,
     handler: (command: Extract<GameCommand, { type: T }>) => void,
   ): () => void {
-    const existing = this.commandHandlers.get(commandType);
+    const existing = this._commandHandlers.get(commandType);
     if (existing) {
       existing.add(handler as (cmd: GameCommand) => void);
     } else {
-      this.commandHandlers.set(commandType, new Set([handler as (cmd: GameCommand) => void]));
+      this._commandHandlers.set(commandType, new Set([handler as (cmd: GameCommand) => void]));
     }
 
     return (): void => {
-      const set = this.commandHandlers.get(commandType);
+      const set = this._commandHandlers.get(commandType);
       if (set) {
         set.delete(handler as (cmd: GameCommand) => void);
         if (set.size === 0) {
-          this.commandHandlers.delete(commandType);
+          this._commandHandlers.delete(commandType);
         }
       }
     };
@@ -259,18 +259,18 @@ class EngineBridgeImpl implements EngineBridge {
    * initialization completes.
    */
   setReady(value: boolean): void {
-    this.ready = value;
+    this._ready = value;
   }
 
   /**
    * Removes all listeners and command handlers. Called on GameWorld destroy.
    */
   reset(): void {
-    this.listeners.clear();
-    this.commandHandlers.clear();
+    this._listeners.clear();
+    this._commandHandlers.clear();
     this._snapshotHandler = undefined;
     this._restoreHandler = undefined;
-    this.ready = false;
+    this._ready = false;
   }
 
   /**
@@ -332,33 +332,33 @@ const createEngineBridge = (): EngineBridgeImpl => {
  * A fully in-memory {@link EngineBridge} implementation for unit tests.
  */
 export class MockEngineBridge implements EngineBridge {
-  private readonly impl = new EngineBridgeImpl();
+  private readonly _impl = new EngineBridgeImpl();
 
   send(command: GameCommand): void {
-    this.impl.send(command);
+    this._impl.send(command);
   }
 
   on<T extends GameEvent['type']>(
     eventType: T,
     handler: (event: Extract<GameEvent, { type: T }>) => void,
   ): () => void {
-    return this.impl.on(eventType, handler);
+    return this._impl.on(eventType, handler);
   }
 
   emit(event: GameEvent): void {
-    this.impl.emit(event);
+    this._impl.emit(event);
   }
 
   isReady(): boolean {
-    return this.impl.isReady();
+    return this._impl.isReady();
   }
 
   executeCommand(cmd: string, args: string[]): void {
-    this.impl.executeCommand(cmd, args);
+    this._impl.executeCommand(cmd, args);
   }
 
   triggerMacro(macro: string, args: string[], entityId?: number): void {
-    this.impl.triggerMacro(macro, args, entityId);
+    this._impl.triggerMacro(macro, args, entityId);
   }
 
   /** @see EngineBridgeImpl.onCommand */
@@ -366,42 +366,42 @@ export class MockEngineBridge implements EngineBridge {
     commandType: T,
     handler: (command: Extract<GameCommand, { type: T }>) => void,
   ): () => void {
-    return this.impl.onCommand(commandType, handler);
+    return this._impl.onCommand(commandType, handler);
   }
 
   /** @see EngineBridgeImpl.setReady */
   setReady(value: boolean): void {
-    this.impl.setReady(value);
+    this._impl.setReady(value);
   }
 
   /** @see EngineBridgeImpl.setSnapshotHandler */
   setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
-    this.impl.setSnapshotHandler(handler);
+    this._impl.setSnapshotHandler(handler);
   }
 
   /** @see EngineBridgeImpl.setRestoreHandler */
   setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
-    this.impl.setRestoreHandler(handler);
+    this._impl.setRestoreHandler(handler);
   }
 
   /** @inheritdoc */
   async createSnapshot(scope?: 'player' | 'world'): Promise<string> {
-    return this.impl.createSnapshot(scope);
+    return this._impl.createSnapshot(scope);
   }
 
   /** @inheritdoc */
   async restoreSnapshot(snapshot: string): Promise<void> {
-    return this.impl.restoreSnapshot(snapshot);
+    return this._impl.restoreSnapshot(snapshot);
   }
 
   /** @see EngineBridgeImpl.reset */
   reset(): void {
-    this.impl.reset();
+    this._impl.reset();
   }
 
   /** Returns the number of registered event listeners. */
   listenerCount(): number {
-    return (this.impl as unknown as { listeners: Map<number, unknown> }).listeners.size;
+    return (this._impl as unknown as { listeners: Map<number, unknown> }).listeners.size;
   }
 }
 

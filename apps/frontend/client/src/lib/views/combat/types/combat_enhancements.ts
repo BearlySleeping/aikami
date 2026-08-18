@@ -232,6 +232,5 @@ export type DamageTypeKey = keyof typeof DAMAGE_TYPE_COLORS;
  * @param damageType - The damage type name (e.g. "fire", "slashing").
  * @returns The Tailwind color class, or undefined if not found.
  */
-export const getDamageTypeColor = (damageType: string): string | undefined => {
-  return DAMAGE_TYPE_COLORS[damageType as DamageTypeKey];
-};
+export const getDamageTypeColor = (damageType: string): string | undefined =>
+  DAMAGE_TYPE_COLORS[damageType as DamageTypeKey];

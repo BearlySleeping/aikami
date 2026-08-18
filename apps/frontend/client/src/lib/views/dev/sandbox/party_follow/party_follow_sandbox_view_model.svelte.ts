@@ -406,8 +406,22 @@ class PartyFollowSandboxViewModel
 
       // Base velocity: mirror the player's movement direction.
       // When the player is moving, followers move in the same direction.
-      let vx = pdx > 0 ? FOLLOW_SPEED : pdx < 0 ? -FOLLOW_SPEED : 0;
-      let vy = pdy > 0 ? FOLLOW_SPEED : pdy < 0 ? -FOLLOW_SPEED : 0;
+      let vx: number;
+      if (pdx > 0) {
+        vx = FOLLOW_SPEED;
+      } else if (pdx < 0) {
+        vx = -FOLLOW_SPEED;
+      } else {
+        vx = 0;
+      }
+      let vy: number;
+      if (pdy > 0) {
+        vy = FOLLOW_SPEED;
+      } else if (pdy < 0) {
+        vy = -FOLLOW_SPEED;
+      } else {
+        vy = 0;
+      }
 
       // Add a small pull toward the offset target so followers spread out
       // and don't stack directly on the player.
@@ -437,6 +451,4 @@ class PartyFollowSandboxViewModel
 
 export const getPartyFollowSandboxViewModel = (
   options: PartyFollowSandboxViewModelOptions,
-): PartyFollowSandboxViewModel => {
-  return new PartyFollowSandboxViewModel(options);
-};
+): PartyFollowSandboxViewModel => new PartyFollowSandboxViewModel(options);

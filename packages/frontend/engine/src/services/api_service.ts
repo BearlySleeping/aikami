@@ -54,13 +54,13 @@ export type GameState = {
  * This service is optional — the game engine works in offline mode without it.
  */
 class GameApiService {
-  private client: GameApiClientInterface;
+  private _client: GameApiClientInterface;
 
   /**
    * @param client - The underlying HTTP client.
    */
   constructor(client: GameApiClientInterface) {
-    this.client = client;
+    this._client = client;
   }
 
   /**
@@ -70,7 +70,7 @@ class GameApiService {
    * @returns NPC data including description, dialog, and texture key.
    */
   async fetchNpcData(npcId: string): Promise<NpcData> {
-    return this.client.get<NpcData>(`/api/npc/${encodeURIComponent(npcId)}`);
+    return this._client.get<NpcData>(`/api/npc/${encodeURIComponent(npcId)}`);
   }
 
   /**
@@ -80,7 +80,7 @@ class GameApiService {
    * @returns Result indicating success or failure.
    */
   async submitPlayerAction(action: PlayerAction): Promise<ActionResult> {
-    return this.client.post<ActionResult, PlayerAction>('/api/game/action', action);
+    return this._client.post<ActionResult, PlayerAction>('/api/game/action', action);
   }
 
   /**
@@ -89,7 +89,7 @@ class GameApiService {
    * @param state - The game state to persist.
    */
   async saveCheckpoint(state: GameState): Promise<void> {
-    await this.client.post<void, GameState>('/api/game/checkpoint', state);
+    await this._client.post<void, GameState>('/api/game/checkpoint', state);
   }
 
   /**
@@ -100,7 +100,9 @@ class GameApiService {
    */
   async loadCheckpoint(slotId: string): Promise<GameState | null> {
     try {
-      return await this.client.get<GameState>(`/api/game/checkpoint/${encodeURIComponent(slotId)}`);
+      return await this._client.get<GameState>(
+        `/api/game/checkpoint/${encodeURIComponent(slotId)}`,
+      );
     } catch {
       return null;
     }

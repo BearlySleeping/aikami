@@ -7,7 +7,7 @@ import type {
   UserMetadata,
 } from '@aikami/types';
 import { toSignInProvider } from '@aikami/utils';
-import type { getAdditionalUserInfo } from 'firebase/auth';
+import { getAdditionalUserInfo } from 'firebase/auth';
 
 export const getRegisterDataFromUser = (user: FirebaseUser): RegisterData => {
   const signInProvider = toSignInProvider(user.providerData[0]?.providerId ?? 'email');
@@ -44,7 +44,7 @@ export const getRegisterDataFromCredential = (options: {
   userCredential: FirebaseAuthUserCredential;
   getAdditionalUserInfo: typeof getAdditionalUserInfo;
 }): RegisterData => {
-  const { userCredential, getAdditionalUserInfo } = options;
+  const { userCredential } = options;
   const signInProvider = toSignInProvider(userCredential.providerId ?? 'email');
   const email = userCredential.user.email;
 
@@ -76,8 +76,8 @@ const getGoogleMetadata = (options: {
   userCredential: FirebaseAuthUserCredential;
   getAdditionalUserInfo: typeof getAdditionalUserInfo;
 }): UserMetadata => {
-  const { userCredential, getAdditionalUserInfo } = options;
-  const profile = getAdditionalUserInfo(userCredential)?.profile as GoogleMetadata | undefined;
+  const { userCredential, getAdditionalUserInfo: getAdditionalUserInfoFn } = options;
+  const profile = getAdditionalUserInfoFn(userCredential)?.profile as GoogleMetadata | undefined;
   const displayName = userCredential.user.displayName;
 
   let firstName = profile?.given_name;
@@ -101,8 +101,8 @@ const getMicrosoftMetadata = (options: {
   userCredential: FirebaseAuthUserCredential;
   getAdditionalUserInfo: typeof getAdditionalUserInfo;
 }): UserMetadata => {
-  const { userCredential, getAdditionalUserInfo } = options;
-  const profile = getAdditionalUserInfo(userCredential)?.profile as MicrosoftMetadata | undefined;
+  const { userCredential, getAdditionalUserInfo: getAdditionalUserInfoFn } = options;
+  const profile = getAdditionalUserInfoFn(userCredential)?.profile as MicrosoftMetadata | undefined;
 
   const displayName = userCredential.user.displayName;
 

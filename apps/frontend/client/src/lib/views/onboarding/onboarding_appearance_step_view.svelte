@@ -78,9 +78,7 @@ const slotLabels: Record<string, string> = {
 
 // ── Color picker state ─────────────────────────────────────────────
 
-const getPaletteHex = (slot: string): string => {
-  return viewModel.paletteOverrides[slot] ?? 'CCCCCC';
-};
+const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot] ?? 'CCCCCC';
 </script>
 
 <div class="space-y-6">

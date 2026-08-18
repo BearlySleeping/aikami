@@ -128,7 +128,7 @@ class AppErrorViewModel
 
     return {
       title,
-      description: description,
+      description,
       type: 'website',
     };
   }

@@ -630,13 +630,14 @@ describe('PersonaCreateViewModel — C-078', () => {
 
       // Fetch of the current avatar returns a blob; engine delegation happens
       // through imageGenerationService.generateImage (mocked above).
-      globalThis.fetch = mock((_url: string): Promise<Response> => {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
-        } as Response);
-      });
+      globalThis.fetch = mock(
+        (_url: string): Promise<Response> =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
+          } as Response),
+      );
 
       await vm.regenerateAvatar();
 

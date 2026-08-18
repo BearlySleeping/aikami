@@ -238,12 +238,12 @@ const _loadVisualTextureAsync = (options: {
   // The placeholder Graphics is already visible; the player won't notice
   // the async resolution.
   void import('pixi.js')
-    .then(({ Assets, Sprite: PixiSprite }) => {
-      return Assets.load(assetPath).then((texture) => ({
+    .then(({ Assets, Sprite: PixiSprite }) =>
+      Assets.load(assetPath).then((texture) => ({
         sprite: PixiSprite,
         texture,
-      }));
-    })
+      })),
+    )
     .then((resolved) => {
       _swapInSprite({ eid, world, stage, resolved });
     })
@@ -558,9 +558,8 @@ const uboRecipeSnapshots = new Map<number, string>();
  * @param recipes - The current layer recipes.
  * @returns A JSON-stringified fingerprint for fast comparison.
  */
-const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string => {
-  return JSON.stringify(recipes.map((r) => (r ? { s: r.slot, a: r.assetId } : null)));
-};
+const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string =>
+  JSON.stringify(recipes.map((r) => (r ? { s: r.slot, a: r.assetId } : null)));
 
 /**
  * Computes a lightweight palette fingerprint for a set of layer recipes.
@@ -661,9 +660,8 @@ const checkAppearanceChange = (
  * @param recipes - The current layer recipes.
  * @returns `true` if the appearance structurally changed.
  */
-const hasAppearanceChanged = (eid: number, recipes: readonly LpcLayerRecipe[]): boolean => {
-  return checkAppearanceChange(eid, recipes) === 'structural';
-};
+const hasAppearanceChanged = (eid: number, recipes: readonly LpcLayerRecipe[]): boolean =>
+  checkAppearanceChange(eid, recipes) === 'structural';
 
 // ---------------------------------------------------------------------------
 // syncAppearanceSystem — bitECS Appearance → LpcBatchManager bridge
@@ -1445,9 +1443,7 @@ const animateEntitySystem = (world: World): void => {
  * @param eid - The entity ID.
  * @returns The frame index, or -1 if not animated.
  */
-const getEntityAnimationFrame = (eid: number): number => {
-  return _entityFrameIndices.get(eid) ?? -1;
-};
+const getEntityAnimationFrame = (eid: number): number => _entityFrameIndices.get(eid) ?? -1;
 
 /**
  * Clears all per-entity animation tracking state.
@@ -1489,12 +1485,10 @@ const toGridCellCenter = (coord: number): number => {
  * @param options.y - Raw simulation y coordinate.
  * @returns Cell-aligned display position.
  */
-const toCellDisplayPosition = (options: { x: number; y: number }): { x: number; y: number } => {
-  return {
-    x: toGridCellCenter(options.x),
-    y: toGridCellCenter(options.y),
-  };
-};
+const toCellDisplayPosition = (options: { x: number; y: number }): { x: number; y: number } => ({
+  x: toGridCellCenter(options.x),
+  y: toGridCellCenter(options.y),
+});
 
 export {
   animateEntitySystem,

@@ -8,6 +8,17 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Badge color for an approval value. */
+const approvalBadgeClass = $derived.by(() => {
+  if (viewModel.approval > 0) {
+    return 'badge-success';
+  }
+  if (viewModel.approval < 0) {
+    return 'badge-error';
+  }
+  return 'badge-ghost';
+});
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -31,9 +42,7 @@ const { viewModel }: Props = $props();
     <div class="flex items-center justify-between border-b border-base-300 px-4 py-2">
       <div class="flex items-center gap-2">
         <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
-        <span
-          class="badge badge-xs {viewModel.approval > 0 ? 'badge-success' : viewModel.approval < 0 ? 'badge-error' : 'badge-ghost'}"
-        >
+        <span class="badge badge-xs {approvalBadgeClass}">
           {viewModel.approval > 0 ? '+' : ''}{viewModel.approval}
         </span>
       </div>

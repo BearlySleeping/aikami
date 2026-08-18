@@ -441,11 +441,12 @@ export class AssetRegistryRepository {
       }
 
       const existing = existingById.get(tag);
-      const version = existing
-        ? existing.hash === hashEntry.hash
-          ? existing.version
-          : existing.version + 1
-        : 1;
+      let version: number;
+      if (existing) {
+        version = existing.hash === hashEntry.hash ? existing.version : existing.version + 1;
+      } else {
+        version = 1;
+      }
 
       if (existing && existing.hash === hashEntry.hash) {
         stats.unchanged += 1;
@@ -493,9 +494,7 @@ export class AssetRegistryRepository {
  */
 export const createAssetRegistryRepository = (
   db: LocalDatabaseInterface,
-): AssetRegistryRepository => {
-  return new AssetRegistryRepository(db);
-};
+): AssetRegistryRepository => new AssetRegistryRepository(db);
 
 // ---------------------------------------------------------------------------
 // Row mappers
@@ -526,22 +525,18 @@ const _rowToAssetRecord = (row: QueryResultRow): AssetRecord => {
 };
 
 /** Maps an `asset_sources` table row to an {@link AssetSource}. */
-const _rowToAssetSource = (row: QueryResultRow): AssetSource => {
-  return {
-    assetId: row.asset_id as string,
-    backend: row.backend as AssetSource['backend'],
-    url: row.url as string,
-    priority: row.priority as number,
-  };
-};
+const _rowToAssetSource = (row: QueryResultRow): AssetSource => ({
+  assetId: row.asset_id as string,
+  backend: row.backend as AssetSource['backend'],
+  url: row.url as string,
+  priority: row.priority as number,
+});
 
 /** Maps an `install_state` table row to an {@link InstallStateRecord}. */
-const _rowToInstallState = (row: QueryResultRow): InstallStateRecord => {
-  return {
-    assetId: row.asset_id as string,
-    status: row.status as InstallStateRecord['status'],
-    localPath: (row.local_path as string | null) ?? undefined,
-    cachedHash: (row.cached_hash as string | null) ?? undefined,
-    downloadedAt: (row.downloaded_at as string | null) ?? undefined,
-  };
-};
+const _rowToInstallState = (row: QueryResultRow): InstallStateRecord => ({
+  assetId: row.asset_id as string,
+  status: row.status as InstallStateRecord['status'],
+  localPath: (row.local_path as string | null) ?? undefined,
+  cachedHash: (row.cached_hash as string | null) ?? undefined,
+  downloadedAt: (row.downloaded_at as string | null) ?? undefined,
+});

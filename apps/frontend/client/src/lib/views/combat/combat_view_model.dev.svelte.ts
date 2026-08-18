@@ -1029,6 +1029,5 @@ export class CombatDevViewModel extends CombatViewModel {
  * Factory function — returns a CombatDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getCombatDevViewModel = (options: CombatDevViewModelOptions): CombatDevViewModel => {
-  return new CombatDevViewModel(options);
-};
+export const getCombatDevViewModel = (options: CombatDevViewModelOptions): CombatDevViewModel =>
+  new CombatDevViewModel(options);

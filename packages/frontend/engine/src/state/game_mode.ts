@@ -26,8 +26,6 @@ const setEngineGameMode = (mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT'): vo
  * Called by {@link import('../systems/movement_system.ts').updateMovement}
  * to gate player movement — movement is skipped when the mode is not EXPLORE.
  */
-const getEngineGameMode = (): 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' => {
-  return _currentMode;
-};
+const getEngineGameMode = (): 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' => _currentMode;
 
 export { getEngineGameMode, setEngineGameMode };

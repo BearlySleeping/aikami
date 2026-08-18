@@ -1,28 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 557 641">
   <defs>
     <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="10" y1="0" x2="546" y2="0">
-      <stop offset="0" stop-color="#ca37e3"/>
-      <stop offset="0.25" stop-color="#aa5ae7"/>
-      <stop offset="0.5" stop-color="#7891e6"/>
-      <stop offset="0.75" stop-color="#44c6dc"/>
-      <stop offset="1" stop-color="#22f0dc"/>
+      <stop offset="0" stop-color="#ca37e3" />
+      <stop offset="0.25" stop-color="#aa5ae7" />
+      <stop offset="0.5" stop-color="#7891e6" />
+      <stop offset="0.75" stop-color="#44c6dc" />
+      <stop offset="1" stop-color="#22f0dc" />
     </linearGradient>
     <radialGradient id="halo" gradientUnits="userSpaceOnUse" cx="279" cy="140" r="58">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.52" stop-color="#ffffff"/>
-      <stop offset="0.62" stop-color="#efe9fc"/>
-      <stop offset="0.8" stop-color="#b09af2"/>
-      <stop offset="0.92" stop-color="#93a4ee"/>
-      <stop offset="1" stop-color="#7d9adf" stop-opacity="0"/>
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="0.52" stop-color="#ffffff" />
+      <stop offset="0.62" stop-color="#efe9fc" />
+      <stop offset="0.8" stop-color="#b09af2" />
+      <stop offset="0.92" stop-color="#93a4ee" />
+      <stop offset="1" stop-color="#7d9adf" stop-opacity="0" />
     </radialGradient>
     <radialGradient id="wc" gradientUnits="userSpaceOnUse" cx="279" cy="140" r="30">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.88" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="0.88" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
     </radialGradient>
   </defs>
   <g transform="translate(0,641) scale(1,-1)" fill="url(#grad)">
-    <path d="M245 620 c-17 -10 -46 -28 -64 -39 -32 -19 -56 -34 -132 -80 -18 -11
+    <path
+      d="M245 620 c-17 -10 -46 -28 -64 -39 -32 -19 -56 -34 -132 -80 -18 -11
 -33 -20 -34 -20 -1 -1 -2 -3 -3 -5 -2 -4 -2 -8 -2 -152 0 -148 0 -149 2 -151
 3 -3 6 -3 9 0 1 2 10 20 20 40 l19 37 -1 21 c-1 12 -2 29 -2 39 l-1 18 2 3 c2
 2 3 4 4 6 0 1 0 4 -1 6 -2 7 -11 11 -17 8 -6 -4 -9 -12 -6 -17 1 -2 2 -3 4 -4
@@ -101,8 +102,10 @@ c4 -6 12 -9 19 -5 6 2 9 6 10 12 0 3 0 5 -2 9 -2 3 -4 5 -7 7 -3 2 -5 2 -8 2
 -3 -3 -5 -2 -10 3 -8 8 1 2 2 3 2 3 2 2 7 1 8 -1z m52 0 c2 -2 2 -6 1 -8 -2
 -3 -8 -3 -10 0 -1 2 -1 6 1 8 2 2 6 3 8 0z m-185 -85 c3 -2 2 -6 -1 -9 -4 -3
 -8 -1 -10 4 0 2 0 3 2 6 2 1 4 2 5 1 1 0 3 -1 4 -2z m371 -1 c1 -2 1 -3 0 -5
-0 -1 -2 -3 -3 -4 -3 -1 -3 -1 -6 1 -3 2 -4 5 -2 9 2 1 3 2 6 2 2 0 3 -1 5 -3z"/>
-    <path d="M190 166 c-6 0 -11 -1 -12 -1 0 -1 -1 -3 -2 -5 l-1 -4 15 -23 c8 -13
+0 -1 -2 -3 -3 -4 -3 -1 -3 -1 -6 1 -3 2 -4 5 -2 9 2 1 3 2 6 2 2 0 3 -1 5 -3z"
+    />
+    <path
+      d="M190 166 c-6 0 -11 -1 -12 -1 0 -1 -1 -3 -2 -5 l-1 -4 15 -23 c8 -13
 23 -35 32 -50 29 -43 33 -50 33 -51 -1 0 -30 18 -53 32 l-7 4 0 14 c0 8 0 15
 -1 17 0 2 -3 5 -17 16 -9 6 -17 12 -17 13 -1 0 -3 -2 -4 -5 l-3 -5 12 -9 c6
 -5 13 -10 15 -11 2 -2 3 -4 3 -6 1 -5 0 -16 -1 -16 0 0 -9 5 -19 11 -10 6 -19
@@ -119,8 +122,9 @@ c-1 3 -3 5 -3 5 0 1 -9 -4 -19 -11 -11 -6 -19 -11 -20 -11 0 0 0 5 0 10 l1 10
 17 0 1 21 1 48 1 28 0 47 0 47 -1z m39 0 c0 -1 -8 -14 -32 -50 -31 -48 -39
 -60 -44 -67 -2 -3 -4 -6 -4 -6 -1 0 -1 13 -1 28 l0 28 3 2 c2 1 5 4 6 6 2 4 2
 5 2 11 l-1 7 4 3 c9 7 30 24 38 31 l10 8 9 0 c6 0 10 0 10 -1z m-83 -45 c2 -2
-3 -3 3 -6 0 -3 -3 -7 -6 -7 -3 0 -7 4 -7 7 0 3 2 6 4 7 3 1 3 1 6 -1z"/>
+3 -3 3 -6 0 -3 -3 -7 -6 -7 -3 0 -7 4 -7 7 0 3 2 6 4 7 3 1 3 1 6 -1z"
+    />
   </g>
-  <circle cx="279" cy="140" r="58" fill="url(#halo)"/>
-  <circle cx="279" cy="140" r="30" fill="url(#wc)"/>
+  <circle cx="279" cy="140" r="58" fill="url(#halo)" />
+  <circle cx="279" cy="140" r="30" fill="url(#wc)" />
 </svg>

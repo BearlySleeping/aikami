@@ -33,12 +33,11 @@ const FILLED_INPUTS = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const createFilledViewModel = () => {
-  return getWorldGenWizardViewModel({
+const createFilledViewModel = () =>
+  getWorldGenWizardViewModel({
     className: 'WorldGenWizardRetryTest',
     initialInputs: FILLED_INPUTS,
   });
-};
 
 // ---------------------------------------------------------------------------
 // Tests

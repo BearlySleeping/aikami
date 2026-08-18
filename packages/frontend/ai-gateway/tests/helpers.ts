@@ -33,6 +33,17 @@ export type CapturedFetch = {
   signal: AbortSignal | undefined;
 };
 
+/** Normalize a fetch input (string | URL | Request) to its string href. */
+const inputUrl = (input: string | URL | Request): string => {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+};
+
 /**
  * Creates a mock fetch that returns a synthetic SSE response and records
  * every call.
@@ -46,7 +57,7 @@ export const createSseFetchMock = (options?: {
   const calls: CapturedFetch[] = [];
 
   const fetchFn = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = inputUrl(input);
     let body: Record<string, unknown> = {};
     if (init?.body && typeof init.body === 'string') {
       try {
@@ -92,7 +103,7 @@ export const createJsonFetchMock = (options?: {
   const calls: CapturedFetch[] = [];
 
   const fetchFn = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = inputUrl(input);
     let body: Record<string, unknown> = {};
     if (init?.body && typeof init.body === 'string') {
       try {

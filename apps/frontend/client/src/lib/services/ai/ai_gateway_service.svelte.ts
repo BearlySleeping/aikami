@@ -36,6 +36,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
 import { configService } from '$lib/services/config/config_service.svelte.ts';
+import { resolveImageEngine } from '$lib/services/image/engine/image_engine_factory.svelte.ts';
 import {
   aiSettingsService,
   getOllamaRuntimeEndpoints,
@@ -165,6 +166,14 @@ class AiGatewayService
         image: ({ signal }) =>
           detectImageAvailability({
             hasConfiguredProvider: () => this._hasConfiguredImageProvider(),
+            // The local stack's bundled image engine is sd-server, not
+            // ComfyUI; the factory already probes both against the runtime
+            // config and caches the winner, so detection reuses it rather
+            // than pinging a ComfyUI-only path the engine does not serve.
+            resolveLocalEngine: async () => {
+              const engine = await resolveImageEngine();
+              return engine ? { id: engine.id } : undefined;
+            },
             signal,
           }),
         voice: () =>

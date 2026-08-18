@@ -295,24 +295,22 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       } else {
         await this.goToHref(redirectToHref);
       }
+    } else if (forceRefresh) {
+      globalThis.window.open(
+        defaultHref ??
+          this.toRouteHref(defaultRoute, {
+            pathParameters: undefined,
+            queryParameters: undefined,
+            url: this.url,
+          }),
+      );
     } else {
-      if (forceRefresh) {
-        globalThis.window.open(
-          defaultHref ??
-            this.toRouteHref(defaultRoute, {
-              pathParameters: undefined,
-              queryParameters: undefined,
-              url: this.url,
-            }),
-        );
-      } else {
-        await (defaultHref
-          ? this.goToHref(defaultHref)
-          : this.goToRoute(defaultRoute, {
-              pathParameters: undefined,
-              queryParameters: undefined,
-            }));
-      }
+      await (defaultHref
+        ? this.goToHref(defaultHref)
+        : this.goToRoute(defaultRoute, {
+            pathParameters: undefined,
+            queryParameters: undefined,
+          }));
     }
 
     this._isNavigatingToApp = false;
