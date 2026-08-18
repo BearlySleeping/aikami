@@ -7,6 +7,9 @@ type Props = {
   viewModel: PersonaListViewModelInterface;
 };
 const { viewModel }: Props = $props();
+
+/** Hidden file input for card import (C-419 AC-1). */
+let fileInput = $state<HTMLInputElement>();
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -56,13 +59,30 @@ const { viewModel }: Props = $props();
             persona{viewModel.personas.length !== 1 ? 's' : ''}
             saved
           </p>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            onclick={() => viewModel.createPersona()}
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              onclick={() => fileInput.click()}
+              disabled={viewModel.isImporting}
+            >
+              {viewModel.isImporting ? 'Importing…' : 'Import Card'}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              onclick={() => viewModel.createPersona()}
+            >
+              + New Persona
+            </button>
+          </div>
+          <input
+            bind:this={fileInput}
+            type="file"
+            accept=".png,.json,image/png,application/json"
+            class="hidden"
+            onchange={(e) => viewModel.handleFileImport({ event: e })}
           >
-            + New Persona
-          </button>
         </div>
 
         <!-- Empty State -->

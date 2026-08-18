@@ -14,6 +14,7 @@ import {
 import type { NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { authService, chatStorage, storageService } from '$services';
+import { inferAbilityScores } from '../character/ability_score_inference.ts';
 import { downloadFromUrl } from '../character/character_downloader.ts';
 import { importFromJson, importFromPng } from '../character/character_importer.ts';
 import { npcStorage } from './npc_storage.svelte.ts';
@@ -164,6 +165,10 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
 
     const { character, avatarFile } = await this._extractCharacterFromFile({ file });
 
+    // C-419 AC-2: card imports carry ability scores (inferred when the card
+    // declares none) so NPCs compile into NpcSheetSchema with stats.
+    const abilityScores = inferAbilityScores({ character });
+
     const npcData: Partial<NpcCreateData> = {
       name: character.name,
       notes: character.description,
@@ -171,6 +176,7 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
       scenario: character.scenario,
       firstMessage: character.first_mes,
       systemPrompt: character.system_prompt,
+      abilityScores,
     };
 
     const npcId = await this.createNpc({ data: npcData, uid });

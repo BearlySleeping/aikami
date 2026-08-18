@@ -22,6 +22,12 @@ const viewModel: VendorViewModelInterface = getVendorDevViewModel({
   vendorInventory:
     'rustySword,ironSword,steelSword,woodenShield,leatherArmor,ironArmor,healthPotion,manaPotion',
 });
+
+// C-419 verification helper (dev-only): `?haggle=expanded` forces the
+// haggle panel open so the expanded layout can be captured deterministically.
+if (new URLSearchParams(window.location.search).get('haggle') === 'expanded') {
+  viewModel.expandHagglePanel();
+}
 </script>
 
 <svelte:head>
