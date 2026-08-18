@@ -43,9 +43,23 @@
       "suspicious": {
         "noThenProperty": "error",
         "noExplicitAny": "error",
-        "noConsole": "error"
+        "noConsole": "error",
+        "noShadow": "error",
+        "noNestedPromises": "error"
       },
       "style": {
+        "noNonNullAssertion": "error",
+        "noNestedTernary": "error",
+        "useCollapsedIf": "error",
+        "useCollapsedElseIf": "error",
+        "useConsistentArrowReturn": "error",
+        "useThrowOnlyError": "error",
+        "useConsistentObjectDefinitions": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        },
         "useImportType": "error",
         "useNodejsImportProtocol": "error",
         "useFilenamingConvention": {
@@ -60,7 +74,14 @@
         "useNamingConvention": {
           "level": "error",
           "options": {
-            "strictCase": false
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": { "kind": "classMember", "modifiers": ["private"] },
+                "match": "_(.+)",
+                "formats": ["camelCase"]
+              }
+            ]
           }
         },
         "useConsistentTypeDefinitions": {
@@ -84,7 +105,9 @@
               "@aikami/frontend-storage": "Use @aikami/frontend/storage instead",
               "@aikami/frontend-services": "Use @aikami/frontend/services instead",
               "@aikami/frontend-utils": "Use @aikami/frontend/utils instead",
-              "@aikami/frontend-components": "Use @aikami/frontend/components instead"
+              "@aikami/frontend-components": "Use @aikami/frontend/components instead",
+              "@sinclair/typebox": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas",
+              "zod": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas"
             }
           }
         }
@@ -95,7 +118,8 @@
         "useFlatMap": "error",
         "useDateNow": "error",
         "noForEach": "error",
-        "noStaticOnlyClass": "error"
+        "noStaticOnlyClass": "error",
+        "noBannedTypes": "error"
       },
       "correctness": {
         "noUnusedVariables": "error",
@@ -144,7 +168,7 @@
       }
     },
     {
-      "includes": ["apps/e2e/**", "**/scripts/**", ".pi/**"],
+      "includes": ["apps/e2e/**", "scripts/**", ".pi/**"],
       "linter": {
         "rules": {
           "suspicious": {

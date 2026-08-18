@@ -53,6 +53,7 @@
     "@google-cloud/secret-manager": "*",
     "elysia": "^1.4.29",
     "eruda": "3.4.3",
-    "firebase": "12.17.1"
+    "firebase": "12.17.1",
+    "firebase-admin": "14.2.0"
   }
 }

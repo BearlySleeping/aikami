@@ -5,11 +5,14 @@
   "type": "module",
   "description": "Compose profiles, backend overrides, checksum-verified model fetcher, and Native Host Binary launchers for the local AI engine stack (C-390).",
   "scripts": {
-    "lint": "bash -n bin/*.sh docker/voice/entrypoint.sh scripts/emit_config.sh scripts/check.sh && bash scripts/check.sh --static && bunx biome check stack/*.ts",
+    "lint": "bash -n bin/*.sh aikami install.sh scripts/*.sh docker/voice/entrypoint.sh && bash scripts/check.sh --static && bunx biome check stack/*.ts",
     "format": "bunx biome format --write stack/*.ts",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json",
     "fix": "bunx biome check --write stack/*.ts && bash -n bin/*.sh docker/voice/entrypoint.sh scripts/emit_config.sh scripts/check.sh",
     "test": "bun test stack/*.test.ts",
+    "test:install": "sh scripts/install.test.sh",
+    "test:install:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.test.ps1",
+    "bundle": "sh scripts/bundle_stack.sh",
     "up": "docker compose up -d",
     "up:cpu": "docker compose -f compose.yaml -f compose.cpu.yaml up -d",
     "up:cuda": "docker compose -f compose.yaml -f compose.cuda.yaml up -d",
@@ -18,10 +21,12 @@
     "down": "docker compose down",
     "logs": "docker compose logs -f",
     "build": "bun run build:client && docker compose build",
-    "build:client": "cd ../../frontend/client && bun run build:${CLIENT_MODE:-production} && bun run stage:client",
-    "stage:client": "rm -rf .build/client && mkdir -p .build && cp -a ../../frontend/client/build .build/client && ./scripts/emit_config.sh > .build/client/config.json",
+    "build:client": "cd ../../frontend/client && bun run build:production && cd ../../backend/local-stack && bun run stage:client",
+    "build:client:staging": "cd ../../frontend/client && bun run build:staging && cd ../../backend/local-stack && bun run stage:client",
+    "build:client:emulator": "cd ../../frontend/client && bun run build:emulator && cd ../../backend/local-stack && bun run stage:client",
+    "stage:client": "rm -rf .build/client && mkdir -p .build && cp -R ../../frontend/client/build .build/client && bash ./scripts/emit_config.sh > .build/client/config.json",
     "build:client:docker": "bun run build:client && docker build -f Dockerfile.client -t aikami-client .",
-    "build:sd-server:cpu": "docker build -f docker/sd-server/Dockerfile.cpu -t ${AIKAMI_IMAGE_PREFIX:-ghcr.io/aikami}/aikami-sd-server:cpu docker/sd-server",
+    "build:sd-server:cpu": "docker build -f docker/sd-server/Dockerfile.cpu -t ghcr.io/bearlysleeping/aikami-sd-server:cpu docker/sd-server",
     "run:native-tts": "bash bin/run-native-tts.sh",
     "run:native-stt": "bash bin/run-native-stt.sh",
     "run:native-llm": "bash bin/run-native-llm.sh"
@@ -30,7 +35,8 @@
     "@aikami/constants": "workspace:*",
     "@aikami/local-ai": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "@clack/prompts": "^1.7.0"
   },
   "devDependencies": {}
 }
