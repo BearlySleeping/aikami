@@ -296,6 +296,14 @@ else
     info "non-interactive install — auto-detecting hardware (--yes)"
     "${STACK_INIT}" --yes --env-path "${ENV_FILE}"
   fi
+  # Verify that the wizard actually wrote .env — when the user cancels
+  # (Ctrl-C or declines prompts), stack-init exits 0 but creates no file.
+  if [ ! -f "${ENV_FILE}" ]; then
+    printf '\n'
+    info "Setup cancelled — no .env was created."
+    info "Re-run the installer when you're ready to complete the setup."
+    exit 0
+  fi
   info ".env written to ${ENV_FILE}"
 fi
 

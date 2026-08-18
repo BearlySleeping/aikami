@@ -22,6 +22,8 @@
 #   8. The bundle script produces per-platform archives + SHA256SUMS.
 #   9. (docker available) docker compose config in the project dir honors the
 #      wizard-written COMPOSE_PROFILES.
+#  10. Cancelled wizard (exit 0, no .env) — installer exits gracefully without
+#      continuing to startup prompts.
 
 set -eu
 cd "$(dirname "$0")/.."
@@ -193,5 +195,34 @@ for entry in bin/stack-init compose.yaml install.sh aikami VERSION; do
   tar -tzf "$BUNDLED_ASSET" | grep -q "local-stack-test-${PLATFORM}/${entry}" \
     || fail "bundle tarball missing ${entry}"
 done
+
+# 12. Cancelled wizard (exits 0 but creates no .env) — installer must exit gracefully
+log "cancelled wizard (exit 0, no .env)"
+rm -rf "$TMP/install-root4"
+export AIKAMI_STACK_DIR="$TMP/install-root4"
+# Replace the fake stack-init with one that exits 0 but writes nothing (cancellation contract)
+cat > "$TMP/local-stack-test-${PLATFORM}/bin/stack-init" <<'EOF'
+#!/bin/sh
+# Simulates a successful cancellation: exit 0, no .env created.
+echo "fake-stack-init: user cancelled (simulated)"
+exit 0
+EOF
+chmod +x "$TMP/local-stack-test-${PLATFORM}/bin/stack-init"
+tar -czf "$TMP/${ASSET}" -C "$TMP" "local-stack-test-${PLATFORM}"
+cp "$TMP/${ASSET}" "$TMP/local-stack-test/${ASSET}"
+(
+  cd "$TMP/local-stack-test"
+  sha256sum "${ASSET}" > SHA256SUMS
+)
+INSTALL_CANCEL_OUT="$(sh install.sh 2>&1)" || fail "installer exited non-zero on cancelled wizard"
+echo "$INSTALL_CANCEL_OUT" | grep -q "Setup cancelled" \
+  || fail "installer did not print cancellation guidance when .env is missing after wizard"
+[ ! -f "$TMP/install-root4/current/.env" ] \
+  || fail ".env should not exist when wizard exits successfully with no file created"
+# Installer should NOT continue to startup/desktop-client prompts after cancellation
+echo "$INSTALL_CANCEL_OUT" | grep -q "Start the stack now?" \
+  && fail "installer should not prompt to start the stack after wizard cancellation"
+log "  cancelled wizard detected, installer exited gracefully without startup prompts"
+unset AIKAMI_STACK_DIR
 
 log "all installer checks passed"

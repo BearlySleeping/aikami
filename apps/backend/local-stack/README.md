@@ -1,19 +1,12 @@
 # Aikami Local Stack
 
 Run the full Aikami AI stack on your own machine — text, image, voice, and
-speech-to-text engines plus the desktop app — with **one command and no
-Python, no CUDA toolkit install, no model hunting, and no source build**.
-
-```bash
-curl -fsSL https://aikami.sh/install | sh          # macOS / Linux
-```
-```powershell
-irm https://aikami.sh/install.ps1 | iex            # Windows
-```
+speech-to-text engines plus the desktop app — with **no Python, no CUDA
+toolkit install, no model hunting, and no source build**.
 
 The installer downloads a checksum-verified bundle, runs a hardware wizard
 that detects your GPU and writes `.env`, and leaves you with one command —
-`aikami up` — to run the stack. See [Quick start](#quick-start).
+`aikami up` — to run the stack. See [Quick start](#quick-start) below.
 
 `stack init` (the wizard, also runnable from a repo checkout as
 `bun run stack init`) detects your hardware, picks a backend and model tier,
@@ -39,25 +32,21 @@ changes.
 
 ## Quick start
 
-**One command on a machine with only Docker installed — no git clone, no
-Python, no CUDA toolkit install, no model hunting, no source build.**
+**On a machine with only Docker installed — no Python, no CUDA toolkit
+install, no model hunting, no source build.**
 
-macOS / Linux:
+macOS / Linux — download and run the installer script:
 
 ```bash
-curl -fsSL https://aikami.sh/install | sh
+curl -fsSL https://raw.githubusercontent.com/BearlySleeping/aikami/main/apps/backend/local-stack/install.sh | sh
 ```
 
-Windows (PowerShell):
+Windows — use the [contributor path](#contributor-path-source-builds) below (clone the repo and run `bun run stack init`).
 
-```powershell
-irm https://aikami.sh/install.ps1 | iex
-```
-
-Both installers do the same six logged steps: check the platform and Docker,
-resolve the newest `local-stack-*` release, download that platform's bundle,
-**verify its SHA-256 against `SHA256SUMS` before anything is extracted**,
-extract it to a stable path, and run the **compiled hardware-wizard binary**
+The installer does six logged steps: checks the platform and Docker, resolves
+the newest `local-stack-*` release, downloads that platform's bundle,
+**verifies its SHA-256 against `SHA256SUMS` before anything is extracted**,
+extracts it to a stable path, and runs the **compiled hardware-wizard binary**
 (`stack-init`) on your machine — never inside a container, because GPU
 detection from inside one is unreliable — to write `.env` next to
 `compose.yaml`. An existing `.env` is **never** overwritten.
