@@ -412,7 +412,7 @@ if (statFetches.length > 0) {
       'https://api.github.com/search/issues?q=is:issue+state:open+label:feature+repo:BearlySleeping/aikami',
       { signal: AbortSignal.timeout(5_000) },
     ),
-  ]).then((results) => {
+  ]).then(async (results) => {
     const [repoRes, issuesRes] = results;
     const repo =
       repoRes.status === 'fulfilled' && repoRes.value.ok
@@ -422,22 +422,21 @@ if (statFetches.length > 0) {
       issuesRes.status === 'fulfilled' && issuesRes.value.ok
         ? issuesRes.value.json()
         : Promise.resolve(null);
-    void Promise.all([repo, issues]).then(([repoData, issuesData]) => {
-      const repoEntry = statFetches.find((s) => s.kind === 'stars');
-      const issuesEntry = statFetches.find((s) => s.kind === 'features');
-      if (repoEntry) {
-        applyStat(
-          repoEntry,
-          typeof repoData?.stargazers_count === 'number' ? repoData.stargazers_count : null,
-        );
-      }
-      if (issuesEntry) {
-        applyStat(
-          issuesEntry,
-          typeof issuesData?.total_count === 'number' ? issuesData.total_count : null,
-        );
-      }
-    });
+    const [repoData, issuesData] = await Promise.all([repo, issues]);
+    const repoEntry = statFetches.find((s) => s.kind === 'stars');
+    const issuesEntry = statFetches.find((s) => s.kind === 'features');
+    if (repoEntry) {
+      applyStat(
+        repoEntry,
+        typeof repoData?.stargazers_count === 'number' ? repoData.stargazers_count : null,
+      );
+    }
+    if (issuesEntry) {
+      applyStat(
+        issuesEntry,
+        typeof issuesData?.total_count === 'number' ? issuesData.total_count : null,
+      );
+    }
   });
 }
 

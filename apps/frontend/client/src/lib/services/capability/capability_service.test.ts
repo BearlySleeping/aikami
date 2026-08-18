@@ -37,7 +37,14 @@ mock.module('@aikami/frontend/ai-gateway', () => ({
 
 /** Builds a default per-capability detection result. */
 const _availableResult = (capability: AiCapability): AiDetectionResult => {
-  const provider = capability === 'text' ? 'ollama' : capability === 'image' ? 'comfyui' : 'kokoro';
+  let provider: string;
+  if (capability === 'text') {
+    provider = 'ollama';
+  } else if (capability === 'image') {
+    provider = 'comfyui';
+  } else {
+    provider = 'kokoro';
+  }
   return {
     capability,
     available: true,

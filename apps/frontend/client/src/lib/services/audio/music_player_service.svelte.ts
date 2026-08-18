@@ -338,26 +338,38 @@ export const buildMusicSceneContext = (): MusicSceneContext => {
       ? gameEngineService.playerScene
       : gameEngineService.currentMapId;
   const scene = rawScene ?? '';
-  const locationType = scene.includes('village')
-    ? 'village'
-    : scene.includes('road') || scene.includes('forest')
-      ? 'forest'
-      : scene.includes('shrine') || scene.includes('dungeon')
-        ? 'dungeon'
-        : 'wilderness';
+  let locationType: MusicSceneContext['locationType'];
+  if (scene.includes('village')) {
+    locationType = 'village';
+  } else if (scene.includes('road') || scene.includes('forest')) {
+    locationType = 'forest';
+  } else if (scene.includes('shrine') || scene.includes('dungeon')) {
+    locationType = 'dungeon';
+  } else {
+    locationType = 'wilderness';
+  }
 
   const hour = timeService.gameHour;
-  const timeOfDay =
-    hour >= 21 || hour < 5
-      ? 'night'
-      : hour >= 17
-        ? 'evening'
-        : hour >= 12
-          ? 'afternoon'
-          : 'morning';
+  let timeOfDay: MusicSceneContext['timeOfDay'];
+  if (hour >= 21 || hour < 5) {
+    timeOfDay = 'night';
+  } else if (hour >= 17) {
+    timeOfDay = 'evening';
+  } else if (hour >= 12) {
+    timeOfDay = 'afternoon';
+  } else {
+    timeOfDay = 'morning';
+  }
 
   const rain = timeService.rainIntensity;
-  const weather = rain > 0.5 ? 'storm' : rain > 0.05 ? 'rain' : 'clear';
+  let weather: MusicSceneContext['weather'];
+  if (rain > 0.5) {
+    weather = 'storm';
+  } else if (rain > 0.05) {
+    weather = 'rain';
+  } else {
+    weather = 'clear';
+  }
 
   const isInCombat = gameOverlayService.activeOverlay === 'COMBAT';
 

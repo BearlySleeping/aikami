@@ -315,9 +315,8 @@ class CharacterSheetViewModel
   };
 
   /** Format a modifier with sign (e.g. "+3" or "-1"). */
-  readonly modifierSign = (modifier: number): string => {
-    return modifier >= 0 ? `+${modifier}` : `${modifier}`;
-  };
+  readonly modifierSign = (modifier: number): string =>
+    modifier >= 0 ? `+${modifier}` : `${modifier}`;
 
   /** Skills grouped by ability for tabular display. */
   get skillsByAbility(): Record<AbilityKey, CharacterSkill[]> {

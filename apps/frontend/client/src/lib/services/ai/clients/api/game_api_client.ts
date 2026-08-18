@@ -14,22 +14,22 @@ import type { GameApiClientConfig, RequestOptions } from './types.ts';
 class GameApiClient implements GameApiClientInterface {
   readonly baseUrl: string;
 
-  private authToken: string | null = null;
-  private defaultTimeout: number;
-  private defaultRetry: { maxRetries: number; initialDelayMs: number };
-  private defaultHeaders: Record<string, string>;
+  private _authToken: string | null = null;
+  private _defaultTimeout: number;
+  private _defaultRetry: { maxRetries: number; initialDelayMs: number };
+  private _defaultHeaders: Record<string, string>;
 
   /**
    * @param config - Client configuration.
    */
   constructor(config: GameApiClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, '');
-    this.defaultTimeout = config.defaultTimeout ?? 15000;
-    this.defaultRetry = {
+    this._defaultTimeout = config.defaultTimeout ?? 15000;
+    this._defaultRetry = {
       maxRetries: config.defaultRetry?.maxRetries ?? 3,
       initialDelayMs: config.defaultRetry?.initialDelayMs ?? 1000,
     };
-    this.defaultHeaders = { ...config.defaultHeaders };
+    this._defaultHeaders = { ...config.defaultHeaders };
   }
 
   // -----------------------------------------------------------------------
@@ -37,11 +37,11 @@ class GameApiClient implements GameApiClientInterface {
   // -----------------------------------------------------------------------
 
   isAuthenticated(): boolean {
-    return this.authToken !== null;
+    return this._authToken !== null;
   }
 
   setAuthToken(token: string | null): void {
-    this.authToken = token;
+    this._authToken = token;
   }
 
   // -----------------------------------------------------------------------
@@ -53,36 +53,36 @@ class GameApiClient implements GameApiClientInterface {
     body: TRequest,
     options?: RequestOptions,
   ): Promise<TResponse> {
-    return this.request<TResponse>('POST', path, body, options);
+    return this._request<TResponse>('POST', path, body, options);
   }
 
   async get<TResponse>(path: string, options?: RequestOptions): Promise<TResponse> {
-    return this.request<TResponse>('GET', path, undefined, options);
+    return this._request<TResponse>('GET', path, undefined, options);
   }
 
   // -----------------------------------------------------------------------
   // Core Request Logic
   // -----------------------------------------------------------------------
 
-  private async request<TResponse>(
+  private async _request<TResponse>(
     method: string,
     path: string,
     body?: unknown,
     options?: RequestOptions,
   ): Promise<TResponse> {
-    const timeout = options?.timeout ?? this.defaultTimeout;
-    const retryConfig = { ...this.defaultRetry, ...options?.retry };
+    const timeout = options?.timeout ?? this._defaultTimeout;
+    const retryConfig = { ...this._defaultRetry, ...options?.retry };
     const { maxRetries, initialDelayMs } = retryConfig;
 
     // Merge headers: default headers + auth header + request-specific headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...this.defaultHeaders,
+      ...this._defaultHeaders,
       ...options?.headers,
     };
 
-    if (this.authToken !== null) {
-      headers.Authorization = `Bearer ${this.authToken}`;
+    if (this._authToken !== null) {
+      headers.Authorization = `Bearer ${this._authToken}`;
     }
 
     const url = `${this.baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;

@@ -33,8 +33,8 @@ const applySchema = async (db: LocalDatabaseInterface): Promise<void> => {
   }
 };
 
-const makeCampaignJson = (overrides?: Record<string, unknown>): string => {
-  return JSON.stringify({
+const makeCampaignJson = (overrides?: Record<string, unknown>): string =>
+  JSON.stringify({
     id: 'campaign-1',
     name: 'Test Campaign',
     state: 'idle',
@@ -49,7 +49,6 @@ const makeCampaignJson = (overrides?: Record<string, unknown>): string => {
     },
     ...overrides,
   });
-};
 
 // ---------------------------------------------------------------------------
 // Tests

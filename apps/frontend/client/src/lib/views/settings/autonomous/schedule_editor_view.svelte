@@ -29,6 +29,34 @@ const handleActivityInput = (e: Event) => {
     viewModel?.setActivity(activityEditingDay, activityEditingHour, input.value);
   }
 };
+
+/** Tailwind color class for an availability status. */
+const statusColorFor = (status: AvailabilityStatus): string => {
+  if (status === 'online') {
+    return 'bg-success';
+  }
+  if (status === 'idle') {
+    return 'bg-warning';
+  }
+  if (status === 'dnd') {
+    return 'bg-error';
+  }
+  return 'bg-neutral';
+};
+
+/** Tailwind cell background for a slot status. */
+const cellBgFor = (status: AvailabilityStatus | undefined): string => {
+  if (status === 'online') {
+    return 'bg-success/40';
+  }
+  if (status === 'idle') {
+    return 'bg-warning/40';
+  }
+  if (status === 'dnd') {
+    return 'bg-error/40';
+  }
+  return 'bg-neutral/30';
+};
 </script>
 
 {#if viewModel?.isOpen}
@@ -68,13 +96,7 @@ const handleActivityInput = (e: Event) => {
         <span class="text-sm font-semibold mr-1">Paint:</span>
         {#each (['online', 'idle', 'dnd', 'offline'] as AvailabilityStatus[]) as status}
           {@const isActive = viewModel.paintStatus === status}
-          {@const statusColor = status === 'online'
-            ? 'bg-success'
-            : status === 'idle'
-              ? 'bg-warning'
-              : status === 'dnd'
-                ? 'bg-error'
-                : 'bg-neutral'}
+          {@const statusColor = statusColorFor(status)}
           <button
             type="button"
             class="btn btn-xs {isActive ? 'btn-primary' : `btn-ghost ${statusColor}`}"
@@ -133,13 +155,7 @@ const handleActivityInput = (e: Event) => {
             {#each viewModel.days as day, dayIndex}
               {@const slot = day.hours[hourIndex]}
               {@const isNow = dayIndex === viewModel.currentDay && hourIndex === viewModel.currentHour}
-              {@const cellBg = slot?.status === 'online'
-                ? 'bg-success/40'
-                : slot?.status === 'idle'
-                  ? 'bg-warning/40'
-                  : slot?.status === 'dnd'
-                    ? 'bg-error/40'
-                    : 'bg-neutral/30'}
+              {@const cellBg = cellBgFor(slot?.status)}
               {@const nowClass = isNow ? ' outline outline-2 outline-primary' : ''}
               <button
                 type="button"

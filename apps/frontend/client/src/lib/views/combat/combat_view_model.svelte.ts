@@ -1636,6 +1636,5 @@ export class CombatViewModel
  * @param options - ViewModel options (standard BaseViewModelOptions).
  * @returns A fully initialized CombatViewModel instance.
  */
-export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface => {
-  return CombatViewModel.create(options);
-};
+export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface =>
+  CombatViewModel.create(options);

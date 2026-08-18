@@ -52,8 +52,8 @@ describe('EngineBridge — message passthrough', () => {
     const bridge: EngineBridge = new MockEngineBridge();
 
     const received: GameEvent[] = [];
-    bridge.on('GAME_READY', (event) => {
-      received.push(event);
+    bridge.on('GAME_READY', (evt) => {
+      received.push(evt);
     });
 
     const event: GameEvent = { type: 'GAME_READY' };

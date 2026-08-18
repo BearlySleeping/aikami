@@ -64,12 +64,14 @@ class TalkToPartyViewModel
 
     // Initial greeting from companion
     const member = partyRosterService.getMember(this._npcId);
-    const approvalMsg =
-      member && member.approval > 50
-        ? ' (They seem particularly happy to talk with you.)'
-        : member && member.approval < -50
-          ? ' (They eye you warily.)'
-          : '';
+    let approvalMsg: string;
+    if (member && member.approval > 50) {
+      approvalMsg = ' (They seem particularly happy to talk with you.)';
+    } else if (member && member.approval < -50) {
+      approvalMsg = ' (They eye you warily.)';
+    } else {
+      approvalMsg = '';
+    }
 
     this.messages = [
       {

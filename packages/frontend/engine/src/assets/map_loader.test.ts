@@ -20,50 +20,47 @@ import {
 /**
  * Creates a minimal valid Tiled JSON map for testing.
  */
-const createTestMap = (overrides?: Partial<Record<string, unknown>>): Record<string, unknown> => {
-  return {
-    width: 10,
-    height: 8,
-    tilewidth: 32,
-    tileheight: 32,
-    tilesets: [
-      {
-        firstgid: 1,
-        name: 'test_tileset',
-        image: 'tileset.png',
-        imagewidth: 256,
-        imageheight: 256,
-        tilewidth: 32,
-        tileheight: 32,
-        columns: 8,
-        tilecount: 64,
-      },
-    ],
-    layers: [
-      {
-        name: 'ground',
-        width: 10,
-        height: 8,
-        data: new Array(80).fill(1),
-        visible: true,
-        type: 'tilelayer',
-      },
-    ],
-    ...overrides,
-  };
-};
+const createTestMap = (overrides?: Partial<Record<string, unknown>>): Record<string, unknown> => ({
+  width: 10,
+  height: 8,
+  tilewidth: 32,
+  tileheight: 32,
+  tilesets: [
+    {
+      firstgid: 1,
+      name: 'test_tileset',
+      image: 'tileset.png',
+      imagewidth: 256,
+      imageheight: 256,
+      tilewidth: 32,
+      tileheight: 32,
+      columns: 8,
+      tilecount: 64,
+    },
+  ],
+  layers: [
+    {
+      name: 'ground',
+      width: 10,
+      height: 8,
+      data: new Array(80).fill(1),
+      visible: true,
+      type: 'tilelayer',
+    },
+  ],
+  ...overrides,
+});
 
 /**
  * Mock fetch that returns a JSON response from the given object.
  */
-const mockFetch = (data: unknown) => {
-  return mock(() =>
+const mockFetch = (data: unknown) =>
+  mock(() =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve(data),
     } as Response),
   ) as unknown as typeof fetch;
-};
 
 afterEach(() => {
   clearMapCache();

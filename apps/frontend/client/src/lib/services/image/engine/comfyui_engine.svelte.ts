@@ -111,11 +111,12 @@ export class ComfyUiEngine implements ImageEngineClient {
 
     // ckpt_name is a NESTED array ([["a.safetensors", ...]]) — do not regress.
     const raw = checkpointNode?.input?.required?.ckpt_name;
-    const filenames: string[] = Array.isArray(raw)
-      ? Array.isArray(raw[0])
-        ? (raw[0] as string[])
-        : (raw as string[])
-      : [];
+    let filenames: string[];
+    if (Array.isArray(raw)) {
+      filenames = Array.isArray(raw[0]) ? (raw[0] as string[]) : (raw as string[]);
+    } else {
+      filenames = [];
+    }
 
     return filenames.map((filename) => ({
       id: filename.replace(/\.safetensors$/, ''),

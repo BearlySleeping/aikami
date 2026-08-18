@@ -89,9 +89,8 @@ const uboRecipeSnapshots = new Map<number, string>();
 /**
  * Computes a structural fingerprint for a set of layer recipes.
  */
-const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string => {
-  return JSON.stringify(recipes.map((r) => (r ? { s: r.slot, a: r.assetId } : null)));
-};
+const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string =>
+  JSON.stringify(recipes.map((r) => (r ? { s: r.slot, a: r.assetId } : null)));
 
 /**
  * Computes a structural fingerprint for a set of layer recipes.

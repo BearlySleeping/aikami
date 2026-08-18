@@ -240,13 +240,13 @@ export class GameStateService
     }
   }
 
-  private readonly uid: string;
-  private readonly listeners: Set<GameStateListener> = new Set();
-  private unsubscribeWorld: (() => void) | undefined;
+  private readonly _uid: string;
+  private readonly _listeners: Set<GameStateListener> = new Set();
+  private _unsubscribeWorld: (() => void) | undefined;
 
   constructor(options: GameStateServiceOptions) {
     super(options);
-    this.uid = options.uid;
+    this._uid = options.uid;
 
     // Register for save/load serialization (C-233)
     registerSerializable('gameState', {
@@ -264,8 +264,8 @@ export class GameStateService
     void this._listenForPlayerStats();
   }
 
-  private emitEvent(event: GameStateEvent): void {
-    for (const listener of this.listeners) {
+  private _emitEvent(event: GameStateEvent): void {
+    for (const listener of this._listeners) {
       listener(event);
     }
   }
@@ -273,7 +273,7 @@ export class GameStateService
   async subscribeToWorld(worldId: string): Promise<void> {
     this.currentWorld = {
       id: worldId,
-      uid: this.uid,
+      uid: this._uid,
       name: 'New World',
       description: '',
       locations: [],
@@ -283,12 +283,12 @@ export class GameStateService
       updatedAt: new Date().toISOString(),
     };
 
-    this.unsubscribeWorld = () => {
+    this._unsubscribeWorld = () => {
       this.currentWorld = undefined;
       this.currentLocation = undefined;
     };
 
-    this.emitEvent({
+    this._emitEvent({
       type: 'location_changed',
       payload: { worldId },
       timestamp: new Date().toISOString(),
@@ -296,9 +296,9 @@ export class GameStateService
   }
 
   unsubscribeFromWorld(): void {
-    if (this.unsubscribeWorld) {
-      this.unsubscribeWorld();
-      this.unsubscribeWorld = undefined;
+    if (this._unsubscribeWorld) {
+      this._unsubscribeWorld();
+      this._unsubscribeWorld = undefined;
     }
   }
 
@@ -321,7 +321,7 @@ export class GameStateService
       locations: world.locations.map((l: WorldLocation) => (l.id === locationId ? updated : l)),
     };
 
-    this.emitEvent({
+    this._emitEvent({
       type: 'location_changed',
       payload: { locationId, location: updated },
       timestamp: new Date().toISOString(),
@@ -340,7 +340,7 @@ export class GameStateService
       updatedAt: new Date().toISOString(),
     };
 
-    this.emitEvent({
+    this._emitEvent({
       type: 'variable_updated',
       payload: { key, value },
       timestamp: new Date().toISOString(),
@@ -359,7 +359,7 @@ export class GameStateService
         npcIds: [...location.npcIds, npcId],
       };
 
-      this.emitEvent({
+      this._emitEvent({
         type: 'npc_added',
         payload: { npcId, locationId: location.id },
         timestamp: new Date().toISOString(),
@@ -378,7 +378,7 @@ export class GameStateService
       npcIds: location.npcIds.filter((id: string) => id !== npcId),
     };
 
-    this.emitEvent({
+    this._emitEvent({
       type: 'npc_removed',
       payload: { npcId, locationId: location.id },
       timestamp: new Date().toISOString(),
@@ -413,7 +413,7 @@ export class GameStateService
       updatedAt: new Date().toISOString(),
     };
 
-    this.emitEvent({
+    this._emitEvent({
       type: 'event_triggered',
       payload: newEvent,
       timestamp: new Date().toISOString(),
@@ -421,9 +421,9 @@ export class GameStateService
   }
 
   addEventListener(listener: GameStateListener): () => void {
-    this.listeners.add(listener);
+    this._listeners.add(listener);
     return () => {
-      this.listeners.delete(listener);
+      this._listeners.delete(listener);
     };
   }
 
@@ -444,7 +444,7 @@ export class GameStateService
     const session: ActiveSessionData = {
       id: crypto.randomUUID(),
       worldId: this.currentWorld?.id ?? '',
-      uid: this.uid,
+      uid: this._uid,
       characterIds,
       npcIds: [],
       startedAt: new Date().toISOString(),
@@ -464,7 +464,7 @@ export class GameStateService
         lastActiveAt: new Date().toISOString(),
       };
 
-      this.emitEvent({
+      this._emitEvent({
         type: 'session_ended',
         payload: { sessionId: this.activeSession.id },
         timestamp: new Date().toISOString(),

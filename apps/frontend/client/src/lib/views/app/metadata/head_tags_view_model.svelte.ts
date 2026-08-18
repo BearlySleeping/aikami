@@ -8,9 +8,8 @@ import {
 import { page } from '$app/state';
 import { routerService } from '$services';
 
-const jsonLd = (data: Record<string, unknown>): string => {
-  return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
-};
+const jsonLd = (data: Record<string, unknown>): string =>
+  `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 
 export type BaseMetaTags = {
   author?: string;
@@ -189,7 +188,7 @@ class HeadTagsViewModel
       locale: 'en_US',
       title: data.title,
       type: data.type,
-      url: url,
+      url,
     };
 
     const twitter: Partial<MetaTagTwitterProperties> = {

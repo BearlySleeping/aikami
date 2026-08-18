@@ -80,28 +80,28 @@ class SettingsControlsViewModel
   private _keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   override async initialize(): Promise<void> {
-    this.loadFromStorage();
+    this._loadFromStorage();
     await super.initialize();
   }
 
   override async dispose(): Promise<void> {
-    this.removeKeyListener();
+    this._removeKeyListener();
     await super.dispose();
   }
 
   startListening(actionId: string): void {
     // Cancel any previous listener
-    this.removeKeyListener();
+    this._removeKeyListener();
 
     this.listeningActionId = actionId;
 
     this._keydownHandler = (e: KeyboardEvent) => {
       e.preventDefault();
 
-      const keyName = this.formatKeyName(e);
+      const keyName = this._formatKeyName(e);
       this.bindings = { ...this.bindings, [actionId]: keyName };
-      this.persistToStorage();
-      this.removeKeyListener();
+      this._persistToStorage();
+      this._removeKeyListener();
       this.listeningActionId = null;
     };
 
@@ -109,18 +109,18 @@ class SettingsControlsViewModel
   }
 
   cancelListening(): void {
-    this.removeKeyListener();
+    this._removeKeyListener();
     this.listeningActionId = null;
   }
 
   resetDefaults(): void {
     this.bindings = { ...DEFAULT_BINDINGS };
-    this.persistToStorage();
+    this._persistToStorage();
   }
 
   // ── Private helpers ──────────────────────────────────────────────────
 
-  private formatKeyName(e: KeyboardEvent): string {
+  private _formatKeyName(e: KeyboardEvent): string {
     // Use event.key directly — single chars stay lowercase (e.g. "w")
     // so the engine's keyToDirection can match them case-insensitively.
     // Modifier combos are stored as "Ctrl+W" style strings.
@@ -141,7 +141,7 @@ class SettingsControlsViewModel
     return parts.length > 0 ? parts.join('+') : '---';
   }
 
-  private persistToStorage(): void {
+  private _persistToStorage(): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.bindings));
     } catch {
@@ -149,7 +149,7 @@ class SettingsControlsViewModel
     }
   }
 
-  private loadFromStorage(): void {
+  private _loadFromStorage(): void {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -160,7 +160,7 @@ class SettingsControlsViewModel
     }
   }
 
-  private removeKeyListener(): void {
+  private _removeKeyListener(): void {
     if (this._keydownHandler) {
       window.removeEventListener('keydown', this._keydownHandler);
       this._keydownHandler = null;

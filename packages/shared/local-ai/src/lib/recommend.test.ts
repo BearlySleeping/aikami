@@ -267,6 +267,45 @@ describe('AC-12 — missing GPU passthrough is caught, not assumed', () => {
     expect(plan.warnings.some((w) => w.includes('NVIDIA Container Toolkit'))).toBe(true);
   });
 
+  test('no container runtime yet blames the missing runtime, not a missing toolkit', () => {
+    // The normal state of a machine being set up for the first time: the GPU
+    // is there, docker is not running, so passthrough could not be checked.
+    // Telling that user to install the NVIDIA Container Toolkit sends them
+    // down the wrong path.
+    const plan = recommend({
+      profile: profile({
+        platform: 'linux',
+        gpu: { vendor: 'nvidia', name: 'RTX 4070', vramMb: 12288, unifiedMemory: false },
+        gpuPassthroughReady: false,
+        containerRuntime: 'none',
+      }),
+      modalities: ['text'],
+      manifest: MANIFEST,
+    });
+    expect(plan.backend).toBe('cpu');
+    const warning = plan.warnings.find((w) => w.includes('no container runtime was running'));
+    expect(warning).toBeDefined();
+    expect(plan.warnings.some((w) => w.includes('NVIDIA Container Toolkit'))).toBe(false);
+  });
+
+  test('win32 points at Docker Desktop + WSL2, not at the container toolkit', () => {
+    // There is no NVIDIA Container Toolkit to install on Windows — GPU access
+    // comes from Docker Desktop's WSL2 backend plus a current driver.
+    const plan = recommend({
+      profile: profile({
+        platform: 'win32',
+        gpu: { vendor: 'nvidia', name: 'RTX 4090 Laptop', vramMb: 16376, unifiedMemory: false },
+        gpuPassthroughReady: false,
+        containerRuntime: 'docker',
+      }),
+      modalities: ['text'],
+      manifest: MANIFEST,
+    });
+    expect(plan.backend).toBe('cpu');
+    expect(plan.warnings.some((w) => w.includes('WSL2'))).toBe(true);
+    expect(plan.warnings.some((w) => w.includes('NVIDIA Container Toolkit'))).toBe(false);
+  });
+
   test('explicit --backend cuda on no NVIDIA GPU obeys with a loud warning', () => {
     const plan = recommend({
       profile: profile({

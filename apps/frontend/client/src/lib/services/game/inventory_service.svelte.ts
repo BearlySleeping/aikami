@@ -501,7 +501,7 @@ class InventoryService
     if (quantity <= 0) {
       return false;
     }
-    const index = this.inventory.findIndex((entry) => entry.itemId === itemId);
+    const index = this.inventory.findIndex((candidate) => candidate.itemId === itemId);
     if (index < 0) {
       this.debug('removeItem:not-owned', { itemId });
       return false;

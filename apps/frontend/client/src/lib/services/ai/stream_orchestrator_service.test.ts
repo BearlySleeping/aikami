@@ -5,9 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, tes
 beforeAll(() => {
   (globalThis as Record<string, unknown>).requestAnimationFrame = (
     callback: FrameRequestCallback,
-  ): number => {
-    return setTimeout(callback, 16) as unknown as number;
-  };
+  ): number => setTimeout(callback, 16) as unknown as number;
   (globalThis as Record<string, unknown>).cancelAnimationFrame = (id: number): void => {
     clearTimeout(id);
   };
@@ -42,12 +40,11 @@ let _originalFetch: typeof globalThis.fetch;
 
 beforeAll(() => {
   _originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () => {
-    return {
+  globalThis.fetch = (async () =>
+    ({
       ok: true,
       arrayBuffer: async () => new ArrayBuffer(128),
-    } as Response;
-  }) as typeof fetch;
+    }) as Response) as typeof fetch;
 });
 
 afterAll(() => {
@@ -490,11 +487,10 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
   test('should NOT save when NPC response is empty', async () => {
     let startPromiseResolve: (() => void) | undefined;
 
-    internalText.start = (_options) => {
-      return new Promise<void>((resolve) => {
+    internalText.start = (_options) =>
+      new Promise<void>((resolve) => {
         startPromiseResolve = resolve;
       });
-    };
 
     void orchestrator.generateDialogue({
       prompt: 'Greetings',
@@ -790,9 +786,8 @@ describe('StreamOrchestrator — C-063 AC3/AC4: Hybrid Trigger Pipeline', () => 
     audioQueuePlayer: audioQueue,
     textureInjector,
     expressionAssetResolver: {
-      resolve: (options: { npcId: string; emotion: string }) => {
-        return staticAssetPaths.get(`${options.npcId}:${options.emotion}`);
-      },
+      resolve: (options: { npcId: string; emotion: string }) =>
+        staticAssetPaths.get(`${options.npcId}:${options.emotion}`),
     },
     expressionGenerator: async (options) => {
       expressionGenerationCalls.push(options);
@@ -826,8 +821,14 @@ describe('StreamOrchestrator — C-063 AC3/AC4: Hybrid Trigger Pipeline', () => 
     staticAssetPaths = new Map();
 
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.toString();
+      } else {
+        url = input.url;
+      }
       fetchCalls.push({ url });
       return {
         ok: true,
@@ -932,8 +933,14 @@ describe('StreamOrchestrator — C-069 AC3: Direct Kokoro HTTP', () => {
 
     // Mock fetch: track Kokoro calls, return mock WAV
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.toString();
+      } else {
+        url = input.url;
+      }
 
       // Only intercept Kokoro calls
       if (url.includes('/v1/audio/speech')) {

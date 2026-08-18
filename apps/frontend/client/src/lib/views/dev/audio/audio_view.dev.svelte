@@ -12,6 +12,28 @@ type Props = {
   viewModel: DevAudioViewModelInterface;
 };
 const { viewModel }: Props = $props();
+
+/** Toggle play/pause/skip based on current transport state. */
+const handleTransportClick = () => {
+  if (viewModel.isPaused) {
+    viewModel.resumeMusic();
+  } else if (viewModel.isPlaying) {
+    viewModel.pauseMusic();
+  } else {
+    viewModel.skipMusic();
+  }
+};
+
+/** Button label for the transport control. */
+const transportLabel = $derived.by(() => {
+  if (viewModel.isPaused) {
+    return '▶️ Resume';
+  }
+  if (viewModel.isPlaying) {
+    return '⏸ Pause';
+  }
+  return '▶ Play';
+});
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">
@@ -92,17 +114,8 @@ const { viewModel }: Props = $props();
 
         <!-- Transport controls -->
         <div class="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            onclick={() =>
-              viewModel.isPaused
-                ? viewModel.resumeMusic()
-                : viewModel.isPlaying
-                  ? viewModel.pauseMusic()
-                  : viewModel.skipMusic()}
-          >
-            {viewModel.isPaused ? '▶️ Resume' : viewModel.isPlaying ? '⏸ Pause' : '▶ Play'}
+          <button type="button" class="btn btn-primary btn-sm" onclick={handleTransportClick}>
+            {transportLabel}
           </button>
           <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.stopMusic()}>
             ⏹ Stop

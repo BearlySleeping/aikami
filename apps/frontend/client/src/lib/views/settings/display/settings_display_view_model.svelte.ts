@@ -87,7 +87,7 @@ class SettingsDisplayViewModel
         const size = await win.innerSize();
         this.width = size.width;
         this.height = size.height;
-        this.updateSelectedPreset(this.width, this.height);
+        this._updateSelectedPreset(this.width, this.height);
       } catch (error) {
         this.debug('Failed to read Tauri window state', { error: String(error) });
       }
@@ -132,7 +132,7 @@ class SettingsDisplayViewModel
   }
 
   /** Checks whether width/height matches a known preset and updates selectedPreset. */
-  private updateSelectedPreset(w: number, h: number): void {
+  private _updateSelectedPreset(w: number, h: number): void {
     const match = RESOLUTION_PRESETS.find((p) => p.width === w && p.height === h);
     this.selectedPreset = match ? match.label : 'Custom';
   }

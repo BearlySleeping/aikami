@@ -21,6 +21,17 @@ const showProgress = $derived(viewModel.isConnected || viewModel.isPlaying);
 const progressPercent = $derived(
   viewModel.isPlaying ? viewModel.playbackProgress : viewModel.synthesisProgress,
 );
+
+/** Status dot color class for the connection/playback indicator. */
+const statusDotClass = $derived.by(() => {
+  if (viewModel.isPlaying) {
+    return 'bg-success animate-pulse';
+  }
+  if (viewModel.isConnected) {
+    return 'bg-warning animate-pulse';
+  }
+  return 'bg-base-content/20';
+});
 </script>
 
 <svelte:head>
@@ -220,13 +231,7 @@ const progressPercent = $derived(
           <div class="flex flex-col gap-3">
             <!-- Progress indicator -->
             <div class="flex items-center gap-3">
-              <div
-                class="w-3 h-3 rounded-full {viewModel.isPlaying
-                  ? 'bg-success animate-pulse'
-                  : viewModel.isConnected
-                    ? 'bg-warning animate-pulse'
-                    : 'bg-base-content/20'}"
-              ></div>
+              <div class="w-3 h-3 rounded-full {statusDotClass}"></div>
               <span class="text-sm">
                 {#if viewModel.isConnected}
                   {#if progressPercent > 0}

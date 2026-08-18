@@ -27,7 +27,7 @@
 }
 
 /* Light theme — Starlight's gray ramp runs darkest-first in light mode. */
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --sl-color-accent-low: color-mix(in oklab, var(--rune) 22%, var(--background));
   --sl-color-accent: var(--rune);
   --sl-color-accent-high: color-mix(in oklab, var(--rune) 78%, var(--foreground));

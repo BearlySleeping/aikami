@@ -58,9 +58,7 @@ describe('PixiTextureInjector — AC4: PixiJS Dynamic Texture Injection', () => 
     mock.module('pixi.js', () => ({
       Texture: {
         WHITE: createMockTexture('white'),
-        from: mock((source: unknown): Texture => {
-          return createMockTexture(source);
-        }),
+        from: mock((source: unknown): Texture => createMockTexture(source)),
       },
       Container: class MockContainer {
         texture: Texture | undefined;
@@ -68,9 +66,9 @@ describe('PixiTextureInjector — AC4: PixiJS Dynamic Texture Injection', () => 
     }));
 
     // Mock global createImageBitmap
-    testGlobal.createImageBitmap = mock((_blob: Blob): Promise<ImageBitmap> => {
-      return Promise.resolve(mockBitmap);
-    });
+    testGlobal.createImageBitmap = mock(
+      (_blob: Blob): Promise<ImageBitmap> => Promise.resolve(mockBitmap),
+    );
 
     // Mock global Blob
     testGlobal.Blob = class MockBlob {

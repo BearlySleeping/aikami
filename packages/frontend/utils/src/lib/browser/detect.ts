@@ -12,9 +12,7 @@ export type Browser = DetectBrowser | 'bot' | 'react-native' | 'node' | 'brave';
  *   before the check
  * @returns true if the user agent is a bot, crawler or spider
  */
-export const isBot = (userAgent: string): boolean => {
-  return isbot(userAgent);
-};
+export const isBot = (userAgent: string): boolean => isbot(userAgent);
 
 /**
  * Browsers that can install the extension.
@@ -65,9 +63,7 @@ export const getOS = (): OperatingSystem | NodeJS.Platform | undefined => {
   return browser?.os ?? undefined;
 };
 
-export const isIOS = (): boolean => {
-  return getOS() === 'iOS';
-};
+export const isIOS = (): boolean => getOS() === 'iOS';
 
 export const isMobileDevice = (): boolean => {
   if (typeof window === 'undefined') {
@@ -91,9 +87,7 @@ export const isTabletDevice = (): boolean => {
   );
 };
 
-export const isMobileOrTablet = (): boolean => {
-  return isMobileDevice() || isTabletDevice();
-};
+export const isMobileOrTablet = (): boolean => isMobileDevice() || isTabletDevice();
 
 export const isIPad = (): boolean => {
   if (typeof window === 'undefined') {

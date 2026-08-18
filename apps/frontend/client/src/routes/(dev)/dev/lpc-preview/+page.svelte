@@ -16,12 +16,12 @@ import {
 
 /** Builds LpcLayerRecipe[] from a recipe record. */
 const buildRecipes = (
-  recipe: Record<string, string>,
-  paletteOverrides?: Record<string, string>,
+  recipeRecord: Record<string, string>,
+  overridePalettes?: Record<string, string>,
 ) => {
   const recipes: Array<{ slot: string; assetId: string; hexPalette: Uint8Array }> = [];
-  for (const [slot, assetId] of Object.entries(recipe)) {
-    const hexColor = paletteOverrides?.[slot];
+  for (const [slot, assetId] of Object.entries(recipeRecord)) {
+    const hexColor = overridePalettes?.[slot];
     const hexPalette = new Uint8Array(1024);
     if (hexColor && hexColor.length === 6) {
       const r = Number.parseInt(hexColor.slice(0, 2), 16);

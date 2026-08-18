@@ -146,8 +146,8 @@ const selectBackend = (options: {
   // (cpu/cuda/rocm/vulkan/intel/musa), not only CPU-only profiles: a CUDA
   // pick with no docker/podman would fail at `up` just the same. Metal is
   // the native runtime and never needs the warning.
-  const warnIfNoRuntime = (backend: StackPlan['backend']): void => {
-    if (backend !== 'metal' && profile.containerRuntime === 'none') {
+  const warnIfNoRuntime = (targetBackend: StackPlan['backend']): void => {
+    if (targetBackend !== 'metal' && profile.containerRuntime === 'none') {
       warnings.push(NO_RUNTIME_WARNING);
     }
   };
@@ -175,9 +175,25 @@ const selectBackend = (options: {
   switch (profile.gpu.vendor) {
     case 'nvidia': {
       if (!profile.gpuPassthroughReady) {
-        warnings.push(
-          'NVIDIA GPU detected but the NVIDIA Container Toolkit is not wired into the container runtime — GPU containers would fail at `up`. Falling back to CPU. Install the toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html',
-        );
+        // Three different situations reach here and they need three different
+        // instructions — a single "install the NVIDIA Container Toolkit" line
+        // is wrong advice on Windows (Docker Desktop wires GPUs through WSL2,
+        // there is no toolkit to install) and premature when there is no
+        // container runtime to inspect yet, which is the normal state on a
+        // machine that is being set up for the first time.
+        if (profile.containerRuntime === 'none') {
+          warnings.push(
+            'NVIDIA GPU detected, but no container runtime was running, so GPU passthrough could not be verified — falling back to CPU. Start Docker and re-run the wizard (`aikami wizard`) to pick the CUDA backend.',
+          );
+        } else if (profile.platform === 'win32') {
+          warnings.push(
+            'NVIDIA GPU detected but Docker does not report GPU support — GPU containers would fail at `up`. Falling back to CPU. On Windows this comes from Docker Desktop on the WSL2 backend plus a current NVIDIA driver (no separate container toolkit to install); check both, then re-run `aikami wizard`.',
+          );
+        } else {
+          warnings.push(
+            'NVIDIA GPU detected but the NVIDIA Container Toolkit is not wired into the container runtime — GPU containers would fail at `up`. Falling back to CPU. Install the toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html',
+          );
+        }
         backend = 'cpu';
       } else {
         backend = 'cuda';

@@ -215,6 +215,4 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
  */
 export const getPersonaCreateDevViewModel = (
   options: PersonaCreateViewModelOptions,
-): PersonaCreateDevViewModel => {
-  return new PersonaCreateDevViewModel(options);
-};
+): PersonaCreateDevViewModel => new PersonaCreateDevViewModel(options);

@@ -183,9 +183,7 @@ const preparePaletteLUT = (hexColors: Record<string, string>): Uint8Array => {
  * @param _key - Numeric asset ID (ignored — always returns white).
  * @returns A promise resolving to `Texture.WHITE`.
  */
-const defaultLoadTexture = async (_key: number): Promise<Texture> => {
-  return Texture.WHITE;
-};
+const defaultLoadTexture = async (_key: number): Promise<Texture> => Texture.WHITE;
 
 // ---------------------------------------------------------------------------
 // generateLpcAtlas — dynamic Spritesheet atlas JSON

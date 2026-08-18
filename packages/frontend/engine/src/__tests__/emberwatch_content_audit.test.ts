@@ -444,9 +444,9 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
     // The interior-lighting property is declared generically per-map in the
     // manifest (`interior: true`) and projected into PackConfig by the
     // engine service — the engine never hard-codes map ids.
-    expect(manifest.maps?.['inn']?.interior).toBe(true);
-    expect(manifest.maps?.['merchant_shop']?.interior).toBe(true);
-    expect(manifest.maps?.['village']?.interior).toBeUndefined();
+    expect(manifest.maps?.inn?.interior).toBe(true);
+    expect(manifest.maps?.merchant_shop?.interior).toBe(true);
+    expect(manifest.maps?.village?.interior).toBeUndefined();
   });
 });
 

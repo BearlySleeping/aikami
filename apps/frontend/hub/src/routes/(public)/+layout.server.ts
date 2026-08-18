@@ -6,8 +6,6 @@
 // shell renders fine with `userSession === undefined`.
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = ({ locals }) => {
-  return {
-    userSession: locals.userSession,
-  };
-};
+export const load: LayoutServerLoad = ({ locals }) => ({
+  userSession: locals.userSession,
+});

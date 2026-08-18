@@ -30,9 +30,7 @@ const {
 /**
  * Formats a number as a zero-padded two-digit string.
  */
-const pad = (n: number): string => {
-  return String(n).padStart(2, '0');
-};
+const pad = (n: number): string => String(n).padStart(2, '0');
 
 /** Returns the diurnal phase label based on the game hour. */
 const diurnalLabel = $derived.by(() => {

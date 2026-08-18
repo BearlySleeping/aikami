@@ -53,6 +53,20 @@ export type AppServiceInterface = BaseFrontendClassInterface & {
   toggleNotificationDrawer(value?: boolean): void;
 
   setLogLevel(logLevel: LogLevel): void;
+
+  /**
+   * Whether external log flushing to /api/internal_logging is enabled.
+   * Mirrors {@link logger.externalLoggingEnabled}.
+   */
+  readonly externalLoggingEnabled: boolean;
+
+  /**
+   * Toggles external logging (HTTP flush to /api/internal_logging).
+   * If a value is provided, it is set directly; if no value is provided,
+   * the current state is inverted.
+   * @param enabled The optional boolean value to set.
+   */
+  setExternalLogging(enabled?: boolean): void;
 };
 
 export class AppService
@@ -72,6 +86,9 @@ export class AppService
   isDevelopment = $state(isDevelopmentModePublic());
   initialized = $state(false);
 
+  /** Whether external log flushing to /api/internal_logging is enabled. */
+  externalLoggingEnabled = $state(logger.externalLoggingEnabled);
+
   setCurrentDevice(device: DeviceData): void {
     this._currentDevice = device;
   }
@@ -82,6 +99,12 @@ export class AppService
 
   setLogLevel(logLevel: LogLevel) {
     logger.logLevel = logLevel;
+  }
+
+  setExternalLogging(enabled?: boolean) {
+    const next = enabled ?? !this.externalLoggingEnabled;
+    logger.setExternalLogging(next);
+    this.externalLoggingEnabled = next;
   }
 
   toggleNotificationDrawer(value?: boolean) {

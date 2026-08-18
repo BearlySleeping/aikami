@@ -84,17 +84,19 @@ class AgentRegistryService
         throw new Error(`Name must be ${AGENT_MAX_NAME_LENGTH} characters or fewer`);
       }
     }
-    if ('description' in input && input.description !== undefined) {
-      if (input.description.length > AGENT_MAX_DESCRIPTION_LENGTH) {
-        throw new Error(`Description must be ${AGENT_MAX_DESCRIPTION_LENGTH} characters or fewer`);
-      }
+    if (
+      'description' in input &&
+      input.description !== undefined &&
+      input.description.length > AGENT_MAX_DESCRIPTION_LENGTH
+    ) {
+      throw new Error(`Description must be ${AGENT_MAX_DESCRIPTION_LENGTH} characters or fewer`);
     }
-    if ('timeout' in input && input.timeout !== undefined) {
-      if (input.timeout < AGENT_MIN_TIMEOUT || input.timeout > AGENT_MAX_TIMEOUT) {
-        throw new Error(
-          `Timeout must be between ${AGENT_MIN_TIMEOUT}ms and ${AGENT_MAX_TIMEOUT}ms`,
-        );
-      }
+    if (
+      'timeout' in input &&
+      input.timeout !== undefined &&
+      (input.timeout < AGENT_MIN_TIMEOUT || input.timeout > AGENT_MAX_TIMEOUT)
+    ) {
+      throw new Error(`Timeout must be between ${AGENT_MIN_TIMEOUT}ms and ${AGENT_MAX_TIMEOUT}ms`);
     }
   }
 

@@ -4,13 +4,11 @@ import { describe, expect, mock, test } from 'bun:test';
 // $state and $derived are polyfilled globally via test_preload.ts
 
 // Mock $app/state for page.url.pathname
-mock.module('$app/state', () => {
-  return {
-    page: { url: { pathname: '/dev/text' } },
-    navigating: null,
-    __esModule: true,
-  };
-});
+mock.module('$app/state', () => ({
+  page: { url: { pathname: '/dev/text' } },
+  navigating: null,
+  __esModule: true,
+}));
 
 import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 

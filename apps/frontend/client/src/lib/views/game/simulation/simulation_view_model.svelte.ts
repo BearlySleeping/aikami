@@ -360,10 +360,7 @@ class SimulationViewModel
  *
  * @param options - ViewModel options including optional log size.
  */
-export const getSimulationViewModel = (
-  options: SimulationViewModelOptions,
-): SimulationViewModel => {
-  return new SimulationViewModel(options);
-};
+export const getSimulationViewModel = (options: SimulationViewModelOptions): SimulationViewModel =>
+  new SimulationViewModel(options);
 
 export { SimulationViewModel };

@@ -25,8 +25,8 @@ mock.module('$services', () => ({
   },
 }));
 
-import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
 import { setLpcUrlResolver } from '$lib/data/lpc_renderer';
+import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
 import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -250,9 +250,7 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
       // on the asset manifest being loaded in the test env (which returns
       // undefined). rustySword's lpcAssetId is weapon/sword/dagger.
       setLpcUrlResolver((assetId) =>
-        assetId === 'weapon/sword/dagger'
-          ? 'https://assets.example/dagger-walk.png'
-          : null,
+        assetId === 'weapon/sword/dagger' ? 'https://assets.example/dagger-walk.png' : null,
       );
       const viewModel = createViewModel({ vendorInventory: 'rustySword' });
       const url = viewModel.getItemArtUrl('rustySword');

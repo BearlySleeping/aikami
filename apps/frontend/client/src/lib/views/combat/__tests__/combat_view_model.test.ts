@@ -56,11 +56,10 @@ const createViewModel = (): CombatViewModelInterface => {
 };
 
 /** Exposes the private BGM transition method for focused unit testing. */
-const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promise<void> => {
-  return (
-    vm as unknown as { _transitionBgmByMood: (m: string) => Promise<void> }
-  )._transitionBgmByMood(mood);
-};
+const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promise<void> =>
+  (vm as unknown as { _transitionBgmByMood: (m: string) => Promise<void> })._transitionBgmByMood(
+    mood,
+  );
 
 describe('CombatViewModel — C-385 AC-3 static catalog BGM', () => {
   let viewModel: CombatViewModelInterface;

@@ -27,9 +27,12 @@ const USER_ACTIONS: MessageAction[] = ['copy', 'edit', 'delete', 'branch'];
 /** Actions when TTS is available (added to both). */
 const TTS_ACTION: MessageAction = 'speak';
 
-const actions = $derived(
-  sender === 'ai' ? (ttsAvailable ? [...AI_ACTIONS, TTS_ACTION] : AI_ACTIONS) : USER_ACTIONS,
-);
+const actions = $derived.by(() => {
+  if (sender === 'ai') {
+    return ttsAvailable ? [...AI_ACTIONS, TTS_ACTION] : AI_ACTIONS;
+  }
+  return USER_ACTIONS;
+});
 
 /** Labels for action buttons. */
 const LABELS: Record<MessageAction, string> = {

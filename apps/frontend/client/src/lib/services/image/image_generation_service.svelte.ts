@@ -154,14 +154,14 @@ export class ImageGenerationService
   extends BaseFrontendClass<ImageGenerationOptions>
   implements ImageGenerationServiceInterface
 {
-  private isDemo: boolean;
+  private _isDemo: boolean;
   // $state — the view reads `engineId`/`capabilities` getters in templates;
   // a plain field would never invalidate after async engine detection.
   private _engine = $state<ImageEngineClient | undefined>(undefined);
 
   constructor(options: ImageGenerationOptions) {
     super(options);
-    this.isDemo = options.isDemo ?? false;
+    this._isDemo = options.isDemo ?? false;
   }
 
   checkpoints: CheckpointInfo[] = $state([]);
@@ -209,7 +209,7 @@ export class ImageGenerationService
 
   /** Whether image generation is ready to use. */
   get isReady(): boolean {
-    if (this.isDemo) {
+    if (this._isDemo) {
       return true;
     }
     // An engine must be resolved (auto-detected or configured) AND a
@@ -224,7 +224,7 @@ export class ImageGenerationService
   }
 
   isDemoMode(): boolean {
-    return this.isDemo;
+    return this._isDemo;
   }
 
   /**
@@ -232,7 +232,7 @@ export class ImageGenerationService
    * per-engine checkpoint (with legacy-key migration for ComfyUI).
    */
   async loadCheckpoints(): Promise<void> {
-    if (this.isDemo) {
+    if (this._isDemo) {
       this.debug('loadCheckpoints: demo mode - loading mock checkpoint');
       this.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base 1.0 (Demo)' }];
       if (!this.selectedCheckpoint) {
@@ -307,7 +307,7 @@ export class ImageGenerationService
       signal,
     } = options;
 
-    if (this.isDemo) {
+    if (this._isDemo) {
       this.debug('generateImage: demo mode - returning mock image');
       return {
         url: `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0, 20))}`,

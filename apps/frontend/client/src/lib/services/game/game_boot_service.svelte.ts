@@ -194,10 +194,12 @@ class GameBootService
 
         // Drive campaign state machine to failed
         if (this._campaign) {
-          const { canTransition, transition } = await import('../campaign/boot_state_machine.ts');
+          const { canTransition, transition: transitionFn } = await import(
+            '../campaign/boot_state_machine.ts'
+          );
           if (canTransition(this._campaign.state, { type: 'LOAD_FAILED', error: message })) {
             try {
-              const failedState = transition(this._campaign.state, {
+              const failedState = transitionFn(this._campaign.state, {
                 type: 'LOAD_FAILED',
                 error: message,
               });
@@ -831,9 +833,11 @@ class GameBootService
   private async _stageCreateEngine(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
-    const { createEngineBridge, GameWorld, TextureManager } = await import(
-      '@aikami/frontend/engine'
-    );
+    const {
+      createEngineBridge,
+      GameWorld: EngineGameWorld,
+      TextureManager,
+    } = await import('@aikami/frontend/engine');
     // Check generation after async import
     if (generation !== this._bootGeneration) {
       return;
@@ -860,7 +864,7 @@ class GameBootService
       getLpcAssetPath(slot, assetId, state as unknown as number),
     );
 
-    this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
+    this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
       className: 'GameWorld',
       bridge: this._bridge,
       recipeResolver: pipeline.recipeResolver,

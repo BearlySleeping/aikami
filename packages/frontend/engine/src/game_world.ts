@@ -380,7 +380,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Number of consecutive missed heartbeats. */
   private _missedHeartbeats = 0;
   /** Heartbeat interval in milliseconds. */
-  private static readonly _HEARTBEAT_INTERVAL_MS = 2000;
+  private static readonly _heartbeatIntervalMs = 2000;
   /** Last known tickCount from the worker (0 if never received). */
   private _lastKnownTickCount = 0;
   /** Baseline tickCount from the previous heartbeat cycle (for stale-tick detection). */
@@ -1708,7 +1708,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Starts the worker heartbeat interval.
    *
-   * Sends a PING message every {@link _HEARTBEAT_INTERVAL_MS}ms.
+   * Sends a PING message every {@link _heartbeatIntervalMs}ms.
    * If the worker fails to respond with PONG within 3 intervals,
    * logs a warning and attempts recovery.
    *
@@ -1759,7 +1759,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       // Check for missed PONG heartbeats (connection-level failure)
       const elapsed = performance.now() - this._lastPongMs;
-      if (elapsed > GameWorld._HEARTBEAT_INTERVAL_MS * 3) {
+      if (elapsed > GameWorld._heartbeatIntervalMs * 3) {
         this._missedHeartbeats++;
         this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
           elapsedMs: Math.round(elapsed),
@@ -1769,10 +1769,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       this._postToWorker({ type: 'PING', timestamp: performance.now() });
-    }, GameWorld._HEARTBEAT_INTERVAL_MS);
+    }, GameWorld._heartbeatIntervalMs);
 
     this.debug('[GameWorld] heartbeat:started', {
-      intervalMs: GameWorld._HEARTBEAT_INTERVAL_MS,
+      intervalMs: GameWorld._heartbeatIntervalMs,
     });
   }
 

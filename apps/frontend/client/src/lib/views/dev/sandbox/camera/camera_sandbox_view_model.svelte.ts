@@ -115,11 +115,11 @@ class CameraSandboxViewModel
   private _initialMapLoaded = false;
 
   /** Max debug log entries to keep in memory. */
-  private static readonly _MAX_LOG = 30;
+  private static readonly _maxLog = 30;
 
   private _addLog(label: string, detail = ''): void {
     const entry: DebugLogEntry = { time: Date.now(), label, detail };
-    this.debugLog = [entry, ...this.debugLog.slice(0, CameraSandboxViewModel._MAX_LOG - 1)];
+    this.debugLog = [entry, ...this.debugLog.slice(0, CameraSandboxViewModel._maxLog - 1)];
   }
 
   clearDebugLog(): void {

@@ -57,8 +57,14 @@ const toSrcPath = (path) => toPosixPath(join(projectDirectory, 'src', path));
 const buildMode = process.env.AIKAMI_BUILD_MODE;
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
 const isProductionBuild = buildMode === 'production';
-const includeDevRoutes =
-  devGateOverride === 'true' ? true : devGateOverride === 'false' ? false : !isProductionBuild;
+let includeDevRoutes;
+if (devGateOverride === 'true') {
+  includeDevRoutes = true;
+} else if (devGateOverride === 'false') {
+  includeDevRoutes = false;
+} else {
+  includeDevRoutes = !isProductionBuild;
+}
 
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');
 

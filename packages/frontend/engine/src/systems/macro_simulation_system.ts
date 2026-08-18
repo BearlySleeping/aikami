@@ -95,9 +95,7 @@ export const stopMacroSimulation = (): void => {
  * Represents the number of macro ticks elapsed since simulation start.
  * Always an integer to prevent floating point drift on clock boundaries.
  */
-export const getMacroClock = (): number => {
-  return _macroClock;
-};
+export const getMacroClock = (): number => _macroClock;
 
 /**
  * Returns true if an entity is in an inactive zone and should be

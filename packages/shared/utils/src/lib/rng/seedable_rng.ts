@@ -64,9 +64,7 @@ export const createSeedableRng = (seed: number, initialState?: number): Seedable
     return Math.floor(next() * sides) + 1;
   };
 
-  const getState = (): number => {
-    return state;
-  };
+  const getState = (): number => state;
 
   return { next, dice, seed, getState };
 };
@@ -80,12 +78,10 @@ export const createSeedableRng = (seed: number, initialState?: number): Seedable
  * @param rng - The active {@link SeedableRng} instance.
  * @returns A {@link SerializedRng} with seed + current internal state.
  */
-export const serializeRng = (rng: SeedableRng): SerializedRng => {
-  return {
-    seed: rng.seed,
-    state: rng.getState(),
-  };
-};
+export const serializeRng = (rng: SeedableRng): SerializedRng => ({
+  seed: rng.seed,
+  state: rng.getState(),
+});
 
 /**
  * Restores a {@link SeedableRng} from a serialized snapshot.
@@ -96,6 +92,5 @@ export const serializeRng = (rng: SeedableRng): SerializedRng => {
  * @param data - A {@link SerializedRng} from {@link serializeRng}.
  * @returns A new {@link SeedableRng} instance at the serialized position.
  */
-export const deserializeRng = (data: SerializedRng): SeedableRng => {
-  return createSeedableRng(data.seed, data.state);
-};
+export const deserializeRng = (data: SerializedRng): SeedableRng =>
+  createSeedableRng(data.seed, data.state);

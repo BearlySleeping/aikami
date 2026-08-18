@@ -726,7 +726,9 @@ class GameEngineService
       // Resolve starting map + build the prop frame resolver from the
       // content pack (C-375 AC-1). The pack must be loaded BEFORE GameWorld
       // is created so the resolver is ready for the first ENTITY_CREATED.
-      const { GameWorld, TextureManager } = await import('@aikami/frontend/engine');
+      const { GameWorld: EngineGameWorld, TextureManager } = await import(
+        '@aikami/frontend/engine'
+      );
       const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
       // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
       // is loaded before the engine boots (idempotent — catalog module scope
@@ -753,7 +755,7 @@ class GameEngineService
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
 
-      this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
+      this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',
         bridge,
         recipeResolver: pipeline.recipeResolver,

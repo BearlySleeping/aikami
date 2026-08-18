@@ -12,6 +12,7 @@
  */
 
 import { parseArgs } from 'node:util';
+import { logger } from '@aikami/logger';
 import { toMode } from '@aikami/utils';
 import { $, file } from 'bun';
 import {
@@ -28,19 +29,19 @@ const { values } = parseArgs({
 
 const mode = toMode(values.mode || process.env.MODE);
 if (!mode) {
-  console.error('Missing --mode argument or MODE env var');
+  logger.error('Missing --mode argument or MODE env var');
   process.exit(1);
 }
 
 const projectId = MODE_PROJECT_MAP[mode];
 if (!projectId) {
-  console.error(`Unknown mode: ${mode}`);
+  logger.error(`Unknown mode: ${mode}`);
   process.exit(1);
 }
 
 const targetSite = resolveHostingSiteId('hub', projectId);
 if (!targetSite) {
-  console.error('No hosting site ID configured for hub');
+  logger.error('No hosting site ID configured for hub');
   process.exit(1);
 }
 
@@ -62,7 +63,7 @@ try {
     process.cwd(),
   );
 } catch (error) {
-  console.error(error);
+  logger.error(error as Error);
   process.exit(1);
 } finally {
   const tempFile = file(deployConfigPath);

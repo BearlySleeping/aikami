@@ -6,6 +6,17 @@ import type { AssetBrowserViewModelInterface } from './asset_browser_view_model.
 type Props = { viewModel: AssetBrowserViewModelInterface };
 const { viewModel }: Props = $props();
 
+/** Icon for a file extension: image, audio, or generic document. */
+const fileTypeIcon = (ext: string): string => {
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) {
+    return '🖼️';
+  }
+  if (['.mp3', '.ogg', '.wav', '.flac', '.m4a'].includes(ext)) {
+    return '🎵';
+  }
+  return '📄';
+};
+
 // Drag state
 let isDragging = $state(false);
 let dragCounter = 0;
@@ -324,7 +335,7 @@ const handleGlobalClick = () => {
               >
                 <div class="card-body p-2 items-center gap-1">
                   <div class="text-2xl leading-none">
-                    {['.png','.jpg','.jpeg','.gif','.webp','.svg'].includes(file.ext) ? '🖼️' : ['.mp3','.ogg','.wav','.flac','.m4a'].includes(file.ext) ? '🎵' : '📄'}
+                    {fileTypeIcon(file.ext)}
                   </div>
                   <p class="text-xs font-mono truncate max-w-full leading-tight">{file.name}</p>
                   <span class="badge badge-xs badge-outline">{file.category}</span>

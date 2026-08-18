@@ -173,9 +173,7 @@ export const shouldUpdateUserClaims = ({
 }: {
   afterUser: UserTokenData;
   beforeUser: UserTokenData;
-}): boolean => {
-  return beforeUser.userRole !== afterUser.userRole || beforeUser.status !== afterUser.status;
-};
+}): boolean => beforeUser.userRole !== afterUser.userRole || beforeUser.status !== afterUser.status;
 
 /**
  * Check if we should update the firebase auth.
@@ -191,11 +189,8 @@ export const shouldUpdateFirebaseAuthUser = ({
 }: {
   afterUser: FirebaseAuthMetadata;
   beforeUser: FirebaseAuthMetadata;
-}): boolean => {
-  return (
-    beforeUser.displayName !== afterUser.displayName ||
-    beforeUser.email !== afterUser.email ||
-    beforeUser.phoneNumber !== afterUser.phoneNumber ||
-    beforeUser.photoURL !== afterUser.photoURL
-  );
-};
+}): boolean =>
+  beforeUser.displayName !== afterUser.displayName ||
+  beforeUser.email !== afterUser.email ||
+  beforeUser.phoneNumber !== afterUser.phoneNumber ||
+  beforeUser.photoURL !== afterUser.photoURL;

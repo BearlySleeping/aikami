@@ -7,6 +7,28 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Progress-bar color for an approval value. */
+const approvalBarClass = (approval: number): string => {
+  if (approval > 0) {
+    return 'progress-success';
+  }
+  if (approval < 0) {
+    return 'progress-error';
+  }
+  return 'progress-neutral';
+};
+
+/** Text color for an approval value. */
+const approvalTextClass = (approval: number): string => {
+  if (approval > 0) {
+    return 'text-success';
+  }
+  if (approval < 0) {
+    return 'text-error';
+  }
+  return '';
+};
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -69,12 +91,12 @@ const { viewModel }: Props = $props();
                     <div class="flex items-center gap-2">
                       <span class="text-xs text-base-content/50 w-16">Approval</span>
                       <progress
-                        class="progress flex-1 {member.approval > 0 ? 'progress-success' : member.approval < 0 ? 'progress-error' : 'progress-neutral'}"
+                        class="progress flex-1 {approvalBarClass(member.approval)}"
                         value={member.approval + 100}
                         max="200"
                       ></progress>
                       <span
-                        class="text-xs font-mono w-8 text-right {member.approval > 0 ? 'text-success' : member.approval < 0 ? 'text-error' : ''}"
+                        class="text-xs font-mono w-8 text-right {approvalTextClass(member.approval)}"
                       >
                         {member.approval > 0 ? '+' : ''}{member.approval}
                       </span>

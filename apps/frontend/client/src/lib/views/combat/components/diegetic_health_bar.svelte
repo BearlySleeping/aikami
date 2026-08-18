@@ -30,9 +30,15 @@ const { entityId, hp, maxHp, screenX, screenY, isActiveTurn = false, label }: Pr
 const hpPercent = $derived(maxHp > 0 ? Math.max(0, (hp / maxHp) * 100) : 0);
 
 /** HP bar color based on remaining health. */
-const barColor = $derived(
-  hpPercent > 50 ? 'bg-success' : hpPercent > 25 ? 'bg-warning' : 'bg-error',
-);
+const barColor = $derived.by(() => {
+  if (hpPercent > 50) {
+    return 'bg-success';
+  }
+  if (hpPercent > 25) {
+    return 'bg-warning';
+  }
+  return 'bg-error';
+});
 </script>
 
 <div

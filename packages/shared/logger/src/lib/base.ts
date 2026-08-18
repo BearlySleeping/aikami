@@ -22,6 +22,8 @@ const SPAM_THROTTLE_MS = 500;
 export abstract class BaseLoggerService implements LoggerInterface {
   logLevel: LogLevel;
   protected _sinks: LogSink[] = [];
+  /** Whether remote log persistence is active. See {@link setExternalLogging}. */
+  protected _externalLoggingEnabled = true;
 
   // --- Infinite Loop Tracker State ---
   private _lastLogSignature = '';
@@ -52,6 +54,14 @@ export abstract class BaseLoggerService implements LoggerInterface {
 
   addSink(sink: LogSink): void {
     this._sinks.push(sink);
+  }
+
+  get externalLoggingEnabled(): boolean {
+    return this._externalLoggingEnabled;
+  }
+
+  setExternalLogging(enabled: boolean): void {
+    this._externalLoggingEnabled = enabled;
   }
 
   protected _flushSinks(entry: LogEntry, ...data: unknown[]): void {

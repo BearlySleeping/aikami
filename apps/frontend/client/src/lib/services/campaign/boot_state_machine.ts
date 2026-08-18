@@ -95,6 +95,5 @@ export const transition = (current: CampaignState, event: CampaignStateEvent): C
  * Returns whether an event is valid for the given state without transitioning.
  * Useful for UI guards (e.g., disabling a button if the action isn't available).
  */
-export const canTransition = (current: CampaignState, event: CampaignStateEvent): boolean => {
-  return event.type in (TRANSITIONS[current] ?? {});
-};
+export const canTransition = (current: CampaignState, event: CampaignStateEvent): boolean =>
+  event.type in (TRANSITIONS[current] ?? {});

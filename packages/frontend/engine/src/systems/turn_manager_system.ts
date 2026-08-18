@@ -322,9 +322,7 @@ const setCombatSeed = (seed: number | null): void => {
   _activeRng = _sharedCreateSeedableRng(seed);
 };
 
-const getCombatSeed = (): SeedableRng | null => {
-  return _activeRng;
-};
+const getCombatSeed = (): SeedableRng | null => _activeRng;
 
 const rollDice = (sides: number): number => {
   if (sides < 1) {
@@ -467,8 +465,14 @@ const handleCombatAction = (params: CombatActionParams): void => {
       _emitActionEconomy(bridge, currentEid);
 
       // C-338 AC-4: Multi-target resolution
-      const targets =
-        targetIds && targetIds.length > 0 ? targetIds : targetId && targetId > 0 ? [targetId] : [];
+      let targets: number[];
+      if (targetIds && targetIds.length > 0) {
+        targets = targetIds;
+      } else if (targetId && targetId > 0) {
+        targets = [targetId];
+      } else {
+        targets = [];
+      }
       if (targets.length === 0) {
         bridge.emit({
           type: 'COMBAT_LOG',
@@ -1720,8 +1724,12 @@ const _repositionEnemy = (
   if (enemyPos && targetPos) {
     const dx = targetPos.x - enemyPos.x;
     const dy = targetPos.y - enemyPos.y;
-    const dir =
-      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : dy > 0 ? 'south' : 'north';
+    let dir: string;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      dir = dx > 0 ? 'east' : 'west';
+    } else {
+      dir = dy > 0 ? 'south' : 'north';
+    }
     moveMsg = `Enemy advances ${dir} toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
     const step = 32;
     const norm = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -1915,9 +1923,7 @@ const _getMaxHp = (world: World, eid: number): number => {
   return stats?.maxHealth ?? 0;
 };
 
-const _getPreferredRange = (eid: number): number => {
-  return CombatTactics.preferredRange[eid] ?? 3;
-};
+const _getPreferredRange = (eid: number): number => CombatTactics.preferredRange[eid] ?? 3;
 
 const _estimateGridDist = (world: World, fromEid: number, toEid: number): number => {
   const fromPos = getComponent(world, fromEid, Position) as PositionData | undefined;

@@ -450,6 +450,18 @@ class DialogueOverlayViewModel
     if (!s) {
       return null;
     }
+    let onRoll: (() => void) | undefined;
+    if (s.phase === 'awaiting_click') {
+      onRoll = () => {
+        void this.rollDice();
+      };
+    } else if (s.phase === 'declared') {
+      onRoll = () => {
+        this.acknowledgeDeclaration();
+      };
+    } else {
+      onRoll = undefined;
+    }
     return {
       phase: s.phase === 'awaiting_click' || s.phase === 'declared' ? 'interactive' : s.phase,
       value: s.rollValue,
@@ -461,16 +473,7 @@ class DialogueOverlayViewModel
         modValue: s.statModifierValue,
         target: s.targetNumber,
       },
-      onRoll:
-        s.phase === 'awaiting_click'
-          ? () => {
-              void this.rollDice();
-            }
-          : s.phase === 'declared'
-            ? () => {
-                this.acknowledgeDeclaration();
-              }
-            : undefined,
+      onRoll,
     };
   }
 

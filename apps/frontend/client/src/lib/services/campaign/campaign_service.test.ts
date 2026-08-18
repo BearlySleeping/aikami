@@ -15,7 +15,7 @@ import type { Campaign } from '@aikami/types';
 // cover workspace packages in test mode, so we provide the AiTextProviderRequiredError
 // class locally.
 mock.module('@aikami/utils', () => {
-  class AiTextProviderRequiredError extends Error {
+  class MockAiTextProviderRequiredError extends Error {
     readonly code = 'text-provider-required' as const;
     constructor(message = 'A text AI provider is required to start a campaign.') {
       super(message);
@@ -23,9 +23,9 @@ mock.module('@aikami/utils', () => {
     }
   }
   return {
-    AiTextProviderRequiredError,
-    isAiTextProviderRequiredError: (error: unknown): error is AiTextProviderRequiredError =>
-      error instanceof AiTextProviderRequiredError,
+    AiTextProviderRequiredError: MockAiTextProviderRequiredError,
+    isAiTextProviderRequiredError: (error: unknown): error is MockAiTextProviderRequiredError =>
+      error instanceof MockAiTextProviderRequiredError,
   };
 });
 

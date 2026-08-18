@@ -5,6 +5,4 @@ export const isMobileDevice = (device?: DeviceData): boolean => {
   return !desktopTypes.includes(device?.type ?? 'desktop');
 };
 
-export const getDeviceType = (device?: DeviceData): DeviceType => {
-  return device?.type ?? 'desktop';
-};
+export const getDeviceType = (device?: DeviceData): DeviceType => device?.type ?? 'desktop';

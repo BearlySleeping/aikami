@@ -11,6 +11,17 @@ type Props = {
 };
 
 const { status, visible }: Props = $props();
+
+/** Accessible label for the current autosave state. */
+const statusLabel = $derived.by(() => {
+  if (status === 'saving') {
+    return 'Autosaving';
+  }
+  if (status === 'saved') {
+    return 'Autosave complete';
+  }
+  return 'Autosave failed';
+});
 </script>
 
 {#if visible && status !== 'idle'}
@@ -18,7 +29,7 @@ const { status, visible }: Props = $props();
     class="autosave-indicator flex items-center gap-1.5 rounded-full bg-base-200/80 px-2.5 py-1 backdrop-blur-sm text-xs"
     role="status"
     aria-live="polite"
-    aria-label={status === 'saving' ? 'Autosaving' : status === 'saved' ? 'Autosave complete' : 'Autosave failed'}
+    aria-label={statusLabel}
   >
     {#if status === 'saving'}
       <span class="loading loading-spinner loading-xs"></span>

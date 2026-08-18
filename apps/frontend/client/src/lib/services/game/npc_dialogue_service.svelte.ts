@@ -1265,11 +1265,14 @@ export class NpcDialogueService
     ms?: number;
   }): void {
     const { path, call, error, ms } = options;
-    const reason = this._isAbortError(error)
-      ? 'aborted'
-      : error instanceof DialogueTimeoutError
-        ? 'timeout'
-        : 'provider_error';
+    let reason: 'aborted' | 'timeout' | 'provider_error';
+    if (this._isAbortError(error)) {
+      reason = 'aborted';
+    } else if (error instanceof DialogueTimeoutError) {
+      reason = 'timeout';
+    } else {
+      reason = 'provider_error';
+    }
     this.warn('dialogue:call-failed', {
       path,
       call,
@@ -1758,14 +1761,14 @@ export class NpcDialogueService
       npcContext: {
         name: npcName,
         persona: `You are ${npcName}, a character in a fantasy world.`,
-        allowedCommands: allowedCommands,
+        allowedCommands,
       },
-      playerContext: playerContext,
+      playerContext,
       recentHistory: messages.slice(-10).map((m) => ({
         role: m.role,
         content: m.content.slice(0, 200),
       })),
-      gameStateFacts: gameStateFacts,
+      gameStateFacts,
     };
 
     // Call 1 streams prose; call 2 extracts the intent envelope.
@@ -2379,11 +2382,13 @@ export function recoverIntentAnalysisOutput(
             return { id: `chip${i}`, label: c, intentType: 'dialogue', prefillText: c };
           }
           if (typeof c === 'object' && c !== null) {
-            const obj = c as Record<string, unknown>;
-            const id = (obj.id as string) || `chip${i}`;
-            const label = (obj.label as string) || String(c);
-            const intentType = (obj.intentType as NpcSuggestionChip['intentType']) || 'dialogue';
-            const prefillText = (obj.prefillText as string) || (obj.label as string) || String(c);
+            const chipObj = c as Record<string, unknown>;
+            const id = (chipObj.id as string) || `chip${i}`;
+            const label = (chipObj.label as string) || String(c);
+            const intentType =
+              (chipObj.intentType as NpcSuggestionChip['intentType']) || 'dialogue';
+            const prefillText =
+              (chipObj.prefillText as string) || (chipObj.label as string) || String(c);
 
             // Reject chips with String(c) as label or prefillText (invalid object coercion)
             if (label === String(c) || prefillText === String(c)) {
@@ -2391,7 +2396,7 @@ export function recoverIntentAnalysisOutput(
             }
 
             // Validate with schema
-            const candidate = { id, label, intentType: intentType, prefillText: prefillText };
+            const candidate = { id, label, intentType, prefillText };
             if (Value.Check(NpcSuggestionChipSchema, candidate)) {
               return candidate;
             }

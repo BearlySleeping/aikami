@@ -13,7 +13,7 @@
 // construction time — same as a Vite build replacing the literal).
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { HttpLogSink } from './logger_browser.ts';
+import { createLogger, HttpLogSink } from './logger_browser.ts';
 
 const DEFAULT_ENDPOINT = '/api/internal_logging';
 
@@ -124,5 +124,45 @@ describe('HttpLogSink request payload', () => {
     const sink = new HttpLogSink();
     sink.flush();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('HttpLogSink external logging toggle', () => {
+  test('skips buffering and flushing when external logging is disabled', () => {
+    const sink = new HttpLogSink();
+    HttpLogSink.externalLoggingEnabled = false;
+    try {
+      sink.write({ logLevel: 'INFO', logType: 'info', message: 'off' });
+      sink.flush();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      HttpLogSink.externalLoggingEnabled = true;
+    }
+  });
+
+  test('re-enabling external logging resumes flushing', () => {
+    const sink = new HttpLogSink();
+    HttpLogSink.externalLoggingEnabled = false;
+    try {
+      sink.write({ logLevel: 'INFO', logType: 'info', message: 'off' });
+      sink.flush();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      HttpLogSink.externalLoggingEnabled = true;
+    }
+    writeAndFlush(sink, 'back on');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('FrontendLoggerService.setExternalLogging flips the static switch', () => {
+    const logger = createLogger();
+    try {
+      logger.setExternalLogging(false);
+      expect(HttpLogSink.externalLoggingEnabled).toBe(false);
+      logger.setExternalLogging(true);
+      expect(HttpLogSink.externalLoggingEnabled).toBe(true);
+    } finally {
+      HttpLogSink.externalLoggingEnabled = true;
+    }
   });
 });

@@ -1173,14 +1173,16 @@ export class GameOverlayService
 
         const { loadContentPack } = await import('@aikami/frontend/engine');
         const pack = await loadContentPack({ packId: map.packId });
-        const { worldStateService } = await import('./world_state_service.svelte');
+        const { worldStateService: lazyWorldStateService } = await import(
+          './world_state_service.svelte'
+        );
         await gameEngineService.loadMap({
           mapUrl: pack.resolveMapUrl(map.mapId),
           targetX: map.playerX,
           targetY: map.playerY,
-          defeatedEnemies: [...worldStateService.defeatedEnemies],
-          collectedPickups: [...worldStateService.collectedPickups],
-          interactableStates: { ...worldStateService.interactableStates },
+          defeatedEnemies: [...lazyWorldStateService.defeatedEnemies],
+          collectedPickups: [...lazyWorldStateService.collectedPickups],
+          interactableStates: { ...lazyWorldStateService.interactableStates },
         });
         await gameEngineService.restorePlayer(ecsSnapshot);
         this.debug('loadLastSave:map-restored', {

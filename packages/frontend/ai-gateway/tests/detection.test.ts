@@ -22,7 +22,14 @@ const routedFetch = (
   routes: Array<{ match: string; respond: () => Promise<Response> }>,
 ): typeof fetch =>
   ((input: string | URL | Request): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    let url: string;
+    if (typeof input === 'string') {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
     for (const route of routes) {
       if (url.includes(route.match)) {
         return route.respond();
@@ -245,6 +252,53 @@ describe('detectImageAvailability — parity with capability_service.detectImage
     expect(result.available).toBe(true);
     expect(result.provider).toBe('comfyui');
     expect(toDetectionStatus(result)).toBe('detected');
+  });
+
+  // The local stack ships sd-server, not ComfyUI. It serves the A1111
+  // surface and has no /object_info at all, so the ping above can never
+  // see it — before `resolveLocalEngine`, a healthy local image engine was
+  // reported unavailable and the capability screen showed image as missing.
+  test('local engine resolver reports sd-server → detected, with its own id', async () => {
+    const result = await detectImageAvailability({
+      resolveLocalEngine: () => Promise.resolve({ id: 'sdcpp' }),
+      fetchFn: routedFetch([]),
+    });
+
+    expect(result.available).toBe(true);
+    expect(result.provider).toBe('sdcpp');
+    expect(result.mode).toBe('offline');
+    expect(toDetectionStatus(result)).toBe('detected');
+  });
+
+  test('resolver finding nothing still falls through to the ComfyUI ping', async () => {
+    const result = await detectImageAvailability({
+      resolveLocalEngine: () => Promise.resolve(undefined),
+      fetchFn: routedFetch([
+        {
+          match: 'object_info',
+          respond: () =>
+            Promise.resolve(
+              new Response('{}', {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            ),
+        },
+      ]),
+    });
+
+    expect(result.available).toBe(true);
+    expect(result.provider).toBe('comfyui');
+  });
+
+  test('a throwing resolver is "not running", never a detection error', async () => {
+    const result = await detectImageAvailability({
+      resolveLocalEngine: () => Promise.reject(new Error('probe exploded')),
+      fetchFn: routedFetch([]),
+    });
+
+    expect(result.available).toBe(false);
+    expect(toDetectionStatus(result)).toBe('not_found');
   });
 
   test('ComfyUI unreachable → not_found', async () => {

@@ -152,7 +152,7 @@ export default defineConfig({
     },
   },
 
-  site: site,
+  site,
   integrations: [
     mdx(),
     robotsTxt({

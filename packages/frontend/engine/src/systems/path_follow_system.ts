@@ -60,9 +60,7 @@ const _npcHaltReason = new Map<number, NpcHaltReason>();
  * @param eid - The entity ID.
  * @returns The halt reason, `'none'` when never recorded.
  */
-export const getNpcHaltReason = (eid: number): NpcHaltReason => {
-  return _npcHaltReason.get(eid) ?? 'none';
-};
+export const getNpcHaltReason = (eid: number): NpcHaltReason => _npcHaltReason.get(eid) ?? 'none';
 
 /**
  * Records a halt reason, logging the transition at debug level.

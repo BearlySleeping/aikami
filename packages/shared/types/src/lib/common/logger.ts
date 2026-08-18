@@ -82,6 +82,26 @@ export type LoggerInterface = {
   addSink(sink: LogSink): void;
 
   /**
+   * Whether remote log persistence is currently enabled. When `false`,
+   * entries are only written to the console / local sinks and are not
+   * flushed to external endpoints (e.g. `/api/internal_logging`).
+   *
+   * Defaults to `true`.
+   */
+  readonly externalLoggingEnabled: boolean;
+
+  /**
+   * Enables or disables external (remote) log persistence — e.g. the
+   * browser HTTP sink that batches entries to `/api/internal_logging`.
+   * When disabled, entries are only written to local sinks (console).
+   *
+   * Defaults to enabled.
+   *
+   * @param enabled Whether external log flushing should be active.
+   */
+  setExternalLogging(enabled: boolean): void;
+
+  /**
    * Sets request-scoped context for the next remote log write.
    * Only meaningful in the browser sink.
    */

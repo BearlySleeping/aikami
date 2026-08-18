@@ -20,17 +20,15 @@ import type {
  * @param definition - Custom agent definition from the registry.
  * @returns A standard AgentConfig ready for pipeline execution.
  */
-export const customAgentToConfig = (definition: CustomAgentDefinition): AgentConfig => {
-  return {
-    id: definition.id,
-    name: definition.name,
-    phase: definition.phase,
-    systemPrompt: definition.promptTemplate,
-    timeout: definition.timeout,
-    enabled: definition.enabled,
-    contextKey: definition.contextKey,
-  };
-};
+export const customAgentToConfig = (definition: CustomAgentDefinition): AgentConfig => ({
+  id: definition.id,
+  name: definition.name,
+  phase: definition.phase,
+  systemPrompt: definition.promptTemplate,
+  timeout: definition.timeout,
+  enabled: definition.enabled,
+  contextKey: definition.contextKey,
+});
 
 /**
  * Executes a custom agent using the text generation service's

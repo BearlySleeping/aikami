@@ -11,13 +11,10 @@ const { viewModel }: Props = $props();
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-const phaseLabel = (phase: string): string => {
-  return phase === 'pre' ? 'Pre-processing' : 'Post-processing';
-};
+const phaseLabel = (phase: string): string =>
+  phase === 'pre' ? 'Pre-processing' : 'Post-processing';
 
-const phaseBadge = (phase: string): string => {
-  return phase === 'pre' ? 'badge-info' : 'badge-accent';
-};
+const phaseBadge = (phase: string): string => (phase === 'pre' ? 'badge-info' : 'badge-accent');
 </script>
 
 <BaseViewModelContainer {viewModel}>

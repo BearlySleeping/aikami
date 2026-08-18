@@ -34,55 +34,51 @@ import {
  * Builds the default action registry used by the GOAP scheduler.
  * Must be initialized before any agent stepping.
  */
-const _buildDefaultActions = () => {
-  return [
-    {
-      actionId: 0,
-      cost: 0,
-      preconditionUsageMask: 0,
-      preconditionValueMask: 0,
-      effectClearMask: 0,
-      effectSetMask: 0,
-    },
-    {
-      actionId: 1,
-      cost: 5,
-      preconditionUsageMask: 4 | 8 | 16,
-      preconditionValueMask: 4 | 8 | 16,
-      effectClearMask: 16 | 4,
-      effectSetMask: 32,
-    },
-    {
-      actionId: 2,
-      cost: 10,
-      preconditionUsageMask: 16 | 4,
-      preconditionValueMask: 16 | 4,
-      effectClearMask: 0,
-      effectSetMask: 8,
-    },
-    {
-      actionId: 3,
-      cost: 8,
-      preconditionUsageMask: 2 | 64,
-      preconditionValueMask: 2 | 64,
-      effectClearMask: 128,
-      effectSetMask: 4,
-    },
-    {
-      actionId: 4,
-      cost: 10,
-      preconditionUsageMask: 0,
-      preconditionValueMask: 0,
-      effectClearMask: 8,
-      effectSetMask: 2,
-    },
-  ];
-};
+const _buildDefaultActions = () => [
+  {
+    actionId: 0,
+    cost: 0,
+    preconditionUsageMask: 0,
+    preconditionValueMask: 0,
+    effectClearMask: 0,
+    effectSetMask: 0,
+  },
+  {
+    actionId: 1,
+    cost: 5,
+    preconditionUsageMask: 4 | 8 | 16,
+    preconditionValueMask: 4 | 8 | 16,
+    effectClearMask: 16 | 4,
+    effectSetMask: 32,
+  },
+  {
+    actionId: 2,
+    cost: 10,
+    preconditionUsageMask: 16 | 4,
+    preconditionValueMask: 16 | 4,
+    effectClearMask: 0,
+    effectSetMask: 8,
+  },
+  {
+    actionId: 3,
+    cost: 8,
+    preconditionUsageMask: 2 | 64,
+    preconditionValueMask: 2 | 64,
+    effectClearMask: 128,
+    effectSetMask: 4,
+  },
+  {
+    actionId: 4,
+    cost: 10,
+    preconditionUsageMask: 0,
+    preconditionValueMask: 0,
+    effectClearMask: 8,
+    effectSetMask: 2,
+  },
+];
 
 /** Creates a fresh bitECS world. */
-const createTestWorld = (): World => {
-  return createWorld();
-};
+const createTestWorld = (): World => createWorld();
 
 // ---------------------------------------------------------------------------
 // Global SoA cleanup

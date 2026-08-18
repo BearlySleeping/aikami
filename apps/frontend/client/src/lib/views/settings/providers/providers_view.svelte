@@ -17,6 +17,28 @@ const { viewModel }: Props = $props();
 
 /** Per-tab ViewModel for text configuration. */
 const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
+
+/** Short badge label for a service status entry. */
+const serviceBadgeLabel = (service: string): string => {
+  if (service === 'comfyUi') {
+    return 'IMG';
+  }
+  if (service === 'voice') {
+    return 'VOX';
+  }
+  return 'TXT';
+};
+
+/** Status dot class for a service status entry. */
+const serviceDotClass = (status: string): string => {
+  if (status === 'connected') {
+    return 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]';
+  }
+  if (status === 'checking') {
+    return 'bg-amber-400 animate-pulse';
+  }
+  return 'bg-red-500/40';
+};
 </script>
 
 <svelte:head>
@@ -48,19 +70,13 @@ const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
             {#each ['comfyUi', 'voice', 'text'] as svc}
               {@const s = viewModel.serviceStatus[svc as keyof typeof viewModel.serviceStatus]}
               <div class="flex items-center gap-1.5" title={`${svc}: ${s}`}>
-                <span
-                  class="inline-block w-2 h-2 rounded-full {s === 'connected'
-                    ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
-                    : s === 'checking'
-                      ? 'bg-amber-400 animate-pulse'
-                      : 'bg-red-500/40'}"
-                ></span>
+                <span class="inline-block w-2 h-2 rounded-full {serviceDotClass(s)}"></span>
                 <span
                   class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest {s === 'connected'
                     ? 'text-green-400'
                     : 'text-[#938ea1]'}"
                 >
-                  {svc === 'comfyUi' ? 'IMG' : svc === 'voice' ? 'VOX' : 'TXT'}
+                  {serviceBadgeLabel(svc)}
                 </span>
               </div>
             {/each}

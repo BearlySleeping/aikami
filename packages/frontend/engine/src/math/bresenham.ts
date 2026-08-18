@@ -202,10 +202,8 @@ export const checkLineOfSight = (
   // eslint-disable-next-line no-constant-condition
   while (true) {
     // Check current cell (skip origin and target)
-    if (!firstStep && (x !== endX || y !== endY)) {
-      if (_isCellBlocking(x, y, sightMask)) {
-        return false;
-      }
+    if (!firstStep && (x !== endX || y !== endY) && _isCellBlocking(x, y, sightMask)) {
+      return false;
     }
     firstStep = false;
 

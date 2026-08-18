@@ -36,8 +36,8 @@ const _resetPositionArrays = (): void => {
  */
 const _createOrchestrator = (
   options?: Partial<StreamingOrchestratorOptions>,
-): StreamingOrchestratorService => {
-  return (
+): StreamingOrchestratorService =>
+  (
     StreamingOrchestratorService.create as (
       opts: StreamingOrchestratorOptions,
     ) => StreamingOrchestratorService
@@ -45,7 +45,6 @@ const _createOrchestrator = (
     className: 'StreamingOrchestratorService',
     ...options,
   });
-};
 
 // ---------------------------------------------------------------------------
 // Setup / teardown

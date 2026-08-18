@@ -307,7 +307,14 @@ describe('AC-2: Reactive turn updates', () => {
 
     // Rapid fire 10 turn changes
     for (let i = 0; i < 10; i++) {
-      const eid = i % 3 === 0 ? eid1 : i % 3 === 1 ? eid2 : eid3;
+      let eid: number;
+      if (i % 3 === 0) {
+        eid = eid1;
+      } else if (i % 3 === 1) {
+        eid = eid2;
+      } else {
+        eid = eid3;
+      }
       bridge.emit({
         type: 'TURN_CHANGED',
         currentEntityId: eid,

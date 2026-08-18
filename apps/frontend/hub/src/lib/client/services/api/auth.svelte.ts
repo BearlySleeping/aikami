@@ -61,7 +61,7 @@ export class AuthService
     try {
       await this._auth.onIdTokenChanged(
         async (user) => {
-          await this.setAuthUser(user);
+          await this._setAuthUser(user);
         },
         (error) => {
           this.error(error.message);
@@ -111,13 +111,13 @@ export class AuthService
       }
       const currentUser = await this._auth.getAuthUser();
       if (currentUser) {
-        await this.setAuthUser(currentUser);
+        await this._setAuthUser(currentUser);
 
         // Force token refresh to pick up custom claims (e.g. userRole)
         // set by the session endpoint after checking admin_emails.
         // Without this, currentUser retains stale claims from the
         // initial ID token and the ViewModel's superAdmin check fails.
-        await this.setAuthUser(currentUser, true);
+        await this._setAuthUser(currentUser, true);
       }
     } finally {
       this.isGoogleSigningIn = false;
@@ -127,7 +127,7 @@ export class AuthService
   async signOut(): Promise<void> {
     this.log('signOut');
     await this._auth.signOut();
-    await this.setAuthUser(undefined, true);
+    await this._setAuthUser(undefined, true);
   }
 
   setCurrentUser(user: CurrentUser | undefined, onlyIfEmpty = false): void {
@@ -166,7 +166,10 @@ export class AuthService
 
   // ─── Private helpers ────────────────────────────────────────
 
-  private async setAuthUser(user: FirebaseUser | undefined, forceRefresh?: boolean): Promise<void> {
+  private async _setAuthUser(
+    user: FirebaseUser | undefined,
+    forceRefresh?: boolean,
+  ): Promise<void> {
     // SSR hydration guard
     if (!user && !this._initialAuthResolved) {
       this.debug('setAuthUser:skipped (pending session restore)');
@@ -244,11 +247,13 @@ export class AuthService
       if (token === this._currentToken) {
         return;
       }
-      if (token && this._currentToken) {
-        if (this._tokenFingerprint(token) === this._tokenFingerprint(this._currentToken)) {
-          this._currentToken = token;
-          return;
-        }
+      if (
+        token &&
+        this._currentToken &&
+        this._tokenFingerprint(token) === this._tokenFingerprint(this._currentToken)
+      ) {
+        this._currentToken = token;
+        return;
       }
     }
 

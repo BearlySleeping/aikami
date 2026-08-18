@@ -103,13 +103,11 @@ const _renderMessage = (options: {
     if (message.text) {
       parts.push(`<p class="narration">${_escapeXml(message.text)}</p>`);
     }
-  } else {
+  } else if (message.text) {
     // User dialogue as quoted block
-    if (message.text) {
-      parts.push(`<blockquote class="dialogue" data-speaker="${_escapeXml(senderName)}">
+    parts.push(`<blockquote class="dialogue" data-speaker="${_escapeXml(senderName)}">
         <p>${_escapeXml(message.text)}</p>
       </blockquote>`);
-    }
   }
 
   // Dice rolls

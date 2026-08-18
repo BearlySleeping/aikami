@@ -39,9 +39,7 @@ export const fromJsonData = <T extends Omit<CoreData, 'createdAt'>>(
 
 export const getValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
-    return value.map((value) => {
-      return getValue(value);
-    });
+    return value.map((item) => getValue(item));
   }
 
   if (typeof value === 'object' && value !== null) {

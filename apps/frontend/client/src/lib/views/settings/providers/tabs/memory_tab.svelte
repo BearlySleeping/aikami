@@ -11,6 +11,20 @@ let { viewModel }: Props = $props();
 const memoryConfig = $derived(viewModel.config.memory);
 
 const showCustomEmbedding = $derived(memoryConfig.embeddingModel === 'custom');
+
+/** Human-readable label for a memory type. */
+const memoryTypeLabel = (mtype: string): string => {
+  if (mtype === 'none') {
+    return 'None';
+  }
+  if (mtype === 'basic') {
+    return 'Basic';
+  }
+  if (mtype === 'hypa-style') {
+    return 'Hypa-Style';
+  }
+  return 'Hanurai';
+};
 </script>
 
 <div class="space-y-6">
@@ -32,13 +46,7 @@ const showCustomEmbedding = $derived(memoryConfig.embeddingModel === 'custom');
             : 'btn-ghost text-[#938ea1]'}"
           onclick={() => viewModel.setField('memory', 'type', mtype)}
         >
-          {mtype === 'none'
-            ? 'None'
-            : mtype === 'basic'
-              ? 'Basic'
-              : mtype === 'hypa-style'
-                ? 'Hypa-Style'
-                : 'Hanurai'}
+          {memoryTypeLabel(mtype)}
         </button>
       {/each}
     </div>

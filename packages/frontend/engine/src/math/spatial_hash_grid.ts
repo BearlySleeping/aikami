@@ -45,30 +45,30 @@ const resultBuffer = new Int32Array(RESULT_BUFFER_CAPACITY);
  */
 class SpatialHashGrid {
   /** Size of each grid cell in world-space units. */
-  private readonly cellSize: number;
+  private readonly _cellSize: number;
 
   /** Maximum number of hash buckets (and total entity slots). */
-  private readonly capacity: number;
+  private readonly _capacity: number;
 
   /** Per-bucket entity count from the COUNT pass. */
-  private readonly count: Int32Array;
+  private readonly _count: Int32Array;
 
   /** Per-bucket start offset (from the PREFIX SUM pass). After DISTRIBUTE, these are the start offsets for each bucket. */
-  private readonly offset: Int32Array;
+  private readonly _offset: Int32Array;
 
   /**
    * Flat array of entity IDs sorted by bucket.
    *
    * After `populate()`, entities in bucket `h` live at
-   * `particleMap[offset[h]]` through `particleMap[offset[h] + count[h] - 1]`.
+   * `_particleMap[_offset[h]]` through `_particleMap[_offset[h] + _count[h] - 1]`.
    */
-  private readonly particleMap: Int32Array;
+  private readonly _particleMap: Int32Array;
 
   /** Number of entities passed to the last `populate()` call. */
-  private entityCount: number;
+  private _entityCount: number;
 
   /** Current number of valid entries in the result buffer after a query. */
-  private resultCount: number;
+  private _resultCount: number;
 
   /**
    * Creates a new spatial hash grid.
@@ -79,14 +79,14 @@ class SpatialHashGrid {
    *   minimize hash collisions.
    */
   constructor(options: { cellSize: number; capacity: number }) {
-    this.cellSize = options.cellSize;
-    this.capacity = options.capacity;
-    this.entityCount = 0;
-    this.resultCount = 0;
+    this._cellSize = options.cellSize;
+    this._capacity = options.capacity;
+    this._entityCount = 0;
+    this._resultCount = 0;
 
-    this.count = new Int32Array(this.capacity);
-    this.offset = new Int32Array(this.capacity);
-    this.particleMap = new Int32Array(this.capacity);
+    this._count = new Int32Array(this._capacity);
+    this._offset = new Int32Array(this._capacity);
+    this._particleMap = new Int32Array(this._capacity);
   }
 
   // -- Public API -----------------------------------------------------------
@@ -105,51 +105,51 @@ class SpatialHashGrid {
    *   `entityIds[i]` is the entity at position index `i`.
    */
   populate(positions: Float32Array, entityIds: number[]): void {
-    this.entityCount = entityIds.length;
+    this._entityCount = entityIds.length;
 
     // Zero out internal arrays
-    this.count.fill(0);
-    this.offset.fill(0);
-    this.particleMap.fill(0);
+    this._count.fill(0);
+    this._offset.fill(0);
+    this._particleMap.fill(0);
 
-    if (this.entityCount === 0) {
+    if (this._entityCount === 0) {
       return;
     }
 
     // --- PASS 1: COUNT ----------------------------------------------------
-    for (let i = 0; i < this.entityCount; i++) {
+    for (let i = 0; i < this._entityCount; i++) {
       const x = positions[i * 2];
       const y = positions[i * 2 + 1];
-      const cx = Math.floor(x / this.cellSize);
-      const cy = Math.floor(y / this.cellSize);
-      const h = this.hashCell(cx, cy);
-      this.count[h]++;
+      const cx = Math.floor(x / this._cellSize);
+      const cy = Math.floor(y / this._cellSize);
+      const h = this._hashCell(cx, cy);
+      this._count[h]++;
     }
 
     // --- PASS 2: PREFIX SUM -----------------------------------------------
     let sum = 0;
-    for (let i = 0; i < this.capacity; i++) {
-      const c = this.count[i];
-      this.offset[i] = sum;
+    for (let i = 0; i < this._capacity; i++) {
+      const c = this._count[i];
+      this._offset[i] = sum;
       sum += c;
     }
 
     // --- PASS 3: DISTRIBUTE -----------------------------------------------
     // Working copy of offsets — mutated during distribution to track the
     // next insertion slot for each bucket.
-    const workingOffsets = new Int32Array(this.offset);
+    const workingOffsets = new Int32Array(this._offset);
 
-    for (let i = 0; i < this.entityCount; i++) {
+    for (let i = 0; i < this._entityCount; i++) {
       const x = positions[i * 2];
       const y = positions[i * 2 + 1];
-      const cx = Math.floor(x / this.cellSize);
-      const cy = Math.floor(y / this.cellSize);
-      const h = this.hashCell(cx, cy);
+      const cx = Math.floor(x / this._cellSize);
+      const cy = Math.floor(y / this._cellSize);
+      const h = this._hashCell(cx, cy);
       const dest = workingOffsets[h]++;
-      this.particleMap[dest] = entityIds[i];
+      this._particleMap[dest] = entityIds[i];
     }
-    // After this loop: offset[h] = start of bucket h, count[h] = bucket size,
-    // particleMap[offset[h] ... offset[h] + count[h] - 1] = eids in bucket h.
+    // After this loop: _offset[h] = start of bucket h, _count[h] = bucket size,
+    // _particleMap[_offset[h] ... _offset[h] + _count[h] - 1] = eids in bucket h.
   }
 
   /**
@@ -165,26 +165,26 @@ class SpatialHashGrid {
    * @returns Entity IDs of all entities in the 3×3 cell neighborhood.
    */
   queryNeighborhood(x: number, y: number): number[] {
-    this.resultCount = 0;
+    this._resultCount = 0;
 
-    const centerCx = Math.floor(x / this.cellSize);
-    const centerCy = Math.floor(y / this.cellSize);
+    const centerCx = Math.floor(x / this._cellSize);
+    const centerCy = Math.floor(y / this._cellSize);
 
     // Iterate the 3×3 grid centered on (centerCx, centerCy)
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        const h = this.hashCell(centerCx + dx, centerCy + dy);
-        const start = this.offset[h];
-        const bucketSize = this.count[h];
+        const h = this._hashCell(centerCx + dx, centerCy + dy);
+        const start = this._offset[h];
+        const bucketSize = this._count[h];
 
-        for (let i = 0; i < bucketSize && this.resultCount < RESULT_BUFFER_CAPACITY; i++) {
-          resultBuffer[this.resultCount++] = this.particleMap[start + i];
+        for (let i = 0; i < bucketSize && this._resultCount < RESULT_BUFFER_CAPACITY; i++) {
+          resultBuffer[this._resultCount++] = this._particleMap[start + i];
         }
       }
     }
 
     // Return a copy so callers don't mutate the shared buffer
-    return Array.from(resultBuffer.slice(0, this.resultCount));
+    return Array.from(resultBuffer.slice(0, this._resultCount));
   }
 
   // -- Private helpers ------------------------------------------------------
@@ -199,13 +199,13 @@ class SpatialHashGrid {
    * @param cy - Cell y coordinate.
    * @returns Bucket index in `[0, capacity)`.
    */
-  private hashCell(cx: number, cy: number): number {
+  private _hashCell(cx: number, cy: number): number {
     // Large primes for spatial hashing — these produce good avalanche
     // properties for typical game-world coordinate ranges.
     let h = (cx * 0x58c7d3e5) ^ (cy * 0x29a1f371);
     // Force unsigned (>>> 0) before modulo to avoid negative indices
     h = h >>> 0;
-    return h % this.capacity;
+    return h % this._capacity;
   }
 }
 

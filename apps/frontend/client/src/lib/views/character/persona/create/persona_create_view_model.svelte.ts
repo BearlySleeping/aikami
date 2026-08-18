@@ -176,7 +176,7 @@ export class PersonaCreateViewModel
   /** Message shown after successful save. */
   characterSavedMessage = $state('');
 
-  private static readonly _SCORE_LABELS: readonly ScoreLabel[] = [
+  private static readonly _scoreLabels: readonly ScoreLabel[] = [
     { key: 'strength', label: 'STR', desc: 'Strength' },
     { key: 'dexterity', label: 'DEX', desc: 'Dexterity' },
     { key: 'constitution', label: 'CON', desc: 'Constitution' },
@@ -198,7 +198,7 @@ export class PersonaCreateViewModel
   }
 
   get scoreLabels(): readonly ScoreLabel[] {
-    return PersonaCreateViewModel._SCORE_LABELS;
+    return PersonaCreateViewModel._scoreLabels;
   }
 
   get isImageGenReady(): boolean {
@@ -811,9 +811,7 @@ export class PersonaCreateViewModel
 
 export const getPersonaCreateViewModel = (
   options: PersonaCreateViewModelOptions,
-): PersonaCreateViewModelInterface => {
-  return new PersonaCreateViewModel(options);
-};
+): PersonaCreateViewModelInterface => new PersonaCreateViewModel(options);
 
 // ---------------------------------------------------------------------------
 // Module helpers

@@ -30,29 +30,29 @@ class LocalTtsClient implements FrontendAiInterface {
   readonly name = 'local-tts';
   readonly capabilities!: AiProviderCapabilities;
 
-  private preferredVoice: string | undefined;
-  private defaultRate: number;
-  private defaultPitch: number;
-  private defaultVolume: number;
-  private ttsAvailable: boolean;
+  private _preferredVoice: string | undefined;
+  private _defaultRate: number;
+  private _defaultPitch: number;
+  private _defaultVolume: number;
+  private _ttsAvailable: boolean;
 
   /**
    * @param options - TTS client configuration.
    */
   constructor(options: LocalTtsClientOptions = {}) {
-    this.preferredVoice = options.preferredVoice;
-    this.defaultRate = options.rate ?? 1.0;
-    this.defaultPitch = options.pitch ?? 1.0;
-    this.defaultVolume = options.volume ?? 1.0;
+    this._preferredVoice = options.preferredVoice;
+    this._defaultRate = options.rate ?? 1.0;
+    this._defaultPitch = options.pitch ?? 1.0;
+    this._defaultVolume = options.volume ?? 1.0;
 
     // Check if Web Speech API is available
-    this.ttsAvailable = this.checkTtsAvailability();
+    this._ttsAvailable = this._checkTtsAvailability();
 
     // Assign readonly capabilities via defineProperty
     const caps: AiProviderCapabilities = {
       dialogue: false,
       contentDescription: false,
-      speech: this.ttsAvailable,
+      speech: this._ttsAvailable,
       image: false,
       structured: false,
       requiresBackend: false,
@@ -101,7 +101,7 @@ class LocalTtsClient implements FrontendAiInterface {
   // -----------------------------------------------------------------------
 
   async synthesizeSpeech(text: string, options?: TtsOptions): Promise<SpeechResult> {
-    if (!this.ttsAvailable) {
+    if (!this._ttsAvailable) {
       return {
         audioData: null,
         durationMs: 0,
@@ -109,13 +109,13 @@ class LocalTtsClient implements FrontendAiInterface {
       };
     }
 
-    const voices = this.getVoices();
-    const voice = this.findVoice(options?.voice ?? this.preferredVoice, voices);
+    const voices = this._getVoices();
+    const voice = this._findVoice(options?.voice ?? this._preferredVoice, voices);
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = options?.rate ?? this.defaultRate;
-    utterance.pitch = options?.pitch ?? this.defaultPitch;
-    utterance.volume = options?.volume ?? this.defaultVolume;
+    utterance.rate = options?.rate ?? this._defaultRate;
+    utterance.pitch = options?.pitch ?? this._defaultPitch;
+    utterance.volume = options?.volume ?? this._defaultVolume;
 
     if (voice) {
       utterance.voice = voice;
@@ -139,7 +139,7 @@ class LocalTtsClient implements FrontendAiInterface {
   // -----------------------------------------------------------------------
 
   async healthCheck(): Promise<HealthCheckResult> {
-    if (!this.ttsAvailable) {
+    if (!this._ttsAvailable) {
       return {
         available: false,
         latencyMs: 0,
@@ -147,7 +147,7 @@ class LocalTtsClient implements FrontendAiInterface {
       };
     }
 
-    const voices = this.getVoices();
+    const voices = this._getVoices();
 
     return {
       available: voices.length > 0,
@@ -166,7 +166,7 @@ class LocalTtsClient implements FrontendAiInterface {
   /**
    * Checks if the browser's Web Speech API is available.
    */
-  private checkTtsAvailability(): boolean {
+  private _checkTtsAvailability(): boolean {
     try {
       return (
         typeof window !== 'undefined' &&
@@ -183,8 +183,8 @@ class LocalTtsClient implements FrontendAiInterface {
    * Gets the list of available speech synthesis voices.
    * Uses synchronous API which works after the first `getVoices()` call.
    */
-  private getVoices(): SpeechSynthesisVoice[] {
-    if (!this.ttsAvailable) {
+  private _getVoices(): SpeechSynthesisVoice[] {
+    if (!this._ttsAvailable) {
       return [];
     }
 
@@ -194,7 +194,7 @@ class LocalTtsClient implements FrontendAiInterface {
   /**
    * Finds a voice by fuzzy name matching.
    */
-  private findVoice(
+  private _findVoice(
     preferred: string | undefined,
     voices: SpeechSynthesisVoice[],
   ): SpeechSynthesisVoice | undefined {

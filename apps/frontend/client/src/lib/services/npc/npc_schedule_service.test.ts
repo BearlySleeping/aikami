@@ -87,8 +87,8 @@ describe('NpcScheduleService', () => {
       npcId: 'npc-456',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
-        hours: Array.from({ length: 24 }, (_, hour) => ({
-          hour,
+        hours: Array.from({ length: 24 }, (_hourSlot, hourIdx) => ({
+          hour: hourIdx,
           status: day === 0 ? ('offline' as const) : ('online' as const),
           activity: day === 0 ? 'Resting' : 'Working',
         })),
@@ -139,10 +139,10 @@ describe('NpcScheduleService', () => {
       npcId: 'npc-abc',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
-        hours: Array.from({ length: 24 }, (_, hour) => ({
-          hour,
-          status: (day === 5 && hour === 14 ? 'idle' : 'online') as const,
-          activity: day === 5 && hour === 14 ? 'Taking a break' : 'Available',
+        hours: Array.from({ length: 24 }, (_hourSlot, hourIdx) => ({
+          hour: hourIdx,
+          status: (day === 5 && hourIdx === 14 ? 'idle' : 'online') as const,
+          activity: day === 5 && hourIdx === 14 ? 'Taking a break' : 'Available',
         })),
       })),
       autonomousEnabled: true,
@@ -166,9 +166,9 @@ describe('NpcScheduleService', () => {
       npcId: 'npc-xyz',
       days: Array.from({ length: 7 }, (_, day) => ({
         day,
-        hours: Array.from({ length: 24 }, (_, hour) => ({
-          hour,
-          status: (day === 5 && hour === 14 ? 'dnd' : 'online') as const,
+        hours: Array.from({ length: 24 }, (_hourSlot, hourIdx) => ({
+          hour: hourIdx,
+          status: (day === 5 && hourIdx === 14 ? 'dnd' : 'online') as const,
           activity: 'Working',
         })),
       })),

@@ -299,9 +299,9 @@ export const renderTilemap = async (
     // every tile samples its own tileset's frame (the old single-primary-
     // tileset binding rendered garbage when UVs came from a different
     // tileset's dimensions).
-    const referencedTilesets = tilemap.tilesets.filter((ts) => {
-      return _layerReferencesTileset(layer, ts, tilemap.tilesets);
-    });
+    const referencedTilesets = tilemap.tilesets.filter((ts) =>
+      _layerReferencesTileset(layer, ts, tilemap.tilesets),
+    );
     if (referencedTilesets.length === 0) {
       continue;
     }

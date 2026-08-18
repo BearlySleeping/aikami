@@ -195,8 +195,8 @@ class VoiceModelService
       const allPresent = (
         await Promise.all(
           entries.map(async (entry) => {
-            const cache = await caches.open(entry.cache);
-            return (await cache.match(entry.key)) !== undefined;
+            const entryCache = await caches.open(entry.cache);
+            return (await entryCache.match(entry.key)) !== undefined;
           }),
         )
       ).every(Boolean);

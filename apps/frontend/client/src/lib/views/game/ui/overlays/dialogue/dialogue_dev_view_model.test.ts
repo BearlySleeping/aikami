@@ -263,8 +263,8 @@ const createDevVM = (options?: {
   initialNpcPreset?: DevNpcPreset;
   // C-371: freeTextFirst is the only supported interaction mode.
   initialInteractionMode?: DevInteractionMode;
-}) => {
-  return new DialogueDevViewModel({
+}) =>
+  new DialogueDevViewModel({
     className: 'TestDialogueDevVM',
     npcData: createNpcData(),
     onEndChat: () => {},
@@ -273,7 +273,6 @@ const createDevVM = (options?: {
     initialNpcPreset: options?.initialNpcPreset,
     initialInteractionMode: options?.initialInteractionMode,
   });
-};
 
 // ---------------------------------------------------------------------------
 // Tests

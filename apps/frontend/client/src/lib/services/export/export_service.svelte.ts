@@ -131,38 +131,33 @@ const _extractDiceRolls = (text: string): ExportMessage['diceRolls'] => {
 /**
  * Converts MessageData to the normalized ExportMessage format.
  */
-const _messageToExport = (message: MessageData, _index: number): ExportMessage => {
-  return {
-    text: message.text,
-    sender: message.sender,
-    timestamp: _timestampToIso(message.createdAt),
-    edited: !!message.editedAt,
-    branchId: message.regeneratedFrom,
-    diceRolls: _extractDiceRolls(message.text),
-    attachments: message.attachments?.map((a) => ({
-      type: a.type as 'image' | 'file',
-      url: a.url,
-      name: a.name,
-    })),
-  };
-};
+const _messageToExport = (message: MessageData, _index: number): ExportMessage => ({
+  text: message.text,
+  sender: message.sender,
+  timestamp: _timestampToIso(message.createdAt),
+  edited: !!message.editedAt,
+  branchId: message.regeneratedFrom,
+  diceRolls: _extractDiceRolls(message.text),
+  attachments: message.attachments?.map((a) => ({
+    type: a.type as 'image' | 'file',
+    url: a.url,
+    name: a.name,
+  })),
+});
 
 /**
  * Sanitizes a file name for export — replaces path separators, truncates.
  */
-const _sanitizeFileName = (name: string): string => {
-  return name
+const _sanitizeFileName = (name: string): string =>
+  name
     .replace(/[/\0]/g, '-')
     .replace(/[^a-zA-Z0-9._-]/g, '_')
     .slice(0, 100);
-};
 
 /**
  * Generates a date stamp for file names (YYYY-MM-DD).
  */
-const _dateStamp = (): string => {
-  return new Date().toISOString().split('T')[0];
-};
+const _dateStamp = (): string => new Date().toISOString().split('T')[0];
 
 /**
  * Triggers a browser download for a Blob or File.

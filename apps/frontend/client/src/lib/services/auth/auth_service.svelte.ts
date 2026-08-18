@@ -302,14 +302,14 @@ export class AuthService
       return this._linkDeviceSignIn();
     }
 
-    const toAuthProviderId = (provider: FirebaseSignInProviderName): AuthProviderId => {
-      switch (provider) {
+    const toAuthProviderId = (signInProvider: FirebaseSignInProviderName): AuthProviderId => {
+      switch (signInProvider) {
         case 'google':
           return 'google.com';
         case 'github':
           return 'github.com';
         default:
-          throw new Error(`Invalid provider: ${provider}`);
+          throw new Error(`Invalid provider: ${signInProvider}`);
       }
     };
 
@@ -330,8 +330,8 @@ export class AuthService
       const response = await this._auth.signInWithPopup(toAuthProviderId(provider));
 
       const isFailed = (
-        response: SocialSignInResponse,
-      ): response is SocialSignInResponse<'failed'> => response.status === 'failed';
+        signInResponse: SocialSignInResponse,
+      ): signInResponse is SocialSignInResponse<'failed'> => signInResponse.status === 'failed';
 
       if (isFailed(response)) {
         // The SDK can report failure (e.g. auth/popup-closed-by-user after

@@ -38,9 +38,7 @@ export const pathToTag = (relPath: string): string => {
  * @param ext  - File extension including dot (e.g. ".png")
  * @returns The relative file path (e.g. "sprites/generic-fantasy/elf-male.png")
  */
-export const tagToPath = (tag: string, ext: string): string => {
-  return `${tag.replace(/:/g, '/')}${ext}`;
-};
+export const tagToPath = (tag: string, ext: string): string => `${tag.replace(/:/g, '/')}${ext}`;
 
 // ---------------------------------------------------------------------------
 // sanitizeAssetFilename — clean user-provided filenames
@@ -55,14 +53,13 @@ export const tagToPath = (tag: string, ext: string): string => {
  * @param filename - Raw user-provided filename.
  * @returns A sanitized filename string.
  */
-export const sanitizeAssetFilename = (filename: string): string => {
-  return filename
+export const sanitizeAssetFilename = (filename: string): string =>
+  filename
     .normalize('NFKD')
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/[/\\:*?"<>|]/g, '_')
     .replace(/\s+/g, '-')
     .toLowerCase();
-};
 
 // ---------------------------------------------------------------------------
 // isSafePath — path traversal guard
@@ -98,9 +95,8 @@ export const isSafePath = (basePath: string, targetPath: string): boolean => {
  * @param relPath - Relative file path.
  * @returns `true` if the file should be write-protected.
  */
-export const hasNativeMarker = (relPath: string): boolean => {
-  return relPath.startsWith('.') || relPath.includes('/.native/');
-};
+export const hasNativeMarker = (relPath: string): boolean =>
+  relPath.startsWith('.') || relPath.includes('/.native/');
 
 // ---------------------------------------------------------------------------
 // resolveAssetUrl — tag → URL resolution

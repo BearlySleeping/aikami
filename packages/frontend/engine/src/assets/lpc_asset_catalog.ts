@@ -18,9 +18,8 @@
  *   (unused in the MVP but reserved for future per-NPC overrides).
  * @returns A texture key string resolvable by PixiJS Assets.
  */
-export const resolveNpcTexture = (_properties: Record<string, unknown>): string => {
-  return '/game-data/lpc/body/bodies_male.walk.webp';
-};
+export const resolveNpcTexture = (_properties: Record<string, unknown>): string =>
+  '/game-data/lpc/body/bodies_male.walk.webp';
 
 /**
  * Resolves the sprite texture key for a prop based on its

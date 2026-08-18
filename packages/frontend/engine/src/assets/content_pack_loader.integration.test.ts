@@ -375,14 +375,13 @@ const emberwatchManifest = {
 // Fetch mock: only responds to /content-packs/emberwatch/manifest.json
 // ---------------------------------------------------------------------------
 
-const createEmberwatchFetch = () => {
-  return mock(async (url: string) => {
+const createEmberwatchFetch = () =>
+  mock(async (url: string) => {
     if (url === '/content-packs/emberwatch/manifest.json') {
       return new Response(JSON.stringify(emberwatchManifest), { status: 200 });
     }
     return new Response('Not Found', { status: 404 });
   });
-};
 
 // ---------------------------------------------------------------------------
 // ITEM_CATALOG subset used for reconciliation testing

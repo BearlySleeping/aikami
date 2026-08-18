@@ -330,10 +330,10 @@ export const toDisplayUsername = (options: {
 
   if (email) {
     const emailParts = email.split('@');
-    const name = emailParts[0];
-    if (name) {
+    const nameFromEmail = emailParts[0];
+    if (nameFromEmail) {
       // capitalize first letter
-      return name.charAt(0).toUpperCase() + name.slice(1);
+      return nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
     }
     return email;
   }

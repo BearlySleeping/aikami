@@ -168,14 +168,12 @@ const lerpColor = (c1: number, c2: number, t: number): number => {
   return (r << 16) | (g << 8) | b;
 };
 
-const randomBetween = (min: number, max: number): number => {
-  return Math.random() * (max - min) + min;
-};
+const randomBetween = (min: number, max: number): number => Math.random() * (max - min) + min;
 
 /* ── Particle System ── */
 
-const createParticles = (count: number, centerX: number, centerY: number): Particle[] => {
-  return Array.from({ length: count }, () => {
+const createParticles = (count: number, centerX: number, centerY: number): Particle[] =>
+  Array.from({ length: count }, () => {
     const angle = Math.random() * Math.PI * 2;
     const speed = randomBetween(2, 8);
     const life = randomBetween(30, 80);
@@ -195,7 +193,6 @@ const createParticles = (count: number, centerX: number, centerY: number): Parti
       alpha: 1,
     };
   });
-};
 
 /* ── Main Initialization ── */
 

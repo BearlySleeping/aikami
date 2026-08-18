@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 /**
  * Minimal AudioBuffer stub used by both decodeAudioData and buffer assignment.
  */
-const createStubAudioBuffer = (): AudioBuffer => {
-  return {
+const createStubAudioBuffer = (): AudioBuffer =>
+  ({
     duration: 2.0,
     length: 88200,
     sampleRate: 44100,
@@ -17,8 +17,7 @@ const createStubAudioBuffer = (): AudioBuffer => {
     getChannelData: () => new Float32Array(88200),
     copyFromChannel: () => {},
     copyToChannel: () => {},
-  } as unknown as AudioBuffer;
-};
+  }) as unknown as AudioBuffer;
 
 // ── Mock state containers (reset in beforeEach) ──
 
@@ -198,9 +197,7 @@ const createMockAudioContext = (): AudioContext => {
       return node;
     }),
 
-    createBufferSource: mock((): AudioBufferSourceNode => {
-      return createMockSourceNode();
-    }),
+    createBufferSource: mock((): AudioBufferSourceNode => createMockSourceNode()),
 
     decodeAudioData: mock((): Promise<AudioBuffer> => {
       decodeCallCount++;
@@ -390,12 +387,13 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
   test('should handle SFX playback failure gracefully', async () => {
     // Mock fetch to fail
-    (globalThis as Record<string, unknown>).fetch = mock(async () => {
-      return {
-        ok: false,
-        status: 404,
-      } as Response;
-    });
+    (globalThis as Record<string, unknown>).fetch = mock(
+      async () =>
+        ({
+          ok: false,
+          status: 404,
+        }) as Response,
+    );
 
     const sourcesBefore = createdSources.length;
 

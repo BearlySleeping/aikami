@@ -48,6 +48,49 @@ const formatNpcText = (
   }
   return segments;
 };
+
+/** Avatar URL for a message sender: player, party mate, or the NPC. */
+const avatarUrlFor = (
+  isPlayer: boolean,
+  isPartyMate: boolean,
+  viewModelRef: DialogueOverlayViewModelInterface,
+): string => {
+  if (isPlayer) {
+    return viewModelRef.playerAvatarUrl;
+  }
+  if (isPartyMate) {
+    return '/assets/npc/gandalf/neutral.webp';
+  }
+  return viewModelRef.npcAvatarUrl;
+};
+
+/** Bubble intent chip class for a suggestion chip. */
+const chipClassFor = (intentType: string): string => {
+  if (intentType === 'combat') {
+    return 'btn-outline btn-error';
+  }
+  if (intentType === 'skill_check') {
+    return 'btn-outline btn-accent';
+  }
+  if (intentType === 'trade') {
+    return 'btn-outline btn-warning';
+  }
+  if (intentType === 'quest') {
+    return 'btn-outline btn-info';
+  }
+  return 'btn-outline';
+};
+
+/** Message bubble styling for a sender role. */
+const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
+  if (isPlayer) {
+    return 'rounded-br-md bg-primary text-primary-content';
+  }
+  if (isPartyMate) {
+    return 'rounded-br-md bg-info/20 text-info-content border border-info/20';
+  }
+  return 'rounded-bl-md bg-base-100 text-base-content';
+};
 </script>
 
 <div
@@ -217,11 +260,7 @@ const formatNpcText = (
             {:else}
               <!-- Party mode: show avatar + name above bubble -->
               {#if viewModel.showPartyUi}
-                {@const avatarUrl = isPlayer
-                  ? viewModel.playerAvatarUrl
-                  : isPartyMate
-                    ? '/assets/npc/gandalf/neutral.webp'
-                    : viewModel.npcAvatarUrl}
+                {@const avatarUrl = avatarUrlFor(isPlayer, isPartyMate, viewModel)}
                 <div class="flex items-center gap-1.5 mb-0.5">
                   <img
                     src={avatarUrl}
@@ -236,11 +275,7 @@ const formatNpcText = (
               {/if}
               <!-- Message bubble -->
               <div
-                class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {isPlayer
-                  ? 'rounded-br-md bg-primary text-primary-content'
-                  : isPartyMate
-                    ? 'rounded-br-md bg-info/20 text-info-content border border-info/20'
-                    : 'rounded-bl-md bg-base-100 text-base-content'}"
+                class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {bubbleClassFor(isPlayer, isPartyMate)}"
               >
                 {#if message.content}
                   {#if isPlayer}
@@ -530,15 +565,7 @@ const formatNpcText = (
           {#each viewModel.suggestedChips as chip (chip.id)}
             <button
               type="button"
-              class="btn btn-xs gap-1 normal-case border-base-content/15 {chip.intentType === 'combat'
-                ? 'btn-outline btn-error'
-                : chip.intentType === 'skill_check'
-                  ? 'btn-outline btn-accent'
-                  : chip.intentType === 'trade'
-                    ? 'btn-outline btn-warning'
-                    : chip.intentType === 'quest'
-                      ? 'btn-outline btn-info'
-                      : 'btn-outline'}"
+              class="btn btn-xs gap-1 normal-case border-base-content/15 {chipClassFor(chip.intentType)}"
               disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
               onclick={() => viewModel.handleChipTap(chip.id)}
               aria-label={chip.label}

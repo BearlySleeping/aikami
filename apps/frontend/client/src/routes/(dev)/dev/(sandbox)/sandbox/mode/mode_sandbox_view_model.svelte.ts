@@ -131,9 +131,9 @@ class ModeSandboxViewModel
     }
 
     try {
-      const { GameWorld } = await import('@aikami/frontend/engine');
+      const { GameWorld: EngineGameWorld } = await import('@aikami/frontend/engine');
 
-      this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
+      this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'ModeSandboxGameWorld',
         bridge,
       });
@@ -173,8 +173,6 @@ class ModeSandboxViewModel
 /** Factory for instantiating the sandbox ViewModel in route pages. */
 export const getModeSandboxViewModel = (
   options: ModeSandboxViewModelOptions,
-): ModeSandboxViewModel => {
-  return new ModeSandboxViewModel(options);
-};
+): ModeSandboxViewModel => new ModeSandboxViewModel(options);
 
 export { ModeSandboxViewModel };

@@ -23,7 +23,7 @@ export const getCountryData = async (
 > => {
   const allCountries = await getAllCountries();
 
-  const country = allCountries.find((country) => country[1] === countryCode);
+  const country = allCountries.find((candidateCountry) => candidateCountry[1] === countryCode);
   if (!country) {
     return undefined;
   }

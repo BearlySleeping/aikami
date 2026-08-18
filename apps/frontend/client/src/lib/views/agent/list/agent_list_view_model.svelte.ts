@@ -115,7 +115,7 @@ class AgentListViewModel
   async exportAgent(id: string): Promise<void> {
     try {
       const json = await agentRegistryService.exportAgent({ id });
-      const agent = this.customAgents.find((a) => a.id === id);
+      const agent = this.customAgents.find((entry) => entry.id === id);
       const filename = `${
         agent?.name.replace(/\s+/g, '_').toLowerCase() ?? 'agent'
       }.aikami.agent.json`;

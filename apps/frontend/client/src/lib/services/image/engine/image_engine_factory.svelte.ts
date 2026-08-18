@@ -129,11 +129,14 @@ export const detectImageEngine = async (): Promise<ImageEngineClient | undefined
       probeWithTimeout(comfyui, budget.signal),
     ]);
 
-    const selected: ImageEngineClient | undefined = sdcppOk
-      ? sdcpp
-      : comfyuiOk
-        ? comfyui
-        : undefined;
+    let selected: ImageEngineClient | undefined;
+    if (sdcppOk) {
+      selected = sdcpp;
+    } else if (comfyuiOk) {
+      selected = comfyui;
+    } else {
+      selected = undefined;
+    }
 
     logger.info('image-engine:detected', {
       sdcpp: sdcppOk,

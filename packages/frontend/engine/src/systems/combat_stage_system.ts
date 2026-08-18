@@ -199,9 +199,7 @@ export const teardownCombatStage = (world: World): void => {
 /**
  * Returns whether the combat stage is currently active.
  */
-export const isCombatStageActive = (): boolean => {
-  return stageActive;
-};
+export const isCombatStageActive = (): boolean => stageActive;
 
 /**
  * Computes screen-space positions for all active combatants.

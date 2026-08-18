@@ -30,6 +30,7 @@ import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { logger } from '@aikami/logger';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_TAURI_DIR = join(CLIENT_DIR, 'src-tauri');
@@ -59,8 +60,8 @@ for (let i = 0; i < args.length; i++) {
 
 const rawMode = modeFlag ?? process.env.TAURI_BUILD_MODE ?? 'emulator';
 if (!VALID_MODES.includes(rawMode as BuildMode)) {
-  console.error(`❌ Invalid mode "${rawMode}". Valid: ${VALID_MODES.join(', ')}`);
-  console.error(
+  logger.error(`❌ Invalid mode "${rawMode}". Valid: ${VALID_MODES.join(', ')}`);
+  logger.error(
     `   Usage: bun run build:tauri [--mode emulator|staging|production] [--web-only] [--dry-run]`,
   );
   process.exit(1);
@@ -73,9 +74,9 @@ const binDir = isRelease ? 'release' : 'debug';
 
 /** Runs a command, inheriting stdio; exits with its code on failure. */
 function run(label: string, cmd: string, argsList: string[], opts: SpawnSyncOptions = {}): void {
-  console.log(`\n▶ ${label}`);
+  logger.info(`\n▶ ${label}`);
   if (dryRun) {
-    console.log(`  (dry-run) ${cmd} ${argsList.join(' ')}`);
+    logger.info(`  (dry-run) ${cmd} ${argsList.join(' ')}`);
     return;
   }
   const result = spawnSync(cmd, argsList, {
@@ -85,16 +86,16 @@ function run(label: string, cmd: string, argsList: string[], opts: SpawnSyncOpti
     ...opts,
   });
   if (result.error) {
-    console.error(`❌ Failed to spawn ${cmd}: ${result.error.message}`);
+    logger.error(`❌ Failed to spawn ${cmd}: ${result.error.message}`);
     process.exit(1);
   }
   if (result.status !== 0) {
-    console.error(`❌ ${label} failed (exit ${result.status})`);
+    logger.error(`❌ ${label} failed (exit ${result.status})`);
     process.exit(result.status ?? 1);
   }
 }
 
-console.log(
+logger.info(
   `\n🎯 Building Tauri ${webOnly ? 'web bundle' : 'app'} — mode: ${mode}` +
     (webOnly ? '' : ` (${isRelease ? 'release profile' : 'debug profile'})`),
 );
@@ -113,11 +114,11 @@ if (!webOnly) {
 
   const binPath = join(SRC_TAURI_DIR, 'target', binDir, binName);
   if (!dryRun && existsSync(binPath)) {
-    console.log(`\n✅ Done — optimized ${isRelease ? 'release' : 'debug'} binary: ${binPath}`);
-    console.log(`   Run it with: bun run tauri:run (picks release over debug when both exist)`);
+    logger.info(`\n✅ Done — optimized ${isRelease ? 'release' : 'debug'} binary: ${binPath}`);
+    logger.info(`   Run it with: bun run tauri:run (picks release over debug when both exist)`);
   } else {
-    console.log(`\n✅ Done — ${isRelease ? 'release' : 'debug'} build complete.`);
+    logger.info(`\n✅ Done — ${isRelease ? 'release' : 'debug'} build complete.`);
   }
 } else {
-  console.log('\n✅ Done — web bundle ready (cargo build is handled by the tauri CLI).');
+  logger.info('\n✅ Done — web bundle ready (cargo build is handled by the tauri CLI).');
 }

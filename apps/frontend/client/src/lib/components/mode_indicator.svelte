@@ -7,13 +7,15 @@ import { gameModeService } from '$services';
  *
  * EXPLORE → green (success), DIALOGUE → blue (info), MENU → gray (neutral).
  */
-const badgeColor = $derived(
-  gameModeService.currentMode === 'EXPLORE'
-    ? 'badge-success'
-    : gameModeService.currentMode === 'DIALOGUE'
-      ? 'badge-info'
-      : 'badge-ghost',
-);
+const badgeColor = $derived.by(() => {
+  if (gameModeService.currentMode === 'EXPLORE') {
+    return 'badge-success';
+  }
+  if (gameModeService.currentMode === 'DIALOGUE') {
+    return 'badge-info';
+  }
+  return 'badge-ghost';
+});
 </script>
 
 <!--

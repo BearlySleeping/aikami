@@ -235,10 +235,10 @@ describe('AC-1: Zero-allocation tactical action resolution', () => {
   });
 
   test('updateGoapCombatTactics is a no-op without world or player', () => {
-    const world = createTestWorld();
+    const testWorld = createTestWorld();
     // No entities with CombatTactics — should not throw
     expect(() => {
-      updateGoapCombatTactics(world, 0);
+      updateGoapCombatTactics(testWorld, 0);
     }).not.toThrow();
 
     expect(() => {

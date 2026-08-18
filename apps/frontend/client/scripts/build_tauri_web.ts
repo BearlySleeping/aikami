@@ -25,6 +25,7 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { logger } from '@aikami/logger';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -57,18 +58,18 @@ for (let i = 0; i < args.length; i++) {
 
 const rawMode = modeFlag ?? process.env.TAURI_BUILD_MODE ?? 'emulator';
 if (!VALID_MODES.includes(rawMode as BuildMode)) {
-  console.error(`❌ Invalid mode "${rawMode}". Valid: ${VALID_MODES.join(', ')}`);
-  console.error(
+  logger.error(`❌ Invalid mode "${rawMode}". Valid: ${VALID_MODES.join(', ')}`);
+  logger.error(
     `   Usage: bun run build:tauri-web [--mode emulator|staging|production] [--dry-run]`,
   );
   process.exit(1);
 }
 const mode = rawMode as BuildMode;
 
-console.log(`\n🎯 Building Tauri web bundle — mode: ${mode}`);
+logger.info(`\n🎯 Building Tauri web bundle — mode: ${mode}`);
 
 if (dryRun) {
-  console.log(`  (dry-run) bunx vite build --mode ${mode}`);
+  logger.info(`  (dry-run) bunx vite build --mode ${mode}`);
   process.exit(0);
 }
 
@@ -81,12 +82,12 @@ const result = spawnSync('bunx', ['vite', 'build', '--mode', mode], {
 });
 
 if (result.error) {
-  console.error(`❌ Failed to spawn vite: ${result.error.message}`);
+  logger.error(`❌ Failed to spawn vite: ${result.error.message}`);
   process.exit(1);
 }
 if (result.status !== 0) {
-  console.error(`❌ vite build failed (exit ${result.status})`);
+  logger.error(`❌ vite build failed (exit ${result.status})`);
   process.exit(result.status ?? 1);
 }
 
-console.log('\n✅ Done — web bundle ready (cargo build + bundling handled by the tauri CLI).');
+logger.info('\n✅ Done — web bundle ready (cargo build + bundling handled by the tauri CLI).');
