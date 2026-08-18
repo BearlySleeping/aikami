@@ -1,0 +1,266 @@
+#!/bin/sh
+# apps/backend/local-stack/aikami
+#
+# `aikami` — the control command for an installed Aikami Local Stack
+# (C-418 Feature F). Shipped inside the release bundle; install.sh copies it to
+# the install root and links it into ~/.local/bin, so an installed user types
+# `aikami up` instead of remembering a compose incantation and a directory to
+# cd into. The Windows twin is aikami.ps1 (same commands, same output shape).
+#
+#   aikami up | down | restart | logs | status | doctor | wizard | client |
+#          update | env | dir | version | help
+#
+# Every command prints the docker compose invocation it runs — nothing here is
+# a black box, and dropping to raw `docker compose` in `aikami dir` works.
+#
+# Pure POSIX sh (dash-compatible); no bash-specific features.
+
+set -eu
+
+head_() { printf '\033[1;34m[aikami]\033[0m %s\n' "$*"; }
+info_() { printf '         %s\n' "$*"; }
+ok_()   { printf '  \033[1;32mok\033[0m     %s\n' "$*"; }
+bad_()  { printf '  \033[1;31mFAIL\033[0m   %s\n' "$*"; }
+meh_()  { printf '  \033[1;33m--\033[0m     %s\n' "$*"; }
+
+# ── Where the stack lives ─────────────────────────────────────────────────
+# This script runs from two places: inside the project dir (as shipped in the
+# bundle) and from the install root (the copy install.sh puts on PATH), where
+# the project dir is `current`.
+SELF="$0"
+while [ -L "${SELF}" ]; do
+  link="$(readlink "${SELF}")"
+  case "${link}" in
+    /*) SELF="${link}" ;;
+    *) SELF="$(dirname "${SELF}")/${link}" ;;
+  esac
+done
+HERE="$(cd "$(dirname "${SELF}")" && pwd)"
+if [ -f "${HERE}/compose.yaml" ]; then
+  PROJECT_DIR="${HERE}"
+elif [ -f "${HERE}/current/compose.yaml" ]; then
+  PROJECT_DIR="${HERE}/current"
+else
+  printf '\033[1;31m[aikami] error:\033[0m cannot find compose.yaml near %s — reinstall with: curl -fsSL https://aikami.sh/install | sh\n' "${HERE}" >&2
+  exit 1
+fi
+
+compose() {
+  info_ "docker compose $*"
+  ( cd "${PROJECT_DIR}" && docker compose "$@" )
+}
+
+env_value() { # name default
+  if [ -f "${PROJECT_DIR}/.env" ]; then
+    value="$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*\)$/\1/p" "${PROJECT_DIR}/.env" | head -n 1)"
+    if [ -n "${value}" ]; then
+      printf '%s' "${value}"
+      return
+    fi
+  fi
+  printf '%s' "$2"
+}
+
+probe() { # url  → 0 when it answers
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time 3 -o /dev/null "$1" 2>/dev/null
+  else
+    wget -q -T 3 -O /dev/null "$1" 2>/dev/null
+  fi
+}
+
+doctor() {
+  head_ 'diagnosing the local stack'
+  info_ "project dir: ${PROJECT_DIR}"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    bad_ 'docker is not on PATH — https://docs.docker.com/engine/install/'
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    bad_ 'the Docker engine is not responding — start Docker and retry'
+    return 1
+  fi
+  ok_ "docker engine $(docker info --format '{{.ServerVersion}}' 2>/dev/null)"
+
+  if [ -f "${PROJECT_DIR}/.env" ]; then
+    ok_ ".env present ($(env_value COMPOSE_PROFILES '?') on $(env_value COMPOSE_FILE compose.yaml))"
+  else
+    bad_ '.env missing — run: aikami wizard'
+  fi
+  if ( cd "${PROJECT_DIR}" && docker compose config --quiet >/dev/null 2>&1 ); then
+    ok_ 'compose topology renders'
+  else
+    bad_ 'docker compose config failed — see: aikami dir'
+  fi
+
+  case "$(env_value COMPOSE_FILE compose.yaml)" in
+    *cuda*)
+      if docker info 2>/dev/null | grep -qi nvidia; then
+        ok_ 'docker reports an nvidia runtime (CUDA backend can reach the GPU)'
+      else
+        meh_ 'CUDA backend selected but docker does not report an nvidia runtime — install the NVIDIA Container Toolkit, or re-run: aikami wizard'
+      fi
+      ;;
+  esac
+
+  printf '\n'
+  info_ 'services:'
+  compose ps || true
+  running="$( ( cd "${PROJECT_DIR}" && docker compose ps -q ) 2>/dev/null | tr -d '[:space:]' )"
+
+  printf '\n'
+  info_ 'endpoints (as the app sees them):'
+  profiles="$(env_value COMPOSE_PROFILES 'text,image,voice')"
+  check() { # profile label url
+    case ",${profiles}," in
+      *",$1,"*) ;;
+      *) return 0 ;;
+    esac
+    if probe "$3"; then
+      ok_ "$2 $3"
+    elif [ -n "${running}" ]; then
+      bad_ "$2 $3 — not answering (first run downloads models; try: aikami logs)"
+    else
+      # A wall of red right after install would be misleading — nothing is
+      # supposed to answer before `aikami up`.
+      meh_ "$2 $3 — stack is not running (aikami up)"
+    fi
+  }
+  check text   'text  ' "http://localhost:$(env_value TEXT_PORT 11434)/health"
+  check image  'image ' "http://localhost:$(env_value IMAGE_PORT 8188)/"
+  check voice  'voice ' "http://localhost:$(env_value TTS_PORT 8089)/health"
+  check stt    'stt   ' "http://localhost:$(env_value STT_PORT 8087)/health"
+  check client 'client' "http://localhost:$(env_value CLIENT_PORT 5274)/"
+}
+
+# ── Desktop client (Tauri, from the latest GitHub release) ────────────────
+client_platform_key() {
+  case "$(uname -s)" in
+    Darwin) printf 'darwin-%s' "$([ "$(uname -m)" = 'arm64' ] && printf 'aarch64' || printf 'x86_64')" ;;
+    Linux) printf 'linux-x86_64' ;;
+    *) printf '' ;;
+  esac
+}
+
+client() {
+  # macOS: the installed app bundle; Linux: the AppImage we downloaded before.
+  app_dir="${AIKAMI_CLIENT_DIR:-${HOME}/.aikami-stack/client}"
+  case "$(uname -s)" in
+    Darwin)
+      for candidate in '/Applications/Aikami.app' "${HOME}/Applications/Aikami.app" "${app_dir}/Aikami.app"; do
+        if [ -d "${candidate}" ] && [ "${1:-}" != '--reinstall' ]; then
+          head_ "launching ${candidate}"
+          open "${candidate}"
+          return 0
+        fi
+      done
+      ;;
+    Linux)
+      if [ -x "${app_dir}/Aikami.AppImage" ] && [ "${1:-}" != '--reinstall' ]; then
+        head_ "launching ${app_dir}/Aikami.AppImage"
+        "${app_dir}/Aikami.AppImage" >/dev/null 2>&1 &
+        return 0
+      fi
+      ;;
+  esac
+
+  key="$(client_platform_key)"
+  [ -n "${key}" ] || { bad_ "no desktop build for $(uname -s)"; return 1; }
+  manifest_url="${AIKAMI_CLIENT_MANIFEST_URL:-https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json}"
+  head_ 'fetching the latest desktop release'
+  manifest="$(curl -fsSL "${manifest_url}" 2>/dev/null || true)"
+  [ -n "${manifest}" ] || { bad_ "could not read ${manifest_url} — download the app from https://github.com/BearlySleeping/aikami/releases/latest"; return 1; }
+  # Take the url that follows this platform's key (single-line JSON-safe: the
+  # manifest is machine-generated one key per platform).
+  url="$(printf '%s' "${manifest}" | tr ',' '\n' | grep -A 4 "\"${key}\"" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+  if [ -z "${url}" ]; then
+    url="$(printf '%s' "${manifest}" | sed -n "s/.*\"${key}\"[^}]*\"url\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1)"
+  fi
+  [ -n "${url}" ] || { bad_ "the latest desktop release has no ${key} build"; return 1; }
+  mkdir -p "${app_dir}"
+  info_ "downloading ${url}"
+  case "${url}" in
+    *.AppImage|*.appimage)
+      curl -fsSL "${url}" -o "${app_dir}/Aikami.AppImage"
+      chmod +x "${app_dir}/Aikami.AppImage"
+      ok_ "installed ${app_dir}/Aikami.AppImage"
+      "${app_dir}/Aikami.AppImage" >/dev/null 2>&1 &
+      ;;
+    *.tar.gz)
+      curl -fsSL "${url}" -o "${app_dir}/Aikami.app.tar.gz"
+      tar -xzf "${app_dir}/Aikami.app.tar.gz" -C "${app_dir}"
+      rm -f "${app_dir}/Aikami.app.tar.gz"
+      ok_ "installed ${app_dir}/Aikami.app — drag it to /Applications to keep it"
+      open "${app_dir}/Aikami.app"
+      ;;
+    *.dmg)
+      curl -fsSL "${url}" -o "${app_dir}/Aikami.dmg"
+      ok_ "downloaded ${app_dir}/Aikami.dmg — open it and drag Aikami to Applications"
+      open "${app_dir}/Aikami.dmg"
+      ;;
+    *) bad_ "unrecognised desktop artifact ${url}"; return 1 ;;
+  esac
+}
+
+usage() {
+  cat <<'EOF'
+
+aikami — control the local Aikami AI stack
+
+  aikami up            start the stack (docker compose up -d)
+  aikami down          stop the stack (models are kept)
+  aikami restart       restart every service
+  aikami status        per-service state and health
+  aikami logs [svc]    follow logs (first run = model download)
+  aikami doctor        diagnose docker, topology, GPU, endpoints
+  aikami wizard        re-run hardware detection and rewrite .env
+  aikami client        launch the desktop app (installs it if absent)
+  aikami update        reinstall the newest stack release (.env kept)
+  aikami env           print the .env path
+  aikami dir           print the project dir (for raw docker compose)
+  aikami version       installed stack version
+
+EOF
+  info_ "project dir: ${PROJECT_DIR}"
+  printf '\n'
+}
+
+command_name="${1:-help}"
+[ $# -gt 0 ] && shift || true
+case "${command_name}" in
+  up) compose up -d "$@" ;;
+  down) compose down "$@" ;;
+  restart) compose restart "$@" ;;
+  status|ps) compose ps "$@" ;;
+  logs) compose logs -f --tail 100 "$@" ;;
+  doctor) doctor ;;
+  client) client "$@" ;;
+  wizard)
+    wizard_bin=''
+    for candidate in "${PROJECT_DIR}"/bin/stack-init "${PROJECT_DIR}"/bin/stack-init-*; do
+      [ -x "${candidate}" ] && { wizard_bin="${candidate}"; break; }
+    done
+    [ -n "${wizard_bin}" ] || { bad_ "wizard binary missing in ${PROJECT_DIR}/bin"; exit 1; }
+    "${wizard_bin}" --env-path "${PROJECT_DIR}/.env" "$@"
+    ;;
+  update)
+    head_ 'reinstalling the newest local-stack release (.env is preserved)'
+    if [ -f "${PROJECT_DIR}/install.sh" ]; then
+      sh "${PROJECT_DIR}/install.sh" "$@"
+    else
+      curl -fsSL https://aikami.sh/install | sh
+    fi
+    ;;
+  env)
+    [ -f "${PROJECT_DIR}/.env" ] || { bad_ '.env missing — run: aikami wizard'; exit 1; }
+    printf '%s\n' "${PROJECT_DIR}/.env"
+    ;;
+  dir) printf '%s\n' "${PROJECT_DIR}" ;;
+  version)
+    if [ -f "${PROJECT_DIR}/VERSION" ]; then cat "${PROJECT_DIR}/VERSION"; printf '\n'
+    else printf 'unknown (installed from a repo checkout?)\n'; fi
+    ;;
+  help|--help|-h) usage ;;
+  *) bad_ "unknown command '${command_name}'"; usage; exit 1 ;;
+esac

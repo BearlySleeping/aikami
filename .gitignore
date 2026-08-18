@@ -264,6 +264,7 @@ apps/backend/packages/
 .pi/agent_scratchpad.db*
 .pi/MARKER_*
 .pi/architect_plan_*.md
+**/**/.pi/cache
 tmp/
 .gcloud/
 apps/frontend/client/static/game-assets/
