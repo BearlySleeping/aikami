@@ -1,11 +1,16 @@
 /**
- * Worker runner — launches pi with DeepSeek V4 Pro as an Implementation Worker.
+ * Worker runner — launches pi with DeepSeek V4 Flash (via DeepInfra) as an
+ * Implementation Worker.
  *
  * Usage: bun run worker "implement the blueprint: <paste guru output>"
  *
  * Worker has FULL tool access (write, edit, moon, validate, etc.) and loads
  * the project's default skills via .pi/settings.json. It receives a structured
  * blueprint from the Guru and implements the code changes.
+ *
+ * Override the provider/model via `.env.local` (gitignored):
+ *   WORKER_PROVIDER=deepseek
+ *   WORKER_MODEL=deepseek-v4-pro
  */
 
 import { resolve } from 'node:path';
@@ -27,11 +32,13 @@ if (!env.PI_HARD_SPEND) {
 }
 
 // Build argv array
+const provider = process.env.WORKER_PROVIDER ?? 'deepinfra';
+const model = process.env.WORKER_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash-0731';
 const piArgs: string[] = [
   '--provider',
-  'deepseek',
+  provider,
   '--model',
-  'deepseek-v4-pro',
+  model,
   '--system-prompt',
   systemPrompt,
   ...userArgs,

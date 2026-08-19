@@ -12,7 +12,10 @@
     "npm:context-mode",
     "npm:pi-mcp-adapter",
     "npm:@hypabolic/pi-hypa",
-    "npm:pi-cache-optimizer"
+    "npm:pi-cache-optimizer",
+    "npm:pi-deepinfra",
+    "npm:@rohaquinlop/pi-deepseek-cache",
+    "git:github.com/jrimmer/pi-deepseek-optimized"
   ],
   "extensions": ["./extensions"],
   "skills": ["./skills", "./generated-skills"],

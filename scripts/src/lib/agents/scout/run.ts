@@ -1,10 +1,15 @@
 /**
- * Scout runner — launches pi with DeepSeek V4 Pro as a Repository Scout.
+ * Scout runner — launches pi with DeepSeek V4 Flash (via DeepInfra) as a
+ * Repository Scout.
  *
  * Usage: bun run scout "find auth-related files and format for Claude"
  *
  * Scout explores the codebase and outputs a formatted context block
  * for the Guru (Claude) to analyze.
+ *
+ * Override the provider/model via `.env.local` (gitignored):
+ *   SCOUT_PROVIDER=deepseek
+ *   SCOUT_MODEL=deepseek-v4-pro
  */
 
 import { resolve } from 'node:path';
@@ -26,11 +31,13 @@ if (!env.PI_HARD_SPEND) {
 }
 
 // Build argv array — Bun.spawn passes directly to process, no shell escaping issues
+const provider = process.env.SCOUT_PROVIDER ?? 'deepinfra';
+const model = process.env.SCOUT_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash-0731';
 const piArgs: string[] = [
   '--provider',
-  'deepseek',
+  provider,
   '--model',
-  'deepseek-v4-pro',
+  model,
   '--system-prompt',
   systemPrompt,
   '--no-skills',
@@ -39,7 +46,10 @@ const piArgs: string[] = [
   '--no-context-files',
   ...userArgs,
   '--exclude-tools',
-  'write,edit,bash',
+  // `edit_lines` is a distinct tool name registered by pi-deepseek-optimized's
+  // hashline-editing module — must be excluded alongside `edit` or scout's
+  // read-only contract leaks a write path when a deepseek-pattern model is active.
+  'write,edit,edit_lines,bash',
 ];
 
 // Exec pi, inheriting stdio for full TUI interactivity

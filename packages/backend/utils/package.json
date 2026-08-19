@@ -17,6 +17,6 @@
     "axios": "1.19.0",
     "firebase-admin": "14.2.0",
     "firebase-functions": "7.3.2",
-    "uuid": "14.0.1"
+    "uuid": "14.0.2"
   }
 }

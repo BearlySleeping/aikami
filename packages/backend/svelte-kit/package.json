@@ -15,6 +15,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@sveltejs/kit": "2.70.2"
+    "@sveltejs/kit": "2.70.3"
   }
 }

@@ -525,10 +525,12 @@ class CapabilityViewModel
 
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
+      // Leave the campaign in 'creating' — /setup hosts the onboarding
+      // coordinator (C-319/C-405), which attaches the persona and calls
+      // completeSetup() itself. Calling it here flips the campaign to
+      // 'playing' before character creation runs, so the onboarding gate
+      // (campaign.state !== 'creating') always rejects the persona.
       await campaignService.startNewCampaign({ capabilityProfile: profile });
-      if (campaignService.activeCampaign) {
-        campaignService.completeSetup();
-      }
 
       await routerService.goToRoute('setup', {
         queryParameters: undefined,
