@@ -121,11 +121,14 @@ const _readStream = async (options: {
       }
 
       // Dynamic timeout: longer for first chunk, shorter for idle detection
-      const timeout = isFirstChunk
-        ? FIRST_CHUNK_TIMEOUT_MS
-        : hasReceivedContent
-          ? IDLE_TIMEOUT_MS
-          : FIRST_CHUNK_TIMEOUT_MS;
+      let timeout: number;
+      if (isFirstChunk) {
+        timeout = FIRST_CHUNK_TIMEOUT_MS;
+      } else if (hasReceivedContent) {
+        timeout = IDLE_TIMEOUT_MS;
+      } else {
+        timeout = FIRST_CHUNK_TIMEOUT_MS;
+      }
 
       const result = await Promise.race([
         reader.read(),

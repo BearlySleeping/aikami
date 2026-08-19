@@ -114,18 +114,18 @@ const getClientUrl = (mode: AikamiMode, live = false): string => {
 
 // ── Arg parsing ────────────────────────────────────────────────────────────
 
-const parseOptions = (args: string[]): PreviewOptions => {
-  const build = hasFlag(args, 'build');
-  const tauri = hasFlag(args, 'tauri');
-  const tauriDev = hasFlag(args, 'tauri-dev') || hasFlag(args, 'tauri-dev-server');
-  const live = hasFlag(args, 'live');
-  const noDev = hasFlag(args, 'no-dev');
-  const noDevtools = hasFlag(args, 'no-devtools');
-  const updateDevtoolsFlag = hasFlag(args, 'update-devtools');
-  const force = hasFlag(args, 'force');
-  const softwareGl = hasFlag(args, 'software-gl') || hasFlag(args, 'sw-gl');
+const parseOptions = (cliArgs: string[]): PreviewOptions => {
+  const build = hasFlag(cliArgs, 'build');
+  const tauri = hasFlag(cliArgs, 'tauri');
+  const tauriDev = hasFlag(cliArgs, 'tauri-dev') || hasFlag(cliArgs, 'tauri-dev-server');
+  const live = hasFlag(cliArgs, 'live');
+  const noDev = hasFlag(cliArgs, 'no-dev');
+  const noDevtools = hasFlag(cliArgs, 'no-devtools');
+  const updateDevtoolsFlag = hasFlag(cliArgs, 'update-devtools');
+  const force = hasFlag(cliArgs, 'force');
+  const softwareGl = hasFlag(cliArgs, 'software-gl') || hasFlag(cliArgs, 'sw-gl');
 
-  const rawMode = parseArg(args, '--mode');
+  const rawMode = parseArg(cliArgs, '--mode');
   const mode = parseMode(rawMode);
 
   // Defaults:

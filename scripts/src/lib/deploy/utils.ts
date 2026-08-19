@@ -3,7 +3,7 @@
  * Shared utilities for the deploy pipeline — local and CI.
  */
 
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { c, error, log } from '../cli_utils';
@@ -93,12 +93,23 @@ export function run(
 }
 
 /**
- * Runs a command from an argument array WITHOUT a shell (`shell: false`).
+ * Runs a command from an argument array WITHOUT a shell.
  *
  * Use this for commands whose arguments may contain untrusted values
  * (e.g. service-account emails read from .env files) — argument arrays
  * cannot be shell-interpreted, so no quoting/escaping is needed and no
  * injection is possible.
+ *
+ * Uses Bun.spawnSync (not node:child_process's spawnSync) because it
+ * correctly resolves Windows .cmd/.bat shims (e.g. gcloud.cmd) via PATHEXT
+ * without a shell; Node's spawnSync only finds true executables in that mode
+ * and fails with ENOENT for shims like gcloud on Windows.
+ *
+ * When we pass a custom env object, Bun's executable resolution looks up
+ * the key `PATH` case-sensitively — but cmd.exe/PowerShell populate the
+ * variable as `Path`, so an explicit env silently breaks lookup on Windows
+ * (this doesn't affect the default env, which Bun captures natively and
+ * resolves case-insensitively). Normalize the key when building one.
  */
 export function runArgs(
   cmd: string[],
@@ -110,21 +121,29 @@ export function runArgs(
     if (!suppressPrefix && !_verbose) {
       log(`${c.dim}> ${cmd.join(' ')}${c.reset}`);
     }
-    const result = spawnSync(cmd[0], cmd.slice(1), {
-      cwd: opts.cwd,
-      env: opts.env ? { ...process.env, ...opts.env } : process.env,
-      encoding: 'utf-8',
-      stdio,
-      maxBuffer: 100 * 1024 * 1024,
-      shell: false,
-      // Windows: hide the console window this spawn would otherwise flash.
-      windowsHide: true,
-    });
-    if (result.status !== 0 && !(opts.quiet || _quiet)) {
-      error(`Command failed: ${cmd.join(' ')}`);
-      throw new Error(result.stderr?.trim() || `exit code ${result.status}`);
+    let env: Record<string, string | undefined> | undefined;
+    if (opts.env) {
+      env = { ...process.env, ...opts.env };
+      if (!('PATH' in env)) {
+        const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH');
+        if (pathKey) {
+          env.PATH = env[pathKey];
+        }
+      }
     }
-    return result.stdout?.trim() || '';
+    const result = Bun.spawnSync(cmd, {
+      cwd: opts.cwd,
+      ...(env ? { env } : {}),
+      stdout: stdio,
+      stderr: stdio,
+    });
+    const stdout = result.stdout instanceof Buffer ? result.stdout.toString('utf-8') : '';
+    const stderr = result.stderr instanceof Buffer ? result.stderr.toString('utf-8') : '';
+    if (!result.success && !(opts.quiet || _quiet)) {
+      error(`Command failed: ${cmd.join(' ')}`);
+      throw new Error(stderr.trim() || `exit code ${result.exitCode}`);
+    }
+    return stdout.trim();
   } catch (e) {
     if (opts.quiet || _quiet) {
       return '';

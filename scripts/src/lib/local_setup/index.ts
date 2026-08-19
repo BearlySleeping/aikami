@@ -514,10 +514,10 @@ async function probeRecommended(): Promise<{ direnv: boolean; nix: boolean }> {
   };
 }
 
-function printRecommendedSection(recommended: { direnv: boolean; nix: boolean }): void {
+function printRecommendedSection(recommendedTools: { direnv: boolean; nix: boolean }): void {
   console.log(fmt.section('Recommended path — direnv + Nix flake'));
 
-  if (recommended.direnv && recommended.nix) {
+  if (recommendedTools.direnv && recommendedTools.nix) {
     console.log(fmt.ok('direnv + nix found — the flake provides everything else'));
     console.log(
       fmt.note('Run: direnv allow (one-time), then the devShell loads bun, node, jdk, chromium,'),
@@ -623,10 +623,10 @@ const probeHerdrCompat = async (): Promise<ExtraCheck> => {
   return { name: 'herdr protocol', ok: true, note: 'client/server compatible' };
 };
 
-const runExtraChecks = async (platform: Platform): Promise<ExtraCheck[]> => {
+const runExtraChecks = async (targetPlatform: Platform): Promise<ExtraCheck[]> => {
   const checks: ExtraCheck[] = [];
 
-  if (platform === 'win32') {
+  if (targetPlatform === 'win32') {
     const bash = findBash();
     checks.push({
       name: 'Git Bash',
@@ -758,8 +758,8 @@ if (opts.json) {
   // --doctor is a strict preflight — extra-capability failures gate the
   // exit code too. Plain --json keeps its original (essentials-only)
   // behavior so existing scripts consuming it don't change meaning.
-  const extraFailure = opts.doctor && extraChecks.some((c) => !c.ok);
-  process.exit(missingEssential || extraFailure ? 1 : 0);
+  const extraChecksFailed = opts.doctor && extraChecks.some((check) => !check.ok);
+  process.exit(missingEssential || extraChecksFailed ? 1 : 0);
 }
 
 // ── Interactive guide ────────────────────────────────────────────────────

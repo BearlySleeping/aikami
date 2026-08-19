@@ -68,18 +68,18 @@ const writeEnvFile = async (
 };
 
 const syncAppEnv = async (
-  appDir: string,
-  fromMode: string,
-  toMode: string,
-  dryRun: boolean,
+  appDirPath: string,
+  fromEnvMode: string,
+  toEnvMode: string,
+  isDryRun: boolean,
 ): Promise<{ added: number; updated: number }> => {
-  const fromPath = resolveEnvPath(appDir, fromMode);
-  const toPath = resolveEnvPath(appDir, toMode);
-  const stripValues = toMode === 'example';
+  const fromPath = resolveEnvPath(appDirPath, fromEnvMode);
+  const toPath = resolveEnvPath(appDirPath, toEnvMode);
+  const stripValues = toEnvMode === 'example';
 
   const fromFile = Bun.file(fromPath);
   if (!(await fromFile.exists())) {
-    console.log(fmt.warn(`${appDir}: No .env.${fromMode} file — skipping`));
+    console.log(fmt.warn(`${appDirPath}: No .env.${fromEnvMode} file — skipping`));
     return { added: 0, updated: 0 };
   }
 
@@ -101,20 +101,20 @@ const syncAppEnv = async (
   }
 
   if (Object.keys(missing).length === 0 && updated.length === 0) {
-    console.log(`${fmt.ok(appDir)}: all keys already present`);
+    console.log(`${fmt.ok(appDirPath)}: all keys already present`);
     return { added: 0, updated: 0 };
   }
 
   const toFile = Bun.file(toPath);
   const actionVerb = (await toFile.exists()) ? 'Updated' : 'Created';
 
-  if (!dryRun) {
+  if (!isDryRun) {
     const mergedVars = { ...toVars, ...missing };
     const allVars = stripValues ? mergedVars : missing;
     await writeEnvFile(toPath, allVars, stripValues);
   }
 
-  console.log(`${fmt.ok(appDir)}: ${actionVerb} ${toPath}${dryRun ? ' (dry-run)' : ''}`);
+  console.log(`${fmt.ok(appDirPath)}: ${actionVerb} ${toPath}${isDryRun ? ' (dry-run)' : ''}`);
   for (const key of Object.keys(missing)) {
     console.log(`  ${fmt.fix(`+ ${key}`)}`);
   }

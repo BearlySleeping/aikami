@@ -198,9 +198,9 @@ async function main() {
   }
 
   // ── Summary ──────────────────────────────────────────────────────────
-  const okCount = allChecks.filter((c) => c.status === 'ok').length;
-  const fixed = allChecks.filter((c) => c.fixed).length;
-  const errors = allChecks.filter((c) => c.status === 'error').length;
+  const okCount = allChecks.filter((check) => check.status === 'ok').length;
+  const fixed = allChecks.filter((check) => check.fixed).length;
+  const errors = allChecks.filter((check) => check.status === 'error').length;
 
   console.log(fmt.head('═══ Summary ═══'));
   console.log(`  ${c.green}${okCount}${c.reset} already configured`);

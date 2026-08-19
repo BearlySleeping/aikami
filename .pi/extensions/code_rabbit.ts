@@ -728,13 +728,18 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                 type: 'text',
                 text: [
                   `✅ CodeRabbit review complete on PR #${num}: ${reviewState}.`,
-                  rateLimited
-                    ? '⚠️  CodeRabbit is rate-limited — autofix could not run.'
-                    : autofixSkipped
-                      ? 'No autofix changes were needed (clean review).'
-                      : hasActionable
-                        ? `⚠️  ${actionableCount} actionable comments — autofix could not resolve them.`
-                        : 'No autofix changes were needed (clean review).',
+                  (() => {
+                    if (rateLimited) {
+                      return '⚠️  CodeRabbit is rate-limited — autofix could not run.';
+                    }
+                    if (autofixSkipped) {
+                      return 'No autofix changes were needed (clean review).';
+                    }
+                    if (hasActionable) {
+                      return `⚠️  ${actionableCount} actionable comments — autofix could not resolve them.`;
+                    }
+                    return 'No autofix changes were needed (clean review).';
+                  })(),
                   findingsWarning,
                   duplicatePrevented
                     ? '🔍 Duplicate autofix command was prevented (was already in flight).'
@@ -825,15 +830,18 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             // CodeRabbit marks severities with an optional leading underscore in
             // markdown (_🔴 Critical_, _🟠 Major_, _🟢 Minor_, _🔵 Trivial_).
             const severityMatch = c.body.match(/🔴|🟠|🟢|🔵/);
-            const severity = severityMatch
-              ? severityMatch[0] === '🔴'
-                ? 'critical'
-                : severityMatch[0] === '🟠'
-                  ? 'major'
-                  : severityMatch[0] === '🔵'
-                    ? 'trivial'
-                    : 'minor'
-              : 'unknown';
+            let severity: string;
+            if (!severityMatch) {
+              severity = 'unknown';
+            } else if (severityMatch[0] === '🔴') {
+              severity = 'critical';
+            } else if (severityMatch[0] === '🟠') {
+              severity = 'major';
+            } else if (severityMatch[0] === '🔵') {
+              severity = 'trivial';
+            } else {
+              severity = 'minor';
+            }
 
             // Extract the AI fix prompt from CodeRabbit's template
             const promptMatch = c.body.match(
@@ -877,16 +885,26 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                     : [
                         '### Findings',
                         '',
-                        ...findings.map((f) =>
-                          [
-                            `#### ${f.severity === 'critical' ? '🔴' : f.severity === 'major' ? '🟠' : f.severity === 'trivial' ? '🔵' : '🟢'} \`${f.path}:${f.line ?? '?'}\``,
+                        ...findings.map((f) => {
+                          let emoji: string;
+                          if (f.severity === 'critical') {
+                            emoji = '🔴';
+                          } else if (f.severity === 'major') {
+                            emoji = '🟠';
+                          } else if (f.severity === 'trivial') {
+                            emoji = '🔵';
+                          } else {
+                            emoji = '🟢';
+                          }
+                          return [
+                            `#### ${emoji} \`${f.path}:${f.line ?? '?'}\``,
                             f.description,
                             f.fixPrompt
                               ? `\n<details><summary>🤖 Fix prompt</summary>\n\n\`\`\`\n${f.fixPrompt}\n\`\`\`\n</details>`
                               : '',
                             '---',
-                          ].join('\n'),
-                        ),
+                          ].join('\n');
+                        }),
                       ].join('\n'),
                 ].join('\n'),
               },

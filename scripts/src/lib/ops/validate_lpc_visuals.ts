@@ -251,11 +251,14 @@ const evaluateScreenshot = async (
   const parsed = result.result ?? {};
   const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 0;
   const passed = typeof parsed.passed === 'boolean' ? parsed.passed : score >= PASSING_SCORE;
-  const detectedAnomalies: string[] = Array.isArray(parsed.detectedAnomalies)
-    ? (parsed.detectedAnomalies as string[])
-    : Array.isArray(parsed.issues_detected)
-      ? (parsed.issues_detected as string[])
-      : [];
+  let detectedAnomalies: string[];
+  if (Array.isArray(parsed.detectedAnomalies)) {
+    detectedAnomalies = parsed.detectedAnomalies as string[];
+  } else if (Array.isArray(parsed.issues_detected)) {
+    detectedAnomalies = parsed.issues_detected as string[];
+  } else {
+    detectedAnomalies = [];
+  }
 
   return {
     recipeId: typeof parsed.recipeId === 'string' ? parsed.recipeId : configId,

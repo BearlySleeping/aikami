@@ -145,14 +145,18 @@ function formatRunDetail(data: Record<string, unknown>): string {
   const branch = String(data.headBranch ?? '?');
   const event = String(data.event ?? '?');
 
-  const statusIcon =
-    status === 'completed'
-      ? conclusion === 'success'
-        ? '✅'
-        : conclusion === 'cancelled'
-          ? '🚫'
-          : '❌'
-      : '⏳';
+  let statusIcon: string;
+  if (status === 'completed') {
+    if (conclusion === 'success') {
+      statusIcon = '✅';
+    } else if (conclusion === 'cancelled') {
+      statusIcon = '🚫';
+    } else {
+      statusIcon = '❌';
+    }
+  } else {
+    statusIcon = '⏳';
+  }
 
   const lines = [
     `${statusIcon} **Run #${id}: ${title}**`,
@@ -169,14 +173,18 @@ function formatRunDetail(data: Record<string, unknown>): string {
       const jobName = String(job.name ?? '?');
       const jobStatus = String(job.status ?? '?');
       const jobConclusion = job.conclusion ? String(job.conclusion) : '';
-      const jobIcon =
-        jobStatus === 'completed'
-          ? jobConclusion === 'success'
-            ? '✅'
-            : jobConclusion === 'cancelled'
-              ? '🚫'
-              : '❌'
-          : '⏳';
+      let jobIcon: string;
+      if (jobStatus === 'completed') {
+        if (jobConclusion === 'success') {
+          jobIcon = '✅';
+        } else if (jobConclusion === 'cancelled') {
+          jobIcon = '🚫';
+        } else {
+          jobIcon = '❌';
+        }
+      } else {
+        jobIcon = '⏳';
+      }
       lines.push(
         `  ${jobIcon} **${jobName}** — ${jobStatus}${jobConclusion ? ` / ${jobConclusion}` : ''}`,
       );
@@ -186,8 +194,12 @@ function formatRunDetail(data: Record<string, unknown>): string {
         const stepName = String(step.name ?? '?');
         const stepStatus = String(step.status ?? '?');
         const stepConclusion = step.conclusion ? String(step.conclusion) : '';
-        const stepIcon =
-          stepStatus === 'completed' ? (stepConclusion === 'success' ? '✅' : '❌') : '⏳';
+        let stepIcon: string;
+        if (stepStatus === 'completed') {
+          stepIcon = stepConclusion === 'success' ? '✅' : '❌';
+        } else {
+          stepIcon = '⏳';
+        }
         const num = String(step.number ?? '?');
         lines.push(
           `     ${stepIcon} ${num}. ${stepName}${stepConclusion ? ` — ${stepConclusion}` : ''}`,
@@ -211,14 +223,18 @@ function formatRunList(runs: Array<Record<string, unknown>>): string {
     const conclusion = run.conclusion ? String(run.conclusion) : '';
     const branch = String(run.headBranch ?? '?');
     const event = String(run.event ?? '?');
-    const icon =
-      status === 'completed'
-        ? conclusion === 'success'
-          ? '✅'
-          : conclusion === 'cancelled'
-            ? '🚫'
-            : '❌'
-        : '⏳';
+    let icon: string;
+    if (status === 'completed') {
+      if (conclusion === 'success') {
+        icon = '✅';
+      } else if (conclusion === 'cancelled') {
+        icon = '🚫';
+      } else {
+        icon = '❌';
+      }
+    } else {
+      icon = '⏳';
+    }
     lines.push(
       `${icon} **#${id}** ${title}`,
       `   ${event} | ${branch} | ${status}${conclusion ? ` / ${conclusion}` : ''}`,
@@ -586,7 +602,14 @@ function formatPrList(prs: Array<Record<string, unknown>>): string {
         ? String((pr.author as Record<string, unknown>).login ?? '?')
         : '?';
     const draftIcon = pr.isDraft ? '📝 ' : '';
-    const stateIcon = state === 'OPEN' ? '🟢' : state === 'MERGED' ? '🟣' : '🔴';
+    let stateIcon: string;
+    if (state === 'OPEN') {
+      stateIcon = '🟢';
+    } else if (state === 'MERGED') {
+      stateIcon = '🟣';
+    } else {
+      stateIcon = '🔴';
+    }
     lines.push(
       `${draftIcon}${stateIcon} **#${number}** ${title}`,
       `   ${head} → ${base} | by @${author} | ${url}`,
@@ -624,7 +647,14 @@ function formatPrSummary(data: Record<string, unknown>): string {
     ? (data.comments as Array<Record<string, unknown>>)
     : [];
 
-  const stateIcon = state === 'OPEN' ? '🟢' : state === 'MERGED' ? '🟣' : '🔴';
+  let stateIcon: string;
+  if (state === 'OPEN') {
+    stateIcon = '🟢';
+  } else if (state === 'MERGED') {
+    stateIcon = '🟣';
+  } else {
+    stateIcon = '🔴';
+  }
   const lines = [
     `${stateIcon} **#${number}: ${title}**`,
     `**State:** ${state} | **By:** @${author} | **Created:** ${createdAt}`,
@@ -3668,14 +3698,16 @@ export default function (pi: ExtensionAPI) {
               const jobConclusion = job.conclusion
                 ? String(job.conclusion)
                 : String(job.status ?? '');
-              const icon =
-                jobConclusion === 'success'
-                  ? '✅'
-                  : jobConclusion === 'skipped'
-                    ? '⏭️'
-                    : jobConclusion === 'cancelled'
-                      ? '🚫'
-                      : '❌';
+              let icon: string;
+              if (jobConclusion === 'success') {
+                icon = '✅';
+              } else if (jobConclusion === 'skipped') {
+                icon = '⏭️';
+              } else if (jobConclusion === 'cancelled') {
+                icon = '🚫';
+              } else {
+                icon = '❌';
+              }
               report.push(`  ${icon} **${jobName}** — ${jobConclusion}`);
             }
           }
@@ -3876,7 +3908,7 @@ export default function (pi: ExtensionAPI) {
 
           return {
             content: [{ type: 'text', text: lines.join('\n') }],
-            details: { tag: tag, isLatest: !!data.isLatest, assetCount: assets.length },
+            details: { tag, isLatest: !!data.isLatest, assetCount: assets.length },
           };
         },
       }),

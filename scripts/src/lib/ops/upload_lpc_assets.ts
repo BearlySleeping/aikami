@@ -89,9 +89,7 @@ const getAccessToken = async (): Promise<string> => {
  * Firebase Storage expects the object name to be URL-encoded, with `/`
  * encoded as `%2F`.
  */
-const encodeStoragePath = (path: string): string => {
-  return encodeURIComponent(path);
-};
+const encodeStoragePath = (path: string): string => encodeURIComponent(path);
 
 // ── Upload ─────────────────────────────────────────────────────────────────
 

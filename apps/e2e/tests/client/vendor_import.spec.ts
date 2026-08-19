@@ -58,7 +58,9 @@ test.describe('C-419 vendor + persona import (production VendorView)', () => {
         .poll(
           async () =>
             await page
-              .locator(`[data-item-id="${itemId}"] .vendor-item-icon div[style*="background-image"]`)
+              .locator(
+                `[data-item-id="${itemId}"] .vendor-item-icon div[style*="background-image"]`,
+              )
               .count(),
           { timeout: 15_000, intervals: [500, 1000, 2000] },
         )
@@ -68,9 +70,12 @@ test.describe('C-419 vendor + persona import (production VendorView)', () => {
     // Consumables (healthPotion, manaPotion) declare no lpcAssetId and
     // legitimately fall back to the emoji tier (🧪), never a blank cell.
     for (const itemId of ['healthPotion', 'manaPotion']) {
-      await expect(page.locator(`[data-item-id="${itemId}"] .vendor-item-icon`)).toContainText('🧪', {
-        timeout: 10_000,
-      });
+      await expect(page.locator(`[data-item-id="${itemId}"] .vendor-item-icon`)).toContainText(
+        '🧪',
+        {
+          timeout: 10_000,
+        },
+      );
     }
   });
 });

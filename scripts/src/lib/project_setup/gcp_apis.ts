@@ -102,7 +102,7 @@ export const setupGcpApis = async (
     }
   }
 
-  if (!dryRun && checks.some((c) => c.fixed)) {
+  if (!dryRun && checks.some((check) => check.fixed)) {
     console.log(fmt.note('Waiting 5s for API propagation...'));
     await new Promise((r) => setTimeout(r, 5000));
   }
@@ -129,8 +129,8 @@ if (import.meta.main) {
   }
 
   const { checks } = await setupGcpApis(projectId, dryRun);
-  const ok = checks.filter((c) => c.status === 'ok').length;
-  const fixed = checks.filter((c) => c.fixed).length;
+  const ok = checks.filter((check) => check.status === 'ok').length;
+  const fixed = checks.filter((check) => check.fixed).length;
   console.log(fmt.head('Summary'));
   console.log(`  ${c.green}${ok}${c.reset} already enabled, ${c.cyan}${fixed}${c.reset} enabled`);
 }

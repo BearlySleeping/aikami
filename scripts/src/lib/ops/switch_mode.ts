@@ -18,9 +18,10 @@ import { hasDirenv } from '../env/direnv_detect';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-const VALID_MODES = Object.keys(MODE_PROJECT_MAP).filter(
-  (mode) => mode !== 'testing',
-) as Exclude<keyof typeof MODE_PROJECT_MAP, 'testing'>[];
+const VALID_MODES = Object.keys(MODE_PROJECT_MAP).filter((mode) => mode !== 'testing') as Exclude<
+  keyof typeof MODE_PROJECT_MAP,
+  'testing'
+>[];
 type Mode = (typeof VALID_MODES)[number];
 
 const MODE_PROJECTS: Record<Mode, string> = MODE_PROJECT_MAP;

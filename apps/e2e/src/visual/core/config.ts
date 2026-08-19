@@ -45,6 +45,4 @@ export type VisualConfigFn = (
  */
 export const defineConfig = (
   config: VisualTestSuite | VisualConfigFn,
-): VisualTestSuite | VisualConfigFn => {
-  return config;
-};
+): VisualTestSuite | VisualConfigFn => config;

@@ -640,31 +640,32 @@ const _runTier1Parallel = async (options: {
   `;
 
   // Spawn workers
-  const workerPromises = chunks.map((chunk) => {
-    return new Promise<WorkerOutput>((resolveW) => {
-      const worker = new Worker(
-        URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })),
-      );
+  const workerPromises = chunks.map(
+    (chunk) =>
+      new Promise<WorkerOutput>((resolveW) => {
+        const worker = new Worker(
+          URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })),
+        );
 
-      worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
-        resolveW(event.data);
-        worker.terminate();
-      };
+        worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
+          resolveW(event.data);
+          worker.terminate();
+        };
 
-      worker.onerror = () => {
-        resolveW({ violations: [], durationMs: 0 });
-        worker.terminate();
-      };
+        worker.onerror = () => {
+          resolveW({ violations: [], durationMs: 0 });
+          worker.terminate();
+        };
 
-      const input: WorkerInput = {
-        filePaths: chunk,
-        rules: rulesConfig.rules,
-        projectRoot: PROJECT_ROOT,
-      };
+        const input: WorkerInput = {
+          filePaths: chunk,
+          rules: rulesConfig.rules,
+          projectRoot: PROJECT_ROOT,
+        };
 
-      worker.postMessage(input);
-    });
-  });
+        worker.postMessage(input);
+      }),
+  );
 
   // Collect results
   const results = await Promise.all(workerPromises);

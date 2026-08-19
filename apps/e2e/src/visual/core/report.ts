@@ -52,14 +52,13 @@ const REPORT_DIR = resolve(E2E_DIR, 'test-results', 'visual');
 /**
  * Escapes HTML entities to prevent XSS in report content.
  */
-const _escapeHtml = (text: string): string => {
-  return text
+const _escapeHtml = (text: string): string =>
+  text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
-};
 
 /**
  * Renders the summary bar at the top of the report.
@@ -67,8 +66,14 @@ const _escapeHtml = (text: string): string => {
 const _renderSummary = (summary: ReportSummary): string => {
   const passRate = summary.total > 0 ? Math.round((summary.passed / summary.total) * 100) : 0;
 
-  const overallLabel =
-    passRate === 100 ? '✅ ALL PASSED' : passRate > 0 ? '⚠️ PARTIAL' : '❌ ALL FAILED';
+  let overallLabel: string;
+  if (passRate === 100) {
+    overallLabel = '✅ ALL PASSED';
+  } else if (passRate > 0) {
+    overallLabel = '⚠️ PARTIAL';
+  } else {
+    overallLabel = '❌ ALL FAILED';
+  }
 
   return `
     <div class="summary">
@@ -141,8 +146,7 @@ const _renderEntry = (entry: ReportEntry): string => {
 /**
  * Renders the CSS stylesheet for the report.
  */
-const _renderStyles = (): string => {
-  return `
+const _renderStyles = (): string => `
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -276,7 +280,6 @@ const _renderStyles = (): string => {
       .score { font-size: 0.9rem; color: #93c5fd; margin-bottom: 6px; }
     </style>
   `;
-};
 
 // ── Public API ────────────────────────────────────────────────
 

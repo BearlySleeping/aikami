@@ -366,9 +366,8 @@ const _writeCache = (cachePath: string, entries: Record<string, CacheEntry>): vo
   writeFileSync(cachePath, JSON.stringify({ entries }, null, 2));
 };
 
-const _computeHash = (imageDataUri: string, prompt: string, schemaJson: string): string => {
-  return createHash('sha256').update(`${imageDataUri}|${prompt}|${schemaJson}`).digest('hex');
-};
+const _computeHash = (imageDataUri: string, prompt: string, schemaJson: string): string =>
+  createHash('sha256').update(`${imageDataUri}|${prompt}|${schemaJson}`).digest('hex');
 
 // ── Fallback chain ───────────────────────────────────────────
 

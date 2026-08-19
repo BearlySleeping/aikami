@@ -14,7 +14,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "axios": "1.19.0",
-    "dayjs": "1.11.22",
+    "dayjs": "1.11.23",
     "detect-browser": "5.3.0",
     "firebase": "12.17.1",
     "isbot": "5.2.1"

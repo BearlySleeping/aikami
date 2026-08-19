@@ -55,9 +55,7 @@ test.describe('Onboarding Hints (C-327 AC-3, AC-4)', () => {
     });
 
     // Read it back
-    const value = await page.evaluate(() => {
-      return localStorage.getItem('aikami:onboarding:test-pack');
-    });
+    const value = await page.evaluate(() => localStorage.getItem('aikami:onboarding:test-pack'));
 
     expect(value).not.toBeNull();
     if (!value) {
@@ -90,9 +88,7 @@ test.describe('Onboarding Hints (C-327 AC-3, AC-4)', () => {
     });
 
     // Verify cleared
-    const cleared = await page.evaluate(() => {
-      return localStorage.getItem('aikami:onboarding:emberwatch');
-    });
+    const cleared = await page.evaluate(() => localStorage.getItem('aikami:onboarding:emberwatch'));
     expect(cleared).toBeNull();
   });
 

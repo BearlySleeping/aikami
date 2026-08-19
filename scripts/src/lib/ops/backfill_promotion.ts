@@ -174,12 +174,15 @@ const backfillPromotion = () => {
       id: id.toUpperCase(),
       fileName: file,
       promotion,
-      inferredFrom:
-        promotion === 'release_verified'
-          ? 'visual tests + passing ACs'
-          : promotion === 'integrated'
-            ? 'E2E tests or passing ACs'
-            : 'execution report (minimum)',
+      inferredFrom: (() => {
+        if (promotion === 'release_verified') {
+          return 'visual tests + passing ACs';
+        }
+        if (promotion === 'integrated') {
+          return 'E2E tests or passing ACs';
+        }
+        return 'execution report (minimum)';
+      })(),
     });
   }
 

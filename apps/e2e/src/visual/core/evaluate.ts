@@ -127,9 +127,7 @@ const _evaluateGates = (
  *
  * Contract: C-200 AC-2
  */
-export const getVlmConfig = (): VlmRuntimeConfig => {
-  return vlmGetVlmConfig();
-};
+export const getVlmConfig = (): VlmRuntimeConfig => vlmGetVlmConfig();
 
 /**
  * Evaluates a single screenshot using the active VLM provider with

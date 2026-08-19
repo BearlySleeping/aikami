@@ -1238,7 +1238,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     services,
     force = false,
     forcePorts = false,
-    join = false,
+    join: shouldJoin = false,
     wait = true,
     waitTimeoutMs = 120_000,
     projectRoot = process.cwd(),
@@ -1480,7 +1480,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   }
 
   // ── Attach if requested ───────────────────────────────
-  if (join) {
+  if (shouldJoin) {
     console.log(`🖥  Attaching to ${workspaceLabel}...`);
     const proc = spawn('herdr', ['session', 'attach', 'default'], { stdio: 'inherit' });
     await new Promise<number>((resolveJ) => proc.on('exit', resolveJ));

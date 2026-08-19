@@ -89,14 +89,13 @@ export default defineConfig({
       // screenshot. The result is rendered into a DOM badge the VLM reads
       // (CodeRabbit review, C-379).
       setupHook: async (page) => {
-        const sample = (): Promise<Record<string, { x: number; y: number }>> => {
-          return page.evaluate(() => {
+        const sample = (): Promise<Record<string, { x: number; y: number }>> =>
+          page.evaluate(() => {
             const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
               | { entityPositions?: Record<string, { x: number; y: number }> }
               | undefined;
             return d?.entityPositions ?? {};
           });
-        };
         const before = await sample();
         await page.waitForTimeout(2000);
         const after = await sample();

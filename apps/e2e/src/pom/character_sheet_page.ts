@@ -134,8 +134,14 @@ export class CharacterSheetPage {
 
   async expectTabActive(tab: 'abilities' | 'skills' | 'traits'): Promise<void> {
     const { expect } = await import('@playwright/test');
-    const tabEl =
-      tab === 'abilities' ? this.tabAbilities : tab === 'skills' ? this.tabSkills : this.tabTraits;
+    let tabEl: import('@playwright/test').Locator;
+    if (tab === 'abilities') {
+      tabEl = this.tabAbilities;
+    } else if (tab === 'skills') {
+      tabEl = this.tabSkills;
+    } else {
+      tabEl = this.tabTraits;
+    }
     await expect(tabEl).toHaveClass(/tab-active/, { timeout: 3_000 });
   }
 

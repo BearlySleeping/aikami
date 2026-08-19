@@ -24,9 +24,8 @@ import {
 // ── Shared helpers ────────────────────────────────────────────
 
 /** Resolves and validates an image path, returning the absolute path. */
-const _resolveImagePath = (imagePath: string): string => {
-  return imagePath.startsWith('/') ? imagePath : `${process.cwd()}/${imagePath}`;
-};
+const _resolveImagePath = (imagePath: string): string =>
+  imagePath.startsWith('/') ? imagePath : `${process.cwd()}/${imagePath}`;
 
 /** Optimises and base64-encodes an image at the given path. */
 const _prepareImage = async (filepath: string): Promise<string> => {

@@ -24,7 +24,7 @@ const pathToTag = (relPath: string): string => {
 };
 
 const scanDir = async (
-  rootDir: string,
+  scanRootDir: string,
 ): Promise<{
   manifest: AssetManifest;
   hashes: AssetHashesFile['hashes'];
@@ -65,7 +65,7 @@ const scanDir = async (
         continue;
       }
 
-      const relPath = entryPath.replace(`${rootDir}/`, '');
+      const relPath = entryPath.replace(`${scanRootDir}/`, '');
       const pathSegments = relPath.split('/');
       const categoryName = pathSegments[0];
       const categoryDef = ASSET_CATEGORIES[categoryName];
@@ -102,7 +102,7 @@ const scanDir = async (
     }
   };
 
-  await walk(rootDir);
+  await walk(scanRootDir);
 
   for (const catEntries of Object.values(byCategory)) {
     catEntries.sort((a, b) => a.tag.localeCompare(b.tag));
@@ -178,12 +178,12 @@ const readJsonSidecar = async <T>(filePath: string): Promise<T | null> => {
  * asset_credits.json, and its preflight hard-fails on any catalog tag
  * present in none of the three sources (C-395 AC-4).
  */
-const writeCreditsSidecar = async (rootDir: string): Promise<void> => {
+const writeCreditsSidecar = async (creditRootDir: string): Promise<void> => {
   const credits: Record<string, MergedCredit> = {};
 
   const lpcCredits = await readJsonSidecar<{
     credits: Record<string, Omit<MergedCredit, 'source'>>;
-  }>(join(rootDir, 'lpc_credits.json'));
+  }>(join(creditRootDir, 'lpc_credits.json'));
   if (lpcCredits) {
     for (const [tag, credit] of Object.entries(lpcCredits.credits)) {
       credits[tag] = { ...credit, source: 'lpc' };
@@ -192,7 +192,7 @@ const writeCreditsSidecar = async (rootDir: string): Promise<void> => {
 
   const supplement = await readJsonSidecar<{
     credits: Record<string, Omit<MergedCredit, 'source'>>;
-  }>(join(rootDir, 'lpc_credits_supplement.json'));
+  }>(join(creditRootDir, 'lpc_credits_supplement.json'));
   if (supplement) {
     for (const [tag, credit] of Object.entries(supplement.credits)) {
       // The supplement must never override a real CREDITS.csv resolution.
@@ -214,7 +214,7 @@ const writeCreditsSidecar = async (rootDir: string): Promise<void> => {
     }
   }
 
-  const creditsPath = join(rootDir, 'asset_credits.json');
+  const creditsPath = join(creditRootDir, 'asset_credits.json');
   const creditsFile: AssetCreditsFile = {
     scannedAt: new Date().toISOString(),
     credits,

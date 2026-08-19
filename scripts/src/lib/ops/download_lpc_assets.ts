@@ -84,9 +84,7 @@ const getAccessToken = async (): Promise<string> => {
 /**
  * Encode a path for use in a Firebase Storage URL.
  */
-const encodeStoragePath = (path: string): string => {
-  return encodeURIComponent(path);
-};
+const encodeStoragePath = (path: string): string => encodeURIComponent(path);
 
 // ── List files ─────────────────────────────────────────────────────────────
 

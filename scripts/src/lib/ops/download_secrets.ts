@@ -317,8 +317,8 @@ function readExistingEnv(filePath: string): Record<string, string> {
 
 function generateEnvContent(
   allKeys: string[],
-  existing: Record<string, string>,
-  secrets: Map<string, string>,
+  existingEnv: Record<string, string>,
+  secretsMap: Map<string, string>,
   keyToGcm: Map<string, string>,
   defaults: Map<string, string>,
   emulatorOverrides: Record<string, string>,
@@ -332,11 +332,11 @@ function generateEnvContent(
     }
     for (const key of section.keys) {
       const gcmName = keyToGcm.get(key);
-      if (gcmName && secrets.has(gcmName)) {
-        lines.push(`${key}=${secrets.get(gcmName)}`);
-      } else if (key in existing) {
+      if (gcmName && secretsMap.has(gcmName)) {
+        lines.push(`${key}=${secretsMap.get(gcmName)}`);
+      } else if (key in existingEnv) {
         // Keep existing .env.emulator values — highest priority after secrets.
-        lines.push(`${key}=${existing[key]}`);
+        lines.push(`${key}=${existingEnv[key]}`);
       } else if (key in emulatorOverrides) {
         // Emulator fakes before .env.example defaults: e.g. an intentionally
         // blank PUBLIC_FIREBASE_API_KEY default must not shadow the fake

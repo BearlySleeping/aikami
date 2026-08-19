@@ -37,7 +37,6 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index.ts';
-import { APP_CONFIG } from '../deploy/deployment_config.ts';
 import {
   commitAll,
   pushBranch,
@@ -45,6 +44,7 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
+import { APP_CONFIG } from '../deploy/deployment_config.ts';
 import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import { findWorkspace, herdrJson, killPort } from './session.ts';
@@ -1035,9 +1035,8 @@ export const publishAndOpenPr = async (
 // ── Lookup helpers ─────────────────────────────────────────
 
 /** Find an open task worktree by slug (workspace label aikami-task-<slug>). */
-export const findTaskWorkspace = async (slug: string): Promise<string | null> => {
-  return findWorkspace(`${TASK_WORKSPACE_PREFIX}${sanitizeBranchName(slug)}`);
-};
+export const findTaskWorkspace = async (slug: string): Promise<string | null> =>
+  findWorkspace(`${TASK_WORKSPACE_PREFIX}${sanitizeBranchName(slug)}`);
 
 /** Get a TaskWorktree for an open task workspace label (repo-scoped). */
 export const getTaskWorktreeByLabel = async (

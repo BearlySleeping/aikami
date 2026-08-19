@@ -63,17 +63,15 @@ export const PAGE_ERROR_ALLOWLIST: RegExp[] = [
  * Test whether a console error message should be ignored.
  * Returns true if the message matches any allowlisted pattern.
  */
-export const isAllowedConsoleError = (text: string): boolean => {
-  return CONSOLE_ERROR_ALLOWLIST.some((pattern) => pattern.test(text));
-};
+export const isAllowedConsoleError = (text: string): boolean =>
+  CONSOLE_ERROR_ALLOWLIST.some((pattern) => pattern.test(text));
 
 /**
  * Test whether a page error message should be ignored.
  * Returns true if the message matches any allowlisted pattern.
  */
-export const isAllowedPageError = (message: string): boolean => {
-  return PAGE_ERROR_ALLOWLIST.some((pattern) => pattern.test(message));
-};
+export const isAllowedPageError = (message: string): boolean =>
+  PAGE_ERROR_ALLOWLIST.some((pattern) => pattern.test(message));
 
 /**
  * Create Playwright page listeners for console and page errors.

@@ -419,9 +419,9 @@ if (import.meta.main) {
 
   const { checks } = await setupIam(projectId, deploySaEmail, dryRun, runtimeSaEmail);
 
-  const okCount = checks.filter((c) => c.status === 'ok').length;
-  const fixed = checks.filter((c) => c.fixed).length;
-  const errors = checks.filter((c) => c.status === 'error').length;
+  const okCount = checks.filter((check) => check.status === 'ok').length;
+  const fixed = checks.filter((check) => check.fixed).length;
+  const errors = checks.filter((check) => check.status === 'error').length;
 
   console.log(fmt.head('Summary'));
   console.log(

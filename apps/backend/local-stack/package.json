@@ -8,7 +8,7 @@
     "lint": "bash -n bin/*.sh aikami install.sh scripts/*.sh docker/voice/entrypoint.sh && bash scripts/check.sh --static && bunx biome check stack/*.ts",
     "format": "bunx biome format --write stack/*.ts",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json",
-    "fix": "bunx biome check --write stack/*.ts && bash -n bin/*.sh docker/voice/entrypoint.sh scripts/emit_config.sh scripts/check.sh",
+    "fix": "bunx biome check --write stack/*.ts && bash -n bin/run-native-llm.sh bin/run-native-tts.sh bin/run-native-stt.sh docker/voice/entrypoint.sh scripts/emit_config.sh scripts/check.sh",
     "test": "bun test stack/*.test.ts",
     "test:install": "sh scripts/install.test.sh",
     "test:install:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.test.ps1",

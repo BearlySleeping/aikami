@@ -163,7 +163,7 @@ export default function (pi: ExtensionAPI) {
       );
 
       const role = process.env.CONTRACT_PIPELINE_ROLE;
-      const message = role
+      const softLimitMsg = role
         ? `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
           `🔴 Contract pipeline ${role}: CALL contract_stage_complete NOW with your current status.\n` +
           `Do not start new work. Summarize what you have and call the completion tool.`
@@ -173,7 +173,7 @@ export default function (pi: ExtensionAPI) {
           `2. Deliver your final analysis based on what you have.\n` +
           `3. End with "## Unexamined Areas & Next Steps" listing what remains.`;
 
-      pi.sendUserMessage(message, { deliverAs: 'steer' });
+      pi.sendUserMessage(softLimitMsg, { deliverAs: 'steer' });
     }
   });
 }

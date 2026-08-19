@@ -202,24 +202,26 @@ async function main() {
 /** Checks if herdr is available on the system. */
 async function checkHerdrAvailable(): Promise<boolean> {
   const { spawn } = await import('node:child_process');
-  return new Promise((resolve) => {
+  return new Promise((resolvePromise) => {
     const proc = spawn('herdr', ['--version'], {
       stdio: 'ignore',
       // Windows: hide the console window this spawn would otherwise flash.
       windowsHide: true,
     });
-    proc.on('close', (code) => resolve(code === 0));
-    proc.on('error', () => resolve(false));
+    proc.on('close', (code) => resolvePromise(code === 0));
+    proc.on('error', () => resolvePromise(false));
   });
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error('Unhandled:', e);
+  const cleanupPromises: Promise<unknown>[] = [];
   if (dockerManager) {
-    dockerManager.stopAllServices().catch(() => {});
+    cleanupPromises.push(dockerManager.stopAllServices());
   }
-  stopServices().catch(() => {});
-  stopAllDevServers().catch(() => {});
-  stopEmulators().catch(() => {});
+  cleanupPromises.push(stopServices());
+  cleanupPromises.push(stopAllDevServers());
+  cleanupPromises.push(stopEmulators());
+  await Promise.allSettled(cleanupPromises);
   process.exit(1);
 });

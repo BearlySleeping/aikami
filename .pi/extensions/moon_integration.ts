@@ -425,7 +425,14 @@ export default function (pi: ExtensionAPI) {
           duration: number;
           error?: string;
         }>) {
-          const icon = s.status === 'pass' ? '✅' : s.status === 'fail' ? '❌' : '⏭️';
+          let icon: string;
+          if (s.status === 'pass') {
+            icon = '✅';
+          } else if (s.status === 'fail') {
+            icon = '❌';
+          } else {
+            icon = '⏭️';
+          }
           lines.push(`${icon} **${s.name}** (${s.duration}ms)`);
           if (s.error) {
             lines.push(`   Error: ${s.error.slice(0, 200)}`);

@@ -105,9 +105,8 @@ const repoSlug = (): string => {
 };
 
 /** browser_download_url for a release asset. */
-export const releaseDownloadUrl = (releaseTag: string, assetName: string): string => {
-  return `https://github.com/${repoSlug()}/releases/download/${releaseTag}/${encodeURIComponent(assetName)}`;
-};
+export const releaseDownloadUrl = (releaseTag: string, assetName: string): string =>
+  `https://github.com/${repoSlug()}/releases/download/${releaseTag}/${encodeURIComponent(assetName)}`;
 
 /** True when a file name identifies an updater-relevant signed artifact. */
 const isUpdaterSignedFile = (fileName: string): boolean => {
@@ -227,12 +226,11 @@ const updaterKeysForPair = (options: {
   // Reuse legs: prefer the source release's own keys (authoritative for arch
   // and universal builds) when a signature matches verbatim.
   if (options.sourceManifest) {
-    const matching = Object.keys(options.sourceManifest.platforms ?? {}).filter((key) => {
-      return (
+    const matching = Object.keys(options.sourceManifest.platforms ?? {}).filter(
+      (key) =>
         key.startsWith(prefix) &&
-        options.sourceManifest?.platforms[key]?.signature === pair.signature
-      );
-    });
+        options.sourceManifest?.platforms[key]?.signature === pair.signature,
+    );
     if (matching.length > 0) {
       return matching;
     }

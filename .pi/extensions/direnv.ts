@@ -88,11 +88,14 @@ function buildStatusReport(): string {
   const playwrightOk = getEnv('PLAYWRIGHT_BROWSERS_PATH') !== undefined;
   const geminiOk = getEnv('GEMINI_API_KEY') !== undefined;
 
-  const nixLine = nixReady
-    ? '✅ loaded'
-    : direnvPresent
-      ? '⚠️  not loaded — run `direnv reload`'
-      : '— not installed (manual env via .env.local)';
+  let nixLine: string;
+  if (nixReady) {
+    nixLine = '✅ loaded';
+  } else if (direnvPresent) {
+    nixLine = '⚠️  not loaded — run `direnv reload`';
+  } else {
+    nixLine = '— not installed (manual env via .env.local)';
+  }
 
   const lines: string[] = [];
   lines.push('');
@@ -153,11 +156,18 @@ async function switchMode(mode: string): Promise<string> {
   process.env.AIKAMI_PROJECT_ID = env.projectId;
   process.env.AIKAMI_IS_EMULATOR = env.isEmulator ? '1' : '0';
 
-  const applyNote = hasDirenv()
-    ? reloadFailed
-      ? 'direnv reload failed — run `direnv reload` to refresh env vars; env updated in this session.'
-      : "Run `direnv reload` if env vars aren't refreshed."
-    : 'direnv not installed — new shells read .env.local automatically; env updated in this session.';
+  let applyNote: string;
+  if (hasDirenv()) {
+    if (reloadFailed) {
+      applyNote =
+        'direnv reload failed — run `direnv reload` to refresh env vars; env updated in this session.';
+    } else {
+      applyNote = "Run `direnv reload` if env vars aren't refreshed.";
+    }
+  } else {
+    applyNote =
+      'direnv not installed — new shells read .env.local automatically; env updated in this session.';
+  }
   return `✅ Switched to ${mode} mode. ${applyNote}`;
 }
 

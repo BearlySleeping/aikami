@@ -94,12 +94,16 @@ const SKILL_SOURCES: SkillSource[] = [
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-async function sh(command: TemplateStringsArray, ...args: unknown[]) {
-  const cmd = String.raw({ raw: command }, ...args);
-  console.log(`  $ ${cmd}`);
-  const result = await $`${{ raw: cmd }}`.quiet();
+async function sh(command: TemplateStringsArray, ...args: string[]) {
+  const display = String.raw({ raw: command }, ...args);
+  console.log(`  $ ${display}`);
+  // Pass the tagged-template pieces straight to Bun's $ so it quotes each
+  // interpolated value itself. Re-serializing to a single raw string first
+  // (the old approach) makes Bun's shell re-parse it as POSIX shell syntax,
+  // which eats backslashes in Windows paths (e.g. C:\Users\...).
+  const result = await $(command, ...args);
   if (result.exitCode !== 0) {
-    throw new Error(`Command failed: ${cmd}`);
+    throw new Error(`Command failed: ${display}`);
   }
   return result;
 }
@@ -201,8 +205,8 @@ async function installSkillSource(source: SkillSource): Promise<void> {
     await cp(src, target, {
       recursive: true,
       filter: (srcPath) => {
-        const rel = srcPath.slice(src.length).replace(/^\/+/, '');
-        const topLevel = rel.split('/')[0] ?? '';
+        const rel = srcPath.slice(src.length).replace(/^[/\\]+/, '');
+        const topLevel = rel.split(/[/\\]/)[0] ?? '';
         return !excluded.has(topLevel);
       },
     });

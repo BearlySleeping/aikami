@@ -57,9 +57,7 @@ test.describe('GOAP Combat Tactics E2E', () => {
     await page.waitForTimeout(1000);
 
     // Check that the page has rendered (no blank screen)
-    const bodyExists = await page.evaluate(() => {
-      return document.body.children.length > 0;
-    });
+    const bodyExists = await page.evaluate(() => document.body.children.length > 0);
     expect(bodyExists).toBe(true);
   });
 });

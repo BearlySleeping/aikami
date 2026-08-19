@@ -25,11 +25,11 @@ const CHROMIUM_PROFILE_DIR = resolve(ROOT, 'dist/tmp/.chromium-profile-hub');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const waitForPort = async (port: number, timeoutMs: number): Promise<boolean> => {
+const waitForPort = async (portNum: number, timeoutMs: number): Promise<boolean> => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isPortReady(port)) {
-      ok(`Hub ready at http://localhost:${port}`);
+    if (await isPortReady(portNum)) {
+      ok(`Hub ready at http://localhost:${portNum}`);
       return true;
     }
     await new Promise((r) => setTimeout(r, 500));
@@ -39,9 +39,9 @@ const waitForPort = async (port: number, timeoutMs: number): Promise<boolean> =>
 
 // ── Ensure hub dev server ─────────────────────────────────────────────────
 
-const ensureHub = async (mode: AikamiMode): Promise<number> => {
-  const wsName = resolveSessionName(mode);
-  const hubPort = PORTS[mode].hub;
+const ensureHub = async (aikamiMode: AikamiMode): Promise<number> => {
+  const wsName = resolveSessionName(aikamiMode);
+  const hubPort = PORTS[aikamiMode].hub;
   const wsId = await findWorkspace(wsName);
 
   // Check if hub is already running and responding
@@ -64,12 +64,12 @@ const ensureHub = async (mode: AikamiMode): Promise<number> => {
 
 // ── Chromium launch ────────────────────────────────────────────────────────
 
-const launchChromium = async (port: number) => {
+const launchChromium = async (portNum: number) => {
   // Wipe stale profile directory to clear locks and cached extension state
   rmSync(CHROMIUM_PROFILE_DIR, { recursive: true, force: true });
   mkdirSync(CHROMIUM_PROFILE_DIR, { recursive: true });
 
-  const targetUrl = `http://localhost:${port}`;
+  const targetUrl = `http://localhost:${portNum}`;
 
   // Prefer chromium-unwrapped (bypasses the flake.nix wrapper that forces
   // --enable-automation) where it exists; falls back to a real browser

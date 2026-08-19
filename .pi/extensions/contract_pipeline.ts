@@ -100,20 +100,17 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
     const input = event.input as Record<string, unknown>;
     if (
       (event.toolName === 'write' || event.toolName === 'edit') &&
-      typeof input.path === 'string'
+      typeof input.path === 'string' &&
+      workspaceRoot &&
+      !resolve(input.path).startsWith(resolve(workspaceRoot)) &&
+      !resolve(input.path).startsWith(resolve(join(process.cwd(), '.pi')))
     ) {
-      if (
-        workspaceRoot &&
-        !resolve(input.path).startsWith(resolve(workspaceRoot)) &&
-        !resolve(input.path).startsWith(resolve(join(process.cwd(), '.pi')))
-      ) {
-        const isolatedRoles = ['implementer', 'verifier'];
-        if (isolatedRoles.includes(role)) {
-          console.warn(
-            `⚠️  [${role}] Accessing root repo path \`${input.path}\` while workspace \`${workspaceRoot}\` ` +
-              `is active. File changes in root will be invisible to the workspace.`,
-          );
-        }
+      const isolatedRoles = ['implementer', 'verifier'];
+      if (isolatedRoles.includes(role)) {
+        console.warn(
+          `⚠️  [${role}] Accessing root repo path \`${input.path}\` while workspace \`${workspaceRoot}\` ` +
+            `is active. File changes in root will be invisible to the workspace.`,
+        );
       }
     }
 
@@ -199,18 +196,16 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                 const message = err instanceof Error ? err.message : String(err);
                 console.warn(`⚠️  Workspace checkpoint failed: ${message}`);
               }
-            } else if (params.status === 'failed' || params.status === 'blocked') {
-              if (wsPath) {
-                try {
-                  const headCommit = getGitHeadCommit(wsPath);
-                  console.error(
-                    `❌ Task failed at commit: ${headCommit}. ` +
-                      `Worktree kept for diagnostics at: ${wsPath}`,
-                  );
-                  params.findings.push(`Failed worktree commit: ${headCommit} (path: ${wsPath})`);
-                } catch {
-                  console.error(`❌ Task failed. Worktree kept at: ${wsPath}`);
-                }
+            } else if ((params.status === 'failed' || params.status === 'blocked') && wsPath) {
+              try {
+                const headCommit = getGitHeadCommit(wsPath);
+                console.error(
+                  `❌ Task failed at commit: ${headCommit}. ` +
+                    `Worktree kept for diagnostics at: ${wsPath}`,
+                );
+                params.findings.push(`Failed worktree commit: ${headCommit} (path: ${wsPath})`);
+              } catch {
+                console.error(`❌ Task failed. Worktree kept at: ${wsPath}`);
               }
             }
           }

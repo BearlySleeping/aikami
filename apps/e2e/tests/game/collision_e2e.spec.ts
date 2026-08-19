@@ -34,10 +34,8 @@ type DebugPosition = {
 };
 
 /** Reads the current player world coordinates from the debug bridge. */
-const _readPlayerPosition = async (
-  page: import('@playwright/test').Page,
-): Promise<DebugPosition> => {
-  return page.evaluate(() => {
+const _readPlayerPosition = async (page: import('@playwright/test').Page): Promise<DebugPosition> =>
+  page.evaluate(() => {
     const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
       | DebugPosition
       | undefined;
@@ -46,7 +44,6 @@ const _readPlayerPosition = async (
     }
     return { playerX: debug.playerX, playerY: debug.playerY };
   });
-};
 
 /** Map dimensions in pixels (10×10 tiles at 32 px). */
 const MAP_PIXEL_W = 320;

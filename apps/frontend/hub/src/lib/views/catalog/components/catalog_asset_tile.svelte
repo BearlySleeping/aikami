@@ -16,7 +16,7 @@ let { entry, previewUrl, onSelect }: Props = $props();
 
 const displayName = assetDisplayName(entry);
 
-let licenseBadge: string;
+let licenseBadge = $state('');
 if (hasNoLicense(entry)) {
   licenseBadge = 'Unknown';
 } else if (entry.licenses.length === 1) {

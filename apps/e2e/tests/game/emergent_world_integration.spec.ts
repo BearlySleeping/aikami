@@ -81,9 +81,7 @@ test.describe('Emergent World Integration E2E', () => {
     );
 
     // Verify the canvas element renders (PixiJS is active)
-    const canvasCount = await page.evaluate(() => {
-      return document.querySelectorAll('canvas').length;
-    });
+    const canvasCount = await page.evaluate(() => document.querySelectorAll('canvas').length);
 
     expect(canvasCount).toBeGreaterThan(0);
   });
@@ -107,14 +105,13 @@ test.describe('Emergent World Integration E2E', () => {
       { timeout: 15000 },
     );
 
-    const samplePositions = async (): Promise<Record<string, { x: number; y: number }>> => {
-      return page.evaluate(() => {
+    const samplePositions = async (): Promise<Record<string, { x: number; y: number }>> =>
+      page.evaluate(() => {
         const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
           | { entityPositions?: Record<string, { x: number; y: number }> }
           | undefined;
         return d?.entityPositions ?? {};
       });
-    };
 
     // Identify the player's eid so the movement assertion can EXCLUDE it —
     // the player may move under input focus, and AC-7 is about NPCs and

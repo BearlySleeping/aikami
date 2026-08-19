@@ -376,7 +376,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       const expected = this._baseContractBranch();
       const singleSuffix = new RegExp(`^${expected}-[0-9a-z]{1,6}$`);
       const entry = (await listWorktrees(this._repoRoot)).find(
-        (w) => w.openWorkspaceId === existingWorkspaceId,
+        (wt) => wt.openWorkspaceId === existingWorkspaceId,
       );
       // Only tear down when the branch mismatch is CONFIRMED. An absent
       // entry (workspace open but no worktree record) is unknown — never
@@ -934,56 +934,58 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const isInteractiveWriter =
       this._interactiveWriter && options.request.role === 'writer' && !isRetry;
 
-    parts.push(
-      isRetry
-        ? [
-            `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
-            '',
-            '🔴 RETRY CHECK: Before doing any work, verify whether you already completed this stage:',
-            '1. Check if the result file exists AT THE EXACT PATH in the CONTRACT_PIPELINE_RESULT_PATH',
-            "   env var for THIS attempt — not a previous attempt's file sitting in the same directory.",
-            '2. If it exists there with status `passed` or `changes_requested`, that is real completed',
-            '   work product — just call `contract_stage_complete` with that same status. Do NOT redo work.',
-            "3. A previous attempt's `blocked` result does NOT satisfy this check, even if you find one:",
-            '   `blocked` reflects an external precondition (contract status, missing dependency, service',
-            '   down, etc.) that may have changed since. Re-run the Preflight checks fresh and only report',
-            '   `blocked` again if the condition still actually holds right now.',
-            '4. Otherwise, do new work.',
-          ].join('\n')
-        : isInteractiveWriter
-          ? [
-              `👋 Direct contract drafting for ${contractId}.`,
-              '',
-              'You are WAITING for the user to describe their feature in this chat.',
-              '',
-              '🔴 DO NOT DO ANY WORK YET:',
-              '- Do NOT inspect the codebase, scan the backlog, or write any file.',
-              '- Do NOT call `contract_stage_complete` before the contract is written.',
-              '',
-              'The input box is empty. The user will type their feature description',
-              'and press Enter — THAT is your input to act on.',
-              '',
-              'Once the user has described the feature:',
-              '',
-              '1. Derive a short slug from the described feature (lowercase, hyphens,',
-              '   max ~60 chars, e.g. "npc-free-text-dialogue").',
-              `2. Create the real contract at \`docs/contracts/${contractId}-<slug>.md\`.`,
-              `   This renames the placeholder \`docs/contracts/${contractId}.md\``,
-              '   (the pipeline removes the placeholder file automatically).',
-              '3. Read `docs/contracts/TEMPLATE.md` — the canonical v2.0.0 template.',
-              '   Direct drafts have NO docs/TODO.md entry, so do NOT call',
-              '   `contract_generate` (it only works for backlog IDs).',
-              '4. Inspect the codebase to fill in architecture directives, data models,',
-              '   and baseline evidence.',
-              '5. Write concrete Given/When/Then acceptance criteria. Fill every',
-              '   section — no TBD or placeholders.',
-              '6. Set status to `draft` and call `contract_stage_complete` with',
-              '   status `passed`.',
-              '',
-              '🔴 Your LAST action MUST call contract_stage_complete.',
-            ].join('\n')
-          : `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`,
-    );
+    let stagePreamble: string;
+    if (isRetry) {
+      stagePreamble = [
+        `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
+        '',
+        '🔴 RETRY CHECK: Before doing any work, verify whether you already completed this stage:',
+        '1. Check if the result file exists AT THE EXACT PATH in the CONTRACT_PIPELINE_RESULT_PATH',
+        "   env var for THIS attempt — not a previous attempt's file sitting in the same directory.",
+        '2. If it exists there with status `passed` or `changes_requested`, that is real completed',
+        '   work product — just call `contract_stage_complete` with that same status. Do NOT redo work.',
+        "3. A previous attempt's `blocked` result does NOT satisfy this check, even if you find one:",
+        '   `blocked` reflects an external precondition (contract status, missing dependency, service',
+        '   down, etc.) that may have changed since. Re-run the Preflight checks fresh and only report',
+        '   `blocked` again if the condition still actually holds right now.',
+        '4. Otherwise, do new work.',
+      ].join('\n');
+    } else if (isInteractiveWriter) {
+      stagePreamble = [
+        `👋 Direct contract drafting for ${contractId}.`,
+        '',
+        'You are WAITING for the user to describe their feature in this chat.',
+        '',
+        '🔴 DO NOT DO ANY WORK YET:',
+        '- Do NOT inspect the codebase, scan the backlog, or write any file.',
+        '- Do NOT call `contract_stage_complete` before the contract is written.',
+        '',
+        'The input box is empty. The user will type their feature description',
+        'and press Enter — THAT is your input to act on.',
+        '',
+        'Once the user has described the feature:',
+        '',
+        '1. Derive a short slug from the described feature (lowercase, hyphens,',
+        '   max ~60 chars, e.g. "npc-free-text-dialogue").',
+        `2. Create the real contract at \`docs/contracts/${contractId}-<slug>.md\`.`,
+        `   This renames the placeholder \`docs/contracts/${contractId}.md\``,
+        '   (the pipeline removes the placeholder file automatically).',
+        '3. Read `docs/contracts/TEMPLATE.md` — the canonical v2.0.0 template.',
+        '   Direct drafts have NO docs/TODO.md entry, so do NOT call',
+        '   `contract_generate` (it only works for backlog IDs).',
+        '4. Inspect the codebase to fill in architecture directives, data models,',
+        '   and baseline evidence.',
+        '5. Write concrete Given/When/Then acceptance criteria. Fill every',
+        '   section — no TBD or placeholders.',
+        '6. Set status to `draft` and call `contract_stage_complete` with',
+        '   status `passed`.',
+        '',
+        '🔴 Your LAST action MUST call contract_stage_complete.',
+      ].join('\n');
+    } else {
+      stagePreamble = `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`;
+    }
+    parts.push(stagePreamble);
     if (options.request.userMessage) {
       parts.push(options.request.userMessage);
     }
@@ -1157,13 +1159,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const paneId = tab.result.root_pane.pane_id;
     const wrappedCommand = `\n${await bashScriptForPane(paneId, command)}`;
     await runPaneCommand({ paneId, command: wrappedCommand });
+    let reviewText: string;
+    if (options.blockedReview) {
+      reviewText = `Review contract run ${this._runId}. RECOVERY MODE: the pipeline is blocked — diagnose the failure from the manifest and findings, then recover it (push/PR creation, small fix) or hand off with a precise summary. Do NOT re-run the verifier's tests. Your LAST action MUST call contract_review_decision.`;
+    } else if (options.yolo) {
+      reviewText = `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`;
+    } else {
+      reviewText = `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`;
+    }
     const taskDelivered = await this._sendTaskText({
       paneId,
-      text: options.blockedReview
-        ? `Review contract run ${this._runId}. RECOVERY MODE: the pipeline is blocked — diagnose the failure from the manifest and findings, then recover it (push/PR creation, small fix) or hand off with a precise summary. Do NOT re-run the verifier's tests. Your LAST action MUST call contract_review_decision.`
-        : options.yolo
-          ? `Review contract run ${this._runId}. YOLO MODE: Create the PR immediately (draft=false). Wait for CodeRabbit review. Apply autofixes. Validate. Merge. Do NOT wait for the user.`
-          : `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
+      text: reviewText,
     });
     return { paneId, taskDelivered };
   }

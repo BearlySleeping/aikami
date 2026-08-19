@@ -187,17 +187,18 @@ export class WorldGenWizardPage {
    * Click "Start Character Creation" after world is accepted.
    */
   async clickStartCharacterCreation(): Promise<void> {
-    const eventPromise = this.page.evaluate(() => {
-      return new Promise<string>((resolve) => {
-        document.addEventListener(
-          'world-accepted',
-          ((e: CustomEvent) => {
-            resolve(e.detail.worldName);
-          }) as EventListener,
-          { once: true },
-        );
-      });
-    });
+    const eventPromise = this.page.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          document.addEventListener(
+            'world-accepted',
+            ((e: CustomEvent) => {
+              resolve(e.detail.worldName);
+            }) as EventListener,
+            { once: true },
+          );
+        }),
+    );
 
     await this.page.getByRole('button', { name: 'Start Character Creation' }).click();
 

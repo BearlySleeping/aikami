@@ -61,13 +61,12 @@ const listSnapshots = (): void => {
   console.log('\nRestore one with: bun run autofix:restore <timestamp>');
 };
 
-const git = (args: string[], repoRoot: string): string => {
-  return execFileSync('git', args, {
+const git = (args: string[], repoRoot: string): string =>
+  execFileSync('git', args, {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).toString();
-};
 
 const restoreSnapshot = (timestamp: string): void => {
   // Reject nested or otherwise invalid paths — the timestamp must identify an
@@ -135,13 +134,11 @@ const restoreSnapshot = (timestamp: string): void => {
       console.warn('  Plain staged apply failed — retrying with --3way --cached…');
       applyPatch(stagedPatch, ['--3way', '--cached'], 'staged.patch via --3way --cached');
     }
-  } else {
+  } else if (!applyPatch(combinedPatch, [], 'tracked.patch (legacy, unstaged)')) {
     // Legacy snapshot: apply the combined patch to the working tree; fall
     // back to --3way (stages) only when it no longer applies cleanly.
-    if (!applyPatch(combinedPatch, [], 'tracked.patch (legacy, unstaged)')) {
-      console.warn('  Plain apply failed (HEAD likely moved) — retrying with --3way…');
-      applyPatch(combinedPatch, ['--3way'], 'tracked.patch via --3way');
-    }
+    console.warn('  Plain apply failed (HEAD likely moved) — retrying with --3way…');
+    applyPatch(combinedPatch, ['--3way'], 'tracked.patch via --3way');
   }
 
   // 2. Restore untracked files.

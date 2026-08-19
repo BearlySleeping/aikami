@@ -134,7 +134,12 @@ export const chimeOnFirstResponse = (options: {
   void waitForFirstResponse({ ...options, isCancelled: () => cancelled })
     .then(async (outcome) => {
       if (outcome === 'responded' || outcome === 'timeout') {
-        const herdrActive = await checkHerdrActive().catch(() => false);
+        let herdrActive = false;
+        try {
+          herdrActive = await checkHerdrActive();
+        } catch {
+          herdrActive = false;
+        }
         if (!herdrActive) {
           chime();
         }

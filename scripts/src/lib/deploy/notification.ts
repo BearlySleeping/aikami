@@ -81,16 +81,26 @@ export function buildNotificationMessage(input: NotificationInput): string {
   const { branch, sha, actor, commitMessage, runUrl, apps } = input;
   const status = overallStatus(apps);
 
-  const headerIcon =
-    status === 'passed' ? '✅' : status === 'failed' ? '🚨' : status === 'partial' ? '⚠️' : 'ℹ️';
-  const headerText =
-    status === 'passed'
-      ? 'Deployment Succeeded'
-      : status === 'failed'
-        ? 'Deployment Failed'
-        : status === 'partial'
-          ? 'Deployment Partially Succeeded'
-          : 'No Deployments';
+  let headerIcon: string;
+  if (status === 'passed') {
+    headerIcon = '✅';
+  } else if (status === 'failed') {
+    headerIcon = '🚨';
+  } else if (status === 'partial') {
+    headerIcon = '⚠️';
+  } else {
+    headerIcon = 'ℹ️';
+  }
+  let headerText: string;
+  if (status === 'passed') {
+    headerText = 'Deployment Succeeded';
+  } else if (status === 'failed') {
+    headerText = 'Deployment Failed';
+  } else if (status === 'partial') {
+    headerText = 'Deployment Partially Succeeded';
+  } else {
+    headerText = 'No Deployments';
+  }
 
   const succeeded = appCountBy(apps, 'success');
   const failed = appCountBy(apps, 'failure');

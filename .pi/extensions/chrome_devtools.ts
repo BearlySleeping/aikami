@@ -650,12 +650,14 @@ export default function (pi: ExtensionAPI) {
           }
 
           const levelFilter = params.level ?? 'all';
-          const filtered =
-            levelFilter === 'all'
-              ? entries
-              : levelFilter === 'warning'
-                ? entries.filter((e) => e.level === 'warn' || e.level === 'error')
-                : entries.filter((e) => e.level === levelFilter);
+          let filtered: typeof entries;
+          if (levelFilter === 'all') {
+            filtered = entries;
+          } else if (levelFilter === 'warning') {
+            filtered = entries.filter((e) => e.level === 'warn' || e.level === 'error');
+          } else {
+            filtered = entries.filter((e) => e.level === levelFilter);
+          }
 
           const lines: string[] = [
             `🖥  Console — ${app} (${pageUrl})`,
@@ -677,7 +679,14 @@ export default function (pi: ExtensionAPI) {
           } else {
             lines.push('── Console Entries (newest last) ──');
             for (const entry of filtered.slice(-50)) {
-              const icon = entry.level === 'error' ? '❌' : entry.level === 'warn' ? '⚠️ ' : '📋';
+              let icon: string;
+              if (entry.level === 'error') {
+                icon = '❌';
+              } else if (entry.level === 'warn') {
+                icon = '⚠️ ';
+              } else {
+                icon = '📋';
+              }
               const time = new Date(entry.ts).toISOString().slice(11, 23);
               lines.push(`  ${icon} [${time}] ${entry.level}: ${entry.args.join(' ')}`);
               if (entry.stack && (entry.level === 'error' || entry.level === 'warn')) {

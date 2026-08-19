@@ -107,7 +107,6 @@ describe('generateCatalogIndex (AC-2)', () => {
     // ~30k entries with content varied enough to defeat gzip compression
     // forces the whole-category shard past the 1 MB budget (the real
     // 12,699-asset LPC shard measures 639 KB gzipped and fits in one shard).
-    const { createHash } = require('node:crypto') as typeof import('node:crypto');
     const entries = Array.from({ length: 30000 }, (_, i) => ({
       ...makeEntry({ tag: `lpc:tag${i}`, category: 'lpc', subcategory: `sub${i % 12}` }),
       licenseNote: `note ${i} ${createHash('sha1').update(String(i)).digest('hex').slice(0, 8)}`,
@@ -134,7 +133,6 @@ describe('generateCatalogIndex (AC-2)', () => {
     // "hat/magic", "hat-magic" and "hat magic" all collapsed to "hat-magic"
     // under the old sanitizer — colliding shard ids and R2 keys. The encoded
     // fragment must keep them distinct.
-    const { createHash } = require('node:crypto') as typeof import('node:crypto');
     const colliding = ['hat/magic', 'hat-magic', 'hat magic'];
     const entries = Array.from({ length: 30000 }, (_, i) => ({
       ...makeEntry({ tag: `lpc:tag${i}`, category: 'lpc', subcategory: colliding[i % 3] }),

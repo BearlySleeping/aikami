@@ -13,7 +13,12 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const DEFAULT_POSIX_CANDIDATES = ['chromium', 'chromium-unwrapped', 'chromium-browser', 'google-chrome'];
+const DEFAULT_POSIX_CANDIDATES = [
+  'chromium',
+  'chromium-unwrapped',
+  'chromium-browser',
+  'google-chrome',
+];
 
 /**
  * Look for a real browser install directly rather than trusting PATH —
@@ -22,9 +27,9 @@ const DEFAULT_POSIX_CANDIDATES = ['chromium', 'chromium-unwrapped', 'chromium-br
  */
 const findChromiumExecutableWindows = (): string | null => {
   const programDirs = [
-    process.env['ProgramFiles'],
+    process.env.ProgramFiles,
     process.env['ProgramFiles(x86)'],
-    process.env['LOCALAPPDATA'],
+    process.env.LOCALAPPDATA,
   ].filter((p): p is string => Boolean(p));
 
   const relPaths = [
@@ -41,7 +46,7 @@ const findChromiumExecutableWindows = (): string | null => {
     }
   }
 
-  const localAppData = process.env['LOCALAPPDATA'];
+  const localAppData = process.env.LOCALAPPDATA;
   if (localAppData) {
     const playwrightDir = resolve(localAppData, 'ms-playwright');
     try {

@@ -48,9 +48,7 @@ const contractHash = (contractPath: string): string =>
  * `undefined`, the `--tools` flag is omitted in {@link main} and `pi` loads
  * every registered tool.
  */
-const activeTools = (_role: string): string[] | undefined => {
-  return undefined;
-};
+const activeTools = (_role: string): string[] | undefined => undefined;
 
 /** Extract a label from the contract path for display. */
 const contractLabel = (path: string): string => {

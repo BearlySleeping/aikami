@@ -57,22 +57,24 @@ const main = async (): Promise<void> => {
 
       const stage = manifest.currentStage ?? '?';
       const updated = manifest.lastUpdated ? elapsed(manifest.lastUpdated) : '?';
-      const stageIcon =
-        stage === 'merged'
-          ? '✅'
-          : stage === 'blocked'
-            ? '🚫'
-            : stage === 'review'
-              ? '👀'
-              : stage === 'verify'
-                ? '🔍'
-                : stage === 'implement'
-                  ? '⚙️'
-                  : stage === 'critique'
-                    ? '📝'
-                    : stage === 'write_contract'
-                      ? '✍️'
-                      : '❓';
+      let stageIcon: string;
+      if (stage === 'merged') {
+        stageIcon = '✅';
+      } else if (stage === 'blocked') {
+        stageIcon = '🚫';
+      } else if (stage === 'review') {
+        stageIcon = '👀';
+      } else if (stage === 'verify') {
+        stageIcon = '🔍';
+      } else if (stage === 'implement') {
+        stageIcon = '⚙️';
+      } else if (stage === 'critique') {
+        stageIcon = '📝';
+      } else if (stage === 'write_contract') {
+        stageIcon = '✍️';
+      } else {
+        stageIcon = '❓';
+      }
 
       console.log(`${stageIcon} ${manifest.contractId ?? '?'} — ${stage} (${updated})`);
     } catch {
@@ -96,12 +98,14 @@ const main = async (): Promise<void> => {
         continue;
       }
       const age = Math.round((Date.now() - new Date(metadata.createdAt).getTime()) / 1000);
-      const ageStr =
-        age < 60
-          ? `${age}s`
-          : age < 3600
-            ? `${Math.round(age / 60)}m`
-            : `${Math.round(age / 3600)}h`;
+      let ageStr: string;
+      if (age < 60) {
+        ageStr = `${age}s`;
+      } else if (age < 3600) {
+        ageStr = `${Math.round(age / 60)}m`;
+      } else {
+        ageStr = `${Math.round(age / 3600)}h`;
+      }
       console.log(`  🔴 ${contractId} (PID ${metadata.pid}, locked ${ageStr} ago)`);
     }
   }

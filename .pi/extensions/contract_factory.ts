@@ -501,7 +501,9 @@ export default function (pi: ExtensionAPI) {
           const sanitized = sanitizeBranchName(params.taskId);
 
           // Check for an existing herdr-native worktree for this task.
-          const existing = (await listWorktrees(cwd)).find((w) => w.branch === `task/${sanitized}`);
+          const existing = (await listWorktrees(cwd)).find(
+            (wtree) => wtree.branch === `task/${sanitized}`,
+          );
           if (existing) {
             // Existing (possibly incomplete) worktree — retry bootstrap so a
             // previous failure is not silently reported as ready.

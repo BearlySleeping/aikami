@@ -65,12 +65,12 @@ export const captureGitState = (cwd: string): GitStateSnapshot => {
 /** Create a deterministic content fingerprint from a path-to-hash map. */
 export const fingerprintFiles = (files: Readonly<Record<string, string>>): string => {
   const hash = createHash('sha256');
-  for (const [path, contentHash] of Object.entries(files).sort(([left], [right]) =>
+  for (const [filePath, contentHashValue] of Object.entries(files).sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
-    hash.update(path);
+    hash.update(filePath);
     hash.update('\0');
-    hash.update(contentHash);
+    hash.update(contentHashValue);
     hash.update('\n');
   }
   return hash.digest('hex');

@@ -115,10 +115,8 @@ const listAllWorktrees = (): Array<{ path: string; branch?: string; detached?: b
       if (current) {
         current.branch = line.slice('branch '.length).replace('refs/heads/', '');
       }
-    } else if (line === 'detached') {
-      if (current) {
-        current.detached = true;
-      }
+    } else if (line === 'detached' && current) {
+      current.detached = true;
     }
   }
   if (current) {

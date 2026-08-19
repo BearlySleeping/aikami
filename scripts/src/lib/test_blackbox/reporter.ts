@@ -16,12 +16,14 @@ export function printTerminalReport(results: SuiteResult[], duration: number): v
   console.log(`${c.bold}══════════════════════════════════════${c.reset}\n`);
 
   for (const r of results) {
-    const icon =
-      r.status === 'pass'
-        ? `${c.green}✓${c.reset}`
-        : r.status === 'fail'
-          ? `${c.red}✗${c.reset}`
-          : `${c.yellow}⏭${c.reset}`;
+    let icon: string;
+    if (r.status === 'pass') {
+      icon = `${c.green}✓${c.reset}`;
+    } else if (r.status === 'fail') {
+      icon = `${c.red}✗${c.reset}`;
+    } else {
+      icon = `${c.yellow}⏭${c.reset}`;
+    }
     const dur = r.duration > 0 ? ` (${r.duration}ms)` : '';
     console.log(`  ${icon} ${r.name}${dur}`);
     if (r.error) {

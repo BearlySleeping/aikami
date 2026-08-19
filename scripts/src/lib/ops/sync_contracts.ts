@@ -236,7 +236,14 @@ export const syncContracts = () => {
       const promotionLabel = c.promotion
         ? (PROMOTION_LABELS[c.promotion] ?? `❓ ${c.promotion}`)
         : '—';
-      const verLabel = c.version === 0 ? '—' : c.version === 2 ? 'v2' : 'v1';
+      let verLabel: string;
+      if (c.version === 0) {
+        verLabel = '—';
+      } else if (c.version === 2) {
+        verLabel = 'v2';
+      } else {
+        verLabel = 'v1';
+      }
       lines.push(
         `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} |`,
       );

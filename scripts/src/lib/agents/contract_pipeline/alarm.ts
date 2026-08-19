@@ -50,7 +50,7 @@ export const resolveErrorFile = (): string => resolveSoundFile(ERROR_FILE);
  */
 export const playerFor = (
   platform: NodeJS.Platform,
-  which: (bin: string) => string | null,
+  whichFn: (bin: string) => string | null,
   file: string = resolveAlarmFile(),
 ): string[] | null => {
   if (!existsSync(file)) {
@@ -72,18 +72,20 @@ export const playerFor = (
     ];
   }
   // Linux: PulseAudio/ALSA are lightweight and native; ffplay/mpv fall back.
-  const player = ['paplay', 'aplay', 'ffplay', 'mpv'].find((bin) => which(bin) !== null);
+  const player = ['paplay', 'aplay', 'ffplay', 'mpv'].find((bin) => whichFn(bin) !== null);
   if (!player) {
     return null;
   }
-  const args =
-    player === 'ffplay'
-      ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', file]
-      : player === 'mpv'
-        ? ['--really-quiet', '--no-terminal', file]
-        : player === 'aplay'
-          ? ['-q', file]
-          : [file]; // paplay takes no quiet flag — quiet by default.
+  let args: string[];
+  if (player === 'ffplay') {
+    args = ['-nodisp', '-autoexit', '-loglevel', 'quiet', file];
+  } else if (player === 'mpv') {
+    args = ['--really-quiet', '--no-terminal', file];
+  } else if (player === 'aplay') {
+    args = ['-q', file];
+  } else {
+    args = [file]; // paplay takes no quiet flag — quiet by default.
+  }
   return [player, ...args];
 };
 

@@ -107,11 +107,14 @@ const testMode: TestMode = parseTestMode(onlyValues);
 // Normalize step names: "test:unit" / "test:e2e" / "test:all" → "test"
 const normalizedOnly = onlyValues.map((v) => (v.startsWith('test') ? 'test' : v));
 
-const steps: AutofixStep[] = doAll
-  ? [...ALL_STEPS]
-  : onlyValues.length > 0
-    ? dedupe(normalizedOnly.filter(isValidStep))
-    : [...DEFAULT_STEPS];
+let steps: AutofixStep[];
+if (doAll) {
+  steps = [...ALL_STEPS];
+} else if (onlyValues.length > 0) {
+  steps = dedupe(normalizedOnly.filter(isValidStep));
+} else {
+  steps = [...DEFAULT_STEPS];
+}
 
 const doFix = steps.includes('fix');
 const doTypecheck = steps.includes('typecheck');
@@ -329,7 +332,7 @@ const ensureFirebaseEmulators = (): Promise<void> =>
 
 // ── Build system prompt ────────────────────────────────────
 
-const buildSystemPrompt = async (baselineDir: string | null): Promise<string> => {
+const buildSystemPrompt = async (baselineSnapshotDir: string | null): Promise<string> => {
   const gitFiles = isGitScoped ? await getGitScopedFiles() : [];
   const scopeInstruction = isGitScoped
     ? [
@@ -351,8 +354,8 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
       'You are an automated commit agent. Your sole purpose is to review pending changes, stage them, write a descriptive commit message, and push.',
       '',
       scopeInstruction,
-      baselineDir
-        ? `\nA baseline snapshot of the pre-run working tree is saved at:\n\`${baselineDir}\`\nIf you are unsure whether a change was intentional, compare against tracked.patch before staging.`
+      baselineSnapshotDir
+        ? `\nA baseline snapshot of the pre-run working tree is saved at:\n\`${baselineSnapshotDir}\`\nIf you are unsure whether a change was intentional, compare against tracked.patch before staging.`
         : '',
       '## STEP 1: Review & Stage',
       '1. Run `git status`.',
@@ -467,7 +470,7 @@ const buildSystemPrompt = async (baselineDir: string | null): Promise<string> =>
     '- **Forbidden Paths**: Do NOT modify node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/. Within .pi/, ONLY the git-scoped .pi files listed above and this prompt file (`.pi/autofix/system_prompt.md`) may be modified — every other .pi/ path is protected.',
     '- **🔴 BRANCH SAFETY — NEVER `git push` alone**: Always use `git push origin HEAD`. Plain `git push` may target the wrong branch if the local branch tracks a different remote branch (e.g. `origin/main` instead of the current feature branch). `git push origin HEAD` ALWAYS pushes to the current branch. If you see an upstream mismatch error, do NOT fall back to `git push origin HEAD:main` — push to the CURRENT branch.',
     baselineDir
-      ? `- **Baseline snapshot**: The pre-run working tree is saved at \`${baselineDir}\`. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run \`bun run autofix:restore <timestamp>\`.`
+      ? `- **Baseline snapshot**: The pre-run working tree is saved at \`${baselineSnapshotDir}\`. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run \`bun run autofix:restore <timestamp>\`.`
       : '',
     '- **NO `as`, `any`, or `unknown`**: Never use type assertions or `any`/`unknown`.',
     '',
@@ -488,12 +491,14 @@ const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
 
   lines.push(`## STEP ${stepNum}: \`bun run test\``);
 
-  const testCommand =
-    testMode === 'e2e'
-      ? 'bun moon run e2e:test'
-      : testMode === 'all'
-        ? 'bun moon run test:all'
-        : 'bun run test';
+  let testCommand: string;
+  if (testMode === 'e2e') {
+    testCommand = 'bun moon run e2e:test';
+  } else if (testMode === 'all') {
+    testCommand = 'bun moon run test:all';
+  } else {
+    testCommand = 'bun run test';
+  }
 
   lines.push(
     `Run the tests using: \`${testCommand}\`${isGitScoped ? ' on git-scoped files' : ''}.`,
@@ -523,7 +528,7 @@ const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
 
 // ── Build task text ────────────────────────────────────────
 
-const buildTaskText = async (baselineDir: string | null): Promise<string> => {
+const buildTaskText = async (baselineSnapshotDir: string | null): Promise<string> => {
   const gitFiles = isGitScoped ? await getGitScopedFiles() : [];
   const scopeLabel = isGitScoped ? 'GIT-SCOPED' : 'FULL PROJECT';
 
@@ -535,7 +540,7 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
       '1. `git status` + `git diff`',
       '2. `git add -A && git commit --no-verify -m "..." && git push origin HEAD`',
       '',
-      baselineDir ? `> 📸 Pre-run baseline snapshot: \`${baselineDir}\`` : '',
+      baselineSnapshotDir ? `> 📸 Pre-run baseline snapshot: \`${baselineSnapshotDir}\`` : '',
       "🔴 **NEVER run destructive git commands** (git checkout -- / git restore / git clean / git reset --hard). The working tree contains pre-existing work — protect it. On Windows, CRLF line-ending churn in `git status` after `bun run fix` is expected — ignore it, never 'clean' the tree.",
       '🔴 **BRANCH SAFETY**: You MUST use `git push origin HEAD`. Plain `git push` (without remote/branch args) is FORBIDDEN — it may push to the wrong branch if upstream tracking differs from the current branch. NEVER fall back to pushing to `main` (`git push origin HEAD:main`). If the current branch is `main` or the repo is in a detached HEAD state, STOP and report the issue — do NOT push.',
       '',
@@ -549,7 +554,7 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
       ? `Only modify these git-scoped files: ${gitFiles.length ? gitFiles.join(', ') : 'None (empty diff)'}`
       : 'Fix/typecheck/test the entire project.',
     baselineDir
-      ? `\n📸 A baseline snapshot of the pre-run working tree is saved at \`${baselineDir}\`. Never run destructive git commands (git checkout -- / git restore / git clean / git reset --hard). Ignore CRLF line-ending churn in git status on Windows.`
+      ? `\n📸 A baseline snapshot of the pre-run working tree is saved at \`${baselineSnapshotDir}\`. Never run destructive git commands (git checkout -- / git restore / git clean / git reset --hard). Ignore CRLF line-ending churn in git status on Windows.`
       : '',
     'Execute the following steps sequentially:',
     '',
@@ -575,8 +580,14 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
   }
   if (doTest) {
     stepNum += 1;
-    const modeLabel =
-      testMode === 'e2e' ? 'e2e-only' : testMode === 'all' ? 'all incl. e2e' : 'unit';
+    let modeLabel: string;
+    if (testMode === 'e2e') {
+      modeLabel = 'e2e-only';
+    } else if (testMode === 'all') {
+      modeLabel = 'all incl. e2e';
+    } else {
+      modeLabel = 'unit';
+    }
     lines.push(
       `${stepNum}. \`bun run test\` [${modeLabel}] — ONLY fix source code regressions. Edit tests **ONLY IF PROVABLY WRONG**.`,
     );
@@ -606,13 +617,18 @@ const buildTaskText = async (baselineDir: string | null): Promise<string> => {
 // ── Logging ───────────────────────────────────────────────
 
 const checkmark = (v: boolean) => (v ? '✓' : '✗');
-const modeLabel = doTest
-  ? testMode === 'e2e'
-    ? 'e2e-only'
-    : testMode === 'all'
-      ? 'all incl. e2e'
-      : 'unit'
-  : '';
+let modeLabel: string;
+if (doTest) {
+  if (testMode === 'e2e') {
+    modeLabel = 'e2e-only';
+  } else if (testMode === 'all') {
+    modeLabel = 'all incl. e2e';
+  } else {
+    modeLabel = 'unit';
+  }
+} else {
+  modeLabel = '';
+}
 
 console.log('╭──────────────────────────────────────────╮');
 console.log('│         🤖 Autofix Pipeline              │');

@@ -390,7 +390,7 @@ export default function (pi: ExtensionAPI) {
         switch (action) {
           // ── list ────────────────────────────────────────
           case 'list': {
-            const panes = await getWorkspacePanes(workspaceId, signal);
+            const workspacePanes = await getWorkspacePanes(workspaceId, signal);
             const aliasByPaneId = new Map<string, string>();
             for (const [a, m] of managedPanes) {
               if (m.workspaceId === workspaceId) {
@@ -398,7 +398,7 @@ export default function (pi: ExtensionAPI) {
               }
             }
 
-            const lines_ = panes.map((p) => {
+            const lines_ = workspacePanes.map((p) => {
               const alias = aliasByPaneId.get(p.pane_id);
               const name = alias ?? p.pane_id;
               const flags = [p.pane_id === currentPaneId ? 'current' : '', p.agent, p.agent_status]
@@ -415,10 +415,10 @@ export default function (pi: ExtensionAPI) {
           // ── workspace_list ──────────────────────────────
           case 'workspace_list': {
             const ws = await execHerdrJson<WorkspaceInfo[]>(['workspace', 'list'], signal);
-            const text = ws
+            const wsText = ws
               .map((w) => `${w.label} [${w.workspace_id}]${w.focused ? ' (focused)' : ''}`)
               .join('\n');
-            return { content: [{ type: 'text', text: text || 'No workspaces' }], details: {} };
+            return { content: [{ type: 'text', text: wsText || 'No workspaces' }], details: {} };
           }
 
           // ── workspace_create ────────────────────────────
@@ -446,10 +446,10 @@ export default function (pi: ExtensionAPI) {
           case 'tab_list': {
             const wsId = (workspace as string) ?? workspaceId;
             const tabs = await getWorkspaceTabs(wsId, signal);
-            const text = tabs
+            const tabsText = tabs
               .map((t) => `${t.label} [${t.tab_id}]${t.focused ? ' (focused)' : ''}`)
               .join('\n');
-            return { content: [{ type: 'text', text: text || 'No tabs' }], details: {} };
+            return { content: [{ type: 'text', text: tabsText || 'No tabs' }], details: {} };
           }
 
           // ── tab_create ──────────────────────────────────
@@ -465,9 +465,9 @@ export default function (pi: ExtensionAPI) {
             if (focus !== true) {
               args.push('--no-focus');
             }
-            const tab = await execHerdrJson<TabInfo>(args, signal);
+            const newTab = await execHerdrJson<TabInfo>(args, signal);
             return {
-              content: [{ type: 'text', text: `Created tab '${tab.label}' (${tab.tab_id})` }],
+              content: [{ type: 'text', text: `Created tab '${newTab.label}' (${newTab.tab_id})` }],
               details: {},
             };
           }
@@ -598,16 +598,22 @@ export default function (pi: ExtensionAPI) {
 
           // ── wait_agent ──────────────────────────────────
           case 'wait_agent': {
-            const refs = (panes as string[])?.length
-              ? (panes as string[])
-              : pane
-                ? [pane as string]
-                : [];
-            const sts = (statuses as string[])?.length
-              ? (statuses as string[])
-              : status
-                ? [status as string]
-                : [];
+            let refs: string[];
+            if ((panes as string[])?.length) {
+              refs = panes as string[];
+            } else if (pane) {
+              refs = [pane as string];
+            } else {
+              refs = [];
+            }
+            let sts: string[];
+            if ((statuses as string[])?.length) {
+              sts = statuses as string[];
+            } else if (status) {
+              sts = [status as string];
+            } else {
+              sts = [];
+            }
             if (!refs.length) {
               throw new Error("'pane' or 'panes' required");
             }
@@ -832,15 +838,23 @@ export default function (pi: ExtensionAPI) {
             for (const session of sessions) {
               for (const svcStatus of session.services) {
                 if (svcStatus.running) {
-                  const icon =
-                    svcStatus.state === 'crashed' ? '❌' : svcStatus.portOpen ? '✅' : '⏳';
+                  let icon: string;
+                  if (svcStatus.state === 'crashed') {
+                    icon = '❌';
+                  } else if (svcStatus.portOpen) {
+                    icon = '✅';
+                  } else {
+                    icon = '⏳';
+                  }
                   const port = svcStatus.readyPort ? ` — :${svcStatus.readyPort}` : '';
-                  const stateNote =
-                    svcStatus.state === 'crashed'
-                      ? ' — CRASHED'
-                      : svcStatus.state === 'booting'
-                        ? ' — booting'
-                        : '';
+                  let stateNote: string;
+                  if (svcStatus.state === 'crashed') {
+                    stateNote = ' — CRASHED';
+                  } else if (svcStatus.state === 'booting') {
+                    stateNote = ' — booting';
+                  } else {
+                    stateNote = '';
+                  }
                   lines.push(`${icon} **${svcStatus.name}**${port}${stateNote}`);
                 } else {
                   lines.push(`⏸️ **${svcStatus.name}** — not running`);

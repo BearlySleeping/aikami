@@ -120,6 +120,4 @@ export const setCachedResult = (options: { hash: string; result: unknown }): voi
  *
  * @returns All cached entries.
  */
-export const getAllCacheEntries = (): Record<string, CacheEntry> => {
-  return _readCacheFile();
-};
+export const getAllCacheEntries = (): Record<string, CacheEntry> => _readCacheFile();

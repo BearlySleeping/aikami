@@ -771,12 +771,12 @@ export const runContractPipeline = async (options: {
     const baseStart = STATUS_TO_START_STAGE[contract.status] ?? 'write_contract';
     // Path-sourced contracts (existing contract by path or bare C-XXX) skip
     // the authoring stages — draft contracts start at implementation.
-    const startStage =
-      options.skipAuthoring && baseStart === 'write_contract'
-        ? options.critique
-          ? 'critique'
-          : 'implement'
-        : baseStart;
+    let startStage: ContractPipelineStage;
+    if (options.skipAuthoring && baseStart === 'write_contract') {
+      startStage = options.critique ? 'critique' : 'implement';
+    } else {
+      startStage = baseStart;
+    }
     manifest = createManifest({
       contractId: contract.id,
       contractPath: contract.path,
@@ -1510,30 +1510,28 @@ export const runContractPipeline = async (options: {
               } catch {}
               console.log(`\n✅ PR ready: ${prUrl}\n`);
               manifest = transition({ manifest, next: 'pr_created' });
-            } else {
+            } else if (options.yolo) {
               // In YOLO mode, Captain already merged via gh_merge_pr.
               // Orchestrator just syncs main; workspace handling is deferred
               // to finalizeWorkspace after the loop.
-              if (options.yolo) {
-                syncMainOnMerge(options.repoRoot);
-                manifest = transition({ manifest, next: 'merged' });
-                console.log(`\n🚀 PR merged: ${prUrl}\n`);
-              } else {
-                try {
-                  ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
-                } catch {}
-                execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
-                  encoding: 'utf-8',
-                  stdio: ['pipe', 'pipe', 'pipe'],
-                  cwd: options.repoRoot,
-                  timeout: 60000,
-                  // Windows: hide the console window (no-op on POSIX).
-                  windowsHide: true,
-                });
-                syncMainOnMerge(options.repoRoot);
-                manifest = transition({ manifest, next: 'merged' });
-                console.log(`\n🚀 PR merged: ${prUrl}\n`);
-              }
+              syncMainOnMerge(options.repoRoot);
+              manifest = transition({ manifest, next: 'merged' });
+              console.log(`\n🚀 PR merged: ${prUrl}\n`);
+            } else {
+              try {
+                ghExec(['pr', 'ready', prUrl], { cwd: options.repoRoot });
+              } catch {}
+              execFileSync('gh', ['pr', 'merge', prUrl, '--squash'], {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: options.repoRoot,
+                timeout: 60000,
+                // Windows: hide the console window (no-op on POSIX).
+                windowsHide: true,
+              });
+              syncMainOnMerge(options.repoRoot);
+              manifest = transition({ manifest, next: 'merged' });
+              console.log(`\n🚀 PR merged: ${prUrl}\n`);
             }
           } else if (decision.decision === 'change') {
             console.log('\n🔄 Retrying — back to implementer.\n');
@@ -1653,7 +1651,6 @@ export const runContractPipeline = async (options: {
           manifest = transition({ manifest, next: 'blocked' });
         }
         writeManifest({ manifest, cwd: options.repoRoot });
-        continue;
       }
 
       manifest.blockedReason = `Unexpected stage: ${manifest.currentStage}`;

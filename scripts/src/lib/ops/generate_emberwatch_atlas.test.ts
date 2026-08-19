@@ -90,11 +90,11 @@ describe('C-378 AC-5 — atlas packer', () => {
     // triangle cut by the two edge-midpoint diagonals. An asymmetric wedge
     // (e.g. the old NE/SW shapes) would shift the terrain cut and break
     // the corner-16 visual contract.
-    for (const { bit, test } of CORNER_WEDGE_TESTS) {
+    for (const { bit, test: testFn } of CORNER_WEDGE_TESTS) {
       let count = 0;
       for (let y = 0; y < TILE; y++) {
         for (let x = 0; x < TILE; x++) {
-          if (test(x, y)) {
+          if (testFn(x, y)) {
             count += 1;
           }
         }
@@ -104,7 +104,7 @@ describe('C-378 AC-5 — atlas packer', () => {
 
     // True mirror images around the tile center: NW(x,y) is SE(31-x,31-y),
     // NE(31-x,y), and SW(x,31-y).
-    const [nw, ne, se, sw] = CORNER_WEDGE_TESTS.map(({ test }) => test);
+    const [nw, ne, se, sw] = CORNER_WEDGE_TESTS.map(({ test: testFn }) => testFn);
     for (let y = 0; y < TILE; y++) {
       for (let x = 0; x < TILE; x++) {
         expect(nw(x, y), `NW≡SE mirror at (${x},${y})`).toBe(se(31 - x, 31 - y));

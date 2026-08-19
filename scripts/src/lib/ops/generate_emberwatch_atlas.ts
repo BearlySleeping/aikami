@@ -902,9 +902,8 @@ export const CORNER_WEDGE_TESTS: Array<{
 ];
 
 /** True when the pixel is in the center diamond (always terrain). */
-const inCenterDiamond = (x: number, y: number): boolean => {
-  return !CORNER_WEDGE_TESTS.some(({ test }) => test(x, y));
-};
+const inCenterDiamond = (x: number, y: number): boolean =>
+  !CORNER_WEDGE_TESTS.some(({ test }) => test(x, y));
 
 /** True when the pixel is owned by a set-corner wedge (or the diamond). */
 export const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {

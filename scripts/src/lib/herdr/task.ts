@@ -191,7 +191,7 @@ const cmdNew = async (args: string[]): Promise<void> => {
   // Guard: reject if a worktree for this slug already exists.
   if (
     (await findTaskWorkspace(slug)) ||
-    (await listWorktrees()).some((w) => w.branch === `${TASK_BRANCH_PREFIX}${slug}`)
+    (await listWorktrees()).some((wt) => wt.branch === `${TASK_BRANCH_PREFIX}${slug}`)
   ) {
     throw new Error(`Task "${slug}" already exists. Use a different slug or remove it first.`);
   }
