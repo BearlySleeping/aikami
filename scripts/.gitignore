@@ -1,4 +1,5 @@
 node_modules
 dist
+!src/lib/dist/
 temp
 *.log

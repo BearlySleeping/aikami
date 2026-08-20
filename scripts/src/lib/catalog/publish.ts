@@ -12,7 +12,7 @@
 //   bun run scripts/src/lib/catalog/publish.ts [--mode production]
 //
 // Env (scripts/.env.{mode}, see scripts/.env.example):
-//   CLOUD_FLARE_BUCKET_ACCESS_KEY_ID / SECRET_ACCESS_KEY / ENDPOINT
+//   CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID / SECRET_ACCESS_KEY / ENDPOINT
 //   CATALOG_ORIGIN_URL               public origin (injected, never hardcoded)
 //   CATALOG_BUCKET                   optional, default aikami-catalog
 //

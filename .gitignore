@@ -234,6 +234,10 @@ $RECYCLE.BIN/
 .pi/*/.cache/
 .pi/*/command_durations.json
 
+# Runtime background-task logs (keep the README)
+.pi/background-tasks/*
+!.pi/background-tasks/README.md
+
 script-config.*.ts
 test-results/
 
