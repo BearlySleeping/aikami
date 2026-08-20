@@ -8,9 +8,9 @@
 // appear in apps/frontend/hub/.env.* where buildSecretArgsFromEnvFile would
 // ship them to Cloud Run.
 //
-//   CLOUD_FLARE_BUCKET_ACCESS_KEY_ID      S3 access key id
-//   CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY  S3 secret
-//   CLOUD_FLARE_BUCKET_ENDPOINT           S3 endpoint (https://<account>.r2.cloudflarestorage.com)
+//   CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID      S3 access key id
+//   CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY  S3 secret
+//   CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT           S3 endpoint (https://<account>.r2.cloudflarestorage.com)
 //
 // `originUrl` is INJECTED configuration — never a constant, never a
 // hardcoded hostname in code or fixtures. The public origin is
@@ -82,21 +82,21 @@ export type CatalogConfig = {
 export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   initScriptsEnv(mode);
 
-  const accessKeyId = getScriptsEnv('CLOUD_FLARE_BUCKET_ACCESS_KEY_ID') ?? '';
-  const secretAccessKey = getScriptsEnv('CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY') ?? '';
-  const endpoint = getScriptsEnv('CLOUD_FLARE_BUCKET_ENDPOINT') ?? '';
+  const accessKeyId = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
+  const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
   const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
   const bucket = getScriptsEnv('CATALOG_BUCKET') ?? DEFAULT_CATALOG_BUCKET;
 
   const missing: string[] = [];
   if (!accessKeyId) {
-    missing.push('CLOUD_FLARE_BUCKET_ACCESS_KEY_ID');
+    missing.push('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID');
   }
   if (!secretAccessKey) {
-    missing.push('CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY');
+    missing.push('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY');
   }
   if (!endpoint) {
-    missing.push('CLOUD_FLARE_BUCKET_ENDPOINT');
+    missing.push('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT');
   }
   if (!originUrlRaw) {
     missing.push('CATALOG_ORIGIN_URL');

@@ -131,14 +131,18 @@ Credentials — set by the maintainer 2026-08-15, in **`scripts/.env.*`**, not i
 the hub's env (the hub never writes to R2, I-7):
 
 ```
-CLOUD_FLARE_BUCKET_ACCESS_KEY_ID       S3 access key id
-CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY   S3 secret
-CLOUD_FLARE_BUCKET_ENDPOINT            S3 endpoint (https://<account>.r2.cloudflarestorage.com)
-CLOUD_FLARE_BUCKET_TOKEN               Cloudflare REST API token — bucket
-                                       administration only, NOT needed for
-                                       S3 object operations. Keep only if a
-                                       management task actually uses it.
+CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID       S3 access key id
+CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY   S3 secret
+CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT            S3 endpoint (https://<account>.r2.cloudflarestorage.com)
+CLOUD_FLARE_CATALOG_BUCKET_TOKEN               Cloudflare REST API token — bucket
+                                                administration only, NOT needed for
+                                                S3 object operations. Keep only if a
+                                                management task actually uses it.
 ```
+
+Renamed 2026-08-20 from `CLOUD_FLARE_BUCKET_*` to `CLOUD_FLARE_CATALOG_BUCKET_*` to
+make room for the sibling planes (`…_DIST_BUCKET_*`, `…_UPLOADS_BUCKET_*`); see
+docs/architecture/object-storage-layout.md §2.
 
 Bucket: `aikami-catalog`, location hint **WEUR**, default storage class
 **Standard** (Infrequent Access is excluded from the R2 free tier and adds

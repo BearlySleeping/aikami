@@ -652,7 +652,7 @@ explicit preview-unavailable placeholders for pre-republish entries.
    needed beyond this note.
 2. **Live republish with thumbnails not run** — the thumbnail phase is fully
    unit/integration tested against fixtures, but running it against the live
-   R2 bucket requires `CLOUD_FLARE_BUCKET_*` write credentials from
+   R2 bucket requires `CLOUD_FLARE_CATALOG_BUCKET_*` write credentials from
    `scripts/.env.{mode}` (secret-manager backed), which are absent in this
    environment. Until a maintainer runs `bun run
    scripts/src/lib/catalog/publish.ts --mode production`, the live index has

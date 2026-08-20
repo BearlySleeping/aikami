@@ -557,7 +557,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this.error('kokoro:worker-onerror', { message: this.errorMessage });
       };
 
-      // Vendored ORT WASM lives in the app's static assets (C-389).
+      // ORT WASM is served from the R2 distribution plane when configured
+      // (PUBLIC_ORT_WASM_URL, e.g. https://dl.bearlysleeping.com/models/ort/1.27.0/)
+      // — onnxruntime appends ort-wasm-simd-threaded.jsep.wasm. Falls back to
+      // the app's own /ort/ static dir when unset (C-389). TTS is installed on
+      // demand, so the wasm is fetched at init like the model itself.
+      const configuredWasm = import.meta.env.PUBLIC_ORT_WASM_URL as string | undefined;
       let baseHref: string | undefined;
       if (typeof document !== 'undefined') {
         baseHref = document.baseURI;
@@ -566,7 +571,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       } else {
         baseHref = undefined;
       }
-      const wasmPath = baseHref ? new URL('/ort/', baseHref).href : '/ort/';
+      const wasmPath =
+        configuredWasm ?? (baseHref ? new URL('/ort/', baseHref).href : '/ort/');
       this._worker.postMessage({
         action: 'initialize',
         wasmPath,
