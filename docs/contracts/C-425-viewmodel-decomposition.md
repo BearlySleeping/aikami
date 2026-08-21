@@ -2,7 +2,7 @@
 id: C-425
 title: "ViewModel Decomposition — split the two oversized ViewModels into focused sub-services"
 source: "Split out of C-424 v3.0.0 (2026-08-21) — structural refactor separated from user-facing surface work"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,20 +22,20 @@ created_at: "2026-08-21"
 | **Priority** | P2 — maintainability only. Real, but no player ever sees it. |
 | **Sequence** | **6 of 6** — last, and deliberately so. Do this after C-424 has already removed duplicated message-layer code from both ViewModels; decomposing first would mean decomposing code that is about to be deleted. |
 | **Dependencies** | C-424 (sequence 3) must be fully landed |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
 
 ## Problem & Baseline Evidence
 
-Two ViewModels carry far too many responsibilities. Line counts verified
-2026-08-21:
+Two ViewModels carry far too many responsibilities. Line counts re-measured
+2026-08-21 (chat re-measured at review time — it has grown to 1141):
 
 | File | Lines |
 |---|---|
 | `views/combat/combat_view_model.svelte.ts` | 1640 |
-| `views/chat/chat_view_model.svelte.ts` | 1100 |
+| `views/chat/chat_view_model.svelte.ts` | 1141 |
 
 For scale, the next-largest surfaces are `dialogue_overlay.svelte` at 692 and
 `vendor_view.svelte` at 628.
