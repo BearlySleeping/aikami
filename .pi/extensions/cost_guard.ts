@@ -17,15 +17,20 @@
  * Environment variables:
  *   PI_SOFT_SPEND            — Soft spend cap in USD (default: 10.00)
  *   PI_HARD_SPEND            — Hard spend cap in USD (default: 15.00)
- *   PI_MAX_TURNS             — Max assistant turns per user prompt (default: 120)
- *   PI_MAX_SESSION_MINUTES   — Max session wall-clock in minutes (default: 45)
+ *   PI_MAX_TURNS             — Max assistant turns per user prompt (default: 1000)
+ *   PI_MAX_RUN_MINUTES       — Max minutes of one autonomous run (default: 240)
  *   PI_REPETITION_GUARD      — Enable repetition collapse detection (default: 1)
  *   PI_REPETITION_THRESHOLD  — Repeats of one segment before tripping (default: 6)
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import { maxRepeatedSegment } from './lib/repetition.ts';
+import {
+  createLoopTracker,
+  DEFAULT_LOOP_THRESHOLD,
+  maxRepeatedSegment,
+  turnSignature,
+} from './lib/repetition.ts';
 
 /** The four pipeline stages, used to validate the role handed over by env. */
 const WORKER_ROLES: readonly ContractWorkerRole[] = ['writer', 'critic', 'implementer', 'verifier'];
@@ -47,7 +52,7 @@ const PER_MILLION = 1_000_000;
 
 /** Parse a positive number from env, falling back when unset or malformed. */
 const _envNumber = (name: string, fallback: number): number => {
-  const parsed = Number.parseFloat(process.env[name] ?? '');
+  const parsed = Number(process.env[name] ?? '');
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
@@ -100,22 +105,38 @@ const _assistantText = (content: unknown): string => {
       const b = block as { type?: string; text?: string } | undefined;
       return b?.type === 'text' && typeof b.text === 'string' ? b.text : '';
     })
-    .join('');
+    .join('\n');
+};
+
+/** Extract an assistant message's tool calls for loop-signature purposes. */
+const _toolCalls = (content: unknown): { name: string; arguments: unknown }[] => {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  return content
+    .filter((block) => (block as { type?: string } | undefined)?.type === 'toolCall')
+    .map((block) => {
+      const b = block as { name?: string; arguments?: unknown };
+      return { name: b.name ?? '', arguments: b.arguments };
+    });
 };
 
 export default function (pi: ExtensionAPI) {
   let sessionCost = 0;
   let hasSoftWarned = false;
   let turnsSincePrompt = 0;
-  let sessionStartedAt = Date.now();
+  let runStartedAt = Date.now();
+  let halted = false;
   let repetitionStrikes = 0;
+  const loopTracker = createLoopTracker();
 
-  const softCap = Number.parseFloat(process.env.PI_SOFT_SPEND || '10.00');
-  const hardCap = Number.parseFloat(process.env.PI_HARD_SPEND || '15.00');
-  const maxTurns = _envNumber('PI_MAX_TURNS', 120);
-  const maxSessionMs = _envNumber('PI_MAX_SESSION_MINUTES', 45) * 60_000;
+  const softCap = _envNumber('PI_SOFT_SPEND', 10.0);
+  const hardCap = _envNumber('PI_HARD_SPEND', 15.0);
+  const maxTurns = _envNumber('PI_MAX_TURNS', 1000);
+  const maxRunMs = _envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
   const repetitionGuard = _envBool('PI_REPETITION_GUARD', true);
   const repetitionThreshold = _envNumber('PI_REPETITION_THRESHOLD', 6);
+  const loopThreshold = _envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
 
   /**
    * Record a `blocked` stage result so the orchestrator sees a real outcome
@@ -129,6 +150,15 @@ export default function (pi: ExtensionAPI) {
     ctx: ExtensionContext,
     options: { summary: string; finding: string },
   ): Promise<void> => {
+    // 🔴 Latch. Without this the trip condition (turns/time/spend stay over
+    // their cap) is still true on the NEXT turn, so the guard re-fires every
+    // turn forever — the user sees "Shutting down." repeated indefinitely
+    // while the session keeps running, which is what happened in practice.
+    if (halted) {
+      return;
+    }
+    halted = true;
+
     ctx.ui.notify(`[COST GUARD] ${options.summary}`, 'error');
 
     const role = _pipelineRole();
@@ -162,6 +192,11 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
+    // 🔴 abort() first: shutdown() asks pi to exit, but it does NOT cancel the
+    // agent loop that is mid-flight, so on its own the session simply carries
+    // on to the next turn. abort() is what stops the current operation — the
+    // same call storm-breaker uses to break out of a run.
+    ctx.abort();
     ctx.shutdown();
   };
 
@@ -170,8 +205,10 @@ export default function (pi: ExtensionAPI) {
     sessionCost = 0;
     hasSoftWarned = false;
     turnsSincePrompt = 0;
-    sessionStartedAt = Date.now();
+    runStartedAt = Date.now();
+    halted = false;
     repetitionStrikes = 0;
+    loopTracker.reset();
   });
 
   // ── Block new agent runs past hard cap ──────────────────────
@@ -180,6 +217,11 @@ export default function (pi: ExtensionAPI) {
     // steering messages deliberately do not, so a wedged autonomous run
     // cannot reset its own guard by talking to itself.
     turnsSincePrompt = 0;
+    runStartedAt = Date.now();
+    loopTracker.reset();
+    // Re-arm: a fresh human prompt is a new run with a new budget, so a guard
+    // that tripped on the previous run must be able to trip again on this one.
+    halted = false;
 
     if (sessionCost >= hardCap) {
       await _halt(ctx, {
@@ -192,10 +234,81 @@ export default function (pi: ExtensionAPI) {
   // ── Track spend at end of each turn ─────────────────────────
   pi.on('turn_end', async (event, ctx) => {
     turnsSincePrompt += 1;
+    const content = (event.message as { content?: unknown }).content;
+
+    // turn_end.message is the assistant response — it always has usage
+    const message = event.message as {
+      usage?: {
+        input: number;
+        output: number;
+        cacheRead?: number;
+        cacheWrite?: number;
+        cost?: { total?: number };
+      };
+    };
+    const usage = message.usage;
+    if (!usage?.input) {
+      return;
+    }
+
+    const pricing = ctx.model?.cost;
+    if (!pricing) {
+      return;
+    } // No pricing data — can't track cost
+
+    const turnCost = _computeTurnCost(usage, pricing);
+    sessionCost += turnCost;
+
+    // ── Hard cap: abort ───────────────────────────────────
+    // Accounted before the repetition branches so repeated turns still update
+    // sessionCost and are checked against the cap before steering or halting.
+    if (sessionCost >= hardCap) {
+      await _halt(ctx, {
+        summary: `Hard limit $${hardCap.toFixed(2)} hit ($${sessionCost.toFixed(2)} spent). Shutting down.`,
+        finding: 'Cost limit exceeded before stage completion.',
+      });
+      return;
+    }
+
+    // ── Cross-turn loop: the same turn, repeated verbatim ──
+    //
+    // Distinct from the collapse check below, which only sees inside a single
+    // message. Both known cases here had EMPTY text and repeated only their
+    // tool call, so text analysis alone scores them zero.
+    if (repetitionGuard) {
+      const signature = turnSignature({
+        text: _assistantText(content),
+        toolCalls: _toolCalls(content),
+      });
+      const run = loopTracker.record(signature);
+
+      if (run >= loopThreshold * 2) {
+        await _halt(ctx, {
+          summary: `Loop detected: the same turn repeated ${run} times. Shutting down.`,
+          finding: `Agent repeated an identical turn ${run} times without progressing.`,
+        });
+        return;
+      }
+
+      if (run === loopThreshold) {
+        ctx.ui.notify(
+          `[COST GUARD] Loop detected — identical turn x${run}. Steering before halting.`,
+          'warning',
+        );
+        pi.sendUserMessage(
+          `[LOOP GUARD] You have repeated the same action ${run} times in a row with ` +
+            `identical arguments, and the result has not changed.\n\n` +
+            `Stop repeating it. Either do something materially different, or state ` +
+            `plainly that you are stuck, what you have already tried, and what you need.`,
+          { deliverAs: 'steer' },
+        );
+        return;
+      }
+    }
 
     // ── Repetition collapse: degenerate sampling, not a real loop ──
     if (repetitionGuard) {
-      const text = _assistantText((event.message as { content?: unknown }).content);
+      const text = _assistantText(content);
       const { count, segment } = maxRepeatedSegment(text);
       if (count >= repetitionThreshold) {
         repetitionStrikes += 1;
@@ -226,54 +339,48 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    // ── Wall-clock cap ────────────────────────────────────
-    const elapsedMs = Date.now() - sessionStartedAt;
-    if (elapsedMs >= maxSessionMs) {
+    // ── Backstops: turns and active run time ──────────────
+    //
+    // 🔴 These are LAST-RESORT bounds, not the primary defence — the loop and
+    // collapse checks above are. Their defaults are measured against all 289
+    // stored sessions rather than guessed, because guessed ones were far too
+    // tight and killed healthy work:
+    //
+    //   turns per prompt   p50=45  p90=217  p95=322  p99=743  legit max=821
+    //                      (a 120 cap would have killed 23% of real sessions)
+    //   active run minutes p50=3   p90=25   p95=41   p99=74   legit max=247
+    //                      (a 45m cap would have killed 34% of real sessions)
+    //
+    // Run time is measured from the last user prompt with per-turn gaps capped
+    // upstream, NOT from session start: a session left open overnight is idle,
+    // not runaway, and the longest sessions on record are 36h of sitting idle.
+    //
+    // Each backstop wraps up first and only halts if the agent ignores that.
+    const runMs = Date.now() - runStartedAt;
+
+    if (runMs >= maxRunMs * 1.5 || turnsSincePrompt >= maxTurns * 1.5) {
       await _halt(ctx, {
-        summary: `Session wall-clock limit ${Math.round(maxSessionMs / 60_000)}m reached. Shutting down.`,
-        finding: 'Session exceeded its wall-clock budget before completing.',
+        summary:
+          `Backstop: ${turnsSincePrompt} turns / ${Math.round(runMs / 60_000)}m active ` +
+          `without completing. Shutting down.`,
+        finding: `Run exceeded its turn and time budget (${turnsSincePrompt} turns, ${Math.round(runMs / 60_000)}m).`,
       });
       return;
     }
 
-    // ── Turn cap ──────────────────────────────────────────
-    if (turnsSincePrompt >= maxTurns) {
-      await _halt(ctx, {
-        summary: `Turn limit ${maxTurns} reached without completing. Shutting down.`,
-        finding: `Stage ran ${turnsSincePrompt} turns on one prompt without completing.`,
-      });
-      return;
-    }
-
-    // turn_end.message is the assistant response — it always has usage
-    const message = event.message as {
-      usage?: {
-        input: number;
-        output: number;
-        cacheRead?: number;
-        cacheWrite?: number;
-        cost?: { total?: number };
-      };
-    };
-    const usage = message.usage;
-    if (!usage?.input) {
-      return;
-    }
-
-    const pricing = ctx.model?.cost;
-    if (!pricing) {
-      return;
-    } // No pricing data — can't track cost
-
-    const turnCost = _computeTurnCost(usage, pricing);
-    sessionCost += turnCost;
-
-    // ── Hard cap: abort ───────────────────────────────────
-    if (sessionCost >= hardCap) {
-      await _halt(ctx, {
-        summary: `Hard limit $${hardCap.toFixed(2)} hit ($${sessionCost.toFixed(2)} spent). Shutting down.`,
-        finding: 'Cost limit exceeded before stage completion.',
-      });
+    if ((runMs >= maxRunMs || turnsSincePrompt >= maxTurns) && !hasSoftWarned) {
+      hasSoftWarned = true;
+      ctx.ui.notify(
+        `[COST GUARD] Backstop: ${turnsSincePrompt} turns / ${Math.round(runMs / 60_000)}m active. Wrapping up…`,
+        'warning',
+      );
+      pi.sendUserMessage(
+        `[RUN BUDGET] This run has used ${turnsSincePrompt} turns over ` +
+          `${Math.round(runMs / 60_000)} minutes without finishing.\n\n` +
+          `Wrap up now: stop starting new work, summarise what you have done and ` +
+          `what remains, and finish the turn.`,
+        { deliverAs: 'steer' },
+      );
       return;
     }
 

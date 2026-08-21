@@ -26,17 +26,21 @@
  * binding and point connection.ts at the Hyperdrive connection string.
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { toMode } from '@aikami/utils';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 import { c, log, ok } from '../cli_utils';
-import { checkDeployCache, saveDeployCache } from './cache';
+import { checkDeployCache, generateVersionString, saveDeployCache } from './cache';
 import {
+  APP_CONFIG,
   type AppConfig,
   resolveCloudflareRoute,
   resolveCloudflareWorkerName,
 } from './deployment_config';
-import { isVerbose, run } from './utils'; // ── Cache/security headers (mirror of the old Firebase Hosting config) ──
+import { isVerbose, run, setVerbose } from './utils'; // ── Cache/security headers (mirror of the old Firebase Hosting config) ──
 
 /**
  * Canonical cache + security headers, expressed as a Workers `_headers` file.
@@ -70,22 +74,128 @@ export const WORKERS_HEADERS = `/*
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
-/*.@(js|css|webp|png|jpg|jpeg|svg|woff|woff2|avif|gif|ico|ttf|eot|mp3|ogg|wav|flac|m4a|aac|txt|pdf|json)
+/*.js
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.webp
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.jpg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.jpeg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.svg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff2
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.avif
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.gif
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ico
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ttf
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.eot
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.mp3
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ogg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.wav
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.flac
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.m4a
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.aac
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.txt
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.pdf
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.json
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+`;
+
+/**
+ * Security headers appended to the hub's adapter-generated `_headers`.
+ * The hub is an SSR Worker whose adapter already emits its own immutable
+ * asset rules — we must NOT clobber those, so we append only the security
+ * block (HSTS, nosniff, XFO, Referrer-Policy, COOP, Permissions-Policy).
+ */
+export const WORKERS_SECURITY_HEADERS = `
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
 `;
 
 /**
  * Ensure the `_headers` file exists in the app's build output before deploy.
  * Wrangler reads `_headers` from the asset directory root.
  *
- * Only applies to assets-only Workers (client/site/docs). The hub is an SSR
- * Worker whose adapter already emits its own `_headers` — overwriting it here
- * would clobber the SvelteKit immutable asset rules.
+ * - Assets-only Workers (client/site/docs): write the full WORKERS_HEADERS
+ *   (cache + security).
+ * - SSR Workers (hub): the adapter already emits its own `_headers` with the
+ *   SvelteKit immutable asset rules — append only the security block so we
+ *   don't clobber those rules.
  */
 export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
   const cf = config.cloudflare;
-  if (!cf?.assetsOnly) {
+  if (!cf) {
     return;
   }
   const outputDir = join(appRoot, cf.buildOutputDir);
@@ -93,8 +203,34 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
     return;
   }
   const headersPath = join(outputDir, '_headers');
-  writeFileSync(headersPath, WORKERS_HEADERS, 'utf-8');
-  log(`  📝 Wrote cache/security headers to ${headersPath}`);
+
+  // When a headersSource is configured, copy it into the build output so the
+  // committed source of truth is what ships. This preserves the existing
+  // default (the generated WORKERS_HEADERS) only when no source is specified.
+  if (cf.headersSource) {
+    const sourcePath = join(appRoot, cf.headersSource);
+    if (existsSync(sourcePath)) {
+      writeFileSync(headersPath, readFileSync(sourcePath, 'utf-8'), 'utf-8');
+      log(`  📝 Copied headers from ${cf.headersSource} to ${headersPath}`);
+      return;
+    }
+    log(`  ⚠️  headersSource ${cf.headersSource} not found — falling back to defaults`);
+  }
+
+  if (cf.assetsOnly) {
+    writeFileSync(headersPath, WORKERS_HEADERS, 'utf-8');
+    log(`  📝 Wrote cache/security headers to ${headersPath}`);
+    return;
+  }
+
+  // SSR app (hub): append security headers to the adapter's file.
+  const existing = existsSync(headersPath) ? readFileSync(headersPath, 'utf-8') : '';
+  if (existing.includes('Strict-Transport-Security')) {
+    log(`  📝 Security headers already present in ${headersPath}`);
+    return;
+  }
+  writeFileSync(headersPath, existing + WORKERS_SECURITY_HEADERS, 'utf-8');
+  log(`  📝 Appended security headers to ${headersPath}`);
 }
 
 /**
@@ -129,12 +265,16 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     json.assets = {
       directory: assetDir,
       html_handling: 'auto-trailing-slash',
-      not_found_handling: '404-page',
+      not_found_handling: cf.notFoundHandling ?? '404-page',
     };
   } else {
     json.main = cf.main;
     json.assets = { binding: 'ASSETS', directory: assetDir };
   }
+
+  // Workers Observability — without this, logs are disabled and there is no
+  // way to debug the Worker at runtime.
+  json.observability = { enabled: true };
 
   const routes: Array<Record<string, unknown>> = [];
   if (route) {
@@ -144,7 +284,10 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     json.routes = routes;
   }
 
-  const configPath = join(appRoot, 'wrangler.jsonc');
+  // Write to a generated file (gitignored) rather than the committed
+  // wrangler.jsonc template — the template is the canonical per-app config
+  // and must never be clobbered or deleted by a deploy.
+  const configPath = join(appRoot, 'wrangler.deploy.json');
   writeFileSync(configPath, JSON.stringify(json, null, 2), 'utf-8');
   log(`  📝 Wrote ${configPath} (worker=${workerName}, route=${route ?? '(none)'})`);
   return configPath;
@@ -160,6 +303,12 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
  * @param version     Version string (for checksum cache)
  * @param isForce     Bypass checksum cache
  * @param preflightChecksum Pre-computed checksum from the orchestrator
+ * @param alreadyBuilt True when the caller (orchestrator) already built this
+ *                     app in an earlier phase. When false, the deploy builds
+ *                     only if the output directory is missing. Never infer
+ *                     "already built" from directory existence alone — a
+ *                     stale build from a different mode could otherwise be
+ *                     shipped to the wrong environment.
  */
 export async function deployCloudflareWorker(
   config: AppConfig,
@@ -169,6 +318,7 @@ export async function deployCloudflareWorker(
   version: string,
   isForce = false,
   preflightChecksum?: string,
+  alreadyBuilt = false,
 ): Promise<void> {
   if (!config.cloudflare) {
     throw new Error(`App ${appName} has no cloudflare config`);
@@ -201,9 +351,17 @@ export async function deployCloudflareWorker(
   const appRoot = join(rootDir, config.path);
   const outputDir = join(appRoot, config.cloudflare.buildOutputDir);
 
-  // 1. Build — skip if already built in Phase 1 (parallel deploy safety)
-  if (existsSync(outputDir)) {
-    log('🏗️  Build already done, skipping...');
+  // 1. Build — the orchestrator already built in Phase 1 (parallel deploy
+  //    safety); the per-app script builds only when the output is missing.
+  //    The output-exists skip is gated on preflightChecksum being defined:
+  //    only an orchestrated Phase 1 build can be trusted to have produced a
+  //    mode-correct output. Direct invocations (no preflightChecksum) always
+  //    run the mode-specific build so a stale build from another mode can
+  //    never be shipped to the wrong environment.
+  if (alreadyBuilt) {
+    log('🏗️  Build already done (orchestrator Phase 1), skipping...');
+  } else if (preflightChecksum !== undefined && existsSync(outputDir)) {
+    log('🏗️  Build output exists, skipping...');
   } else {
     log(`🏗️  Building (mode: ${mode})...`);
     const modeFlag = ` -- --mode ${mode}`;
@@ -238,9 +396,56 @@ export async function deployCloudflareWorker(
   } finally {
     // 6. Cleanup the generated wrangler.jsonc so we don't pollute git.
     try {
-      run(`rm -f ${configPath}`, { quiet: true, cwd: resolve(appRoot) });
+      rmSync(configPath, { force: true });
     } catch {
       // ignore cleanup failure
     }
+  }
+}
+
+/**
+ * Shared Cloudflare deployment CLI entrypoint for the per-app deploy scripts
+ * (site, hub). Owns argument parsing, the APP_CONFIG Cloudflare guard, the
+ * deployment invocation, and error handling so each app script stays a thin
+ * one-liner.
+ *
+ * @param appName The app id (e.g. 'site', 'hub').
+ */
+export async function deployCloudflareApp(appName: AppId): Promise<void> {
+  const { values } = parseArgs({
+    args: Bun.argv,
+    options: {
+      mode: { type: 'string' },
+      verbose: { type: 'boolean', default: false },
+    },
+    strict: false,
+    allowPositionals: true,
+  });
+
+  if (values.verbose) {
+    setVerbose(true);
+  }
+
+  const mode = toMode(values.mode || process.env.MODE);
+  if (!mode) {
+    console.error('Missing --mode argument or MODE env var');
+    process.exit(1);
+  }
+
+  const config = APP_CONFIG[appName];
+  if (!config?.cloudflare) {
+    console.error(`No cloudflare config for ${appName}`);
+    process.exit(1);
+  }
+
+  // Repo root = 4 levels up from apps/frontend/<app>/scripts/deploy.ts
+  const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+  try {
+    await deployCloudflareWorker(config, appName, mode, rootDir, generateVersionString(), false);
+  } catch (error) {
+    const err = error as { stderr?: string; stdout?: string; message?: string };
+    console.error(err.stderr ?? err.message ?? String(error));
+    process.exit(1);
   }
 }

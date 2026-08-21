@@ -90,18 +90,23 @@ describe('buildFilter', () => {
 });
 
 describe('resolveLogTarget', () => {
-  it('hub → cloudflare-worker, unsupported via gcloud (logs in Workers Observability)', () => {
+  it('hub → cloud-run-sveltekit, resolves to Cloud Run service aikami-hub', () => {
     const target = resolveLogTarget('hub', 'staging', undefined);
-    expect('unsupported' in target).toBe(true);
-    if (!('unsupported' in target)) {
+    expect('unsupported' in target).toBe(false);
+    if ('unsupported' in target) {
       return;
     }
-    expect(target.unsupported).toContain('Cloudflare Worker');
+    expect(target.serviceName).toBe('aikami-hub');
+    expect(target.region).toBe('europe-west4');
   });
 
-  it('production mode → same cloudflare-worker unsupported for hub', () => {
+  it('production mode → same Cloud Run service for hub', () => {
     const target = resolveLogTarget('hub', 'production', undefined);
-    expect('unsupported' in target).toBe(true);
+    expect('unsupported' in target).toBe(false);
+    if ('unsupported' in target) {
+      return;
+    }
+    expect(target.serviceName).toBe('aikami-hub');
   });
 
   it('firebase without --only → all functions in the region, with a hint note', () => {

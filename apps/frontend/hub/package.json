@@ -24,7 +24,6 @@
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.24.1",
-    "@sveltejs/adapter-cloudflare": "^7.2.9",
     "@sveltejs/kit": "2.70.3",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
@@ -33,12 +32,12 @@
     "playwright": "1.62.1",
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.56.9",
+    "svelte-adapter-bun": "1.0.1",
     "svelte-check": "4.7.6",
     "svelte-fast-check": "^0.4.5",
     "tailwindcss": "4.3.3",
     "vite": "8.2.1",
-    "vite-plugin-devtools-json": "1.1.0",
-    "wrangler": "^4.125.0"
+    "vite-plugin-devtools-json": "1.1.0"
   },
   "dependencies": {
     "@aikami/backend-database": "workspace:*",

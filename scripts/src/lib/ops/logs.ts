@@ -24,7 +24,7 @@
 import { resolve } from 'node:path';
 import { c, error, log, parseCliArgs } from '../cli_utils';
 import { APP_CONFIG, CLOUD_FUNCTIONS_REGION } from '../deploy/deployment_config';
-import { ensureGcloudAuth, resolveProjectId, runArgs } from '../deploy/utils';
+import { ensureGcloudAuth, resolveProjectId, resolveRegion, runArgs } from '../deploy/utils';
 
 const ROOT_DIR = resolve(import.meta.dir, '../../../..');
 
@@ -58,13 +58,22 @@ export function resolveLogTarget(
 
   switch (config.serviceType) {
     case 'cloudflare-worker': {
-      // client, site, docs, hub are all Cloudflare Workers now — their logs
-      // live in Cloudflare Workers Observability, not GCP Cloud Logging.
+      // client, site, docs are Cloudflare Workers now — their logs live in
+      // Cloudflare Workers Observability, not GCP Cloud Logging.
       return {
         unsupported:
           `${appId} is a Cloudflare Worker — server logs are in Cloudflare Workers ` +
           `Observability (dashboard or \`wrangler tail\`), not GCP Cloud Logging. ` +
-          `'client' browser logs are forwarded to the hub Worker's /api/internal_logging.`,
+          `'client' browser logs are forwarded to the hub's /api/internal_logging.`,
+      };
+    }
+
+    case 'cloud-run-sveltekit': {
+      const region = resolveRegion(mode, config.region);
+      return {
+        projectId,
+        region,
+        serviceName: config.cloudRunServiceId ?? `aikami-${config.shortName}`,
       };
     }
 

@@ -18,6 +18,7 @@ dependsOn:
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-configs'
+  - 'frontend-storage'
   - 'frontend-theme'
   - 'schemas'
   - 'types'
@@ -40,8 +41,10 @@ fileGroups:
     - '.env.*'
     - '.env'
   deployment:
-    - 'wrangler.jsonc'
+    - 'Dockerfile'
+    - 'firebase.json'
     - 'scripts/deploy.ts'
+    - 'start.js'
 
 tasks:
   dev:

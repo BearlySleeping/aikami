@@ -48,7 +48,8 @@ name: Release
 #   update-manifest  → (release: published only) merges each leg's updater
 #                      fragment into a single latest.json on the triggering
 #                      release.
-#   deploy-cloudflare / deploy-firebase-functions / deploy-docker-release
+#   deploy-cloudflare / deploy-cloud-run-sveltekit / deploy-firebase-functions /
+#   deploy-docker-release
 #                    → one dedicated job per service type, each running only
 #                      when resolve-plan found apps of that type. Each calls
 #                      the same local orchestrator (scripts/.../deploy/index.ts)
@@ -112,6 +113,7 @@ jobs:
       all_apps: ${{ steps.resolve.outputs.all_apps }}
       desktop_apps: ${{ steps.resolve.outputs.desktop_apps }}
       cloudflare_apps: ${{ steps.resolve.outputs.cloudflare_apps }}
+      cloud_run_sveltekit_apps: ${{ steps.resolve.outputs.cloud_run_sveltekit_apps }}
       firebase_functions_apps: ${{ steps.resolve.outputs.firebase_functions_apps }}
       docker_release_apps: ${{ steps.resolve.outputs.docker_release_apps }}
       database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
@@ -562,7 +564,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Cloudflare Workers (client, site, docs, hub) ───────────────────
+  # ── Cloudflare Workers (client, site, docs) ────────────────────────
   deploy-cloudflare:
     name: Cloudflare Workers
     runs-on: ubuntu-latest
@@ -602,6 +604,49 @@ jobs:
         env:
           CI: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  # ── Cloud Run (SvelteKit hub) ────────────────────────────────────────
+  deploy-cloud-run-sveltekit:
+    name: Cloud Run (SvelteKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [resolve-plan, prepare-secrets]
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.resolve-plan.outputs.cloud_run_sveltekit_apps != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          moon-cache: "true"
+          install-deps: "true"
+          gcp-auth: "true"
+          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+          docker-registry: europe-west1-docker.pkg.dev
+
+      - name: Restore env files from Redis
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+
+      - name: Run Web Deploy Pipeline (Cloud Run)
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
+          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
+            ${{ needs.resolve-plan.outputs.cloud_run_sveltekit_apps }}
+        env:
+          CI: "true"
 
   # ── Firebase Functions ───────────────────────────────────────────────
   deploy-firebase-functions:

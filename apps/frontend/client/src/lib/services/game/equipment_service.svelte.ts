@@ -150,7 +150,16 @@ class EquipmentService
       const assetId = baseRecipe[lpcSlot];
       const itemId = assetId ? findItemIdByLpcAsset(assetId) : undefined;
       const resolvedItemId = itemId ?? fallback;
-      this._inventoryService.addItem({ itemId: resolvedItemId, quantity: 1 });
+      // Reuse an owned matching item when the slot is empty rather than
+      // granting a duplicate (C-374/C-417): hydration may have restored the
+      // item into the bag while leaving the slot empty, and re-seeding must
+      // not inflate the quantity.
+      const owned = this._inventoryService.inventory.some(
+        (entry) => entry.itemId === resolvedItemId,
+      );
+      if (!owned) {
+        this._inventoryService.addItem({ itemId: resolvedItemId, quantity: 1 });
+      }
       this.equipItem({ itemId: resolvedItemId });
       this.debug('seedBaseOutfit', { slot, assetId: assetId ?? '(none)', itemId: resolvedItemId });
     }

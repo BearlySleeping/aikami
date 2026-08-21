@@ -12,6 +12,18 @@ type Props = {
 };
 
 let { onclose }: Props = $props();
+
+// Dismiss on Escape at window scope so it works regardless of where focus
+// currently sits inside the modal.
+$effect(() => {
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onclose();
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+  return () => window.removeEventListener('keydown', onKeyDown);
+});
 </script>
 
 <div
@@ -20,9 +32,18 @@ let { onclose }: Props = $props();
   aria-modal="true"
   aria-label="Credits"
   tabindex="-1"
-  onclick={() => onclose()}
+  onclick={(e) => {
+    // Only dismiss when the backdrop itself is clicked — clicks that bubble
+    // up from the modal-box, credit links, or the Close button must not
+    // dismiss the modal.
+    if (e.target === e.currentTarget) {
+      onclose();
+    }
+  }}
   onkeydown={(e) => {
-    if (e.key === 'Escape' || e.key === 'Enter') {
+    // Keyboard dismissal mirrors the backdrop-only click rule: Enter/Space
+    // only dismiss when the backdrop itself has focus.
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
       onclose();
     }
   }}

@@ -166,4 +166,30 @@ describe('STARTER_KIT (C-374)', () => {
     // Empty feet slot gets filled by the base outfit.
     expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
   });
+
+  // Regression (C-374/C-417): re-seeding must reuse an owned matching item
+  // when the slot is empty instead of granting a duplicate. Hydration may
+  // restore the chainmail/boots into the bag while leaving the slot empty;
+  // re-seeding should equip the owned item without inflating its quantity.
+  test('re-seeding equips an owned matching item without increasing quantity', () => {
+    equipmentService.reset();
+    inventoryService.reset();
+
+    // Hydration restored the matching items into the bag, slots empty.
+    inventoryService.addItem({ itemId: 'chainmailArmor', quantity: 1 });
+    inventoryService.addItem({ itemId: 'leatherBoots', quantity: 1 });
+
+    // Boot re-seeds — should equip the owned items, not grant duplicates.
+    equipmentService.seedBaseOutfit({
+      torso: 'torso/chainmail_male',
+      feet: 'feet/boots/basic_male',
+    });
+
+    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
+    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
+    // The owned items were moved into their slots — no duplicate remains in
+    // the bag (a buggy re-seed would have added a second copy).
+    expect(inventoryService.inventory.some((e) => e.itemId === 'chainmailArmor')).toBe(false);
+    expect(inventoryService.inventory.some((e) => e.itemId === 'leatherBoots')).toBe(false);
+  });
 });

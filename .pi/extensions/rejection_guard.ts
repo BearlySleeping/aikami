@@ -28,6 +28,16 @@
 // unhandled rejection is re-raised so Node's crash semantics are preserved;
 // silencing them broadly would hide real defects, which is worse than the
 // problem being worked around.
+//
+// Supported mode: Node's DEFAULT unhandled-rejection mode (throw). This
+// extension is only correct when the process runs with the default
+// `--unhandled-rejections=throw` (or unset, which is the same). It is NOT
+// compatible with `--unhandled-rejections=warn` or `=strict`: under `warn`
+// the rethrow below would surface as an uncaughtException and abort the
+// process (the same crash we are trying to avoid), and under `strict` the
+// semantics differ. Do not set NODE_OPTIONS to a non-default rejection mode
+// for processes that load this extension. The stale-context suppression and
+// rethrow behavior below are correct under the documented default.
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 

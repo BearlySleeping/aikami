@@ -1785,13 +1785,24 @@ self.onmessage = (event: MessageEvent): void => {
             }
             const layers = getAppearanceLayers(newEid);
             if (layers.length > 0) {
+              // C-417: for the player, normalize the equipment-owned torso
+              // (index 2) and feet (index 4) slots to zero before emitting,
+              // reusing the same behavior as _refreshPlayerAppearance. A
+              // restored save may have captured a non-zeroed appearance
+              // (chainmail/boots baked in), which would otherwise double-
+              // render gear alongside the equipment provider. Other entities
+              // are emitted as-is.
+              const normalized: number[] = newEid === playerEntityId ? [...layers] : [...layers];
+              if (newEid === playerEntityId) {
+                zeroEquipmentOwnedAppearanceSlots(normalized);
+              }
               postMessage({
                 type: 'SYNC',
                 events: [
                   {
                     type: 'APPEARANCE_CHANGED',
                     eid: newEid,
-                    layerIds: [...layers],
+                    layerIds: [...normalized],
                   },
                 ],
               });

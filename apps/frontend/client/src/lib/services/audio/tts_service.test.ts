@@ -311,4 +311,20 @@ describe('TtsService — C-389 config-driven TTS', () => {
     ttsService.setTtsVolume(-0.5);
     expect(ttsService.ttsVolume).toBe(0);
   });
+
+  test('setTtsVolume rejects NaN, leaving stored state and gain unchanged', async () => {
+    const { ttsService } = await resetTtsService();
+    const svc = ttsService as unknown as Service;
+
+    // Prime a valid volume and a live gain node.
+    ttsService.setTtsVolume(0.4);
+    const gain = (svc._getTtsGain as () => GainNode).call(svc);
+    const gainBefore = gain.gain.value;
+
+    ttsService.setTtsVolume(Number.NaN);
+
+    // Neither stored state nor the live gain changed.
+    expect(ttsService.ttsVolume).toBe(0.4);
+    expect(gain.gain.value).toBe(gainBefore);
+  });
 });

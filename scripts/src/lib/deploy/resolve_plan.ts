@@ -34,6 +34,7 @@ import { APP_CONFIG, DEPLOYABLE_APPS, type ServiceType } from './deployment_conf
 const SERVICE_TYPE_OUTPUT_KEY: Record<ServiceType, string> = {
   'tauri-release': 'desktop_apps',
   'cloudflare-worker': 'cloudflare_apps',
+  'cloud-run-sveltekit': 'cloud_run_sveltekit_apps',
   'firebase-functions': 'firebase_functions_apps',
   'docker-release': 'docker_release_apps',
   'database-migration': 'database_migration_apps',
@@ -83,6 +84,7 @@ function main(): void {
   const buckets: Record<string, string[]> = {
     desktop_apps: [],
     cloudflare_apps: [],
+    cloud_run_sveltekit_apps: [],
     firebase_functions_apps: [],
     docker_release_apps: [],
     database_migration_apps: [],

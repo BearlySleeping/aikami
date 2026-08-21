@@ -280,10 +280,16 @@ class SettingsAudioViewModel
       text: SettingsAudioViewModel._ttsTestText,
       voice: ttsService.selectedVoice,
     });
-    // Surface real failures instead of always claiming completion.
-    this.feedback = ttsService.errorMessage
-      ? `TTS failed: ${ttsService.errorMessage}`
-      : 'TTS test complete.';
+    // synthesize() resolves once the request is queued, not when playback
+    // finishes — so report that playback started rather than claiming
+    // completion. Surface real failures instead of always claiming success.
+    if (ttsService.errorMessage) {
+      this.feedback = `TTS failed: ${ttsService.errorMessage}`;
+    } else if (ttsService.isPlaying) {
+      this.feedback = 'TTS test playing…';
+    } else {
+      this.feedback = 'TTS test queued.';
+    }
   }
 
   stopTts(): void {

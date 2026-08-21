@@ -23,6 +23,7 @@ const createStubAudioBuffer = (): AudioBuffer =>
 
 let createdGainNodes: MockGainNode[] = [];
 let createdSources: MockSourceNode[] = [];
+let createdOscillators: MockOscillator[] = [];
 let fakeCurrentTime = 0;
 let decodeCallCount = 0;
 let fetchCallCount = 0;
@@ -47,6 +48,14 @@ type MockSourceNode = {
   stopped: boolean;
   loop: boolean;
   connectCalls: number;
+};
+
+/** Tracks OscillatorNode interactions for playTestSfx verification. */
+type MockOscillator = {
+  started: boolean;
+  stopped: boolean;
+  connectCalls: number;
+  disconnectCalls: number;
 };
 
 const createMockGainNode = (initialValue = 1): GainNode => {
@@ -91,6 +100,9 @@ const createMockGainNode = (initialValue = 1): GainNode => {
       return {} as AudioNode;
     }),
     disconnect: mock(() => {}),
+    get connectCalls(): number {
+      return node.connectCalls;
+    },
     context: {} as BaseAudioContext,
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -205,6 +217,12 @@ const createMockAudioContext = (): AudioContext => {
     }),
 
     createOscillator: mock((): OscillatorNode => {
+      const state: MockOscillator = {
+        started: false,
+        stopped: false,
+        connectCalls: 0,
+        disconnectCalls: 0,
+      };
       const osc = {
         type: 'sine',
         frequency: {
@@ -213,14 +231,24 @@ const createMockAudioContext = (): AudioContext => {
           exponentialRampToValueAtTime: mock(() => {}),
         } as unknown as AudioParam,
         detune: {} as AudioParam,
-        connect: mock(() => ({})),
-        disconnect: mock(() => {}),
-        start: mock(() => {}),
-        stop: mock(() => {}),
+        connect: mock(() => {
+          state.connectCalls++;
+          return {};
+        }),
+        disconnect: mock(() => {
+          state.disconnectCalls++;
+        }),
+        start: mock(() => {
+          state.started = true;
+        }),
+        stop: mock(() => {
+          state.stopped = true;
+        }),
         addEventListener: mock(() => {}),
         removeEventListener: mock(() => {}),
         dispatchEvent: mock(() => true),
       };
+      createdOscillators.push(state);
       return osc as unknown as OscillatorNode;
     }),
 
@@ -265,6 +293,7 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
     fakeCurrentTime = 10;
     decodeCallCount = 0;
     fetchCallCount = 0;
+    createdOscillators = [];
 
     const mockCtx = createMockAudioContext();
 
@@ -304,6 +333,7 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
     fakeCurrentTime = 0;
     createdGainNodes = [];
     createdSources = [];
+    createdOscillators = [];
   });
 
   // ── AC-1: BGM transitionToBgm creates correct gain chain ──
@@ -424,8 +454,28 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
     expect(createdSources.length).toBe(sourcesBefore);
   });
 
-  test('playTestSfx synthesizes a tone without throwing', () => {
-    expect(() => audioService.playTestSfx()).not.toThrow();
+  test('playTestSfx synthesizes, schedules, and routes a tone', () => {
+    const gainNodesBefore = createdGainNodes.length;
+    const sourcesBefore = createdSources.length;
+
+    audioService.playTestSfx();
+
+    // One oscillator should be created for the synthesized tone.
+    expect(createdOscillators.length).toBe(1);
+    const osc = createdOscillators[0];
+    expect(osc.started).toBe(true);
+    expect(osc.stopped).toBe(true);
+
+    // The oscillator connects to a gain node, which routes into the SFX gain.
+    expect(osc.connectCalls).toBeGreaterThanOrEqual(1);
+
+    // A dedicated gain node should have been created for the tone envelope.
+    expect(createdGainNodes.length).toBe(gainNodesBefore + 1);
+    const toneGain = createdGainNodes[createdGainNodes.length - 1];
+    expect(toneGain.connectCalls).toBeGreaterThanOrEqual(1);
+
+    // No audio-buffer source should be involved in a synthesized tone.
+    expect(createdSources.length).toBe(sourcesBefore);
   });
 
   // ── AC-4: Volume Controls ──

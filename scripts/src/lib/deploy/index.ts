@@ -51,6 +51,7 @@ import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
+import { deployCloudRunSveltekit } from './cloud_run';
 import { deployCloudflareWorker } from './cloudflare';
 import { deployDatabaseMigration } from './database_migration';
 import {
@@ -147,6 +148,18 @@ async function deployApp(
   switch (config.serviceType) {
     case 'cloudflare-worker':
       await deployCloudflareWorker(
+        config,
+        appName,
+        mode,
+        rootDir,
+        version,
+        isForce,
+        preflightChecksum,
+        true, // orchestrator already built in Phase 1
+      );
+      return 'success';
+    case 'cloud-run-sveltekit':
+      await deployCloudRunSveltekit(
         config,
         appName,
         mode,

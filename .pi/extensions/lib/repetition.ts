@@ -31,7 +31,7 @@ export const maxRepeatedSegment = (text: string): { count: number; segment: stri
   const counts = new Map<string, number>();
   let best = { count: 0, segment: '' };
 
-  for (const raw of text.split(/(?<=[.!?;:])\s+|\n+/)) {
+  for (const raw of text.split(/(?<=[.!?;:])(?:\s+|(?=[A-Z]))|\n+/)) {
     const segment = raw.trim().replace(/\s+/g, ' ').toLowerCase();
     if (segment.length < MIN_SEGMENT_CHARS) {
       continue;
@@ -44,4 +44,89 @@ export const maxRepeatedSegment = (text: string): { count: number; segment: stri
   }
 
   return best;
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Cross-turn loops
+//
+// 🔴 A SECOND, distinct failure mode that `maxRepeatedSegment` cannot see.
+// There the repetition is inside one message; here each message is fine on
+// its own and the agent simply repeats the same turn forever:
+//
+//     thinking → bash(cmd) → result → thinking → bash(SAME cmd) → result → …
+//
+// Two real cases in this session store, both with EMPTY text content (the
+// narration lived in `thinking` blocks, so a text-based check scores zero):
+//
+//   * 2026-08-21  88 identical `bash` calls in 98 turns.
+//   * 2026-08-17  846 identical `bash` calls over 6h19m — a contract-pipeline
+//                 implementer stage that burned the afternoon.
+//
+// Storm-breaker cannot catch these either: the commands SUCCEED every time
+// (exit 0), and it only tracks consecutive failures.
+//
+// Threshold calibration, measured over all 270 stored sessions: 261 sessions
+// never exceed a run of 2 identical turns, and the only two that go higher
+// hit 88 and 846. The gap is enormous, so a threshold of 4 catches both known
+// loops with zero false positives against real history.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Consecutive identical turns before a run is treated as a loop. */
+export const DEFAULT_LOOP_THRESHOLD = 4;
+
+/**
+ * Identity of a turn for loop detection: its tool calls plus its text.
+ *
+ * Tool-call arguments dominate — an agent doing real work varies them. Text
+ * is folded in so that two different reasoning paths landing on the same
+ * command are not mistaken for a loop. Returns '' for turns with nothing
+ * worth comparing, which resets the run rather than extending it.
+ */
+export const turnSignature = (options: {
+  text: string;
+  toolCalls: readonly { name: string; arguments: unknown }[];
+}): string => {
+  const text = options.text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const calls = options.toolCalls
+    .map((call) => `${call.name}::${JSON.stringify(call.arguments ?? null)}`)
+    .join('|');
+
+  // A turn with no tool call and only trivial text carries no signal.
+  if (calls.length === 0 && text.length < MIN_SEGMENT_CHARS) {
+    return '';
+  }
+  return `${calls}##${text}`;
+};
+
+export type LoopTracker = {
+  /** Record a signature; returns how many times it has now repeated in a row. */
+  record: (signature: string) => number;
+  reset: () => void;
+};
+
+/** Track consecutive identical turn signatures. */
+export const createLoopTracker = (): LoopTracker => {
+  let last = '';
+  let run = 0;
+
+  return {
+    record: (signature) => {
+      if (signature === '') {
+        last = '';
+        run = 0;
+        return 0;
+      }
+      if (signature === last) {
+        run += 1;
+      } else {
+        last = signature;
+        run = 1;
+      }
+      return run;
+    },
+    reset: () => {
+      last = '';
+      run = 0;
+    },
+  };
 };

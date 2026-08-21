@@ -40,14 +40,7 @@ const emulatorAuthProxy: Record<string, string | ProxyOptions> = {
 };
 
 // Generate a list of all native Node.js modules (e.g., 'fs', 'stream', 'node:fs')
-// EXCEPT `node:module`. On Cloudflare Workers (adapter-cloudflare), leaving
-// `node:module` external forces `createRequire(import.meta.url)` in SvelteKit's
-// server core to run with `import.meta.url === undefined`, which throws at module
-// load. Inlining `node:module` preserves `import.meta.url` and lets workerd's
-// nodejs_compat provide createRequire correctly.
-const NODE_BUILTINS = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)].filter(
-  (m) => m !== 'node:module' && m !== 'module',
-);
+const NODE_BUILTINS = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 // Packages that are Node-only and should NEVER be bundled.
 const SERVER_ONLY_PACKAGES = [
@@ -146,6 +139,17 @@ export default defineConfig(({ mode }) => {
       // build.rollupOptions is a deprecated alias for rolldownOptions in
       // Vite 8 — use the current option directly.
       rolldownOptions: {
+        // Rewrite bare Node builtins (e.g. `crypto`, `util`) to their `node:`
+        // prefixed form in the output. svelte-adapter-bun's rolldown pass only
+        // externalizes `/^node:/` specifiers, so bare builtins left in the SSR
+        // output would produce UNRESOLVED_IMPORT warnings. bun resolves the
+        // `node:` form natively at runtime, so behavior is unchanged.
+        output: {
+          paths: {
+            crypto: 'node:crypto',
+            util: 'node:util',
+          },
+        },
         // Prevent bundling Node-only packages AND Node native built-ins
         external: [...SERVER_ONLY_PACKAGES, 'body-parser', 'raw-body', ...NODE_BUILTINS],
 

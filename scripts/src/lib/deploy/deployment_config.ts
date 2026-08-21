@@ -10,7 +10,8 @@
  * to keep a single source of truth across all apps.
  *
  * Service types:
- *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs, hub)
+ *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs)
+ *   cloud-run-sveltekit  → Build + Docker + push → Cloud Run (hub SSR, fronted by Firebase Hosting)
  *   tauri-release        → Build Tauri desktop app → release artifacts
  *   firebase-functions   → Deploy via firestack (firebase)
  *   docker-release       → Docker build + push only (image, text, voice)
@@ -22,6 +23,7 @@ import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 
 export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',
+  'cloud-run-sveltekit',
   'tauri-release',
   'firebase-functions',
   'docker-release',
@@ -46,22 +48,45 @@ export type ServiceType = (typeof ALL_SERVICE_TYPES)[number];
  * - `routes`: per-mode custom_domain routes. Worker custom domains require the
  *   zone to be on Cloudflare (true for bearlysleeping.com).
  */
-export type CloudflareAppConfig = {
-  /** Worker name (per mode, e.g. aikami-staging-client / aikami-production-client). */
-  workerName: string | ((mode: string) => string);
-  /** Directory of static build output (relative to app root). */
-  buildOutputDir: string;
-  /** True for assets-only static Workers (no `main`), false for SSR (hub). */
-  assetsOnly: boolean;
-  /** Worker entry for non-assets-only apps (hub). Relative to app root. */
-  main?: string;
-  compatibilityDate: string;
-  compatibilityFlags?: string[];
-  /** Per-mode custom-domain route patterns (e.g. hub.bearlysleeping.com). */
-  routes: Partial<Record<LiveMode, string>>;
-  /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
-  headersSource?: string;
-};
+export type CloudflareAppConfig =
+  | {
+      /** Worker name (per mode, e.g. aikami-staging-client / aikami-production-client). */
+      workerName: string | ((mode: string) => string);
+      /** Directory of static build output (relative to app root). */
+      buildOutputDir: string;
+      /** True for assets-only static Workers (no `main`). */
+      assetsOnly: true;
+      compatibilityDate: string;
+      compatibilityFlags?: string[];
+      /** Per-mode custom-domain route patterns (e.g. hub.bearlysleeping.com). */
+      routes: Partial<Record<LiveMode, string>>;
+      /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
+      headersSource?: string;
+      /**
+       * How the Worker handles requests for paths with no matching asset.
+       * - '404-page': serve a 404.html (Astro/Starlight — real file per route).
+       * - 'single-page-application': serve index.html (SvelteKit adapter-static
+       *   with `fallback: 'index.html'` — client deep links must resolve to the SPA).
+       * Defaults to '404-page'.
+       */
+      notFoundHandling?: '404-page' | 'single-page-application';
+    }
+  | {
+      /** Worker name (per mode, e.g. aikami-staging-hub / aikami-production-hub). */
+      workerName: string | ((mode: string) => string);
+      /** Directory of static build output (relative to app root). */
+      buildOutputDir: string;
+      /** False for SSR Workers (hub) — requires `main`. */
+      assetsOnly: false;
+      /** Worker entry for SSR apps (hub). Relative to app root. */
+      main: string;
+      compatibilityDate: string;
+      compatibilityFlags?: string[];
+      /** Per-mode custom-domain route patterns (e.g. hub.bearlysleeping.com). */
+      routes: Partial<Record<LiveMode, string>>;
+      /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
+      headersSource?: string;
+    };
 
 export type AppConfig = {
   serviceType: ServiceType;
@@ -75,17 +100,23 @@ export type AppConfig = {
   prefix?: string;
   /** Branches that are allowed to deploy this app. If omitted, all branches. */
   deployBranches?: string[];
-  /** Cloud Run service ID. Defaults to ${shortName} */
-  cloudRunServiceId?: string;
   /** GCP region override. Defaults to the global region variable. */
   region?: string;
   /** Cloud Run CPU allocation (e.g. '1', '2', '4'). Default: not set. */
   cpu?: string;
   /** Cloud Run memory allocation (e.g. '1Gi', '4Gi'). Default: '1Gi'. */
   memory?: string;
-  /** VPC connector name for Cloud SQL access. */
+  /** Cloud Run service ID override. Defaults to `aikami-${shortName}`. */
+  cloudRunServiceId?: string;
+  /**
+   * Firebase Hosting site ID override per mode. Defaults to
+   * `{projectId}-{shortName}` (or `{projectId}` for the default site).
+   * Needed when the derived name is globally unavailable.
+   */
+  hostingSiteIds?: Partial<Record<LiveMode, string>>;
+  /** VPC connector for Cloud SQL access (Cloud Run). */
   vpcConnector?: string;
-  /** Cloud SQL instance connection name. */
+  /** Cloud SQL instance for the Auth Proxy (Cloud Run). */
   cloudSqlInstance?: string;
   /** Whether to expect a dist/ directory after moon build. Default true. */
   needsDist?: boolean;
@@ -105,19 +136,9 @@ export type AppConfig = {
   customDomains?: Partial<Record<LiveMode, string>>;
   /**
    * Cloudflare Worker deployment config. Present on apps whose serviceType is
-   * `cloudflare-worker` (client, site, docs, hub).
+   * `cloudflare-worker` (client, site, docs).
    */
   cloudflare?: CloudflareAppConfig;
-  /**
-   * Per-mode Firebase Hosting site ID overrides.
-   *
-   * Site IDs are globally unique across *all* Firebase projects, not just
-   * ours, so the default `{projectId}-{shortName}` name is not always
-   * available — `aikami-staging-docs` is reserved by an unrelated project.
-   * Set an override only for the modes that need one; every other mode keeps
-   * the derived default.
-   */
-  hostingSiteIds?: Partial<Record<LiveMode, string>>;
 };
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
@@ -139,6 +160,7 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
         production: 'aikami.bearlysleeping.com',
       },
       headersSource: 'static/_headers',
+      notFoundHandling: 'single-page-application',
     },
   },
   /** Tauri desktop release — reuses the client moon project for web build, then runs cargo tauri build. */
@@ -170,27 +192,17 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       headersSource: 'public/_headers',
     },
   },
-  /** SvelteKit SSR dashboard — deployed as a Cloudflare Worker (adapter-cloudflare). */
+  /** SvelteKit SSR dashboard — deployed to Cloud Run (aikami-hub), fronted by Firebase Hosting sites per mode. */
   hub: {
-    serviceType: 'cloudflare-worker',
+    serviceType: 'cloud-run-sveltekit',
     path: 'apps/frontend/hub',
     shortName: 'hub',
     prefix: 'HUB',
+    cloudRunServiceId: 'aikami-hub',
+    region: 'europe-west4',
     customDomains: {
       production: 'hub.bearlysleeping.com',
       staging: 'hub.stg.bearlysleeping.com',
-    },
-    cloudflare: {
-      workerName: (mode) => (mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`),
-      buildOutputDir: '.svelte-kit/cloudflare',
-      assetsOnly: false,
-      main: '.svelte-kit/cloudflare/_worker.js',
-      compatibilityDate: '2026-08-21',
-      compatibilityFlags: ['nodejs_compat'],
-      routes: {
-        production: 'hub.bearlysleeping.com',
-        staging: 'hub.stg.bearlysleeping.com',
-      },
     },
   },
   /** Starlight documentation site — static build deployed to its own Worker. */
@@ -438,6 +450,13 @@ export function resolveCloudflareRoute(appId: AppId, mode: string): string | und
   const cf = APP_CONFIG[appId]?.cloudflare;
   const liveMode = mode as LiveMode;
   return cf?.routes?.[liveMode];
+}
+
+/**
+ * Resolves the Cloud Run service ID for an app, if configured.
+ */
+export function resolveCloudRunServiceId(appId: AppId): string | undefined {
+  return APP_CONFIG[appId]?.cloudRunServiceId;
 }
 
 const BRANCH_MODE_MAP: Record<string, string> = {

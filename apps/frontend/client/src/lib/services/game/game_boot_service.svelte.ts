@@ -163,6 +163,9 @@ class GameBootService
     this._bootGeneration++;
     this._input = input;
     this._resetProgress();
+    // Clear the previous boot's recipe so _seedBaseOutfit can never reuse it
+    // (C-374/C-417): each boot attempt must derive its own base outfit.
+    this._effectiveRecipe = undefined;
 
     const t0 = performance.now();
 
@@ -1236,6 +1239,8 @@ class GameBootService
     const { generatedLpcSlots } = this._getLpcCatalogSync();
     if (!generatedLpcSlots) {
       this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
+      // No catalog — no recipe to persist; drop any stale one from a prior boot.
+      this._effectiveRecipe = undefined;
       return playerData;
     }
 

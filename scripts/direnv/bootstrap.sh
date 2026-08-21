@@ -166,9 +166,20 @@ export PI_HARNESS_PLANMODE_ENABLED="1"
 # minutes instead of hours.
 export PI_SOFT_SPEND="${PI_SOFT_SPEND:-10.00}"
 export PI_HARD_SPEND="${PI_HARD_SPEND:-15.00}"
-export PI_MAX_TURNS="${PI_MAX_TURNS:-120}"
-export PI_MAX_SESSION_MINUTES="${PI_MAX_SESSION_MINUTES:-45}"
+# Backstops only — the loop/collapse detectors are the real guard. Calibrated
+# against all 289 stored sessions, because the first guessed values were far
+# too tight: turns p90=217/p99=743/legit-max=821 (a 120 cap would have killed
+# 23% of healthy sessions) and active run minutes p90=25/p99=74/legit-max=247
+# (a 45m cap would have killed 34%). Run time counts only active work since
+# the last prompt, not idle session age.
+export PI_MAX_TURNS="${PI_MAX_TURNS:-1000}"
+export PI_MAX_RUN_MINUTES="${PI_MAX_RUN_MINUTES:-240}"
 export PI_REPETITION_GUARD="${PI_REPETITION_GUARD:-1}"
+# Consecutive identical turns before the loop guard intervenes. Calibrated
+# against all 270 stored sessions: 261 never exceed a run of 2, and the only
+# two that do hit 88 and 846 (the latter a contract implementer that ran
+# 6h19m on 2026-08-17). A threshold of 4 catches both with no false positives.
+export PI_LOOP_THRESHOLD="${PI_LOOP_THRESHOLD:-4}"
 
 # ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 

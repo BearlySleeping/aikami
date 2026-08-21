@@ -1,8 +1,8 @@
 // apps/frontend/hub/svelte.config.js
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import adapter from 'svelte-adapter-bun';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const packagesDirectory = resolve(projectDirectory, '../../../packages');
@@ -28,7 +28,9 @@ const config = {
     warningFilter: (warning) => warning.code !== 'state_referenced_locally',
   },
   kit: {
-    adapter: adapter(),
+    adapter: adapter({
+      out: 'build',
+    }),
     alias: {
       $components: toSrcPath('lib/components'),
       '$components/*': toSrcPath('lib/components/*'),

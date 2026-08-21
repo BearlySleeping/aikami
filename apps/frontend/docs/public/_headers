@@ -23,6 +23,94 @@
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
-/*.@(js|css|webp|png|jpg|jpeg|svg|woff|woff2|avif|gif|ico|ttf|eot|mp3|ogg|wav|flac|m4a|aac|txt|pdf|json)
+/*.js
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.webp
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.jpg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.jpeg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.svg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff2
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.avif
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.gif
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ico
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ttf
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.eot
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.mp3
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ogg
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.wav
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.flac
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.m4a
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.aac
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.txt
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.pdf
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.json
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable

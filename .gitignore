@@ -136,6 +136,8 @@ ui-debug.log
 .vercel/
 .netlify/
 .wrangler/
+wrangler.generated.jsonc
+wrangler.deploy.json
 Dockerfile.prod
 docker-compose.override.yml
 
