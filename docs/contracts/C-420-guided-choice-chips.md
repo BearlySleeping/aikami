@@ -2,7 +2,7 @@
 id: C-420
 title: "One Choice Affordance — converge CYOA choices and suggestion chips on a single primitive, across chat and dialogue"
 source: "UX review 2026-08-21; premise re-verified and inverted 2026-08-21"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -366,3 +366,66 @@ Target: **`integrated`** per increment; AC-4 additionally requires
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Extracted the existing `NpcSuggestionChip` rendering into a shared
+`components/messaging/suggestion_chips.svelte` component and mounted it in both
+the dialogue overlay and chat via `GuidedComposer.above` (C-424). Brought
+starter chips to chat's empty state (AC-2, prefill-not-send) and wired a new
+`suggestion-chips` post-agent so model chips render after each chat turn
+(AC-3). Resolved the dialogue two-affordance collision by labelling each group
+(AC-4, OQ-1 option a). No new chip type was introduced — the existing
+`NpcSuggestionChip` primitive is reused throughout.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Shared `suggestion_chips.svelte` extracted; dialogue consumes it; `dialogue_overlay_view_model.test.ts` passes unmodified; no new chip type in `packages/shared`. |
+| AC-2 | ✅ | Starter chips (NPC `initialSuggestions` + player-class presets) replace the dead chat empty state; tapping prefills + focuses, does not send; works with no model. Verified via browser (score 85). |
+| AC-3 | ✅ | New `suggestion-chips` post-agent emits `NpcSuggestionChip[]`; wired into chat pipeline; combat chips filtered; clears on send/switch/reset. Unit-tested. |
+| AC-4 | ✅ | OQ-1 option (a): CYOA choices labelled "What do you do?", chips labelled "Say something". Chip label visually verified (score 95); CYOA label in code (dev sandbox does not reliably populate CYOA choices). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/components/messaging/suggestion_chips.svelte` | Shared chip-row component (chips, disabled, onSelect, optional label). |
+| `apps/frontend/client/src/lib/components/messaging/suggestion_chips.test.ts` | Unit tests for intent → class/icon mapping. |
+| `apps/frontend/client/src/lib/services/agent/agents/suggestion_chips_agent.ts` | Post-agent emitting `NpcSuggestionChip[]` from the AI response. |
+| `apps/frontend/client/src/lib/services/agent/suggestion_chips_agent.test.ts` | Unit tests for chip sanitization (combat filter, dedupe, cap). |
+| `apps/frontend/client/src/lib/views/chat/chat_c420_sandbox_view_model.svelte.ts` | Dev sandbox VM with an empty chat for AC-2/AC-3 visual verification. |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/chat-c420/+page.svelte` | Dev sandbox route mounting the production ChatView with an empty chat. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Consume shared `SuggestionChips`; add "What do you do?" / "Say something" labels (AC-4). |
+| `apps/frontend/client/src/lib/views/chat/chat_view.svelte` | Mount `SuggestionChips` in `GuidedComposer.above`; replace dead empty text. |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` | Add `suggestedChips` state, `handleChipTap` (prefill-not-send), starter-chip merge, `_applySuggestionChips`, clear on send/reset. |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.test.ts` | Add C-420 chip tests. |
+| `apps/frontend/client/src/lib/services/agent/agent_pipeline_service.svelte.ts` | Register `suggestion-chips` runner. |
+| `apps/frontend/client/src/lib/services/agent/built_in_agents.ts` | Add `suggestion-chips` built-in agent config. |
+| `packages/shared/constants/src/lib/cyoa.ts` | Add `SUGGESTION_CHIPS_AGENT_ID`. |
+| `packages/shared/schemas/src/lib/domain/npc.ts` | Add optional `initialSuggestions` field to `NpcSheetSchema`. |
+| `packages/shared/schemas/src/lib/game/cyoa.ts` | Add `SuggestionChipsResultSchema` (reuses `NpcSuggestionChipSchema`). |
+
+### Deviations from Spec
+- **AC-3 model chips**: OQ-2 recommended shipping AC-2 first and treating AC-3
+  as a follow-on. I implemented AC-3 in full (a `suggestion-chips` post-agent),
+  so no deviation — but note the post-agent adds a small per-turn LLM call.
+- **Chat NPC `initialSuggestions`**: the chat `NpcData` did not carry the
+  content-pack `initialSuggestions`. Per the contract's allowance, I added it
+  as `Type.Optional` to the Npc schema. In practice the chat NPC document does
+  not populate it, so chat starter chips fall back to player-class presets
+  (the retention win) — the merge function is reused exactly as the overlay
+  performs it.
+- **AC-4 CYOA label visual evidence**: the dialogue dev sandbox does not
+  reliably populate CYOA choices, so the "What do you do?" label is verified in
+  code while the "Say something" chip label is visually verified (score 95).
+
+### Test Results
+- Unit: client:test-unit PASS (includes new suggestion_chips, suggestion_chips_agent, chat_view_model C-420 tests; dialogue_overlay_view_model.test.ts unmodified and passing). schemas:test + constants:test PASS.
+- E2E: `dialogue_chips.spec.ts` could not run — the Firebase emulator starts only firestore/storage (no auth emulator on :15368), so the e2e auth setup fails. Pre-existing environment limitation, not caused by this change.
+- Visual: chat empty state score 85/100 (PASS); dialogue overlay score 95/100 (PASS).
+- Baseline: 4 pre-existing client lint errors in files outside this change (`onboarding_coordinator_view_model.svelte.ts` ×2, `lpc_preview_view_model.svelte.ts` ×1, +1) — confirmed present on the base commit; 0 new lint errors introduced (all 12 changed files pass `biome check`).
