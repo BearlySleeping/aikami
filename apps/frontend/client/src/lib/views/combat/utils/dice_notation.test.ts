@@ -74,6 +74,11 @@ describe('parseDiceNotation', () => {
     expect(parseDiceNotation('0d6')).toBeUndefined();
     expect(parseDiceNotation('d0')).toBeUndefined();
   });
+
+  test('returns undefined for an oversized modifier', () => {
+    expect(parseDiceNotation('1d20+99999999999999999999')).toBeUndefined();
+    expect(parseDiceNotation('1d20-99999999999999999999')).toBeUndefined();
+  });
 });
 
 describe('parseRollCommand (C-421 AC-1)', () => {
@@ -105,6 +110,20 @@ describe('parseRollCommand (C-421 AC-1)', () => {
       modifier: 0,
       dc: 10,
     });
+  });
+
+  test('trims surrounding whitespace before matching vs <dc>', () => {
+    expect(parseRollCommand('  1d20+3 vs 15  ')).toEqual({
+      notation: '1d20+3',
+      count: 1,
+      sides: 20,
+      modifier: 3,
+      dc: 15,
+    });
+  });
+
+  test('returns undefined for an oversized DC', () => {
+    expect(parseRollCommand('1d20 vs 99999999999999999999')).toBeUndefined();
   });
 
   test('returns undefined for malformed notation', () => {

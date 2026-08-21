@@ -35,9 +35,15 @@ export const parseDiceNotation = (input: string): DiceNotation | undefined => {
     return undefined;
   }
 
-  const count = match[1] ? Number.parseInt(match[1], 10) : 1;
-  const sides = Number.parseInt(match[2], 10);
-  const modifier = match[3] ? Number.parseInt(match[3], 10) : 0;
+  const count = match[1] ? Number(match[1]) : 1;
+  const sides = Number(match[2]);
+  const modifier = match[3] ? Number(match[3]) : 0;
+
+  // Reject any value that is not a safe integer (e.g. oversized digit strings
+  // that overflow past Number.MAX_SAFE_INTEGER).
+  if (!Number.isSafeInteger(count) || !Number.isSafeInteger(sides) || !Number.isSafeInteger(modifier)) {
+    return undefined;
+  }
 
   if (count < 1 || sides < 1) {
     return undefined;
@@ -74,9 +80,14 @@ export const parseRollCommand = (
       dc: number | undefined;
     }
   | undefined => {
-  const vsMatch = input.match(/^(.+?)\s+vs\s+(\d+)$/i);
-  const notationRaw = vsMatch?.[1]?.trim() ?? input.trim();
-  const dc = vsMatch?.[2] ? Number.parseInt(vsMatch[2], 10) : undefined;
+  const trimmed = input.trim();
+  const vsMatch = trimmed.match(/^(.+?)\s+vs\s+(\d+)$/i);
+  const notationRaw = vsMatch?.[1]?.trim() ?? trimmed;
+  const dc = vsMatch?.[2] ? Number(vsMatch[2]) : undefined;
+  // Reject an oversized / non-safe-integer DC before it is used.
+  if (dc !== undefined && !Number.isSafeInteger(dc)) {
+    return undefined;
+  }
 
   const parsed = parseDiceNotation(notationRaw);
   if (!parsed) {

@@ -23,13 +23,14 @@ const formatTime = (date: Date): string =>
   aria-label="Roll History"
   tabindex="-1"
 >
-  <div class="w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
+  <div class="w-full max-w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-bold text-base-content">Roll History</h2>
       <button
         type="button"
         class="btn btn-ghost btn-sm"
         aria-label="Close roll history"
+        autofocus
         onclick={onClose}
       >
         ✕

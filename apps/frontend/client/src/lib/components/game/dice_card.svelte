@@ -15,17 +15,6 @@ type Props = {
 
 const { card }: Props = $props();
 
-/** Human-readable modifier, e.g. "+3" or "-1" or "" when zero. */
-const modifierLabel = $derived.by(() => {
-  if (card.modifier > 0) {
-    return `+${card.modifier}`;
-  }
-  if (card.modifier < 0) {
-    return `${card.modifier}`;
-  }
-  return '';
-});
-
 /** "Nat 20" / "Nat 1" crit label for a single d20. */
 const critLabel = $derived.by(() => {
   if (card.isCriticalSuccess) {
@@ -74,9 +63,6 @@ const outcomeMark = $derived.by(() => {
     <div class="min-w-0 flex-1">
       <div class="flex items-baseline gap-2">
         <span class="font-mono text-sm font-semibold text-base-content">{card.notation}</span>
-        {#if modifierLabel}
-          <span class="font-mono text-xs text-base-content/60">{modifierLabel}</span>
-        {/if}
         <span class="ml-auto font-mono text-lg font-bold text-base-content">{card.total}</span>
       </div>
 

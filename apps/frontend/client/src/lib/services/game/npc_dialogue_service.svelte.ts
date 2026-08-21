@@ -1906,9 +1906,6 @@ export class NpcDialogueService
       dc: difficultyClass,
       total: rollTotal,
       success: outcome === 'pass',
-      natural: rollTotal,
-      isCriticalSuccess: false,
-      isCriticalFailure: false,
     });
 
     // Call 1 streams prose; call 2 extracts the roll-resolution envelope.

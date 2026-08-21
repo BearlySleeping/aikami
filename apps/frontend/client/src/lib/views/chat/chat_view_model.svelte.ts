@@ -458,6 +458,9 @@ export class ChatViewModel
         // ── Dice roll command (C-421) — resolve through DiceService, not the bridge ──
         if (command === 'roll') {
           this._handleRollCommand(args.join(' '));
+          // Clear the input and draft for both valid and invalid roll notation.
+          this.inputText = '';
+          void draftStore.clearDraft({ chatId: this._chatId });
           return;
         }
 

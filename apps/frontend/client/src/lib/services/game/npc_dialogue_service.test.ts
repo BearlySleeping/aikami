@@ -1292,7 +1292,7 @@ describe('C-401: two-call narrative streaming', () => {
       signal: controller.signal,
       checkType: 'persuasion',
       difficultyClass: 12,
-      rollTotal: 18,
+      rollTotal: 8,
       outcome: 'fail',
       playerInput: 'I appeal to your honor.',
     });
@@ -1302,7 +1302,7 @@ describe('C-401: two-call narrative streaming', () => {
 
     // The mechanical result is injected as ground truth.
     expect(userPrompt).toContain('DC=12');
-    expect(userPrompt).toContain('Roll=18');
+    expect(userPrompt).toContain('Roll=8');
     expect(userPrompt).toContain('FAILURE');
 
     // The system prompt carries the explicit non-contradiction instruction.

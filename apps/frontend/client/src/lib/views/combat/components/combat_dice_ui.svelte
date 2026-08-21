@@ -51,5 +51,14 @@ const card = $derived.by((): DiceCardData | null => {
 {#if activeDiceRoll?.isRolling}
   <GameDice {dice} />
 {:else if card}
-  <DiceCard {card} />
+  <div class="flex flex-col items-center gap-2">
+    <DiceCard {card} />
+    <span
+      class="text-lg font-bold"
+      class:text-success={activeDiceRoll.isSuccess}
+      class:text-error={!activeDiceRoll.isSuccess}
+    >
+      {activeDiceRoll.isSuccess ? 'HIT!' : 'MISS'}
+    </span>
+  </div>
 {/if}

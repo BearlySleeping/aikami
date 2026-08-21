@@ -8,6 +8,21 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Ref to the Roll History trigger so focus can be restored when the dialog closes. */
+let rollHistoryTrigger = $state<HTMLButtonElement | null>(null);
+/** Tracks the previous open state so focus is only restored on an open→close transition. */
+let wasRollHistoryOpen = false;
+
+// Restore focus to the Roll History trigger when the history dialog closes,
+// keeping keyboard navigation within the pause menu.
+$effect(() => {
+  const open = viewModel.isRollHistoryOpen;
+  if (!open && wasRollHistoryOpen) {
+    rollHistoryTrigger?.focus();
+  }
+  wasRollHistoryOpen = open;
+});
 </script>
 
 <div
@@ -18,7 +33,11 @@ const { viewModel }: Props = $props();
   tabindex="-1"
   onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      viewModel.resumeGame();
+      if (viewModel.isRollHistoryOpen) {
+        viewModel.closeRollHistory();
+      } else {
+        viewModel.resumeGame();
+      }
       return;
     }
     // Focus trap — Tab/Shift+Tab cycle within the dialog
@@ -130,6 +149,7 @@ const { viewModel }: Props = $props();
         <button
           type="button"
           class="btn btn-ghost btn-block"
+          bind:this={rollHistoryTrigger}
           onclick={() => viewModel.openRollHistory()}
         >
           Roll History
