@@ -92,6 +92,7 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
                 characterName={viewModel.npc.name}
                 avatarUrl={viewModel.npc.avatarUrl}
                 onAction={viewModel.handleMessageAction}
+                onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
               />
             {/snippet}
             {#snippet after()}

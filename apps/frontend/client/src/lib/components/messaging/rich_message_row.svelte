@@ -168,18 +168,10 @@ const handleAction = (action: MessageAction) => {
 };
 
 const handleSwipeLeft = () => {
-  if (variant === 'chat') {
-    messageBranchStore.swipeAlternative({ messageId: message.id, direction: 'left' });
-    return;
-  }
   onSwipe?.(message.id, 'left');
 };
 
 const handleSwipeRight = () => {
-  if (variant === 'chat') {
-    messageBranchStore.swipeAlternative({ messageId: message.id, direction: 'right' });
-    return;
-  }
   onSwipe?.(message.id, 'right');
 };
 </script>
@@ -233,6 +225,8 @@ const handleSwipeRight = () => {
               {#each formatNpcTextSegments(message.text) as segment}
                 {#if segment.type === 'action'}
                   <span class="italic text-base-content/60">*{segment.content}*</span>
+                {:else if segment.type === 'dialogue'}
+                  <span class="text-base-content">"{segment.content}"</span>
                 {:else}
                   {segment.content}
                 {/if}
@@ -243,6 +237,8 @@ const handleSwipeRight = () => {
               {#each formatNpcTextSegments(streamingText) as segment}
                 {#if segment.type === 'action'}
                   <span class="italic text-base-content/60">*{segment.content}*</span>
+                {:else if segment.type === 'dialogue'}
+                  <span class="text-base-content">"{segment.content}"</span>
                 {:else}
                   {segment.content}
                 {/if}
@@ -410,7 +406,7 @@ const handleSwipeRight = () => {
     {/if}
 
     <!-- Action bar (appears on hover) -->
-    <MessageActionBar sender={message.sender} ttsAvailable={true} onAction={handleAction} />
+    <MessageActionBar sender={message.sender} {ttsAvailable} onAction={handleAction} />
 
     {#if renderFooter}
       {@render renderFooter(message.id)}

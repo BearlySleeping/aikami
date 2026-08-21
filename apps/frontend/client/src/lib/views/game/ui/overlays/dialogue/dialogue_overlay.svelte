@@ -224,7 +224,6 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           showPartyUi={viewModel.showPartyUi}
           senderName={original?.senderName}
           isPartyMate={original?.senderName != null && original?.senderName !== viewModel.npcName}
-          formatNpcText={true}
           editing={viewModel.editingMessageId === message.id}
           editText={viewModel.editText}
           onEditChange={(t) => viewModel.setEditText(t)}
@@ -422,6 +421,9 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onCancel={() => viewModel.cancelStreaming()}
           sendIcon="↑"
           square={true}
+          textareaRef={(el) => {
+            viewModel.inputElement = el ?? undefined;
+          }}
         >
           {#snippet above()}
             <!-- Suggestion chips — rendered inside the card, above the input -->

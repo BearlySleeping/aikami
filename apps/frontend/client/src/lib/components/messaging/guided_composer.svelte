@@ -110,15 +110,15 @@ const handleActivate = () => {
 
   <button
     type="button"
-    class="btn btn-primary btn-sm {square ? 'btn-square' : ''} {showCancel ? 'btn-error' : ''}"
+    class="btn btn-sm {square ? 'btn-square' : ''} {showCancel ? 'btn-error' : 'btn-primary'}"
     onclick={handleActivate}
     disabled={!canSend && !showCancel}
     aria-label={showCancel ? 'Cancel' : 'Send'}
   >
-    {#if isSending}
-      <span class="loading loading-spinner loading-xs"></span>
-    {:else if showCancel}
+    {#if showCancel}
       <span class="text-lg">■</span>
+    {:else if isSending}
+      <span class="loading loading-spinner loading-xs"></span>
     {:else if sendIcon}
       <span class="text-lg">{sendIcon}</span>
     {:else}

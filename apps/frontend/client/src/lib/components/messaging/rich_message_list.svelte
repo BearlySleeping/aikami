@@ -46,12 +46,19 @@ let {
 }: Props = $props();
 
 // Scroll anchoring — keep the newest message in view when the list grows
-// or while the surface is streaming.
+// or while the surface is streaming. Only auto-scroll when the user is
+// already near the bottom, so a manual scroll position is preserved.
 $effect(() => {
+  const last = messages[messages.length - 1];
+  void last?.text;
   void messages.length;
   void isStreaming;
   if (containerElement) {
-    containerElement.scrollTop = containerElement.scrollHeight;
+    const distanceFromBottom =
+      containerElement.scrollHeight - containerElement.scrollTop - containerElement.clientHeight;
+    if (distanceFromBottom < 100) {
+      containerElement.scrollTop = containerElement.scrollHeight;
+    }
   }
 });
 </script>
@@ -61,7 +68,7 @@ $effect(() => {
     {@render before()}
   {/if}
 
-  {#if messages.length === 0}
+  {#if messages.length === 0 && !before}
     <div class="flex items-center justify-center h-full opacity-50">
       <p>{emptyText}</p>
     </div>

@@ -52,8 +52,8 @@ describe('GuidedComposer — send affordance state (C-424)', () => {
     expect(canSend({ value: 'hello', disabled: true })).toBe(false);
   });
 
-  test('sendDisabled takes precedence over content', () => {
-    expect(canSend({ value: 'hello', sendDisabled: true })).toBe(false);
+  test('explicit sendDisabled=false overrides a disabled textarea', () => {
+    expect(canSend({ value: 'hello', sendDisabled: false, disabled: true })).toBe(true);
   });
 
   test('requireText=false keeps send enabled with empty input (dialogue)', () => {
