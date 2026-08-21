@@ -782,14 +782,7 @@ class DialogueOverlayViewModel
         }
       });
 
-      // Auto-scroll to bottom when new messages arrive or AI is streaming
-      $effect(() => {
-        void this.messages.length;
-        void this.isStreaming;
-        if (this.messageContainerElement) {
-          this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
-        }
-      });
+      // Auto-scroll to bottom is owned by RichMessageList (C-424).
 
       // Auto-save input draft (bind:value bypasses setInput)
       $effect(() => {
