@@ -12,7 +12,7 @@
 // mounted handler responds 503 — the existing Firebase auth path keeps
 // serving until the cutover completes.
 
-import { createBetterAuth } from '@aikami/backend/auth';
+import { createBetterAuth } from '@aikami/backend-auth/better-auth';
 import { d1 } from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
 import { env } from '$env/dynamic/private';
@@ -53,7 +53,33 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
       secret: secret ?? 'dev-secret-not-for-production',
       googleClientId: env.GOOGLE_CLIENT_ID,
       googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+      // SSO: share the session cookie across the client (`aikami.`) and hub
+      // (`hub.`) subdomains of the same root domain.
+      cookieDomain: deriveCookieDomain(baseURL),
     });
   }
   return _auth;
+};
+
+/**
+ * Derive the shared cookie domain from the hub's public base URL, e.g.
+ * `https://hub.bearlysleeping.com` → `bearlysleeping.com`. Returns undefined
+ * for localhost / bare hosts so cookies stay host-scoped in dev.
+ */
+const deriveCookieDomain = (baseURL: string | undefined): string | undefined => {
+  if (!baseURL) {
+    return undefined;
+  }
+  try {
+    const host = new URL(baseURL).hostname;
+    // Only share across subdomains of a real registrable domain — never
+    // localhost or a bare IP.
+    const parts = host.split('.');
+    if (parts.length >= 3 && !/^\d+$/.test(parts[parts.length - 1] ?? '')) {
+      return parts.slice(-2).join('.');
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 };

@@ -38,14 +38,16 @@ import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import type { User } from 'firebase/auth';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { analyticService } from '../analytics/analytics_service.svelte.ts';
-import { callHubAuthAction, pollHubDeviceHandoff } from '../api/hub_api_client';
+import { callHubAuthAction, hubApiBase, pollHubDeviceHandoff } from '../api/hub_api_client';
 import {
   sendPasswordResetEmail as baSendPasswordResetEmail,
   signInWithEmailAndPassword as baSignInWithEmailAndPassword,
   signUpWithEmailAndPassword as baSignUpWithEmailAndPassword,
   getBetterAuthSession,
+  pollDeviceHandoff as pollBetterAuthDeviceHandoff,
   signOutBetterAuth,
   socialSignInRedirect,
+  startDeviceHandoff,
 } from './better_auth_client';
 
 /**
@@ -471,7 +473,79 @@ export class AuthService
       // after the callback route resolves, so this placeholder is never read.
       return { status: 'exitingUser', payload: this.currentUser as unknown as User };
     }
-    return this._linkDeviceSignIn();
+    return this._betterAuthDeviceHandoff();
+  }
+
+  /**
+   * C-426 AC-5: Tauri device handoff via Better Auth's device-authorization
+   * flow. Requests a device code, opens the /link verification page in the
+   * system browser, and polls until the user approves — the same polling UX as
+   * the old Firebase device-link flow, but exchanging a Better Auth session.
+   */
+  private async _betterAuthDeviceHandoff(): Promise<SocialSignInResponse> {
+    let deviceCode: string;
+    try {
+      const start = await startDeviceHandoff();
+      deviceCode = start.deviceCode;
+      // Open the client's /link page (a real browser domain) with the user
+      // code, where the user signs in and approves the device. The plugin's
+      // own verification_uri is the hub's JSON /device endpoint, not a UI.
+      const linkUrl = `${DEVICE_LINK_URL}?code=${encodeURIComponent(start.userCode)}`;
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(linkUrl);
+    } catch (error) {
+      this.error('betterAuthDeviceHandoff:start', error);
+      const message = error instanceof Error ? error.message : 'Could not start device sign-in';
+      this.showSnackbar({ text: `Sign-in failed: ${message}`, type: 'error' });
+      return {
+        status: 'failed',
+        payload: {
+          code: 'device-handoff-failed',
+          message,
+          email: '',
+          accountExists: false,
+        } as unknown as SocialSignInError,
+      };
+    }
+
+    try {
+      const user = await this._awaitBetterAuthDeviceApproval(deviceCode);
+      if (!user) {
+        throw new Error('Sign-in timed out — please try again.');
+      }
+      this.setCurrentUser(user);
+      return { status: 'exitingUser', payload: user as unknown as User };
+    } catch (error) {
+      this.error('betterAuthDeviceHandoff', error);
+      const errMsg = error instanceof Error ? error.message : 'Sign-in failed';
+      this.showSnackbar({ text: `Sign-in failed: ${errMsg}`, type: 'error' });
+      return {
+        status: 'failed',
+        payload: {
+          code: 'device-handoff-failed',
+          message: errMsg,
+          email: '',
+          accountExists: false,
+        } as unknown as SocialSignInError,
+      };
+    }
+  }
+
+  /** Poll the hub until the device authorization is approved (or times out). */
+  private async _awaitBetterAuthDeviceApproval(
+    deviceCode: string,
+  ): Promise<CurrentUser | undefined> {
+    const timeoutMs = 5 * 60 * 1000;
+    const intervalMs = 2000;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const user = await pollBetterAuthDeviceHandoff(deviceCode);
+      if (user) {
+        return user;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return undefined;
   }
 
   private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
@@ -849,10 +923,40 @@ export class AuthService
     code: string;
     uid: string;
   }): Promise<{ customFirebaseSignInToken: string }> {
+    // C-426 AC-5: on the Better Auth path the device-link code is the
+    // device-authorization user code — approve it via the plugin instead of
+    // minting a Firebase custom token.
+    if (this._isBetterAuth()) {
+      await this.approveDeviceHandoff(options.code);
+      return { customFirebaseSignInToken: '' };
+    }
     return await this.callAuthEndpoint({
       type: 'completeDeviceHandoff',
       payload: { code: options.code, uid: options.uid },
     });
+  }
+
+  /**
+   * C-426 AC-5: approve a Better Auth device-authorization code from the /link
+   * page. Claims the code (GET /device) then approves it (POST /device/approve)
+   * so the polling desktop client can exchange it for a session token.
+   */
+  async approveDeviceHandoff(userCode: string): Promise<void> {
+    const base = hubApiBase();
+    // Claim the code for the signed-in user (idempotent).
+    await fetch(`${base}/auth/device?user_code=${encodeURIComponent(userCode)}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const response = await fetch(`${base}/auth/device/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userCode }),
+    });
+    if (!response.ok) {
+      throw toAppErrorFromUnknownError(await response.json().catch(() => ({})));
+    }
   }
 }
 

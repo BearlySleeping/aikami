@@ -19,7 +19,7 @@ import { updateEmail } from './lib/update_email.ts';
 
 export type { BetterAuthEnv, BetterAuthInstance } from './lib/better_auth.ts';
 
-export { betterAuthSchema, createBetterAuth } from './lib/better_auth.ts';
+export { betterAuthSchema, createBetterAuth, toUserSessionData } from './lib/better_auth.ts';
 export { pollDeviceHandoff } from './lib/poll_device_handoff.ts';
 
 type AssertUserFn = (value: UserClaims | undefined) => asserts value is UserClaims;

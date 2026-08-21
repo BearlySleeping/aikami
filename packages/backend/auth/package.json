@@ -2,6 +2,10 @@
   "name": "@aikami/backend-auth",
   "license": "MIT",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./better-auth": "./src/lib/better_auth.ts"
+  },
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",

@@ -269,7 +269,10 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     };
   } else {
     json.main = cf.main;
-    json.assets = { binding: 'ASSETS', directory: assetDir };
+    // SSR Workers serve their static client assets from `assetsDir` (e.g.
+    // `build/client`), NOT `buildOutputDir` — the latter also contains the
+    // server `_worker.js`, which must never be uploaded as a public asset.
+    json.assets = { binding: 'ASSETS', directory: cf.assetsDir ?? assetDir };
     // C-426 AC-3: SSR Workers (hub) need their D1 + R2 bindings and the
     // nodejs_compat flag in the generated per-mode wrangler config.
     if (cf.d1Databases?.length) {

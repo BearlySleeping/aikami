@@ -80,6 +80,13 @@ export type CloudflareAppConfig =
       assetsOnly: false;
       /** Worker entry for SSR apps (hub). Relative to app root. */
       main: string;
+      /**
+       * Directory of static client assets served by the Worker (relative to
+       * app root). For SvelteKit SSR apps this is the adapter's client output
+       * (e.g. `build/client`), NOT `buildOutputDir` (which also contains the
+       * server `_worker.js`). Defaults to `buildOutputDir` when omitted.
+       */
+      assetsDir?: string;
       compatibilityDate: string;
       compatibilityFlags?: string[];
       /** Per-mode custom-domain route patterns (e.g. hub.bearlysleeping.com). */
@@ -211,13 +218,14 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       buildOutputDir: 'build',
       assetsOnly: false,
       main: 'build/_worker.js',
+      assetsDir: 'build/client',
       compatibilityDate: '2026-08-21',
       compatibilityFlags: ['nodejs_compat'],
       d1Databases: [
         {
           binding: 'DB',
           databaseName: 'aikami-hub',
-          databaseId: 'REPLACE_WITH_D1_DATABASE_ID',
+          databaseId: 'bf77e365-058f-408f-871c-4a0567c9aa10',
         },
       ],
       r2Buckets: [{ binding: 'SAVES_BUCKET', bucketName: 'aikami-saves' }],

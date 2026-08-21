@@ -168,7 +168,8 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
       const meta = (msg as { metadata?: Record<string, unknown> }).metadata;
       const kind =
         (msg as { kind?: 'text' | 'dice' }).kind ?? (meta?.kind as 'text' | 'dice' | undefined);
-      const dice = (msg as { dice?: DiceCardData }).dice ?? (meta?.dice as DiceCardData | undefined);
+      const dice =
+        (msg as { dice?: DiceCardData }).dice ?? (meta?.dice as DiceCardData | undefined);
       return {
         id: msg.id || crypto.randomUUID(),
         text: msg.text,

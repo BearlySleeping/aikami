@@ -11,10 +11,12 @@
 // runtime does not read `.env` at request time).
 
 import { d1 } from '@aikami/backend-database';
+import type { UserSessionData } from '@aikami/types';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { deviceAuthorization } from 'better-auth/plugins/device-authorization';
 
-const { users, sessions, accounts, verifications } = d1;
+const { users, sessions, accounts, verifications, deviceCodes } = d1;
 
 /** The Better Auth tables, keyed by the singular model names the adapter expects. */
 export const betterAuthSchema = {
@@ -22,6 +24,7 @@ export const betterAuthSchema = {
   session: sessions,
   account: accounts,
   verification: verifications,
+  deviceCode: deviceCodes,
 } as const;
 
 export type BetterAuthEnv = {
@@ -35,6 +38,12 @@ export type BetterAuthEnv = {
   googleClientSecret?: string;
   /** Extra trusted origins for cross-origin session cookies. */
   trustedOrigins?: string[];
+  /**
+   * Root domain for cross-subdomain session cookies (e.g. `bearlysleeping.com`)
+   * so the client (`aikami.`) and hub (`hub.`) share one SSO session. Omit to
+   * keep cookies scoped to the exact host (single-app deployments).
+   */
+  cookieDomain?: string;
 };
 
 /**
@@ -51,9 +60,26 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
     baseURL: env.baseURL,
     secret: env.secret,
     trustedOrigins: env.trustedOrigins ?? [],
+    // SSO across the client (`aikami.bearlysleeping.com`) and hub
+    // (`hub.bearlysleeping.com`): scope the session cookie to the shared root
+    // domain so both apps read the same session.
+    ...(env.cookieDomain
+      ? {
+          advanced: {
+            crossSubDomainCookies: {
+              enabled: true,
+              domain: env.cookieDomain,
+            },
+          },
+        }
+      : {}),
     emailAndPassword: {
       enabled: true,
     },
+    // C-426 AC-5: device-authorization flow for the Tauri desktop client (it
+    // cannot OAuth-popup). The client requests a code, the user approves it on
+    // the /link page, and the client polls for a session token.
+    plugins: [deviceAuthorization()],
     // Only configure Google OAuth when BOTH credentials are present — Better
     // Auth 1.7.1 treats a provider with empty-string credentials as configured
     // and throws CLIENT_ID_AND_SECRET_REQUIRED when the flow starts.
@@ -70,3 +96,24 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
   });
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
+
+/**
+ * Map a Better Auth user to the app's `UserSessionData` shape (the type the
+ * hub's `locals.userSession` and the client's `CurrentUser` are built on).
+ *
+ * The D1 `users` table has no `role` column, so every user is `member` for
+ * now — the hub is a community app, not restricted to super admins.
+ */
+export const toUserSessionData = (user: {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}): UserSessionData => ({
+  id: user.id,
+  email: user.email ?? undefined,
+  displayName: user.name ?? undefined,
+  photoURL: user.image ?? undefined,
+  userRole: 'member',
+  currentSignInProvider: 'email',
+});

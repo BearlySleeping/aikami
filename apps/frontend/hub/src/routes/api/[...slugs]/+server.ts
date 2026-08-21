@@ -7,13 +7,17 @@
 // 🔴 /api/internal_logging is NOT handled here — it has its own dedicated
 // route (src/routes/api/internal_logging/+server.ts) which SvelteKit
 // matches with higher priority than this catch-all.
+//
+// C-426 AC-3/AC-4: the Worker bindings (D1 + R2) are only available per
+// request via `platform.env`. They are injected into the Better Auth /
+// save-backup modules before handling so production requests initialize
+// from the real DB. Better Auth sets its own session cookie directly on
+// the response — no `__session` merge shim is needed (that was the old
+// Firebase Hosting path, removed with the Firebase auth routes).
 
-import { deleteCookie, setSessionCookie } from '@aikami/backend/svelte-kit/cookies.ts';
-import { AUTH_COOKIE_NAME } from '@aikami/constants';
 import { app } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
-import { logger } from '$logger';
 
 type RequestHandler = (v: {
   request: Request;
@@ -22,54 +26,12 @@ type RequestHandler = (v: {
   platform?: App.Platform;
 }) => Response | Promise<Response>;
 
-/**
- * The Elysia session handler writes the session cookie as a raw
- * `Set-Cookie` header (host-only, no Domain), while hooks' manageSessionId
- * writes the same `__session` name with a `Domain=` attribute via
- * SvelteKit. That produces TWO cookies under the same name that shadow
- * each other — the session JWT can lose to the aikamiSessionId-only copy,
- * and a failed verify re-stamps the no-session copy newer so it wins
- * every subsequent parse.
- *
- * This fallback intercepts the raw session cookie and re-applies it
- * through SvelteKit's cookie store, so the session JWT merges into the
- * SAME cookie as aikamiSessionId (one cookie, consistent domain).
- *
- * Note: the cookie must be named `__session` — Firebase Hosting strips
- * every other cookie from requests forwarded to Cloud Run rewrites.
- */
-export const fallback: RequestHandler = async ({ request, cookies, url, platform }) => {
-  // C-426 AC-3/AC-4: the Worker bindings (D1 + R2) are only available per
-  // request via `platform.env`. Inject them into the Better Auth / save-backup
-  // modules before handling so production requests initialize from the real
-  // DB rather than relying on module-level state left unset outside tests.
+export const fallback: RequestHandler = async ({ request, platform }) => {
   const env = platform?.env;
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setBetterAuthEnv(env ? { DB: env.DB } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
 
-  const response = await app.handle(request);
-
-  const setCookie = response.headers.get('set-cookie');
-  if (setCookie?.startsWith(`${AUTH_COOKIE_NAME}=`)) {
-    response.headers.delete('set-cookie');
-    try {
-      const rawValue = decodeURIComponent(
-        setCookie.slice(AUTH_COOKIE_NAME.length + 1).split(';')[0] ?? '',
-      );
-      const store = JSON.parse(rawValue) as Record<string, string | undefined>;
-      const session = store.session;
-      if (session) {
-        setSessionCookie(session, { cookies, request, url });
-      } else {
-        deleteCookie('__session', { cookies, request, url });
-      }
-    } catch (error) {
-      // Malformed cookie value — drop it rather than fail the request.
-      logger.error('api/[...slugs]: failed to re-apply session cookie', error);
-    }
-  }
-
-  return response;
+  return await app.handle(request);
 };

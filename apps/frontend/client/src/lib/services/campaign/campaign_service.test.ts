@@ -35,9 +35,9 @@ const { AiTextProviderRequiredError } = await import('@aikami/utils');
 // ---------------------------------------------------------------------------
 
 /** Mutable stubs for aiSettingsService — used to control gate behavior. */
-let _textProviderApiKey = '';
-let _textProviderEndpoint = 'http://localhost:11434';
-let _textProviderModel = 'llama3';
+const _textProviderApiKey = '';
+const _textProviderEndpoint = 'http://localhost:11434';
+const _textProviderModel = 'llama3';
 
 /** Mutable C-230 connections — the source the gate now reads for text. */
 let _connections: Array<{
@@ -149,7 +149,9 @@ describe('CampaignService', () => {
       (svc as Record<string, unknown>)._campaigns = [];
     }
     // Default: a local text provider is configured so the gate passes
-    _connections = [{ capability: 'text', provider: 'ollama', apiKey: '', baseUrl: '', model: 'llama3' }];
+    _connections = [
+      { capability: 'text', provider: 'ollama', apiKey: '', baseUrl: '', model: 'llama3' },
+    ];
   });
 
   test('hasCampaigns returns false when no campaigns exist', () => {
@@ -279,7 +281,9 @@ describe('CampaignService', () => {
   });
 
   test('startNewCampaign with explicit capabilityProfile overrides buildCapabilityProfile', async () => {
-    _connections = [{ capability: 'text', provider: 'openrouter', apiKey: 'test-key', baseUrl: '', model: 'x' }];
+    _connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'test-key', baseUrl: '', model: 'x' },
+    ];
 
     const campaign = await getSvc().startNewCampaign({
       capabilityProfile: {

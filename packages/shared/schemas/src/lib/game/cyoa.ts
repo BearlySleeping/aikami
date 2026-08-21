@@ -5,7 +5,6 @@
 // agent and the per-chat choice history entries injected into GM context.
 
 import Type from 'typebox';
-import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 
 // ── Skill check ──────────────────────────────────────────────────────────
 
@@ -48,20 +47,6 @@ export const CyoaChoiceResultSchema = Type.Object({
   /** Proposed player choices. */
   choices: Type.Array(CyoaChoiceSchema, { maxItems: 4 }),
 });
-
-// ── Suggestion chips result (C-420) ───────────────────────────────────────
-
-/**
- * Suggestion-chips agent structured output — 0–4 chips.
- * Zero chips is a valid no-op (no meaningful suggestions for this turn).
- * Reuses the existing NpcSuggestionChip primitive — no new chip type.
- */
-export const SuggestionChipsResultSchema = Type.Object({
-  /** Proposed suggestion chips. */
-  chips: Type.Array(NpcSuggestionChipSchema, { maxItems: 4 }),
-});
-
-export type SuggestionChipsResult = Type.Static<typeof SuggestionChipsResultSchema>;
 
 // ── Choice history ───────────────────────────────────────────────────────
 
