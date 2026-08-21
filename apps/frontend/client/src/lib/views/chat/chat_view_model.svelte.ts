@@ -252,13 +252,7 @@ export class ChatViewModel
     }
     // Register reactive effects for DOM interactions
     this.registerEffectRoot(() => {
-      // Auto-scroll to bottom when new messages arrive
-      $effect(() => {
-        void this.messages.length;
-        if (this.messageContainerElement) {
-          this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
-        }
-      });
+      // Auto-scroll to bottom is owned by RichMessageList (C-424).
 
       // Auto-save input draft on each keystroke (bind:value bypasses onInputChange)
       $effect(() => {

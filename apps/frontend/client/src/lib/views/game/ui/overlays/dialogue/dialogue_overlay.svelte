@@ -7,8 +7,16 @@
 // - Animated suggestion chips with intent icons
 // - Skill check dice overlay (C-162)
 // - Message actions, branches, editing, TTS (C-343)
-import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
+//
+// C-424: the message list and composer are now the shared RichMessageList /
+// GuidedComposer components. Surface-specific concerns (skill-check dice,
+// portrait row, spatial speech bubble, suggestion chips, combat escalation)
+// are preserved here via snippets.
 import GameDice from '$lib/components/game/game_dice.svelte';
+import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
+import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
+import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
+import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 
 type Props = {
@@ -17,52 +25,15 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/**
- * Parses NPC message text into styled segments.
- * - `*action*` → italic, muted
- * - `"dialogue"` → normal
- * - plain text → normal
- * - Unmatched `*` and `"` are captured as text
- */
-const formatNpcText = (
-  text: string,
-): Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> => {
-  const segments: Array<{ type: 'action' | 'dialogue' | 'text'; content: string }> = [];
-  const re = /(\*[^*]+\*)|("[^"]+")|([^*"]+)|(\*|")/g;
-  let match = re.exec(text);
-  while (match !== null) {
-    if (match[1]) {
-      // *action*
-      segments.push({ type: 'action', content: match[1].replace(/^\*|\*$/g, '') });
-    } else if (match[2]) {
-      // "dialogue"
-      segments.push({ type: 'dialogue', content: match[2].replace(/^"|"$/g, '') });
-    } else if (match[3]) {
-      // Plain text
-      segments.push({ type: 'text', content: match[3] });
-    } else if (match[4]) {
-      // Unmatched delimiter (standalone * or ")
-      segments.push({ type: 'text', content: match[4] });
-    }
-    match = re.exec(text);
-  }
-  return segments;
-};
-
-/** Avatar URL for a message sender: player, party mate, or the NPC. */
-const avatarUrlFor = (
-  isPlayer: boolean,
-  isPartyMate: boolean,
-  viewModelRef: DialogueOverlayViewModelInterface,
-): string => {
-  if (isPlayer) {
-    return viewModelRef.playerAvatarUrl;
-  }
-  if (isPartyMate) {
-    return '/assets/npc/gandalf/neutral.webp';
-  }
-  return viewModelRef.npcAvatarUrl;
-};
+/** Map dialogue messages to the shared RichMessage row shape (C-424). */
+const richMessages = $derived(
+  viewModel.messages.map((m) => ({
+    id: m.id,
+    text: m.content,
+    sender: m.role === 'player' ? ('user' as const) : ('ai' as const),
+    timestamp: new Date(0),
+  })),
+);
 
 /** Bubble intent chip class for a suggestion chip. */
 const chipClassFor = (intentType: string): string => {
@@ -81,15 +52,32 @@ const chipClassFor = (intentType: string): string => {
   return 'btn-outline';
 };
 
-/** Message bubble styling for a sender role. */
-const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
-  if (isPlayer) {
-    return 'rounded-br-md bg-primary text-primary-content';
+/** Dispatches a shared MessageAction to the dialogue ViewModel. */
+const handleRowAction = (messageId: string, action: MessageAction): void => {
+  const msg = viewModel.messages.find((m) => m.id === messageId);
+  if (!msg) {
+    return;
   }
-  if (isPartyMate) {
-    return 'rounded-br-md bg-info/20 text-info-content border border-info/20';
+  switch (action) {
+    case 'copy':
+      void viewModel.copyMessage(msg.content);
+      break;
+    case 'retry':
+      viewModel.regenerateResponse(messageId);
+      break;
+    case 'speak':
+      viewModel.speakMessage(msg.content);
+      break;
+    case 'branch':
+      viewModel.createBranch({ parentMessageId: messageId });
+      break;
+    case 'edit':
+      viewModel.startEdit(messageId);
+      break;
+    case 'delete':
+      viewModel.deleteMessage(messageId);
+      break;
   }
-  return 'rounded-bl-md bg-base-100 text-base-content';
 };
 </script>
 
@@ -192,403 +180,185 @@ const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
       </div>
     </div>
 
-    <!-- Scrollable message history -->
-    <div
-      bind:this={viewModel.messageContainerElement}
-      class="flex-1 space-y-3 overflow-y-auto px-4 py-3"
-      aria-busy={viewModel.isStreaming}
-    >
-      {#snippet imageBlock(image: { id: string; url: string | null; status: string })}
-        <div class="flex justify-center py-1">
-          {#if image.status === 'generating'}
-            <div class="skeleton h-48 w-64 rounded-xl"></div>
-          {:else if image.status === 'done' && image.url}
-            <div class="overflow-hidden rounded-xl shadow-md max-w-xs">
-              <img
-                src={image.url}
-                alt="Generated scene"
-                class="w-full h-auto object-cover"
-                loading="lazy"
-              >
-            </div>
-          {:else if image.status === 'error'}
-            <span class="text-xs text-error italic">Image generation failed</span>
-          {/if}
-        </div>
-      {/snippet}
-
-      <!-- Images created before any message -->
-      {#each viewModel.generatedImages.filter((img) => img.afterMessageId === null) as image (image.id)}
-        {@render imageBlock(image)}
-      {/each}
-
-      {#each viewModel.messages as message, i (message.id)}
-        {@const isPlayer = message.role === 'player'}
-        {@const isPartyMate = message.senderName != null && message.senderName !== viewModel.npcName}
-        {@const alignRight = isPlayer || isPartyMate}
-        {@const isLast = i === viewModel.messages.length - 1}
-
-        <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
-          <!-- Bubble column -->
-          <div class="flex max-w-[75%] flex-col gap-0.5">
-            {#if viewModel.editingMessageId === message.id}
-              <!-- Editing: inline textarea -->
-              <div class="flex flex-col gap-1">
-                <textarea
-                  class="textarea textarea-bordered textarea-sm w-full"
-                  rows={3}
-                  value={viewModel.editText}
-                  oninput={(e) => viewModel.setEditText((e.target as HTMLTextAreaElement).value)}
-                ></textarea>
-                <div class="flex gap-1 justify-end">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs"
-                    onclick={() => viewModel.cancelEdit()}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-primary btn-xs"
-                    onclick={() => viewModel.editMessage({ messageId: message.id, newText: viewModel.editText })}
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            {:else}
-              <!-- Party mode: show avatar + name above bubble -->
-              {#if viewModel.showPartyUi}
-                {@const avatarUrl = avatarUrlFor(isPlayer, isPartyMate, viewModel)}
-                <div class="flex items-center gap-1.5 mb-0.5">
-                  <img
-                    src={avatarUrl}
-                    alt={message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
-                    class="h-5 w-5 rounded-full object-cover"
-                    loading="lazy"
-                  >
-                  <span class="text-xs font-medium text-base-content/50">
-                    {message.senderName || (isPlayer ? 'You' : viewModel.npcName)}
-                  </span>
-                </div>
-              {/if}
-              <!-- Message bubble -->
-              <div
-                class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {bubbleClassFor(isPlayer, isPartyMate)}"
-              >
-                {#if message.content}
-                  {#if isPlayer}
-                    {message.content}
-                  {:else}
-                    {#each formatNpcText(message.content) as segment}
-                      {#if segment.type === 'action'}
-                        <span class="italic text-base-content/60">*{segment.content}*</span>
-                      {:else}
-                        {segment.content}
-                      {/if}
-                    {/each}
-                  {/if}
-                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast && viewModel.streamingText}
-                  <!-- C-401: streamed narrative — live region announces the
-                       settled reply without interrupting per token. role=status
-                       already implies aria-live=polite, so only the role is set.
-                       The testid is the E2E anchor for the streaming span. -->
-                  <span class="inline-block" role="status" data-testid="dialogue-streaming-text">
-                    {#each formatNpcText(viewModel.streamingText) as segment}
-                      {#if segment.type === 'action'}
-                        <span class="italic text-base-content/60">*{segment.content}*</span>
-                      {:else}
-                        {segment.content}
-                      {/if}
-                    {/each}
-                  </span>
-                {:else if (viewModel.isStreaming || viewModel.isResolvingSkillCheck) && isLast}
-                  <span
-                    class="inline-flex items-center gap-1"
-                    role="status"
-                    aria-label="NPC is typing"
-                  >
-                    <span
-                      class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce"
-                      style="animation-delay: 0ms"
-                    ></span>
-                    <span
-                      class="h-1.5 w-1.5 rounded-full bg-current opacity-65 animate-bounce"
-                      style="animation-delay: 150ms"
-                    ></span>
-                    <span
-                      class="h-1.5 w-1.5 rounded-full bg-current opacity-85 animate-bounce"
-                      style="animation-delay: 300ms"
-                    ></span>
-                  </span>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Message action buttons (hover-visible) -->
-            <div
-              class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
+    {#snippet imageBlock(image: { id: string; url: string | null; status: string })}
+      <div class="flex justify-center py-1">
+        {#if image.status === 'generating'}
+          <div class="skeleton h-48 w-64 rounded-xl"></div>
+        {:else if image.status === 'done' && image.url}
+          <div class="overflow-hidden rounded-xl shadow-md max-w-xs">
+            <img
+              src={image.url}
+              alt="Generated scene"
+              class="w-full h-auto object-cover"
+              loading="lazy"
             >
-              {#if !isPlayer && !isPartyMate}
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Copy"
-                  aria-label="Copy"
-                  onclick={() => viewModel.copyMessage(message.content)}
-                >
-                  📋
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Retry"
-                  aria-label="Retry"
-                  disabled={viewModel.isStreaming}
-                  onclick={() => viewModel.regenerateResponse(message.id)}
-                >
-                  🔄
-                </button>
-                {#if viewModel.streamingTtsEnabled}
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs px-1"
-                    title="Speak"
-                    aria-label="Speak"
-                    onclick={() => viewModel.speakMessage(message.content)}
-                  >
-                    🔊
-                  </button>
-                {/if}
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Branch"
-                  aria-label="Branch"
-                  onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
-                >
-                  🌿
-                </button>
-              {:else}
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Copy"
-                  aria-label="Copy"
-                  onclick={() => viewModel.copyMessage(message.content)}
-                >
-                  📋
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Edit"
-                  aria-label="Edit"
-                  disabled={viewModel.isStreaming}
-                  onclick={() => viewModel.startEdit(message.id)}
-                >
-                  ✏️
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Delete"
-                  aria-label="Delete"
-                  disabled={viewModel.isStreaming}
-                  onclick={() => viewModel.deleteMessage(message.id)}
-                >
-                  🗑️
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  title="Branch"
-                  aria-label="Branch"
-                  onclick={() => viewModel.createBranch({ parentMessageId: message.id })}
-                >
-                  🌿
-                </button>
-              {/if}
-            </div>
-
-            <!-- Swipe controls for AI messages with alternatives -->
-            {#if !isPlayer && !isPartyMate && message.alternativeLabel}
-              <div class="flex items-center justify-center gap-1 mt-0.5">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  disabled={!message.canSwipeLeft}
-                  onclick={() => viewModel.swipeAlternative(message.id, 'left')}
-                  aria-label="Previous alternative"
-                >
-                  ◀
-                </button>
-                <span class="text-xs font-mono text-base-content/50"
-                  >{message.alternativeLabel}</span
-                >
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs px-1"
-                  disabled={!message.canSwipeRight}
-                  onclick={() => viewModel.swipeAlternative(message.id, 'right')}
-                  aria-label="Next alternative"
-                >
-                  ▶
-                </button>
-              </div>
-            {/if}
           </div>
-        </div>
+        {:else if image.status === 'error'}
+          <span class="text-xs text-error italic">Image generation failed</span>
+        {/if}
+      </div>
+    {/snippet}
 
-        <!-- Images anchored to this message -->
-        {#each viewModel.generatedImages.filter((img) => img.afterMessageId === message.id) as image (image.id)}
+    <!-- Scrollable message history (shared RichMessageList, C-424) -->
+    <RichMessageList
+      messages={richMessages}
+      bind:containerElement={viewModel.messageContainerElement}
+      containerClass="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+      isStreaming={viewModel.isStreaming}
+    >
+      {#snippet before()}
+        <!-- Images created before any message -->
+        {#each viewModel.generatedImages.filter((img) => img.afterMessageId === null) as image (image.id)}
           {@render imageBlock(image)}
         {/each}
+      {/snippet}
 
-        <!-- Dice roll result banner — anchored to the message it appeared after -->
-        {#if viewModel.rollResultBanner && viewModel.rollResultBanner.afterMessageId === message.id}
-          <div class="flex justify-center py-2">
-            <div
-              class="rounded-xl px-4 py-2 text-center shadow-md {viewModel.rollResultBanner.isSuccess
-                ? 'bg-success/10 border border-success/30'
-                : 'bg-error/10 border border-error/30'}"
-            >
-              <span class="text-xs text-base-content/50"
-                >{viewModel.rollResultBanner.checkType}
-                Check</span
-              >
-              <div class="flex items-baseline gap-2">
-                <span
-                  class="text-2xl font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
-                  >{viewModel.rollResultBanner.value}</span
+      {#snippet renderRow(message, index)}
+        {@const original = viewModel.messages.find((m) => m.id === message.id)}
+        <RichMessageRow
+          {message}
+          variant="dialogue"
+          characterName={viewModel.npcName}
+          npcAvatarUrl={viewModel.npcAvatarUrl}
+          playerAvatarUrl={viewModel.playerAvatarUrl}
+          showPartyUi={viewModel.showPartyUi}
+          senderName={original?.senderName}
+          isPartyMate={original?.senderName != null && original?.senderName !== viewModel.npcName}
+          formatNpcText={true}
+          editing={viewModel.editingMessageId === message.id}
+          editText={viewModel.editText}
+          onEditChange={(t) => viewModel.setEditText(t)}
+          onEditSave={(id) => viewModel.editMessage({ messageId: id, newText: viewModel.editText })}
+          onEditCancel={() => viewModel.cancelEdit()}
+          isStreaming={viewModel.isStreaming}
+          isLast={index === viewModel.messages.length - 1}
+          streamingText={viewModel.streamingText}
+          isResolvingSkillCheck={viewModel.isResolvingSkillCheck}
+          alternativeLabel={original?.alternativeLabel ?? ''}
+          canSwipeLeft={original?.canSwipeLeft ?? false}
+          canSwipeRight={original?.canSwipeRight ?? false}
+          ttsAvailable={viewModel.streamingTtsEnabled}
+          onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
+          onAction={handleRowAction}
+        >
+          {#snippet renderFooter(messageId)}
+            <!-- Images anchored to this message -->
+            {#each viewModel.generatedImages.filter((img) => img.afterMessageId === messageId) as image (image.id)}
+              {@render imageBlock(image)}
+            {/each}
+
+            <!-- Dice roll result banner — anchored to the message it appeared after -->
+            {#if viewModel.rollResultBanner && viewModel.rollResultBanner.afterMessageId === messageId}
+              <div class="flex justify-center py-2">
+                <div
+                  class="rounded-xl px-4 py-2 text-center shadow-md {viewModel.rollResultBanner.isSuccess
+                    ? 'bg-success/10 border border-success/30'
+                    : 'bg-error/10 border border-error/30'}"
                 >
-                <span class="text-sm text-base-content/50"
-                  >vs DC {viewModel.rollResultBanner.dc}</span
-                >
+                  <span class="text-xs text-base-content/50"
+                    >{viewModel.rollResultBanner.checkType}
+                    Check</span
+                  >
+                  <div class="flex items-baseline gap-2">
+                    <span
+                      class="text-2xl font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
+                      >{viewModel.rollResultBanner.value}</span
+                    >
+                    <span class="text-sm text-base-content/50"
+                      >vs DC {viewModel.rollResultBanner.dc}</span
+                    >
+                  </div>
+                  <span
+                    class="text-sm font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
+                  >
+                    {viewModel.rollResultBanner.isSuccess ? '✅ SUCCESS' : '❌ FAILURE'}
+                  </span>
+                </div>
               </div>
-              <span
-                class="text-sm font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
-              >
-                {viewModel.rollResultBanner.isSuccess ? '✅ SUCCESS' : '❌ FAILURE'}
+            {/if}
+          {/snippet}
+        </RichMessageRow>
+      {/snippet}
+
+      {#snippet after()}
+        <!-- Typing indicator — shown while waiting for NPC response -->
+        {#if viewModel.isStreaming && viewModel.messages.length > 0 && viewModel.messages[viewModel.messages.length - 1].role === 'player'}
+          <div class="flex gap-2">
+            <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
+              <span class="inline-flex items-center gap-1">
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-base-content/30 animate-bounce"
+                  style="animation-delay: 0ms"
+                ></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-base-content/40 animate-bounce"
+                  style="animation-delay: 150ms"
+                ></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-base-content/50 animate-bounce"
+                  style="animation-delay: 300ms"
+                ></span>
               </span>
             </div>
           </div>
         {/if}
-      {/each}
 
-      <!-- Typing indicator — shown while waiting for NPC response -->
-      {#if viewModel.isStreaming && viewModel.messages.length > 0 && viewModel.messages[viewModel.messages.length - 1].role === 'player'}
-        <div class="flex gap-2">
-          <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
-            <span class="inline-flex items-center gap-1">
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-base-content/30 animate-bounce"
-                style="animation-delay: 0ms"
-              ></span>
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-base-content/40 animate-bounce"
-                style="animation-delay: 150ms"
-              ></span>
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-base-content/50 animate-bounce"
-                style="animation-delay: 300ms"
-              ></span>
-            </span>
+        {#if viewModel.streamError}
+          <div class="rounded-lg bg-error/10 p-2 text-center text-xs text-error">
+            {viewModel.streamError}
           </div>
-        </div>
-      {/if}
+        {/if}
 
-      {#if viewModel.streamError}
-        <div class="rounded-lg bg-error/10 p-2 text-center text-xs text-error">
-          {viewModel.streamError}
-        </div>
-      {/if}
-
-      <!-- CYOA choice buttons -->
-      {#if viewModel.activeChoices.length > 0}
-        <div class="space-y-1 px-2" data-testid="cyoa-choices">
-          {#each viewModel.activeChoices as choice (choice.id)}
-            <button
-              type="button"
-              class="btn btn-sm btn-outline w-full justify-start gap-2 normal-case text-sm"
-              onclick={() => viewModel.sendMessage(choice.label)}
-            >
-              <span class="truncate text-left">{choice.label}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-
-      {#if viewModel.isResolvingSkillCheck}
-        <div class="flex items-center justify-center gap-2 py-2 text-xs text-base-content/50">
-          <span class="loading loading-spinner loading-xs"></span>
-          <span>Resolving skill check...</span>
-        </div>
-      {/if}
-
-      <!-- Branch selector -->
-      {#if viewModel.branches.length > 0}
-        <div class="border-t border-base-content/10 px-3 py-1">
-          <div class="flex items-center gap-1 text-xs">
-            <span class="text-base-content/50">Branch:</span>
-            <button
-              type="button"
-              class="btn btn-xs"
-              class:btn-active={viewModel.activeBranchId === null}
-              onclick={() => viewModel.switchBranch(null)}
-            >
-              Main
-            </button>
-            {#each viewModel.branches as branch (branch.branchId)}
+        <!-- CYOA choice buttons -->
+        {#if viewModel.activeChoices.length > 0}
+          <div class="space-y-1 px-2" data-testid="cyoa-choices">
+            {#each viewModel.activeChoices as choice (choice.id)}
               <button
                 type="button"
-                class="btn btn-xs"
-                class:btn-active={viewModel.activeBranchId === branch.branchId}
-                onclick={() => viewModel.switchBranch(branch.branchId)}
+                class="btn btn-sm btn-outline w-full justify-start gap-2 normal-case text-sm"
+                onclick={() => viewModel.sendMessage(choice.label)}
               >
-                {branch.label ?? 'Branch'}
+                <span class="truncate text-left">{choice.label}</span>
               </button>
             {/each}
           </div>
-        </div>
-      {/if}
-    </div>
+        {/if}
 
-    <!-- Suggestion chips — rendered inside the card, above the input -->
-    {#if viewModel.suggestedChips.length > 0}
-      {#key viewModel.suggestedChips.map(c => c.id).join('|')}
-        <div
-          class="flex flex-wrap gap-1.5 border-t border-base-content/5 px-4 py-2"
-          data-testid="suggestion-chips"
-        >
-          {#each viewModel.suggestedChips as chip (chip.id)}
-            <button
-              type="button"
-              class="btn btn-xs gap-1 normal-case border-base-content/15 {chipClassFor(chip.intentType)}"
-              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-              onclick={() => viewModel.handleChipTap(chip.id)}
-              aria-label={chip.label}
-            >
-              <span>
-                {#if chip.intentType === 'skill_check'}
-                  🎲
-                {:else if chip.intentType === 'combat'}
-                  ⚔️
-                {:else if chip.intentType === 'trade'}
-                  💰
-                {:else if chip.intentType === 'quest'}
-                  📋
-                {:else}
-                  💬
-                {/if}
-              </span>
-              {chip.label}
-            </button>
-          {/each}
-        </div>
-      {/key}
-    {/if}
+        {#if viewModel.isResolvingSkillCheck}
+          <div class="flex items-center justify-center gap-2 py-2 text-xs text-base-content/50">
+            <span class="loading loading-spinner loading-xs"></span>
+            <span>Resolving skill check...</span>
+          </div>
+        {/if}
+
+        <!-- Branch selector -->
+        {#if viewModel.branches.length > 0}
+          <div class="border-t border-base-content/10 px-3 py-1">
+            <div class="flex items-center gap-1 text-xs">
+              <span class="text-base-content/50">Branch:</span>
+              <button
+                type="button"
+                class="btn btn-xs"
+                class:btn-active={viewModel.activeBranchId === null}
+                onclick={() => viewModel.switchBranch(null)}
+              >
+                Main
+              </button>
+              {#each viewModel.branches as branch (branch.branchId)}
+                <button
+                  type="button"
+                  class="btn btn-xs"
+                  class:btn-active={viewModel.activeBranchId === branch.branchId}
+                  onclick={() => viewModel.switchBranch(branch.branchId)}
+                >
+                  {branch.label ?? 'Branch'}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      {/snippet}
+    </RichMessageList>
 
     <!-- Toast notification -->
     {#if viewModel.toastMessage}
@@ -624,7 +394,7 @@ const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
       </div>
     {/if}
 
-    <!-- Input area -->
+    <!-- Input area (shared GuidedComposer, C-424) -->
     <div class="shrink-0 border-t border-base-content/10 px-4 py-3">
       {#if viewModel.recruitAvailable}
         <div class="flex items-center justify-center gap-3">
@@ -638,54 +408,80 @@ const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
           </button>
         </div>
       {:else}
-        <div class="flex items-end gap-2">
-          <div class="flex-1">
-            <AutoResizeTextarea
-              value={viewModel.inputText}
-              onchange={(text) => viewModel.setInput(text)}
-              onkeydown={(e) => viewModel.handleKeyDown(e)}
-              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-              placeholder="Reply to {viewModel.npcName}..."
-              class="w-full"
-            />
-          </div>
-          <div class="flex gap-1">
-            <button
-              type="button"
-              class="btn btn-sm btn-square {viewModel.isStreaming ? 'btn-error' : 'btn-primary'}"
-              onclick={() => viewModel.isStreaming ? viewModel.cancelStreaming() : viewModel.sendMessage()}
-              disabled={viewModel.isResolvingSkillCheck}
-              title={viewModel.isStreaming ? 'Cancel' : 'Send'}
-            >
-              {#if viewModel.isResolvingSkillCheck}
-                <span class="loading loading-spinner loading-xs"></span>
-              {:else if viewModel.isStreaming}
-                <span class="text-lg">■</span>
-              {:else}
-                <span class="text-lg">↑</span>
+        <GuidedComposer
+          value={viewModel.inputText}
+          onInput={(t) => viewModel.setInput(t)}
+          onSend={() => viewModel.sendMessage()}
+          onKeyDown={(e) => viewModel.handleKeyDown(e)}
+          placeholder="Reply to {viewModel.npcName}..."
+          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          sendDisabled={viewModel.isResolvingSkillCheck}
+          requireText={false}
+          isSending={viewModel.isResolvingSkillCheck}
+          isStreaming={viewModel.isStreaming}
+          onCancel={() => viewModel.cancelStreaming()}
+          sendIcon="↑"
+          square={true}
+        >
+          {#snippet above()}
+            <!-- Suggestion chips — rendered inside the card, above the input -->
+            {#if viewModel.suggestedChips.length > 0}
+              {#key viewModel.suggestedChips.map((c) => c.id).join('|')}
+                <div
+                  class="flex flex-wrap gap-1.5 border-t border-base-content/5 px-4 py-2"
+                  data-testid="suggestion-chips"
+                >
+                  {#each viewModel.suggestedChips as chip (chip.id)}
+                    <button
+                      type="button"
+                      class="btn btn-xs gap-1 normal-case border-base-content/15 {chipClassFor(chip.intentType)}"
+                      disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+                      onclick={() => viewModel.handleChipTap(chip.id)}
+                      aria-label={chip.label}
+                    >
+                      <span>
+                        {#if chip.intentType === 'skill_check'}
+                          🎲
+                        {:else if chip.intentType === 'combat'}
+                          ⚔️
+                        {:else if chip.intentType === 'trade'}
+                          💰
+                        {:else if chip.intentType === 'quest'}
+                          📋
+                        {:else}
+                          💬
+                        {/if}
+                      </span>
+                      {chip.label}
+                    </button>
+                  {/each}
+                </div>
+              {/key}
+            {/if}
+          {/snippet}
+
+          {#snippet extras()}
+            <div class="flex items-center justify-between">
+              <!-- TTS toggle (C-417 AC-5: accessible name + visible label) -->
+              <label class="flex cursor-pointer items-center gap-1.5">
+                <span class="text-xs font-medium text-base-content/60">🔊 TTS</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-xs toggle-primary"
+                  aria-label="Toggle text-to-speech"
+                  checked={viewModel.streamingTtsEnabled}
+                  onclick={() => viewModel.toggleStreamingTts()}
+                >
+              </label>
+              <!-- Draft recovery badge -->
+              {#if viewModel.showDraftRecovery}
+                <span class="badge badge-info badge-sm gap-1" aria-live="polite">
+                  📝 Draft restored
+                </span>
               {/if}
-            </button>
-          </div>
-        </div>
-        <div class="mt-2 flex items-center justify-between">
-          <!-- TTS toggle (C-417 AC-5: accessible name + visible label) -->
-          <label class="flex cursor-pointer items-center gap-1.5">
-            <span class="text-xs font-medium text-base-content/60">🔊 TTS</span>
-            <input
-              type="checkbox"
-              class="toggle toggle-xs toggle-primary"
-              aria-label="Toggle text-to-speech"
-              checked={viewModel.streamingTtsEnabled}
-              onclick={() => viewModel.toggleStreamingTts()}
-            >
-          </label>
-          <!-- Draft recovery badge -->
-          {#if viewModel.showDraftRecovery}
-            <span class="badge badge-info badge-sm gap-1" aria-live="polite">
-              📝 Draft restored
-            </span>
-          {/if}
-        </div>
+            </div>
+          {/snippet}
+        </GuidedComposer>
       {/if}
     </div>
   </div>

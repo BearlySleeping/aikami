@@ -5,6 +5,32 @@
 //
 // Contract: C-231 Rich Chat Streaming
 
+import type { DiceCardData } from '@aikami/types';
+
+// ── Rich Message (C-424) ────────────────────────────────────────────────
+
+/**
+ * A message row rendered by the shared `RichMessageList`.
+ *
+ * This is the C-231 message shape (id/text/sender/timestamp) plus C-421's
+ * `dice` kind. It is the single row shape consumed by both the chat surface
+ * and the in-game dialogue overlay (C-424).
+ */
+export type RichMessage = {
+  /** Unique message identifier (used as the {#each} key). */
+  id: string;
+  /** Message text content. */
+  text: string;
+  /** Who sent the message. */
+  sender: 'user' | 'ai' | 'system';
+  /** When the message was created. */
+  timestamp: Date;
+  /** Message kind — 'dice' renders a DiceCard instead of plain text. */
+  kind?: 'text' | 'dice';
+  /** Present when kind === 'dice'. */
+  dice?: DiceCardData;
+};
+
 // ── Enhanced Message ────────────────────────────────────────────────────
 
 /**
