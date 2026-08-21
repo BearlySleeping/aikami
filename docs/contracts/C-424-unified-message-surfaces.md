@@ -2,7 +2,7 @@
 id: C-424
 title: "Unified Message Surfaces — one RichMessageList + GuidedComposer behind chat and dialogue"
 source: "UX review 2026-08-21, re-verified and re-scoped 2026-08-21"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — resequenced up from P2. It is the precondition for C-420 and the reason C-420/C-421 each had to be written twice. |
 | **Sequence** | **3 of 6** — after C-421 so `DiceCard` exists to be composed in; before C-420 so chips land in one place instead of two |
 | **Dependencies** | C-231 (landed — `EnhancedChatMessage`); C-343 (landed — dialogue message actions/branches); C-423 (a11y baseline, sequence 1); C-421 (`DiceCard`, sequence 2) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 3.0.0 |
@@ -252,6 +252,12 @@ intact.
 **When** C-423's a11y spec and a 200-message render benchmark are run
 **Then** no serious/critical axe violations appear on either surface, and
 message-list render time is no worse than the pre-refactor baseline.
+
+> ⚠️ **Dependency note (verified 2026-08-21):** C-423 is marked `implemented`
+> but `apps/e2e/tests/client/message_actions_a11y.spec.ts` is **not present** in
+> the tree. If it is still missing when this contract is implemented, create it
+> (port C-423's axe + keyboard-focus + touch-width assertions at 390×844 and
+> 1280×720) before AC-3 can be verified. Do not silently skip the a11y gate.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
