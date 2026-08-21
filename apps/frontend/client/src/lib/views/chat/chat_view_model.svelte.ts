@@ -2,7 +2,6 @@
 
 import {
   CYOA_AGENT_ID,
-  getSlashCompletions,
   IMPERSONATION_COMMAND,
   IMPERSONATION_DRAFT_READY_TOAST,
   NO_PERSONA_TOAST_MESSAGE,
@@ -45,6 +44,10 @@ import {
   type ChoiceButtonsViewModelInterface,
   getChoiceButtonsViewModel,
 } from './choice_buttons_view_model.svelte.ts';
+import {
+  getSlashCommandAutocomplete,
+  type SlashCommandAutocompleteInterface,
+} from './slash_command_autocomplete.svelte.ts';
 
 export type ChatViewModelOptions = BaseViewModelOptions & {
   /** The chat document ID to load. */
@@ -182,12 +185,6 @@ export class ChatViewModel
   });
   /** Whether an impersonation draft is currently being generated. */
   isImpersonationDrafting = $state(false);
-  /** Slash command completions for current input. */
-  slashCompletions = $state<readonly SlashCommandEntry[]>([]);
-  /** Selected index in the completions list (-1 = nothing selected). */
-  selectedSlashCompletion = $state(-1);
-  /** Whether to show the autocomplete popup. */
-  showSlashCompletions = $state(false);
   /** Toast notification message — auto-clears after display. */
   toastMessage = $state('');
   /** Whether CYOA choices feed the impersonation draft instead of posting (C-245 AC-6). */
@@ -195,6 +192,9 @@ export class ChatViewModel
 
   /** CYOA choice buttons ViewModel — owns display state for the choice stack. */
   readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
+
+  /** Slash-command autocomplete sub-service — owns completion state + navigation (C-425). */
+  private readonly _slashAutocomplete: SlashCommandAutocompleteInterface;
 
   /** Suggestion chips shown above the composer (C-420). */
   suggestedChips = $state<NpcSuggestionChip[]>([]);
@@ -237,6 +237,35 @@ export class ChatViewModel
       choices: [],
       onSelect: (choice) => this._handleChoiceSelected(choice),
     });
+    this._slashAutocomplete = getSlashCommandAutocomplete({
+      className: 'SlashCommandAutocomplete',
+      onApply: (commandName) => {
+        this.inputText = `/${commandName} `;
+        this._focusTextarea?.();
+      },
+    });
+  }
+
+  /** Slash command completions for current input (delegated to sub-service). */
+  get slashCompletions(): readonly SlashCommandEntry[] {
+    return this._slashAutocomplete.completions;
+  }
+
+  /** Selected index in the completions list (-1 = nothing selected). */
+  get selectedSlashCompletion(): number {
+    return this._slashAutocomplete.selectedIndex;
+  }
+
+  /** Whether to show the autocomplete popup. */
+  get showSlashCompletions(): boolean {
+    return this._slashAutocomplete.visible;
+  }
+
+  override async dispose(): Promise<void> {
+    // Dispose the composed sub-service so its reactive roots are torn down
+    // with the parent (C-425 lifecycle gotcha).
+    await this._slashAutocomplete.dispose();
+    return super.dispose();
   }
 
   /** Scrollable message container — bound by View via bind:this. */
@@ -400,9 +429,7 @@ export class ChatViewModel
         return;
       }
       if (event.key === 'Escape') {
-        this.showSlashCompletions = false;
-        this.slashCompletions = [];
-        this.selectedSlashCompletion = -1;
+        this._slashAutocomplete.dismiss();
         return;
       }
     }
@@ -677,17 +704,7 @@ export class ChatViewModel
     this.inputText = text;
 
     // ── Slash command autocomplete ──
-    const trimmed = text.trim();
-    if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
-      const matches = getSlashCompletions(trimmed);
-      this.slashCompletions = matches;
-      this.showSlashCompletions = matches.length > 0;
-      this.selectedSlashCompletion = matches.length > 0 ? 0 : -1;
-    } else {
-      this.slashCompletions = [];
-      this.showSlashCompletions = false;
-      this.selectedSlashCompletion = -1;
-    }
+    this._slashAutocomplete.update(text);
 
     // Debounced save — fire-and-forget so input feels instant
     void draftStore.saveDraft({ chatId: this._chatId, text });
@@ -885,17 +902,7 @@ export class ChatViewModel
    * @param delta — -1 to move up, +1 to move down.
    */
   navigateSlashCompletion(delta: number): void {
-    if (this.slashCompletions.length === 0) {
-      return;
-    }
-    const next = this.selectedSlashCompletion + delta;
-    if (next < 0) {
-      this.selectedSlashCompletion = this.slashCompletions.length - 1;
-    } else if (next >= this.slashCompletions.length) {
-      this.selectedSlashCompletion = 0;
-    } else {
-      this.selectedSlashCompletion = next;
-    }
+    this._slashAutocomplete.navigate(delta);
   }
 
   /**
@@ -904,22 +911,7 @@ export class ChatViewModel
    * dismisses the autocomplete popup.
    */
   applySlashCompletion(): void {
-    if (!this.showSlashCompletions || this.selectedSlashCompletion < 0) {
-      return;
-    }
-    const cmd = this.slashCompletions[this.selectedSlashCompletion];
-    if (!cmd) {
-      return;
-    }
-
-    this.inputText = `/${cmd.name} `;
-    this.showSlashCompletions = false;
-    this.slashCompletions = [];
-    this.selectedSlashCompletion = -1;
-
-    // Return focus to the textarea after autocomplete insertion.
-    // The view registers this callback when the textarea mounts.
-    this._focusTextarea?.();
+    this._slashAutocomplete.apply();
   }
 
   /** Callback registered by the view to focus the textarea. */
@@ -934,8 +926,7 @@ export class ChatViewModel
    * Selects a completion by index and immediately applies it.
    */
   selectAndApplySlashCompletion(index: number): void {
-    this.selectedSlashCompletion = index;
-    this.applySlashCompletion();
+    this._slashAutocomplete.selectAndApply(index);
   }
 
   /**
