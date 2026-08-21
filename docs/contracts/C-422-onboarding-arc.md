@@ -1,7 +1,7 @@
 ---
 id: C-422
-title: "Guided First-Session Onboarding Arc — replace dead empty-states with a real tutorial that bridges chat → combat → world"
-source: "UX review 2026-08-21 — 'Empty-state is a dead end', 'Onboarding needs a real tutorial arc, not just hint bubbles'"
+title: "Guided First-Session Onboarding Arc — widen the hint schema past keybindings, then teach the actual game"
+source: "UX review 2026-08-21, re-verified against code 2026-08-21"
 status: draft
 github:
   issue_number: null
@@ -17,170 +17,357 @@ created_at: "2026-08-21"
 
 | Field | Value |
 |---|---|
-| **Source** | UX review 2026-08-21 — "Empty-state + onboarding arc" improvement. |
-| **Target** | `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts`; `apps/frontend/client/src/lib/views/chat/chat_view.svelte`; `apps/frontend/client/src/lib/views/start/`; `apps/frontend/client/src/lib/views/onboarding/`; `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte` |
-| **Priority** | P1 — first-session retention is the make-or-break for an AI RPG; the infrastructure (hint state machine) already exists |
-| **Dependencies** | C-327 (landed — onboarding hint state machine); C-420 (planned — guided-choice chips for starter chips) |
+| **Source** | UX review 2026-08-21 — "empty-state is a dead end; onboarding needs a real arc". Re-verified: the arc already exists but the schema physically cannot express gameplay steps. That blocker is now AC-1. |
+| **Target** | `packages/shared/schemas/src/lib/game/onboarding_hints.ts`; `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts`; `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte`; `apps/frontend/client/static/content-packs/emberwatch/manifest.json`; `apps/frontend/client/src/lib/views/start/` |
+| **Priority** | P1 — first-session retention. Sequenced last of the P1s because it depends on the surfaces the others build. |
+| **Sequence** | **5 of 6** — needs C-420's starter chips (AC-4) and C-421's dice (a tutorial step teaches `/roll`) |
+| **Dependencies** | C-327 (landed — hint state machine); C-420 (starter chips, sequence 4); C-421 (working dice, sequence 2) |
 | **Status** | draft |
-| **Promotion** | `sandbox` |
-| **Docs Impact** | user-facing → `apps/frontend/docs` (if the tutorial is documented) |
-| **Contract version** | 2.0.0 |
+| **Promotion** | `integrated` |
+| **Docs Impact** | user-facing → `apps/frontend/docs` if the tutorial is documented |
+| **Contract version** | 3.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: The onboarding hint system (`onboarding_hint_service.svelte.ts`, contract C-327) is a capable **state machine** — it shows contextual tutorial toasts, marks hints learned when the player performs the action, persists per-pack in localStorage, and supports replay/reset. But it is a **fragmentary hint system**, not a tutorial **arc**: hints appear contextually but there is no coherent first-session path that takes a new player from "dropped an API key" through "I understand this is a chat, this is combat, this is my world." Empty-states are dead ends — the chat view shows `"No messages yet. Start the conversation!"`, and the first-run experience (drop a key → here's the world) is a large leap for a non-technical player.
-- **Reproduction**: Create a new account, drop an API key, open the game. There is no guided 3-minute walkthrough; onboarding hints fire opportunistically but don't form a structured path. A new player may not know how to talk to an NPC, how to roll dice, or how combat works.
-- **Existing implementation to reuse**: `OnboardingHintService` (state machine, `loadOnboarding`, `onActionPerformed`, `resetOnboarding`, `currentHint`, `isComplete`, localStorage persistence); `OnboardingHint` HUD component; C-420's starter chips (planned); the start menu and onboarding routes.
-- **Known gaps**: (a) no structured multi-step arc, just independent hints; (b) no progress indicator / sense of "this is a tutorial"; (c) empty-states don't guide; (d) no skip-and-replay UX that's discoverable.
-- **Baseline tests**: `onboarding_hint_service` tests exist (C-327). Run before starting.
+### Correction: the arc already exists, and is already linear
+
+The review described "a fragmentary hint system, not a tutorial arc, hints
+appear contextually but there is no coherent path". Verification does not
+support that. `apps/frontend/client/static/content-packs/emberwatch/manifest.json`
+ships **five ordered steps chained by `trigger: "after_previous"`**:
+
+```
+hint_move      (map_loaded)       "Use {key} to move — try walking around!"
+hint_interact  (near_interactable) "Press {key} to interact with people and objects"
+hint_quest_log (after_previous)   "Press {key} to open your quest log"
+hint_inventory (after_previous)   "Press {key} to check your inventory"
+hint_pause     (after_previous)   "Press {key} to pause and save your game"
+```
+
+That is a linear arc with keybinding templating. It is not fragmentary.
+
+### The real blocker the review missed
+
+`OnboardingHintStepSchema.action` is a **closed union of nine input action ids**
+— `packages/shared/schemas/src/lib/game/onboarding_hints.ts:12-21`:
+
+```
+move_up, move_down, move_left, move_right, interact,
+open_inventory, open_quest_log, open_character, open_menu
+```
+
+You **cannot author** a step for "talk to an NPC", "roll a die", "win a fight",
+or "accept a quest" — the schema rejects it at validation. Every gameplay-
+teaching step this contract wants requires widening that union first. The
+existing arc is keybinding-shaped *because the schema permits nothing else.*
+
+This is why AC-1 exists, and why it must land before any content work.
+
+### What is genuinely missing
+
+- No progress indication — a player cannot tell they are in a tutorial or how
+  much is left. `OnboardingHintServiceInterface`
+  (`onboarding_hint_service.svelte.ts:29-48`) exposes `currentHint`,
+  `hintVisible`, `isComplete` — no index, no total.
+- No discoverable skip; `resetOnboarding()` exists on the service but has no
+  UI entry point in the start or pause menus.
+- Chat's empty state is a dead end (`chat_view.svelte:87`) — addressed by
+  C-420 AC-2, which is why this contract sits behind it.
+- Nothing teaches conversation, dice, or combat.
+
+- **Reproduction**: fresh profile → drop an API key → open the game. Five
+  keybinding toasts fire in order. Nothing teaches what the game *is*.
+- **Baseline tests**: `onboarding_hint_service` tests (C-327). Run before starting.
 
 ## User Outcome
 
-After this contract, a **new player** completes a guided 3–5 minute onboarding arc in their first session: it introduces the character, the chat/dialogue, dice rolling, the HUD, and combat, with clear progress and the ability to skip or replay at any time. A **player** who already knows the game can dismiss onboarding once and never see it again.
+A **new player** completes a 3–5 minute guided arc that teaches movement,
+interaction, conversation, dice and combat, with visible progress and a
+discoverable skip. A **returning player** dismisses it once and never sees it
+again, but can replay it from the start or pause menu.
 
 ## Success Measures
 
-- **Time/latency target**: onboarding arc is 3–5 minutes; zero added latency (purely UI/UX orchestration, no AI round trips required for the core path).
-- **Offline/degraded behavior**: the tutorial is entirely local and works offline; AI-dependent steps (e.g. "talk to an NPC") degrade to a simulated/dry-run path or a "this needs a model" message.
-- **Production journey enabled**: a first-time player goes from sign-up to a coherent first gameplay loop without getting stuck — the highest-leverage retention lever.
+- **Time/latency target**: arc completes in 3–5 minutes; no AI round trip
+  required for the core path.
+- **Offline/degraded behavior**: every step that can be local is local. Steps
+  marked `requiresModel` show a clear message and are skippable without
+  blocking the arc.
+- **Production journey enabled**: the leap from "dropped a key" to "I
+  understand this game" stops being unassisted.
 
 ## Existing System & Reuse Map
 
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
-| Hint state machine | `services/game/onboarding_hint_service.svelte.ts` | reuse — extend into a sequence/arc |
-| HUD hint toast | `views/game/ui/hud/onboarding_hint.svelte` | reuse — extend with progress + step UI |
-| Starter chips | C-420 `GuidedChipsView` (planned) | reuse — starter chips in empty state |
-| Start/onboarding routes | `views/start/`, `views/onboarding/` | modify — wire an arc |
-| Empty-state text | `views/chat/chat_view.svelte` | modify — replace dead-end with guided content |
+| Step schema | `schemas/.../onboarding_hints.ts:12-48` | **modify — widen `action` (AC-1)** |
+| Hint state machine | `services/game/onboarding_hint_service.svelte.ts` | modify — expose progress |
+| `{key}` templating | same service | reuse — keep for input steps |
+| HUD toast | `views/game/ui/hud/onboarding_hint.svelte` | modify — add progress + skip |
+| localStorage progress | `OnboardingProgress` (`:21-26`) | reuse — additive migration |
+| Authored steps | `content-packs/emberwatch/manifest.json` | modify — extend the arc |
+| Starter chips | C-420 AC-2 | reuse — the conversation step |
+| Dice | C-421 | reuse — the dice step |
 
 ## Overview
 
-Turn the fragmentary hint system into a structured, guided **onboarding arc** that walks a first-time player through the core loops: meet your character, learn chat/dialogue (with starter chips), learn dice, understand the HUD, and experience combat. Add a visible progress indicator, a discoverable skip/replay affordance, and replace dead empty-states with guided content that points toward the next step.
+Widen the step schema so gameplay can be taught at all, expose progress on the
+existing state machine, add skip and replay affordances, then author the
+extended arc as content. Schema first, service second, UI third, content last.
 
 ## Design Reference
 
-- `services/game/onboarding_hint_service.svelte.ts` — the existing state machine to extend.
-- `views/game/ui/hud/onboarding_hint.svelte` — the existing hint HUD to extend.
-- C-420 `GuidedChipsView` (planned) — starter chips in the empty state.
-- `views/start/` and `views/onboarding/` — existing onboarding surfaces.
+- `schemas/.../onboarding_hints.ts:12-21` — the union to widen.
+- `services/game/onboarding_hint_service.svelte.ts:29-48` — the interface to extend.
+- `content-packs/emberwatch/manifest.json` — the arc to extend.
+- `views/game/ui/hud/onboarding_hint.svelte` — the toast to extend.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
-- Extend `OnboardingHintService` to model a **sequence of steps** (an arc) in addition to independent hints, with a `currentStep`, `stepIndex`, and `totalSteps` exposed for progress UI.
-- Add a visible onboarding progress indicator (e.g. a slim step tracker) and a persistent "How to play / Replay tutorial" affordance in the start menu and pause menu.
-- Replace the chat empty-state dead-end with a guided panel that uses starter chips (from C-420) and contextual next-step prompts.
-- Add skip and replay; persist "onboarding complete" per user so it shows once.
-- AI-dependent steps degrade gracefully offline (dry-run/simulated path or clear messaging).
+- Widen `action` to a discriminated shape rather than one flat union, so input
+  hints keep `{key}` templating and gameplay steps do not pretend to be
+  keybindings:
+  `{ kind: 'input', actionId: InputActionId } | { kind: 'event', eventId: string }`.
+  Keep `InputActionId` as the input-side source of truth.
+- **Additive migration.** Existing manifests use a bare string `action`. Accept
+  both shapes at parse time, normalising the legacy form to
+  `{ kind: 'input', actionId }`, so Emberwatch's current five steps keep working
+  without a content edit.
+- Extend `OnboardingHintServiceInterface` with `stepIndex`, `totalSteps` and
+  `skipOnboarding()`. Do not restructure the state machine — it works.
+- Gameplay steps complete via a new `onEventPerformed(eventId)` alongside the
+  existing `onActionPerformed(actionId)`; emit those events from the surfaces
+  that already exist (dialogue open, chip tap, roll resolved, combat won).
+- Progress in text ("Step 3 of 8"), never colour alone. Esc dismisses the
+  current toast; skip is explicit and persists completion.
+- Gate the extended arc behind a feature flag so it can be disabled without a
+  redeploy.
+- Inherits the C-423 baseline — skip/replay are real buttons, keyboard-reachable.
 
 ## State & Data Models
 
 ```typescript
-type OnboardingStep = {
-  id: string;
-  title: string;
-  /** Short instruction shown to the player. */
-  body: string;
-  /** The action that marks this step learned. */
-  learnActionId: string;
-  /** Where in the UI this step is anchored (chat, combat, hud, start). */
-  surface: 'start' | 'chat' | 'combat' | 'hud' | 'dialogue';
-  /** Optional prerequisite step id. */
-  requiresStepId?: string;
-  /** Optional: AI required for this step? */
-  requiresModel?: boolean;
-};
+/** Widened step action. Legacy bare-string `action` normalises to the input form. */
+type OnboardingStepAction =
+  | { kind: 'input'; actionId: InputActionId }
+  | { kind: 'event'; eventId: string };
 
-type OnboardingArc = {
+type OnboardingHintStep = {
   id: string;
-  title: string;
-  steps: OnboardingStep[];
+  action: OnboardingStepAction;
+  /** "{key}" is substituted for input steps only. */
+  text: string;
+  trigger: 'map_loaded' | 'near_interactable' | 'after_previous';
+  /** Step needs a configured model; skippable when none. */
+  requiresModel?: boolean;
 };
 ```
 
-Progress is persisted via the existing `OnboardingProgress` (localStorage): `{ packId, learned, completedAt }`. A step is "learned" when its `learnActionId` fires through `onActionPerformed`.
+Persistence keeps the existing `OnboardingProgress`
+(`{ packId, learned, completedAt }`, localStorage). New step ids default to
+unlearned; unknown legacy ids are ignored rather than erroring.
+
+**Deliberately not modelled:** `surface`, `title`, and `requiresStepId` from the
+v2.0.0 draft. `trigger: 'after_previous'` already sequences steps, the toast has
+no title slot, and no step yet needs a non-linear prerequisite. Add them when a
+step needs them.
 
 ## Quality Requirements
 
-- **Offline/degraded mode**: core tutorial steps are local and offline; `requiresModel` steps show a clear "needs a model" message when AI is unavailable, and can be skipped without blocking the arc.
-- **Accessibility/input**: onboarding steps are keyboard-reachable; progress is conveyed in text ("Step 2 of 5") not color alone; hints dismissible by Esc.
-- **Performance budget**: pure DOM/UI; no engine-loop impact.
-- **Security/privacy**: no new data; progress is local. No exposure.
-- **Persistence/migration**: onboarding completion persists in localStorage via existing mechanism; old hint progress remains compatible (a completed hint set simply maps to "arc done"). Migration: reconcile `learned` map with new step ids.
-- **Cancellation/retry/idempotency**: skip/replay are idempotent; reset restores a fresh arc.
-- **Observability**: log arc start/complete and where players drop off (step id) at debug level for onboarding analytics.
+- **Offline/degraded mode**: input and UI steps are fully local. `requiresModel`
+  steps show a clear "needs a model" message and can be skipped without
+  blocking the remaining steps.
+- **Accessibility/input**: progress in text; steps keyboard-reachable; Esc
+  dismisses; skip and replay are focusable buttons. Inherits C-423.
+- **Performance budget**: DOM/UI only; no engine-loop impact.
+- **Security/privacy**: no new data; progress stays in localStorage.
+- **Persistence/migration**: legacy bare-string `action` must keep parsing —
+  covered by AC-1. Existing `learned` maps stay valid.
+- **Cancellation/retry/idempotency**: skip, replay and reset are idempotent.
+- **Observability**: log arc start, per-step advance and completion at debug
+  level, including the step id at drop-off.
 
 ## Migration & Rollback
 
-**Old data compatibility**: existing `OnboardingProgress` records remain valid; new steps get default unlearned state. **Migration**: map old hint-ids to new step-ids where they overlap; anything unknown defaults to unlearned. **Rollback**: revert the arc UI; hints fall back to the existing fragmentary mode. No persistent game-world state changes. **Feature flag**: gate the arc behind a flag so it can be disabled without redeploy.
+**Old data compatibility**: existing `OnboardingProgress` records remain valid;
+unknown ids ignored, new ids default unlearned. Existing content-pack manifests
+parse unchanged via legacy-form normalisation.
+**Rollback**: the feature flag disables the extended arc; the schema change is
+backward-compatible, so reverting the UI leaves the original five hints working.
 
 ## Scope Boundaries
 
-- **In Scope:** onboarding arc model + service extension; progress step tracker; skip/replay affordances; empty-state replacement (chat + dialogue); graceful degradation for model-dependent steps; tests.
-- **Out of Scope:** content-authoring for every world's tutorial (arc is framework + default content); changing combat mechanics; redesigning the start menu beyond adding the tutorial affordance; multiplayer onboarding.
+- **In Scope:** widened step schema with legacy compatibility; `stepIndex` /
+  `totalSteps` / `skipOnboarding()`; `onEventPerformed`; progress + skip in the
+  HUD toast; replay entry points in start and pause menus; the extended default
+  arc for Emberwatch; graceful `requiresModel` degradation; feature flag; tests.
+- **Out of Scope:** authoring tutorial content for every content pack (this
+  ships the framework plus one default arc); the chat empty state (C-420 AC-2);
+  changing combat or dialogue mechanics; redesigning the start menu beyond
+  adding the replay entry point; onboarding analytics beyond debug logging.
 
 ## Contract Size & Split Rule
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** the service-level arc model + progress is one independently-mergeable unit; the UI (step tracker, skip/replay, empty-state replacement) is a second; content (default arc steps) is a third.
+**Four independently-mergeable increments, in this order:**
+1. **Schema** — widen `action`, legacy normalisation, tests. *Blocks everything.*
+2. **Service** — progress, `skipOnboarding`, `onEventPerformed`.
+3. **UI** — progress tracker, skip, replay entry points.
+4. **Content** — the extended Emberwatch arc.
 
 ## Acceptance Criteria
 
-### AC-1: Onboarding arc model in the service
-**Given** the `OnboardingHintService`
-**When** an arc is loaded
-**Then** it exposes `currentStep`, `stepIndex`, `totalSteps`, and advances steps as `learnActionId`s fire; completion persists and is reported via `isComplete`.
+### AC-1: Step schema can express gameplay, and legacy content still parses
+
+**Given** `OnboardingHintStepSchema`
+**When** a step is authored as `{ kind: 'event', eventId: 'npc_dialogue_opened' }`
+**Then** it validates; **and** Emberwatch's existing five steps — which use a
+bare string `action` — still parse unchanged and behave identically.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | `onboarding_hint_service.test.ts` (extended) | N/A | Filled during verification |
+| AC-1 | Unit | `onboarding_hints.test.ts` — both shapes; manifest-parse regression | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: unit test arc advance + persistence.
+- Moon Task: `moon run schemas:test`, `moon run client:test-unit`
+- Integration: parse the live Emberwatch manifest in a test; assert five steps
+  normalise to `kind: 'input'`. **A content edit to make this pass is a fail.**
 
-### AC-2: Visible progress + skip/replay
-**Given** a player in the onboarding arc
-**When** the arc renders
-**Then** a step tracker shows "Step 2 of 5", a Skip button dismisses the arc (persisting completion), and a "Replay tutorial / How to play" affordance is discoverable in start and pause menus.
+### AC-2: Service exposes progress and skip
+
+**Given** a loaded arc
+**When** the service is queried
+**Then** it exposes `stepIndex`, `totalSteps` and `skipOnboarding()`; steps
+advance on `onActionPerformed` (input) and `onEventPerformed` (event);
+completion persists and `isComplete` reports it.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Visual + Unit | HUD/onboarding component test | start + game | Filled during verification |
+| AC-2 | Unit | `onboarding_hint_service.test.ts` (extended) | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: browser — walk the arc, assert progress, skip, and replay.
+- Moon Task: `moon run client:test-unit`
+- Integration: advance a mixed input/event arc; assert index, persistence, skip.
 
-### AC-3: Empty-state replacement with starter chips
-**Given** a fresh chat (or dialogue) with no messages
-**When** the surface renders
-**Then** instead of a dead-end text, a guided panel renders with starter chips (from C-420) and a contextual next-step prompt, so the player always has a clear action.
+### AC-3: Visible progress, skip, and discoverable replay
+
+**Given** a player in the arc
+**When** the hint toast renders
+**Then** it shows "Step 3 of 8" as text, a focusable Skip that persists
+completion, and Esc dismisses the current toast; a "How to play / Replay
+tutorial" entry exists in **both** the start menu and the pause menu.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Visual | `chat_view`/`dialogue_overlay` component test | chat + dialogue | Filled during verification |
+| AC-3 | Unit + E2E | `onboarding_hint.test.ts`; `onboarding_arc.spec.ts` | start + in-game | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: browser — fresh chat, assert guided panel + starter chips.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:test-client`
+- Integration: walk the arc, skip mid-way, reload, assert it stays skipped,
+  replay from the pause menu.
 
-### AC-4: Model-dependent steps degrade gracefully
-**Given** an onboarding step with `requiresModel: true` while the AI is unavailable
+### AC-4: The arc teaches the game, not just the keys
+
+**Given** a fresh profile with a configured model
+**When** the extended Emberwatch arc runs
+**Then** it covers movement, interaction, **conversation** (using C-420 starter
+chips), **a dice roll** (using C-421), and **a combat encounter** — in 3–5
+minutes — with each gameplay step completing via a real emitted event.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-4 | E2E | `onboarding_arc.spec.ts` — full walkthrough | new-player journey | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run e2e:test-client`
+- Integration: drive the whole arc end to end; assert every step completes from
+  a real gameplay event, not a test-only hook.
+
+### AC-5: Model-dependent steps degrade
+
+**Given** a `requiresModel: true` step and no configured provider
 **When** the step is reached
-**Then** the player sees a clear "needs a model" message and can skip the step without blocking the rest of the arc.
+**Then** the player sees a clear "needs a model" message and can skip that step
+without blocking the rest of the arc.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit | service test with no model | onboarding | Filled during verification |
+| AC-5 | Unit | `onboarding_hint_service.test.ts` (no-model case) | onboarding | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: simulate no-model, assert step degrades and is skippable.
+- Moon Task: `moon run client:test-unit`
+- Integration: run the arc with no provider; assert it reaches completion.
+
+## Implementation Sequence
+
+1. **Phase 1 (Schema)** — Widen `action` to the discriminated shape with legacy
+   normalisation. Prove the live Emberwatch manifest parses untouched. Ship.
+2. **Phase 2 (Service)** — Add `stepIndex`, `totalSteps`, `skipOnboarding()`,
+   `onEventPerformed`. Emit the gameplay events from existing surfaces. Ship.
+3. **Phase 3 (UI)** — Progress tracker and Skip in the toast; replay entries in
+   the start and pause menus. Ship.
+4. **Phase 4 (Content)** — Author the extended arc behind the feature flag;
+   write the E2E walkthrough. Ship.
+5. **Phase 5 (Validation)** — `moon run schemas:test`,
+   `moon run client:test-unit`, `moon run e2e:test-client`, `bun run typecheck`.
+
+## Edge Cases & Gotchas
+
+- **Do not edit the Emberwatch manifest to make AC-1 pass.** The point of the
+  legacy-normalisation path is that shipped content keeps working; editing the
+  content hides a real compatibility break from every other pack.
+- `{key}` templating is meaningless for event steps. Substitution must be
+  skipped for `kind: 'event'`, not left to emit a literal `{key}`.
+- `hint_interact` uses `trigger: 'near_interactable'`, which the service tracks
+  with a one-shot `_nearInteractableTriggered` flag
+  (`onboarding_hint_service.svelte.ts:70`). Adding steps after it must not
+  depend on that flag re-arming.
+- The arc spans surfaces the player can leave — a step waiting on a combat win
+  strands the arc if they flee. Every gameplay step needs a skip path or a
+  timeout, or the tutorial deadlocks.
+- The service is keyed per content pack (`packId`). A player switching packs
+  mid-arc must not inherit half-learned state from another pack.
+- 3–5 minutes is a real constraint. Eight steps at 30 seconds each is already
+  the ceiling — resist adding a ninth.
+
+## Open Questions
+
+Must be resolved before status becomes `approved`:
+
+- **OQ-1 — is the combat step (AC-4) in the first cut?** Combat is the longest,
+  most failure-prone step, it is the one that can strand the arc, and it is the
+  hardest to E2E deterministically. **Recommendation: yes, but last and
+  skippable** — a player who never sees combat has not been taught the game;
+  a player stuck in it has been taught to quit.
+- **OQ-2 — which event ids do gameplay steps listen to?** These must come from
+  events the game already emits, or they become new instrumentation.
+  **Resolve by grepping the existing event surface before Phase 2**, and
+  prefer an existing event over a new one in every case.
+
+## Amendments
+
+Changes to ACs or scope require a version bump and user approval.
+
+| Version | Date | Change | Approved by |
+|---|---|---|---|
+| 2.0.0 | 2026-08-21 | Initial draft from UX review. | — |
+| 3.0.0 | 2026-08-21 | Re-verified against code. Corrected the premise: the arc is already linear — Emberwatch ships five ordered steps chained by `after_previous` — so "fragmentary hints, not an arc" was false. Surfaced the blocker the review missed and promoted it to AC-1: `OnboardingHintStepSchema.action` is a closed union of nine `InputActionId` values (`onboarding_hints.ts:12-21`), so no gameplay step can be authored at all; added a discriminated `action` shape with legacy normalisation so shipped content keeps parsing. Dropped `surface`, `title` and `requiresStepId` from the data model as unused. Added AC-4 (the arc must teach gameplay via real events) and AC-5. Added the arc-deadlock and pack-switch gotchas, Implementation Sequence, and lifecycle sections. Resequenced to 5 of 6, behind C-420 and C-421 whose surfaces it teaches. | review 2026-08-21 |
+
+## Promotion Lifecycle
+
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
+
+Target: **`integrated`**; AC-4 requires `release_verified`-level evidence — a
+full new-player walkthrough recording.
+
+## Status Lifecycle
+
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)

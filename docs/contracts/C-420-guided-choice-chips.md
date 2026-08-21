@@ -1,7 +1,7 @@
 ---
 id: C-420
-title: "Guided-Choice Chips Everywhere — a shared, model-driven quick-reply primitive for chat and game dialogue"
-source: "UX review 2026-08-21 (guided generation / suggestion chips pattern, generalized from Marinara-Engine MARI_SUGGESTION_CHIPS_TASK.md and existing CYOA ChoiceButtonsView)"
+title: "One Choice Affordance — converge CYOA choices and suggestion chips on a single primitive, across chat and dialogue"
+source: "UX review 2026-08-21; premise re-verified and inverted 2026-08-21"
 status: draft
 github:
   issue_number: null
@@ -11,159 +11,257 @@ github:
 created_at: "2026-08-21"
 ---
 
-# Contract C-420: Guided-Choice Chips Everywhere
+# Contract C-420: One Choice Affordance
 
 ## Metadata
 
 | Field | Value |
 |---|---|
-| **Source** | UX review 2026-08-21 — "Guided generation / suggestion chips" improvement. Pattern generalized from `examples/Marinara-Engine/MARI_SUGGESTION_CHIPS_TASK.md` and Aikami's existing CYOA `ChoiceButtonsView`. |
-| **Target** | `packages/shared/schemas/src/lib/game/cyoa.ts`; `packages/shared/types/src/lib/game/cyoa.ts`; `packages/frontend/services` (agent/gateway event channel); `apps/frontend/client/src/lib/views/chat/choice_buttons_view.svelte`; `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte`; `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte` |
-| **Priority** | P1 — biggest UX win for first-session retention; cheap because the core (CYOA choices, chip rendering) already exists |
-| **Dependencies** | C-245 (landed — CYOA Choices Branching Narrative); C-128/C-129 (landed — dialogue overlay + AI chat); C-231 (landed — rich chat streaming) |
+| **Source** | UX review 2026-08-21 — "guided generation / suggestion chips". **The review's premise was wrong**; verification found the primitive already exists and is already in dialogue. Re-scoped from "add chips" to "converge on one chip". |
+| **Target** | `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts`; `packages/shared/schemas/src/lib/game/cyoa.ts`; `apps/frontend/client/src/lib/data/initial_suggestion_presets.ts`; `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte`; `apps/frontend/client/src/lib/views/chat/chat_view.svelte` + `chat_view_model.svelte.ts`; `apps/frontend/client/src/lib/views/chat/choice_buttons_view.svelte` |
+| **Priority** | P1 — removes a live UX defect (two competing affordances) and fills the dead first-session chat |
+| **Sequence** | **4 of 6** — after C-424, so the chip surface is written once into `GuidedComposer` rather than twice |
+| **Dependencies** | C-245 (landed — CYOA); C-371 (landed — `NpcSuggestionChip` + intent chips); C-417 Feature 4 (landed — chip row wrapping); C-424 (`GuidedComposer`, sequence 3) |
 | **Status** | draft |
-| **Promotion** | `sandbox` |
-| **Docs Impact** | internal (no user-facing docs) |
-| **Contract version** | 2.0.0 |
+| **Promotion** | `integrated` |
+| **Docs Impact** | internal |
+| **Contract version** | 3.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: Aikami has two *separate* guided-choice mechanisms that never talk to each other:
-  1. **CYOA choice buttons** (`ChoiceButtonsView` + `ChoiceButtonsViewModel`, contract C-245) — structured `CyoaChoice[]` (label + optional description + optional `skillCheck`), 2–4 choices, rendered below the latest AI message in **chat only**.
-  2. **Dialogue overlay** (`dialogue_overlay.svelte`, 692 lines) — its own choice rendering inside the game view, parallel and divergent from chat.
-  There is **no** lightweight "suggestion chip" path: after an NPC reply the model can't emit 3–5 short quick-reply chips unless it goes through the full CYOA structured-output path, and CYOA isn't wired into the game dialogue overlay at all.
-- **Reproduction**: Open a fresh chat with an NPC (empty-state shows `"No messages yet. Start the conversation!"`). There are no starter chips or suggested replies — the user faces a blank textarea. In-game, a dialogue has no suggestion chips either. Compare: Marinara's `MARI_SUGGESTION_CHIPS` renders starter chips on empty transcripts and dynamic chips after each model turn.
-- **Existing implementation to reuse**: `ChoiceButtonsViewModel` (label truncation via `CYOA_LABEL_MAX_LENGTH`, single-choice → "Continue", selection/dismissal state machine, choice history store); `CyoaChoiceSchema`/`CyoaChoice` in `packages/shared/`; `GameDice`/dice service; the agent event/gateway channel that already carries `CyoaChoiceResult`.
-- **Known gaps**: (a) no chip primitive distinct from CYOA — chips should *append to composer* (not auto-send), while CYOA *selects a branch*; (b) not wired into game dialogue; (c) no starter chips on empty state; (d) no `entity`/`tone` coloring on chips.
-- **Baseline tests**: `choice_buttons_view_model.test.ts` exists (C-245). `dialogue_overlay_view_model.test.ts` exists. Run both before starting.
+> **This contract was rewritten.** Version 2.0.0 proposed adding a new
+> `GuidedChip` type on the grounds that "there is no lightweight suggestion
+> chip path" and that chips are "not wired into game dialogue". Both claims
+> are false. Building v2.0.0 would have produced a **third** overlapping
+> choice primitive. What follows is the verified baseline.
+
+### What already exists
+
+- **`NpcSuggestionChip` is the primitive the review asked for.**
+  `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts:192-206`:
+  `{ id, label, intentType, prefillText }`, `additionalProperties: false`,
+  `prefillText` required at `minLength: 10` ("MUST be a complete natural
+  sentence, not a keyword"). Model-emitted, shared package, already validated.
+- **It is already rendered in the game dialogue overlay**, with intent icons —
+  `dialogue_overlay.svelte:558-590`, `data-testid="suggestion-chips"`.
+- **Starter chips already exist and are offline-safe.**
+  `apps/frontend/client/src/lib/data/initial_suggestion_presets.ts` merges the
+  NPC's content-pack `initialSuggestions` with the active player class's preset
+  chips (bard / fighter / wizard / rogue …), capped at
+  `MAX_INITIAL_SUGGESTIONS = 5`. This is exactly what v2.0.0's OQ-1 proposed as
+  future work — it shipped under C-371.
+- **The dialogue overlay already has a composer** — `AutoResizeTextarea` at
+  `dialogue_overlay.svelte:643`. (v2.0.0's OQ-2 asked whether one existed.)
+
+### The real defect: two competing affordances, stacked
+
+The dialogue overlay renders **both** choice systems, one directly above the
+other, as near-identical daisyUI buttons with different semantics:
+
+| Element | Line | Sends | Styling |
+|---|---|---|---|
+| `data-testid="cyoa-choices"` | `dialogue_overlay.svelte:508-521` | `choice.label` | `btn btn-sm btn-outline w-full justify-start` |
+| `data-testid="suggestion-chips"` | `dialogue_overlay.svelte:558-590` | `chip.prefillText` | `btn btn-xs` + intent colour |
+
+Nothing in the UI explains why one row is full-width and the other is a
+wrapped chip row, or why tapping one sends a short label while tapping the
+other sends a full sentence. C-417 Feature 4 already noted these two are
+"visually adjacent in the same overlay" and easy to conflate.
+
+Meanwhile **chat has the opposite gap**: CYOA choices only
+(`chat_view.svelte:109`), no suggestion chips, and a dead empty state —
+`chat_view.svelte:87`, `"No messages yet. Start the conversation!"` — with no
+starter chips, even though the presets exist and are surface-agnostic.
+
+- **Reproduction**: (a) talk to Elder Thalia in-game with the CYOA agent
+  enabled — observe two stacked, unexplained button rows. (b) Open a fresh chat
+  with any NPC — observe a blank textarea and dead-end text.
+- **Baseline tests**: `choice_buttons_view_model.test.ts`,
+  `dialogue_overlay_view_model.test.ts`. Run both before starting.
 
 ## User Outcome
 
-After this contract, a **player** can start a chat and immediately see 3–5 suggested replies (starter chips on a fresh chat, dynamic chips after each NPC turn), tap one to drop it into the composer, refine it, and send — in **both** the chat view and the in-game dialogue overlay. A **creator** sees the same guided-choice behavior in both surfaces, driven by one shared, model-emitted primitive.
+A **player** sees exactly one kind of suggested-action affordance, and it means
+the same thing everywhere: tap it to say that. It appears in the game dialogue
+overlay and in chat, including on a fresh chat where starter chips replace the
+dead empty state. A **creator** authors one chip shape.
 
 ## Success Measures
 
-- **Time/latency target**: chips render with the completed assistant turn (no extra round trip); starter chips show <100ms on a fresh chat.
-- **Offline/degraded behavior**: chips are model-driven — when the AI is unavailable, chips simply don't render; the composer still works normally. Starter chips (static) can render offline.
-- **Production journey enabled**: a first-time player goes from "blank chat" to a guided conversation in one tap — the single biggest drop-off point for AI-RPG onboarding.
+- **Time/latency target**: chips render with the completed turn — no extra
+  round trip. Starter chips render immediately from local presets.
+- **Offline/degraded behavior**: starter chips are local and render with no
+  model. Model-emitted chips are simply absent when the AI is unavailable; the
+  composer still works.
+- **Production journey enabled**: the fresh-chat dead end — the largest
+  first-session drop-off in an AI RPG — becomes a one-tap start.
 
 ## Existing System & Reuse Map
 
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
-| Chip/choice button rendering | `views/chat/choice_buttons_view.svelte` | modify — generalize to a shared `GuidedChipsView` |
-| Choice selection state machine | `views/chat/choice_buttons_view_model.svelte.ts` | reuse — extend with append-to-composer mode |
-| Choice data model | `packages/shared/schemas/src/lib/game/cyoa.ts` (`CyoaChoiceSchema`) | modify — add `GuidedChipSchema` alongside |
-| Agent event channel | `packages/frontend/services` (CYOA result delivery) | modify — add a `suggestions`/`guided_chips` event type |
-| Game dialogue choices | `views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | modify — render shared chips component |
-| Starter chips | `examples/Marinara-Engine/MARI_SUGGESTION_CHIPS_TASK.md` (`MARI_STARTER_CHIPS`) | reference — Aikami-local equivalent |
-| NPC dialogue service | `services/game/npc_dialogue_service.svelte` | modify — thread chip delivery through |
+| Chip primitive | `schemas/.../npc_dialogue_command.ts:192` `NpcSuggestionChipSchema` | **reuse — do not replace** |
+| Intent taxonomy | `NpcSuggestionChipIntentTypeSchema` (`combat`/`skill_check`/`trade`/`quest`/`dialogue`) | reuse — it already drives icons and a combat branch |
+| Starter chips | `data/initial_suggestion_presets.ts` | reuse — extend to chat |
+| Chip rendering | `dialogue_overlay.svelte:558-590` | extract — into a shared component |
+| Chip selection | `dialogue_overlay_view_model.svelte.ts:838-857` `handleChipTap` | reuse |
+| CYOA choices | `views/chat/choice_buttons_view.svelte` + VM, `schemas/.../cyoa.ts` | **decide — see OQ-1** |
+| Composer slot | C-424 `GuidedComposer.above` snippet | reuse |
 
 ## Overview
 
-Introduce a shared, model-driven **guided-choice chip** primitive and render it in both the chat view and the in-game dialogue overlay. The chip set is emitted by the agent after a completed assistant turn (or statically provided as starter chips on an empty transcript). Tapping a chip **inserts its prompt into the composer** (append, don't auto-send) so the user can refine before sending — distinct from CYOA which auto-advances a branch. This unifies two divergent surfaces behind one primitive and eliminates the dead first-session chat.
+Stop the proliferation. Extract the existing `NpcSuggestionChip` rendering into
+one shared component, mount it in `GuidedComposer.above` so both surfaces get
+it for free, bring starter chips to chat's empty state, and resolve the
+two-affordance collision in dialogue by giving CYOA choices and chips visibly
+distinct roles — or by folding one into the other (OQ-1).
+
+**No new type is introduced by this contract.**
 
 ## Design Reference
 
-- `views/chat/choice_buttons_view.svelte` + `choice_buttons_view_model.svelte.ts` — existing chip-like button pattern (label truncation, single-choice "Continue", selection/dismiss).
-- `packages/shared/schemas/src/lib/game/cyoa.ts` — schema conventions (TypeBox, `Type.Object`, maxItems).
-- `dialogue_overlay_view_model.svelte.ts` — how the game overlay currently renders dialogue choices.
-- Marinara's `MARI_SUGGESTION_CHIPS_TASK.md` interaction model: on empty transcript show starter chips; after each turn show dynamic chips; `onSelect` inserts into draft (append with separating space if non-empty), focus composer, **do not auto-send**.
+- `schemas/.../npc_dialogue_command.ts:192-206` — the primitive being kept.
+- `dialogue_overlay.svelte:558-590` — the rendering being extracted.
+- `dialogue_overlay_view_model.svelte.ts:838-857` — selection semantics.
+- `data/initial_suggestion_presets.ts` — the starter-chip source.
+- `chat_view.svelte:87` — the dead empty state being replaced.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
-- Add `GuidedChip` to `packages/shared/types` and `GuidedChipSchema` to `packages/shared/schemas` (domain-level; Pi resolves exact file placement).
-- Add a new agent event type (e.g. `guided_chips`) delivered over the existing agent event/gateway channel, alongside `CyoaChoiceResult`.
-- Render via a shared `GuidedChipsView` component used by both `chat_view.svelte` and `dialogue_overlay.svelte`.
-- Chip selection appends to the composer draft and focuses it — it does **not** auto-send. This is the deliberate difference from CYOA.
-- Keep the primitive optional/back-compat: no `guided_chips` in a turn ⇒ emit nothing.
+- **Reuse `NpcSuggestionChip`. Do not add a parallel chip type.** If chat needs
+  a field the schema lacks, add it as `Type.Optional` to the existing schema.
+- **Keep `intentType`; do not adopt an `entity` taxonomy.** The v2.0.0 proposal
+  copied Marinara's app-navigation categories (`lorebooks`, `personas`,
+  `presets`, `connections`, `settings`) wholesale. Those are meaningless on an
+  RPG dialogue chip. `intentType` already carries game meaning and already
+  drives both the icon map and the `intentType === 'combat'` escalation branch.
+- Extract chip rendering into `components/messaging/suggestion_chips.svelte`,
+  mounted through `GuidedComposer.above` (C-424) so both surfaces share it.
+- **Selection semantics are per-surface, and this is deliberate:**
+  - *Dialogue* keeps **auto-send** (current behaviour,
+    `dialogue_overlay_view_model.svelte.ts:855`). Tapping a line in a
+    conversation *is* saying it; a confirm step breaks pacing.
+  - *Chat* uses **prefill-and-focus, do not send.** Chat is an authoring
+    surface where the player edits before committing.
+  The shared component takes an `onSelect` callback and makes no assumption.
+- Starter chips in chat come from the existing presets, keyed by the NPC and
+  the active player class — the same merge the overlay performs.
+- Chips clear on send, on chat switch, and on reset. Idempotent.
+- Inherits the C-423 baseline: real buttons, visible focus, keyboard-activatable,
+  never hover-only.
 
 ## State & Data Models
 
+**No new types.** For reference, the primitive being reused:
+
 ```typescript
-type GuidedChip = {
+// packages/shared/schemas/src/lib/game/npc_dialogue_command.ts:192
+type NpcSuggestionChip = {
   id: string;
-  /** Short button label (≤ 40 chars). */
   label: string;
-  /** Exact message text inserted into the composer on tap (≤ 400 chars). */
-  prompt: string;
-  /** Optional hint for chip coloring/grouping. */
-  entity?: 'characters' | 'lorebooks' | 'personas' | 'presets' | 'connections' | 'agents' | 'settings' | 'chat';
-  /** Optional tone for emphasis; use 'danger' only for irreversible actions. */
-  tone?: 'danger' | 'caution' | 'success';
+  intentType: 'combat' | 'skill_check' | 'trade' | 'quest' | 'dialogue';
+  /** Complete natural sentence, min 10 chars. */
+  prefillText: string;
 };
 ```
 
-```typescript
-type GuidedChipSet = {
-  chips: GuidedChip[]; // 1..6
-  chatId: string;
-};
-```
-
-Sanitization rules (server/client-side, mirrored from Marinara): cap at 6 chips; drop entries missing `label` or `prompt`; truncate `label` to 40 chars and `prompt` to 400 chars; coerce `entity`/`tone` to allowed unions (drop invalid); generate an `id` if absent.
+Sanitisation already lives in the schema (`minLength`, `additionalProperties:
+false`). If chat surfaces malformed model output, tighten the schema — do not
+add a second client-side sanitiser.
 
 ## Quality Requirements
 
-- **Offline/degraded mode**: chips are absent when no model output; static starter chips render offline from bundled config.
-- **Accessibility/input**: chips are real buttons with visible focus, keyboard-activatable (Enter/Space), and not hover-only.
-- **Performance budget**: chip set is ≤6 items; rendering is a static list — negligible frame cost. No impact on the 60fps engine loop.
-- **Security/privacy**: chip `prompt` is user-authored text inserted into a local composer; sanitize lengths to prevent layout abuse. No new data exposure.
-- **Persistence/migration**: chips are ephemeral per turn; not persisted. No migration.
-- **Cancellation/retry/idempotency**: clearing chips on new send / chat switch / reset is idempotent.
-- **Observability**: log parse failures of malformed chip payloads at debug level.
+- **Offline/degraded mode**: starter chips render from local presets with no
+  model. Model chips absent ⇒ nothing renders; composer unaffected.
+- **Accessibility/input**: inherits C-423 — real buttons, visible focus,
+  Enter/Space, never hover-only. Chip rows wrap (C-417 Feature 4 fixed
+  `overflow-x-auto` → `flex-wrap`; keep it that way).
+- **Performance budget**: ≤ 5 chips (`MAX_INITIAL_SUGGESTIONS`); static list;
+  no engine-loop impact.
+- **Security/privacy**: `prefillText` is model-authored text placed in a local
+  composer. It must be rendered as text, never as markup, and length-bounded.
+- **Persistence/migration**: chips are per-turn and ephemeral; not persisted.
+  No migration.
+- **Cancellation/retry/idempotency**: clearing on send / switch / reset is
+  idempotent.
+- **Observability**: log malformed chip payloads at debug level.
 
 ## Migration & Rollback
 
-N/A — no persistent state changes. Chips are per-turn ephemeral UI. Rollback = revert the shared component and event handling.
+No persistent state. **Rollback**: revert the shared component and the chat
+wiring; the dialogue overlay's original inline chip markup is the reference
+implementation. If OQ-1 resolves toward removing a CYOA surface, that removal
+lands as its own increment so it can be reverted independently.
 
 ## Scope Boundaries
 
-- **In Scope:** shared `GuidedChip` type + schema; `guided_chips` agent event; shared `GuidedChipsView`; wiring into chat view (starter + dynamic chips); wiring into game dialogue overlay (dynamic chips); append-to-composer selection semantics; tests.
-- **Out of Scope:** CYOA branching narrative changes (that's C-245, already landed); redesigning the composer; multiplayer; changing existing NPC dialogue data models beyond adding optional chip delivery.
+- **In Scope:** extract the existing chip rendering into a shared component;
+  mount it in both surfaces via `GuidedComposer`; starter chips in chat's empty
+  state; per-surface selection semantics; resolve the dialogue two-affordance
+  collision (OQ-1); tests.
+- **Out of Scope:** any new chip type; the `entity`/`tone` taxonomy from
+  v2.0.0; CYOA branching-narrative behaviour (C-245); redesigning the composer
+  (C-424); changing NPC dialogue data models beyond optional schema fields;
+  multiplayer.
 
 ## Contract Size & Split Rule
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** one cohesive unit (shared primitive + two surface integrations). The shared primitive (type + schema + event) is independently mergeable and should land first; chat wiring and dialogue wiring are each independently mergeable increments.
+**Three independently-mergeable increments:**
+1. Extract `suggestion_chips.svelte`; dialogue consumes it. Behaviour identical.
+2. Chat consumes it: model chips after each turn + starter chips in the empty
+   state, with prefill-not-send semantics. *This is the retention win.*
+3. Resolve the dialogue two-affordance collision per OQ-1.
 
 ## Acceptance Criteria
 
-### AC-1: Shared chip primitive exists
-**Given** the `packages/shared` packages
-**When** a `GuidedChip` / `GuidedChipSchema` and a `guided_chips` agent event type are added
-**Then** the type, schema, and event type exist with sanitization (cap 6, truncate label/prompt, coerce entity/tone) and are covered by unit tests.
+### AC-1: One shared chip component; dialogue behaviour unchanged
+
+**Given** the dialogue overlay's inline chip markup
+**When** it is extracted to `components/messaging/suggestion_chips.svelte` and
+the overlay consumes it
+**Then** chips render identically — intent icons, wrapping, disabled-while-
+streaming — existing dialogue tests pass unmodified, and **no new chip type is
+added to `packages/shared`**.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | `packages/shared/schemas/.../guided_chip.test.ts` | N/A | Filled during verification |
+| AC-1 | Unit + Visual | `suggestion_chips.test.ts`; `dialogue_overlay_view_model.test.ts` unmodified | in-game dialogue | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `schemas:test` / `types:test`
-- Integration: unit tests only
+- Moon Task: `moon run client:test-unit`, `moon run e2e:run-visual-tests`
+- Integration: `git diff --stat packages/shared` shows no new chip schema; a
+  before/after screenshot of the chip row is pixel-equivalent.
 
-### AC-2: Starter chips on empty chat
-**Given** a fresh chat with an NPC that has no messages
+### AC-2: Starter chips replace the dead chat empty state
+
+**Given** a fresh chat with an NPC and no messages
 **When** the chat view renders
-**Then** 3–5 starter chips render above the composer; tapping one appends its prompt to the draft and focuses the composer (does not auto-send).
+**Then** the `"No messages yet. Start the conversation!"` dead end is replaced
+by up to 5 starter chips merged from the NPC's `initialSuggestions` and the
+active player class presets; tapping one **prefills the composer and focuses
+it without sending**; this works with no model available.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit + Visual | `choice_buttons_view_model.test.ts` (extended) | `/game/...` chat | Filled during verification |
+| AC-2 | Unit + Visual | `chat_view_model.test.ts` (extended) | fresh NPC chat | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: browser check on a fresh NPC chat; assert chips render and append to draft.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:test-client`
+- Integration: open a fresh chat with **no provider configured**; assert chips
+  render and that tapping fills the draft and sends nothing.
 
-### AC-3: Dynamic chips after each NPC turn (chat)
-**Given** an assistant reply completes in the chat view
-**When** the model emitted a `guided_chips` payload for that turn
-**Then** the chips render above the composer (replacing the previous set); selecting one appends to the draft; chips clear on a new send, chat switch, and reset.
+### AC-3: Model chips after each chat turn
+
+**Given** an assistant turn completes in chat and the model emitted chips
+**When** the turn finishes
+**Then** the chips render above the composer, replacing the previous set;
+selecting one prefills the draft; the set clears on send, chat switch and reset.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -171,24 +269,100 @@ N/A — no persistent state changes. Chips are per-turn ephemeral UI. Rollback =
 | AC-3 | Unit + Integration | `chat_view_model.test.ts` (extended) | chat | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: drive a mock agent turn with chips; assert render + append + clear semantics.
+- Moon Task: `moon run client:test-unit`
+- Integration: mock a turn carrying chips; assert render, prefill, and all
+  three clear paths.
 
-### AC-4: Dynamic chips in game dialogue overlay
-**Given** an in-game dialogue with an NPC completes a turn
-**When** the model emitted `guided_chips` for that turn
-**Then** the chips render in the dialogue overlay above its input, using the same shared component, with the same append-to-composer behavior.
+### AC-4: One choice affordance per surface
+
+**Given** the dialogue overlay with both CYOA choices and suggestion chips
+available for the same turn
+**When** the overlay renders
+**Then** the resolution chosen in OQ-1 is implemented, and the surface no
+longer presents two visually similar, semantically different button rows
+without explanation.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit + Visual | `dialogue_overlay_view_model.test.ts` (extended) | in-game dialogue | Filled during verification |
+| AC-4 | Visual + Unit | `dialogue_overlay_view_model.test.ts` (extended) + screenshot with both sources populated | in-game dialogue | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: start an in-game dialogue; assert chips appear and append to the overlay composer.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:run-visual-tests`
+- Integration: force a turn that yields both CYOA choices and chips; screenshot
+  at 1280×720 and 800×600.
+
+## Implementation Sequence
+
+1. **Phase 1 (Extract)** — Lift the chip row from `dialogue_overlay.svelte`
+   into `components/messaging/suggestion_chips.svelte`, taking `chips`,
+   `disabled` and `onSelect`. Overlay consumes it. Ship.
+2. **Phase 2 (Chat)** — Mount it in `GuidedComposer.above` for chat. Wire the
+   starter-chip merge for the empty state, then model chips per turn, with
+   prefill-not-send. Ship — this is the retention increment.
+3. **Phase 3 (Converge)** — Resolve OQ-1 and implement it. Ship.
+4. **Phase 4 (Validation)** — `moon run client:test-unit`,
+   `moon run e2e:test-client`, `moon run e2e:run-visual-tests`,
+   `bun run typecheck`.
+
+## Edge Cases & Gotchas
+
+- **Do not add a new chip type, however tempting.** The whole point of this
+  rewrite is that v2.0.0 would have made two overlapping primitives into three.
+  If a reviewer asks for `tone` or `entity`, point them at this line.
+- `prefillText` has `minLength: 10`; `handleChipTap` already falls back to
+  `label` when the model emits something shorter
+  (`dialogue_overlay_view_model.svelte.ts:854`). Preserve that fallback.
+- `intentType === 'combat'` does **not** send a message — it escalates straight
+  to combat (`:847-850`). In chat there is no combat surface to escalate to.
+  Decide what a combat-intent chip means in chat (recommendation: filter it out
+  of chat chip sets rather than sending its text as dialogue).
+- The dialogue chip row is keyed by `{#key chips.map(c => c.id).join('|')}` to
+  re-trigger its animation. Preserve that, or the chips stop feeling responsive.
+- C-417 Feature 4 changed the row from `overflow-x-auto` to `flex-wrap`. Do not
+  reintroduce horizontal scrolling during extraction.
+- Chat starter chips need the active player class. Confirm it is reachable from
+  the chat ViewModel; the overlay reads it from game state, which chat may not
+  have when opened outside a session.
 
 ## Open Questions
 
-- **OQ-1 — Should starter chips be static per-NPC (bundled config) or model-generated on first load?** Static is offline-safe and instant; model-generated is more personalized but needs a round trip. Recommendation: static per-NPC default with optional model override, but this is a design call to confirm.
-- **OQ-2 — Does the game dialogue overlay already have a composer/draft mechanism to reuse, or does one need adding?** Affects AC-4 scope.
+Must be resolved before status becomes `approved`:
+
+- **OQ-1 — what happens to CYOA choices in the dialogue overlay?**
+  Three options: (a) **give them distinct roles** — CYOA = branch-advancing
+  narrative beats rendered as a full-width list; chips = things you say,
+  rendered as a chip row; make the difference visible with a label on each
+  group. (b) **Fold CYOA choices into chips** as a new `intentType`, one row
+  only. (c) **Drop CYOA from the overlay**, keeping it in chat where C-245
+  targeted it.
+  **Recommendation: (a).** They genuinely are different things — one advances a
+  branch, one composes a line — and C-245's branch history depends on CYOA
+  identity. The defect is that the difference is invisible, not that both
+  exist. (b) would lose skill-check metadata; (c) would silently drop a shipped
+  feature from the surface players use most.
+- **OQ-2 — should chat chips be model-emitted at all in v1?** Chat's pipeline
+  would need a chip-emitting post-agent (CYOA has one; chips do not). Starter
+  chips alone (AC-2) deliver most of the retention win with none of that work.
+  **Recommendation: ship AC-2 first and treat AC-3 as the follow-on increment**
+  — if the post-agent proves costly, AC-2 still stands alone.
+
+## Amendments
+
+Changes to ACs or scope require a version bump and user approval.
+
+| Version | Date | Change | Approved by |
+|---|---|---|---|
+| 2.0.0 | 2026-08-21 | Initial draft from UX review — proposed a new `GuidedChip` type, `guided_chips` agent event, and `GuidedChipsView`. | — |
+| 3.0.0 | 2026-08-21 | **Full rewrite; premise inverted.** Verification found `NpcSuggestionChip` (`npc_dialogue_command.ts:192`) already is the proposed primitive, already rendered in the dialogue overlay (`:558-590`), with starter chips already shipped (`initial_suggestion_presets.ts`) — so v2.0.0's OQ-1 and OQ-2 were both already answered in code, and building it would have created a third overlapping choice primitive. Re-scoped to convergence: no new type, reuse `intentType` instead of Marinara's app-navigation `entity` taxonomy, extract the existing renderer, extend to chat. Identified the real defect (two stacked, visually similar, semantically different affordances at `dialogue_overlay.svelte:508` and `:558`) and added AC-4 + OQ-1 for it. Made the auto-send vs prefill split an explicit per-surface decision rather than an unexamined assertion. Resequenced from 1 to 4 of 6, behind C-424. | review 2026-08-21 |
+
+## Promotion Lifecycle
+
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
+
+Target: **`integrated`** per increment; AC-4 additionally requires
+`release_verified`-level visual evidence at both viewports.
+
+## Status Lifecycle
+
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)

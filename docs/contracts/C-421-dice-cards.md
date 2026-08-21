@@ -1,7 +1,7 @@
 ---
 id: C-421
-title: "Mechanically-Authoritative Dice Cards — rich roll rendering in chat and combat, with mechanical results fed to NPC narration"
-source: "UX review 2026-08-21 — 'Dice are functional but not dramatized; mechanical results should be authoritative and visible'"
+title: "Dice That Actually Roll — implement /roll, render dice cards, and bind narration to the mechanical result"
+source: "UX review 2026-08-21, re-verified against code 2026-08-21"
 status: draft
 github:
   issue_number: null
@@ -11,190 +11,395 @@ github:
 created_at: "2026-08-21"
 ---
 
-# Contract C-421: Mechanically-Authoritative Dice Cards
+# Contract C-421: Dice That Actually Roll
 
 ## Metadata
 
 | Field | Value |
 |---|---|
-| **Source** | UX review 2026-08-21 — "Mechanically-authoritative dice cards in chat" improvement. |
-| **Target** | `apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts`; `apps/frontend/client/src/lib/views/chat/`; `apps/frontend/client/src/lib/views/combat/`; `packages/shared/schemas` (dice event schema); `apps/frontend/client/src/lib/components/game/game_dice.svelte` |
-| **Priority** | P1 — makes Aikami feel like a real TTRPG rather than "AI pretend dice"; builds directly on the existing seeded dice service |
-| **Dependencies** | C-148 (landed — combat dice / `GameDice`); C-231 (landed — rich chat streaming / message types) |
+| **Source** | UX review 2026-08-21 — "dice are functional but not dramatized". Re-verified; the review understated the chat gap and overstated the narration gap. Both corrected below. |
+| **Target** | `packages/frontend/engine/src/engine_bridge.ts`; `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts`; `apps/frontend/client/src/lib/views/combat/utils/dice_notation.ts`; `apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts`; `apps/frontend/client/src/lib/components/game/game_dice.svelte`; `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`; `packages/shared/schemas` (dice card schema) |
+| **Priority** | P1 — the single biggest "this is a real TTRPG, not a chat wrapper" win in the batch |
+| **Sequence** | **2 of 6** — after C-423 (inherits its a11y baseline); before the surface unification in C-424 |
+| **Dependencies** | C-148 (landed — combat dice / `GameDice`); C-231 (landed — rich chat streaming); C-234 (landed — `dice_notation.ts`); C-371/C-401 (landed — two-call dialogue pipeline); C-423 (a11y baseline) |
 | **Status** | draft |
-| **Promotion** | `sandbox` |
+| **Promotion** | `integrated` |
 | **Docs Impact** | internal |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 3.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: The dice service (`dice_service.svelte.ts`) is fully capable — `roll`, `rollD20` (with `isCriticalSuccess`/`isCriticalFailure`), `rollCheck` (success/DC/difference), `rollNotation`, seeded RNG, and a `history` array. But in the **chat view**, a `/roll 1d20+3` renders as **plain text** — the rich dice experience (`GameDice` animated d20, `CombatDiceUi`) exists only in **combat**. More importantly, the mechanical result is **not authoritative**: combat narration flows through the LLM, and the rolled outcome isn't visibly enforced or fed back into the prompt as a ground-truth constraint. So the AI can narrate a hit that the mechanics said missed (or vice versa), and the player can't see the actual math.
-- **Reproduction**: In a chat, type `/roll 1d20+3`. Observe a plain-text result with no die face, no crit flash, no DC comparison. Then in combat, note that the NPC's narration is not visibly constrained by the rolled success/failure.
-- **Existing implementation to reuse**: `DiceService` (all roll methods + history + seeding); `GameDice` component (`DiceState`: `phase`, `value`, `isSuccess`, `labels`); `CombatDiceUi` mapping; `rollCheck` already returns `{ success, total, difference }`.
-- **Known gaps**: (a) no rich *dice card* message type in chat; (b) DC/advantage/check comparison not visualized; (c) mechanical result not injected into NPC prompt as authoritative ground truth; (d) dice history not surfaced as a browsable feed.
-- **Baseline tests**: `dice_service.test.ts` exists (C-148). `combat_view_model.test.ts` exists. Run both before starting.
+### Finding 1 — `/roll` in chat is a stub; no roll happens at all
+
+The review reported that `/roll 1d20+3` "renders as plain text." It does not
+render a result of any kind. The real path:
+
+1. `chat_view_model.svelte.ts:441-467` intercepts `/`-prefixed input, parses it,
+   and calls `bridge.executeCommand(command, args)`.
+2. `packages/frontend/engine/src/engine_bridge.ts:175-181` is a **stub with a
+   TODO** that discards the argument:
+   ```ts
+   case 'roll': {
+     // TODO: implement dice rolling via slash commands
+     void (args[0] ?? '1d20');
+     break;
+   }
+   ```
+3. The worker-side bridge (`worker/ecs_worker.ts:338`) is an explicit no-op.
+4. Chat then echoes a literal system message: `` `Command: ${parsed.command.raw}` ``.
+
+So the player sees `Command: /roll 1d20+3` and nothing else. **No dice are
+rolled.** `DiceService` is never reached from chat. This makes AC-1 larger than
+the review implied — it is "implement dice in chat", not "restyle a result".
+
+Two concrete prerequisites the review missed:
+
+- **`parseDiceNotation` cannot parse modifiers.** `dice_notation.ts:24-30` uses
+  `/^(\d+)?d(\d+)$/` — `"1d20+3"` returns `undefined`. The regex must be widened
+  before `/roll 1d20+3` can work at all.
+- **`DiceService.history` has no check context.** Its entries are
+  `{ roll, sides, modifier, total, timestamp }`
+  (`dice_service.svelte.ts:12-18`) — no DC, no success, no crit flags. AC-4's
+  history feed cannot show check outcomes until this shape is widened.
+
+### Finding 2 — narration is already bound to the roll in the dialogue path
+
+The review claimed "the AI can narrate a hit that the mechanics said missed."
+For the **in-game dialogue path this is already solved** and has been since
+C-371/C-401. `npc_dialogue_service.svelte.ts:1877-1899` is a dedicated
+roll-resolution call whose user prompt is:
+
+```
+`${npcName} resolves a ${checkType} check: DC=${difficultyClass},
+ Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}.
+ Player said: "${playerInput}"`
+```
+
+The mechanical result **is** injected as ground truth before narration.
+
+The genuine remaining gap is narrower, and worth fixing:
+
+- The system prompt (`:1900-1906`) says *"resolve this outcome"* but never
+  instructs the model that it **must not contradict** it.
+- Nothing verifies afterward that the narration agreed with the mechanics.
+- The **chat** path has no dice at all (Finding 1), so nothing to bind.
+
+AC-3 is therefore re-scoped from "build injection" (already built) to
+"harden the existing injection and extend it to chat".
+
+### Finding 3 — the rich dice visual exists but only in combat
+
+`GameDice` (`components/game/game_dice.svelte`, 209 lines, `DiceState`:
+`phase`/`value`/`isSuccess`/`labels`) and `combat_dice_ui.svelte` render the
+animated d20. Chat has no dice visual. The dialogue overlay already mounts
+`GameDice` (`dialogue_overlay.svelte:113`) for skill checks.
+
+- **Reproduction**: chat → type `/roll 1d20+3` → observe `Command: /roll 1d20+3`
+  and no roll. Combat → attack → observe the animated die.
+- **Baseline tests**: `dice_service.test.ts`, `combat_view_model.test.ts`.
+  Run both before starting.
 
 ## User Outcome
 
-After this contract, a **player** who rolls dice in chat sees a rich animated dice card: the die face, the modifier, the total, and (for checks) a `Nat 20 + 3 = 23 vs DC 15 ✓` comparison with crit highlighting. The same visual language appears in combat. The NPC narration is constrained to respect the rolled result. A **player** can open a dice history feed to review past rolls.
+A **player** who types `/roll 1d20+3` in chat gets a real, seeded roll rendered
+as a dice card — die face, modifier, total, and for a check
+`Nat 20 + 3 = 23 vs DC 15 ✓` with crit highlighting. The same card renders in
+combat. When a check drives NPC narration, the narration cannot contradict the
+mechanical result. A player can review past rolls with their outcomes.
 
 ## Success Measures
 
-- **Time/latency target**: dice card renders instantly (client-side roll); no added latency.
-- **Offline/degraded behavior**: dice are deterministic, seeded, client-side — fully offline. No AI required for the roll itself.
-- **Production journey enabled**: players trust that rolls are real and respected — the core emotional contract of a tabletop RPG.
+- **Time/latency target**: rolls resolve client-side and render instantly; no
+  added AI round trip for the roll itself.
+- **Offline/degraded behavior**: rolls are seeded and local — fully offline.
+  Only the narration degrades when no model is available.
+- **Production journey enabled**: the player can trust the dice. That is the
+  core emotional contract of a tabletop RPG, and it is currently unmet in chat.
 
 ## Existing System & Reuse Map
 
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
-| Roll mechanics (d20, checks, notation, seeding) | `services/dice/dice_service.svelte.ts` | reuse — unchanged |
-| Animated die face | `components/game/game_dice.svelte` (`DiceState`) | reuse — extend for multi-die / card layout |
-| Combat dice overlay | `views/combat/components/combat_dice_ui.svelte` | reuse — keep, add card message type |
-| Chat message types | `packages/shared` message schema (C-231) | modify — add a `dice` message kind |
-| Roll history | `DiceService.history` | reuse — surface as a feed |
+| Roll resolution + seeding | `services/dice/dice_service.svelte.ts` | modify — widen `history` entry shape only |
+| Notation parsing | `views/combat/utils/dice_notation.ts` | **modify — add modifier support** |
+| Animated die face | `components/game/game_dice.svelte` | reuse — wrap in `DiceCard` |
+| Combat dice overlay | `views/combat/components/combat_dice_ui.svelte` | reuse — keep |
+| Quick-roll menu | `views/combat/components/dice_quick_menu.svelte` | reference |
+| Slash-command intercept | `chat_view_model.svelte.ts:441-467` | modify — route `roll` to `DiceService`, not the bridge |
+| Engine bridge roll stub | `engine_bridge.ts:175-181` | **replace or delete** — see Directives |
+| Authoritative injection | `npc_dialogue_service.svelte.ts:1877-1906` | modify — add a non-contradiction instruction |
 
 ## Overview
 
-Add a rich **dice card** message type to the chat view (and reuse the same component in combat) that renders rolls with die faces, modifiers, totals, and check comparisons with crit highlighting. Make the mechanical result **authoritative**: the resolved success/failure and total are injected into the NPC/game prompt as ground truth, and the narration is instructed to respect it. Surface the existing roll history as a browsable feed.
+Make dice real in chat, give rolls one shared visual language across chat and
+combat, and harden the existing mechanical-authority binding. Three
+independently-mergeable increments, in the order below.
 
 ## Design Reference
 
-- `services/dice/dice_service.svelte.ts` — the source of truth for roll resolution.
-- `components/game/game_dice.svelte` — existing `DiceState` animation to reuse.
-- `views/chat/chat_view.svelte` message list — where the new message kind is rendered.
-- `packages/shared` message schema (C-231 `EnhancedChatMessage`) — where the `dice` message type is defined.
+- `services/dice/dice_service.svelte.ts` — the single source of roll truth.
+- `views/combat/utils/dice_notation.ts:24-30` — the regex to widen.
+- `components/game/game_dice.svelte` — the animation to wrap.
+- `npc_dialogue_service.svelte.ts:1877-1906` — the existing injection to harden.
+- `packages/shared` `EnhancedChatMessage` (C-231) — where the `dice` kind lands.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
-- Define a `dice` chat message kind in `packages/shared` with the full resolved shape (dice, modifiers, total, check context, crit flags).
-- Create a shared `DiceCard` component (reusing `GameDice`) rendered by both chat and combat.
-- Resolve rolls through `DiceService` so the card reflects the *same* source of truth as combat.
-- On a check, emit the result (success/total/DC/difference) into the NPC prompt as authoritative context, and instruct narration to respect it.
-- Add a roll-history feed view surfaced from `DiceService.history`.
+- **Resolve every roll through `DiceService`.** Chat must not get its own RNG.
+  This is what makes the card and combat agree.
+- **Do not route `roll` through the engine bridge.** Dice are a rules concern,
+  not an ECS concern; the bridge stub exists only because `/roll` was
+  originally wired as an engine command. Route `roll` to `DiceService` in the
+  chat ViewModel's command intercept and delete the dead `case 'roll'`.
+- Widen `parseDiceNotation` to accept an optional signed modifier
+  (`2d6+3`, `1d20-1`) and return it. Keep the existing return shape additive so
+  combat callers are unaffected.
+- Widen the `DiceService.history` entry with optional check context
+  (`dc`, `success`, `isCriticalSuccess`, `isCriticalFailure`, `label`).
+  Optional fields keep existing callers valid.
+- Define a `dice` chat message kind in `packages/shared`; render it with a
+  shared `DiceCard` that wraps `GameDice`. Chat and combat use the same
+  component.
+- Add an explicit non-contradiction instruction to the roll-resolution system
+  prompt, and log the injected result at debug level.
+- `DiceCard` must satisfy the C-423 baseline: outcome conveyed in text
+  (`Success`/`Failure`, `✓`/`✗`) as well as colour; no hover-only affordances.
 
 ## State & Data Models
 
 ```typescript
+/** A resolved roll, rendered as a chat message and in combat. */
 type DiceCardData = {
   id: string;
-  /** Raw notation, e.g. "1d20+3". */
+  /** Raw notation as typed, e.g. "1d20+3". */
   notation: string;
-  /** Individual die results. */
+  /** Individual die results, in roll order. */
   dice: { sides: number; value: number }[];
-  /** Sum of dice + modifiers. */
+  /** Flat modifier applied after the dice. */
+  modifier: number;
+  /** Sum of dice + modifier. */
   total: number;
-  /** Optional check context. */
+  /** Present only when the roll was made against a DC. */
   check?: {
     dc: number;
     success: boolean;
+    /** total - dc; negative on failure. */
     difference: number;
-    ability?: string; // e.g. "Persuasion"
-    advantage?: boolean;
-    disadvantage?: boolean;
+    /** e.g. "Persuasion". */
+    ability?: string;
   };
-  /** Crit flags from rollD20. */
-  isCriticalSuccess?: boolean;
-  isCriticalFailure?: boolean;
+  /** Only meaningful for a single d20. */
+  isCriticalSuccess: boolean;
+  isCriticalFailure: boolean;
   timestamp: Date;
 };
 ```
 
 ```typescript
+/** Ground truth handed to the narration turn. */
 type AuthoritativeRollResult = {
   total: number;
-  success: boolean | null; // null for non-check rolls
+  /** null for a flat roll with no DC. */
+  success: boolean | null;
   dc?: number;
   difference?: number;
+  /** The unmodified d20 face, for crit narration. */
   natural: number;
   isCriticalSuccess: boolean;
   isCriticalFailure: boolean;
 };
 ```
 
-The `AuthoritativeRollResult` is injected into the NPC/game prompt as ground truth before the narration turn, with an instruction to narrate consistently with it.
+**Deliberately out of the model:** advantage/disadvantage. `DiceService` has no
+advantage mechanic today (`rollD20` takes only a modifier), so modelling it here
+would be speculative. Add it when the rules kernel grows it.
 
 ## Quality Requirements
 
-- **Offline/degraded mode**: fully offline — rolls are seeded client-side; no AI required for the roll, only for narration which degrades gracefully.
-- **Accessibility/input**: dice cards must convey outcome in text (not color alone) for color-blind users; `✓`/`✗` plus "Success"/"Failure" text. Keyboard-focusable where interactive.
-- **Performance budget**: animation via existing `GameDice`; card render is DOM, outside the 60fps engine loop. No engine impact.
-- **Security/privacy**: rolls are local player data; no new exposure. Validate notation parsing to prevent abuse.
-- **Persistence/migration**: dice cards are part of the chat transcript; already persisted as messages. No new migration for the card; history feed reads existing `history` state.
-- **Cancellation/retry/idempotency**: rolls are deterministic given a seed; re-rolling is a new roll. Idempotent rendering.
-- **Observability**: log injection of authoritative roll results at debug level to verify prompt-fidelity.
+- **Offline/degraded mode**: rolls are fully local and seeded. When no model is
+  available the card still renders; only narration is absent.
+- **Accessibility/input**: outcome in text and colour, never colour alone;
+  card is keyboard-focusable where interactive. Inherits C-423.
+- **Performance budget**: DOM-layer render outside the 60fps engine loop.
+  Reuses the existing `GameDice` animation — no new animation cost.
+- **Security/privacy**: notation is user input — the widened regex must remain
+  anchored and bounded (cap dice count and sides) to prevent
+  `999999d999999` resource abuse.
+- **Persistence/migration**: dice cards persist as ordinary chat messages of
+  the new kind. Pre-existing `Command: /roll …` text messages stay text; no
+  back-migration.
+- **Cancellation/retry/idempotency**: a re-roll is a new roll with a new id.
+  Rendering is idempotent.
+- **Observability**: log the injected `AuthoritativeRollResult` at debug level
+  so prompt fidelity is verifiable from a session log.
 
 ## Migration & Rollback
 
-Old chat transcripts contain plain-text roll messages; the new `dice` kind is additive. **Old data compatibility**: existing text rolls remain as text (optionally re-rendered client-side into cards if parseable). **Migration**: none required — new rolls use the new kind. **Rollback**: revert message kind + card component; old rolls unaffected.
+**Old data compatibility**: existing transcripts hold plain-text roll echoes;
+the `dice` kind is additive and old messages render unchanged.
+**Migration**: none. **Rollback**: revert the message kind, `DiceCard`, and the
+chat command route; restore the bridge stub. No persistent state is lost.
 
 ## Scope Boundaries
 
-- **In Scope:** `dice` chat message kind; shared `DiceCard` component (chat + combat); authoritative roll-result injection into NPC prompt; roll-history feed; tests.
-- **Out of Scope:** changing the seeded RNG semantics (C-148); redesigning combat turn logic; changing dice-service API surface; multiplayer roll syncing.
+- **In Scope:** working `/roll` in chat routed through `DiceService`; modifier
+  support in `parseDiceNotation`; widened `DiceService.history` entry; `dice`
+  chat message kind; shared `DiceCard` used by chat and combat;
+  non-contradiction instruction on the existing roll-resolution prompt;
+  roll-history feed; tests.
+- **Out of Scope:** changing seeded-RNG semantics (C-148); advantage/disadvantage
+  mechanics; redesigning combat turn logic; multiplayer roll sync; rewriting the
+  two-call dialogue pipeline (C-371/C-401 — this contract only adds an
+  instruction to its prompt); re-rendering historical text rolls as cards.
 
 ## Contract Size & Split Rule
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** the shared `DiceCard` component + message kind is independently mergeable and should land first (pure visualization). Authoritative prompt-injection is a second independently-mergeable increment (behavioral). Roll-history feed is a third.
+**Three independently-mergeable increments, in this order:**
+1. **Mechanics** — notation modifiers, widened history, `/roll` routed to
+   `DiceService`. Ships a working (if plain) roll. *Highest value; ship first.*
+2. **Visual** — `dice` message kind + shared `DiceCard` in chat and combat.
+3. **Authority + history feed** — non-contradiction instruction; history view.
 
 ## Acceptance Criteria
 
-### AC-1: Dice card message kind in chat
-**Given** a user issues `/roll 1d20+3` in chat
-**When** the roll resolves through `DiceService`
-**Then** a rich dice card renders with the die face, modifier, total, and — for a check — a `Nat 20 + 3 = 23 vs DC 15 ✓` comparison with crit highlighting; the card conveys outcome in both text and color.
+### AC-1: `/roll` actually rolls
+
+**Given** a player types `/roll 1d20+3` in chat
+**When** the command is intercepted
+**Then** it resolves through `DiceService` (not the engine bridge), the
+modifier is parsed and applied, and the result is added to `DiceService.history`
+— replacing today's `Command: /roll 1d20+3` echo. Malformed notation
+(`/roll foo`, `/roll 99999d6`) produces a clear inline error and no roll.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit + Visual | `dice_service.test.ts` (extended) + card component test | chat | Filled during verification |
+| AC-1 | Unit | `dice_notation.test.ts` (modifiers + bounds), `chat_view_model.test.ts` (routes to DiceService) | chat | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: browser — issue `/roll`, assert card renders with correct math.
+- Moon Task: `moon run client:test-unit`
+- Integration: seed the RNG, issue `/roll 1d20+3`, assert the exact total.
 
-### AC-2: Dice card in combat reuses same component
-**Given** combat resolves an attack/check roll
-**When** the roll completes
-**Then** the same `DiceCard` component renders the result, consistent with the existing `GameDice` animation, with check comparison when a DC is present.
+### AC-2: Dice card renders in chat and combat from one component
+
+**Given** a resolved roll in chat, and a resolved attack/check roll in combat
+**When** each renders
+**Then** both use the same `DiceCard`, showing die face, modifier and total;
+for a check, `Nat 20 + 3 = 23 vs DC 15 ✓` with crit highlighting; outcome is
+stated in text as well as colour.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit + Visual | `combat_view_model.test.ts` (extended) | combat | Filled during verification |
+| AC-2 | Unit + Visual | `dice_card.test.ts`; `combat_view_model.test.ts` (extended) | chat + combat | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: enter combat, assert roll card renders.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:run-visual-tests`
+- Integration: seeded roll in each surface; screenshot both; assert identical
+  component and correct math.
 
-### AC-3: Mechanical result is authoritative in narration
-**Given** a check resolves with a concrete `AuthoritativeRollResult`
-**When** the NPC narration turn is generated
-**Then** the result (total, success, DC, crits) is injected into the prompt as ground truth and the narration is instructed to respect it; a logged assertion verifies the injection.
+### AC-3: Narration cannot contradict the mechanical result
+
+**Given** a check resolves to a concrete `AuthoritativeRollResult`
+**When** `_resolveRoll` builds the narration turn
+**Then** the existing `DC=… Roll=… SUCCESS|FAILURE` injection is retained
+**and** the system prompt carries an explicit instruction that the outcome is
+final and must not be contradicted; the injected result is logged at debug level.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit + Integration | prompt-injection test | combat + chat checks | Filled during verification |
+| AC-3 | Unit | `npc_dialogue_service.test.ts` — assert prompt contains both the result and the non-contradiction instruction | in-game dialogue | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: run a mock narration with an injected failed check; assert the narration prompt contains the authoritative result and a "respect it" instruction.
+- Moon Task: `moon run client:test-unit`
+- Integration: mock adapter; run a failed check; assert both strings present in
+  the captured prompt. **Note:** the injection already exists — the test must
+  fail only on the missing instruction, not on the injection.
 
-### AC-4: Roll-history feed
-**Given** the player has made rolls
-**When** the player opens the roll-history feed
-**Then** past rolls (from `DiceService.history`) render with notation, result, and timestamp, browsable in a compact feed.
+### AC-4: Roll-history feed with outcomes
+
+**Given** the player has made several rolls, some against a DC
+**When** the roll-history feed is opened
+**Then** each entry shows notation, total, timestamp, and — where present —
+the DC and success/failure, read from the widened `DiceService.history`.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit + Visual | history-feed test | settings/chat | Filled during verification |
+| AC-4 | Unit + Visual | `dice_history_feed.test.ts` | chat / settings | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: make several rolls, open feed, assert all present.
+- Moon Task: `moon run client:test-unit`
+- Integration: make one flat roll and one check; assert both render with the
+  correct fields and that the flat roll shows no DC.
+
+## Implementation Sequence
+
+1. **Phase 1 (Mechanics)** — Widen `parseDiceNotation` for signed modifiers and
+   add count/sides bounds. Widen the `DiceService.history` entry with optional
+   check context. Route `roll` from the chat command intercept to `DiceService`
+   and delete the `case 'roll'` stub in `engine_bridge.ts`. Ship.
+2. **Phase 2 (Visual)** — Add the `dice` message kind in `packages/shared`.
+   Build `DiceCard` wrapping `GameDice`. Render in chat; swap combat's inline
+   result to the same component. Ship.
+3. **Phase 3 (Authority + history)** — Add the non-contradiction instruction and
+   debug logging to `_resolveRoll`. Build the history feed over the widened
+   history. Ship.
+4. **Phase 4 (Validation)** — `moon run client:test-unit`,
+   `moon run e2e:test-client`, `moon run e2e:run-visual-tests`,
+   `bun run typecheck`.
+
+## Edge Cases & Gotchas
+
+- **Do not "fix" the narration binding by rebuilding it.** It exists
+  (`npc_dialogue_service.svelte.ts:1877-1899`). This contract adds one
+  instruction to a prompt; a rewrite of the two-call pipeline is out of scope
+  and would regress C-401's streaming behaviour.
+- `parseDiceNotation` is called by combat today. Widening its return shape must
+  stay additive — check every caller before changing the type.
+- The `roll` case in `engine_bridge.ts` also falls through to a generic
+  `EXECUTE_COMMAND` dispatch below the switch. Confirm no registered handler
+  depends on `roll` before deleting the case.
+- Seeded determinism: combat may already have set a seed via
+  `DiceService.setSeed`. A chat `/roll` will consume from the same sequence.
+  Decide deliberately whether that is desired (it probably is — one timeline,
+  one RNG) and note it in the Execution Report.
+- Crit flags are meaningful only for a single d20. `2d6` must not report crits.
+
+## Open Questions
+
+Must be resolved before status becomes `approved`:
+
+- **OQ-1 — should `/roll` in chat support an explicit DC (`/roll 1d20+3 vs 15`)?**
+  Without it, chat rolls are always flat and the check half of `DiceCard` only
+  ever renders in combat and dialogue. **Recommendation: yes**, a trailing
+  `vs <dc>` — it is a small parser addition and it is what makes the card's
+  best state reachable from the surface players use most.
+- **OQ-2 — where does the roll-history feed live?** Chat side panel, pause
+  menu, or settings. **Recommendation: pause menu**, next to the other
+  session-level views; it is a session artefact, not a chat artefact.
+
+## Amendments
+
+Changes to ACs or scope require a version bump and user approval.
+
+| Version | Date | Change | Approved by |
+|---|---|---|---|
+| 2.0.0 | 2026-08-21 | Initial draft from UX review. | — |
+| 3.0.0 | 2026-08-21 | Re-verified against code. AC-1 corrected: `/roll` is a TODO stub in `engine_bridge.ts:175-181`, not a plain-text result — no roll occurs, so the work is "implement dice in chat". Added two undeclared prerequisites the review missed: `parseDiceNotation` cannot parse modifiers (`dice_notation.ts:24-30`), and `DiceService.history` carries no check context, blocking AC-4. AC-3 re-scoped from "build authoritative injection" to "harden it" — injection already exists (`npc_dialogue_service.svelte.ts:1877-1899`, C-371/C-401). Dropped advantage/disadvantage from the data model as speculative. Added notation bounds as a security requirement, Implementation Sequence, Edge Cases, and lifecycle sections. Sequenced 2 of 6. | review 2026-08-21 |
+
+## Promotion Lifecycle
+
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
+
+Target: **`integrated`** per increment. Phase 2 additionally requires
+`release_verified`-level visual evidence in both chat and combat.
+
+## Status Lifecycle
+
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)

@@ -1,7 +1,7 @@
 ---
 id: C-424
-title: "Unified Message Surfaces — shared RichMessageList + GuidedComposer across chat, dialogue overlay, and vendor"
-source: "UX review 2026-08-21 — 'Duplicated surfaces (chat vs dialogue overlay vs vendor) re-implement list-of-messages + input'; 'chat_view_model 1100 lines, combat_view_model 1640 lines'"
+title: "Unified Message Surfaces — one RichMessageList + GuidedComposer behind chat and dialogue"
+source: "UX review 2026-08-21, re-verified and re-scoped 2026-08-21"
 status: draft
 github:
   issue_number: null
@@ -17,175 +17,306 @@ created_at: "2026-08-21"
 
 | Field | Value |
 |---|---|
-| **Source** | UX review 2026-08-21 — "Unify chat/dialogue/vendor message surfaces; reduce duplicated ViewModels". |
-| **Target** | `apps/frontend/client/src/lib/views/chat/chat_view.svelte`; `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` (1100 lines); `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` (1640 lines); `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` (692 lines); `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` (628 lines) |
-| **Priority** | P2 — maintainability + consistency; high payoff (removes duplicated logic and forces coherent UX) but not a first-session blocker |
-| **Dependencies** | C-420 (planned — shared guided chips); C-421 (planned — shared dice card); C-231 (landed — rich chat streaming / `EnhancedChatMessage`) |
+| **Source** | UX review 2026-08-21 — "chat vs dialogue vs vendor re-implement list-of-messages + input". Re-scoped: vendor convergence and ViewModel decomposition removed (see Scope Boundaries). |
+| **Target** | `apps/frontend/client/src/lib/components/chat/enhanced_chat_message.svelte`; `apps/frontend/client/src/lib/components/chat/auto_resize_textarea.svelte`; `apps/frontend/client/src/lib/views/chat/chat_view.svelte`; `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` |
+| **Priority** | P1 — resequenced up from P2. It is the precondition for C-420 and the reason C-420/C-421 each had to be written twice. |
+| **Sequence** | **3 of 6** — after C-421 so `DiceCard` exists to be composed in; before C-420 so chips land in one place instead of two |
+| **Dependencies** | C-231 (landed — `EnhancedChatMessage`); C-343 (landed — dialogue message actions/branches); C-423 (a11y baseline, sequence 1); C-421 (`DiceCard`, sequence 2) |
 | **Status** | draft |
-| **Promotion** | `sandbox` |
+| **Promotion** | `integrated` |
 | **Docs Impact** | internal |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 3.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: Aikami re-implements the "list of messages + input/composer" pattern in at least three surfaces that are currently divergent:
-  - **Chat** (`chat_view.svelte` + `chat_view_model.svelte.ts`, 1100 lines) — `EnhancedChatMessage`, CYOA choices, slash-command autocomplete, streaming TTS, impersonation.
-  - **Dialogue overlay** (`dialogue_overlay.svelte`, 692 lines + its ViewModel) — a parallel dialogue implementation with its own choice rendering.
-  - **Vendor** (`vendor_view.svelte`, 628 lines) — its own list/interaction surface.
-  These surfaces have drifted: chat got rich streaming (C-231), CYOA (C-245), and branching; dialogue/vendor did not get the same treatment. The large ViewModels (chat 1100, combat 1640 lines) indicate too much responsibility in one object, which accrues bugs and merge pain.
-- **Reproduction**: Interact with an NPC in chat, then in an in-game dialogue — the choice/message UX differs. The `EnhancedChatMessage` rich features (swipe/alternatives, action bar, dice card after C-421) don't appear in dialogue or vendor because those are separate implementations.
-- **Existing implementation to reuse**: `EnhancedChatMessage` (rich message), `ChoiceButtonsView`/`GuidedChipsView` (C-420), `AutoResizeTextarea`, `CombatDiceUi`/`DiceCard` (C-421), `BaseViewModel`/`BaseViewModelContainer` patterns, `npc_dialogue_service`.
-- **Known gaps**: (a) three divergent message/composer surfaces; (b) no shared `RichMessageList` component; (c) ViewModels too large; (d) rich chat features don't propagate to dialogue/vendor.
-- **Baseline tests**: `chat_view_model` tests, `dialogue_overlay_view_model.test.ts`, `combat_view_model.test.ts`, `choice_buttons_view_model.test.ts`. Run all before starting.
+Aikami implements "list of messages + composer" twice, and the two have drifted:
+
+| Surface | File | Lines | Has |
+|---|---|---|---|
+| Chat | `views/chat/chat_view.svelte` + `chat_view_model.svelte.ts` | 1100 (VM) | `EnhancedChatMessage`, CYOA choices, slash commands, streaming TTS, impersonation, branches |
+| Dialogue | `views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | 692 | its own bubbles, its own action row, suggestion chips, CYOA choices, skill-check dice, branches |
+
+Both were verified; the line counts are exact. The drift is not cosmetic —
+each surface re-implements message actions, branch switching, and the composer
+with different markup, so every message-layer improvement has to be built
+twice. C-420 and C-421 both exist as separate contracts *because* of this
+duplication: chips landed in dialogue only, rich messages landed in chat only.
+
+Concretely, the same concepts are duplicated:
+
+- Message action row: `components/chat/message_action_bar.svelte` vs
+  `dialogue_overlay.svelte:298-377` (its own inline emoji buttons).
+- Branch switcher: chat's `messageBranchStore` path vs
+  `dialogue_overlay.svelte:530-554` (its own branch button row).
+- Composer: both mount `AutoResizeTextarea`, with different surrounding markup
+  and different send/disable rules.
+
+- **Reproduction**: talk to an NPC in chat, then to the same NPC in-game.
+  Message bubbles, action affordances, and branch controls all differ.
+- **Baseline tests**: `chat_view_model` tests,
+  `dialogue_overlay_view_model.test.ts`, `choice_buttons_view_model.test.ts`.
+  All must be green before starting **and after each increment** — this
+  contract must not change behaviour.
 
 ## User Outcome
 
-After this contract, a **player** gets a consistent rich-message and composer experience whether chatting with an NPC in the chat view, in an in-game dialogue, or at a vendor — the same dice cards, guided chips, streaming, and action affordances. A **developer** maintains one `RichMessageList` + `GuidedComposer` rather than three divergent implementations, and ViewModels are decomposed into focused sub-services.
+A **player** gets the same rich message rendering, action affordances, branch
+controls, dice cards and composer whether they are in the chat view or an
+in-game dialogue. A **developer** adds a message-layer feature once instead of
+twice.
 
 ## Success Measures
 
-- **Time/latency target**: no regression; shared components are at least as fast as the current surfaces.
-- **Offline/degraded behavior**: the shared surfaces preserve current offline behavior (chat works offline; dialogue/vendor behavior unchanged when AI is down).
-- **Production journey enabled**: a consistent, coherent NPC interaction model across all surfaces; a healthier codebase that's cheaper to extend.
+- **Time/latency target**: no regression. Message-list render must be at least
+  as fast as today; verify with a long transcript (200+ messages).
+- **Offline/degraded behavior**: unchanged per surface. The shared components
+  must introduce no online requirement.
+- **Production journey enabled**: message-layer work stops costing double, and
+  the two NPC-interaction surfaces stop teaching the player two interfaces.
 
 ## Existing System & Reuse Map
 
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
-| Rich message rendering | `components/chat/enhanced_chat_message.svelte` | reuse — extract to shared `RichMessageList` |
-| Composer/input | `components/chat/auto_resize_textarea.svelte` | reuse — shared `GuidedComposer` |
-| Choice/guided chips | `views/chat/choice_buttons_view.svelte` + C-420 `GuidedChipsView` | reuse — shared |
-| Dice card | C-421 `DiceCard` (planned) | reuse — shared |
-| Dialogue surface | `views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | modify — consume shared components |
-| Vendor surface | `views/vendor/vendor_view.svelte` | modify — consume shared components |
-| Large ViewModels | `chat_view_model.svelte.ts` (1100), `combat_view_model.svelte.ts` (1640) | refactor — decompose into focused sub-services |
+| Rich message bubble | `components/chat/enhanced_chat_message.svelte` | reuse — becomes the row renderer |
+| Message actions | `components/chat/message_action_bar.svelte` | reuse — post-C-423 |
+| Swipe/alternates | `components/chat/message_swipe_controls.svelte` | reuse |
+| Composer input | `components/chat/auto_resize_textarea.svelte` | reuse — wrap in `GuidedComposer` |
+| Dice card | C-421 `DiceCard` | reuse |
+| Chat surface | `views/chat/chat_view.svelte` | modify — consume shared components |
+| Dialogue surface | `dialogue_overlay.svelte` | modify — consume shared components |
+| ViewModel pattern | `BaseViewModel` / `BaseViewModelContainer` | reuse — unchanged |
 
 ## Overview
 
-Extract a shared **`RichMessageList`** and **`GuidedComposer`** from the chat implementation, then rewire the dialogue overlay and vendor surfaces to consume them, so all NPC-interaction surfaces share the same rich message, guided-chip, dice-card, streaming, and action-bar behavior. In parallel, decompose the largest ViewModels (chat 1100, combat 1640 lines) into focused sub-services the ViewModel composes, so each object has a single responsibility.
+Extract `RichMessageList` and `GuidedComposer` from the chat implementation,
+rewire chat to them with **zero behaviour change**, then rewire the dialogue
+overlay to the same components while preserving its surface-specific concerns
+(skill-check dice, NPC portraits, spatial speech bubble, combat escalation).
 
 ## Design Reference
 
-- `views/chat/chat_view.svelte` — the richest current surface; the source for the shared components.
-- `components/chat/enhanced_chat_message.svelte`, `auto_resize_textarea.svelte`, `message_action_bar.svelte` — building blocks.
-- `views/game/ui/overlays/dialogue/dialogue_overlay.svelte` + `views/vendor/vendor_view.svelte` — surfaces to converge.
-- `BaseViewModel`/`BaseViewModelContainer` — the ViewModel pattern to keep (and decompose within).
+- `views/chat/chat_view.svelte` — the richer surface; source of the extraction.
+- `dialogue_overlay.svelte:290-380` (actions), `:500-554` (choices/branches),
+  `:620-660` (composer) — the code being replaced.
+- `BaseViewModel` / `BaseViewModelContainer` — the pattern to keep.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
-- Extract `RichMessageList` and `GuidedComposer` as shared components under `components/`, consuming `EnhancedChatMessage`, `GuidedChipsView` (C-420), `DiceCard` (C-421), `AutoResizeTextarea`, and `MessageActionBar`.
-- Rewire `dialogue_overlay.svelte` and `vendor_view.svelte` to consume the shared components, preserving their surface-specific concerns (e.g. vendor buy/sell actions, dialogue skill checks) as wrappers.
-- Decompose `chat_view_model.svelte.ts` and `combat_view_model.svelte.ts`: extract cohesive sub-services (e.g. turn state, dice, combat log for combat; message state, composer, choices for chat) that the ViewModel composes. Do not change external behavior — this is structural.
-- Keep each surface's unique behavior (vendor economy, dialogue checks) intact; only unify the message/composer layer.
+- Extract into `components/messaging/` (not `components/chat/` — the point is
+  that these are no longer chat-specific).
+- `RichMessageList` owns: message rows, action bar, swipe/alternates, dice
+  cards, streaming indicator, scroll anchoring. It owns **no** transport,
+  **no** AI calls, **no** persistence.
+- `GuidedComposer` owns: the textarea, send affordance, disabled state, and a
+  slot for surface-specific extras. It owns **no** send logic — it calls back.
+- Surface-specific concerns stay in the surface, passed in via snippets:
+  dialogue keeps its `GameDice` skill-check overlay, portrait row, spatial
+  speech bubble and combat escalation; chat keeps slash commands,
+  impersonation and CYOA.
+- **Increment 1 must be behaviour-preserving.** If a chat behaviour is hard to
+  express in the shared component, keep it in chat via a snippet rather than
+  changing it. Behaviour changes belong to C-420, not here.
+- Keyed `{#each}` on message id; do not regress list performance.
+- Inherits the C-423 accessibility baseline — no hover-only, no
+  focus-invisible actions in the extracted components.
 
 ## State & Data Models
 
-No new persistent state. The decomposition introduces internal sub-service objects (not serialized). Where shared message types exist, they are reused; new shared component props are typed interfaces.
+No new persistent state and no new schemas. The extraction introduces component
+prop types only.
 
 ```typescript
 type RichMessageListProps = {
-  messages: RichMessage[]; // shared message shape (C-231 + dice/choice kinds)
+  /** Rendered rows, keyed by id. */
+  messages: RichMessage[];
   characterName?: string;
   avatarUrl?: string;
+  /** Streaming indicator for the last row. */
+  isStreaming?: boolean;
   onAction?(messageId: string, action: MessageAction): void;
-  renderFooter?: (messageId: string) => Snippet; // surface-specific extras
+  /** Surface-specific extras rendered under a given message. */
+  renderFooter?: (messageId: string) => Snippet;
 };
 
 type GuidedComposerProps = {
+  value: string;
+  onInput(value: string): void;
   onSend(text: string): void;
-  chips?: GuidedChipSet; // C-420
   placeholder?: string;
   disabled?: boolean;
-  extras?: Snippet; // surface-specific actions (e.g. vendor buy)
+  /** Surface-specific controls (TTS toggle, impersonate, …). */
+  extras?: Snippet;
+  /** Rendered above the input — choices and chips (C-420 fills this). */
+  above?: Snippet;
 };
 ```
 
+`RichMessage` is the existing C-231 message shape plus C-421's `dice` kind.
+No new message type is introduced here.
+
 ## Quality Requirements
 
-- **Offline/degraded mode**: preserve per-surface offline behavior; shared components must not introduce online requirements.
-- **Accessibility/input**: the shared components inherit the accessibility baseline from C-423 (no hover-only actions, keyboard-reachable). Refactor must not regress.
-- **Performance budget**: shared components must not exceed current render cost; keep within DOM layer (no engine-loop impact). Watch for re-render overhead in large message lists (keyed `{#each}`).
-- **Security/privacy**: no new data exposure; reuse existing message schemas.
-- **Persistence/migration**: no persistent state change; message rendering is presentational. No migration.
-- **Cancellation/retry/idempotency**: composer/streaming behavior preserved.
-- **Observability**: ViewModel decomposition should not lose existing logging; add coverage where the refactor touches.
+- **Offline/degraded mode**: preserved per surface; no new online dependency.
+- **Accessibility/input**: inherits C-423. The refactor must not regress it —
+  re-run C-423's `message_actions_a11y.spec.ts` against both surfaces.
+- **Performance budget**: DOM layer only, no engine-loop impact. Measure
+  render time on a 200-message transcript before and after; no regression.
+- **Security/privacy**: no new data exposure; existing schemas reused.
+- **Persistence/migration**: none — presentational refactor.
+- **Cancellation/retry/idempotency**: streaming, abort and retry behaviour
+  preserved exactly.
+- **Observability**: preserve existing ViewModel logging; the extraction must
+  not silently drop debug calls.
 
 ## Migration & Rollback
 
-N/A — no persistent state changes (structural refactor + shared components). **Rollback** = revert the extraction/rewire; chat implementation remains as the source of truth. Because this is a large refactor, **land it incrementally** (shared components first, then rewire dialogue, then vendor, then decompose ViewModels) with tests green at each step.
+No persistent state changes. **Rollback**: revert per increment — chat's
+original implementation remains the reference. Because this is a refactor of
+two live surfaces, **each increment lands separately with the full existing
+test suite green**; do not batch them.
 
 ## Scope Boundaries
 
-- **In Scope:** shared `RichMessageList` + `GuidedComposer`; rewiring dialogue + vendor to consume them; decomposing `chat_view_model` + `combat_view_model` into sub-services; tests.
-- **Out of Scope:** changing chat/gameplay behavior; rewriting the engine; changing vendor economy or combat rules; redesigning the composer UX beyond unification.
+- **In Scope:** extract `RichMessageList` + `GuidedComposer`; rewire chat
+  (no behaviour change); rewire the dialogue overlay; preserve every
+  surface-specific concern; tests.
+- **Out of Scope, with reasons:**
+  - **Vendor convergence.** `vendor_view.svelte` (628 lines) is a shop, not a
+    conversation. Forcing it onto a message list risks degrading buying to
+    satisfy an abstraction. Revisit only if a vendor gains real NPC
+    conversation, and only on evidence that it looks better.
+  - **ViewModel decomposition.** Moved to **C-425**. It is a pure refactor with
+    no user-facing outcome and the highest risk in the original contract;
+    bundling it here would gate three user-facing increments behind it.
+  - Any change to chat or dialogue *behaviour* — that is C-420.
+  - Engine, combat rules, or economy changes.
 
 ## Contract Size & Split Rule
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** must be split into independently-mergeable increments to be safe:
-1. Extract shared `RichMessageList` + `GuidedComposer` (no behavior change in chat).
-2. Rewire dialogue overlay to shared components.
-3. Rewire vendor to shared components.
-4. Decompose `chat_view_model`; then `combat_view_model`.
-Each increment is independently mergeable with green tests.
+**Two independently-mergeable increments, in this order:**
+1. Extract `RichMessageList` + `GuidedComposer`; rewire **chat** only. Chat
+   behaviour identical. Ship.
+2. Rewire the **dialogue overlay**. Ship.
+
+Increment 1 is worthless-but-harmless alone; increment 2 is where the payoff
+lands. Do not start increment 2 until increment 1 is green in `main`.
 
 ## Acceptance Criteria
 
-### AC-1: Shared RichMessageList + GuidedComposer extracted
-**Given** the chat surface
-**When** the shared components are extracted and chat is rewired to use them
-**Then** chat behavior is unchanged (rich streaming, choices, action bar, dice cards all render identically), and the shared components exist with tests.
+### AC-1: Shared components extracted; chat behaviour unchanged
+
+**Given** the chat surface today
+**When** `RichMessageList` and `GuidedComposer` are extracted and chat is
+rewired to them
+**Then** every existing chat test passes unmodified, and rich streaming, CYOA
+choices, message actions, swipe/alternates, dice cards and slash commands all
+behave identically.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit + Visual | shared component tests + existing chat tests still green | chat | Filled during verification |
+| AC-1 | Unit + E2E | existing `chat_view_model` tests **unmodified** + new `rich_message_list.test.ts`, `guided_composer.test.ts` | chat | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: chat regression — full chat session works identically.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:test-client`
+- Integration: full chat session E2E before and after; **if an existing chat
+  test needed editing, that is a behaviour change and a fail.**
 
-### AC-2: Dialogue overlay consumes shared components
+### AC-2: Dialogue overlay consumes the shared components
+
 **Given** an in-game dialogue
-**When** the dialogue overlay is rewired to `RichMessageList`/`GuidedComposer`
-**Then** the dialogue gets the same rich message, guided-chip (C-420), and dice-card (C-421) behavior as chat, while preserving its skill-check and surface-specific concerns.
+**When** the overlay is rewired to `RichMessageList` / `GuidedComposer`
+**Then** it renders the same rich messages, action affordances, branch controls
+and dice cards as chat, while keeping its skill-check `GameDice` overlay,
+portrait row, spatial speech bubble, suggestion chips and combat escalation
+intact.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit + Visual | `dialogue_overlay_view_model.test.ts` (extended) | in-game dialogue | Filled during verification |
+| AC-2 | Unit + Visual | `dialogue_overlay_view_model.test.ts` (extended) + before/after screenshots at 1280×720 and 800×600 | in-game dialogue | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: in-game dialogue — assert rich messages + chips render.
+- Moon Task: `moon run client:test-unit`, `moon run e2e:run-visual-tests`
+- Integration: talk to Elder Thalia, trigger a skill check with Rollo; assert
+  the dice overlay and chips still work and messages use the shared renderer.
 
-### AC-3: Vendor consumes shared components
-**Given** a vendor interaction
-**When** the vendor surface is rewired to the shared components
-**Then** vendor messages use the shared rich rendering while preserving buy/sell/economy actions.
+### AC-3: No accessibility or performance regression
+
+**Given** both rewired surfaces
+**When** C-423's a11y spec and a 200-message render benchmark are run
+**Then** no serious/critical axe violations appear on either surface, and
+message-list render time is no worse than the pre-refactor baseline.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit + Visual | vendor view test | vendor | Filled during verification |
+| AC-3 | E2E + benchmark | `message_actions_a11y.spec.ts` (from C-423) run on both; recorded before/after render timings | chat + dialogue | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `client:test`
-- Integration: vendor — assert shared rendering + buy/sell intact.
+- Moon Task: `moon run e2e:test-client`
+- Integration: record both timings in the Execution Report; a regression is a fail.
 
-### AC-4: ViewModels decomposed
-**Given** `chat_view_model.svelte.ts` and `combat_view_model.svelte.ts`
-**When** they are decomposed into focused sub-services
-**Then** each ViewModel is meaningfully smaller, behavior is unchanged (all existing tests green), and each sub-service has a single responsibility with its own tests.
+## Implementation Sequence
 
-**Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Unit | refactored ViewModel tests + sub-service tests | N/A | Filled during verification |
+1. **Phase 1 (Extract)** — Create `components/messaging/rich_message_list.svelte`
+   and `guided_composer.svelte` from chat's current markup. Do not improve
+   anything while extracting.
+2. **Phase 2 (Rewire chat)** — Point `chat_view.svelte` at them. Run the chat
+   suite unmodified. Ship.
+3. **Phase 3 (Rewire dialogue)** — Replace the overlay's bubble/action/branch/
+   composer markup, keeping its snippets for dice, portraits and chips. Ship.
+4. **Phase 4 (Validation)** — Full suite, a11y spec on both surfaces, render
+   benchmark, `bun run typecheck`.
 
-**Test Hooks**:
-- Moon Task: `client:test`
-- Integration: run full client test suite; assert all pre-existing tests still pass and line-count reduction is verified.
+## Edge Cases & Gotchas
+
+- The dialogue overlay parses NPC text into `*action*` / `"dialogue"` segments
+  (`dialogue_overlay.svelte:26-50`, `formatNpcText`). Chat does **not**. Decide
+  deliberately: either lift segment formatting into `RichMessageList` as an
+  opt-in prop, or keep it as a dialogue-side snippet. Silently dropping it
+  would visibly degrade in-game dialogue.
+- The overlay is `role="dialog" aria-modal="true"`. Extracted components must
+  not introduce focus traps or duplicate landmarks inside it.
+- `dialogue_overlay.svelte` gates actions on `isStreaming` **and**
+  `isResolvingSkillCheck`; chat gates only on sending. `GuidedComposer` needs a
+  single `disabled` input rich enough for both — do not hardcode chat's rule.
+- Scroll anchoring differs between a full-height chat view and a bottom-anchored
+  overlay. Verify auto-scroll-on-new-message in both.
+- Resist widening scope mid-refactor. Anything that improves behaviour belongs
+  to C-420, which lands immediately after.
+
+## Open Questions
+
+Must be resolved before status becomes `approved`:
+
+- **OQ-1 — does `formatNpcText` become shared behaviour or stay dialogue-only?**
+  **Recommendation: make it shared and opt-in.** Chat conversations with an NPC
+  contain the same `*action*` prose and currently render the asterisks raw;
+  unifying is a small win, but it *is* a behaviour change for chat — so land it
+  as a follow-up after AC-1 proves the extraction, not inside it.
+
+## Amendments
+
+Changes to ACs or scope require a version bump and user approval.
+
+| Version | Date | Change | Approved by |
+|---|---|---|---|
+| 2.0.0 | 2026-08-21 | Initial draft from UX review. | — |
+| 3.0.0 | 2026-08-21 | Re-scoped and resequenced. Moved from P2/last to P1/position 3 — it is the precondition for C-420, and sequencing it after C-420/C-421 would have meant building two shared primitives before knowing the extraction constraints. Removed vendor convergence (a shop is not a conversation) and ViewModel decomposition (split to C-425; "line-count reduction is verified" rewarded moving code, not improving it). Added AC-3 (a11y + performance non-regression), a hard rule that editing an existing chat test is a fail, `formatNpcText` as a named gotcha, Implementation Sequence, Edge Cases, and lifecycle sections. | review 2026-08-21 |
+
+## Promotion Lifecycle
+
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
+
+Target: **`integrated`** per increment; increment 2 additionally requires
+`release_verified`-level before/after visual evidence.
+
+## Status Lifecycle
+
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)

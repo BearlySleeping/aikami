@@ -278,6 +278,38 @@ C-397 … C-399 remain reserved by `data-layer-target-architecture.md` §5.1 and
 are not MVP work. **The P2 batch (C-418) must not start before the P0 block
 lands** — see `mvp-assessment-2026-08-16.md` §1.
 
+## UX Batch (C-420 … C-425)
+
+Seeded 2026-08-21 from a UX review, then **re-verified against code before
+drafting**. The review's claims did not survive verification intact: three
+contracts described systems that already exist. C-420 was rewritten (its
+premise was inverted), C-421 and C-422 had their central acceptance criteria
+corrected, C-423's token evidence was wrong, and C-424 was re-scoped with its
+refactor half split into C-425. Each contract's Amendments table records what
+changed and why.
+
+**Implement in sequence order, not contract-number order.**
+
+| # | Contract | Name | Priority | Why here |
+|---|---|---|---|---|
+| 1 | C-423 | Design north star — kill hover-only actions, make brand tokens real | P1 | Cheapest; fixes a WCAG 2.4.7 failure; every later contract inherits its a11y baseline |
+| 2 | C-421 | Dice that actually roll — `/roll`, dice cards, mechanical authority | P1 | Biggest felt-quality win; `/roll` is currently a TODO stub |
+| 3 | C-424 | Unified message surfaces — `RichMessageList` + `GuidedComposer` | P1 | Precondition for C-420; do it before adding chips, not after |
+| 4 | C-420 | One choice affordance — converge CYOA + suggestion chips | P1 | Cheap once 3 lands; removes the two-affordance defect; fills the dead chat empty state |
+| 5 | C-422 | Onboarding arc — widen the hint schema, then teach the game | P1 | Teaches the surfaces 2 and 4 build |
+| 6 | C-425 | ViewModel decomposition | P2 | Pure refactor, no player value. Re-measure after 3 and decide whether to run it at all |
+
+**Sequencing rules:**
+- **C-423 first.** C-424 and C-420 both declare its accessibility baseline as
+  inherited, and it is the smallest contract in the batch.
+- **C-424 before C-420.** The original order had C-420 first, which would have
+  built the chip surface twice — once per surface — and then extracted it.
+- **C-425 is optional.** Re-measure both ViewModels after C-424 lands; if chat
+  drops below ~700 lines, defer indefinitely.
+- Dropped from the batch: **vendor convergence** (a shop is not a conversation
+  — see C-424 Scope Boundaries) and the **`GuidedChip` type** from C-420
+  v2.0.0 (would have made two overlapping choice primitives into three).
+
 ## Usage
 
 ```bash
