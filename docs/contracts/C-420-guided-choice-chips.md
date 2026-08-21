@@ -2,7 +2,7 @@
 id: C-420
 title: "One Choice Affordance — converge CYOA choices and suggestion chips on a single primitive, across chat and dialogue"
 source: "UX review 2026-08-21; premise re-verified and inverted 2026-08-21"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — removes a live UX defect (two competing affordances) and fills the dead first-session chat |
 | **Sequence** | **4 of 6** — after C-424, so the chip surface is written once into `GuidedComposer` rather than twice |
 | **Dependencies** | C-245 (landed — CYOA); C-371 (landed — `NpcSuggestionChip` + intent chips); C-417 Feature 4 (landed — chip row wrapping); C-424 (`GuidedComposer`, sequence 3) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 3.0.0 |
@@ -303,7 +303,7 @@ without explanation.
 3. **Phase 3 (Converge)** — Resolve OQ-1 and implement it. Ship.
 4. **Phase 4 (Validation)** — `moon run client:test-unit`,
    `moon run e2e:test-client`, `moon run e2e:run-visual-tests`,
-   `bun run typecheck`.
+   `moon run :typecheck`.
 
 ## Edge Cases & Gotchas
 
