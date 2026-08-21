@@ -2,7 +2,7 @@
 id: C-422
 title: "Guided First-Session Onboarding Arc — widen the hint schema past keybindings, then teach the actual game"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — first-session retention. Sequenced last of the P1s because it depends on the surfaces the others build. |
 | **Sequence** | **5 of 6** — needs C-420's starter chips (AC-4) and C-421's dice (a tutorial step teaches `/roll`) |
 | **Dependencies** | C-327 (landed — hint state machine); C-420 (starter chips, sequence 4); C-421 (working dice, sequence 2) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → `apps/frontend/docs` if the tutorial is documented |
 | **Contract version** | 3.0.0 |
@@ -288,7 +288,9 @@ minutes — with each gameplay step completing via a real emitted event.
 **Test Hooks**:
 - Moon Task: `moon run e2e:test-client`
 - Integration: drive the whole arc end to end; assert every step completes from
-  a real gameplay event, not a test-only hook.
+  a real gameplay event, not a test-only hook. The E2E must enable the extended-arc
+  feature flag (or assert the flag is on by default) before walking the arc —
+  otherwise the test silently exercises only the legacy five-step arc.
 
 ### AC-5: Model-dependent steps degrade
 
@@ -351,6 +353,14 @@ Must be resolved before status becomes `approved`:
   events the game already emits, or they become new instrumentation.
   **Resolve by grepping the existing event surface before Phase 2**, and
   prefer an existing event over a new one in every case.
+  **Partially resolved from codebase evidence (2026-08-21):** the engine bridge
+  already emits `NPC_DIALOG_START` (conversation step), `COMBAT_ENDED` /
+  `ENCOUNTER_COMPLETED` (combat step), and `MAP_LOADED` /
+  `INTERACTION_TARGET_CHANGED` (movement/interaction). The **dice-roll event is
+  the one genuinely open item** — it must come from C-421's `/roll`
+  implementation, which is still `draft`. If C-421 has not landed a roll event
+  by Phase 2, the dice step must listen to whatever C-421 emits, or be dropped
+  from the first cut (see OQ-1).
 
 ## Amendments
 
