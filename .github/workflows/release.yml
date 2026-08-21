@@ -18,8 +18,8 @@ name: Release
 #
 # Pipeline shape:
 #   resolve-plan     → groups DEPLOY_APPS by serviceType (desktop,
-#                      cloud-run-sveltekit, firebase-hosting,
-#                      firebase-functions, docker-release) so every job below
+#                      cloudflare-worker, firebase-functions, docker-release)
+#                      so every job below
 #                      is gated at the JOB level (`if: needs.resolve-plan...`)
 #                      instead of skipping steps one at a time inside a
 #                      monolithic job. Deploying only "client-tauri" (the
@@ -33,25 +33,23 @@ name: Release
 #                      Shared to every other job over Redis (env_share.ts) —
 #                      no job below this one re-authenticates to GCP just to
 #                      read secrets (they may still auth to GCP for their own
-#                      deploy calls — gcloud run deploy, docker push, etc.
+#                      deploy calls — wrangler deploy, docker push, etc.
 #                      that's a different concern from *fetching* secrets).
 #   plan-desktop     → (client-tauri only) checksum + shared version +
 #                      cached-release lookup, from the shared secrets.
 #   plan-matrix      → platform/bundle filtering + per-leg build/reuse/skip
 #                      decision (emits the dynamic matrix). No secrets.
 #   build-web        → builds the OS-independent SvelteKit bundle ONCE with
-#                      the plan's version string. Consumed by BOTH the
-#                      desktop matrix legs AND (when both are in scope this
-#                      run) the Cloud Run SvelteKit deploy — see
-#                      deploy-cloud-run-sveltekit's --skip-build-for.
+#                      the plan's version string. Consumed by the
+#                      desktop matrix legs.
 #   deploy-desktop   → one job per matrix leg (runs-on from the plan): build
 #                      legs compile with the shared web bundle; reuse legs
 #                      just copy artifacts between releases on ubuntu-latest.
 #   update-manifest  → (release: published only) merges each leg's updater
 #                      fragment into a single latest.json on the triggering
 #                      release.
-#   deploy-cloud-run-sveltekit / deploy-firebase-hosting /
-#   deploy-firebase-functions / deploy-docker-release
+#   deploy-cloudflare / deploy-cloud-run-sveltekit / deploy-firebase-functions /
+#   deploy-docker-release
 #                    → one dedicated job per service type, each running only
 #                      when resolve-plan found apps of that type. Each calls
 #                      the same local orchestrator (scripts/.../deploy/index.ts)
@@ -114,8 +112,8 @@ jobs:
     outputs:
       all_apps: ${{ steps.resolve.outputs.all_apps }}
       desktop_apps: ${{ steps.resolve.outputs.desktop_apps }}
-      cloud_run_apps: ${{ steps.resolve.outputs.cloud_run_apps }}
-      firebase_hosting_apps: ${{ steps.resolve.outputs.firebase_hosting_apps }}
+      cloudflare_apps: ${{ steps.resolve.outputs.cloudflare_apps }}
+      cloud_run_sveltekit_apps: ${{ steps.resolve.outputs.cloud_run_sveltekit_apps }}
       firebase_functions_apps: ${{ steps.resolve.outputs.firebase_functions_apps }}
       docker_release_apps: ${{ steps.resolve.outputs.docker_release_apps }}
       database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
@@ -253,11 +251,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Shared web build (once, OS-independent) ────────────────────────
-  # The SvelteKit bundle is embedded inside every desktop binary AND is what
-  # the Cloud Run SvelteKit app serves, so build it a single time with the
-  # plan's version string. deploy-cloud-run-sveltekit reuses this artifact
-  # (via --skip-build-for) whenever both it and the desktop pipeline are in
-  # scope this run — see that job for the fallback when this one is skipped.
+  # The SvelteKit bundle is embedded inside every desktop binary, so build
+  # it a single time with the plan's version string.
   build-web:
     name: Build Web Bundle
     runs-on: ubuntu-latest
@@ -569,15 +564,56 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Cloud Run (SvelteKit) ────────────────────────────────────────────
+  # ── Cloudflare Workers (client, site, docs) ────────────────────────
+  deploy-cloudflare:
+    name: Cloudflare Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [resolve-plan, prepare-secrets]
+    environment:
+      name: ${{ github.event.inputs.mode || 'production' }}
+    if: needs.resolve-plan.outputs.cloudflare_apps != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          moon-cache: "true"
+          install-deps: "true"
+
+      - name: Restore env files from Redis
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+
+      - name: Run Web Deploy Pipeline (Cloudflare)
+        shell: bash
+        run: |
+          MODE="${{ github.event.inputs.mode || 'production' }}"
+          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
+          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
+            ${{ needs.resolve-plan.outputs.cloudflare_apps }}
+        env:
+          CI: "true"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  # ── Cloud Run (SvelteKit hub) ────────────────────────────────────────
   deploy-cloud-run-sveltekit:
     name: Cloud Run (SvelteKit)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets, plan-desktop, build-web]
+    needs: [resolve-plan, prepare-secrets]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.cloud_run_apps != ''
+    if: needs.resolve-plan.outputs.cloud_run_sveltekit_apps != ''
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -602,78 +638,13 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
 
-      # If the desktop pipeline already built the shared SvelteKit bundle
-      # this run (build-web succeeded), reuse it byte-for-byte instead of
-      # paying for a second `moon run client:build` — same version string
-      # (passed to index.ts below), so the output is identical. Falls back
-      # to a normal build inside index.ts when build-web didn't run at all
-      # (e.g. a web-only release with no client-tauri in DEPLOY_APPS, or
-      # desktop's own checksum was unchanged so it never needed a build).
-      - name: Download shared web build (if desktop built one this run)
-        if: needs.build-web.result == 'success'
-        uses: actions/download-artifact@v8
-        with:
-          name: web-build-${{ github.run_id }}
-          path: apps/frontend/client/build
-
       - name: Run Web Deploy Pipeline (Cloud Run)
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
           FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          SKIP_BUILD_FLAG=""
-          VERSION_FLAG=""
-          if [ "${{ needs.build-web.result }}" == "success" ]; then
-            SKIP_BUILD_FLAG="--skip-build-for=client"
-            VERSION_FLAG="--version=${{ needs.plan-desktop.outputs.version }}"
-          fi
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG $SKIP_BUILD_FLAG $VERSION_FLAG \
-            ${{ needs.resolve-plan.outputs.cloud_run_apps }}
-        env:
-          CI: "true"
-
-  # ── Firebase Hosting ─────────────────────────────────────────────────
-  deploy-firebase-hosting:
-    name: Firebase Hosting
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets]
-    environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.firebase_hosting_apps != ''
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # Firebase CLI tooling shells out to Node directly — unlike Cloud Run
-      # and desktop, this job actually needs it (see setup-environment.yml).
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          node: "true"
-          moon-cache: "true"
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Restore env files from Redis
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
-        env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-
-      - name: Run Web Deploy Pipeline (Firebase Hosting)
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
           bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
-            ${{ needs.resolve-plan.outputs.firebase_hosting_apps }}
+            ${{ needs.resolve-plan.outputs.cloud_run_sveltekit_apps }}
         env:
           CI: "true"
 

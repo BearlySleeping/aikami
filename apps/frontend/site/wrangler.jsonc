@@ -1,0 +1,15 @@
+// apps/frontend/site/wrangler.jsonc
+// Static assets-only Worker for the marketing site.
+// The deploy pipeline rewrites this file per-mode (worker name + route) via
+// scripts/src/lib/deploy/cloudflare.ts — this is the canonical template.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aikami-site",
+  "compatibility_date": "2026-08-21",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "bearlysleeping.com", "custom_domain": true }]
+}

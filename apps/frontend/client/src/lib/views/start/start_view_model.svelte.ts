@@ -27,6 +27,7 @@ import {
   worldStateService,
 } from '$services';
 import type { SaveSlotInfo } from '$types';
+import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,7 +70,7 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** C-334 AC-5: Whether a recovery action is in progress. */
   readonly isRecovering: boolean;
 
-  /** Start a New Game with Emberwatch — resets state and routes to character creation. */
+  /** Start a New Game — routes to the capability screen. */
   startNewGame(): Promise<void>;
 
   /** Continue the most recent saved game. */
@@ -129,83 +130,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 };
 
 // ---------------------------------------------------------------------------
-// Credit data (inline — reused from game/credits for the modal)
-// ---------------------------------------------------------------------------
-
-type CreditGroup = {
-  readonly heading: string;
-  readonly items: CreditItem[];
-};
-
-type CreditItem = {
-  readonly name: string;
-  readonly url: string;
-  readonly description: string;
-};
-
-const CREDIT_GROUPS: CreditGroup[] = [
-  {
-    heading: 'Game Engine & ECS',
-    items: [
-      {
-        name: 'PixiJS',
-        url: 'https://pixijs.com/',
-        description: '2D WebGL rendering engine powering the game world and visual effects.',
-      },
-      {
-        name: 'bitECS',
-        url: 'https://bitecs.dev/',
-        description:
-          'Entity-Component-System architecture driving all game logic and entity management.',
-      },
-    ],
-  },
-  {
-    heading: 'Frontend Framework',
-    items: [
-      {
-        name: 'Svelte',
-        url: 'https://svelte.dev/',
-        description:
-          'UI framework for the menu system, HUD overlays, and reactive state management.',
-      },
-      {
-        name: 'Tailwind CSS',
-        url: 'https://tailwindcss.com/',
-        description: 'Utility-first CSS framework for responsive styling across the entire app.',
-      },
-      {
-        name: 'daisyUI',
-        url: 'https://daisyui.com/',
-        description: 'UI component library built on Tailwind CSS providing themed components.',
-      },
-    ],
-  },
-  {
-    heading: 'Desktop Application',
-    items: [
-      {
-        name: 'Tauri',
-        url: 'https://v2.tauri.app/',
-        description:
-          'Desktop application framework wrapping the web frontend in a native Rust shell.',
-      },
-    ],
-  },
-  {
-    heading: 'Assets',
-    items: [
-      {
-        name: 'Universal LPC Spritesheet Character Generator',
-        url: 'https://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator',
-        description:
-          'Liberated Pixel Cup character sprites and asset generation for in-game characters.',
-      },
-    ],
-  },
-] as const;
-
-// ---------------------------------------------------------------------------
 // ViewModel
 // ---------------------------------------------------------------------------
 
@@ -257,9 +181,10 @@ class StartViewModel
 
   /** @inheritdoc */
   async startNewGame(): Promise<void> {
-    // C-405 AC-3: route through the pack browser — it shows the picker when
-    // multiple packs are installed and proceeds directly for a single pack.
-    await this.openPackBrowser();
+    await routerService.goToRoute('capability', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
   }
 
   /** @inheritdoc */

@@ -52,6 +52,7 @@ import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudRunSveltekit } from './cloud_run';
+import { deployCloudflareWorker } from './cloudflare';
 import { deployDatabaseMigration } from './database_migration';
 import {
   APP_CONFIG,
@@ -61,7 +62,7 @@ import {
   MODE_PROJECT_MAP,
 } from './deployment_config';
 import { deployDockerRelease } from './docker_release';
-import { deployFirebaseFunctions, deployFirebaseHosting } from './firebase';
+import { deployFirebaseFunctions } from './firebase';
 import { type AppResult, type NotificationInput, notifyDeployment } from './notification';
 import { deployTauriRelease } from './tauri_release';
 import {
@@ -145,6 +146,18 @@ async function deployApp(
   preflightChecksum?: string,
 ): Promise<'success' | 'failure'> {
   switch (config.serviceType) {
+    case 'cloudflare-worker':
+      await deployCloudflareWorker(
+        config,
+        appName,
+        mode,
+        rootDir,
+        version,
+        isForce,
+        preflightChecksum,
+        true, // orchestrator already built in Phase 1
+      );
+      return 'success';
     case 'cloud-run-sveltekit':
       await deployCloudRunSveltekit(
         config,
@@ -158,17 +171,6 @@ async function deployApp(
       return 'success';
     case 'tauri-release':
       await deployTauriRelease(config, appName, mode, rootDir, version, isForce, preflightChecksum);
-      return 'success';
-    case 'firebase-hosting':
-      await deployFirebaseHosting(
-        config,
-        appName,
-        mode,
-        rootDir,
-        version,
-        isForce,
-        preflightChecksum,
-      );
       return 'success';
     case 'firebase-functions':
       await deployFirebaseFunctions(config, appName, mode, rootDir, isForce);

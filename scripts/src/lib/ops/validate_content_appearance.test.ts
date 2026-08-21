@@ -7,9 +7,9 @@
 //     generated catalog text
 //   - in-range indices pass; out-of-range indices fail naming slot/range
 //   - head-slot indices must resolve to head/heads/* assets
-//   - 0 (intentionally empty) and short arrays (whispering-caves policy)
+//   - 0 (intentionally empty) and short arrays (4-layer policy)
 //     never fail validation
-//   - both committed packs (emberwatch + whispering-caves) pass the validator
+//   - the committed emberwatch pack passes the validator
 
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
@@ -91,7 +91,7 @@ describe('validateNpcAppearance', () => {
     expect(errors).toEqual([]);
   });
 
-  it('accepts short arrays (whispering-caves 4-layer policy)', () => {
+  it('accepts short arrays (4-layer policy)', () => {
     const errors = validateNpcAppearance({
       ...base,
       appearanceLayers: [1, 3, 7, 14],
@@ -159,7 +159,7 @@ describe('validateNpcAppearance', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateContentAppearance (integration)', () => {
-  it('passes both committed packs (emberwatch + whispering-caves)', () => {
+  it('passes the committed emberwatch pack', () => {
     expect(existsSync(CONTENT_PACKS_ROOT)).toBe(true);
     const errors = validateContentAppearance();
     expect(errors).toEqual([]);

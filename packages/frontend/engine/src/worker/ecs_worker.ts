@@ -9,6 +9,7 @@ import {
   createWorld,
   getAllEntities,
   getComponent,
+  hasComponent,
   query,
   removeEntity,
   set,
@@ -64,6 +65,7 @@ import { registerVisionVisibleObservers, VisionVisible } from '../components/vis
 import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
+import { zeroEquipmentOwnedAppearanceSlots } from '../core/appearance_layers.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
@@ -599,6 +601,13 @@ const _refreshPlayerAppearance = (eid: number): void => {
     layers[0] = DEFAULT_BODY_LAYER_ID;
   }
 
+  // C-417: torso (index 2) and feet (index 4) are equipment-owned — force
+  // them to zero in the emitted base layers so the main thread always
+  // renders gear from the equipment provider, never baked into the base
+  // appearance. This makes unequipping reveal the bare body even when a
+  // restored save captured a non-zeroed appearance (chainmail/boots).
+  zeroEquipmentOwnedAppearanceSlots(layers);
+
   workerBridge.emit({
     type: 'APPEARANCE_CHANGED',
     eid,
@@ -759,10 +768,18 @@ const initializeEngine = (
   } else {
     playerEntityId = createPlayer(world, playerData);
 
-    // ── C-198: Override player Appearance with full 6-layer sandbox recipe ──
-    // createPlayer sets [1, 1, 1, 1, 1, 95] — replace with body, hair,
-    // torso, legs, feet, head so all layers render without gaps.
-    createDefaultSandboxAvatar(world, playerEntityId);
+    // C-417/C-374: only fill in the full sandbox recipe when the caller did
+    // NOT supply explicit appearanceLayers. The production boot passes the
+    // zeroed base appearance (torso/feet = 0 — equipment-owned slots, see
+    // game_boot_service._buildPlayerData / zeroEquipmentOwnedAppearanceSlots),
+    // and createDefaultSandboxAvatar would overwrite it with chainmail+boots
+    // baked into the base layer — which would then never come off on unequip.
+    if (!playerData?.appearanceLayers) {
+      // C-198: Override player Appearance with full 6-layer sandbox recipe.
+      // createPlayer sets [1, 1, 1, 1, 1, 95] — replace with body, hair,
+      // torso, legs, feet, head so all layers render without gaps.
+      createDefaultSandboxAvatar(world, playerEntityId);
+    }
 
     // Player (green tint)
     postMessage({
@@ -1759,15 +1776,33 @@ self.onmessage = (event: MessageEvent): void => {
           // Without this, restored entities stay as colored debug squares
           // until the next tick-loop sync picks up the change.
           for (const [, newEid] of eidMap) {
+            // Gate on the Appearance component (props never carry it) —
+            // getAppearanceLayers() always returns a 6-element array, so a
+            // bare `length > 0` would leak a default-NPC appearance onto
+            // restored props (same render race as the LOAD_MAP path).
+            if (!hasComponent(world, newEid, Appearance)) {
+              continue;
+            }
             const layers = getAppearanceLayers(newEid);
             if (layers.length > 0) {
+              // C-417: for the player, normalize the equipment-owned torso
+              // (index 2) and feet (index 4) slots to zero before emitting,
+              // reusing the same behavior as _refreshPlayerAppearance. A
+              // restored save may have captured a non-zeroed appearance
+              // (chainmail/boots baked in), which would otherwise double-
+              // render gear alongside the equipment provider. Other entities
+              // are emitted as-is.
+              const normalized: number[] = newEid === playerEntityId ? [...layers] : [...layers];
+              if (newEid === playerEntityId) {
+                zeroEquipmentOwnedAppearanceSlots(normalized);
+              }
               postMessage({
                 type: 'SYNC',
                 events: [
                   {
                     type: 'APPEARANCE_CHANGED',
                     eid: newEid,
-                    layerIds: [...layers],
+                    layerIds: [...normalized],
                   },
                 ],
               });
@@ -2116,21 +2151,31 @@ self.onmessage = (event: MessageEvent): void => {
                 : {}),
             });
 
-            // Emit APPEARANCE_CHANGED for entities with Appearance component
+            // Emit APPEARANCE_CHANGED for entities with an Appearance component
             // so the main thread loads LPC textures immediately instead of
             // waiting for the tick-loop sync system to detect them.
-            const layers = getAppearanceLayers(result.eid);
-            if (layers.length > 0) {
-              postMessage({
-                type: 'SYNC',
-                events: [
-                  {
-                    type: 'APPEARANCE_CHANGED',
-                    eid: result.eid,
-                    layerIds: [...layers],
-                  },
-                ],
-              });
+            //
+            // Gate on the component itself, NOT on getAppearanceLayers().length:
+            // getAppearanceLayers ALWAYS returns a 6-element (zero-filled)
+            // array, so `length > 0` is true for every entity — including
+            // props, which never carry Appearance. That leaked a spurious
+            // APPEARANCE_CHANGED (zero layers → default NPC recipes) onto prop
+            // containers, painting an NPC over the barrel on every map
+            // transition (render race). Props never render LPC layers.
+            if (hasComponent(world, result.eid, Appearance)) {
+              const layers = getAppearanceLayers(result.eid);
+              if (layers.length > 0) {
+                postMessage({
+                  type: 'SYNC',
+                  events: [
+                    {
+                      type: 'APPEARANCE_CHANGED',
+                      eid: result.eid,
+                      layerIds: [...layers],
+                    },
+                  ],
+                });
+              }
             }
           }
 

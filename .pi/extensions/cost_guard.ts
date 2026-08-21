@@ -1,22 +1,36 @@
 /**
- * Cost Guard — two-stage budget protection for pi sessions.
+ * Cost Guard — runaway protection for pi sessions across four axes.
  *
- * Soft cap (PI_SOFT_SPEND, default $10): injects a wrap-up message telling
- * the agent to stop tool calls and deliver a final summary.
+ * Spend:
+ *   Soft cap (PI_SOFT_SPEND, default $10): injects a wrap-up message telling
+ *   the agent to stop tool calls and deliver a final summary.
+ *   Hard cap (PI_HARD_SPEND, default $15): shuts down the session.
  *
- * Hard cap (PI_HARD_SPEND, default $15): shuts down the session to prevent
- * runaway spend.
+ * Turns / wall-clock / repetition:
+ *   Spend alone cannot catch a cheap runaway. A 2.5h, 308-turn session on a
+ *   97%-cached model reached only ~$5 — well under both caps — while making
+ *   no progress. These three guards bound the axes money does not.
  *
  * Pricing is read from pi's model registry at runtime (ctx.model.cost).
  * No hardcoded prices — always reflects the user's model catalog.
  *
  * Environment variables:
- *   PI_SOFT_SPEND  — Soft cap in USD (default: 10.00)
- *   PI_HARD_SPEND  — Hard cap in USD (default: 15.00)
+ *   PI_SOFT_SPEND            — Soft spend cap in USD (default: 10.00)
+ *   PI_HARD_SPEND            — Hard spend cap in USD (default: 15.00)
+ *   PI_MAX_TURNS             — Max assistant turns per user prompt (default: 1000)
+ *   PI_MAX_RUN_MINUTES       — Max minutes of one autonomous run (default: 240)
+ *   PI_REPETITION_GUARD      — Enable repetition collapse detection (default: 1)
+ *   PI_REPETITION_THRESHOLD  — Repeats of one segment before tripping (default: 6)
  */
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import {
+  createLoopTracker,
+  DEFAULT_LOOP_THRESHOLD,
+  maxRepeatedSegment,
+  turnSignature,
+} from './lib/repetition.ts';
 
 /** The four pipeline stages, used to validate the role handed over by env. */
 const WORKER_ROLES: readonly ContractWorkerRole[] = ['writer', 'critic', 'implementer', 'verifier'];
@@ -35,6 +49,21 @@ const _pipelineRole = (): ContractWorkerRole | undefined => {
 
 /** Convert model-registry cost (per 1M tokens) to per-token cost. */
 const PER_MILLION = 1_000_000;
+
+/** Parse a positive number from env, falling back when unset or malformed. */
+const _envNumber = (name: string, fallback: number): number => {
+  const parsed = Number(process.env[name] ?? '');
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+/** Parse a boolean env var. Anything but the standard off-values enables. */
+const _envBool = (name: string, fallback: boolean): boolean => {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+  return !['0', 'false', 'no', 'off'].includes(raw.toLowerCase());
+};
 
 /**
  * pi usage objects use `input`/`output`/`cacheRead`/`cacheWrite` field names.
@@ -63,63 +92,150 @@ const _computeTurnCost = (
   );
 };
 
+/** Flatten an assistant message's content into plain text for analysis. */
+const _assistantText = (content: unknown): string => {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .map((block) => {
+      const b = block as { type?: string; text?: string } | undefined;
+      return b?.type === 'text' && typeof b.text === 'string' ? b.text : '';
+    })
+    .join('\n');
+};
+
+/** Extract an assistant message's tool calls for loop-signature purposes. */
+const _toolCalls = (content: unknown): { name: string; arguments: unknown }[] => {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  return content
+    .filter((block) => (block as { type?: string } | undefined)?.type === 'toolCall')
+    .map((block) => {
+      const b = block as { name?: string; arguments?: unknown };
+      return { name: b.name ?? '', arguments: b.arguments };
+    });
+};
+
 export default function (pi: ExtensionAPI) {
   let sessionCost = 0;
   let hasSoftWarned = false;
+  let turnsSincePrompt = 0;
+  let runStartedAt = Date.now();
+  let halted = false;
+  let repetitionStrikes = 0;
+  const loopTracker = createLoopTracker();
 
-  const softCap = Number.parseFloat(process.env.PI_SOFT_SPEND || '10.00');
-  const hardCap = Number.parseFloat(process.env.PI_HARD_SPEND || '15.00');
+  const softCap = _envNumber('PI_SOFT_SPEND', 10.0);
+  const hardCap = _envNumber('PI_HARD_SPEND', 15.0);
+  const maxTurns = _envNumber('PI_MAX_TURNS', 1000);
+  const maxRunMs = _envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
+  const repetitionGuard = _envBool('PI_REPETITION_GUARD', true);
+  const repetitionThreshold = _envNumber('PI_REPETITION_THRESHOLD', 6);
+  const loopThreshold = _envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
+
+  /**
+   * Record a `blocked` stage result so the orchestrator sees a real outcome
+   * instead of a worker that simply vanished, then shut the session down.
+   *
+   * Every guard funnels through here: a pipeline worker killed by any cap
+   * must leave the same trace, or the run stalls waiting on a result file
+   * that is never written.
+   */
+  const _halt = async (
+    ctx: ExtensionContext,
+    options: { summary: string; finding: string },
+  ): Promise<void> => {
+    // 🔴 Latch. Without this the trip condition (turns/time/spend stay over
+    // their cap) is still true on the NEXT turn, so the guard re-fires every
+    // turn forever — the user sees "Shutting down." repeated indefinitely
+    // while the session keeps running, which is what happened in practice.
+    if (halted) {
+      return;
+    }
+    halted = true;
+
+    ctx.ui.notify(`[COST GUARD] ${options.summary}`, 'error');
+
+    const role = _pipelineRole();
+    const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
+    if (role && resultPath) {
+      try {
+        const { writeStageResult } = await import(
+          '../../scripts/src/lib/agents/contract_pipeline/stage_result.ts'
+        );
+        const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
+        const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
+        if (runId && attempt >= 1) {
+          writeStageResult({
+            resultPath,
+            result: {
+              runId,
+              stage: role,
+              attempt,
+              status: 'blocked',
+              summary: options.summary,
+              findings: [options.finding],
+              filesTouched: [],
+              evidence: [],
+              contractHash: '',
+              diffHash: '',
+            },
+          });
+        }
+      } catch {
+        // If we can't write the result, still shut down
+      }
+    }
+
+    // 🔴 abort() first: shutdown() asks pi to exit, but it does NOT cancel the
+    // agent loop that is mid-flight, so on its own the session simply carries
+    // on to the next turn. abort() is what stops the current operation — the
+    // same call storm-breaker uses to break out of a run.
+    ctx.abort();
+    ctx.shutdown();
+  };
 
   // ── Reset on session start ──────────────────────────────────
   pi.on('session_start', () => {
     sessionCost = 0;
     hasSoftWarned = false;
+    turnsSincePrompt = 0;
+    runStartedAt = Date.now();
+    halted = false;
+    repetitionStrikes = 0;
+    loopTracker.reset();
   });
 
   // ── Block new agent runs past hard cap ──────────────────────
   pi.on('before_agent_start', async (_event, ctx) => {
+    // A fresh human prompt is the only thing that clears the turn budget —
+    // steering messages deliberately do not, so a wedged autonomous run
+    // cannot reset its own guard by talking to itself.
+    turnsSincePrompt = 0;
+    runStartedAt = Date.now();
+    loopTracker.reset();
+    // Re-arm: a fresh human prompt is a new run with a new budget, so a guard
+    // that tripped on the previous run must be able to trip again on this one.
+    halted = false;
+
     if (sessionCost >= hardCap) {
-      ctx.ui.notify(
-        `[COST GUARD] Hard limit $${hardCap.toFixed(2)} reached. Spend: $${sessionCost.toFixed(2)}. Session frozen.`,
-        'error',
-      );
-      // For contract pipeline workers: write a blocked result before shutdown
-      const role = _pipelineRole();
-      const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
-      if (role && resultPath) {
-        try {
-          const { writeStageResult } = await import(
-            '../../scripts/src/lib/agents/contract_pipeline/stage_result.ts'
-          );
-          const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
-          const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
-          if (runId && attempt >= 1) {
-            writeStageResult({
-              resultPath,
-              result: {
-                runId,
-                stage: role,
-                attempt,
-                status: 'blocked',
-                summary: `Cost guard hard limit reached ($${hardCap.toFixed(2)}). Pipeline stopped.`,
-                findings: ['Cost limit exceeded before stage completion.'],
-                filesTouched: [],
-                evidence: [],
-                contractHash: '',
-                diffHash: '',
-              },
-            });
-          }
-        } catch {
-          // If we can't write the result, still shut down
-        }
-      }
-      ctx.shutdown();
+      await _halt(ctx, {
+        summary: `Hard limit $${hardCap.toFixed(2)} reached. Spend: $${sessionCost.toFixed(2)}. Session frozen.`,
+        finding: 'Cost limit exceeded before stage completion.',
+      });
     }
   });
 
   // ── Track spend at end of each turn ─────────────────────────
   pi.on('turn_end', async (event, ctx) => {
+    turnsSincePrompt += 1;
+    const content = (event.message as { content?: unknown }).content;
+
     // turn_end.message is the assistant response — it always has usage
     const message = event.message as {
       usage?: {
@@ -144,12 +260,127 @@ export default function (pi: ExtensionAPI) {
     sessionCost += turnCost;
 
     // ── Hard cap: abort ───────────────────────────────────
+    // Accounted before the repetition branches so repeated turns still update
+    // sessionCost and are checked against the cap before steering or halting.
     if (sessionCost >= hardCap) {
+      await _halt(ctx, {
+        summary: `Hard limit $${hardCap.toFixed(2)} hit ($${sessionCost.toFixed(2)} spent). Shutting down.`,
+        finding: 'Cost limit exceeded before stage completion.',
+      });
+      return;
+    }
+
+    // ── Cross-turn loop: the same turn, repeated verbatim ──
+    //
+    // Distinct from the collapse check below, which only sees inside a single
+    // message. Both known cases here had EMPTY text and repeated only their
+    // tool call, so text analysis alone scores them zero.
+    if (repetitionGuard) {
+      const signature = turnSignature({
+        text: _assistantText(content),
+        toolCalls: _toolCalls(content),
+      });
+      const run = loopTracker.record(signature);
+
+      if (run >= loopThreshold * 2) {
+        await _halt(ctx, {
+          summary: `Loop detected: the same turn repeated ${run} times. Shutting down.`,
+          finding: `Agent repeated an identical turn ${run} times without progressing.`,
+        });
+        return;
+      }
+
+      if (run === loopThreshold) {
+        ctx.ui.notify(
+          `[COST GUARD] Loop detected — identical turn x${run}. Steering before halting.`,
+          'warning',
+        );
+        pi.sendUserMessage(
+          `[LOOP GUARD] You have repeated the same action ${run} times in a row with ` +
+            `identical arguments, and the result has not changed.\n\n` +
+            `Stop repeating it. Either do something materially different, or state ` +
+            `plainly that you are stuck, what you have already tried, and what you need.`,
+          { deliverAs: 'steer' },
+        );
+        return;
+      }
+    }
+
+    // ── Repetition collapse: degenerate sampling, not a real loop ──
+    if (repetitionGuard) {
+      const text = _assistantText(content);
+      const { count, segment } = maxRepeatedSegment(text);
+      if (count >= repetitionThreshold) {
+        repetitionStrikes += 1;
+        const preview = segment.slice(0, 60);
+
+        // Two strikes: one collapsed generation may still recover when the
+        // model gets a fresh tool result, but a repeat means it is wedged.
+        if (repetitionStrikes >= 2) {
+          await _halt(ctx, {
+            summary: `Repetition collapse (x${repetitionStrikes}): "${preview}" repeated ${count} times. Shutting down.`,
+            finding: 'Model output degenerated into repetition; stage abandoned.',
+          });
+          return;
+        }
+
+        ctx.ui.notify(
+          `[COST GUARD] Repetition detected — "${preview}" x${count}. Steering once before halting.`,
+          'warning',
+        );
+        pi.sendUserMessage(
+          `[REPETITION GUARD] Your last message repeated the same sentence ${count} times ` +
+            `without making progress.\n\n` +
+            `Stop. Do not restate your intent again. Either take ONE concrete action with a ` +
+            `tool call, or state plainly that you are blocked and what you need to proceed.`,
+          { deliverAs: 'steer' },
+        );
+        return;
+      }
+    }
+
+    // ── Backstops: turns and active run time ──────────────
+    //
+    // 🔴 These are LAST-RESORT bounds, not the primary defence — the loop and
+    // collapse checks above are. Their defaults are measured against all 289
+    // stored sessions rather than guessed, because guessed ones were far too
+    // tight and killed healthy work:
+    //
+    //   turns per prompt   p50=45  p90=217  p95=322  p99=743  legit max=821
+    //                      (a 120 cap would have killed 23% of real sessions)
+    //   active run minutes p50=3   p90=25   p95=41   p99=74   legit max=247
+    //                      (a 45m cap would have killed 34% of real sessions)
+    //
+    // Run time is measured from the last user prompt with per-turn gaps capped
+    // upstream, NOT from session start: a session left open overnight is idle,
+    // not runaway, and the longest sessions on record are 36h of sitting idle.
+    //
+    // Each backstop wraps up first and only halts if the agent ignores that.
+    const runMs = Date.now() - runStartedAt;
+
+    if (runMs >= maxRunMs * 1.5 || turnsSincePrompt >= maxTurns * 1.5) {
+      await _halt(ctx, {
+        summary:
+          `Backstop: ${turnsSincePrompt} turns / ${Math.round(runMs / 60_000)}m active ` +
+          `without completing. Shutting down.`,
+        finding: `Run exceeded its turn and time budget (${turnsSincePrompt} turns, ${Math.round(runMs / 60_000)}m).`,
+      });
+      return;
+    }
+
+    if ((runMs >= maxRunMs || turnsSincePrompt >= maxTurns) && !hasSoftWarned) {
+      hasSoftWarned = true;
       ctx.ui.notify(
-        `[COST GUARD] Hard limit $${hardCap.toFixed(2)} hit ($${sessionCost.toFixed(2)} spent). Shutting down.`,
-        'error',
+        `[COST GUARD] Backstop: ${turnsSincePrompt} turns / ${Math.round(runMs / 60_000)}m active. Wrapping up…`,
+        'warning',
       );
-      ctx.shutdown();
+      pi.sendUserMessage(
+        `[RUN BUDGET] This run has used ${turnsSincePrompt} turns over ` +
+          `${Math.round(runMs / 60_000)} minutes without finishing.\n\n` +
+          `Wrap up now: stop starting new work, summarise what you have done and ` +
+          `what remains, and finish the turn.`,
+        { deliverAs: 'steer' },
+      );
       return;
     }
 

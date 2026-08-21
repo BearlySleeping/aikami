@@ -14,7 +14,6 @@
     "npm:@hypabolic/pi-hypa",
     "npm:pi-cache-optimizer",
     "npm:pi-deepinfra",
-    "npm:@rohaquinlop/pi-deepseek-cache",
     "git:github.com/jrimmer/pi-deepseek-optimized"
   ],
   "extensions": ["./extensions"],

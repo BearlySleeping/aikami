@@ -131,6 +131,56 @@ export HYPA_PI_MODE="additive"
 export HYPA_PI_REWRITE_TIMEOUT_MS="10000"
 export HYPA_PI_ASK_NON_INTERACTIVE="deny"
 
+# ── 4.5. pi-deepseek-optimized harness (cache module disabled) ─────────
+#
+# The harness ships five modules. Four are keepers; its `cache` module is
+# not, and PI_HARNESS_CACHE_ENABLED=0 disables that module alone:
+#
+#   * stripTimestamps used an UNANCHORED regex
+#     (/Current (date|time)…|Today( is)?[:\s].*|Date[:\s]\d{4}-…/gim)
+#     that truncates any prompt line from a match to end-of-line. Ordinary
+#     prose was being silently mangled — "Do not assume today is the same
+#     as the file mtime" became "Do not assume ". The system prompt carries
+#     CLAUDE.md and the skill index, so this corrupted real instructions.
+#
+#   * stripReasoning deletes reasoning_content from assistant messages,
+#     directly contradicting requiresReasoningContentOnAssistantMessages
+#     in ~/.pi/agent/models.json (pi then backfills an empty string).
+#
+#   * sortTools is redundant — pi-cache-optimizer already owns prompt and
+#     payload stability, and measured cache hit rate is ~97-98%.
+#
+# Storm-breaker, hashlines, and plan mode stay ON; they are the modules
+# that actually earn their keep. Rewind stays OFF (harness default).
+export PI_HARNESS_CACHE_ENABLED="0"
+export PI_HARNESS_STORMBREAKER_ENABLED="1"
+export PI_HARNESS_STORMBREAKER_THRESHOLD="3"
+export PI_HARNESS_HASHLINES_ENABLED="1"
+export PI_HARNESS_PLANMODE_ENABLED="1"
+
+# ── 4.6. Runaway guards (cost_guard.ts) ────────────────────────────────
+#
+# Spend caps alone cannot catch a cheap runaway: a 2.5h / 308-turn session
+# on a 97%-cached model reached only ~$5. These bound the other two axes —
+# turns without human input, and wall-clock — so a stuck pipeline fails in
+# minutes instead of hours.
+export PI_SOFT_SPEND="${PI_SOFT_SPEND:-10.00}"
+export PI_HARD_SPEND="${PI_HARD_SPEND:-15.00}"
+# Backstops only — the loop/collapse detectors are the real guard. Calibrated
+# against all 289 stored sessions, because the first guessed values were far
+# too tight: turns p90=217/p99=743/legit-max=821 (a 120 cap would have killed
+# 23% of healthy sessions) and active run minutes p90=25/p99=74/legit-max=247
+# (a 45m cap would have killed 34%). Run time counts only active work since
+# the last prompt, not idle session age.
+export PI_MAX_TURNS="${PI_MAX_TURNS:-1000}"
+export PI_MAX_RUN_MINUTES="${PI_MAX_RUN_MINUTES:-240}"
+export PI_REPETITION_GUARD="${PI_REPETITION_GUARD:-1}"
+# Consecutive identical turns before the loop guard intervenes. Calibrated
+# against all 270 stored sessions: 261 never exceed a run of 2, and the only
+# two that do hit 88 and 846 (the latter a contract implementer that ran
+# 6h19m on 2026-08-17). A threshold of 4 catches both with no false positives.
+export PI_LOOP_THRESHOLD="${PI_LOOP_THRESHOLD:-4}"
+
 # ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 
 echo "━━━ Secret Manager ━━━"

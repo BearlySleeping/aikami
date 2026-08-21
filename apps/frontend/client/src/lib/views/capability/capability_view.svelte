@@ -27,16 +27,6 @@ const { viewModel }: Props = $props();
     {#if entry.connection.model}
       <span class="badge badge-sm badge-outline shrink-0">{entry.connection.model}</span>
     {/if}
-    {#if entry.sourceBadge}
-      <span
-        class="badge badge-sm shrink-0 {entry.sourceBadge.startsWith('env:') ? 'badge-info' : 'badge-ghost'}"
-      >
-        ✓ {entry.sourceBadge}
-      </span>
-    {/if}
-    {#if entry.isDefault}
-      <span class="badge badge-sm badge-success shrink-0">default</span>
-    {/if}
   </button>
 {/snippet}
 

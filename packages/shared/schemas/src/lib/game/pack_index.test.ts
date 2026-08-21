@@ -24,11 +24,11 @@ describe('PackIndexEntrySchema', () => {
 
   test('accepts a valid entry with optional description', () => {
     const entry = {
-      id: 'whispering-caves',
-      name: 'Whispering Caves',
+      id: 'stormreach',
+      name: 'Stormreach',
       version: '1.0.0',
       updatedAt: '2026-07-20T00:00:00.000Z',
-      description: 'Deep beneath the foothills.',
+      description: 'Coastal fortress under siege.',
     };
     expect(Value.Check(PackIndexEntrySchema, entry)).toBe(true);
   });
@@ -75,11 +75,11 @@ describe('PackIndexSchema', () => {
           updatedAt: '2026-07-13T00:00:00.000Z',
         },
         {
-          id: 'whispering-caves',
-          name: 'Whispering Caves',
+          id: 'stormreach',
+          name: 'Stormreach',
           version: '1.0.0',
           updatedAt: '2026-07-20T00:00:00.000Z',
-          description: 'Caves adventure.',
+          description: 'Coastal adventure.',
         },
       ],
     };

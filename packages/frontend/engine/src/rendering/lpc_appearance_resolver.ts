@@ -155,9 +155,10 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
 
   for (let i = 0; i < LPC_SLOT_ORDER.length; i++) {
     const slot = LPC_SLOT_ORDER[i] ?? 'body';
-    // A slot missing from a short input array (e.g. whispering-caves' 4-layer
-    // declarations) is normalized to null so the fallback resolution records
-    // it explicitly instead of leaking `undefined` into requestedIndex.
+    // A slot missing from a short input array (e.g. a pack that declares
+    // fewer than six layers) is normalized to null so the fallback
+    // resolution records it explicitly instead of leaking `undefined` into
+    // requestedIndex.
     const rawId = layerIds[i] ?? null;
 
     // 1-indexed layer values → 0-indexed variant lookup.

@@ -85,11 +85,11 @@ describe('PackRegistryService', () => {
               description: 'The wardstone is failing.',
             },
             {
-              id: 'whispering-caves',
-              name: 'Whispering Caves',
+              id: 'stormreach',
+              name: 'Stormreach',
               version: '1.0.0',
               updatedAt: '2026-07-20T00:00:00.000Z',
-              description: 'Caves with crystals.',
+              description: 'Coastal fortress under siege.',
             },
           ],
         }),
@@ -99,7 +99,7 @@ describe('PackRegistryService', () => {
 
       expect(packRegistryService.availablePacks.length).toBe(2);
       expect(packRegistryService.availablePacks[0].id).toBe('emberwatch');
-      expect(packRegistryService.availablePacks[1].id).toBe('whispering-caves');
+      expect(packRegistryService.availablePacks[1].id).toBe('stormreach');
       expect(packRegistryService.isLoading).toBe(false);
       expect(packRegistryService.lastError).toBeUndefined();
     });

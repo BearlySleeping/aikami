@@ -217,11 +217,6 @@ export function dockerImageTag(
   return `${region}-docker.pkg.dev/${projectId}/${imageName}:${tag}`;
 }
 
-/** Resolve the Cloud Run service id for an app config. */
-export function resolveCloudRunServiceName(config: AppConfig, appName: string): string {
-  return resolveCloudRunServiceId(appName as never) || `aikami-${config.shortName}`;
-}
-
 /** GCP Artifact Registry auth — authenticates the Docker registry.
  *  Idempotent per region: only configures a region once per process.
  *  @param region Region of the Artifact Registry to configure; defaults to the global region. */
@@ -234,49 +229,17 @@ export function authenticateDocker(region: string = GCP_REGION): void {
 }
 
 /**
- * Ensures gcloud is authenticated — user credentials first, then fall back
- * to the mode's service-account key (.secrets/gcp_sa_key.{mode}.json) so
- * deploys and log queries work in CI and for agents/pi without an
- * interactive `gcloud auth login`.
- *
- * Exits the process when neither credential source is available or the
- * service-account activation fails.
- *
- * @param mode      Deployment mode ('staging' | 'production') — selects the SA key file.
- * @param projectId GCP project id — passed to activate-service-account.
- * @param rootDir   Repo root — `.secrets/` lives at its top level.
+ * Resolve the Cloud Run service name for an app. Falls back to
+ * `aikami-{shortName}` when the config has no explicit `cloudRunServiceId`.
  */
-export function ensureGcloudAuth(mode: string, projectId: string, rootDir: string): void {
-  const authCheck = run('gcloud auth print-access-token', { quiet: true });
-  if (authCheck) {
-    return;
-  }
-  const saKeyPath = resolve(rootDir, `.secrets/gcp_sa_key.${mode}.json`);
-  if (!existsSync(saKeyPath)) {
-    error('Not authenticated with gcloud and no service-account fallback found.');
-    error('  Run: gcloud auth login');
-    error(`  Or place a key at: ${saKeyPath}`);
-    process.exit(1);
-  }
-  log(
-    `${c.yellow}No gcloud user credentials — activating service account from ${saKeyPath}${c.reset}`,
-  );
-  run(`gcloud auth activate-service-account --key-file="${saKeyPath}" --project=${projectId}`, {
-    quiet: true,
-  });
-  const retry = run('gcloud auth print-access-token', { quiet: true });
-  if (!retry) {
-    error(`Service account activation failed (${saKeyPath}). Run: gcloud auth login`);
-    process.exit(1);
-  }
+export function resolveCloudRunServiceName(config: AppConfig, appName: string): string {
+  return resolveCloudRunServiceId(appName as never) || `aikami-${config.shortName}`;
 }
 
 /**
- * Build common Cloud Run deploy args.
- * Returns the complete `gcloud run deploy ...` argument array.
- *
- * The array is executed via {@link runArgs} (no shell), so values like
- * `serviceAccount` read from .env files are never shell-interpolated.
+ * Build the `gcloud run deploy` argument array for a Cloud Run service.
+ * Executed through the argument-array path (no shell) so the service-account
+ * email — read from an untrusted .env file — can never be shell-interpreted.
  */
 export function buildGcloudRunArgs(
   config: AppConfig,
@@ -347,6 +310,44 @@ export function buildGcloudRunArgs(
   }
 
   return args;
+}
+
+/**
+ * Ensures gcloud is authenticated — user credentials first, then fall back
+ * to the mode's service-account key (.secrets/gcp_sa_key.{mode}.json) so
+ * deploys and log queries work in CI and for agents/pi without an
+ * interactive `gcloud auth login`.
+ *
+ * Exits the process when neither credential source is available or the
+ * service-account activation fails.
+ *
+ * @param mode      Deployment mode ('staging' | 'production') — selects the SA key file.
+ * @param projectId GCP project id — passed to activate-service-account.
+ * @param rootDir   Repo root — `.secrets/` lives at its top level.
+ */
+export function ensureGcloudAuth(mode: string, projectId: string, rootDir: string): void {
+  const authCheck = run('gcloud auth print-access-token', { quiet: true });
+  if (authCheck) {
+    return;
+  }
+  const saKeyPath = resolve(rootDir, `.secrets/gcp_sa_key.${mode}.json`);
+  if (!existsSync(saKeyPath)) {
+    error('Not authenticated with gcloud and no service-account fallback found.');
+    error('  Run: gcloud auth login');
+    error(`  Or place a key at: ${saKeyPath}`);
+    process.exit(1);
+  }
+  log(
+    `${c.yellow}No gcloud user credentials — activating service account from ${saKeyPath}${c.reset}`,
+  );
+  run(`gcloud auth activate-service-account --key-file="${saKeyPath}" --project=${projectId}`, {
+    quiet: true,
+  });
+  const retry = run('gcloud auth print-access-token', { quiet: true });
+  if (!retry) {
+    error(`Service account activation failed (${saKeyPath}). Run: gcloud auth login`);
+    process.exit(1);
+  }
 }
 
 // ── Env File ─────────────────────────────────────────────────────────────

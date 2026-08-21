@@ -2,6 +2,7 @@
 // apps/frontend/client/src/lib/views/start/start_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
+import CreditsModal from './components/credits_modal.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';
 import type { StartViewModelInterface } from './start_view_model.svelte';
 
@@ -120,54 +121,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
 
     <!-- Credits Modal -->
     {#if viewModel.showCredits}
-      <div
-        class="modal modal-open"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Credits"
-        tabindex="-1"
-        onclick={() => viewModel.hideCreditsModal()}
-        onkeydown={(e) => {
-          if (e.key === 'Escape' || e.key === 'Enter') {
-            viewModel.hideCreditsModal();
-          }
-        }}
-      >
-        <div class="modal-box max-w-lg" role="dialog" aria-modal="true" aria-label="Credits">
-          <h3 class="text-lg font-bold mb-4">Credits</h3>
-
-          {#each viewModel.creditGroups as group}
-            <div class="mb-4">
-              <h4 class="font-semibold text-sm text-base-content/70 mb-2">
-                {group.heading}
-              </h4>
-              <ul class="space-y-2">
-                {#each group.items as item}
-                  <li>
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="link link-hover font-medium"
-                    >
-                      {item.name}
-                    </a>
-                    <p class="text-xs text-base-content/50">
-                      {item.description}
-                    </p>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/each}
-
-          <div class="modal-action">
-            <button type="button" class="btn btn-sm" onclick={() => viewModel.hideCreditsModal()}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
+      <CreditsModal onclose={() => viewModel.hideCreditsModal()} />
     {/if}
 
     <!-- C-345: Pack Browser Modal -->

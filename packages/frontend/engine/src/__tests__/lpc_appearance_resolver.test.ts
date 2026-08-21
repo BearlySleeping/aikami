@@ -152,7 +152,7 @@ describe('AC-3 — unresolvable slots fall back and log', () => {
     }
   });
 
-  test('a short array (whispering-caves 4-layer policy) still yields six entries', () => {
+  test('a short array (4-layer policy) still yields six entries', () => {
     const result = resolve([1, 2, 1, 1]);
 
     expect(result.recipes).toHaveLength(6);

@@ -7,6 +7,7 @@ import {
 import type { TtsBackend, VoiceInfo } from '$types';
 import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
+import { audioService } from './audio_service.svelte.ts';
 import { voiceModelService } from './voice_model_service.svelte.ts';
 
 /** True when running inside a Tauri webview. */
@@ -67,6 +68,12 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
 
   /** The currently selected voice ID. */
   selectedVoice: string;
+
+  /** TTS output volume (0–1). Scales all synthesized speech. */
+  readonly ttsVolume: number;
+
+  /** Sets the TTS output volume (0–1). */
+  setTtsVolume(volume: number): void;
 
   /** Whether a running Kokoro REST API server was detected (faster than WebGPU). */
   readonly isKokoroServerAvailable: boolean;
@@ -217,11 +224,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   activeMessageId = $state<string | undefined>(undefined);
   voices: VoiceInfo[] = $state([]);
   selectedVoice = $state('af_heart');
+  ttsVolume = $state(1);
 
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
+  private _ttsGain: GainNode | undefined; // volume control for synthesized speech
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -235,6 +244,37 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   isDemoMode(): boolean {
     return false;
+  }
+
+  /** @inheritdoc */
+  setTtsVolume(volume: number): void {
+    // Reject NaN so a malformed value can never corrupt stored state or the
+    // live gain node. Valid numeric inputs still go through the 0–1 clamp.
+    if (Number.isNaN(volume)) {
+      return;
+    }
+    const clamped = Math.min(1, Math.max(0, volume));
+    this.ttsVolume = clamped;
+    if (this._ttsGain) {
+      this._ttsGain.gain.value = clamped;
+    }
+  }
+
+  /**
+   * Returns the TTS gain node, creating it on first use. All synthesized
+   * speech sources connect through it so the TTS volume slider applies
+   * uniformly across the server and browser-worker backends.
+   */
+  private _getTtsGain(): GainNode {
+    if (!this._ttsGain) {
+      const ctx = audioContextManager.context;
+      this._ttsGain = ctx.createGain();
+      this._ttsGain.gain.value = this.ttsVolume;
+      // Route through the shared master audio graph so the master volume
+      // control applies to synthesized speech too.
+      this._ttsGain.connect(audioService.masterGainNode);
+    }
+    return this._ttsGain;
   }
 
   /** @inheritdoc */
@@ -396,7 +436,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(this._getTtsGain());
 
     // Schedule gapless playback
     const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);
@@ -705,7 +745,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      source.connect(this._getTtsGain());
       source.start();
 
       this.isPlaying = true;
@@ -824,11 +864,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(this._getTtsGain());
 
     // Schedule gapless playback
     const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);
     source.start(scheduleTime);
+
+    // Playback has begun — reflect it in state so callers can observe it.
+    this.isPlaying = true;
 
     // Update scheduling clock
     this._nextStartTime = scheduleTime + audioBuffer.duration;
@@ -840,6 +883,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       const idx = this._sourceNodes.indexOf(source);
       if (idx !== -1) {
         this._sourceNodes.splice(idx, 1);
+      }
+      // Clear isPlaying only once the final queued source has ended, so a
+      // stale onended from an earlier source cannot clear it mid-stream.
+      if (this._sourceNodes.length === 0) {
+        this.isPlaying = false;
       }
     };
   }

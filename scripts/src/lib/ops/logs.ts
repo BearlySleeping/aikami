@@ -9,18 +9,16 @@
  *   - `bun run scripts -- logs <app> [flags]`   (manual CLI)
  *   - .pi/extensions/log_viewer.ts              (pi/LLM tool call)
  *
- * Cloud Run-backed services (serviceType `cloud-run-sveltekit`) AND
- * `firebase-functions` are queried the SAME way, via `gcloud logging
- * read`/`tail` against `resource.type="cloud_run_revision"` — Firebase
- * Functions gen2 ARE Cloud Run revisions under the hood, so one filter
- * builder covers both instead of two tools with different flag support.
+ * Cloudflare Workers (serviceType `cloudflare-worker`) and `firebase-functions`
+ * — functions are queried via `gcloud logging read`/`tail` against
+ * `resource.type="cloud_run_revision"`; Workers logs live in Cloudflare
+ * Workers Observability and are not reachable via gcloud.
  *
- * `client` (Firebase Hosting, no server of its own) has no logs of its
+ * `client` (static Worker, no server of its own) has no logs of its
  * own — its browser logger forwards cross-origin into hub's
  * /api/internal_logging (see packages/shared/logger/src/lib/
  * logger_browser.ts and hub's hooks.server.ts), tagged
- * `jsonPayload.app="client"`. This command transparently redirects
- * `logs client` to hub's log stream with that filter applied.
+ * `jsonPayload.app="client"`.
  */
 
 import { resolve } from 'node:path';
@@ -59,6 +57,17 @@ export function resolveLogTarget(
   const projectId = resolveProjectId(mode);
 
   switch (config.serviceType) {
+    case 'cloudflare-worker': {
+      // client, site, docs are Cloudflare Workers now — their logs live in
+      // Cloudflare Workers Observability, not GCP Cloud Logging.
+      return {
+        unsupported:
+          `${appId} is a Cloudflare Worker — server logs are in Cloudflare Workers ` +
+          `Observability (dashboard or \`wrangler tail\`), not GCP Cloud Logging. ` +
+          `'client' browser logs are forwarded to the hub's /api/internal_logging.`,
+      };
+    }
+
     case 'cloud-run-sveltekit': {
       const region = resolveRegion(mode, config.region);
       return {
@@ -78,24 +87,6 @@ export function resolveLogTarget(
         };
       }
       return { projectId, region: CLOUD_FUNCTIONS_REGION, serviceName: only };
-    }
-
-    case 'firebase-hosting': {
-      // client has no server of its own — its browser logs are forwarded
-      // into hub's Cloud Run stream (see module doc comment above).
-      if (appId === 'client') {
-        const hub = APP_CONFIG.hub;
-        return {
-          projectId,
-          region: resolveRegion(mode, hub.region),
-          serviceName: hub.cloudRunServiceId ?? `aikami-${hub.shortName}`,
-          extraFilter: 'jsonPayload.app="client"',
-          note: "client is static hosting with no server — showing browser logs forwarded through hub's /api/internal_logging.",
-        };
-      }
-      return {
-        unsupported: `${appId} is static Firebase Hosting with no server-side logs. Check browser devtools — only 'client' forwards browser logs server-side today.`,
-      };
     }
 
     case 'tauri-release':

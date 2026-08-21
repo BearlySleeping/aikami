@@ -140,6 +140,15 @@ class GameBootService
   /** Resolved persona data during loading_campaign stage. */
   private _persona: PersonaData | undefined;
 
+  /**
+   * The effective LPC recipe (base + persona overrides) computed by
+   * {@link _buildPlayerData}. Persisted so the base outfit can be re-seeded
+   * AFTER save hydration — otherwise an empty equipment snapshot in the
+   * restored save clobbers the freshly-seeded chainmail/boots base outfit
+   * (C-417 / C-374 regression).
+   */
+  private _effectiveRecipe: Record<string, string> | undefined;
+
   // ── Public API ──
 
   /** @inheritdoc */
@@ -154,6 +163,9 @@ class GameBootService
     this._bootGeneration++;
     this._input = input;
     this._resetProgress();
+    // Clear the previous boot's recipe so _seedBaseOutfit can never reuse it
+    // (C-374/C-417): each boot attempt must derive its own base outfit.
+    this._effectiveRecipe = undefined;
 
     const t0 = performance.now();
 
@@ -307,6 +319,7 @@ class GameBootService
     this.lastResult = undefined;
     this._campaign = undefined;
     this._persona = undefined;
+    this._effectiveRecipe = undefined;
   }
 
   // ── Stage runners ──
@@ -957,6 +970,12 @@ class GameBootService
         });
       }
 
+      // Re-seed the base outfit AFTER hydration so an empty equipment
+      // snapshot in the restored save cannot clobber the character's default
+      // chainmail/boots (C-374/C-417). seedBaseOutfit only fills empty
+      // body/feet slots, so real saved gear is preserved.
+      this._seedBaseOutfit();
+
       if (map?.mapId && map.packId) {
         // ── Map-authoritative restore (v3+ envelope) ──
         // The map file is the source of truth for the world: rebuild the
@@ -1220,6 +1239,8 @@ class GameBootService
     const { generatedLpcSlots } = this._getLpcCatalogSync();
     if (!generatedLpcSlots) {
       this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
+      // No catalog — no recipe to persist; drop any stale one from a prior boot.
+      this._effectiveRecipe = undefined;
       return playerData;
     }
 
@@ -1303,14 +1324,35 @@ class GameBootService
     zeroEquipmentOwnedAppearanceSlots(appearanceLayers);
     playerData.appearanceLayers = appearanceLayers;
 
+    // Persist the effective recipe so the base outfit can be re-seeded after
+    // save hydration (see {@link _seedBaseOutfit}).
+    this._effectiveRecipe = effectiveRecipe;
+
     // C-374: seed the base outfit (chainmail + boots by default) into the
     // equipment service so the paperdoll reflects what the character wears.
     // Only fills empty body/feet slots — saved gear is never clobbered.
-    equipmentService.seedBaseOutfit(effectiveRecipe);
+    this._seedBaseOutfit();
 
     this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 
     return playerData;
+  }
+
+  /**
+   * Seeds the base outfit (chainmail + boots by default) into the equipment
+   * service so the paperdoll reflects the character's base LPC clothing.
+   *
+   * Only fills empty body/feet slots — saved gear is never clobbered. Called
+   * once during {@link _buildPlayerData} (engine creation) and again AFTER
+   * save hydration, because restoring a save with an empty equipment snapshot
+   * would otherwise wipe the freshly-seeded base outfit, leaving the
+   * character rendering chainmail while the Body slot sits empty (C-374/C-417).
+   */
+  private _seedBaseOutfit(): void {
+    if (!this._effectiveRecipe) {
+      return;
+    }
+    equipmentService.seedBaseOutfit(this._effectiveRecipe);
   }
 
   private _getLpcCatalogSync(): {

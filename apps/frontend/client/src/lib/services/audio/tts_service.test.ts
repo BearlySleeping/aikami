@@ -298,4 +298,33 @@ describe('TtsService — C-389 config-driven TTS', () => {
     const url = (fetchMock as ReturnType<typeof mock>).mock.calls[0][0];
     expect(String(url)).toContain('http://10.0.0.7:6006/v1/audio/speech');
   });
+
+  test('setTtsVolume updates state and clamps to 0–1', async () => {
+    const { ttsService } = await resetTtsService();
+
+    ttsService.setTtsVolume(0.5);
+    expect(ttsService.ttsVolume).toBe(0.5);
+
+    ttsService.setTtsVolume(1.5);
+    expect(ttsService.ttsVolume).toBe(1);
+
+    ttsService.setTtsVolume(-0.5);
+    expect(ttsService.ttsVolume).toBe(0);
+  });
+
+  test('setTtsVolume rejects NaN, leaving stored state and gain unchanged', async () => {
+    const { ttsService } = await resetTtsService();
+    const svc = ttsService as unknown as Service;
+
+    // Prime a valid volume and a live gain node.
+    ttsService.setTtsVolume(0.4);
+    const gain = (svc._getTtsGain as () => GainNode).call(svc);
+    const gainBefore = gain.gain.value;
+
+    ttsService.setTtsVolume(Number.NaN);
+
+    // Neither stored state nor the live gain changed.
+    expect(ttsService.ttsVolume).toBe(0.4);
+    expect(gain.gain.value).toBe(gainBefore);
+  });
 });

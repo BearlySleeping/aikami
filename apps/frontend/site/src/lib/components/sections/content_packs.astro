@@ -8,7 +8,6 @@
  */
 import { hubUrl } from '$data/site_content';
 import emberwatchManifest from '../../../../../client/static/content-packs/emberwatch/manifest.json';
-import whisperingCavesManifest from '../../../../../client/static/content-packs/whispering-caves/manifest.json';
 
 type PackCard = {
   name: string;
@@ -21,13 +20,6 @@ const emberwatch: PackCard = {
   name: emberwatchManifest.name,
   hook: emberwatchManifest.description,
   tags: ['Quest', 'Persuasion', 'Combat', 'Faction system'],
-  real: true,
-};
-
-const whisperingCaves: PackCard = {
-  name: whisperingCavesManifest.name,
-  hook: whisperingCavesManifest.description,
-  tags: ['Exploration', 'Combat', 'Vendor'],
   real: true,
 };
 
@@ -62,8 +54,8 @@ const comingSoon: PackCard = {
     </div>
 
     <!-- Pack teaser cards -->
-    <div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-      {[emberwatch, whisperingCaves, comingSoon].map((pack) => (
+    <div class="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+      {[emberwatch, comingSoon].map((pack) => (
         <div class="glass-panel p-6 flex flex-col group hover:border-indigo-400/40 transition-colors">
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-serif text-2xl leading-tight">{pack.name}</h3>

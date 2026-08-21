@@ -56,7 +56,7 @@ tasks:
     command: 'bun run scripts/deploy.ts'
     inputs:
       - 'scripts/deploy.ts'
-      - 'firebase.json'
+      - 'wrangler.jsonc'
       - '@group(sources)'
     options:
       cache: false

@@ -12,8 +12,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
-import { createWorld } from 'bitecs';
+import { createWorld, hasComponent } from 'bitecs';
 import type { SpawnPoint } from '../assets/map_loader.ts';
+import { Appearance } from '../components/appearance.ts';
 import {
   CollisionData,
   CollisionLayer,
@@ -259,5 +260,53 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     expect(CollisionData.mask[eid]).toBe(
       CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy,
     );
+  });
+
+  // ── Render-race regression (emberwatch inn_barrel showing an NPC) ──
+  // The worker emits APPEARANCE_CHANGED only for entities carrying the
+  // Appearance component. getAppearanceLayers() ALWAYS returns a 6-element
+  // array, so gating on `length > 0` leaks a default-NPC appearance onto
+  // props, which never have Appearance — painting an NPC over the barrel on
+  // every map transition. This test pins the invariant the fix relies on:
+  // NPCs carry Appearance, props do NOT.
+  test('NPC spawns with an Appearance component; props do NOT (render-race regression)', () => {
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'rollo',
+          type: 'npc',
+          x: 256,
+          y: 160,
+          properties: { npcId: 'rollo_grasper', npcName: 'Rollo the Grasper' },
+        }),
+        makeSpawnPoint({
+          id: 'barrel',
+          type: 'prop',
+          x: 96,
+          y: 96,
+          properties: { propId: 'inn_barrel', frame: 'barrel.png' },
+        }),
+      ],
+    });
+
+    const npcResult = results.find((r) => r.type === 'npc');
+    const propResult = results.find((r) => r.type === 'prop');
+    expect(npcResult).toBeDefined();
+    expect(propResult).toBeDefined();
+    if (!npcResult || !propResult) {
+      throw new Error('Expected both an NPC and a prop spawn result');
+    }
+    const npcEid = npcResult.eid;
+    const propEid = propResult.eid;
+
+    // NPC: carries the Appearance component (spawner sets 6 layers → the
+    // worker emits APPEARANCE_CHANGED for it).
+    expect(hasComponent(world, npcEid, Appearance)).toBe(true);
+    // Prop: must NOT carry Appearance — otherwise the worker's appearance
+    // emission paints LPC NPC layers over the barrel sprite. (Checked via
+    // hasComponent — world-scoped, unlike the module-global SoA arrays which
+    // are polluted across test files.)
+    expect(hasComponent(world, propEid, Appearance)).toBe(false);
   });
 });
