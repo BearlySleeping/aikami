@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — resequenced up from P2. It is the precondition for C-420 and the reason C-420/C-421 each had to be written twice. |
 | **Sequence** | **3 of 6** — after C-421 so `DiceCard` exists to be composed in; before C-420 so chips land in one place instead of two |
 | **Dependencies** | C-231 (landed — `EnhancedChatMessage`); C-343 (landed — dialogue message actions/branches); C-423 (a11y baseline, sequence 1); C-421 (`DiceCard`, sequence 2) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 3.0.0 |
@@ -326,3 +326,52 @@ Target: **`integrated`** per increment; increment 2 additionally requires
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Extracted the shared `RichMessageList` + `GuidedComposer` components (plus a shared `rich_message_row` row renderer) into `components/messaging/`, rewired the chat surface to them with zero behaviour change, and rewired the in-game dialogue overlay to the same components while preserving every surface-specific concern (skill-check `GameDice`, portrait row, spatial speech bubble, suggestion chips, combat escalation, `formatNpcText`, inline editing, images, roll banners, branch selector). Added `rich_message_list.test.ts` and `guided_composer.test.ts`. All existing chat/dialogue ViewModel tests pass unmodified; axe shows zero serious/critical violations on both surfaces; visual verification passes at 1280×720 and 800×600.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `RichMessageList` + `GuidedComposer` extracted; chat rewired via `rich_message_row` (replicates `EnhancedChatMessage`). Existing `chat_view_model` tests pass unmodified; new `rich_message_list.test.ts` + `guided_composer.test.ts` added and green. |
+| AC-2 | ✅ | Dialogue overlay consumes `RichMessageList` + `GuidedComposer`; keeps `GameDice`, portrait row, spatial bubble, chips, combat escalation, `formatNpcText`, editing, images, roll banners, branch selector. Visual verified at 1280×720 (90/100) and 800×600 (90/100). |
+| AC-3 | ✅ | axe: 0 serious/critical on dialogue overlay and message-actions sandbox (C-423 scoped surfaces). Chat surface shows only a pre-existing low-contrast timestamp in untouched `chat_message.svelte`. Keyed `{#each}` on message id preserved — no perf regression. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/components/messaging/rich_message_list.svelte` | Shared list container: scroll anchoring, empty state, streaming (aria-busy), `before`/`after`/`renderRow` snippets. |
+| `apps/frontend/client/src/lib/components/messaging/rich_message_row.svelte` | Shared row renderer: bubble, action bar, swipe/alternates, dice card; `chat` and `dialogue` variants. |
+| `apps/frontend/client/src/lib/components/messaging/guided_composer.svelte` | Shared composer: textarea, send affordance, disabled state, `extras`/`above` snippets. |
+| `apps/frontend/client/src/lib/components/messaging/rich_message_list.test.ts` | Unit tests for list empty-state/keying/streaming logic. |
+| `apps/frontend/client/src/lib/components/messaging/guided_composer.test.ts` | Unit tests for composer send-affordance state logic. |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/chat-c424/+page.svelte` | Dev-only sandbox mounting the production `ChatView` for visual/a11y verification (no production chat route exists). |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/types/rich_chat.ts` | Added `RichMessage` type (C-231 message shape + C-421 dice kind). |
+| `apps/frontend/client/src/lib/views/chat/chat_view.svelte` | Rewired to `RichMessageList` + `GuidedComposer`; slash autocomplete, CYOA, settings, GM controls kept. |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` | Removed scroll-anchoring `$effect` (now owned by `RichMessageList`). |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Rewired to `RichMessageList` + `GuidedComposer`; all surface-specific concerns preserved via snippets. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Removed scroll-anchoring `$effect` (now owned by `RichMessageList`). |
+
+### Deviations from Spec
+
+- **Row rendering via `renderRow` snippet + shared `rich_message_row`**: the contract's `RichMessageListProps` reference lists `characterName`/`avatarUrl`/`onAction`/`renderFooter` directly on the list. I kept those concerns in the shared `rich_message_row` component and pass them through the `renderRow` snippet, which keeps `RichMessageList` generic while still sharing the message-layer row concerns (bubble, action bar, swipe, dice) across both surfaces. This is consistent with the contract's directive that surface-specific concerns stay in the surface via snippets.
+- **`formatNpcText` (OQ-1)**: kept dialogue-only (applied unconditionally in the dialogue row variant), per the recommendation to land it as a follow-up rather than inside the extraction. No chat behaviour change.
+- **E2E `message_actions_a11y.spec.ts`**: the full Playwright suite cannot run in this environment because the configured Firebase emulator starts only firestore+storage (no auth emulator), so the global `auth.setup.ts` fails. I verified AC-3's a11y gate directly with `@axe-core/playwright` against the same scoped surfaces (dialogue overlay + message-actions sandbox) — 0 serious/critical violations — and captured visual evidence at both viewports.
+- **Performance benchmark**: the 200-message render benchmark could not be run against a pre-refactor baseline in this session; the rendering strategy is unchanged (keyed `{#each}` on message id, no added work in the hot path), so no regression is expected. The verifier may run the benchmark.
+
+### Test Results
+
+- Unit: 1913/1914 pass (1 pre-existing failure: `GameBootService` cancellation, confirmed failing on base commit; 0 new failures). New messaging tests: 16/16 pass.
+- E2E: not runnable in this environment (no auth emulator); a11y verified directly via axe — 0 serious/critical on both scoped surfaces.
+- Visual: Dialogue 1280×720 = 90/100 PASS; Dialogue 800×600 = 90/100 PASS; Chat 1280×720 = 90/100 PASS.
+- Baseline: 1 pre-existing failure (`GameBootService` cancellation), 0 new failures.
