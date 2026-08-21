@@ -298,4 +298,17 @@ describe('TtsService — C-389 config-driven TTS', () => {
     const url = (fetchMock as ReturnType<typeof mock>).mock.calls[0][0];
     expect(String(url)).toContain('http://10.0.0.7:6006/v1/audio/speech');
   });
+
+  test('setTtsVolume updates state and clamps to 0–1', async () => {
+    const { ttsService } = await resetTtsService();
+
+    ttsService.setTtsVolume(0.5);
+    expect(ttsService.ttsVolume).toBe(0.5);
+
+    ttsService.setTtsVolume(1.5);
+    expect(ttsService.ttsVolume).toBe(1);
+
+    ttsService.setTtsVolume(-0.5);
+    expect(ttsService.ttsVolume).toBe(0);
+  });
 });

@@ -319,8 +319,8 @@ describe('CampaignService', () => {
   });
 
   test('startNewCampaign accepts custom contentPackId', async () => {
-    const campaign = await getSvc().startNewCampaign({ contentPackId: 'whispering-caves' });
-    expect(campaign.contentPackId).toBe('whispering-caves');
+    const campaign = await getSvc().startNewCampaign({ contentPackId: 'stormreach' });
+    expect(campaign.contentPackId).toBe('stormreach');
   });
 
   test.todo('startNewCampaign rejects unknown contentPackId (not in registry)');

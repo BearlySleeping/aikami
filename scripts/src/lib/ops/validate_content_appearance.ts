@@ -12,7 +12,7 @@
  *   - head-slot indices must resolve to a `head/heads/*` asset (the old
  *     render-time `effectiveIdx = 94` override is gone — validity is a
  *     content-load-time concern now)
- *   - packs may declare FEWER than six layers (whispering-caves declares 4);
+ *   - packs may declare FEWER than six layers (some packs declare 4);
  *     only the indices present are validated, missing trailing slots
  *     (feet, head) are treated as absent → runtime fallback
  *

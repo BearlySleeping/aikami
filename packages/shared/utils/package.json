@@ -15,6 +15,6 @@
     "device-detector-js": "^3.0.3"
   },
   "devDependencies": {
-    "firebase": "12.17.1"
+    "firebase": "12.18.0"
   }
 }

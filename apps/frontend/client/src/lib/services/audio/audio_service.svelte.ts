@@ -107,6 +107,14 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
    */
   playSfx(trackUrl: string): Promise<void>;
 
+  /**
+   * Plays a short synthesized test tone through the SFX bus so the
+   * Settings test button produces audible feedback even when no SFX asset
+   * files are bundled. Routes through {@link _sfxGain}, so it respects both
+   * the SFX volume slider and the master volume.
+   */
+  playTestSfx(): void;
+
   /** Stops all BGM and SFX, resets internal state. */
   stopAll(): void;
 };
@@ -417,6 +425,49 @@ export class AudioService
       };
     } catch (error) {
       this.error('playSfx:failed', { trackUrl, error });
+    }
+  }
+
+  /** @inheritdoc */
+  playTestSfx(): void {
+    const ctx = audioContextManager.context;
+    this._ensureGraph();
+    audioContextManager.unlock();
+
+    if (!this._sfxGain) {
+      return;
+    }
+
+    try {
+      // Synthesize a short "hit" — a sharp-attack tone with a fast pitch
+      // drop and quick exponential decay, ~250ms. No asset file required.
+      const now = ctx.currentTime;
+      const duration = 0.25;
+
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(160, now + duration);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.8, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(this._sfxGain);
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {
+          // Already disconnected
+        }
+      };
+    } catch (error) {
+      this.error('playTestSfx:failed', error);
     }
   }
 

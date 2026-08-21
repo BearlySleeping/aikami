@@ -1,13 +1,11 @@
 // apps/e2e/tests/client/new_campaign_flow.spec.ts
 //
-// E2E tests for the C-405 new-campaign entry flow.
+// E2E tests for the new-campaign entry flow.
 //
-// AC-1: fresh install → "Start campaign" → pack picker (2+ packs) → persona
-//       creation (onboarding) — WITHOUT passing through the world-generation
-//       wizard, and WITHOUT any world-generation AI call (request spy, not
-//       timing).
-// AC-3: the picker lists both installed packs with name + description and the
-//       chosen pack id reaches startNewCampaign.
+// AC-1: fresh install → "New Game" routes to /capability (the AI-provider
+//       welcome screen), then "Start Campaign" reaches persona creation
+//       (onboarding) — WITHOUT passing through the world-generation wizard,
+//       and WITHOUT any world-generation AI call (request spy, not timing).
 // AC-4: the Advanced entry (/worldgen) renders the wizard with an honest
 //       preview notice.
 //
@@ -34,7 +32,7 @@ test.describe('New Campaign Flow — C-405', () => {
     });
   });
 
-  test('AC-1: fresh start reaches persona creation without world generation', async ({ page }) => {
+  test('AC-1: fresh start routes through /capability to persona creation', async ({ page }) => {
     // ── Request spy: any world-gen / AI-provider call during the default
     //    path is a regression (asserted via the spy, never by timing). ──
     const aiRequestUrls: string[] = [];
@@ -55,23 +53,15 @@ test.describe('New Campaign Flow — C-405', () => {
 
     await page.goto('/');
 
-    // Start campaign — the front door.
+    // New Game — the front door. Routes to /capability, not the pack picker.
     await page.getByRole('button', { name: 'New Game' }).click();
 
-    // AC-3: with both emberwatch and whispering-caves installed, the pack
-    // picker must appear listing both packs by name.
-    await expect(page.getByRole('dialog').first()).toBeVisible();
-    await expect(page.getByText('Choose Your Adventure')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Select Emberwatch: The Fading Ward' }),
-    ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Select Whispering Caves' })).toBeVisible();
+    // Lands on the AI-provider welcome screen.
+    await expect(page).toHaveURL(/\/capability/, { timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Welcome to Aikami' })).toBeVisible();
 
-    // Pick the second pack and confirm.
-    await page.getByRole('button', { name: 'Select Whispering Caves' }).click();
-    await page.getByRole('button', { name: 'Start New Game' }).click();
-
-    // AC-1: lands on persona creation (onboarding), never the wizard.
+    // Start Campaign proceeds to persona creation (onboarding), never the wizard.
+    await page.getByRole('button', { name: 'Start Campaign' }).click();
     await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
       timeout: 10000,
     });
@@ -88,10 +78,10 @@ test.describe('New Campaign Flow — C-405', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'New Game' }).click();
-    await expect(page.getByText('Choose Your Adventure')).toBeVisible();
+    await expect(page).toHaveURL(/\/capability/, { timeout: 10000 });
 
-    // Default selection is the first pack — confirm directly.
-    await page.getByRole('button', { name: 'Start New Game' }).click();
+    // Start Campaign proceeds to onboarding.
+    await page.getByRole('button', { name: 'Start Campaign' }).click();
 
     // Onboarding coordinator with three starter heroes.
     await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({

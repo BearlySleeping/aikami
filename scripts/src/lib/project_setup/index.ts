@@ -17,7 +17,6 @@
  * Individual steps:
  *   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/firebase_setup.ts --mode=staging
- *   bun run scripts/src/lib/project_setup/firebase_hosting_setup.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/github.ts --mode=staging
@@ -27,7 +26,6 @@ import { c, fmt, parseCliArgs } from '../cli_utils';
 import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from '../deploy/deployment_config';
 import { setupArtifactRegistry } from './artifact_registry';
 import { setupCdnHosting } from './cdn_hosting_setup';
-import { setupFirebaseHosting } from './firebase_hosting_setup';
 import { setupGcpApis } from './gcp_apis';
 import { setupIam } from './iam';
 import { setupSecrets } from './secrets_manager';
@@ -147,13 +145,6 @@ async function main() {
   // ── Secret Manager ────────────────────────────────────────────────
   {
     const { checks, manualSteps } = await setupSecrets(projectId, DRY_RUN);
-    allChecks.push(...checks);
-    allManualSteps.push(...manualSteps);
-  }
-
-  // ── Firebase Hosting Sites ────────────────────────────────────────
-  {
-    const { checks, manualSteps } = await setupFirebaseHosting(projectId, DRY_RUN);
     allChecks.push(...checks);
     allManualSteps.push(...manualSteps);
   }

@@ -1,0 +1,15 @@
+// apps/frontend/client/wrangler.jsonc
+// Static assets-only Worker for the client app (SPA).
+// The deploy pipeline rewrites this file per-mode (worker name + route) via
+// scripts/src/lib/deploy/cloudflare.ts — this is the canonical template.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aikami-client",
+  "compatibility_date": "2026-08-21",
+  "assets": {
+    "directory": "./build",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "aikami.bearlysleeping.com", "custom_domain": true }]
+}

@@ -12,7 +12,6 @@ import {
   CLOUD_FUNCTIONS_REGION,
   liveModes,
   MODE_PROJECT_MAP,
-  resolveCloudRunServiceId,
 } from './deployment_config';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -217,11 +216,6 @@ export function dockerImageTag(
   return `${region}-docker.pkg.dev/${projectId}/${imageName}:${tag}`;
 }
 
-/** Resolve the Cloud Run service id for an app config. */
-export function resolveCloudRunServiceName(config: AppConfig, appName: string): string {
-  return resolveCloudRunServiceId(appName as never) || `aikami-${config.shortName}`;
-}
-
 /** GCP Artifact Registry auth — authenticates the Docker registry.
  *  Idempotent per region: only configures a region once per process.
  *  @param region Region of the Artifact Registry to configure; defaults to the global region. */
@@ -269,84 +263,6 @@ export function ensureGcloudAuth(mode: string, projectId: string, rootDir: strin
     error(`Service account activation failed (${saKeyPath}). Run: gcloud auth login`);
     process.exit(1);
   }
-}
-
-/**
- * Build common Cloud Run deploy args.
- * Returns the complete `gcloud run deploy ...` argument array.
- *
- * The array is executed via {@link runArgs} (no shell), so values like
- * `serviceAccount` read from .env files are never shell-interpolated.
- */
-export function buildGcloudRunArgs(
-  config: AppConfig,
-  serviceId: string,
-  tag: string,
-  projectId: string,
-  mode: string,
-  extraEnvVars = '',
-  secretArgs = '',
-  serviceAccount = '',
-): string[] {
-  const region = resolveRegion(mode, config.region);
-  const memory = config.memory ?? '1Gi';
-  const args = [
-    'gcloud',
-    'run',
-    'deploy',
-    serviceId,
-    '--image',
-    tag,
-    '--platform',
-    'managed',
-    '--memory',
-    memory,
-    '--timeout',
-    '300',
-    '--region',
-    region,
-    '--allow-unauthenticated',
-    '--project',
-    projectId,
-  ];
-
-  // Run as the mode's Firebase Admin SA (derived from FIREBASE_SERVICE_ACCOUNT
-  // in .env.{mode}) so Admin SDK calls like verifySessionCookie(checkRevoked)
-  // and createSessionCookie work — the default compute SA cannot perform the
-  // accounts:lookup call that revocation-checked verification needs, which
-  // silently breaks session cookies on Cloud Run. The runtime SA needs
-  // roles/secretmanager.secretAccessor + roles/logging.logWriter (granted in
-  // both aikami-production and aikami-staging).
-  if (serviceAccount) {
-    args.push('--service-account', serviceAccount);
-  }
-
-  // CPU allocation
-  if (config.cpu) {
-    args.push('--cpu', config.cpu);
-  } else {
-    args.push('--cpu-boost');
-  }
-
-  // VPC connector for Cloud SQL access
-  if (config.vpcConnector) {
-    args.push('--vpc-connector', config.vpcConnector);
-  } else {
-    args.push('--clear-vpc-connector');
-  }
-
-  // Cloud SQL Auth Proxy (Unix socket)
-  if (config.cloudSqlInstance) {
-    args.push('--add-cloudsql-instances', config.cloudSqlInstance);
-  }
-
-  args.push('--set-env-vars', `NODE_ENV=production,HOST=0.0.0.0${extraEnvVars}`);
-
-  if (secretArgs) {
-    args.push(secretArgs);
-  }
-
-  return args;
 }
 
 // ── Env File ─────────────────────────────────────────────────────────────

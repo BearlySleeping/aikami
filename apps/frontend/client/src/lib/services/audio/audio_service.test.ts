@@ -204,6 +204,26 @@ const createMockAudioContext = (): AudioContext => {
       return Promise.resolve(createStubAudioBuffer());
     }),
 
+    createOscillator: mock((): OscillatorNode => {
+      const osc = {
+        type: 'sine',
+        frequency: {
+          value: 0,
+          setValueAtTime: mock(() => {}),
+          exponentialRampToValueAtTime: mock(() => {}),
+        } as unknown as AudioParam,
+        detune: {} as AudioParam,
+        connect: mock(() => ({})),
+        disconnect: mock(() => {}),
+        start: mock(() => {}),
+        stop: mock(() => {}),
+        addEventListener: mock(() => {}),
+        removeEventListener: mock(() => {}),
+        dispatchEvent: mock(() => true),
+      };
+      return osc as unknown as OscillatorNode;
+    }),
+
     createDynamicsCompressor: mock((): DynamicsCompressorNode => {
       // Minimal stub — returns a mock with AudioParam-like gain props
       const paramStub = { value: 0 } as unknown as AudioParam;
@@ -402,6 +422,10 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
     // No new source should be created
     expect(createdSources.length).toBe(sourcesBefore);
+  });
+
+  test('playTestSfx synthesizes a tone without throwing', () => {
+    expect(() => audioService.playTestSfx()).not.toThrow();
   });
 
   // ── AC-4: Volume Controls ──

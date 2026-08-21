@@ -32,6 +32,9 @@ fileGroups:
     - 'astro.config.*'
   tests:
     - 'tests/**/*'
+  deployment:
+    - 'scripts/deploy.ts'
+    - 'wrangler.jsonc'
 
 tasks:
   dev:

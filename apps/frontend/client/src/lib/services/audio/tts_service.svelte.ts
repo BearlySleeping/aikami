@@ -68,6 +68,12 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** The currently selected voice ID. */
   selectedVoice: string;
 
+  /** TTS output volume (0–1). Scales all synthesized speech. */
+  readonly ttsVolume: number;
+
+  /** Sets the TTS output volume (0–1). */
+  setTtsVolume(volume: number): void;
+
   /** Whether a running Kokoro REST API server was detected (faster than WebGPU). */
   readonly isKokoroServerAvailable: boolean;
 
@@ -217,11 +223,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   activeMessageId = $state<string | undefined>(undefined);
   voices: VoiceInfo[] = $state([]);
   selectedVoice = $state('af_heart');
+  ttsVolume = $state(1);
 
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
+  private _ttsGain: GainNode | undefined; // volume control for synthesized speech
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -235,6 +243,30 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   isDemoMode(): boolean {
     return false;
+  }
+
+  /** @inheritdoc */
+  setTtsVolume(volume: number): void {
+    const clamped = Math.min(1, Math.max(0, volume));
+    this.ttsVolume = clamped;
+    if (this._ttsGain) {
+      this._ttsGain.gain.value = clamped;
+    }
+  }
+
+  /**
+   * Returns the TTS gain node, creating it on first use. All synthesized
+   * speech sources connect through it so the TTS volume slider applies
+   * uniformly across the server and browser-worker backends.
+   */
+  private _getTtsGain(): GainNode {
+    if (!this._ttsGain) {
+      const ctx = audioContextManager.context;
+      this._ttsGain = ctx.createGain();
+      this._ttsGain.gain.value = this.ttsVolume;
+      this._ttsGain.connect(ctx.destination);
+    }
+    return this._ttsGain;
   }
 
   /** @inheritdoc */
@@ -396,7 +428,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(this._getTtsGain());
 
     // Schedule gapless playback
     const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);
@@ -705,7 +737,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      source.connect(this._getTtsGain());
       source.start();
 
       this.isPlaying = true;
@@ -824,7 +856,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(this._getTtsGain());
 
     // Schedule gapless playback
     const scheduleTime = Math.max(ctx.currentTime, this._nextStartTime);

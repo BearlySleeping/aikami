@@ -111,4 +111,59 @@ describe('STARTER_KIT (C-374)', () => {
     });
     expect(equipmentService.getEquippedItemId('body')).toBe('ironArmor');
   });
+
+  // Regression (C-374/C-417): boot seeds the base outfit during engine
+  // creation, then save hydration restores the service snapshots. An empty
+  // equipment snapshot ({ slots: {} }) must not wipe the seeded chainmail/
+  // boots — the boot pipeline re-seeds AFTER hydration (game_boot_service
+  // _stageHydrateSnapshot), which fills only empty slots, so the base outfit
+  // survives while real saved gear is preserved.
+  test('re-seeding after an empty-slot hydrate restores the base outfit', () => {
+    equipmentService.reset();
+    inventoryService.reset();
+
+    // Engine creation seeds the base outfit.
+    equipmentService.seedBaseOutfit({
+      body: 'body/bodies_male',
+      hair: 'hair/bangs_adult',
+      torso: 'torso/chainmail_male',
+      legs: 'legs/pants_male',
+      feet: 'feet/boots/basic_male',
+      head: 'head/heads/human_male',
+    });
+    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
+
+    // Save hydration restores an empty equipment snapshot.
+    equipmentService.hydrate({ slots: {} });
+    expect(equipmentService.getEquippedItemId('body')).toBeUndefined();
+
+    // Boot re-seeds after hydration — the base outfit returns.
+    equipmentService.seedBaseOutfit({
+      torso: 'torso/chainmail_male',
+      feet: 'feet/boots/basic_male',
+    });
+    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
+    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
+  });
+
+  // Re-seeding must not clobber real gear the save actually restored.
+  test('re-seeding after hydrate preserves restored saved gear', () => {
+    equipmentService.reset();
+    inventoryService.reset();
+
+    // Save hydration restored real gear (iron armor + steel sword).
+    equipmentService.hydrate({
+      slots: { body: 'ironArmor', rightHand: 'steelSword' },
+    });
+
+    // Boot re-seeds — must not clobber the restored iron armor.
+    equipmentService.seedBaseOutfit({
+      torso: 'torso/chainmail_male',
+      feet: 'feet/boots/basic_male',
+    });
+    expect(equipmentService.getEquippedItemId('body')).toBe('ironArmor');
+    expect(equipmentService.getEquippedItemId('rightHand')).toBe('steelSword');
+    // Empty feet slot gets filled by the base outfit.
+    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
+  });
 });

@@ -35,11 +35,11 @@ const STATUS_ICON: Record<string, string> = {
 };
 
 const TYPE_LABEL: Record<string, string> = {
-  'cloud-run-sveltekit': 'Cloud Run',
+  'cloudflare-worker': 'Cloudflare Worker',
   'tauri-release': 'Tauri Release',
-  'firebase-hosting': 'Firebase Hosting',
   'firebase-functions': 'Firebase Functions',
   'docker-release': 'Docker Release',
+  'database-migration': 'Database Migration',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────

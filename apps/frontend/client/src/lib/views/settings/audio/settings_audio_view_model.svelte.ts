@@ -7,7 +7,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
+import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
+import { runtimeConfigService } from '$lib/services/config/runtime_config_service.svelte';
 import { audioService, musicPlayerService, ttsService, voiceModelService } from '$services';
 import type { VoiceModelState } from '$types';
 
@@ -22,6 +23,8 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   readonly bgmVolume: number;
   /** SFX volume (0–1). Mirrors audioService.sfxVolume. */
   readonly sfxVolume: number;
+  /** TTS volume (0–1). Mirrors ttsService.ttsVolume. */
+  readonly ttsVolume: number;
   /** Whether a BGM crossfade is currently in progress. */
   readonly isCrossfading: boolean;
   /** Whether the in-game music player overlay is visible. */
@@ -35,6 +38,7 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   setMasterVolume(volume: number): void;
   setBgmVolume(volume: number): void;
   setSfxVolume(volume: number): void;
+  setTtsVolume(volume: number): void;
 
   /** Test BGM playback: crossfade to Exploration track. */
   testExploreBgm(): Promise<void>;
@@ -63,6 +67,13 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   cancelVoiceModelDownload(): void;
   /** Deletes the cached voice model. */
   deleteVoiceModel(): Promise<void>;
+
+  /** Tests TTS by speaking a sample phrase with the current voice. */
+  testTts(): Promise<void>;
+  /** Stops any in-progress TTS playback. */
+  stopTts(): void;
+  /** Whether TTS audio is currently playing. */
+  readonly isTtsPlaying: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,6 +93,7 @@ class SettingsAudioViewModel
   masterVolume = $state<number>(audioService.masterVolume);
   bgmVolume = $state<number>(audioService.bgmVolume);
   sfxVolume = $state<number>(audioService.sfxVolume);
+  ttsVolume = $state<number>(ttsService.ttsVolume);
   isCrossfading = $state<boolean>(false);
   feedback = $state<string>('');
   private _pollInterval: ReturnType<typeof setInterval> | undefined;
@@ -95,6 +107,7 @@ class SettingsAudioViewModel
       this.masterVolume = audioService.masterVolume;
       this.bgmVolume = audioService.bgmVolume;
       this.sfxVolume = audioService.sfxVolume;
+      this.ttsVolume = ttsService.ttsVolume;
       this.isCrossfading = audioService.isCrossfading;
     }, 200);
     await super.initialize();
@@ -123,6 +136,11 @@ class SettingsAudioViewModel
     this.sfxVolume = audioService.sfxVolume;
   }
 
+  setTtsVolume(volume: number): void {
+    ttsService.setTtsVolume(volume);
+    this.ttsVolume = ttsService.ttsVolume;
+  }
+
   get musicPlayerVisible(): boolean {
     return musicPlayerService.visible;
   }
@@ -145,7 +163,10 @@ class SettingsAudioViewModel
 
   async testHitSfx(): Promise<void> {
     this.feedback = 'Playing: Hit SFX';
-    await playSfxByName('sfx_hit');
+    // No SFX asset files are bundled, so use a synthesized test tone routed
+    // through the SFX bus — it always produces audible feedback and respects
+    // the SFX + master volume sliders.
+    audioService.playTestSfx();
   }
 
   stopAll(): void {
@@ -226,6 +247,48 @@ class SettingsAudioViewModel
     // worker is terminated and the backend reports unavailable again
     // (C-389 CR — previously only the status flag was cleared).
     ttsService.reset();
+  }
+
+  /** Sample phrase spoken by the TTS test button. */
+  private static readonly _ttsTestText =
+    'Hello! This is a speech test. The voice model is working perfectly.';
+
+  get isTtsPlaying(): boolean {
+    return ttsService.isPlaying;
+  }
+
+  async testTts(): Promise<void> {
+    // The TTS service only probes the Kokoro server once, during initialize().
+    // If the voice server started after Settings opened (or was briefly down),
+    // re-discover it so server-mode synthesis actually works instead of
+    // silently falling back to the browser worker.
+    const mode = runtimeConfigService.getVoiceTtsMode();
+    const serverUrl = runtimeConfigService.getVoiceTtsUrl();
+    if (mode === 'server' && serverUrl && !ttsService.isKokoroServerAvailable) {
+      this.feedback = 'Probing voice server…';
+      ttsService.reset();
+      await ttsService.initialize().catch(() => {});
+    }
+
+    if (ttsService.status !== 'ready') {
+      this.feedback = 'TTS not ready — download the voice model first.';
+      return;
+    }
+
+    this.feedback = 'Speaking test phrase…';
+    await ttsService.synthesize({
+      text: SettingsAudioViewModel._ttsTestText,
+      voice: ttsService.selectedVoice,
+    });
+    // Surface real failures instead of always claiming completion.
+    this.feedback = ttsService.errorMessage
+      ? `TTS failed: ${ttsService.errorMessage}`
+      : 'TTS test complete.';
+  }
+
+  stopTts(): void {
+    ttsService.stop();
+    this.feedback = 'TTS playback stopped.';
   }
 }
 

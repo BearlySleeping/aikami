@@ -36,7 +36,6 @@ mock.module('$app/state', () => ({
 // Mock state
 // ---------------------------------------------------------------------------
 
-let resetCalls = 0;
 let fetchSavesResult: Array<{
   id: string;
   timestamp: number;
@@ -66,10 +65,11 @@ const PACK_EMBERWATCH: MockPack = {
   updatedAt: '2026-07-13T00:00:00.000Z',
 };
 
-const PACK_WHISPERING_CAVES: MockPack = {
-  id: 'whispering-caves',
-  name: 'Whispering Caves',
-  description: 'Deep beneath the foothills, an ancient network of caves hums.',
+// Generic second pack used to exercise multi-pack (browser) behavior.
+const PACK_SECOND: MockPack = {
+  id: 'stormreach',
+  name: 'Stormreach',
+  description: 'A coastal fortress under siege by a rising tide of nightmares.',
   version: '1.0.0',
   updatedAt: '2026-07-20T00:00:00.000Z',
 };
@@ -89,11 +89,6 @@ let mockSessionMarkerCampaignId: string | undefined;
 let mockClearSessionMarkerCalls = 0;
 
 const _setupServiceOverrides = (): void => {
-  // ── inventoryService.reset — tracked to verify state reset on new game ──
-  (_svcStubs.inventoryService as Record<string, unknown>).reset = mock(() => {
-    resetCalls++;
-  });
-
   // ── gameSaveService ───────────────────────────────────────────────────
   // fetchAvailableSaves populates the availableSaves getter
   (_svcStubs.gameSaveService as Record<string, unknown>).fetchAvailableSaves = mock(async () => {
@@ -222,7 +217,6 @@ const setCharacters = (count: number): void => {
 
 describe('StartViewModel', () => {
   beforeEach(() => {
-    resetCalls = 0;
     mockClearSessionMarkerCalls = 0;
     fetchSavesResult = [];
     routeCalls = [];
@@ -233,36 +227,27 @@ describe('StartViewModel', () => {
 
   // ── C-405 AC-1: New Game routes to persona creation (onboarding) ──────
 
+  // ── New Game: routes to the capability screen ──────────────────────────
+
   describe('startNewGame()', () => {
-    test('with zero characters and one pack routes to onboarding', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH];
+    test('routes to /capability', async () => {
       const vm = createViewModel();
 
       await vm.startNewGame();
 
       expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personaCreate');
-      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
+      expect(routeCalls[0].route).toBe('capability');
     });
 
-    test('calls gameStateService.reset() to clear stale state', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH];
+    test('does not open the pack browser', async () => {
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       const vm = createViewModel();
 
       await vm.startNewGame();
 
-      expect(resetCalls).toBe(1);
-    });
-
-    test('with zero characters and multiple packs shows the pack browser without routing', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
-      const vm = createViewModel();
-
-      await vm.startNewGame();
-
-      expect(routeCalls).toHaveLength(0);
-      expect(vm.showPackBrowser).toBe(true);
-      expect(vm.selectedPackId).toBe('emberwatch');
+      expect(vm.showPackBrowser).toBe(false);
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('capability');
     });
   });
 
@@ -274,7 +259,7 @@ describe('StartViewModel', () => {
       setCharacters(0);
       const vm = createViewModel();
 
-      await vm.startNewGame();
+      await vm.openPackBrowser();
 
       expect(routeCalls[0].route).toBe('personaCreate');
       expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
@@ -285,7 +270,7 @@ describe('StartViewModel', () => {
       setCharacters(1);
       const vm = createViewModel();
 
-      await vm.startNewGame();
+      await vm.openPackBrowser();
 
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
@@ -296,19 +281,19 @@ describe('StartViewModel', () => {
       setCharacters(2);
       const vm = createViewModel();
 
-      await vm.startNewGame();
+      await vm.openPackBrowser();
 
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('personas');
     });
 
     test('confirmPackSelection carries the selected pack into the branch', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       setCharacters(0);
       const vm = createViewModel();
 
-      await vm.startNewGame();
-      vm.selectPack('whispering-caves');
+      await vm.openPackBrowser();
+      vm.selectPack('stormreach');
       await vm.confirmPackSelection();
 
       expect(routeCalls).toHaveLength(1);
@@ -316,7 +301,7 @@ describe('StartViewModel', () => {
       expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
       expect(
         (_svcStubs.campaignService.startNewCampaign as ReturnType<typeof mock>).mock.calls[0]?.[0],
-      ).toEqual({ contentPackId: 'whispering-caves' });
+      ).toEqual({ contentPackId: 'stormreach' });
     });
   });
 
@@ -381,20 +366,19 @@ describe('StartViewModel', () => {
 
   // ── AC-3: starts new game regardless of AI gate ──
 
-  test('startNewGame routes to onboarding even when gateway resolveMode would fail', async () => {
-    mockAvailablePacks = [PACK_EMBERWATCH];
+  test('startNewGame routes to /capability even when gateway resolveMode would fail', async () => {
     const vm = createViewModel();
 
-    // Even when gateway resolution would fail, we proceed with the pack
+    // Even when gateway resolution would fail, startNewGame proceeds to the
+    // capability screen (which handles provider setup).
     (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
       throw new Error('No text generation provider configured.');
     });
 
     await vm.startNewGame();
 
-    // Should route to persona creation with the pack, not /capability
     expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('personaCreate');
+    expect(routeCalls[0].route).toBe('capability');
   });
 
   test('continueGame succeeds even when gateway resolveMode would fail', async () => {
@@ -416,8 +400,7 @@ describe('StartViewModel', () => {
     expect(routeCalls[0].route).toBe('game');
   });
 
-  test('startNewGame routes to onboarding when gateway resolves successfully', async () => {
-    mockAvailablePacks = [PACK_EMBERWATCH];
+  test('startNewGame routes to /capability when gateway resolves successfully', async () => {
     const vm = createViewModel();
 
     // Gateway resolves successfully
@@ -431,7 +414,7 @@ describe('StartViewModel', () => {
     await vm.startNewGame();
 
     expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('personaCreate');
+    expect(routeCalls[0].route).toBe('capability');
   });
 
   // ── AC-5: Crash Recovery ────────────────────────────────────────────
@@ -542,7 +525,7 @@ describe('StartViewModel', () => {
 
   describe('pack browser', () => {
     test('openPackBrowser loads packs and shows browser when multiple packs available', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       const vm = createViewModel();
 
       await vm.openPackBrowser();
@@ -564,7 +547,7 @@ describe('StartViewModel', () => {
     });
 
     test('closePackBrowser hides the browser and clears selection', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       const vm = createViewModel();
       await vm.openPackBrowser();
       expect(vm.showPackBrowser).toBe(true);
@@ -578,15 +561,15 @@ describe('StartViewModel', () => {
 
     test('selectPack updates selectedPackId', async () => {
       const vm = createViewModel();
-      vm.selectPack('whispering-caves');
-      expect(vm.selectedPackId).toBe('whispering-caves');
+      vm.selectPack('stormreach');
+      expect(vm.selectedPackId).toBe('stormreach');
     });
 
     test('confirmPackSelection hides browser and proceeds with selected pack', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       const vm = createViewModel();
       await vm.openPackBrowser();
-      vm.selectPack('whispering-caves');
+      vm.selectPack('stormreach');
 
       await vm.confirmPackSelection();
 
@@ -597,11 +580,11 @@ describe('StartViewModel', () => {
     });
 
     test('confirmPackSelection with 1 character routes directly to /game', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       setCharacters(1);
       const vm = createViewModel();
       await vm.openPackBrowser();
-      vm.selectPack('whispering-caves');
+      vm.selectPack('stormreach');
 
       await vm.confirmPackSelection();
 
@@ -610,7 +593,7 @@ describe('StartViewModel', () => {
     });
 
     test('confirmPackSelection with 0 characters routes to persona creation', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       setCharacters(0);
       const vm = createViewModel();
       await vm.openPackBrowser();
@@ -623,7 +606,7 @@ describe('StartViewModel', () => {
     });
 
     test('confirmPackSelection with 2+ characters routes to /personas', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_WHISPERING_CAVES];
+      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       setCharacters(2);
       const vm = createViewModel();
       await vm.openPackBrowser();

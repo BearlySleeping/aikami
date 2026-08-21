@@ -99,6 +99,25 @@ const { viewModel }: Props = $props();
               }}
             >
           </div>
+
+          <!-- TTS Volume -->
+          <div class="form-control">
+            <label class="label" for="settings-audio-tts">
+              <span class="label-text">Speech (TTS)</span>
+              <span class="label-text-alt"> {Math.round(viewModel.ttsVolume * 100)}% </span>
+            </label>
+            <input
+              id="settings-audio-tts"
+              type="range"
+              min="0"
+              max="100"
+              value={Math.round(viewModel.ttsVolume * 100)}
+              class="range"
+              oninput={(e) => {
+                viewModel.setTtsVolume(Number(e.currentTarget.value) / 100);
+              }}
+            >
+          </div>
         </div>
       </div>
     </div>
@@ -233,19 +252,42 @@ const { viewModel }: Props = $props();
             <div class="alert alert-success py-2 text-sm">
               <span>✓ Voice model ready — speech works offline.</span>
             </div>
-            <button
-              type="button"
-              class="btn btn-outline btn-error w-full"
-              onclick={() => viewModel.deleteVoiceModel()}
-            >
-              🗑 Delete voice model
-            </button>
+            <div class="flex gap-2">
+              {#if viewModel.isTtsPlaying}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-error flex-1"
+                  onclick={() => viewModel.stopTts()}
+                >
+                  ⏹ Stop TTS
+                </button>
+              {:else}
+                <button
+                  type="button"
+                  class="btn btn-primary flex-1"
+                  onclick={() => viewModel.testTts()}
+                >
+                  🔊 Test TTS
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-outline btn-error"
+                  onclick={() => viewModel.deleteVoiceModel()}
+                >
+                  🗑 Delete
+                </button>
+              {/if}
+            </div>
           {/if}
 
           <p class="label-text-alt text-base-content/50 px-1">
             Without WebGPU the WASM backend is used and speech will be slower. The model download is
             resumable and verifies a checksum before use.
           </p>
+
+          {#if viewModel.feedback && viewModel.voiceModelState.status === 'ready'}
+            <p class="text-sm font-mono text-base-content/70">{viewModel.feedback}</p>
+          {/if}
         </div>
       </div>
     </div>
