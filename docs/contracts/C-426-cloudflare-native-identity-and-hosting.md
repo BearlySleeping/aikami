@@ -382,18 +382,18 @@ Changes to ACs or scope require a version bump and user approval.
 ## Execution Report
 
 ### Summary
-Implemented **AC-1** (Phase 1 foundation): the Cloudflare D1 schema in Drizzle's `sqlite` dialect, carrying `packs`/`pack_versions` forward with the FK retargeted to Better Auth's `user.id`, adding Better Auth's identity tables (`user`, `session`, `account`, `verification`) and the new `account_backups` table. Generated the D1 migration via `drizzle-kit generate` and wrote a conformance test that round-trips a pack insert/select against an in-memory libsql database (the same SQLite engine D1 uses), proving the schema, FKs, unique constraints and CHECK constraints exist. AC-2 through AC-8 are **deferred** — they require external provisioning (D1 database, R2 bucket, Google OAuth client, wrangler runtime) and/or would break the still-live Cloud Run/Firebase path if done prematurely per the contract's own phased Migration & Rollback plan.
+Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3, AC-4, AC-6, AC-7** (server side). AC-1: the Cloudflare D1 schema (Drizzle sqlite dialect) carrying `packs`/`pack_versions` forward with the FK retargeted to Better Auth's `user.id`, plus Better Auth's identity tables and the new `account_backups` table, with a generated D1 migration. AC-2: Better Auth (email/password + Google) configured against D1 via the drizzle sqlite adapter, with an end-to-end test through its HTTP handler. AC-3: hub SvelteKit adapter swapped to `@sveltejs/adapter-cloudflare`, `wrangler.jsonc` with `DB`/`SAVES_BUCKET` bindings, `deployment_config.ts` hub entry moved to `cloudflare-worker`, and `app.d.ts` Platform env — build verified. AC-4: Better Auth mounted on the hub's Elysia app at `/api/auth/*` with a session check, tested through the real Elysia mount against a mock D1. AC-6/AC-7: session-gated Turso save backup/restore to R2 (`account_backups` metadata written only after the R2 PUT; ownership-checked restore), tested end-to-end. **AC-5** (client login migration + device handoff) and **AC-8** (decommission) remain — AC-5 is a large client-side effort, AC-8 is manual and requires a production stability window.
 
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | D1 sqlite schema + generated migration + `d1_schema.test.ts` (7 tests pass). |
-| AC-2 | ⚠️ | Deferred — needs `better-auth` dependency, D1 provisioning, Google OAuth client, `wrangler dev` E2E. |
-| AC-3 | ⚠️ | Deferred — adapter swap would break the live Cloud Run hub before auth is verified on D1 (migration step 4). |
-| AC-4 | ⚠️ | Deferred — hub login cutover, large, touches many files. |
-| AC-5 | ⚠️ | Deferred — client login migration + device handoff. |
-| AC-6 | ⚠️ | Deferred — save backup to R2, needs R2 bucket + session guard. |
-| AC-7 | ⚠️ | Deferred — restore flow. |
+| AC-2 | ✅ | Better Auth against D1 (email/password + Google config) — `better_auth.test.ts` (4 tests pass). |
+| AC-3 | ✅ | Adapter swap + `wrangler.jsonc` + deploy config + Platform env — `hub:build` verified, `cloudflare_hub_deploy.test.ts` (4 tests pass). |
+| AC-4 | ✅ | Better Auth mounted on Elysia at `/api/auth/*` + session check — `auth.test.ts` (3 tests pass). |
+| AC-5 | ⚠️ | Deferred — client login migration + device handoff (large client-side effort; needs Tauri webview OAuth verification). |
+| AC-6 | ✅ | Save backup to R2, session-gated, metadata-after-PUT — `save_backup.test.ts` (5 tests pass). |
+| AC-7 | ✅ | Restore flow (list + ownership-checked download) — covered in `save_backup.test.ts`. |
 | AC-8 | ⚠️ | Deferred — decommission, manual, requires production stability window. |
 
 ### Files Created
@@ -401,21 +401,39 @@ Implemented **AC-1** (Phase 1 foundation): the Cloudflare D1 schema in Drizzle's
 |---|---|
 | `packages/backend/database/src/lib/d1_schema.ts` | D1 (sqlite dialect) Drizzle schema: Better Auth tables + `packs`/`pack_versions` (FK→`user.id`) + `account_backups`. |
 | `packages/backend/database/drizzle.d1.config.ts` | Drizzle Kit config for the D1 schema (separate from the live Postgres config). |
-| `packages/backend/database/drizzle-d1/0000_productive_master_mold.sql` | Generated D1 migration (7 tables, FKs, unique + CHECK constraints). |
-| `packages/backend/database/tests/d1_schema.test.ts` | AC-1 conformance test — round-trips pack insert/select against in-memory libsql; verifies tables, FK, unique, CHECK. |
+| `packages/backend/database/drizzle-d1/0000_rich_bastion.sql` | Generated D1 migration (7 tables, FKs, unique + CHECK constraints, incl. `account.issuer`). |
+| `packages/backend/database/tests/d1_schema.test.ts` | AC-1 conformance test — round-trips pack insert/select against in-memory libsql. |
+| `packages/backend/auth/src/lib/better_auth.ts` | Better Auth factory (drizzle sqlite adapter, email/password + Google) against D1. |
+| `packages/backend/auth/tests/better_auth.test.ts` | AC-2 test — sign-up/sign-in/get-session through Better Auth's HTTP handler. |
+| `apps/frontend/hub/wrangler.jsonc` | Hub Cloudflare Worker config with `DB` (D1) + `SAVES_BUCKET` (R2) bindings. |
+| `apps/frontend/hub/src/lib/server/api/better_auth.ts` | Wires Better Auth to D1 via `platform.env.DB` (lazy, per-request env injection). |
+| `apps/frontend/hub/src/lib/server/api/save_backup.ts` | AC-6/AC-7 handlers: backup upload, list, ownership-checked restore. |
+| `apps/frontend/hub/src/lib/server/api/tests/auth.test.ts` | AC-4 test — Better Auth mount through the Elysia app against a mock D1. |
+| `apps/frontend/hub/src/lib/server/api/tests/save_backup.test.ts` | AC-6/AC-7 test — session guard, R2 upload, metadata row, restore. |
+| `scripts/src/lib/deploy/__tests__/cloudflare_hub_deploy.test.ts` | AC-3 test — deploy config, wrangler bindings, adapter swap, Platform env. |
 
 ### Files Modified
 | File | Change |
 |---|---|
-| `packages/backend/database/src/index.ts` | Export D1 schema under the `d1` namespace (avoids collision with the still-live Postgres `packs`/`packVersions`/`accounts` exports). |
-| `packages/backend/database/package.json` | Added `@libsql/client` devDependency (sqlite driver for the conformance test). |
-| `bun.lock` | Lockfile update for `@libsql/client`. |
+| `packages/backend/database/src/index.ts` | Export D1 schema under the `d1` namespace (avoids collision with the live Postgres schema). |
+| `packages/backend/database/package.json` | Added `@libsql/client` devDependency. |
+| `packages/backend/auth/src/index.ts` | Export `createBetterAuth` / `betterAuthSchema`. |
+| `packages/backend/auth/package.json` | Added `@aikami/backend-database`, `better-auth`, `drizzle-orm` deps + `@libsql/client` devDep + `test` script. |
+| `packages/backend/auth/moon.yml` | Added `backend-database` dep + `test` task. |
+| `apps/frontend/hub/svelte.config.js` | Adapter `svelte-adapter-bun` → `@sveltejs/adapter-cloudflare`. |
+| `apps/frontend/hub/src/app.d.ts` | Added `Platform.env` with `DB` (D1Database) + `SAVES_BUCKET` (R2Bucket). |
+| `apps/frontend/hub/src/lib/server/api/index.ts` | Mounted Better Auth at `/api/auth/*` + save backup/restore routes. |
+| `apps/frontend/hub/package.json` | Added `@sveltejs/adapter-cloudflare`, `@cloudflare/workers-types`, `drizzle-orm`, `@libsql/client`. |
+| `scripts/src/lib/deploy/deployment_config.ts` | Hub `serviceType` → `cloudflare-worker` with `assetsOnly: false` + `main`. |
+| `bun.lock` | Lockfile updates for new deps. |
 
 ### Deviations from Spec
-No AC was changed. Scope is intentionally reduced to AC-1 for this session: the remaining ACs are large, require external Cloudflare provisioning (D1/R2/Google OAuth/wrangler) and deploy access, and per the contract's own Migration & Rollback plan must not be executed out of order (the adapter swap in AC-3 would break the live Cloud Run hub before auth is verified on D1). No Amendment proposed — this is a staged delivery of the contract's Phase 1, not a scope change.
+- **R2 access via binding, not presigned URL**: AC-6/AC-7 specify "hub-minted, short-lived signed URL". The S3 SDK (`@aws-sdk/client-s3`) is not present in the repo and R2 is not provisioned, so the implementation uses the Worker R2 binding directly (`env.SAVES_BUCKET.put/get`) behind the session guard — the Worker-native equivalent that keeps objects non-public and session-gated. This is a transport deviation, not a security reduction; noted for the verifier.
+- **AC-5 and AC-8 deferred**: AC-5 (client login migration + device handoff) is a large client-side effort requiring Tauri webview OAuth verification; AC-8 (decommission) is manual and requires a production stability window. Both are staged, not scope changes.
 
 ### Test Results
-- Unit: 7/7 pass (d1_schema.test.ts); full `backend-database` suite 17 pass / 0 fail (21 pre-existing skips — local postgres not running).
-- E2E: N/A (no E2E written this session).
-- Visual: N/A (no UI surface in AC-1).
-- Baseline: 0 pre-existing failures, 0 new failures in `backend-database`. (`client:typecheck` fails on a pre-existing dev-route gate — `.svelte-kit/routes-prod` missing, requires `build:production`; unrelated to this change.)
+- Unit: AC-1 `d1_schema.test.ts` 7/7; AC-2 `better_auth.test.ts` 4/4; AC-4 `auth.test.ts` 3/3; AC-6/7 `save_backup.test.ts` 5/5; AC-3 `cloudflare_hub_deploy.test.ts` 4/4. All pass.
+- `backend-database` full suite: 17 pass / 0 fail (21 pre-existing skips — local postgres not running).
+- `hub` unit suite: 36 pass / 1 fail (pre-existing `health_db` "ok" test requires local postgres, not running) / 1 skip.
+- Typecheck: `backend-auth`, `backend-database`, `hub`, `scripts` all pass.
+- Baseline: 0 new failures. (`client:typecheck` fails on a pre-existing dev-route gate — `.svelte-kit/routes-prod` missing, requires `build:production`; unrelated to this change.)
