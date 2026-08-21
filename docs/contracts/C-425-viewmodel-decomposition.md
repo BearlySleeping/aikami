@@ -2,7 +2,7 @@
 id: C-425
 title: "ViewModel Decomposition — split the two oversized ViewModels into focused sub-services"
 source: "Split out of C-424 v3.0.0 (2026-08-21) — structural refactor separated from user-facing surface work"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P2 — maintainability only. Real, but no player ever sees it. |
 | **Sequence** | **6 of 6** — last, and deliberately so. Do this after C-424 has already removed duplicated message-layer code from both ViewModels; decomposing first would mean decomposing code that is about to be deleted. |
 | **Dependencies** | C-424 (sequence 3) must be fully landed |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -251,3 +251,58 @@ Target: **`integrated`**. No visual evidence required — there is nothing to se
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Decomposed the two oversized ViewModels by extracting cohesive concerns into
+composed sub-services, preserving each public interface exactly so no view and
+no existing test changed. From `chat_view_model` (1201 lines) extracted the
+slash-command autocomplete concern into `SlashCommandAutocomplete`. From
+`combat_view_model` (1640 lines) extracted the status-effect/death-save concern
+into `StatusEffectsService` and the combat-log entry domain logic into
+`CombatLogService`. Each sub-service owns one responsibility, has its own
+focused tests, and does not reach back into its parent. All existing chat and
+combat tests pass unmodified; reactivity through the composed sub-services was
+verified. This is a P2 maintainability refactor with no user-visible change.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Chat decomposed: `SlashCommandAutocomplete` extracted; public interface unchanged; all 10 existing chat tests pass unmodified; sub-service has 11 own tests. |
+| AC-2 | ✅ | Combat decomposed: `StatusEffectsService` + `CombatLogService` extracted; public interface unchanged; all 22 existing combat tests pass unmodified; sub-services have 20 own tests. |
+| AC-3 | ✅ | Each sub-service has one nameable responsibility, own tests, and no parent back-reference (see below). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/chat/slash_command_autocomplete.svelte.ts` | Sub-service owning slash-command autocomplete state + navigation/apply logic. |
+| `apps/frontend/client/src/lib/views/chat/slash_command_autocomplete.test.ts` | 11 unit tests for the autocomplete sub-service. |
+| `apps/frontend/client/src/lib/views/combat/status_effects_service.svelte.ts` | Sub-service owning status-effect + death-save state (C-338). |
+| `apps/frontend/client/src/lib/views/combat/status_effects_service.test.ts` | 10 unit tests for the status-effects sub-service. |
+| `apps/frontend/client/src/lib/views/combat/combat_log_service.svelte.ts` | Sub-service owning combat-log entry domain logic (C-165); also the new home of the `CombatLogEntry` type (re-exported from the VM). |
+| `apps/frontend/client/src/lib/views/combat/combat_log_service.test.ts` | 10 unit tests for the combat-log sub-service. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` | Replaced slash-completion state/methods with delegation to `SlashCommandAutocomplete`; added getters + dispose override. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | Replaced status-effect/death-save state with getters delegating to `StatusEffectsService`; delegated `_parseActorFromMessage`/`_updateLogEntryImage` to `CombatLogService`; re-exported `CombatLogEntry`; added constructor + dispose reset. |
+
+### Deviations from Spec
+None. Scope held to the two named ViewModels; no behaviour change, no view
+change, no other ViewModels touched. The `:fix` task auto-formats a few
+pre-existing unrelated files (campaign_service, chat.svelte, dice_notation)
+during `validate`; these were reverted to keep the change scoped to the
+contract. No Amendment required.
+
+### Test Results
+- Unit: 63/63 focused tests pass (10 existing chat + 22 existing combat + 31 new sub-service tests). Full client suite: 1968 pass, 1 pre-existing failure (`game_boot_service` cancellation — Tauri env, fails on base commit too), 0 new failures.
+- E2E: not run — internal refactor, no user-facing flow; contract's Promotion Lifecycle states no visual evidence required.
+- Visual: N/A — internal refactor, nothing to see.
+- Baseline: 1 pre-existing failure (`game_boot_service`), 0 new failures.
+
+### Sub-service responsibilities (AC-3)
+- `SlashCommandAutocomplete` — "Owns the slash-command autocomplete state and navigation/apply logic for the chat composer." Delegates input mutation via an injected `onApply` callback; no parent back-reference.
+- `StatusEffectsService` — "Owns the status-effect and death-save state for the combat UI." Bridge events are translated to method calls by the parent; no parent back-reference.
+- `CombatLogService` — "Owns the combat-log entry domain logic (creation, actor parsing, inline-image updates)." Pure functions over the entries array; no parent back-reference, no shared mutable state with siblings.
