@@ -22,6 +22,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@libsql/client": "^0.17.4",
     "@types/pg": "8.23.1",
     "drizzle-kit": "^0.31.10"
   }

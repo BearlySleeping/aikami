@@ -270,6 +270,21 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
   } else {
     json.main = cf.main;
     json.assets = { binding: 'ASSETS', directory: assetDir };
+    // C-426 AC-3: SSR Workers (hub) need their D1 + R2 bindings and the
+    // nodejs_compat flag in the generated per-mode wrangler config.
+    if (cf.d1Databases?.length) {
+      json.d1_databases = cf.d1Databases.map((d) => ({
+        binding: d.binding,
+        database_name: d.databaseName,
+        database_id: d.databaseId,
+      }));
+    }
+    if (cf.r2Buckets?.length) {
+      json.r2_buckets = cf.r2Buckets.map((r) => ({
+        binding: r.binding,
+        bucket_name: r.bucketName,
+      }));
+    }
   }
 
   // Workers Observability — without this, logs are disabled and there is no

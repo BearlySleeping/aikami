@@ -6,11 +6,18 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write . --error-on-warnings"
+    "fix": "biome check --write . --error-on-warnings",
+    "test": "bun test"
   },
   "dependencies": {
+    "@aikami/backend-database": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "better-auth": "^1.7.1",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.17.4"
   }
 }

@@ -86,6 +86,10 @@ export type CloudflareAppConfig =
       routes: Partial<Record<LiveMode, string>>;
       /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
       headersSource?: string;
+      /** D1 database bindings emitted into the generated wrangler config. */
+      d1Databases?: Array<{ binding: string; databaseName: string; databaseId: string }>;
+      /** R2 bucket bindings emitted into the generated wrangler config. */
+      r2Buckets?: Array<{ binding: string; bucketName: string }>;
     };
 
 export type AppConfig = {
@@ -192,17 +196,35 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       headersSource: 'public/_headers',
     },
   },
-  /** SvelteKit SSR dashboard — deployed to Cloud Run (aikami-hub), fronted by Firebase Hosting sites per mode. */
+  /** SvelteKit SSR dashboard — deployed as a Cloudflare Worker (C-426 AC-3), was Cloud Run. */
   hub: {
-    serviceType: 'cloud-run-sveltekit',
+    serviceType: 'cloudflare-worker',
     path: 'apps/frontend/hub',
     shortName: 'hub',
     prefix: 'HUB',
-    cloudRunServiceId: 'aikami-hub',
-    region: 'europe-west4',
     customDomains: {
       production: 'hub.bearlysleeping.com',
       staging: 'hub.stg.bearlysleeping.com',
+    },
+    cloudflare: {
+      workerName: (mode) => (mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`),
+      buildOutputDir: 'build',
+      assetsOnly: false,
+      main: 'build/_worker.js',
+      compatibilityDate: '2026-08-21',
+      compatibilityFlags: ['nodejs_compat'],
+      d1Databases: [
+        {
+          binding: 'DB',
+          databaseName: 'aikami-hub',
+          databaseId: 'REPLACE_WITH_D1_DATABASE_ID',
+        },
+      ],
+      r2Buckets: [{ binding: 'SAVES_BUCKET', bucketName: 'aikami-saves' }],
+      routes: {
+        production: 'hub.bearlysleeping.com',
+        staging: 'hub.stg.bearlysleeping.com',
+      },
     },
   },
   /** Starlight documentation site — static build deployed to its own Worker. */
