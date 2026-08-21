@@ -85,6 +85,15 @@ describe('Better Auth against D1 (AC-2)', () => {
   });
 
   test('email/password sign-in sets a session cookie and get-session recognizes it', async () => {
+    // Self-contained: create the user before signing in (don't depend on the
+    // sign-up test having run first).
+    await auth.handler(
+      post('/api/auth/sign-up/email', {
+        name: 'Alice',
+        email: 'alice@example.com',
+        password: 'password123',
+      }),
+    );
     const signInRes = await auth.handler(
       post('/api/auth/sign-in/email', {
         email: 'alice@example.com',

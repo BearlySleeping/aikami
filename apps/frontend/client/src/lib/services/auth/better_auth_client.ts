@@ -194,36 +194,29 @@ export const socialSignInRedirect = (provider: FirebaseSignInProviderName): void
  * Request a device authorization from the hub (Better Auth device-authorization
  * flow). Returns the device code and the verification URI to open in the system
  * browser (the /link page), where the user signs in and approves the device.
+ *
+ * 🔴 GATED: the hub's Better Auth device-authorization plugin is not yet
+ * mounted, so this endpoint does not exist. Callers must not invoke it — the
+ * Tauri path falls back to the Firebase device-link flow instead. This throws a
+ * clear error rather than silently hitting a 404.
  */
 export const startDeviceHandoff = async (): Promise<DeviceHandoffStart> => {
-  const response = await fetch(`${hubApiBase()}/auth/device-authorization`, {
-    method: 'POST',
-    headers: jsonHeaders,
-    credentials: 'include',
+  throw toAppError({
+    errorType: 'unavailable',
+    errorMessage: 'Device authorization is not yet available on the hub.',
   });
-  if (!response.ok) {
-    throw await toAppErrorFromResponse(response);
-  }
-  return (await response.json()) as DeviceHandoffStart;
 };
 
 /**
  * Poll the hub to check whether a device authorization was approved. Returns
  * the adopted `CurrentUser` once approved, or `undefined` while still pending
  * (the hub answers 202 for pending). The caller keeps polling on `undefined`.
+ *
+ * 🔴 GATED: see {@link startDeviceHandoff} — the hub plugin is not mounted.
  */
-export const pollDeviceHandoff = async (deviceCode: string): Promise<CurrentUser | undefined> => {
-  const response = await fetch(`${hubApiBase()}/auth/device-authorization/status`, {
-    method: 'POST',
-    headers: jsonHeaders,
-    credentials: 'include',
-    body: JSON.stringify({ deviceCode }),
+export const pollDeviceHandoff = async (_deviceCode: string): Promise<CurrentUser | undefined> => {
+  throw toAppError({
+    errorType: 'unavailable',
+    errorMessage: 'Device authorization is not yet available on the hub.',
   });
-  if (response.status === 202) {
-    return undefined;
-  }
-  if (!response.ok) {
-    throw await toAppErrorFromResponse(response);
-  }
-  return await parseSession(response);
 };

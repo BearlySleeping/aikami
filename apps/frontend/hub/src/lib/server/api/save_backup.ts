@@ -37,9 +37,28 @@ export const setSaveBackupEnv = (envValue: SaveBackupEnv | undefined): void => {
 /** The injected env, or undefined when the hub is not on a Worker yet. */
 export const getSaveBackupEnv = (): SaveBackupEnv | undefined => _env;
 
-/** R2 object key prefix for a given account. */
-export const saveKeyFor = (accountId: string, timestamp: number, filename: string): string =>
-  `saves/${accountId}/${timestamp}-${filename}`;
+/** Per-backup size cap (64 MiB) — reject oversized uploads before buffering. */
+export const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
+
+/** Per-account backup count cap — a simple storage-quota guard. */
+export const MAX_BACKUPS_PER_ACCOUNT = 20;
+
+/**
+ * R2 object key for a given account. The backup UUID is embedded so each
+ * upload gets a collision-resistant key even within the same millisecond.
+ */
+export const saveKeyFor = (
+  accountId: string,
+  timestamp: number,
+  filename: string,
+  backupId: string,
+): string => `saves/${accountId}/${timestamp}-${backupId}-${filename}`;
+
+/** SHA-256 hex digest of the uploaded bytes (for the checksum column). */
+const sha256Hex = async (bytes: ArrayBuffer): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 /** Resolve the signed-in user id from the request, or undefined. */
 const getSessionUserId = async (request: Request): Promise<string | undefined> => {
@@ -82,6 +101,16 @@ export const handleCreateBackup = async (
     });
   }
 
+  // Reject oversized uploads up front via Content-Length, then again after
+  // reading, so we never buffer an unbounded body.
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_BACKUP_BYTES) {
+    return new Response(JSON.stringify({ error: 'backup_too_large' }), {
+      status: 413,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
   const bytes = await request.arrayBuffer();
   if (bytes.byteLength === 0) {
     return new Response(JSON.stringify({ error: 'invalid-argument' }), {
@@ -89,9 +118,29 @@ export const handleCreateBackup = async (
       headers: { 'content-type': 'application/json' },
     });
   }
+  if (bytes.byteLength > MAX_BACKUP_BYTES) {
+    return new Response(JSON.stringify({ error: 'backup_too_large' }), {
+      status: 413,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
 
+  // Storage-quota guard: cap the number of backups per account.
+  const db = drizzle(env.DB, { schema: d1 });
+  const existing = await db
+    .select({ id: d1.accountBackups.id })
+    .from(d1.accountBackups)
+    .where(eq(d1.accountBackups.accountId, accountId));
+  if (existing.length >= MAX_BACKUPS_PER_ACCOUNT) {
+    return new Response(JSON.stringify({ error: 'quota_exceeded' }), {
+      status: 429,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  const backupId = crypto.randomUUID();
   const timestamp = Date.now();
-  const r2Key = saveKeyFor(accountId, timestamp, filename);
+  const r2Key = saveKeyFor(accountId, timestamp, filename, backupId);
 
   // Upload to R2 first — only on success do we write the metadata row.
   await env.SAVES_BUCKET.put(r2Key, bytes, {
@@ -99,23 +148,30 @@ export const handleCreateBackup = async (
   });
 
   const sizeBytes = bytes.byteLength;
-  const db = drizzle(env.DB, { schema: d1 });
-  const row = await db
-    .insert(d1.accountBackups)
-    .values({
-      id: crypto.randomUUID(),
-      accountId,
-      r2Key,
-      sizeBytes,
-      checksumSha256: '',
-      createdAt: new Date(),
-    })
-    .returning();
+  const checksumSha256 = await sha256Hex(bytes);
+  try {
+    const row = await db
+      .insert(d1.accountBackups)
+      .values({
+        id: backupId,
+        accountId,
+        r2Key,
+        sizeBytes,
+        checksumSha256,
+        createdAt: new Date(),
+      })
+      .returning();
 
-  return new Response(JSON.stringify({ backupId: row[0].id, r2Key }), {
-    status: 201,
-    headers: { 'content-type': 'application/json' },
-  });
+    return new Response(JSON.stringify({ backupId: row[0].id, r2Key }), {
+      status: 201,
+      headers: { 'content-type': 'application/json' },
+    });
+  } catch (error) {
+    // Metadata insert failed — delete the already-uploaded R2 object so no
+    // successful upload remains without a metadata row (AC-6 idempotency).
+    await env.SAVES_BUCKET.delete(r2Key).catch(() => undefined);
+    throw error;
+  }
 };
 
 /**

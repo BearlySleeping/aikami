@@ -54,12 +54,19 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
     emailAndPassword: {
       enabled: true,
     },
-    socialProviders: {
-      google: {
-        clientId: env.googleClientId ?? '',
-        clientSecret: env.googleClientSecret ?? '',
-      },
-    },
+    // Only configure Google OAuth when BOTH credentials are present — Better
+    // Auth 1.7.1 treats a provider with empty-string credentials as configured
+    // and throws CLIENT_ID_AND_SECRET_REQUIRED when the flow starts.
+    ...(env.googleClientId && env.googleClientSecret
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.googleClientId,
+              clientSecret: env.googleClientSecret,
+            },
+          },
+        }
+      : {}),
   });
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;

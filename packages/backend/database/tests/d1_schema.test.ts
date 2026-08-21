@@ -62,6 +62,22 @@ afterAll(async () => {
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Assert a promise rejects with a SQLite constraint error whose message
+ * (on the wrapped `cause`) matches `pattern`. Drizzle wraps the libsql error
+ * as `Failed query: …` with the real message on `error.cause.message`.
+ */
+const expectConstraint = async (promise: Promise<unknown>, pattern: RegExp): Promise<void> => {
+  try {
+    await promise;
+    throw new Error('expected the promise to reject');
+  } catch (error) {
+    const cause = (error as { cause?: { message?: string } }).cause;
+    const message = cause?.message ?? (error as Error).message;
+    expect(message).toMatch(pattern);
+  }
+};
+
 const insertUser = async (id: string, email: string) => {
   const now = new Date();
   await db.insert(users).values({
@@ -149,7 +165,7 @@ describe('D1 schema (AC-1)', () => {
 
   test('packs.owner_account_id has a foreign key to user.id (RESTRICT)', async () => {
     // Inserting a pack with a non-existent owner must be rejected by the FK.
-    await expect(
+    await expectConstraint(
       db
         .insert(packs)
         .values({
@@ -161,7 +177,8 @@ describe('D1 schema (AC-1)', () => {
           updatedAt: new Date(),
         })
         .run(),
-    ).rejects.toThrow();
+      /FOREIGN KEY constraint failed/i,
+    );
   });
 
   test('a second pack with the same slug is rejected (unique)', async () => {
@@ -174,7 +191,7 @@ describe('D1 schema (AC-1)', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    await expect(
+    await expectConstraint(
       db
         .insert(packs)
         .values({
@@ -186,12 +203,13 @@ describe('D1 schema (AC-1)', () => {
           updatedAt: new Date(),
         })
         .run(),
-    ).rejects.toThrow();
+      /UNIQUE constraint failed/i,
+    );
   });
 
   test('an invalid visibility value is rejected by the CHECK constraint', async () => {
     await insertUser('user-3', 'carol@example.com');
-    await expect(
+    await expectConstraint(
       db
         .insert(packs)
         .values({
@@ -203,7 +221,8 @@ describe('D1 schema (AC-1)', () => {
           updatedAt: new Date(),
         })
         .run(),
-    ).rejects.toThrow();
+      /CHECK constraint failed/i,
+    );
   });
 
   test('account_backups round-trips and references user.id', async () => {
@@ -221,6 +240,59 @@ describe('D1 schema (AC-1)', () => {
       .returning();
     expect(backup[0].r2Key).toBe('saves/user-4/1700000000000-save.db');
     expect(backup[0].sizeBytes).toBe(4096);
+  });
+
+  test('deleting a user cascades to their account_backups rows', async () => {
+    await insertUser('user-cascade', 'cascade@example.com');
+    await db.insert(accountBackups).values({
+      id: 'backup-cascade',
+      accountId: 'user-cascade',
+      r2Key: 'saves/user-cascade/1700000000000-save.db',
+      sizeBytes: 1024,
+      checksumSha256: 'd'.repeat(64),
+      createdAt: new Date(),
+    });
+
+    await db.delete(users).where(eq(users.id, 'user-cascade'));
+
+    const rows = await db
+      .select()
+      .from(accountBackups)
+      .where(eq(accountBackups.accountId, 'user-cascade'));
+    expect(rows).toHaveLength(0);
+  });
+
+  test('a duplicate (pack_id, version) pair is rejected (unique)', async () => {
+    await insertUser('user-pv', 'pv@example.com');
+    await db.insert(packs).values({
+      id: 'pack-pv',
+      slug: 'pv-pack',
+      ownerAccountId: 'user-pv',
+      visibility: 'draft',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(packVersions).values({
+      id: 'pv-a',
+      packId: 'pack-pv',
+      version: '1.0.0',
+      manifestHash: 'e'.repeat(64),
+      createdAt: new Date(),
+    });
+
+    await expectConstraint(
+      db
+        .insert(packVersions)
+        .values({
+          id: 'pv-b',
+          packId: 'pack-pv',
+          version: '1.0.0',
+          manifestHash: 'f'.repeat(64),
+          createdAt: new Date(),
+        })
+        .run(),
+      /UNIQUE constraint failed/i,
+    );
   });
 
   test('Better Auth identity tables are present and usable', async () => {
@@ -244,6 +316,7 @@ describe('D1 schema (AC-1)', () => {
         id: 'acct-1',
         accountId: 'google-123',
         providerId: 'google',
+        issuer: 'https://accounts.google.com',
         userId: 'user-5',
         createdAt: new Date(),
         updatedAt: new Date(),

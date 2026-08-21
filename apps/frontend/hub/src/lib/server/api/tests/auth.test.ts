@@ -58,7 +58,7 @@ const createMockD1 = (dbClient: Client): unknown => {
       await dbClient.execute(sql);
     },
     batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(statements.map((s) => client.execute({ sql: s.sql, args: s.params ?? [] }))),
+      Promise.all(statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] }))),
   };
 };
 
@@ -171,5 +171,46 @@ describe('hub Better Auth mount (AC-4)', () => {
     const body = (await res.json()) as { user?: unknown } | null;
     // Better Auth returns `null` (no session) for an invalid/absent token.
     expect(body === null || body.user === undefined).toBe(true);
+  });
+
+  test('wrong-password sign-in returns a non-200 with no session cookie', async () => {
+    const res = await app.handle(
+      post('/api/auth/sign-in/email', {
+        email: 'alice@example.com',
+        password: 'wrong-password',
+      }),
+    );
+    expect(res.status).not.toBe(200);
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  test('duplicate-email sign-up fails', async () => {
+    const res = await app.handle(
+      post('/api/auth/sign-up/email', {
+        name: 'Alice2',
+        email: 'alice@example.com',
+        password: 'password123',
+      }),
+    );
+    expect(res.status).not.toBe(200);
+  });
+
+  test('getBetterAuth() returns undefined and the mounted handler 503s with no D1 env', async () => {
+    const betterAuthModule = await import('../better_auth.ts');
+    setBetterAuthEnv(undefined);
+    try {
+      expect(betterAuthModule.getBetterAuth()).toBeUndefined();
+      const res = await app.handle(
+        post('/api/auth/sign-in/email', {
+          email: 'alice@example.com',
+          password: 'password123',
+        }),
+      );
+      expect(res.status).toBe(503);
+    } finally {
+      // Restore the env so the remaining tests keep working.
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      setBetterAuthEnv({ DB: createMockD1(client) });
+    }
   });
 });

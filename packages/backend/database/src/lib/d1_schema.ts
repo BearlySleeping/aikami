@@ -71,7 +71,7 @@ export const accounts = sqliteTable(
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
     /** OAuth issuer — Better Auth requires this field on the account table. */
-    issuer: text('issuer'),
+    issuer: text('issuer').notNull(),
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -85,7 +85,11 @@ export const accounts = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [index('account_user_id_idx').on(table.userId)],
+  (table) => [
+    index('account_user_id_idx').on(table.userId),
+    // One identity per (issuer, accountId) — Better Auth's account model.
+    uniqueIndex('account_issuer_account_id_unique').on(table.issuer, table.accountId),
+  ],
 );
 
 /** A Better Auth verification token (email verification, password reset, …). */
@@ -133,7 +137,7 @@ export const packs = sqliteTable(
     // enforced at the repository/app layer.)
     check(
       'packs_slug_url_safe',
-      sql`${table.slug} GLOB '[a-z0-9-]*' AND length(${table.slug}) > 0`,
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
     ),
     check(
       'packs_visibility_valid',

@@ -38,10 +38,19 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     return undefined;
   }
   if (!_auth) {
+    const baseURL = env.BETTER_AUTH_URL;
+    const secret = env.BETTER_AUTH_SECRET;
+    // Never fall back to a hardcoded secret or a localhost base URL in
+    // production — a missing secret would let anyone forge sessions. The
+    // dev-only fallbacks are gated behind an explicit non-production check.
+    const isProduction = baseURL?.includes('bearlysleeping.com') ?? false;
+    if (isProduction && (!baseURL || !secret)) {
+      throw new Error('BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in production');
+    }
     const db = drizzle(_env.DB, { schema: d1 });
     _auth = createBetterAuth(db, {
-      baseURL: env.BETTER_AUTH_URL ?? 'http://localhost:5173',
-      secret: env.BETTER_AUTH_SECRET ?? 'dev-secret-not-for-production',
+      baseURL: baseURL ?? 'http://localhost:5173',
+      secret: secret ?? 'dev-secret-not-for-production',
       googleClientId: env.GOOGLE_CLIENT_ID,
       googleClientSecret: env.GOOGLE_CLIENT_SECRET,
     });

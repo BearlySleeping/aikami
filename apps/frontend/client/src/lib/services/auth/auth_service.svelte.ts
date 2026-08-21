@@ -12,6 +12,8 @@
 //   3. _awaitDeviceHandoffToken() races a poll loop against a Tauri deep-
 //      link event for that same code — whichever notices first calls
 //      signInWithCustomToken. See src-tauri/src/lib.rs for the Rust half.
+
+import { getAuthBackend } from '@aikami/frontend/configs';
 import {
   type AuthProviderId,
   BaseFrontendClass,
@@ -42,10 +44,8 @@ import {
   signInWithEmailAndPassword as baSignInWithEmailAndPassword,
   signUpWithEmailAndPassword as baSignUpWithEmailAndPassword,
   getBetterAuthSession,
-  pollDeviceHandoff,
   signOutBetterAuth,
   socialSignInRedirect,
-  startDeviceHandoff,
 } from './better_auth_client';
 
 /**
@@ -204,13 +204,16 @@ export class AuthService
    * so the cutover is revertible per-release without a hub-side change.
    */
   private _isBetterAuth(): boolean {
-    return import.meta.env.PUBLIC_AUTH_BACKEND === 'better-auth';
+    return getAuthBackend() === 'better-auth';
   }
 
   async initialize(): Promise<CurrentUser | undefined> {
     this.log('initialize');
+    // Single-flight for BOTH auth paths: concurrent callers (AppViewModel,
+    // LinkViewModel, …) share one in-flight session request.
     if (this._isBetterAuth()) {
-      return await this._initializeBetterAuth();
+      this._initPromise ??= this._initializeBetterAuth();
+      return await this._initPromise;
     }
     if (!this._initPromise) {
       this._initPromise = this._initializeOnce();
@@ -455,8 +458,9 @@ export class AuthService
   /**
    * C-426 AC-5: Better Auth social sign-in. Browser: redirect to the hub's
    * Google OAuth (the page reloads and the callback route adopts the session).
-   * Tauri: device-authorization flow — open the verification URI in the system
-   * browser and poll until the user approves.
+   * Tauri: the hub's Better Auth device-authorization plugin is not yet
+   * mounted, so fall back to the working Firebase device-link flow rather than
+   * calling the unavailable /api/auth/device-authorization endpoint.
    */
   private async _betterAuthSocialSignIn(
     provider: FirebaseSignInProviderName,
@@ -467,50 +471,7 @@ export class AuthService
       // after the callback route resolves, so this placeholder is never read.
       return { status: 'exitingUser', payload: this.currentUser as unknown as User };
     }
-
-    try {
-      const { deviceCode, verificationUri } = await startDeviceHandoff();
-      const { openUrl } = await import('@tauri-apps/plugin-opener');
-      await openUrl(verificationUri);
-
-      const user = await this._awaitBetterAuthDeviceApproval(deviceCode);
-      if (!user) {
-        throw new Error('Sign-in timed out — please try again.');
-      }
-      this.setCurrentUser(user);
-      return { status: 'exitingUser', payload: user as unknown as User };
-    } catch (error) {
-      this.error('betterAuthSocialSignIn', error);
-      const errMsg = error instanceof Error ? error.message : 'Sign-in failed';
-      this.showSnackbar({ text: `Sign-in failed: ${errMsg}`, type: 'error' });
-      return {
-        status: 'failed',
-        payload: {
-          code: 'device-handoff-failed',
-          message: errMsg,
-          email: '',
-          accountExists: false,
-        } as unknown as SocialSignInError,
-      };
-    }
-  }
-
-  /**
-   * C-426 AC-5: poll the hub until a device authorization is approved or the
-   * wait times out. Same polling cadence as the Firebase device-link flow.
-   */
-  private async _awaitBetterAuthDeviceApproval(
-    deviceCode: string,
-  ): Promise<CurrentUser | undefined> {
-    const deadline = Date.now() + DEVICE_LINK_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const user = await pollDeviceHandoff(deviceCode);
-      if (user) {
-        return user;
-      }
-      await new Promise((resolve) => setTimeout(resolve, DEVICE_LINK_POLL_INTERVAL_MS));
-    }
-    return undefined;
+    return this._linkDeviceSignIn();
   }
 
   private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
@@ -746,9 +707,10 @@ export class AuthService
 
   async registerUser(registerForm: RegisterForm): Promise<boolean> {
     try {
-      this.setIsChangingAuthState(true);
-
       this.log('registerUser', { registerForm });
+      // Better Auth path: never touch the Firebase changing-state machinery —
+      // setIsChangingAuthState(false) re-hydrates from Firebase getAuthUser()
+      // and would overwrite the user just established by setCurrentUser.
       if (this._isBetterAuth()) {
         const user = await baSignUpWithEmailAndPassword({
           name: registerForm.displayName,
@@ -759,9 +721,9 @@ export class AuthService
         void this.logEvent('signUp', {
           method: registerForm.signInProvider,
         });
-        this.setIsChangingAuthState(false);
         return true;
       }
+      this.setIsChangingAuthState(true);
       const { customFirebaseSignInToken } = await this.callAuthEndpoint({
         payload: {
           registerForm,

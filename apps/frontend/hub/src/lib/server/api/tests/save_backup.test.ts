@@ -58,9 +58,16 @@ const createMockD1 = (dbClient: Client): unknown => {
 // ── Mock R2 bucket (in-memory) ──────────────────────────────────────────
 const createMockR2 = () => {
   const store = new Map<string, Uint8Array>();
+  let failPut = false;
   return {
     store,
+    failPut: (v: boolean) => {
+      failPut = v;
+    },
     put: async (key: string, value: ArrayBuffer | Uint8Array) => {
+      if (failPut) {
+        throw new Error('R2 put failed');
+      }
       store.set(key, new Uint8Array(value as ArrayBuffer));
       return { key };
     },
@@ -70,6 +77,9 @@ const createMockR2 = () => {
         return null;
       }
       return { body: new Blob([bytes]).stream() };
+    },
+    delete: async (key: string) => {
+      store.delete(key);
     },
   };
 };
@@ -196,10 +206,34 @@ describe('save backup/restore (AC-6/AC-7)', () => {
     expect(body.r2Key).toContain('saves/');
 
     // The metadata row exists and the R2 object was written.
-    const rows = await client.execute('SELECT id, r2_key, size_bytes FROM account_backups');
+    const rows = await client.execute(
+      'SELECT id, r2_key, size_bytes, checksum_sha256 FROM account_backups',
+    );
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0].size_bytes).toBe(5);
+    // The SHA-256 checksum is persisted, not an empty string.
+    expect(rows.rows[0].checksum_sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(r2.store.size).toBe(1);
+  });
+
+  test('a failed R2 PUT returns a failure and records no account_backups row', async () => {
+    const cookie = await signInCookie('dave@example.com');
+    const before = await client.execute('SELECT id FROM account_backups');
+    const beforeCount = before.rows.length;
+    const beforeR2 = r2.store.size;
+    r2.failPut(true);
+    try {
+      const res = await app.handle(
+        postBytes('/api/saves/backup?filename=save.db', new Uint8Array([9, 9, 9]), cookie),
+      );
+      expect(res.status).not.toBe(201);
+      // No new metadata row and no new R2 object were created.
+      const after = await client.execute('SELECT id FROM account_backups');
+      expect(after.rows.length).toBe(beforeCount);
+      expect(r2.store.size).toBe(beforeR2);
+    } finally {
+      r2.failPut(false);
+    }
   });
 
   test('list returns the signed-in user backups', async () => {
@@ -212,9 +246,15 @@ describe('save backup/restore (AC-6/AC-7)', () => {
   });
 
   test('restore returns the bytes for an owned backup', async () => {
+    // Self-contained: create the backup as Alice within this test.
     const cookie = await signInCookie('alice@example.com');
-    const rows = await client.execute('SELECT id FROM account_backups');
-    const backupId = rows.rows[0].id as string;
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', bytes, cookie),
+    );
+    expect(createRes.status).toBe(201);
+    const { backupId } = (await createRes.json()) as { backupId: string };
+
     const res = await app.handle(get(`/api/saves/${backupId}`, cookie));
     expect(res.status).toBe(200);
     const text = await res.text();
@@ -222,10 +262,16 @@ describe('save backup/restore (AC-6/AC-7)', () => {
   });
 
   test('restore of another user backup is rejected 404', async () => {
-    const cookie = await signInCookie('carol@example.com');
-    const rows = await client.execute('SELECT id FROM account_backups');
-    const backupId = rows.rows[0].id as string;
-    const res = await app.handle(get(`/api/saves/${backupId}`, cookie));
+    // Self-contained: create the backup as Alice, then authenticate as Carol.
+    const aliceCookie = await signInCookie('alice@example.com');
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([1, 2, 3]), aliceCookie),
+    );
+    expect(createRes.status).toBe(201);
+    const { backupId } = (await createRes.json()) as { backupId: string };
+
+    const carolCookie = await signInCookie('carol@example.com');
+    const res = await app.handle(get(`/api/saves/${backupId}`, carolCookie));
     expect(res.status).toBe(404);
   });
 });

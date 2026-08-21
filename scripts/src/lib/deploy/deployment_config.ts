@@ -86,6 +86,10 @@ export type CloudflareAppConfig =
       routes: Partial<Record<LiveMode, string>>;
       /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
       headersSource?: string;
+      /** D1 database bindings emitted into the generated wrangler config. */
+      d1Databases?: Array<{ binding: string; databaseName: string; databaseId: string }>;
+      /** R2 bucket bindings emitted into the generated wrangler config. */
+      r2Buckets?: Array<{ binding: string; bucketName: string }>;
     };
 
 export type AppConfig = {
@@ -208,6 +212,15 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       assetsOnly: false,
       main: 'build/_worker.js',
       compatibilityDate: '2026-08-21',
+      compatibilityFlags: ['nodejs_compat'],
+      d1Databases: [
+        {
+          binding: 'DB',
+          databaseName: 'aikami-hub',
+          databaseId: 'REPLACE_WITH_D1_DATABASE_ID',
+        },
+      ],
+      r2Buckets: [{ binding: 'SAVES_BUCKET', bucketName: 'aikami-saves' }],
       routes: {
         production: 'hub.bearlysleeping.com',
         staging: 'hub.stg.bearlysleeping.com',
