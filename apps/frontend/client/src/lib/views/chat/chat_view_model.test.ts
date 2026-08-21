@@ -24,6 +24,7 @@ mock.module('$services', () => ({
   messageBranchStore: {},
   npcService: {},
   personaService: {},
+  playerStateService: { classId: 'fighter' },
   SentenceBoundaryChunker: class {},
   ttsService: {},
 }));
@@ -117,5 +118,94 @@ describe('ChatViewModel /roll (C-421 AC-1)', () => {
     expect(rollCardMock).not.toHaveBeenCalled();
     expect(addMessageMock).toHaveBeenCalledTimes(1);
     expect(addMessageMock.mock.calls[0]?.[0].text).toContain('Invalid dice notation');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-420 — One Choice Affordance: chat suggestion chips
+// ---------------------------------------------------------------------------
+
+/** Exposes the private chip-application handler for focused unit testing. */
+const applyChips = (
+  vm: ChatViewModelInterface,
+  results: ReadonlyArray<{ agentId: string; success: boolean; output?: unknown }>,
+): void =>
+  (vm as unknown as { _applySuggestionChips: (r: typeof results) => void })._applySuggestionChips(
+    results,
+  );
+
+const chipResult = (chips: unknown[]) => ({
+  agentId: 'suggestion-chips',
+  success: true,
+  output: { type: 'suggestion_chips', chips },
+});
+
+const chip = (
+  overrides: Partial<{ id: string; label: string; intentType: string; prefillText: string }> = {},
+) => ({
+  id: 'chip-1',
+  label: 'Ask about the ward',
+  intentType: 'dialogue',
+  prefillText: 'Tell me more about the fading ward, please.',
+  ...overrides,
+});
+
+describe('ChatViewModel suggestion chips (C-420)', () => {
+  beforeEach(() => {
+    addMessageMock.mockClear();
+    rollCardMock.mockClear();
+  });
+
+  test('_applySuggestionChips sets the chip set from a successful result', async () => {
+    const vm = await createViewModel();
+    applyChips(vm, [chipResult([chip()])]);
+    expect(vm.suggestedChips).toHaveLength(1);
+    expect(vm.suggestedChips[0]?.label).toBe('Ask about the ward');
+  });
+
+  test('_applySuggestionChips filters out combat-intent chips', async () => {
+    const vm = await createViewModel();
+    applyChips(vm, [
+      chipResult([
+        chip({ id: 'c1', intentType: 'combat', label: 'Attack' }),
+        chip({ id: 'c2', intentType: 'dialogue', label: 'Ask' }),
+      ]),
+    ]);
+    expect(vm.suggestedChips).toHaveLength(1);
+    expect(vm.suggestedChips[0]?.id).toBe('c2');
+  });
+
+  test('_applySuggestionChips ignores a failed or missing result without clearing chips', async () => {
+    const vm = await createViewModel();
+    // A successful result first establishes a chip set…
+    applyChips(vm, [chipResult([chip()])]);
+    expect(vm.suggestedChips).toHaveLength(1);
+    // …then a failed/missing result must leave the previous set untouched.
+    applyChips(vm, [{ agentId: 'suggestion-chips', success: false, output: undefined }]);
+    expect(vm.suggestedChips).toHaveLength(1);
+    expect(vm.suggestedChips[0]?.label).toBe('Ask about the ward');
+  });
+
+  test('handleChipTap prefills the composer and does not send', async () => {
+    const vm = await createViewModel();
+    applyChips(vm, [chipResult([chip()])]);
+    vm.handleChipTap('chip-1');
+    expect(vm.inputText).toBe('Tell me more about the fading ward, please.');
+    expect(addMessageMock).not.toHaveBeenCalled();
+  });
+
+  test('handleChipTap falls back to the label when prefillText is too short', async () => {
+    const vm = await createViewModel();
+    applyChips(vm, [chipResult([chip({ prefillText: 'Hi' })])]);
+    vm.handleChipTap('chip-1');
+    expect(vm.inputText).toBe('Ask about the ward');
+    expect(addMessageMock).not.toHaveBeenCalled();
+  });
+
+  test('handleChipTap ignores an unknown chip id', async () => {
+    const vm = await createViewModel();
+    applyChips(vm, [chipResult([chip()])]);
+    vm.handleChipTap('missing');
+    expect(vm.inputText).toBe('');
   });
 });

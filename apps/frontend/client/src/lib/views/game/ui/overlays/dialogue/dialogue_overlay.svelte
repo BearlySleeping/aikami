@@ -16,6 +16,7 @@ import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
+import SuggestionChips from '$lib/components/messaging/suggestion_chips.svelte';
 import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 
@@ -34,23 +35,6 @@ const richMessages = $derived(
     timestamp: new Date(0),
   })),
 );
-
-/** Bubble intent chip class for a suggestion chip. */
-const chipClassFor = (intentType: string): string => {
-  if (intentType === 'combat') {
-    return 'btn-outline btn-error';
-  }
-  if (intentType === 'skill_check') {
-    return 'btn-outline btn-accent';
-  }
-  if (intentType === 'trade') {
-    return 'btn-outline btn-warning';
-  }
-  if (intentType === 'quest') {
-    return 'btn-outline btn-info';
-  }
-  return 'btn-outline';
-};
 
 /** Dispatches a shared MessageAction to the dialogue ViewModel. */
 const handleRowAction = (messageId: string, action: MessageAction): void => {
@@ -311,6 +295,9 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         <!-- CYOA choice buttons -->
         {#if viewModel.activeChoices.length > 0}
           <div class="space-y-1 px-2" data-testid="cyoa-choices">
+            <p class="text-[0.65rem] font-semibold uppercase tracking-wide text-base-content/40">
+              What do you do?
+            </p>
             {#each viewModel.activeChoices as choice (choice.id)}
               <button
                 type="button"
@@ -426,40 +413,13 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           }}
         >
           {#snippet above()}
-            <!-- Suggestion chips — rendered inside the card, above the input -->
-            {#if viewModel.suggestedChips.length > 0}
-              {#key viewModel.suggestedChips.map((c) => c.id).join('|')}
-                <div
-                  class="flex flex-wrap gap-1.5 border-t border-base-content/5 px-4 py-2"
-                  data-testid="suggestion-chips"
-                >
-                  {#each viewModel.suggestedChips as chip (chip.id)}
-                    <button
-                      type="button"
-                      class="btn btn-xs gap-1 normal-case border-base-content/15 {chipClassFor(chip.intentType)}"
-                      disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-                      onclick={() => viewModel.handleChipTap(chip.id)}
-                      aria-label={chip.label}
-                    >
-                      <span>
-                        {#if chip.intentType === 'skill_check'}
-                          🎲
-                        {:else if chip.intentType === 'combat'}
-                          ⚔️
-                        {:else if chip.intentType === 'trade'}
-                          💰
-                        {:else if chip.intentType === 'quest'}
-                          📋
-                        {:else}
-                          💬
-                        {/if}
-                      </span>
-                      {chip.label}
-                    </button>
-                  {/each}
-                </div>
-              {/key}
-            {/if}
+            <!-- Suggestion chips — shared component (C-420) -->
+            <SuggestionChips
+              chips={viewModel.suggestedChips}
+              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+              onSelect={(chipId) => viewModel.handleChipTap(chipId)}
+              label="Say something"
+            />
           {/snippet}
 
           {#snippet extras()}

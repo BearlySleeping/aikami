@@ -7,6 +7,7 @@ import {
   IMPERSONATION_DRAFT_READY_TOAST,
   NO_PERSONA_TOAST_MESSAGE,
   type SlashCommandEntry,
+  SUGGESTION_CHIPS_AGENT_ID,
 } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { parseBridgeTags } from '@aikami/frontend/engine';
@@ -16,7 +17,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
-import type { ChatData, CyoaChoice, MessageData, NpcData } from '@aikami/types';
+import type { ChatData, CyoaChoice, MessageData, NpcData, NpcSuggestionChip } from '@aikami/types';
+import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import {
   aiService,
   authService,
@@ -32,6 +34,7 @@ import {
   messageBranchStore,
   npcService,
   personaService,
+  playerStateService,
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
@@ -89,6 +92,10 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   readonly toastMessage: string;
   /** CYOA choice buttons ViewModel (C-245) — rendered below the latest AI message. */
   readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
+  /** Suggestion chips shown above the composer (C-420). */
+  readonly suggestedChips: readonly NpcSuggestionChip[];
+  /** Handles a suggestion-chip tap — prefills the composer, does not send (C-420). */
+  handleChipTap(chipId: string): void;
   /** Whether "Use CYOA as direction" feeds choices into impersonation drafts (C-245 AC-6). */
   readonly useCyoaAsDirection: boolean;
   /** Toggles the "Use CYOA as direction" impersonation integration. */
@@ -188,6 +195,9 @@ export class ChatViewModel
 
   /** CYOA choice buttons ViewModel — owns display state for the choice stack. */
   readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
+
+  /** Suggestion chips shown above the composer (C-420). */
+  suggestedChips = $state<NpcSuggestionChip[]>([]);
 
   /** Sentence boundary chunker for streaming TTS. */
   private readonly _chunker = new SentenceBoundaryChunker();
@@ -346,6 +356,12 @@ export class ChatViewModel
     this.backgroundImageUrl = chat.backgroundImageUrl;
     chatService.setMessages(chat.messages as unknown as MessageData[]);
     this.showGreeting = (chat.messages?.length ?? 0) === 0;
+    // Starter chips for the empty state (C-420 AC-2) — merged from the NPC's
+    // authored initialSuggestions and the active player class presets.
+    this.suggestedChips =
+      (chat.messages?.length ?? 0) === 0
+        ? mergeInitialSuggestions(this.npc?.initialSuggestions, playerStateService.classId)
+        : [];
   }
 
   /**
@@ -395,6 +411,23 @@ export class ChatViewModel
       event.preventDefault();
       this.handleSend();
     }
+  }
+
+  /**
+   * Handles a suggestion-chip tap (C-420). Chat is an authoring surface —
+   * tapping a chip prefills the composer and focuses it, but does NOT send.
+   * Combat-intent chips are filtered out of chat chip sets (no combat surface
+   * to escalate to), so they never reach here.
+   */
+  handleChipTap(chipId: string): void {
+    const chip = this.suggestedChips.find((c) => c.id === chipId);
+    if (!chip || this.isSending || this.isImpersonationDrafting) {
+      return;
+    }
+    // Preserve the prefillText fallback to label when the model emits something short.
+    const messageText = chip.prefillText.length >= 10 ? chip.prefillText : chip.label;
+    this.inputText = messageText;
+    this._focusTextarea?.();
   }
 
   /**
@@ -510,6 +543,8 @@ export class ChatViewModel
     // Clear the per-chat draft since the message was sent
     void draftStore.clearDraft({ chatId: this._chatId });
     this.inputText = '';
+    // Chips clear on send (C-420) — the next set arrives with the next turn.
+    this.suggestedChips = [];
 
     // Stream buffer for incremental macro parsing (future streaming use)
     const streamBuf: StreamBuffer = createStreamBuffer();
@@ -539,6 +574,8 @@ export class ChatViewModel
       // ── CYOA choices (C-245): surface post-agent output as buttons ──
       if (pipelineVm) {
         this._applyCyoaResults(pipelineVm.results);
+        // ── Suggestion chips (C-420 AC-3): surface post-agent output as chips ──
+        this._applySuggestionChips(pipelineVm.results);
       }
 
       const response = rawResponse || undefined;
@@ -750,6 +787,28 @@ export class ChatViewModel
     }
 
     this.choiceButtonsViewModel.setChoices(output.choices);
+  }
+
+  /**
+   * Extracts suggestion chips from the latest pipeline post-agent results
+   * (C-420 AC-3) and replaces the current chip set. Combat-intent chips are
+   * filtered out — chat has no combat surface to escalate to. Malformed or
+   * failed results leave the previous set untouched.
+   */
+  private _applySuggestionChips(
+    results: ReadonlyArray<{ agentId: string; success: boolean; output?: unknown }>,
+  ): void {
+    const chipResult = results.find((r) => r.agentId === SUGGESTION_CHIPS_AGENT_ID);
+    if (!chipResult?.success || !chipResult.output) {
+      return;
+    }
+
+    const output = chipResult.output as { type?: string; chips?: NpcSuggestionChip[] };
+    if (output.type !== 'suggestion_chips' || !Array.isArray(output.chips)) {
+      return;
+    }
+
+    this.suggestedChips = output.chips.filter((chip) => chip.intentType !== 'combat');
   }
 
   /**
@@ -1095,6 +1154,7 @@ export class ChatViewModel
     this.showGreeting = true;
     this.inputText = '';
     this.choiceButtonsViewModel.setChoices([]);
+    this.suggestedChips = [];
     void draftStore.clearDraft({ chatId: this._chatId });
 
     // TTS cleanup
