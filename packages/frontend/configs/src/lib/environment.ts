@@ -43,6 +43,10 @@ const masterSchema = Type.Object({
   PUBLIC_APP_CHECK_DEBUG_TOKEN: Type.Optional(Type.String()),
   PUBLIC_LOG_PERSIST_LEVEL: Type.Optional(Type.String()),
   PUBLIC_VOICE_URL: Type.Optional(Type.String()),
+  // C-426 AC-5: auth backend selector during the Firebase → Better Auth
+  // transition. 'better-auth' | 'firebase' (default). Removed once Better
+  // Auth is the only path.
+  PUBLIC_AUTH_BACKEND: Type.Optional(Type.String()),
   PUBLIC_QA_BYPASS_TEXT_AI: Type.Optional(Type.String()),
   APP_VERSION: Type.Optional(Type.String()),
 });
@@ -140,6 +144,14 @@ export const isEmulatorModePublic = () =>
   publicEnv.PUBLIC_MODE === 'emulator' || publicEnv.PUBLIC_MODE === 'testing';
 export const isDevelopmentModePublic = () => publicEnv.PUBLIC_MODE !== 'production';
 export const getPublicMode = () => publicEnv.PUBLIC_MODE;
+
+/**
+ * C-426 AC-5: which auth backend the client uses. Defaults to 'firebase'
+ * during the transition; set PUBLIC_AUTH_BACKEND=better-auth to opt in.
+ * Removed once Better Auth is the only path.
+ */
+export const getAuthBackend = (): 'better-auth' | 'firebase' =>
+  publicEnv.PUBLIC_AUTH_BACKEND === 'better-auth' ? 'better-auth' : 'firebase';
 
 /**
  * Shared App Check enablement predicate — used by both the client
