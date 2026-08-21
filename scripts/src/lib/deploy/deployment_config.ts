@@ -192,17 +192,26 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       headersSource: 'public/_headers',
     },
   },
-  /** SvelteKit SSR dashboard — deployed to Cloud Run (aikami-hub), fronted by Firebase Hosting sites per mode. */
+  /** SvelteKit SSR dashboard — deployed as a Cloudflare Worker (C-426 AC-3), was Cloud Run. */
   hub: {
-    serviceType: 'cloud-run-sveltekit',
+    serviceType: 'cloudflare-worker',
     path: 'apps/frontend/hub',
     shortName: 'hub',
     prefix: 'HUB',
-    cloudRunServiceId: 'aikami-hub',
-    region: 'europe-west4',
     customDomains: {
       production: 'hub.bearlysleeping.com',
       staging: 'hub.stg.bearlysleeping.com',
+    },
+    cloudflare: {
+      workerName: (mode) => (mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`),
+      buildOutputDir: 'build',
+      assetsOnly: false,
+      main: 'build/_worker.js',
+      compatibilityDate: '2026-08-21',
+      routes: {
+        production: 'hub.bearlysleeping.com',
+        staging: 'hub.stg.bearlysleeping.com',
+      },
     },
   },
   /** Starlight documentation site — static build deployed to its own Worker. */

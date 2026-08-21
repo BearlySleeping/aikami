@@ -14,8 +14,15 @@ import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { logger } from '$logger';
 import { handleAsk } from './ask.ts';
+import { getBetterAuth } from './better_auth.ts';
 import { handleCatalogStats } from './catalog_stats.ts';
 import { handleDbHealth } from './health_db.ts';
+import {
+  getSaveBackupEnv,
+  handleCreateBackup,
+  handleGetBackup,
+  handleListBackups,
+} from './save_backup.ts';
 
 // ─── Session cookie helpers ──────────────────────────────────────────
 // Mirrors the aikami session store shape: the `__session` cookie
@@ -351,8 +358,56 @@ export const app = new Elysia({ prefix: '/api' })
     body: deviceHandoffRequestSchema,
     response: deviceHandoffResponseSchema,
   })
+  // C-426 AC-4: Better Auth mounted at /api/auth/* (its own paths like
+  // /api/auth/sign-in/email, /api/auth/get-session). The specific routes
+  // above take precedence; everything else under /api/auth/* falls through
+  // to Better Auth's fetch handler. When D1 is unavailable (hub still on
+  // Cloud Run during the migration window) it responds 503 and the Firebase
+  // path above keeps serving.
+  .all('/auth/*', ({ request }) => {
+    const auth = getBetterAuth();
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'auth_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return auth.handler(request);
+  })
   .get('/health/db', handleDbHealth, {
     response: dbHealthResponseSchema,
+  })
+  // C-426 AC-6/AC-7: Turso save backup/restore to R2, session-gated.
+  // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
+  .post('/saves/backup', ({ request }) => {
+    const env = getSaveBackupEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleCreateBackup(request, env);
+  })
+  .get('/saves', ({ request }) => {
+    const env = getSaveBackupEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleListBackups(request, env);
+  })
+  .get('/saves/:id', ({ request, params }) => {
+    const env = getSaveBackupEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleGetBackup(request, env, params.id);
   })
   .get('/catalog/stats', handleCatalogStats, {
     response: catalogStatsResponseSchema,

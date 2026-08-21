@@ -32,4 +32,13 @@ declare namespace App {
   interface PageData {
     sessionId?: string;
   }
+
+  // C-426 AC-3: Cloudflare Worker bindings (D1 + R2) reachable from
+  // +page.server.ts / hooks.server.ts via `platform.env`.
+  interface Platform {
+    env: {
+      DB: import('@cloudflare/workers-types').D1Database;
+      SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
+    };
+  }
 }

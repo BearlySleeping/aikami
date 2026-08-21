@@ -13,6 +13,7 @@ CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
 	`account_id` text NOT NULL,
 	`provider_id` text NOT NULL,
+	`issuer` text,
 	`user_id` text NOT NULL,
 	`access_token` text,
 	`refresh_token` text,

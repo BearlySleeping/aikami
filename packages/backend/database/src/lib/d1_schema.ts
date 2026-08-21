@@ -70,6 +70,8 @@ export const accounts = sqliteTable(
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
+    /** OAuth issuer — Better Auth requires this field on the account table. */
+    issuer: text('issuer'),
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3b24e3b8-24e3-4413-9603-66e5fcc87521",
+  "id": "f825d714-7f6b-4935-93d7-b4a3655cc63a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account_backups": {
@@ -94,6 +94,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "user_id": {
