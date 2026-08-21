@@ -169,7 +169,7 @@ const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
   <!-- Dialogue Box — glass card at bottom 45% of screen -->
   <div
     class="mx-auto mb-6 flex w-full max-w-2xl flex-col rounded-2xl border border-base-content/10 bg-base-200/90 shadow-2xl backdrop-blur-md"
-    style="height: 45vh;"
+    style="height: 45vh; border-color: var(--rune-glow);"
   >
     <!-- Header: NPC name + address mode + End Chat -->
     <div
@@ -328,7 +328,7 @@ const bubbleClassFor = (isPlayer: boolean, isPartyMate: boolean): string => {
 
             <!-- Message action buttons (hover-visible) -->
             <div
-              class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
+              class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
             >
               {#if !isPlayer && !isPartyMate}
                 <button

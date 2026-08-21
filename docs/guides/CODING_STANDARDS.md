@@ -2,6 +2,14 @@
 
 This document outlines the coding standards for the AiKami project. Adhering to these standards ensures code consistency, readability, and maintainability across the codebase.
 
+## Design Standards
+
+For visual/UX rules — the brand palette, named tokens, the "no hover-only, no
+focus-invisible primary actions" rule, typography/elevation/feedback
+vocabulary, and the WCAG contrast audit — see
+[`docs/design/DESIGN.md`](../design/DESIGN.md). Every rule there cites a
+shipping file that follows it.
+
 ## General Guidelines
 
 -   **Readability:** Code should be easy to read and understand.
