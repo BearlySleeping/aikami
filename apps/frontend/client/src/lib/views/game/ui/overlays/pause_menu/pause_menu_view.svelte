@@ -1,4 +1,5 @@
 <script lang="ts">
+import DiceHistoryFeed from './dice_history_feed.svelte';
 // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte
 import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
 
@@ -37,7 +38,12 @@ const { viewModel }: Props = $props();
   }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
-    {#if viewModel.confirmingQuit}
+    {#if viewModel.isRollHistoryOpen}
+      <DiceHistoryFeed
+        entries={viewModel.rollHistory}
+        onClose={() => viewModel.closeRollHistory()}
+      />
+    {:else if viewModel.confirmingQuit}
       <h2 class="text-center text-lg font-bold text-base-content">Quit to Main Menu?</h2>
       <p class="mt-2 text-center text-sm text-base-content/60">
         Any unsaved progress will be lost.
@@ -119,6 +125,14 @@ const { viewModel }: Props = $props();
           onclick={() => viewModel.openReputation()}
         >
           Reputation
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block"
+          onclick={() => viewModel.openRollHistory()}
+        >
+          Roll History
         </button>
 
         <button

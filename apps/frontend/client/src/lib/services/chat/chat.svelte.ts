@@ -3,7 +3,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { MessageData } from '@aikami/types';
+import type { DiceCardData, MessageData } from '@aikami/types';
 
 export type ChatServiceOptions = BaseFrontendClassOptions;
 
@@ -12,6 +12,10 @@ export type ChatMessage = {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+  /** Message kind — 'dice' renders a DiceCard instead of plain text. */
+  kind?: 'text' | 'dice';
+  /** Present when kind === 'dice'. */
+  dice?: DiceCardData;
 };
 
 /**

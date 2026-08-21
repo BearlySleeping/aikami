@@ -4,18 +4,35 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { DiceCardData } from '@aikami/types';
 import { createSeedableRng, type SeedableRng } from '@aikami/utils';
 
 export type DiceServiceOptions = BaseFrontendClassOptions;
 
+/** A single entry in the roll history. Optional check context is present only
+ * when the roll was made against a DC. */
+export type DiceHistoryEntry = {
+  roll: number;
+  sides: number;
+  modifier: number;
+  total: number;
+  timestamp: Date;
+  /** Raw notation as typed, e.g. "1d20+3" (rollCard only). */
+  notation?: string;
+  /** Difficulty class the roll was made against, if any. */
+  dc?: number;
+  /** Whether the roll met/exceeded the DC, if a check was made. */
+  success?: boolean;
+  /** Natural-20 crit flag (single d20 only). */
+  isCriticalSuccess?: boolean;
+  /** Natural-1 crit flag (single d20 only). */
+  isCriticalFailure?: boolean;
+  /** Optional human label, e.g. "Persuasion". */
+  label?: string;
+};
+
 export type DiceServiceInterface = BaseFrontendClassInterface & {
-  readonly history: {
-    roll: number;
-    sides: number;
-    modifier: number;
-    total: number;
-    timestamp: Date;
-  }[];
+  readonly history: DiceHistoryEntry[];
 
   /**
    * Sets the RNG seed for deterministic dice rolls.
@@ -44,18 +61,26 @@ export type DiceServiceInterface = BaseFrontendClassInterface & {
    * @returns The sum of all dice rolled.
    */
   rollNotation(options: { count: number; sides: number; label?: string }): number;
+
+  /**
+   * Resolves a full dice-card roll: rolls `count` dice of `sides`, applies the
+   * modifier, computes check context and crit flags, pushes to history, and
+   * returns a {@link DiceCardData} for rendering.
+   *
+   * @param options - Parsed notation plus optional check context.
+   */
+  rollCard(options: {
+    notation: string;
+    count: number;
+    sides: number;
+    modifier?: number;
+    dc?: number;
+    ability?: string;
+  }): DiceCardData;
 };
 
 class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceServiceInterface {
-  history = $state<
-    {
-      roll: number;
-      sides: number;
-      modifier: number;
-      total: number;
-      timestamp: Date;
-    }[]
-  >([]);
+  history = $state<DiceHistoryEntry[]>([]);
 
   private _activeRng: SeedableRng | null = null;
 
@@ -135,6 +160,73 @@ class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceS
       timestamp: new Date(),
     });
     return total;
+  }
+
+  /** @inheritdoc */
+  rollCard(options: {
+    notation: string;
+    count: number;
+    sides: number;
+    modifier?: number;
+    dc?: number;
+    ability?: string;
+  }): DiceCardData {
+    const modifier = options.modifier ?? 0;
+    const dice = [];
+    let sum = 0;
+    for (let i = 0; i < options.count; i++) {
+      const value = this._rollInternal(options.sides);
+      dice.push({ sides: options.sides, value });
+      sum += value;
+    }
+    const total = sum + modifier;
+
+    // Crit flags are meaningful only for a single d20.
+    const isSingleD20 = options.count === 1 && options.sides === 20;
+    const natural = isSingleD20 ? (dice[0]?.value ?? 0) : 0;
+    const isCriticalSuccess = isSingleD20 && natural === 20;
+    const isCriticalFailure = isSingleD20 && natural === 1;
+
+    const check =
+      options.dc === undefined
+        ? undefined
+        : {
+            dc: options.dc,
+            success: total >= options.dc,
+            difference: total - options.dc,
+            ...(options.ability ? { ability: options.ability } : {}),
+          };
+
+    const card: DiceCardData = {
+      id: crypto.randomUUID(),
+      notation: options.notation,
+      dice,
+      modifier,
+      total,
+      ...(check ? { check } : {}),
+      isCriticalSuccess,
+      isCriticalFailure,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.history.push({
+      roll: sum,
+      sides: options.sides,
+      modifier,
+      total,
+      timestamp: new Date(card.timestamp),
+      notation: options.notation,
+      ...(options.dc !== undefined
+        ? {
+            dc: options.dc,
+            success: check?.success,
+            label: options.ability,
+          }
+        : {}),
+      ...(isSingleD20 ? { isCriticalSuccess, isCriticalFailure } : {}),
+    });
+
+    return card;
   }
 
   /**

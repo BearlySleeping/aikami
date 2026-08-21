@@ -1258,4 +1258,55 @@ describe('C-401: two-call narrative streaming', () => {
     expect(output.stateDeltas.length).toBe(1);
     expect(npcDialogueService.turnState.kind).toBe('complete');
   });
+
+  test('resolveRoll prompt carries the result AND the non-contradiction instruction (C-421 AC-3)', async () => {
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      // Capture the narrative streaming call (no schema) — call 1.
+      if (!opts.schema) {
+        capturedMessages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+      }
+      if (opts.schema) {
+        return {
+          text: 'Your words carry weight.',
+          structured: {
+            narrativeResult: 'Your words carry weight.',
+            stateDeltas: [],
+            suggestedChips: [],
+          },
+        };
+      }
+      return { text: 'Your words carry weight.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: controller.signal,
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 18,
+      outcome: 'fail',
+      playerInput: 'I appeal to your honor.',
+    });
+
+    const systemPrompt = capturedMessages.find((m) => m.role === 'system')?.content ?? '';
+    const userPrompt = capturedMessages.find((m) => m.role === 'user')?.content ?? '';
+
+    // The mechanical result is injected as ground truth.
+    expect(userPrompt).toContain('DC=12');
+    expect(userPrompt).toContain('Roll=18');
+    expect(userPrompt).toContain('FAILURE');
+
+    // The system prompt carries the explicit non-contradiction instruction.
+    expect(systemPrompt).toContain('MUST NOT contradict');
+    expect(systemPrompt).toContain('authoritative');
+  });
 });
