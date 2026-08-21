@@ -2,7 +2,7 @@
 id: C-423
 title: "Aikami Design North Star — make the brand tokens real, kill hover-only actions"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — cheapest of the batch, fixes a real WCAG failure, and every later contract inherits its baseline |
 | **Sequence** | **1 of 6** — must land first; C-424 explicitly inherits this accessibility baseline |
 | **Dependencies** | C-418 Feature A (landed — `brand_daisy.css` / `brand_tokens.css`) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal (`docs/design/DESIGN.md`) |
 | **Contract version** | 3.0.0 |
@@ -41,7 +41,11 @@ the app at all.**
   (dark).
 - `apps/frontend/client/src/app.css:3` imports **only** `brand_daisy.css`.
   Same for `apps/frontend/hub/src/app.css:3`. `brand_tokens.css` is exported
-  from `packages/frontend/theme/package.json:7` and imported by nothing.
+  from `packages/frontend/theme/package.json:7` and is imported **only** by the
+  site and docs apps (`apps/frontend/site/src/lib/styles/global.css:17`,
+  `apps/frontend/docs/src/styles/docs.css:11`) — never by the game client or
+  hub. So the named tokens are dead **in the game client/hub** specifically,
+  which is the surface this contract targets.
 - `grep -rn 'var(--rune|--ember|--magic-dust|--parchment|--obsidian)` across
   `apps/frontend/client/src`, `apps/frontend/hub/src`, and
   `packages/frontend/components/src`: **0 hits.**
