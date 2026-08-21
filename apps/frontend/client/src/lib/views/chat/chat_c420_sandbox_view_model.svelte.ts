@@ -4,9 +4,34 @@
 // EMPTY chat (no messages) so the starter-chip empty state (AC-2) and the
 // model-chip-after-turn behaviour (AC-3) can be exercised and screenshotted.
 // Dev-only; never imported from production code.
-import type { NpcData } from '@aikami/types';
+import { SUGGESTION_CHIPS_AGENT_ID } from '@aikami/constants';
+import type { NpcData, NpcSuggestionChip } from '@aikami/types';
 import { chatService } from '$services';
+import type { AgentRunResult } from '$types';
+import type { AgentPipelineViewModelInterface } from '$views/agent/agent_pipeline_view_model.svelte';
 import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
+
+/** Deterministic starter chips for the sandbox NPC (AC-2) — no preset/class dependency. */
+const MOCK_INITIAL_SUGGESTIONS: NpcSuggestionChip[] = [
+  {
+    id: 'sandbox-chip-1',
+    label: 'Ask about the fading ward',
+    intentType: 'quest',
+    prefillText: 'Tell me about the fading ward you mentioned, please.',
+  },
+  {
+    id: 'sandbox-chip-2',
+    label: 'Offer to help the village',
+    intentType: 'dialogue',
+    prefillText: 'I would like to help the village however I can.',
+  },
+  {
+    id: 'sandbox-chip-3',
+    label: 'Ask about the hidden shrine',
+    intentType: 'skill_check',
+    prefillText: 'Can you tell me more about the hidden shrine?',
+  },
+];
 
 const MOCK_NPC: NpcData = {
   id: 'dev-npc-thalia',
@@ -41,6 +66,53 @@ const MOCK_NPC: NpcData = {
   languages: ['Common', 'Celestial'],
   equipment: ['Holy symbol', 'Robes', 'Herbal kit'],
   inventory: ['Healing salves (6)', 'Blessed water (2)', 'Old tome'],
+  initialSuggestions: MOCK_INITIAL_SUGGESTIONS,
+};
+
+/**
+ * Builds a minimal mock agent pipeline VM so the sandbox's ChatViewModel can
+ * run a turn and surface post-turn suggestion chips (AC-3). It delegates the
+ * actual GM generation to the pipeline's `mainGenerator` and appends a
+ * suggestion-chips result to `results`, which ChatViewModel.sendMessage reads
+ * via `_applySuggestionChips`.
+ */
+const createMockPipelineViewModel = (): AgentPipelineViewModelInterface => {
+  const results: AgentRunResult[] = [];
+  return {
+    hudState: {
+      isRunning: false,
+      currentPhase: null,
+      currentAgent: null,
+      results,
+      thoughtBubbles: [],
+      showDrawer: false,
+      enabledAgents: [],
+    },
+    isRunning: false,
+    currentPhase: null,
+    currentAgent: null,
+    results,
+    thoughtBubbles: [],
+    showDrawer: false,
+    toggleDrawer: () => {},
+    toggleAgent: () => {},
+    isAgentEnabled: () => false,
+    availableAgents: [],
+    clearResults: () => {
+      results.length = 0;
+    },
+    runPipeline: async ({ mainGenerator }) => {
+      const response = await mainGenerator('');
+      results.push({
+        agentId: SUGGESTION_CHIPS_AGENT_ID,
+        phase: 'post',
+        success: true,
+        output: { type: 'suggestion_chips', chips: MOCK_INITIAL_SUGGESTIONS },
+        durationMs: 0,
+      });
+      return response;
+    },
+  };
 };
 
 export class ChatC420SandboxViewModel extends ChatViewModel {
@@ -71,4 +143,8 @@ export class ChatC420SandboxViewModel extends ChatViewModel {
 
 export const getChatC420SandboxViewModel = (
   options: ChatViewModelOptions,
-): ChatC420SandboxViewModel => new ChatC420SandboxViewModel(options);
+): ChatC420SandboxViewModel =>
+  new ChatC420SandboxViewModel({
+    ...options,
+    agentPipelineViewModel: createMockPipelineViewModel(),
+  });

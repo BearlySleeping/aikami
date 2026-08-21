@@ -5,45 +5,13 @@
 // intent-coloured daisyUI classes, and calls back via `onSelect` — it owns no
 // selection semantics (auto-send vs prefill is per-surface).
 //
-// These tests cover the intent → class/icon mapping that the component
-// computes from a chip's intentType, mirroring the component's logic.
+// These tests exercise the intent → class/icon mapping imported from the SAME
+// module the component renders (`suggestion_chips_mapping.ts`), so assertions
+// cannot pass independently of the component implementation.
 //
 // Contract: C-420 One Choice Affordance
 import { describe, expect, test } from 'bun:test';
-
-// ── Logic under test (mirrors SuggestionChips' intent mapping) ──────────
-
-const chipClassFor = (intentType: string): string => {
-  if (intentType === 'combat') {
-    return 'btn-outline btn-error';
-  }
-  if (intentType === 'skill_check') {
-    return 'btn-outline btn-accent';
-  }
-  if (intentType === 'trade') {
-    return 'btn-outline btn-warning';
-  }
-  if (intentType === 'quest') {
-    return 'btn-outline btn-info';
-  }
-  return 'btn-outline';
-};
-
-const chipIconFor = (intentType: string): string => {
-  if (intentType === 'skill_check') {
-    return '🎲';
-  }
-  if (intentType === 'combat') {
-    return '⚔️';
-  }
-  if (intentType === 'trade') {
-    return '💰';
-  }
-  if (intentType === 'quest') {
-    return '📋';
-  }
-  return '💬';
-};
+import { chipClassFor, chipIconFor } from './suggestion_chips_mapping.ts';
 
 // ── Tests ────────────────────────────────────────────────────────────────
 

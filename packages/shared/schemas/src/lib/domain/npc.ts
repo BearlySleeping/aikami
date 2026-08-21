@@ -35,6 +35,7 @@ export const NpcSheetSchema = Composite(
     /** Pre-authored suggestion chips shown with the NPC's initial greeting (C-420). */
     initialSuggestions: Type.Optional(
       Type.Array(NpcSuggestionChipSchema, {
+        maxItems: 4,
         description: 'Pre-authored suggestion chips shown with the initial greeting',
       }),
     ),

@@ -67,4 +67,15 @@ describe('sanitizeChips (C-420)', () => {
     expect(result[1]?.id).not.toBe('');
     expect(result[0]?.id).not.toBe(result[1]?.id);
   });
+
+  it('regenerates ids when two chips share the same non-empty id', () => {
+    const result = sanitizeChips([
+      chip({ id: 'dup', label: 'First' }),
+      chip({ id: 'dup', label: 'Second' }),
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.id).not.toBe('');
+    expect(result[1]?.id).not.toBe('');
+    expect(result[0]?.id).not.toBe(result[1]?.id);
+  });
 });

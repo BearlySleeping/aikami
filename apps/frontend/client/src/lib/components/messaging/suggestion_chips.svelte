@@ -11,6 +11,7 @@
 //
 // Contract: C-420 One Choice Affordance
 import type { NpcSuggestionChip } from '@aikami/types';
+import { chipClassFor, chipIconFor } from './suggestion_chips_mapping.ts';
 
 type Props = {
   /** Chips to render. Empty array renders nothing. */
@@ -24,40 +25,6 @@ type Props = {
 };
 
 const { chips, disabled = false, onSelect, label }: Props = $props();
-
-/** daisyUI intent colour for a chip. */
-const chipClassFor = (intentType: string): string => {
-  if (intentType === 'combat') {
-    return 'btn-outline btn-error';
-  }
-  if (intentType === 'skill_check') {
-    return 'btn-outline btn-accent';
-  }
-  if (intentType === 'trade') {
-    return 'btn-outline btn-warning';
-  }
-  if (intentType === 'quest') {
-    return 'btn-outline btn-info';
-  }
-  return 'btn-outline';
-};
-
-/** Intent icon glyph for a chip. */
-const chipIconFor = (intentType: string): string => {
-  if (intentType === 'skill_check') {
-    return '🎲';
-  }
-  if (intentType === 'combat') {
-    return '⚔️';
-  }
-  if (intentType === 'trade') {
-    return '💰';
-  }
-  if (intentType === 'quest') {
-    return '📋';
-  }
-  return '💬';
-};
 </script>
 
 {#if chips.length > 0}

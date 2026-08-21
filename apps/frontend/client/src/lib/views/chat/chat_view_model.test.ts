@@ -175,10 +175,15 @@ describe('ChatViewModel suggestion chips (C-420)', () => {
     expect(vm.suggestedChips[0]?.id).toBe('c2');
   });
 
-  test('_applySuggestionChips ignores a failed or missing result', async () => {
+  test('_applySuggestionChips ignores a failed or missing result without clearing chips', async () => {
     const vm = await createViewModel();
+    // A successful result first establishes a chip set…
+    applyChips(vm, [chipResult([chip()])]);
+    expect(vm.suggestedChips).toHaveLength(1);
+    // …then a failed/missing result must leave the previous set untouched.
     applyChips(vm, [{ agentId: 'suggestion-chips', success: false, output: undefined }]);
-    expect(vm.suggestedChips).toHaveLength(0);
+    expect(vm.suggestedChips).toHaveLength(1);
+    expect(vm.suggestedChips[0]?.label).toBe('Ask about the ward');
   });
 
   test('handleChipTap prefills the composer and does not send', async () => {
