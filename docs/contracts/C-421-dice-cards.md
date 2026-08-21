@@ -2,7 +2,7 @@
 id: C-421
 title: "Dice That Actually Roll — implement /roll, render dice cards, and bind narration to the mechanical result"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,10 +22,10 @@ created_at: "2026-08-21"
 | **Priority** | P1 — the single biggest "this is a real TTRPG, not a chat wrapper" win in the batch |
 | **Sequence** | **2 of 6** — after C-423 (inherits its a11y baseline); before the surface unification in C-424 |
 | **Dependencies** | C-148 (landed — combat dice / `GameDice`); C-231 (landed — rich chat streaming); C-234 (landed — `dice_notation.ts`); C-371/C-401 (landed — two-call dialogue pipeline); C-423 (a11y baseline) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
-| **Contract version** | 3.0.0 |
+| **Contract version** | 4.0.0 |
 
 ## Problem & Baseline Evidence
 
@@ -141,7 +141,7 @@ independently-mergeable increments, in the order below.
 - `views/combat/utils/dice_notation.ts:24-30` — the regex to widen.
 - `components/game/game_dice.svelte` — the animation to wrap.
 - `npc_dialogue_service.svelte.ts:1877-1906` — the existing injection to harden.
-- `packages/shared` `EnhancedChatMessage` (C-231) — where the `dice` kind lands.
+- `apps/frontend/client/src/lib/types/rich_chat.ts` — `EnhancedChatMessage` (C-231) lives here (client-local). The new `dice` kind is a cross-boundary schema added to `packages/shared/schemas` per Pillar 2, then surfaced through the chat message type.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
@@ -155,7 +155,9 @@ independently-mergeable increments, in the order below.
   chat ViewModel's command intercept and delete the dead `case 'roll'`.
 - Widen `parseDiceNotation` to accept an optional signed modifier
   (`2d6+3`, `1d20-1`) and return it. Keep the existing return shape additive so
-  combat callers are unaffected.
+  combat callers are unaffected. The chat command parser additionally accepts a
+  trailing `vs <dc>` (e.g. `/roll 1d20+3 vs 15`) that sets the check context on
+  the roll (OQ-1, resolved).
 - Widen the `DiceService.history` entry with optional check context
   (`dc`, `success`, `isCriticalSuccess`, `isCriticalFailure`, `label`).
   Optional fields keep existing callers valid.
@@ -268,11 +270,12 @@ chat command route; restore the bridge stub. No persistent state is lost.
 
 ### AC-1: `/roll` actually rolls
 
-**Given** a player types `/roll 1d20+3` in chat
+**Given** a player types `/roll 1d20+3` (or `/roll 1d20+3 vs 15`) in chat
 **When** the command is intercepted
 **Then** it resolves through `DiceService` (not the engine bridge), the
 modifier is parsed and applied, and the result is added to `DiceService.history`
-— replacing today's `Command: /roll 1d20+3` echo. Malformed notation
+— replacing today's `Command: /roll 1d20+3` echo. A trailing `vs <dc>` sets the
+check context (`dc`, `success`, crit flags) on the roll. Malformed notation
 (`/roll foo`, `/roll 99999d6`) produces a clear inline error and no roll.
 
 **Evidence Matrix**:
@@ -331,7 +334,7 @@ the DC and success/failure, read from the widened `DiceService.history`.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit + Visual | `dice_history_feed.test.ts` | chat / settings | Filled during verification |
+| AC-4 | Unit + Visual | `dice_history_feed.test.ts` | pause menu | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run client:test-unit`
@@ -373,16 +376,16 @@ the DC and success/failure, read from the widened `DiceService.history`.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved during critique (2026-08-21) by adopting the contract's stated
+recommendations:
 
-- **OQ-1 — should `/roll` in chat support an explicit DC (`/roll 1d20+3 vs 15`)?**
-  Without it, chat rolls are always flat and the check half of `DiceCard` only
-  ever renders in combat and dialogue. **Recommendation: yes**, a trailing
-  `vs <dc>` — it is a small parser addition and it is what makes the card's
-  best state reachable from the surface players use most.
-- **OQ-2 — where does the roll-history feed live?** Chat side panel, pause
-  menu, or settings. **Recommendation: pause menu**, next to the other
-  session-level views; it is a session artefact, not a chat artefact.
+- **OQ-1 — RESOLVED: yes.** `/roll` supports a trailing `vs <dc>` (e.g.
+  `/roll 1d20+3 vs 15`). It is a small parser addition and makes the check half
+  of `DiceCard` reachable from chat, the surface players use most. Folded into
+  AC-1 and the Architecture Directives.
+- **OQ-2 — RESOLVED: pause menu.** The roll-history feed lives in the pause
+  menu, next to the other session-level views; it is a session artefact, not a
+  chat artefact. AC-4's production path updated accordingly.
 
 ## Amendments
 
@@ -392,6 +395,7 @@ Changes to ACs or scope require a version bump and user approval.
 |---|---|---|---|
 | 2.0.0 | 2026-08-21 | Initial draft from UX review. | — |
 | 3.0.0 | 2026-08-21 | Re-verified against code. AC-1 corrected: `/roll` is a TODO stub in `engine_bridge.ts:175-181`, not a plain-text result — no roll occurs, so the work is "implement dice in chat". Added two undeclared prerequisites the review missed: `parseDiceNotation` cannot parse modifiers (`dice_notation.ts:24-30`), and `DiceService.history` carries no check context, blocking AC-4. AC-3 re-scoped from "build authoritative injection" to "harden it" — injection already exists (`npc_dialogue_service.svelte.ts:1877-1899`, C-371/C-401). Dropped advantage/disadvantage from the data model as speculative. Added notation bounds as a security requirement, Implementation Sequence, Edge Cases, and lifecycle sections. Sequenced 2 of 6. | review 2026-08-21 |
+| 4.0.0 | 2026-08-21 | Critique: resolved OQ-1 (support `vs <dc>` in `/roll`, folded into AC-1 + directives) and OQ-2 (history feed lives in pause menu, AC-4 path updated). Corrected Design Reference: `EnhancedChatMessage` is client-local in `apps/frontend/client/src/lib/types/rich_chat.ts`; the `dice` kind is a new shared schema. | critic 2026-08-21 |
 
 ## Promotion Lifecycle
 
