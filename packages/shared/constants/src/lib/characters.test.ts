@@ -11,35 +11,12 @@ import {
   DND_STANDARD_ARRAY,
   ONBOARDING_STEPS,
   PLAY_STYLE_TAGS,
-  PRONOUN_SETS,
   RANDOM_BACKGROUNDS,
   RANDOM_FANTASY_NAMES,
   RANDOM_PERSONALITIES,
   SPECIES_OPTIONS,
   STARTER_HEROES,
 } from './characters';
-
-describe('Pronoun sets', () => {
-  it('has exactly three pronoun sets', () => {
-    expect(PRONOUN_SETS.length).toBe(3);
-  });
-
-  it('includes he/him, she/her, and they/them', () => {
-    const ids = PRONOUN_SETS.map((p) => p.id);
-    expect(ids).toContain('he_him');
-    expect(ids).toContain('she_her');
-    expect(ids).toContain('they_them');
-  });
-
-  it('all pronoun sets have required fields', () => {
-    for (const pronoun of PRONOUN_SETS) {
-      expect(pronoun.subjective.length).toBeGreaterThan(0);
-      expect(pronoun.objective.length).toBeGreaterThan(0);
-      expect(pronoun.possessive.length).toBeGreaterThan(0);
-      expect(pronoun.reflexive.length).toBeGreaterThan(0);
-    }
-  });
-});
 
 describe('Play-style tags', () => {
   it('has six play-style tags', () => {
@@ -131,7 +108,6 @@ describe('Starter heroes', () => {
       expect(hero.background.length).toBeGreaterThan(0);
       expect(hero.personalityTraits.length).toBeGreaterThan(0);
       expect(hero.appearance.length).toBeGreaterThan(0);
-      expect(hero.pronouns.subjective.length).toBeGreaterThan(0);
     }
   });
 

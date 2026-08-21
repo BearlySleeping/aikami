@@ -16,7 +16,25 @@ project:
   owner: 'Backend Team'
 
 dependsOn:
+  - 'backend-database'
   - 'constants'
   - 'schemas'
   - 'types'
 
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

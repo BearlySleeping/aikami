@@ -14,10 +14,6 @@ export type OnboardingDraft = {
   step: OnboardingStep;
   /** Character name. */
   name: string;
-  /** Selected pronoun set ID (e.g., 'he_him'). */
-  pronounId: string;
-  /** Display string like "he/him" for storage in persona notes. */
-  pronounDisplay: string;
   /** Selected race/species ID. */
   raceId: string;
   /** Selected class ID. */

@@ -10,7 +10,6 @@ import type {
   AppearancePreset,
   ClassPreset,
   OnboardingStep,
-  PronounSet,
   SpeciesOption,
   StarterHero,
 } from '@aikami/constants';
@@ -22,7 +21,6 @@ import {
   DND_STANDARD_ARRAY,
   ONBOARDING_STEPS,
   PLAY_STYLE_TAGS,
-  PRONOUN_SETS,
   RANDOM_BACKGROUNDS,
   RANDOM_FANTASY_NAMES,
   RANDOM_PERSONALITIES,
@@ -36,11 +34,19 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { OnboardingDraft, PersonaData, SetupMode } from '@aikami/types';
-import { campaignService, routerService } from '$services';
+import { campaignService, personaService, routerService } from '$services';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
 const DRAFT_KEY = 'aikami-onboarding-draft' as const;
+
+/**
+ * Max total across all six ability scores. Matches the sum of the D&D
+ * standard array (15+14+13+12+10+8 = 72) so players can't pump every
+ * score to 15.
+ */
+const ABILITY_SCORE_BUDGET = DND_STANDARD_ARRAY.reduce((sum, v) => sum + v, 0);
+
 const EMPTY_SCORES: Record<string, number> = {
   strength: 10,
   dexterity: 10,
@@ -51,13 +57,24 @@ const EMPTY_SCORES: Record<string, number> = {
 };
 
 /** Canonical render-order for LPC slots. Matches engine ordering. */
-const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+const ENGINE_SLOTS = [
+  'body',
+  'accessories',
+  'hair',
+  'torso',
+  'legs',
+  'feet',
+  'head',
+  'head_accessories',
+] as const;
 
 /** LPC slot labels for the appearance step UI. */
 const LPC_SLOT_LABELS: Record<string, string> = {
   body: 'Body',
+  accessories: 'Accessories',
   hair: 'Hair',
   head: 'Head',
+  head_accessories: 'Head Accessories',
   torso: 'Torso',
   legs: 'Legs',
   feet: 'Feet',
@@ -75,9 +92,12 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly canGoNext: boolean;
   readonly classPresets: readonly ClassPreset[];
   readonly speciesOptions: readonly SpeciesOption[];
-  readonly pronounSets: readonly PronounSet[];
   readonly abilityLabels: typeof ABILITY_LABELS;
   readonly playStyleTags: typeof PLAY_STYLE_TAGS;
+  /** Max total across all ability scores (sum of the standard array). */
+  readonly abilityScoreBudget: number;
+  /** Current sum of all ability scores. */
+  readonly abilityScoreTotal: number;
   readonly appearancePresets: readonly AppearancePreset[];
   readonly hasDraft: boolean;
 
@@ -92,7 +112,6 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
 
   // Custom path state (bound by step views)
   name: string;
-  pronounId: string;
   raceId: string;
   classId: string;
   alignment: string;
@@ -104,7 +123,6 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
 
   // Step mutators
   setName(value: string): void;
-  setPronounId(value: string): void;
   setRaceId(value: string): void;
   setClassId(value: string): void;
   setAlignment(value: string): void;
@@ -116,7 +134,6 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   // Selected class/race resolved data
   readonly selectedClass: ClassPreset | undefined;
   readonly selectedRace: SpeciesOption | undefined;
-  readonly selectedPronoun: PronounSet | undefined;
 
   // LPC appearance state
   lpcRecipe: Record<string, string>;
@@ -159,7 +176,6 @@ class OnboardingCoordinatorViewModel
 
   // Custom path form fields
   name = $state('');
-  pronounId = $state('he_him');
   raceId = $state('');
   classId = $state('');
   alignment = $state('True Neutral');
@@ -193,16 +209,20 @@ class OnboardingCoordinatorViewModel
     return SPECIES_OPTIONS;
   }
 
-  get pronounSets(): readonly PronounSet[] {
-    return PRONOUN_SETS;
-  }
-
   get abilityLabels(): typeof ABILITY_LABELS {
     return ABILITY_LABELS;
   }
 
   get playStyleTags(): typeof PLAY_STYLE_TAGS {
     return PLAY_STYLE_TAGS;
+  }
+
+  get abilityScoreBudget(): number {
+    return ABILITY_SCORE_BUDGET;
+  }
+
+  get abilityScoreTotal(): number {
+    return Object.values(this.abilityScores).reduce((sum, v) => sum + v, 0);
   }
 
   get appearancePresets(): readonly AppearancePreset[] {
@@ -241,10 +261,6 @@ class OnboardingCoordinatorViewModel
 
   get selectedRace(): SpeciesOption | undefined {
     return SPECIES_OPTIONS.find((s) => s.id === this.raceId);
-  }
-
-  get selectedPronoun(): PronounSet | undefined {
-    return PRONOUN_SETS.find((p) => p.id === this.pronounId);
   }
 
   /**
@@ -345,11 +361,6 @@ class OnboardingCoordinatorViewModel
     this._saveDraft();
   }
 
-  setPronounId(value: string): void {
-    this.pronounId = value;
-    this._saveDraft();
-  }
-
   setRaceId(value: string): void {
     this.raceId = value;
     this._saveDraft();
@@ -389,6 +400,11 @@ class OnboardingCoordinatorViewModel
     }
     const next = current + delta;
     if (next < 8 || next > 15) {
+      return;
+    }
+    // Enforce the total budget: increasing a score must not push the sum
+    // of all scores past ABILITY_SCORE_BUDGET (e.g. can't set all to 15).
+    if (delta > 0 && this.abilityScoreTotal + delta > ABILITY_SCORE_BUDGET) {
       return;
     }
     this.abilityScores = { ...this.abilityScores, [key]: next };
@@ -442,7 +458,6 @@ class OnboardingCoordinatorViewModel
       RANDOM_FANTASY_NAMES[Math.floor(Math.random() * RANDOM_FANTASY_NAMES.length)];
     const randomRace = SPECIES_OPTIONS[Math.floor(Math.random() * SPECIES_OPTIONS.length)];
     const randomClass = CLASS_PRESETS[Math.floor(Math.random() * CLASS_PRESETS.length)];
-    const randomPronoun = PRONOUN_SETS[Math.floor(Math.random() * PRONOUN_SETS.length)];
     const randomPreset = APPEARANCE_PRESETS[Math.floor(Math.random() * APPEARANCE_PRESETS.length)];
     const randomBg = RANDOM_BACKGROUNDS[Math.floor(Math.random() * RANDOM_BACKGROUNDS.length)];
     const randomPers =
@@ -459,7 +474,6 @@ class OnboardingCoordinatorViewModel
     const randomAlignment = alignments[Math.floor(Math.random() * alignments.length)];
 
     this.name = randomName;
-    this.pronounId = randomPronoun.id;
     this.raceId = randomRace.id;
     this.classId = randomClass.id;
     this.alignment = randomAlignment;
@@ -507,8 +521,6 @@ class OnboardingCoordinatorViewModel
 
   /** Creates a PersonaData object from a starter hero definition. */
   private _assemblePersonaFromStarter(hero: StarterHero): PersonaData {
-    const pronounDisplay = `${hero.pronouns.subjective}/${hero.pronouns.objective}`;
-
     return {
       id: crypto.randomUUID(),
       name: hero.name,
@@ -517,10 +529,14 @@ class OnboardingCoordinatorViewModel
       alignment: hero.alignment,
       abilityScores: hero.abilityScores,
       equipment: hero.equipment,
-      appearance: { physicalDescription: hero.appearance },
+      appearance: {
+        physicalDescription: hero.appearance,
+        lpcRecipe: { ...hero.lpcRecipe },
+        paletteOverrides: { ...(hero.paletteOverrides ?? {}) },
+      } as Record<string, unknown>,
       background: hero.background,
       personalityTraits: hero.personalityTraits,
-      notes: `Pronouns: ${pronounDisplay}`,
+      notes: '',
       hitPoints: 10,
       hitPointsMax: 10,
       temporaryHitPoints: 0,
@@ -538,9 +554,6 @@ class OnboardingCoordinatorViewModel
 
   /** Creates a PersonaData object from the current draft state. */
   private _assemblePersonaFromDraft(): PersonaData {
-    const pronoun = this.selectedPronoun;
-    const pronounDisplay = pronoun ? `${pronoun.subjective}/${pronoun.objective}` : 'they/them';
-
     return {
       id: crypto.randomUUID(),
       name: this.name.trim(),
@@ -556,7 +569,7 @@ class OnboardingCoordinatorViewModel
       } as Record<string, unknown>,
       background: this.background,
       personalityTraits: this.personalityTraits,
-      notes: `Pronouns: ${pronounDisplay}`,
+      notes: '',
       hitPoints: 10,
       hitPointsMax: 10,
       temporaryHitPoints: 0,
@@ -576,20 +589,31 @@ class OnboardingCoordinatorViewModel
 
   /** Attaches the persona to the campaign, completes setup, and navigates to /game. */
   private async _attachPersonaToCampaign(persona: PersonaData): Promise<void> {
-    const campaign = campaignService.activeCampaign;
-    if (!campaign) {
-      this.error('_attachPersonaToCampaign:no-campaign');
-      this.errorMessage = 'No active campaign found. Please return to the start menu.';
-      return;
-    }
-
-    if (campaign.state !== 'creating') {
-      this.error('_attachPersonaToCampaign:wrong-state', { state: campaign.state });
-      this.errorMessage = 'Campaign is not ready for character creation.';
-      return;
+    // Resolve a campaign in the 'creating' state. When /setup is refreshed or
+    // entered directly (not via the index flow), no active campaign exists —
+    // create one so character creation can complete.
+    let campaign = campaignService.activeCampaign;
+    if (!campaign || campaign.state !== 'creating') {
+      try {
+        campaign = await campaignService.startNewCampaign();
+      } catch (error) {
+        this.error('_attachPersonaToCampaign:create-failed', error);
+        this.errorMessage =
+          error instanceof Error
+            ? error.message
+            : 'No active campaign found. Please return to the start menu.';
+        return;
+      }
     }
 
     try {
+      // Persist the persona to the same stores the game reads so the created
+      // character (not the default LPC sprite) shows up in /game:
+      //   1. `aikami-characters` localStorage (legacy list)
+      //   2. the local `personas` SQLite table (C-386b local-first)
+      //   3. mark it as the active persona
+      await this._persistPersona(persona);
+
       localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
       campaign.personaId = persona.id;
       campaignService.completeSetup();
@@ -607,6 +631,42 @@ class OnboardingCoordinatorViewModel
     } catch (error) {
       this.error('_attachPersonaToCampaign:failed', error);
       throw error;
+    }
+  }
+
+  // ── Private: Persona Persistence ──────────────────────────────────
+
+  /**
+   * Persists a persona to the stores the game boot resolves from, so the
+   * created character (not the default LPC sprite) appears in /game.
+   * Mirrors the persona-create flow: `aikami-characters` localStorage list
+   * plus the local `personas` SQLite table, then marks it active.
+   */
+  private async _persistPersona(persona: PersonaData): Promise<void> {
+    // 1. Legacy `aikami-characters` list (append or replace by id)
+    try {
+      const stored = localStorage.getItem('aikami-characters');
+      const characters = stored ? (JSON.parse(stored) as unknown[]) : [];
+      const idx = characters.findIndex(
+        (c: unknown) => (c as { persona: { id: string } }).persona?.id === persona.id,
+      );
+      const entry = { persona, savedAt: new Date().toISOString() };
+      if (idx >= 0) {
+        characters[idx] = entry;
+      } else {
+        characters.push(entry);
+      }
+      localStorage.setItem('aikami-characters', JSON.stringify(characters));
+    } catch (error) {
+      this.warn('_persistPersona:local-list-failed', error);
+    }
+
+    // 2. Local `personas` SQLite table (upsert) + mark active
+    try {
+      await personaService.updatePersona(persona.id, { ...persona, isActive: true });
+      await personaService.setActivePersona(persona.id);
+    } catch (error) {
+      this.warn('_persistPersona:local-table-failed', error);
     }
   }
 
@@ -657,10 +717,6 @@ class OnboardingCoordinatorViewModel
       const draft: OnboardingDraft = {
         step: this.step,
         name: this.name,
-        pronounId: this.pronounId,
-        pronounDisplay: this.selectedPronoun
-          ? `${this.selectedPronoun.subjective}/${this.selectedPronoun.objective}`
-          : 'they/them',
         raceId: this.raceId,
         classId: this.classId,
         alignment: this.alignment,
@@ -691,13 +747,11 @@ class OnboardingCoordinatorViewModel
 
       const raceExists = SPECIES_OPTIONS.some((s) => s.id === draft.raceId);
       const classExists = CLASS_PRESETS.some((c) => c.id === draft.classId);
-      const pronounExists = PRONOUN_SETS.some((p) => p.id === draft.pronounId);
 
-      if (!raceExists || !classExists || !pronounExists) {
+      if (!raceExists || !classExists) {
         this.warn('_recoverDraft:stale-ids', {
           raceExists,
           classExists,
-          pronounExists,
         });
         this._clearDraft();
         return;
@@ -706,7 +760,6 @@ class OnboardingCoordinatorViewModel
       this.mode = 'custom';
       this.step = draft.step;
       this.name = draft.name;
-      this.pronounId = draft.pronounId;
       this.raceId = draft.raceId;
       this.classId = draft.classId;
       this.alignment = draft.alignment;

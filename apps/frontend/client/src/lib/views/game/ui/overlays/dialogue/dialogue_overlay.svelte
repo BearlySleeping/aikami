@@ -157,7 +157,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
   <!-- Dialogue Box — glass card at bottom 45% of screen -->
   <div
     class="mx-auto mb-6 flex w-full max-w-2xl flex-col rounded-2xl border border-base-content/10 bg-base-200/90 shadow-2xl backdrop-blur-md"
-    style="height: 45vh; border-color: var(--rune-glow);"
+    style="height: 45vh;"
   >
     <!-- Header: NPC name + address mode + End Chat -->
     <div

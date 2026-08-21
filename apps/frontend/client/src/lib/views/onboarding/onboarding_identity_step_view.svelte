@@ -28,23 +28,6 @@ const { viewModel }: Props = $props();
     >
   </div>
 
-  <!-- Pronouns -->
-  <fieldset class="border-0 p-0">
-    <legend class="text-sm font-semibold mb-2">Pronouns</legend>
-    <div class="flex flex-wrap gap-2">
-      {#each viewModel.pronounSets as pronoun}
-        <button
-          type="button"
-          class="btn btn-sm {viewModel.pronounId === pronoun.id ? 'btn-primary' : 'btn-outline'}"
-          onclick={() => viewModel.setPronounId(pronoun.id)}
-          aria-pressed={viewModel.pronounId === pronoun.id}
-        >
-          {pronoun.subjective}/{pronoun.objective}
-        </button>
-      {/each}
-    </div>
-  </fieldset>
-
   <!-- Species -->
   <fieldset class="border-0 p-0">
     <legend class="text-sm font-semibold mb-2">Species / Ancestry</legend>

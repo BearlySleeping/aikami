@@ -56,7 +56,7 @@ const ICONS: Record<MessageAction, string> = {
 </script>
 
 <div
-  class="message-action-bar absolute -top-8 right-0 flex gap-1 rounded-lg bg-base-200/90 px-1 py-0.5 opacity-0 shadow backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100"
+  class="message-action-bar absolute -top-8 right-0 flex gap-1 rounded-lg bg-base-200/90 px-1 py-0.5 opacity-0 shadow backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100"
 >
   {#each actions as action (action)}
     <button

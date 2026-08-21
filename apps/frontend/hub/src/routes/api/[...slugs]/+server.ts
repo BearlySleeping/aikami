@@ -11,12 +11,15 @@
 import { deleteCookie, setSessionCookie } from '@aikami/backend/svelte-kit/cookies.ts';
 import { AUTH_COOKIE_NAME } from '@aikami/constants';
 import { app } from '$lib/server/api';
+import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
+import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
 import { logger } from '$logger';
 
 type RequestHandler = (v: {
   request: Request;
   cookies: import('@sveltejs/kit').Cookies;
   url: URL;
+  platform?: App.Platform;
 }) => Response | Promise<Response>;
 
 /**
@@ -35,7 +38,17 @@ type RequestHandler = (v: {
  * Note: the cookie must be named `__session` — Firebase Hosting strips
  * every other cookie from requests forwarded to Cloud Run rewrites.
  */
-export const fallback: RequestHandler = async ({ request, cookies, url }) => {
+export const fallback: RequestHandler = async ({ request, cookies, url, platform }) => {
+  // C-426 AC-3/AC-4: the Worker bindings (D1 + R2) are only available per
+  // request via `platform.env`. Inject them into the Better Auth / save-backup
+  // modules before handling so production requests initialize from the real
+  // DB rather than relying on module-level state left unset outside tests.
+  const env = platform?.env;
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setBetterAuthEnv(env ? { DB: env.DB } : undefined);
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
+
   const response = await app.handle(request);
 
   const setCookie = response.headers.get('set-cookie');

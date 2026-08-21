@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "cf": "0.7.0",
-    "firebase-tools": "15.28.0",
+    "firebase-tools": "15.28.1",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.3",
     "wrangler": "^4.125.0"

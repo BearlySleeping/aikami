@@ -65,16 +65,35 @@ const getSlotVariants = (slotName: string): Array<{ assetId: string; label: stri
   }));
 };
 
-// Slots exposed in the onboarding UI
-const editableSlots = ['body', 'hair', 'head', 'torso', 'legs', 'feet'] as const;
+// Slots exposed in the onboarding UI (body + accessories and head + head
+// accessories are handled separately)
+const editableSlots = ['hair', 'torso', 'legs', 'feet'] as const;
 const slotLabels: Record<string, string> = {
   body: 'Body',
+  accessories: 'Accessories',
   hair: 'Hair',
   head: 'Head',
+  head_accessories: 'Head Accessories',
   torso: 'Torso',
   legs: 'Legs',
   feet: 'Feet',
 };
+
+// The LPC 'body' slot mixes base bodies with accessories (wings, tails,
+// wounds, prosthesis, wheelchair). Split them into two selectors:
+//   - Body: required, only actual body shapes (assetId starts with 'body/bodies')
+//   - Accessories: optional, everything else (wings/tails/wounds/etc.)
+const isBodyVariant = (assetId: string): boolean => assetId.startsWith('body/bodies');
+const bodyVariants = getSlotVariants('body').filter((v) => isBodyVariant(v.assetId));
+const accessoryVariants = getSlotVariants('body').filter((v) => !isBodyVariant(v.assetId));
+
+// The LPC 'head' slot mixes actual head shapes with facial features
+// (ears, faces, nose, horns, fins, wrinkles). Split them too:
+//   - Head: required, only actual head shapes (assetId starts with 'head/heads')
+//   - Head Accessories: optional, everything else (ears/faces/nose/horns/fins)
+const isHeadVariant = (assetId: string): boolean => assetId.startsWith('head/heads');
+const headVariants = getSlotVariants('head').filter((v) => isHeadVariant(v.assetId));
+const headAccessoryVariants = getSlotVariants('head').filter((v) => !isHeadVariant(v.assetId));
 
 // ── Color picker state ─────────────────────────────────────────────
 
@@ -111,6 +130,82 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
   <fieldset class="border-0 p-0">
     <legend class="text-sm font-semibold mb-2">Customize Layers</legend>
     <div class="grid grid-cols-2 gap-2">
+      <!-- Body (required — only actual body shapes) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-body" class="label py-1">
+          <span class="label-text text-xs">Body</span>
+          <span class="badge badge-primary badge-xs">Required</span>
+        </label>
+        <select
+          id="lpc-slot-body"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.body ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('body', (e.target as HTMLSelectElement).value)}
+        >
+          {#each bodyVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Accessories (optional — wings, tails, wounds, etc.) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-accessories" class="label py-1">
+          <span class="label-text text-xs">Accessories</span>
+        </label>
+        <select
+          id="lpc-slot-accessories"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.accessories ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('accessories', (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">—</option>
+          {#each accessoryVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Head (required — only actual head shapes) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-head" class="label py-1">
+          <span class="label-text text-xs">Head</span>
+          <span class="badge badge-primary badge-xs">Required</span>
+        </label>
+        <select
+          id="lpc-slot-head"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.head ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('head', (e.target as HTMLSelectElement).value)}
+        >
+          {#each headVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Head Accessories (optional — ears, faces, nose, horns, fins, etc.) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-head-accessories" class="label py-1">
+          <span class="label-text text-xs">Head Accessories</span>
+        </label>
+        <select
+          id="lpc-slot-head-accessories"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.head_accessories ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('head_accessories', (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">—</option>
+          {#each headAccessoryVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
       {#each editableSlots as slot}
         {@const variants = getSlotVariants(slot)}
         {@const currentAssetId = viewModel.lpcRecipe[slot] ?? ''}

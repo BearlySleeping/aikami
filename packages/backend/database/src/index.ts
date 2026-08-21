@@ -8,5 +8,9 @@
 // (AC-4.1) — so no database credential ever reaches a browser.
 
 export * from './lib/connection.ts';
+// C-426: the D1 (sqlite) schema is exported under the `d1` namespace to avoid
+// colliding with the still-live Postgres schema's `packs`/`packVersions`/
+// `accounts` exports (both stay in the tree until the AC-8 decommission).
+export * as d1 from './lib/d1_schema.ts';
 export * from './lib/repositories/index.ts';
 export * from './lib/schema.ts';

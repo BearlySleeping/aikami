@@ -286,17 +286,6 @@ mock.module('@aikami/constants', () => ({
     { id: 'stealth', label: 'Stealth', description: 'Stealth' },
     { id: 'social', label: 'Social', description: 'Social' },
   ],
-  PRONOUN_SETS: [
-    { id: 'he_him', subjective: 'he', objective: 'him', possessive: 'his', reflexive: 'himself' },
-    { id: 'she_her', subjective: 'she', objective: 'her', possessive: 'her', reflexive: 'herself' },
-    {
-      id: 'they_them',
-      subjective: 'they',
-      objective: 'them',
-      possessive: 'their',
-      reflexive: 'themself',
-    },
-  ],
   RANDOM_BACKGROUNDS: ['BgA', 'BgB', 'BgC', 'BgD', 'BgE', 'BgF', 'BgG', 'BgH'],
   RANDOM_FANTASY_NAMES: [
     'N0',
@@ -345,13 +334,6 @@ mock.module('@aikami/constants', () => ({
     {
       id: 'starter_thaldrin',
       name: 'Thaldrin',
-      pronouns: {
-        id: 'he_him',
-        subjective: 'he',
-        objective: 'him',
-        possessive: 'his',
-        reflexive: 'himself',
-      },
       race: 'Human',
       class: 'Fighter',
       alignment: 'Lawful Good',
@@ -365,6 +347,14 @@ mock.module('@aikami/constants', () => ({
       },
       equipment: ['Longsword'],
       appearance: 'Tall',
+      lpcRecipe: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_muscular',
+        hair: 'hair/messy2_adult',
+        torso: 'torso/armour/plate_male',
+        legs: 'legs/armour/plate_male',
+        feet: 'feet/boots/basic_male',
+      },
       personalityTraits: 'Disciplined',
       background: 'Former guard',
       flavorText: 'Protector',
@@ -373,13 +363,6 @@ mock.module('@aikami/constants', () => ({
     {
       id: 'starter_lyra',
       name: 'Lyra',
-      pronouns: {
-        id: 'she_her',
-        subjective: 'she',
-        objective: 'her',
-        possessive: 'her',
-        reflexive: 'herself',
-      },
       race: 'Elf',
       class: 'Wizard',
       alignment: 'Neutral Good',
@@ -393,6 +376,15 @@ mock.module('@aikami/constants', () => ({
       },
       equipment: ['Spellbook'],
       appearance: 'Slender',
+      lpcRecipe: {
+        head: 'head/heads/human_female',
+        body: 'body/bodies_female',
+        hair: 'hair/page_adult',
+        torso: 'torso/clothes/robe_female',
+        legs: 'legs/formal_thin',
+        feet: 'feet/shoes/basic_thin',
+      },
+      paletteOverrides: { hair: 'C0C0C0' },
       personalityTraits: 'Curious',
       background: 'Scholar',
       flavorText: 'Scholar',
@@ -401,13 +393,6 @@ mock.module('@aikami/constants', () => ({
     {
       id: 'starter_zeph',
       name: 'Zeph',
-      pronouns: {
-        id: 'they_them',
-        subjective: 'they',
-        objective: 'them',
-        possessive: 'their',
-        reflexive: 'themself',
-      },
       race: 'Tiefling',
       class: 'Rogue',
       alignment: 'Chaotic Good',
@@ -421,6 +406,14 @@ mock.module('@aikami/constants', () => ({
       },
       equipment: ['Shortsword'],
       appearance: 'Lean',
+      lpcRecipe: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/swoop_adult',
+        torso: 'torso/clothes/vest_male',
+        legs: 'legs/cuffed_male',
+        feet: 'feet/boots/basic_male',
+      },
       personalityTraits: 'Charming',
       background: 'Street urchin',
       flavorText: 'Scoundrel',
@@ -452,6 +445,10 @@ mock.module('$services', () => ({
   routerService: {
     goToRoute: mock(async () => {}),
   },
+  personaService: {
+    updatePersona: mock(async () => {}),
+    setActivePersona: mock(async () => {}),
+  },
   aiSettingsService: {
     textProvider: { apiKey: 'mock', endpoint: 'http://localhost:11434', model: 'llama3' },
     imageProvider: { apiKey: '', endpoint: '' },
@@ -464,7 +461,6 @@ mock.module('$services', () => ({
 import {
   CLASS_PRESETS,
   DND_STANDARD_ARRAY,
-  PRONOUN_SETS,
   STARTER_HEROES,
 } from '../../../../../../../packages/shared/constants/src/lib/characters';
 
@@ -555,11 +551,6 @@ describe('OnboardingCoordinatorViewModel — initial state', () => {
   it('exposes three starter heroes', () => {
     const vm = getVM({ className: 'TestVM' });
     expect(vm.starterHeroes.length).toBe(3);
-  });
-
-  it('defaults pronoun to he_him', () => {
-    const vm = getVM({ className: 'TestVM' });
-    expect(vm.pronounId).toBe('he_him');
   });
 
   it('defaults alignment to True Neutral', () => {
@@ -714,12 +705,6 @@ describe('OnboardingCoordinatorViewModel — field setters', () => {
     expect(vm.name).toBe('Gandalf');
   });
 
-  it('setPronounId updates pronoun', () => {
-    const vm = getVM({ className: 'TestVM' });
-    vm.setPronounId('she_her');
-    expect(vm.pronounId).toBe('she_her');
-  });
-
   it('setRaceId updates race', () => {
     const vm = getVM({ className: 'TestVM' });
     vm.setRaceId('tiefling');
@@ -785,6 +770,31 @@ describe('OnboardingCoordinatorViewModel — ability scores', () => {
     vm.adjustAbilityScore('dexterity', 1);
     expect(vm.abilityScores.dexterity).toBe(15);
   });
+
+  it('cannot set all scores to 15 (total budget enforced)', () => {
+    const vm = getVM({ className: 'TestVM' });
+    // Start from the standard array (sum = 72 = budget)
+    vm.abilityScores = {
+      strength: 15,
+      dexterity: 14,
+      constitution: 13,
+      intelligence: 12,
+      wisdom: 10,
+      charisma: 8,
+    };
+    expect(vm.abilityScoreTotal).toBe(vm.abilityScoreBudget);
+    // At budget, no further increases are allowed
+    vm.adjustAbilityScore('charisma', 1);
+    expect(vm.abilityScores.charisma).toBe(8);
+  });
+
+  it('allows increases while under the total budget', () => {
+    const vm = getVM({ className: 'TestVM' });
+    // All 10s = 60, budget 72 → 12 points of headroom
+    vm.adjustAbilityScore('strength', 1);
+    expect(vm.abilityScores.strength).toBe(11);
+    expect(vm.abilityScoreTotal).toBe(61);
+  });
 });
 
 describe('OnboardingCoordinatorViewModel — standard array', () => {
@@ -818,13 +828,15 @@ describe('OnboardingCoordinatorViewModel — standard array', () => {
   it('does not overwrite manually adjusted scores on re-select', () => {
     const vm = getVM({ className: 'TestVM' });
     vm.setClassId('fighter');
-    // Override scores to known values to avoid shuffle randomness
+    // Override scores to known values to avoid shuffle randomness.
+    // Keep the total (68) under the 72 budget so the +4 intelligence
+    // increases below are allowed.
     vm.abilityScores = {
       strength: 15,
       dexterity: 13,
       constitution: 14,
       intelligence: 10,
-      wisdom: 12,
+      wisdom: 8,
       charisma: 8,
     };
     vm.adjustAbilityScore('intelligence', 2); // 10→12
@@ -859,13 +871,6 @@ describe('OnboardingCoordinatorViewModel — computed selections', () => {
     const vm = getVM({ className: 'TestVM' });
     expect(vm.selectedRace).toBeUndefined();
   });
-
-  it('selectedPronoun matches set', () => {
-    const vm = getVM({ className: 'TestVM' });
-    expect(vm.selectedPronoun?.id).toBe('he_him');
-    vm.setPronounId('they_them');
-    expect(vm.selectedPronoun?.id).toBe('they_them');
-  });
 });
 
 describe('OnboardingCoordinatorViewModel — randomize', () => {
@@ -874,7 +879,6 @@ describe('OnboardingCoordinatorViewModel — randomize', () => {
     vm.startCustom();
     vm.randomizeCharacter();
     expect(vm.name.length).toBeGreaterThan(0);
-    expect(vm.pronounId.length).toBeGreaterThan(0);
     expect(vm.raceId.length).toBeGreaterThan(0);
     expect(vm.classId.length).toBeGreaterThan(0);
     expect(vm.alignment.length).toBeGreaterThan(0);
@@ -883,12 +887,10 @@ describe('OnboardingCoordinatorViewModel — randomize', () => {
     expect(vm.personalityTraits.length).toBeGreaterThan(0);
   });
 
-  it('uses valid pronoun/race/class IDs', () => {
+  it('uses valid race/class IDs', () => {
     const vm = getVM({ className: 'TestVM' });
     vm.startCustom();
     vm.randomizeCharacter();
-    const pronounIds = PRONOUN_SETS.map((p) => p.id);
-    expect(pronounIds).toContain(vm.pronounId);
     expect(vm.selectedRace).toBeDefined();
     expect(vm.selectedClass).toBeDefined();
   });
@@ -918,11 +920,9 @@ describe('OnboardingCoordinatorViewModel — draft persistence', () => {
     const vm = getVM({ className: 'TestVM' });
     vm.startCustom();
     vm.setName('Eldrin');
-    vm.setPronounId('they_them');
     vm.setRaceId('elf');
     const draft = JSON.parse(localStorage.getItem('aikami-onboarding-draft') ?? '{}');
     expect(draft.name).toBe('Eldrin');
-    expect(draft.pronounId).toBe('they_them');
     expect(draft.raceId).toBe('elf');
   });
 
@@ -930,8 +930,6 @@ describe('OnboardingCoordinatorViewModel — draft persistence', () => {
     const preDraft = {
       step: 'play_style',
       name: 'RecoveryTest',
-      pronounId: 'she_her',
-      pronounDisplay: 'she/her',
       raceId: 'human',
       classId: 'rogue',
       alignment: 'Chaotic Good',
@@ -962,8 +960,6 @@ describe('OnboardingCoordinatorViewModel — draft persistence', () => {
     const staleDraft = {
       step: 'review',
       name: 'Stale',
-      pronounId: 'he_him',
-      pronounDisplay: 'he/him',
       raceId: 'nonexistent_race',
       classId: 'wizard',
       alignment: 'Neutral',
@@ -1000,7 +996,6 @@ describe('OnboardingCoordinatorViewModel — persona assembly', () => {
     expect(p.alignment).toBe('Lawful Good');
     expect(p.abilityScores?.strength).toBe(15);
     expect(p.equipment).toContain('Longsword');
-    expect(p.notes).toContain('he/him');
   });
 
   it('_assemblePersonaFromStarter has required fields for all heroes', () => {
@@ -1012,6 +1007,19 @@ describe('OnboardingCoordinatorViewModel — persona assembly', () => {
       expect(p.name).toBeDefined();
       expect(p.hitPoints).toBeDefined();
       expect(p.armorClass).toBeDefined();
+    }
+  });
+
+  it('_assemblePersonaFromStarter includes the hero LPC recipe', () => {
+    const vm = getVM({ className: 'TestVM' });
+    const internal = getInternal(vm);
+    for (const hero of STARTER_HEROES) {
+      const p = internal._assemblePersonaFromStarter(hero) as AssembledPersona;
+      const appearance = p.appearance as Record<string, unknown> | undefined;
+      const recipe = appearance?.lpcRecipe as Record<string, string> | undefined;
+      expect(recipe).toBeDefined();
+      expect(recipe?.head).toBe(hero.lpcRecipe.head);
+      expect(recipe?.body).toBe(hero.lpcRecipe.body);
     }
   });
 
@@ -1041,6 +1049,52 @@ describe('OnboardingCoordinatorViewModel — persona assembly', () => {
       (h) => (internal._assemblePersonaFromStarter(h) as AssembledPersona).id,
     );
     expect(new Set(ids).size).toBe(3);
+  });
+
+  it('_attachPersonaToCampaign persists persona to the stores the game reads', async () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.startCustom();
+    vm.setName('PersistHero');
+    vm.setRaceId('human');
+    vm.setClassId('fighter');
+    const internal = getInternal(vm);
+    const persona = internal._assemblePersonaFromDraft() as AssembledPersona;
+
+    await internal._attachPersonaToCampaign(persona);
+
+    // Written to the legacy `aikami-characters` list
+    const stored = localStorage.getItem('aikami-characters');
+    expect(stored).not.toBeNull();
+    const characters = JSON.parse(stored ?? '[]') as Array<{ persona: { id: string } }>;
+    expect(characters.some((c) => c.persona.id === persona.id)).toBe(true);
+
+    // Persisted to the local personas table + marked active
+    const { personaService } = await import('$services');
+    expect(personaService.updatePersona).toHaveBeenCalled();
+    expect(personaService.setActivePersona).toHaveBeenCalledWith(persona.id);
+  });
+
+  it('_attachPersonaToCampaign creates a campaign when none is active (refresh on /setup)', async () => {
+    const { campaignService } = await import('$services');
+    const original = campaignService.activeCampaign;
+    // Simulate a refresh on /setup where no active campaign exists
+    campaignService.activeCampaign = undefined;
+
+    try {
+      const vm = getVM({ className: 'TestVM' });
+      vm.startCustom();
+      vm.setName('RefreshHero');
+      vm.setRaceId('human');
+      vm.setClassId('fighter');
+      const internal = getInternal(vm);
+      const persona = internal._assemblePersonaFromDraft() as AssembledPersona;
+
+      await internal._attachPersonaToCampaign(persona);
+
+      expect(campaignService.startNewCampaign).toHaveBeenCalled();
+    } finally {
+      campaignService.activeCampaign = original;
+    }
   });
 });
 
@@ -1088,11 +1142,6 @@ describe('OnboardingCoordinatorViewModel — constant accessors', () => {
   it('8 species options', () => {
     const vm = getVM({ className: 'TestVM' });
     expect(vm.speciesOptions.length).toBe(8);
-  });
-
-  it('3 pronoun sets', () => {
-    const vm = getVM({ className: 'TestVM' });
-    expect(vm.pronounSets.length).toBe(3);
   });
 
   it('6 ability labels', () => {
@@ -1268,8 +1317,6 @@ describe('OnboardingCoordinatorViewModel — LPC draft persistence', () => {
     const preDraft = {
       step: 'appearance' as const,
       name: 'LpcTest',
-      pronounId: 'he_him',
-      pronounDisplay: 'he/him',
       raceId: 'human',
       classId: 'fighter',
       alignment: 'Neutral',
@@ -1306,8 +1353,6 @@ describe('OnboardingCoordinatorViewModel — LPC draft persistence', () => {
     const preDraft = {
       step: 'appearance' as const,
       name: 'NoLpc',
-      pronounId: 'he_him',
-      pronounDisplay: 'he/him',
       raceId: 'human',
       classId: 'fighter',
       alignment: 'Neutral',

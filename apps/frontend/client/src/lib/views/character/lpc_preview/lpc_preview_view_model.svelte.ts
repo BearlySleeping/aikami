@@ -33,11 +33,13 @@ import {
 /** Canonical Aikami z-order offsets for each slot. */
 const SLOT_Z_ORDER: Record<string, number> = {
   body: 0,
+  accessories: 5,
   legs: 10,
   feet: 20,
   torso: 30,
   shoulders: 40,
   head: 50,
+  head_accessories: 55,
   hair: 60,
   hat: 70,
   weapon: 80,
