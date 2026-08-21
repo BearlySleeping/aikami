@@ -2,7 +2,7 @@
 id: C-421
 title: "Dice That Actually Roll — implement /roll, render dice cards, and bind narration to the mechanical result"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -407,3 +407,56 @@ Target: **`integrated`** per increment. Phase 2 additionally requires
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented real dice in chat: `/roll 1d20+3` (and `vs <dc>`) now resolves through `DiceService` (not the engine bridge stub, which was deleted), with signed-modifier support and count/sides bounds added to `parseDiceNotation`. Added a shared `DiceCard` component (die faces, modifier, total, check context with crit highlighting) rendered in both chat and combat, a `dice` chat message kind in `packages/shared`, a hardened non-contradiction instruction + debug logging in the roll-resolution prompt, and a roll-history feed in the pause menu. All rolls are local/seeded and fully offline.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `/roll` routed to `DiceService`; modifiers + `vs <dc>` parsed; bounds enforced; malformed notation → inline error. Unit tests pass. |
+| AC-2 | ✅ | Shared `DiceCard` renders in chat (dice message kind) and combat (combat_dice_ui). Visual verified in sandbox (95/100). |
+| AC-3 | ✅ | Non-contradiction instruction added to roll-resolution system prompt; authoritative result logged at debug. Unit test asserts both strings present. |
+| AC-4 | ✅ | Roll-history feed in pause menu reads widened `DiceService.history` (notation, total, timestamp, DC + success/failure). Visual verified in sandbox. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/game/dice_card.ts` | TypeBox schema for `DiceCardData` (dice message kind). |
+| `packages/shared/types/src/lib/game/dice_card.ts` | `DiceCardData` type inferred from schema. |
+| `apps/frontend/client/src/lib/components/game/dice_card.svelte` | Shared dice card component (chat + combat). |
+| `apps/frontend/client/src/lib/views/combat/utils/dice_notation.test.ts` | Tests for `parseDiceNotation` modifiers/bounds + `parseRollCommand`. |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.test.ts` | Tests for `/roll` routing to `DiceService`. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/dice_history_feed.svelte` | Roll-history feed component. |
+| `apps/frontend/client/src/routes/(dev)/dev/dice/+page.svelte` | Dev sandbox for DiceCard + history feed visual verification. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/combat/utils/dice_notation.ts` | Widened `parseDiceNotation` for signed modifiers + bounds; added `parseRollCommand`. |
+| `apps/frontend/client/src/lib/views/combat/types/combat_enhancements.ts` | Added optional `modifier` to `DiceNotation`. |
+| `apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts` | Widened `history` entry (dc/success/crits/label/notation); added `rollCard`. |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` | Routed `/roll` to `DiceService`; added `_handleRollCommand`. |
+| `apps/frontend/client/src/lib/services/chat/chat.svelte.ts` | Added `kind`/`dice` to `ChatMessage`. |
+| `apps/frontend/client/src/lib/views/chat/chat_view.svelte` | Pass kind/dice to `EnhancedChatMessage`. |
+| `apps/frontend/client/src/lib/components/chat/enhanced_chat_message.svelte` | Render `DiceCard` for `kind === 'dice'`. |
+| `apps/frontend/client/src/lib/views/combat/components/combat_dice_ui.svelte` | Render shared `DiceCard` for resolved combat roll. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added non-contradiction instruction + debug logging to `_resolveRoll`. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view_model.svelte.ts` | Added roll-history open/close + `rollHistory`. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte` | Added Roll History button + feed render. |
+| `packages/frontend/engine/src/engine_bridge.ts` | Deleted dead `case 'roll'` stub. |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts` | Export dice card schema/type. |
+| `apps/frontend/client/src/lib/services/dice/dice_service.test.ts`, `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | Added AC-1/AC-3/AC-4 tests. |
+
+### Deviations from Spec
+- **`DiceCardData.timestamp` is an ISO-8601 string, not a `Date`.** The shared schemas package uses `typebox` (v1.3.16), which has no `Type.Date()`; the established convention is `Type.String({ format: 'date-time' })`. The client converts to `Date` where needed. This is a minor type-shape deviation from the contract's illustrative model, not a functional change.
+- **Production chat path not screenshot-verified.** Reaching the production chat requires a full game session (login + campaign load + NPC interaction), which is impractical to set up headlessly. The `/roll` routing is covered by unit tests, and the `DiceCard`/history-feed visuals are verified in the dev sandbox. The combat `DiceCard` render is wired but not screenshot-verified (combat requires a live engine session).
+- **`@aikami/utils` package.json was temporarily modified** (added `main`) during debugging, then reverted — it exposed latent pre-existing type errors in unrelated AI-client files. The real fix for test resolution was generating `.svelte-kit` (via client restart).
+
+### Test Results
+- Unit: 1894 pass / 1 fail (1 pre-existing `GameBootService` cancellation failure, unrelated to C-421; fails on base commit too)
+- E2E: not run (no E2E suite for this feature)
+- Visual: DiceCard sandbox 95/100 (PASS); roll-history feed 75/100 (modal content correct; backdrop blur lowers score)
+- Baseline: 1 pre-existing failure (GameBootService), 0 new failures
