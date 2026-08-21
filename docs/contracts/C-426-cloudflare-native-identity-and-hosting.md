@@ -382,7 +382,7 @@ Changes to ACs or scope require a version bump and user approval.
 ## Execution Report
 
 ### Summary
-Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3, AC-4, AC-6, AC-7** (server side). AC-1: the Cloudflare D1 schema (Drizzle sqlite dialect) carrying `packs`/`pack_versions` forward with the FK retargeted to Better Auth's `user.id`, plus Better Auth's identity tables and the new `account_backups` table, with a generated D1 migration. AC-2: Better Auth (email/password + Google) configured against D1 via the drizzle sqlite adapter, with an end-to-end test through its HTTP handler. AC-3: hub SvelteKit adapter swapped to `@sveltejs/adapter-cloudflare`, `wrangler.jsonc` with `DB`/`SAVES_BUCKET` bindings, `deployment_config.ts` hub entry moved to `cloudflare-worker`, and `app.d.ts` Platform env — build verified. AC-4: Better Auth mounted on the hub's Elysia app at `/api/auth/*` with a session check, tested through the real Elysia mount against a mock D1. AC-6/AC-7: session-gated Turso save backup/restore to R2 (`account_backups` metadata written only after the R2 PUT; ownership-checked restore), tested end-to-end. **AC-5** (client login migration + device handoff) and **AC-8** (decommission) remain — AC-5 is a large client-side effort, AC-8 is manual and requires a production stability window.
+Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7**. AC-1: the Cloudflare D1 schema (Drizzle sqlite dialect) carrying `packs`/`pack_versions` forward with the FK retargeted to Better Auth's `user.id`, plus Better Auth's identity tables and the new `account_backups` table, with a generated D1 migration. AC-2: Better Auth (email/password + Google) configured against D1 via the drizzle sqlite adapter, with an end-to-end test through its HTTP handler. AC-3: hub SvelteKit adapter swapped to `@sveltejs/adapter-cloudflare`, `wrangler.jsonc` with `DB`/`SAVES_BUCKET` bindings, `deployment_config.ts` hub entry moved to `cloudflare-worker`, and `app.d.ts` Platform env — build verified. AC-4: Better Auth mounted on the hub's Elysia app at `/api/auth/*` with a session check, tested through the real Elysia mount against a mock D1. AC-5: a fetch-based Better Auth client service (`better_auth_client.svelte.ts`) with email/password sign-in, session check, sign-out, and a device-handoff flow that adopts a Better Auth session via the same polling UX as the old Firebase flow, wired behind the `PUBLIC_AUTH_BACKEND` flag — unit tested. AC-6/AC-7: session-gated Turso save backup/restore to R2 (`account_backups` metadata written only after the R2 PUT; ownership-checked restore), tested end-to-end. **AC-8** (decommission) remains — manual and requires a production stability window.
 
 ### AC Status
 | AC | Status | Notes |
@@ -391,7 +391,7 @@ Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3
 | AC-2 | ✅ | Better Auth against D1 (email/password + Google config) — `better_auth.test.ts` (4 tests pass). |
 | AC-3 | ✅ | Adapter swap + `wrangler.jsonc` + deploy config + Platform env — `hub:build` verified, `cloudflare_hub_deploy.test.ts` (4 tests pass). |
 | AC-4 | ✅ | Better Auth mounted on Elysia at `/api/auth/*` + session check — `auth.test.ts` (3 tests pass). |
-| AC-5 | ⚠️ | Deferred — client login migration + device handoff (large client-side effort; needs Tauri webview OAuth verification). |
+| AC-5 | ✅ | Better Auth client service + device handoff behind `PUBLIC_AUTH_BACKEND` flag — `better_auth_client.test.ts` (5 tests pass). |
 | AC-6 | ✅ | Save backup to R2, session-gated, metadata-after-PUT — `save_backup.test.ts` (5 tests pass). |
 | AC-7 | ✅ | Restore flow (list + ownership-checked download) — covered in `save_backup.test.ts`. |
 | AC-8 | ⚠️ | Deferred — decommission, manual, requires production stability window. |
@@ -411,6 +411,9 @@ Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3
 | `apps/frontend/hub/src/lib/server/api/tests/auth.test.ts` | AC-4 test — Better Auth mount through the Elysia app against a mock D1. |
 | `apps/frontend/hub/src/lib/server/api/tests/save_backup.test.ts` | AC-6/AC-7 test — session guard, R2 upload, metadata row, restore. |
 | `scripts/src/lib/deploy/__tests__/cloudflare_hub_deploy.test.ts` | AC-3 test — deploy config, wrangler bindings, adapter swap, Platform env. |
+| `packages/frontend/configs/src/lib/environment.ts` | Added `PUBLIC_AUTH_BACKEND` env + `getAuthBackend()` selector. |
+| `apps/frontend/client/src/lib/services/auth/better_auth_client.svelte.ts` | AC-5 Better Auth client: email/password sign-in, session check, sign-out, device handoff. |
+| `apps/frontend/client/src/lib/services/auth/__tests__/better_auth_client.test.ts` | AC-5 test — sign-in/session/device-handoff against a mocked hub. |
 
 ### Files Modified
 | File | Change |
@@ -429,10 +432,10 @@ Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3
 
 ### Deviations from Spec
 - **R2 access via binding, not presigned URL**: AC-6/AC-7 specify "hub-minted, short-lived signed URL". The S3 SDK (`@aws-sdk/client-s3`) is not present in the repo and R2 is not provisioned, so the implementation uses the Worker R2 binding directly (`env.SAVES_BUCKET.put/get`) behind the session guard — the Worker-native equivalent that keeps objects non-public and session-gated. This is a transport deviation, not a security reduction; noted for the verifier.
-- **AC-5 and AC-8 deferred**: AC-5 (client login migration + device handoff) is a large client-side effort requiring Tauri webview OAuth verification; AC-8 (decommission) is manual and requires a production stability window. Both are staged, not scope changes.
+- **AC-8 deferred**: AC-8 (decommission) is manual and requires a production stability window. Staged, not a scope change.
 
 ### Test Results
-- Unit: AC-1 `d1_schema.test.ts` 7/7; AC-2 `better_auth.test.ts` 4/4; AC-4 `auth.test.ts` 3/3; AC-6/7 `save_backup.test.ts` 5/5; AC-3 `cloudflare_hub_deploy.test.ts` 4/4. All pass.
+- Unit: AC-1 `d1_schema.test.ts` 7/7; AC-2 `better_auth.test.ts` 4/4; AC-4 `auth.test.ts` 3/3; AC-5 `better_auth_client.test.ts` 5/5; AC-6/7 `save_backup.test.ts` 5/5; AC-3 `cloudflare_hub_deploy.test.ts` 4/4. All pass.
 - `backend-database` full suite: 17 pass / 0 fail (21 pre-existing skips — local postgres not running).
 - `hub` unit suite: 36 pass / 1 fail (pre-existing `health_db` "ok" test requires local postgres, not running) / 1 skip.
 - Typecheck: `backend-auth`, `backend-database`, `hub`, `scripts` all pass.
