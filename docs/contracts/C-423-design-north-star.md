@@ -2,7 +2,7 @@
 id: C-423
 title: "Aikami Design North Star — make the brand tokens real, kill hover-only actions"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — cheapest of the batch, fixes a real WCAG failure, and every later contract inherits its baseline |
 | **Sequence** | **1 of 6** — must land first; C-424 explicitly inherits this accessibility baseline |
 | **Dependencies** | C-418 Feature A (landed — `brand_daisy.css` / `brand_tokens.css`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal (`docs/design/DESIGN.md`) |
 | **Contract version** | 3.0.0 |
@@ -312,3 +312,53 @@ visual evidence at both viewports given its visual nature.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Fixed the WCAG 2.4.7 hover-only/focus-invisible defect on all three message-action
+surfaces (chat action bar, dialogue message actions, combat inline image) by adding
+`focus-within:opacity-100` + `max-sm:opacity-100` to each. Wired the previously-dead
+`brand_tokens.css` into the client (`app.css`) and applied `--rune-glow` to the
+dialogue overlay card as the exemplar surface (AC-2, grep 0→1). Wrote
+`docs/design/DESIGN.md` with named rules, a WCAG contrast audit, and a "Don't" list,
+and linked it from `CODING_STANDARDS.md`. Added `message_actions_a11y.spec.ts`
+(axe + keyboard-focus + touch-width, both viewports) — 11/11 passing.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | All three surfaces focus-revealed + touch-persistent; E2E spec 11/11 (axe, keyboard-focus, 390×844 + 1280×720) |
+| AC-2 | ✅ | `brand_tokens.css` imported in `app.css`; `--rune-glow` consumed on dialogue card; grep 0→1 |
+| AC-3 | ✅ | `docs/design/DESIGN.md` written with named rules (incl. no-hover-only rule), each citing a shipping file; linked from `CODING_STANDARDS.md` |
+| AC-4 | ✅ | Contrast audit computed for light+dark `brand_daisy.css`; failing pairs documented with named remedies |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/e2e/tests/client/message_actions_a11y.spec.ts` | AC-1 E2E: axe + keyboard-focus + touch-width at both viewports |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/message-actions/+page.svelte` | Dev sandbox mounting production MessageActionBar + CombatInlineImage for deterministic a11y testing |
+| `docs/design/DESIGN.md` | Named design rules + contrast audit (AC-3/AC-4) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/components/chat/message_action_bar.svelte` | Added `focus-within:opacity-100 max-sm:opacity-100` |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Added `focus-within:opacity-100 max-sm:opacity-100` to action bar; `border-color: var(--rune-glow)` on dialogue card |
+| `apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte` | Added `focus-within:opacity-100 max-sm:opacity-100` to overlay |
+| `apps/frontend/client/src/app.css` | Imported `brand_tokens.css` |
+| `docs/guides/CODING_STANDARDS.md` | Added Design Standards section linking to `docs/design/DESIGN.md` |
+
+### Deviations from Spec
+None. Chose the "wire in" branch of AC-2 (per OQ-1 recommendation) with the dialogue
+overlay as the exemplar. No scope change.
+
+### Test Results
+- Unit: client:test-unit passed (no failures); client:typecheck clean; e2e:typecheck clean
+- E2E: `message_actions_a11y.spec.ts` 11/11 PASS (0 failures)
+- Visual: dialogue focused 75/100, dialogue touch 75/100 — VLM under-scores small emoji
+  icons (Speak 🔊 not recognised) and small-icon opacity; programmatic computed-opacity
+  checks confirm opacity=1 at touch and on focus. E2E spec is the authoritative AC-1 gate.
+- Baseline: site-chromium/site-mobile e2e tests fail with `ERR_CONNECTION_REFUSED` on the
+  site dev-server port (11748) — the site server is not running in this worktree. This is
+  pre-existing and unrelated to C-423 (client-only contract); no new failures introduced.
