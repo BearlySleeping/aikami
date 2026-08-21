@@ -7,6 +7,8 @@
 //
 // Contract: C-231 AC-1, AC-3
 
+import type { DiceCardData } from '@aikami/types';
+import DiceCard from '$lib/components/game/dice_card.svelte';
 import { messageBranchStore } from '$services';
 import type { MessageAction } from '$types';
 import ChatMessage from './chat_message.svelte';
@@ -19,6 +21,10 @@ type Props = {
   text: string;
   sender: 'user' | 'ai' | 'system';
   timestamp: Date;
+  /** Message kind — 'dice' renders a DiceCard instead of plain text. */
+  kind?: 'text' | 'dice';
+  /** Present when kind === 'dice'. */
+  dice?: DiceCardData;
   /** Avatar URL for the AI character. */
   avatarUrl?: string;
   /** Name of the AI character. */
@@ -34,6 +40,8 @@ const {
   text,
   sender,
   timestamp,
+  kind = 'text',
+  dice,
   avatarUrl,
   characterName = 'AI',
   ttsAvailable = false,
@@ -80,16 +88,20 @@ const handleSwipeRight = () => {
     />
   </div>
 
-  <ChatMessage
-    message={{
-      id: messageId,
-      text: enriched.text,
-      sender: sender as 'user' | 'ai',
-      timestamp,
-    }}
-    {avatarUrl}
-    {characterName}
-  />
+  {#if kind === 'dice' && dice}
+    <DiceCard card={dice} />
+  {:else}
+    <ChatMessage
+      message={{
+        id: messageId,
+        text: enriched.text,
+        sender: sender as 'user' | 'ai',
+        timestamp,
+      }}
+      {avatarUrl}
+      {characterName}
+    />
+  {/if}
 
   <!-- Action bar (appears on hover) -->
   <MessageActionBar {sender} {ttsAvailable} onAction={handleAction} />

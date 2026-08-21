@@ -171,4 +171,77 @@ describe('DiceService', () => {
       expect(sequencesDiffer).toBe(true);
     });
   });
+
+  describe('rollCard (C-421)', () => {
+    test('rolls count dice, applies modifier, and computes total', () => {
+      diceService.setSeed(42);
+      const card = diceService.rollCard({ notation: '2d6+3', count: 2, sides: 6, modifier: 3 });
+      expect(card.dice).toHaveLength(2);
+      expect(card.modifier).toBe(3);
+      const sum = card.dice.reduce((acc, d) => acc + d.value, 0);
+      expect(card.total).toBe(sum + 3);
+      expect(card.check).toBeUndefined();
+      expect(card.isCriticalSuccess).toBe(false);
+      expect(card.isCriticalFailure).toBe(false);
+    });
+
+    test('sets check context when a DC is provided', () => {
+      diceService.setSeed(42);
+      const card = diceService.rollCard({
+        notation: '1d20+3',
+        count: 1,
+        sides: 20,
+        modifier: 3,
+        dc: 15,
+        ability: 'Persuasion',
+      });
+      expect(card.check).toBeDefined();
+      expect(card.check?.dc).toBe(15);
+      expect(card.check?.difference).toBe(card.total - 15);
+      expect(card.check?.success).toBe(card.total >= 15);
+      expect(card.check?.ability).toBe('Persuasion');
+    });
+
+    test('flags crits only for a single d20', () => {
+      diceService.setSeed(42);
+      const d20 = diceService.rollCard({ notation: '1d20', count: 1, sides: 20 });
+      // 2d6 must never report crits
+      const multi = diceService.rollCard({ notation: '2d6', count: 2, sides: 6 });
+      expect(multi.isCriticalSuccess).toBe(false);
+      expect(multi.isCriticalFailure).toBe(false);
+      // d20 crit flags are booleans (may be true or false depending on seed)
+      expect(typeof d20.isCriticalSuccess).toBe('boolean');
+      expect(typeof d20.isCriticalFailure).toBe('boolean');
+    });
+
+    test('pushes a widened history entry with check context', () => {
+      diceService.setSeed(42);
+      const before = diceService.history.length;
+      diceService.rollCard({
+        notation: '1d20+3',
+        count: 1,
+        sides: 20,
+        modifier: 3,
+        dc: 15,
+        ability: 'Persuasion',
+      });
+      const entry = diceService.history[before];
+      expect(entry.dc).toBe(15);
+      expect(typeof entry.success).toBe('boolean');
+      expect(entry.label).toBe('Persuasion');
+      expect(typeof entry.isCriticalSuccess).toBe('boolean');
+      expect(entry.notation).toBe('1d20+3');
+    });
+
+    test('flat roll history entry has no check context', () => {
+      diceService.setSeed(42);
+      const before = diceService.history.length;
+      diceService.rollCard({ notation: '2d6', count: 2, sides: 6 });
+      const entry = diceService.history[before];
+      expect(entry.dc).toBeUndefined();
+      expect(entry.success).toBeUndefined();
+      expect(entry.isCriticalSuccess).toBeUndefined();
+      expect(entry.notation).toBe('2d6');
+    });
+  });
 });

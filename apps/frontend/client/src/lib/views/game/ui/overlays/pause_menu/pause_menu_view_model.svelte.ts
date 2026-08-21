@@ -5,12 +5,15 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameOverlayService } from '$services';
+import type { DiceHistoryEntry } from '$lib/services/dice/dice_service.svelte.ts';
+import { diceService, gameOverlayService } from '$services';
 
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
   readonly confirmingQuit: boolean;
+  readonly isRollHistoryOpen: boolean;
+  readonly rollHistory: DiceHistoryEntry[];
   resumeGame(): void;
   saveGame(): Promise<void>;
   goToSettings(): Promise<void>;
@@ -20,6 +23,8 @@ export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   openEndSession(): void;
   replayOnboarding(): void;
   openReputation(): void;
+  openRollHistory(): void;
+  closeRollHistory(): void;
 };
 
 class PauseMenuViewModel
@@ -27,6 +32,11 @@ class PauseMenuViewModel
   implements PauseMenuViewModelInterface
 {
   confirmingQuit = $state(false);
+  isRollHistoryOpen = $state(false);
+
+  get rollHistory(): DiceHistoryEntry[] {
+    return diceService.history;
+  }
 
   get isSaving(): boolean {
     return gameOverlayService.isSaving;
@@ -71,6 +81,16 @@ class PauseMenuViewModel
   /** @inheritdoc */
   openReputation(): void {
     gameOverlayService.openReputation();
+  }
+
+  /** @inheritdoc */
+  openRollHistory(): void {
+    this.isRollHistoryOpen = true;
+  }
+
+  /** @inheritdoc */
+  closeRollHistory(): void {
+    this.isRollHistoryOpen = false;
   }
 }
 

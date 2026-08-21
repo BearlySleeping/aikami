@@ -175,11 +175,6 @@ class EngineBridgeImpl implements EngineBridge {
   executeCommand(cmd: string, args: string[]): void {
     // ── Stub implementations ──
     switch (cmd) {
-      case 'roll': {
-        // TODO: implement dice rolling via slash commands
-        void (args[0] ?? '1d20');
-        break;
-      }
       case 'move': {
         const x = Number(args[0]) || 0;
         const y = Number(args[1]) || 0;

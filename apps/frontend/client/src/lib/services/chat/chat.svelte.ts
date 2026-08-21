@@ -3,7 +3,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { MessageData } from '@aikami/types';
+import type { DiceCardData, MessageData } from '@aikami/types';
 
 export type ChatServiceOptions = BaseFrontendClassOptions;
 
@@ -12,6 +12,10 @@ export type ChatMessage = {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+  /** Message kind — 'dice' renders a DiceCard instead of plain text. */
+  kind?: 'text' | 'dice';
+  /** Present when kind === 'dice'. */
+  dice?: DiceCardData;
 };
 
 /**
@@ -157,11 +161,21 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
       } else {
         timestamp = new Date();
       }
+      // Carry the optional dice metadata through unchanged so dice messages
+      // keep rendering as DiceCard across rebuilds (edit/delete) and reloads.
+      // The fields may live at the top level (in-memory ChatMessage) or in the
+      // persisted `metadata` map (MessageData from Firestore).
+      const meta = (msg as { metadata?: Record<string, unknown> }).metadata;
+      const kind =
+        (msg as { kind?: 'text' | 'dice' }).kind ?? (meta?.kind as 'text' | 'dice' | undefined);
+      const dice = (msg as { dice?: DiceCardData }).dice ?? (meta?.dice as DiceCardData | undefined);
       return {
         id: msg.id || crypto.randomUUID(),
         text: msg.text,
         sender: msg.sender,
         timestamp,
+        kind,
+        dice,
       };
     });
     this.debug('setMessages: mapped messages', this.messages);

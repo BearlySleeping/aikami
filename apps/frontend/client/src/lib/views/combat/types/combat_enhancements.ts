@@ -14,6 +14,8 @@ export type DiceNotation = {
   readonly sides: number;
   /** Human-readable label (e.g. "2d6"). */
   readonly label: string;
+  /** Signed flat modifier applied after the dice (e.g. +3 from "2d6+3"). Default 0. */
+  readonly modifier?: number;
 };
 
 /**

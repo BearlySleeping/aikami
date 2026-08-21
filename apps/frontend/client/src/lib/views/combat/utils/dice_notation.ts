@@ -9,36 +9,98 @@ import type { DiceNotation, InitiativeEntry } from '../types/combat_enhancements
 // Dice Notation Parsing
 // ---------------------------------------------------------------------------
 
+const MAX_DICE_COUNT = 100;
+const MAX_DICE_SIDES = 1000;
+
 /**
  * Parse a dice notation string into its components.
  *
- * Accepts standard D&D formats: "d20", "1d20", "2d6", "3d8", "1d100".
- * Returns `undefined` for unrecognized formats.
+ * Accepts standard D&D formats with an optional signed modifier:
+ * "d20", "1d20", "2d6", "3d8", "1d100", "1d20+3", "2d6-1".
+ * Returns `undefined` for unrecognized formats or out-of-bounds counts/sides.
  *
  * @example
- * parseDiceNotation("2d6")    // → { count: 2, sides: 6, label: "2d6" }
- * parseDiceNotation("d20")    // → { count: 1, sides: 20, label: "d20" }
+ * parseDiceNotation("2d6")    // → { count: 2, sides: 6, label: "2d6", modifier: 0 }
+ * parseDiceNotation("d20")    // → { count: 1, sides: 20, label: "d20", modifier: 0 }
+ * parseDiceNotation("1d20+3") // → { count: 1, sides: 20, label: "1d20", modifier: 3 }
+ * parseDiceNotation("2d6-1")  // → { count: 2, sides: 6, label: "2d6", modifier: -1 }
  * parseDiceNotation("foo")    // → undefined
  */
 export const parseDiceNotation = (input: string): DiceNotation | undefined => {
   const trimmed = input.trim().toLowerCase();
 
-  // Match optional count + 'd' + sides, e.g. "2d6", "d20", "1d100"
-  const match = trimmed.match(/^(\d+)?d(\d+)$/);
+  // Match optional count + 'd' + sides + optional signed modifier, e.g. "2d6+3".
+  const match = trimmed.match(/^(\d+)?d(\d+)([+-]\d+)?$/);
   if (!match) {
     return undefined;
   }
 
-  const count = match[1] ? Number.parseInt(match[1], 10) : 1;
-  const sides = Number.parseInt(match[2], 10);
+  const count = match[1] ? Number(match[1]) : 1;
+  const sides = Number(match[2]);
+  const modifier = match[3] ? Number(match[3]) : 0;
+
+  // Reject any value that is not a safe integer (e.g. oversized digit strings
+  // that overflow past Number.MAX_SAFE_INTEGER).
+  if (!Number.isSafeInteger(count) || !Number.isSafeInteger(sides) || !Number.isSafeInteger(modifier)) {
+    return undefined;
+  }
 
   if (count < 1 || sides < 1) {
+    return undefined;
+  }
+  // Security bound: reject resource-abuse notation like 999999d999999.
+  if (count > MAX_DICE_COUNT || sides > MAX_DICE_SIDES) {
     return undefined;
   }
 
   const label = count === 1 ? `d${sides}` : `${count}d${sides}`;
 
-  return { count, sides, label } as const;
+  return { count, sides, label, modifier } as const;
+};
+
+/**
+ * Parse a full `/roll` command body into notation + optional check DC.
+ *
+ * Accepts an optional trailing `vs <dc>` (e.g. "1d20+3 vs 15"). Returns
+ * `undefined` for malformed notation or out-of-bounds counts/sides.
+ *
+ * @example
+ * parseRollCommand("1d20+3")      // → { notation: "1d20+3", count: 1, sides: 20, modifier: 3, dc: undefined }
+ * parseRollCommand("1d20+3 vs 15") // → { notation: "1d20+3", count: 1, sides: 20, modifier: 3, dc: 15 }
+ * parseRollCommand("foo")          // → undefined
+ */
+export const parseRollCommand = (
+  input: string,
+):
+  | {
+      notation: string;
+      count: number;
+      sides: number;
+      modifier: number;
+      dc: number | undefined;
+    }
+  | undefined => {
+  const trimmed = input.trim();
+  const vsMatch = trimmed.match(/^(.+?)\s+vs\s+(\d+)$/i);
+  const notationRaw = vsMatch?.[1]?.trim() ?? trimmed;
+  const dc = vsMatch?.[2] ? Number(vsMatch[2]) : undefined;
+  // Reject an oversized / non-safe-integer DC before it is used.
+  if (dc !== undefined && !Number.isSafeInteger(dc)) {
+    return undefined;
+  }
+
+  const parsed = parseDiceNotation(notationRaw);
+  if (!parsed) {
+    return undefined;
+  }
+
+  return {
+    notation: notationRaw,
+    count: parsed.count,
+    sides: parsed.sides,
+    modifier: parsed.modifier ?? 0,
+    dc,
+  };
 };
 
 // ---------------------------------------------------------------------------

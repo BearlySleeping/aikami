@@ -37,6 +37,7 @@ import {
 } from '$services';
 import type { ImpersonationConfig } from '$types';
 import type { AgentPipelineViewModelInterface } from '$views/agent/agent_pipeline_view_model.svelte';
+import { parseRollCommand } from '../combat/utils/dice_notation.ts';
 import {
   type ChoiceButtonsViewModelInterface,
   getChoiceButtonsViewModel,
@@ -336,6 +337,8 @@ export class ChatViewModel
         text: activeAlt ?? msg.text,
         sender: msg.sender,
         timestamp: msg.timestamp,
+        kind: msg.kind,
+        dice: msg.dice,
       };
     });
   }
@@ -449,6 +452,15 @@ export class ChatViewModel
         if (command === IMPERSONATION_COMMAND) {
           const direction = args.length > 0 ? args.join(' ') : '';
           await this._handleImpersonateCommand(direction);
+          return;
+        }
+
+        // ── Dice roll command (C-421) — resolve through DiceService, not the bridge ──
+        if (command === 'roll') {
+          this._handleRollCommand(args.join(' '));
+          // Clear the input and draft for both valid and invalid roll notation.
+          this.inputText = '';
+          void draftStore.clearDraft({ chatId: this._chatId });
           return;
         }
 
@@ -912,6 +924,41 @@ export class ChatViewModel
     } finally {
       this.isImpersonationDrafting = false;
     }
+  }
+
+  /**
+   * Handles the `/roll` slash command (C-421). Parses notation with an optional
+   * `vs <dc>` check, resolves through DiceService, and adds a dice chat message.
+   * Malformed notation produces a clear inline error and no roll.
+   */
+  private _handleRollCommand(input: string): void {
+    const parsed = parseRollCommand(input);
+    if (!parsed) {
+      chatService.addMessage({
+        id: crypto.randomUUID(),
+        text: `Invalid dice notation: "${input.trim()}". Try /roll 1d20+3 or /roll 2d6 vs 10.`,
+        sender: 'ai',
+        timestamp: new Date(),
+      });
+      return;
+    }
+
+    const card = diceService.rollCard({
+      notation: parsed.notation,
+      count: parsed.count,
+      sides: parsed.sides,
+      modifier: parsed.modifier,
+      ...(parsed.dc !== undefined ? { dc: parsed.dc } : {}),
+    });
+
+    chatService.addMessage({
+      id: crypto.randomUUID(),
+      text: card.notation,
+      sender: 'ai',
+      timestamp: new Date(),
+      kind: 'dice',
+      dice: card,
+    });
   }
 
   async regenerateMessage(messageId: string): Promise<void> {

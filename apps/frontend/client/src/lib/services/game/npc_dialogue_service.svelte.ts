@@ -1898,11 +1898,25 @@ export class NpcDialogueService
 
     const userPrompt = `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`;
 
+    // C-421: log the authoritative mechanical result so prompt fidelity is
+    // verifiable from a session log.
+    this.debug('_resolveRoll:authoritative', {
+      npcName,
+      checkType,
+      dc: difficultyClass,
+      total: rollTotal,
+      success: outcome === 'pass',
+    });
+
     // Call 1 streams prose; call 2 extracts the roll-resolution envelope.
     const narrativeSystemPrompt = [
       'You are a game master resolving a dice roll outcome in an RPG dialogue.',
       'Given the skill check result, write a narrative NPC response and propose',
       'any state changes (trust, flags, inventory).',
+      '',
+      'The mechanical result (DC, Roll, SUCCESS/FAILURE) is FINAL and',
+      'authoritative. Your narration MUST NOT contradict it: if the check',
+      'failed, the NPC cannot describe the player succeeding, and vice versa.',
       '',
       "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
     ].join('\n');

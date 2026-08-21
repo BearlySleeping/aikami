@@ -1,4 +1,5 @@
 <script lang="ts">
+import DiceHistoryFeed from './dice_history_feed.svelte';
 // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte
 import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
 
@@ -7,6 +8,21 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Ref to the Roll History trigger so focus can be restored when the dialog closes. */
+let rollHistoryTrigger = $state<HTMLButtonElement | null>(null);
+/** Tracks the previous open state so focus is only restored on an open→close transition. */
+let wasRollHistoryOpen = false;
+
+// Restore focus to the Roll History trigger when the history dialog closes,
+// keeping keyboard navigation within the pause menu.
+$effect(() => {
+  const open = viewModel.isRollHistoryOpen;
+  if (!open && wasRollHistoryOpen) {
+    rollHistoryTrigger?.focus();
+  }
+  wasRollHistoryOpen = open;
+});
 </script>
 
 <div
@@ -17,7 +33,11 @@ const { viewModel }: Props = $props();
   tabindex="-1"
   onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      viewModel.resumeGame();
+      if (viewModel.isRollHistoryOpen) {
+        viewModel.closeRollHistory();
+      } else {
+        viewModel.resumeGame();
+      }
       return;
     }
     // Focus trap — Tab/Shift+Tab cycle within the dialog
@@ -37,7 +57,12 @@ const { viewModel }: Props = $props();
   }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
-    {#if viewModel.confirmingQuit}
+    {#if viewModel.isRollHistoryOpen}
+      <DiceHistoryFeed
+        entries={viewModel.rollHistory}
+        onClose={() => viewModel.closeRollHistory()}
+      />
+    {:else if viewModel.confirmingQuit}
       <h2 class="text-center text-lg font-bold text-base-content">Quit to Main Menu?</h2>
       <p class="mt-2 text-center text-sm text-base-content/60">
         Any unsaved progress will be lost.
@@ -119,6 +144,15 @@ const { viewModel }: Props = $props();
           onclick={() => viewModel.openReputation()}
         >
           Reputation
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost btn-block"
+          bind:this={rollHistoryTrigger}
+          onclick={() => viewModel.openRollHistory()}
+        >
+          Roll History
         </button>
 
         <button

@@ -42,6 +42,7 @@ export * from './lib/game/class_definition.ts';
 export * from './lib/game/content_pack.ts';
 export * from './lib/game/cyoa.ts';
 export * from './lib/game/damage_type.ts';
+export * from './lib/game/dice_card.ts';
 export * from './lib/game/ecs_snapshot.ts';
 export * from './lib/game/faction_standing.ts';
 export * from './lib/game/game_assets.ts';
