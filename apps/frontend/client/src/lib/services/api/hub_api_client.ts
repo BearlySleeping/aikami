@@ -27,7 +27,7 @@ const HUB_API_BASE: Record<Mode, string> = {
   production: 'https://hub.bearlysleeping.com',
 };
 
-const hubApiBase = (): string => {
+export const hubApiBase = (): string => {
   const mode = getPublicMode();
   return HUB_API_BASE[mode] ?? '/api/hub';
 };

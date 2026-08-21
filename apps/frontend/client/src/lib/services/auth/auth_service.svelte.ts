@@ -33,9 +33,20 @@ import type {
   RegisterForm,
 } from '@aikami/types';
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
+import type { User } from 'firebase/auth';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { analyticService } from '../analytics/analytics_service.svelte.ts';
 import { callHubAuthAction, pollHubDeviceHandoff } from '../api/hub_api_client';
+import {
+  sendPasswordResetEmail as baSendPasswordResetEmail,
+  signInWithEmailAndPassword as baSignInWithEmailAndPassword,
+  signUpWithEmailAndPassword as baSignUpWithEmailAndPassword,
+  getBetterAuthSession,
+  pollDeviceHandoff,
+  signOutBetterAuth,
+  socialSignInRedirect,
+  startDeviceHandoff,
+} from './better_auth_client';
 
 /**
  * Where the desktop app sends users to sign in — a normal page load of the
@@ -187,12 +198,42 @@ export class AuthService
     return this._options.auth;
   }
 
+  /**
+   * C-426 AC-5: whether the client should use Better Auth instead of Firebase.
+   * Controlled by the `PUBLIC_AUTH_BACKEND` build-time flag (default `firebase`),
+   * so the cutover is revertible per-release without a hub-side change.
+   */
+  private _isBetterAuth(): boolean {
+    return import.meta.env.PUBLIC_AUTH_BACKEND === 'better-auth';
+  }
+
   async initialize(): Promise<CurrentUser | undefined> {
     this.log('initialize');
+    if (this._isBetterAuth()) {
+      return await this._initializeBetterAuth();
+    }
     if (!this._initPromise) {
       this._initPromise = this._initializeOnce();
     }
     return await this._initPromise;
+  }
+
+  /**
+   * C-426 AC-5: resolve the initial Better Auth session (cookie-based) and
+   * hydrate app state. There is no async ID-token listener like Firebase's
+   * onIdTokenChanged — the session is read once and re-checked on demand.
+   */
+  private async _initializeBetterAuth(): Promise<CurrentUser | undefined> {
+    try {
+      const user = await getBetterAuthSession();
+      this.setCurrentUser(user);
+      this.isAuthReady = true;
+      return user;
+    } catch (error) {
+      this.error('initialize:better-auth', error);
+      this.isAuthReady = true;
+      return undefined;
+    }
   }
 
   private async _initializeOnce(): Promise<CurrentUser | undefined> {
@@ -250,6 +291,11 @@ export class AuthService
   }): Promise<AppResult> {
     this.log('signInWithEmailAndPassword', options);
     try {
+      if (this._isBetterAuth()) {
+        const user = await baSignInWithEmailAndPassword(options);
+        this.setCurrentUser(user);
+        return { success: true, data: undefined };
+      }
       const user = await this._auth.signInWithEmailAndPassword(options);
       await this.setAuthUser(user);
       return { success: true, data: undefined };
@@ -267,6 +313,12 @@ export class AuthService
   async signOut(): Promise<boolean> {
     try {
       this.log('signOut');
+      if (this._isBetterAuth()) {
+        await signOutBetterAuth();
+        this.setCurrentUser(undefined);
+        void this.logEvent('logout', undefined);
+        return true;
+      }
       await this._auth.signOut();
       await this.setAuthUser(undefined);
 
@@ -293,6 +345,12 @@ export class AuthService
   }
 
   async socialSignIn(provider: FirebaseSignInProviderName): Promise<SocialSignInResponse> {
+    // C-426 AC-5: Better Auth path. Browser uses a full-page redirect to the
+    // hub's Google OAuth; Tauri (no OAuth popup) uses the device-authorization
+    // flow with the same polling UX as the Firebase path.
+    if (this._isBetterAuth()) {
+      return await this._betterAuthSocialSignIn(provider);
+    }
     // Firebase's authorized-domains check rejects the Tauri webview's origin
     // outright for signInWithPopup/signInWithRedirect — this isn't fixable by
     // configuration. Hand off to a browser tab on a real, authorized domain
@@ -394,6 +452,67 @@ export class AuthService
    * normal sign-in and hand back a custom token — via whichever of the
    * poll/deep-link race in {@link _awaitDeviceHandoffToken} resolves first.
    */
+  /**
+   * C-426 AC-5: Better Auth social sign-in. Browser: redirect to the hub's
+   * Google OAuth (the page reloads and the callback route adopts the session).
+   * Tauri: device-authorization flow — open the verification URI in the system
+   * browser and poll until the user approves.
+   */
+  private async _betterAuthSocialSignIn(
+    provider: FirebaseSignInProviderName,
+  ): Promise<SocialSignInResponse> {
+    if (!isTauri()) {
+      socialSignInRedirect(provider);
+      // The page navigates away; the caller reacts to authService.isLoggedIn
+      // after the callback route resolves, so this placeholder is never read.
+      return { status: 'exitingUser', payload: this.currentUser as unknown as User };
+    }
+
+    try {
+      const { deviceCode, verificationUri } = await startDeviceHandoff();
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(verificationUri);
+
+      const user = await this._awaitBetterAuthDeviceApproval(deviceCode);
+      if (!user) {
+        throw new Error('Sign-in timed out — please try again.');
+      }
+      this.setCurrentUser(user);
+      return { status: 'exitingUser', payload: user as unknown as User };
+    } catch (error) {
+      this.error('betterAuthSocialSignIn', error);
+      const errMsg = error instanceof Error ? error.message : 'Sign-in failed';
+      this.showSnackbar({ text: `Sign-in failed: ${errMsg}`, type: 'error' });
+      return {
+        status: 'failed',
+        payload: {
+          code: 'device-handoff-failed',
+          message: errMsg,
+          email: '',
+          accountExists: false,
+        } as unknown as SocialSignInError,
+      };
+    }
+  }
+
+  /**
+   * C-426 AC-5: poll the hub until a device authorization is approved or the
+   * wait times out. Same polling cadence as the Firebase device-link flow.
+   */
+  private async _awaitBetterAuthDeviceApproval(
+    deviceCode: string,
+  ): Promise<CurrentUser | undefined> {
+    const deadline = Date.now() + DEVICE_LINK_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const user = await pollDeviceHandoff(deviceCode);
+      if (user) {
+        return user;
+      }
+      await new Promise((resolve) => setTimeout(resolve, DEVICE_LINK_POLL_INTERVAL_MS));
+    }
+    return undefined;
+  }
+
   private async _linkDeviceSignIn(): Promise<SocialSignInResponse> {
     const code = crypto.randomUUID();
     const handoffUrl = `${DEVICE_LINK_URL}?code=${code}`;
@@ -630,6 +749,19 @@ export class AuthService
       this.setIsChangingAuthState(true);
 
       this.log('registerUser', { registerForm });
+      if (this._isBetterAuth()) {
+        const user = await baSignUpWithEmailAndPassword({
+          name: registerForm.displayName,
+          email: registerForm.email,
+          password: registerForm.password,
+        });
+        this.setCurrentUser(user);
+        void this.logEvent('signUp', {
+          method: registerForm.signInProvider,
+        });
+        this.setIsChangingAuthState(false);
+        return true;
+      }
       const { customFirebaseSignInToken } = await this.callAuthEndpoint({
         payload: {
           registerForm,
@@ -662,6 +794,11 @@ export class AuthService
   async sendPasswordResetEmail(email: string): Promise<boolean> {
     this.log('sendPasswordResetEmail', { email });
     try {
+      if (this._isBetterAuth()) {
+        await baSendPasswordResetEmail(email);
+        this.log('Password reset email sent', { email });
+        return true;
+      }
       await this._auth.sendPasswordResetEmail(email);
       this.log('Password reset email sent', { email });
       return true;
@@ -705,6 +842,12 @@ export class AuthService
   }
 
   async getIdToken(): Promise<string | undefined> {
+    // C-426 AC-5: Better Auth has no Firebase ID token. The hub's legacy
+    // Firebase-keyed auth actions are not used on the Better Auth path, so
+    // returning undefined is correct — callers must not attach it.
+    if (this._isBetterAuth()) {
+      return undefined;
+    }
     try {
       const user = await this._auth.getAuthUser();
       if (!user) {
