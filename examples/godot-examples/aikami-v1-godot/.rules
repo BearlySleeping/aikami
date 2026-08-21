@@ -1,0 +1,128 @@
+- GENERAL PRINCIPLES
+Clarity/Readability: Code easy to understand, maintain.
+Simplicity (KISS): Prefer simple solutions; avoid over-complexity.
+Meaningful Names: Variables, functions, classes clearly reveal purpose. Avoid abbreviations.
+SRP: Components (functions, classes, modules) do one specific thing. Keep small, focused.
+DRY: Don't Repeat Yourself. Extract to reusable units. Single source of truth.
+Modularity: Break complex problems into smaller, manageable units.
+Named Constants: Use for magic values (no magic numbers). Define at top of script or in dedicated constants autoload/script. Use const for immutable values.
+Logical Structure: Group related code. Use consistent, logical naming for files/folders.
+Encapsulation: Hide implementation details; expose minimal, clear interfaces.
+Avoid Side Effects: Functions should primarily compute and return values, minimizing changes to external state unless explicitly intended (e.g., node property setters, signal emissions).
+
+- GDScript NAMING CONVENTIONS (Godot 4)
+Classes & Nodes: PascalCase (e.g., PlayerController, ScoreLabel). Use class_name for global registration.
+Functions & Methods: snake_case (e.g., calculate_damage, _process_input).
+Variables & Properties: snake_case (e.g., move_speed, current_health).
+Constants: UPPER_SNAKE_CASE (e.g., const MAX_SPEED = 100.0, const DEFAULT_GRAVITY = Vector2.DOWN * 980).
+Signals (custom): snake_case (e.g., health_updated, enemy_defeated).
+Private (by convention): Prefix with underscore: _my_private_var, _my_private_func().
+Booleans: Prefixes like is_, has_, can_ (e.g., is_jumping, has_permission).
+
+- GDScript FORMATTING & SYNTAX
+Indentation: Use Tabs.
+Type Hints:
+Variables: MANDATORY.
+Prefer inferred type var speed := 10.0 when the type is obvious from the right-hand side.
+Use explicit type var data: Dictionary = load_complex_data() when the type is not immediately obvious or for clarity.
+var health: int = 100
+var target_node: Node2D
+Functions: MANDATORY for all parameters and return types.
+func calculate_speed(distance: float, time: float) -> float:
+Local Variables: Prefer local variables. Avoid global variables unless essential (e.g., Autoloads).
+
+- GDScript FUNCTION & CONTROL FLOW
+Early Exits (Guard Clauses): MANDATORY. Handle edge cases, errors, and preconditions at the beginning of functions to reduce nesting and simplify logic.
+## Calculates the area of a rectangle.
+## Returns 0.0 if width or height is non-positive.
+func calculate_area(width: float, height: float) -> float:
+    # Guard clause for invalid input
+    if width <= 0.0 or height <= 0.0:
+        push_warning("Attempted to calculate area with non-positive dimensions.")
+        return 0.0
+    return width * height
+
+Avoid if-else where possible: Prefer guard clauses for early exits. Ternary operators (value_if_true if condition else value_if_false) can be used for simple assignments if they enhance readability, but guard clauses are generally clearer for control flow.
+Conciseness: Keep functions short and focused on a single responsibility.
+Async: Use await with signals or create_timer for async operations.
+await get_tree().create_timer(1.0).timeout
+await some_node.custom_signal_name
+
+- GDScript COMMENTING & DOCUMENTATION
+Public API Documentation: Use ## (double hash) for all public (exported or globally accessible) functions, variables, signals, and classes/scripts.
+Script/Class: ## Brief description of what this script/class does. (At the top of the file).
+Function:
+## Brief one-sentence summary of the function's purpose.
+## Optional: More detailed explanation if complex logic.
+## Parameters:
+## - param_name: Purpose of this parameter. (GDScript type hints cover the type itself).
+## Returns: Description of what is returned. (Use "Nothing." or omit if void and obvious).
+func my_complex_func(value: int, label: String = "default") -> String:
+    # ... function logic ...
+    return "result based on " + label + " and " + str(value)
+
+Variables/Signals: ## Description of the variable/signal's purpose.
+## Emitted when the player's score changes.
+signal score_updated(new_score: int)
+
+Internal Comments: Use # (single hash) for all other comments (inline, private logic explanations). Explain why, not what if code is self-evident.
+GDScript ERROR HANDLING
+Explicit Checks: Check return values from functions that might fail (e.g., load, get_node, file operations).
+assert(condition, "Error message if assert fails"): Use for development checks to catch logic errors early; document if critical.
+push_error("Descriptive error message"), push_warning("Descriptive warning"): Report issues to Godot's debugger.
+Custom Error Signals: For recoverable errors that other game systems might need to react to.
+Return Error Codes/Null: Functions may return specific error values (e.g., an enum or null) on failure; document this behavior clearly in docstrings.
+
+- GODOT 4 SPECIFIC GUIDELINES
+class_name: Use for custom types/nodes for global script class access & editor integration.
+class_name PlayerStateMachine, "res://path/to/optional_icon.svg"
+Node References (@onready, NodePaths):
+Use @onready var node_ref: Type = get_node("Path/To/Node") to reliably get node references.
+Avoid get_node() calls in _process or _physics_process; cache references.
+Prefer unique node names (%UniqueNodeName) or scene-unique paths for get_node robustness.
+Signals:
+
+Heavily prefer signals for decoupling.
+Define custom signals clearly with typed arguments: signal score_changed(new_score: int)
+Connect signals via editor or code: some_node.connect("signal_name", Callable(self, "_on_signal_name")).
+Lifecycle Methods (_init, _ready, _process, _physics_process, _notification):
+Keep concise. Offload heavy logic to other functions or use call_deferred.
+_physics_process strictly for physics-related updates. _process for non-physics frame updates.
+@export: Use extensively for Inspector-configurable variables. Provide type hints.
+Organize exports with @export_category("Category Name"), @export_group("Group Name").
+Resources: Use custom Resource scripts. preload() for compile-time, load() for runtime.
+Input Handling: Use Godot's Input Map. Check inputs using Input.is_action_pressed(), Input.get_vector(), etc.
+Scene Instancing: Prefer instancing scenes (.tscn) over creating complex node hierarchies purely in code.
+File Structure: Maintain logical project folder organization (e.g., scenes/, scripts/, assets/).
+Autoloads (Singletons): Use sparingly for truly global systems.
+StringName: For performance-critical string lookups.
+match Statement: Use for complex conditional logic if it improves clarity over many if/elif/else.
+Godot Style: Adhere to official Godot documentation & community style guides.
+
+- GENERAL CODE QUALITY & MAINTENANCE
+Continuous Refactoring: Regularly improve code structure, readability, and performance.
+Technical Debt: Identify and address technical debt proactively.
+Boy Scout Rule: Leave the code cleaner than you found it.
+
+- GENERAL TESTING
+Testable Code: Write code facilitating testing (small functions, clear inputs/outputs).
+Unit Tests: For core logic, algorithms. Consider Godot Unit Test (GUT) or similar.
+Coverage: Test edge cases, error conditions, typical usage.
+
+GENERAL VERSION CONTROL (e.g., Git)
+Commit Messages: Clear, concise, descriptive (why & what).
+Commit Scope: Small, focused commits (single logical change).
+Branch Names: Meaningful, descriptive.
+
+AI WORKFLOW & CODE VALIDATION
+Context: Godot Engine (v4.x) using GDScript.
+AI Goal: Generate GDScript that is correct, adheres to these rules, and likely passes gdformat and aligns with best practices without manual developer intervention.
+Instruction for AI (Post-Modification Expectation):
+Anticipate Developer Actions: Developer will likely run gdformat . and other validation. Code review against these guidelines is expected.
+Your Responsibility:
+
+Do NOT execute gdformat or other commands.
+
+Generate code proactively meeting these standards.
+
+If unsure, err on side of official Godot style and common GDScript best practices for clean, readable, idiomatic code.

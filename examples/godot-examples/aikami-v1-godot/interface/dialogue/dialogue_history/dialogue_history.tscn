@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3 uid="uid://cg3nhiloosjxj"]
+
+[ext_resource type="Texture2D" uid="uid://csbbckyn3xnt" path="res://assets/sprites/text-bubble.png" id="1_0q1wk"]
+[ext_resource type="Script" path="res://interface/dialogue/dialogue_history/dialogue_history.gd" id="2_unwuo"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ykuvc"]
+texture = ExtResource("1_0q1wk")
+
+[node name="DialogueHistory" type="PanelContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxTexture_ykuvc")
+script = ExtResource("2_unwuo")
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 2
+
+[node name="DialogueContainer" type="VBoxContainer" parent="ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
