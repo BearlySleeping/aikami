@@ -2,7 +2,7 @@
 id: C-426
 title: "Cloudflare-Native Identity & Hosting — D1 + Better Auth + Workers SSR, Turso Save Backup to R2"
 source: "user request 2026-08-21 — full migration off Neon/Firebase Auth/Cloud Run for the hub"
-status: draft
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-21"
 | **Target**           | `apps/frontend/hub/{svelte.config.js,app.d.ts,hooks.server.ts,wrangler.jsonc (new)}`; `apps/frontend/hub/src/lib/server/api/`; `packages/backend/database/` (schema + connection → D1); `packages/backend/auth/src/`; `packages/frontend/services/src/lib/firebase/firebase_auth_service.ts`; `packages/backend/configs/src/lib/auth.ts`; `apps/frontend/client/src/lib/{views/auth,services/auth}/`; `apps/frontend/hub/src/lib/{views/login,client/services/api/auth.svelte.ts}`; `packages/frontend/storage/src/lib/` (backup/restore additions); `scripts/src/lib/deploy/{deployment_config.ts,cloudflare.ts}`; `apps/frontend/hub/scripts/deploy.ts` (deleted) |
 | **Priority**         | P1 — no active defect forces this, but it removes a hard architectural constraint (`pg` cannot run in a Worker) blocking the hub from ever leaving Cloud Run, and closes the R2 identity gap D-13 recorded as a known cost.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Dependencies**     | Supersedes the database vendor chosen by C-394 (schema carried forward, engine changes). Reuses the R2 bucket/pipeline from C-395 (new `saves/` prefix, same bucket). Depends on nothing unimplemented.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Status**           | draft                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Status** | approved |
 | **Promotion**        | `sandbox`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | **Docs Impact**      | internal — `docs/architecture/data-layer-target-architecture.md` (amended alongside this contract, see A-12…A-15), `docs/guides/database.md`, `docs/guides/STACK.md` (Firebase/Neon references need updating once this ships)                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Contract version** | 1.0.0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -63,7 +63,7 @@ After this contract, a **player** signs into the hub and the desktop client with
 | Elysia mount point at `/api/*`                 | `apps/frontend/hub/src/lib/server/api/index.ts` + `src/routes/api/[...slugs]/+server.ts`                           | modify — add Better Auth handler, remove Firebase-only handlers                                                  |
 | `packs` / `pack_versions` schema               | `packages/backend/database/src/lib/schema.ts`                                                                      | reuse — same shape, SQLite dialect                                                                               |
 | `accounts` table (Firebase uid → uuid)         | `packages/backend/database/src/lib/schema.ts:47-73`, `account_repository.ts`                                       | replace — Better Auth's `user` table is the new stable identity; `packs.ownerAccountId` FK repoints to `user.id` |
-| R2 bucket + publish tooling                    | C-395, `scripts/src/lib/ops/upload_assets.ts`                                                                      | reuse — new `saves/` prefix, same bucket/vendor account                                                          |
+| R2 bucket + publish tooling                    | C-395, `scripts/src/lib/ops/upload_assets.ts`                                                                      | reuse — new dedicated `SAVES_BUCKET` bucket (per Open Question 4, resolved: new bucket), same vendor account/publish tooling |
 | Device-handoff poll (client can't OAuth-popup) | `packages/backend/auth/src/lib/{complete_device_handoff,poll_device_handoff}.ts`                                   | modify — exchange a Better Auth session instead of a `customFirebaseSignInToken`                                 |
 | Local Turso storage (source of truth)          | `packages/frontend/storage/src/lib/{turso_storage_adapter,local_database_factory}.ts`                              | reuse — unchanged; backup reads from it, never replaces it                                                       |
 | Firebase Auth SDK (client + hub)               | `packages/frontend/services/src/lib/firebase/firebase_auth_service.ts`, `packages/backend/configs/src/lib/auth.ts` | replace                                                                                                          |
@@ -86,9 +86,9 @@ Three coupled changes, in dependency order: (1) stand up Cloudflare D1 as the hu
 ## Architecture Directives
 
 - **D1 schema**: one Drizzle schema, `dialect: 'sqlite'`, covering Better Auth's required tables (`user`, `session`, `account`, `verification` — exact shape per Better Auth's D1/Drizzle adapter docs) plus `packs`, `pack_versions` (carried forward from `schema.ts`, FK retargeted to `user.id`) plus a new `account_backups` table (save-backup metadata). No hand-written DDL — `drizzle-kit generate` against this schema, migrations applied via `wrangler d1 migrations apply`.
-- **Better Auth mount**: `betterAuth({ database: drizzleAdapter(db, { provider: 'sqlite' }), socialProviders: { google: { clientId, clientSecret } } })`, handler mounted at `/api/auth/*` inside the existing Elysia `app` in `apps/frontend/hub/src/lib/server/api/index.ts` — do not create a second HTTP entry point. Google client secret is a Wrangler secret (`wrangler secret put`), never an env file, since the Worker runtime does not read `.env` at request time.
+- **Better Auth mount**: `betterAuth({ database: drizzleAdapter(db, { provider: 'sqlite' }), emailAndPassword: { enabled: true }, socialProviders: { google: { clientId, clientSecret } } })`, handler mounted at `/api/auth/*` inside the existing Elysia `app` in `apps/frontend/hub/src/lib/server/api/index.ts` — do not create a second HTTP entry point. Google client secret is a Wrangler secret (`wrangler secret put`), never an env file, since the Worker runtime does not read `.env` at request time. Email/password is in scope per Open Question 1 (resolved: keep it) — the existing `register`/`send_reset_password`/`check_unique_email`/`update_email` handlers map onto Better Auth's email/password plugin.
 - **Session cookie interop**: Better Auth mints its own session cookie. Decide explicitly whether it replaces the existing `__session` JSON-blob cookie (`AUTH_COOKIE_NAME`) wholesale, or whether the existing merge shim in `src/routes/api/[...slugs]/+server.ts` needs a Better-Auth-aware branch. Do not ship both a Firebase session cookie and a Better Auth session cookie live at once outside of the explicit dual-auth cutover window (see Migration & Rollback).
-- **Device handoff**: keep the polling UX and rate-limit bucket in `poll_device_handoff.ts` verbatim; change only the payload from `customFirebaseSignInToken` to a Better Auth session token/cookie value the client applies directly (no `signInWithCustomToken` equivalent needed — Better Auth sessions are bearer/cookie-based, not a client SDK sign-in call).
+- **Device handoff**: per Open Question 3 (resolved), use Better Auth's device-authorization plugin (`@dreamshive/better-auth-tauri` for the Tauri client) rather than hand-adapting the Firebase poll flow. The existing polling UX and rate-limit bucket in `poll_device_handoff.ts` are preserved as the client-side UX, but the server-side exchange is replaced by Better Auth's device-authorization flow — no `customFirebaseSignInToken` / `signInWithCustomToken` path remains.
 - **Hosting swap**: `svelte.config.js` adapter → `@sveltejs/adapter-cloudflare`; new `apps/frontend/hub/wrangler.jsonc` with `assets`, a D1 binding (`DB`) and an R2 binding (`SAVES_BUCKET`, distinct binding name from any catalog-bucket binding even if it is the same underlying bucket); `app.d.ts`'s `App.Platform` gains `env: { DB: D1Database; SAVES_BUCKET: R2Bucket }`. `deployment_config.ts`'s `hub` entry switches `serviceType` from `'cloud-run-sveltekit'` to `'cloudflare-worker'` with `assetsOnly: false` and `main` pointing at the adapter's Worker entry.
 - **R2 save-backup keying**: objects live at `saves/{accountId}/{timestamp}-{filename}`, mirroring the `saves/{uid}/…` convention D-13 originally specified for Firebase Storage. Every read/write is a hub-minted, short-lived signed URL gated by a verified Better Auth session (I-10) — never a public or guessable key.
 - Presentational/UI work for login screens and the backup/restore surface follows `svelte-conventions` (Views + ViewModels) — do not put fetch/session logic in a `.svelte` file.
@@ -144,7 +144,7 @@ type AccountBackupRow = {
 
 ## Migration & Rollback
 
-- **Old data compatibility**: **Open Question 2** (below) must be answered before this can be finalized — if the Neon `accounts`/`packs`/`pack_versions` tables hold real production rows, a one-time export (`pg` → JSON → D1 insert) runs during Phase 1, with `accounts.firebase_uid` rows needing a best-effort link to a Better Auth `user` row (exact match isn't guaranteed — a user who signed in with Google via Firebase gets a new Better Auth `user` row on first post-migration Google sign-in; pack ownership re-attaches via an admin-run reconciliation script keyed on email, not automatically). If the hub is pre-launch with no real accounts, skip straight to a clean D1 schema.
+- **Old data compatibility**: **Open Question 2** (below) is resolved — **no migration needed** (hub is pre-launch, no real production rows). Phase 1 provisions a clean D1 schema directly; no `pg` → JSON → D1 export and no account-reconciliation script is required. If, during implementation, real rows are discovered, stop and re-open OQ2 before proceeding.
 - **Migration**: phased cutover, each phase independently verifiable and left in a consistent state if the next never runs:
     1. D1 + schema + Better Auth live in a **staging** Worker only; Cloud Run keeps serving `hub.bearlysleeping.com` production traffic unchanged.
     2. Verify Google sign-in, session cookie, and pack ownership against D1 in staging.
@@ -158,7 +158,7 @@ type AccountBackupRow = {
 ## Scope Boundaries
 
 - **In Scope**: D1 schema + migrations; Better Auth (Google OAuth) replacing Firebase Auth for hub and client sign-in; hub SSR migration to Cloudflare Workers; device-handoff flow adapted to Better Auth sessions; Turso save-backup/restore to R2 gated by Better Auth; decommissioning Neon, the hub's Cloud Run service, Firebase Hosting for the hub, and the Firebase Auth Admin SDK config once the cutover is verified; the ADR amendment (already landed alongside this contract — A-12…A-15).
-- **Out of Scope**: FCM, App Check, Remote Config, Realtime Database — these stay on Firebase per D-2, unrelated to this contract's identity/hosting/database scope. The catalog asset pipeline (C-395) and the `packs`/`pack_versions` moderation/browse features (C-396/398/399) — schema carried forward, business logic untouched. Turso Cloud's own hosted sync/replication product — this contract is a manual export-and-upload snapshot, not live database replication. Email/password auth parity — see Open Question 1; if resolved "keep it," it is a scope addition requiring a version bump, not assumed here.
+- **Out of Scope**: FCM, App Check, Remote Config, Realtime Database — these stay on Firebase per D-2, unrelated to this contract's identity/hosting/database scope. The catalog asset pipeline (C-395) and the `packs`/`pack_versions` moderation/browse features (C-396/398/399) — schema carried forward, business logic untouched. Turso Cloud's own hosted sync/replication product — this contract is a manual export-and-upload snapshot, not live database replication. **In Scope**: email/password auth parity — Open Question 1 is resolved as "keep it," so Better Auth's email/password plugin is in scope (this is the version-bump scope addition the original text anticipated).
 
 ## Contract Size & Split Rule
 
@@ -189,10 +189,10 @@ type AccountBackupRow = {
 
 - `pgEnum`/`check` constraints don't exist in Drizzle's sqlite dialect the same way — `visibility` becomes a `text` column with an app-level enum guard or a SQLite `CHECK` constraint written directly.
 
-### AC-2: Better Auth Google sign-in works end-to-end against D1
+### AC-2: Better Auth sign-in works end-to-end against D1 (Google + email/password)
 
 **Given** the hub running locally via `wrangler dev` with a local D1 database
-**When** a user clicks "Sign in with Google" and completes the OAuth flow
+**When** a user signs in via Google OAuth **or** via email/password (per Open Question 1, resolved: keep email/password)
 **Then** a `user`/`account`/`session` row is created in D1, a Better Auth session cookie is set, and the hub's protected routes recognize the session.
 
 **Evidence Matrix**:
@@ -332,7 +332,7 @@ type AccountBackupRow = {
 
 **Watch Points**:
 
-- Do not delete Neon until AC-1's data-migration question (Open Question 2) is confirmed resolved with no pending reconciliation.
+- Do not delete Neon until the rollback window closes (Open Question 2 is resolved as "no migration needed" — no pending reconciliation, but keep Neon until the window closes per Migration & Rollback).
 
 ## Implementation Sequence
 
@@ -345,12 +345,12 @@ type AccountBackupRow = {
 
 - **Double session cookie**: the existing `[...slugs]/+server.ts` shim exists because Elysia's raw `Set-Cookie` and SvelteKit's `manageSessionId` collide under the same cookie name. Better Auth introduces its own cookie — resolve this explicitly (single cookie, one owner) rather than layering a third cookie mechanism on top.
 - **App Check exclusion list**: `hooks.server.ts`'s `clientAuthApiPaths` (`/api/auth/action`, `/api/auth/poll-device-handoff`) is keyed on the old route names — audit and update once Better Auth's actual route paths are known (Better Auth typically mounts under `/api/auth/[...all]`).
-- **Device handoff without a Firebase custom token**: the client currently calls `signInWithCustomToken` on receipt of `customFirebaseSignInToken`. Better Auth has no equivalent client SDK call for "adopt this session token I got from a side channel" out of the box — confirm whether Better Auth's cookie can simply be set directly by the client's HTTP layer, or whether a small custom endpoint is needed to exchange the handoff code for a session server-side.
+- **Device handoff without a Firebase custom token**: the client currently calls `signInWithCustomToken` on receipt of `customFirebaseSignInToken`. Per Open Question 3 (resolved), this is replaced by Better Auth's device-authorization plugin (`@dreamshive/better-auth-tauri` for the Tauri client) — verify the plugin's Tauri webview redirect handling and that the polling UX maps cleanly onto the device-authorization flow before removing the Firebase path.
 - **Backing up a live database file**: never read the raw SQLite file bytes while the connection is open without using the adapter's serialize/backup primitive — risk of a torn/inconsistent snapshot.
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved (answers recorded below; body reconciled to them).
 
 - **Email/password parity**: `register.ts`, `send_reset_password.ts`, `check_unique_email.ts`, `update_email.ts` imply email+password sign-in exists today alongside (or instead of) Google. Does this contract drop email/password entirely (Google-only, as literally requested), or does Better Auth need its email/password plugin too? This changes AC-2's scope materially.
   A: We setup support for emails and password
