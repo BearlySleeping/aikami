@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-08-21)
 
-**179 active (0 without contract file), 119 archived, 1 duplicates**
+**180 active (0 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -181,12 +181,13 @@
 | C-417 | P1 Polish Batch | 👍 approved | ❓ `—` | v2 |
 | C-418 | P2 Cleanup And Infrastructure | 👍 approved | ❓ `—` | v2 |
 | C-419 | P3 Growth Features | 🛠️ implemented | ❓ `—` | v2 |
-| C-420 | Guided Choice Chips | 📝 draft | ❓ `integrated` | v2 |
-| C-421 | Dice Cards | 📝 draft | ❓ `integrated` | v2 |
-| C-422 | Onboarding Arc | 📝 draft | ❓ `integrated` | v2 |
+| C-420 | Guided Choice Chips | 👍 approved | ❓ `integrated` | v2 |
+| C-421 | Dice Cards | 👍 approved | ❓ `integrated` | v2 |
+| C-422 | Onboarding Arc | 👍 approved | ❓ `integrated` | v2 |
 | C-423 | Design North Star | 📝 draft | ❓ `integrated` | v2 |
 | C-424 | Unified Message Surfaces | 📝 draft | ❓ `integrated` | v2 |
 | C-425 | Viewmodel Decomposition | 📝 draft | ❓ `integrated` | v2 |
+| C-426 | Cloudflare Native Identity And Hosting | 📝 draft | ❓ `sandbox` | v1 |
 
 ---
 

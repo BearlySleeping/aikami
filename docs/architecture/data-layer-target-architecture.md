@@ -6,7 +6,7 @@
 > document wins — raise an amendment on the contract.
 
 **Decided:** 2026-08-12
-**Last amended:** 2026-08-15 (see §6 — D-6, D-7 revised; D-13…D-15 added; §4.1 costing added)
+**Last amended:** 2026-08-21 (see §6 — D-6, D-12, D-13 revised; D-17 added; I-10 added; §4.2 added)
 **Supersedes:** `apps/backend/firebase/dataconnect/schema/firestore-vs-dataconnect.md`
 **Rationale & alternatives considered:** `docs/research/database-architecture-recommendation.md`
 
@@ -21,17 +21,18 @@
 | **D-3** | **Local SQLite (Turso/libSQL) is the source of truth for all player-owned data.** | Campaigns, saves, sessions, checkpoints, journal, chat, personas, NPC state, asset install state. Never leaves the device except as an explicit, deliberate projection. |
 | **D-4** | **Chat is not realtime.** | Single-player NPC chat is local-only. The Firestore chat/message path is deleted, not kept "just in case". |
 | **D-5** | **The hub is public/community only.** It never reads user-owned data. | No personas in the hub. No user Turso in the hub. No per-user sync. |
-| **D-6** | ~~One Cloud SQL for PostgreSQL instance, `europe-west4`~~ → **One Neon PostgreSQL 18 project, `aws-eu-west-2` (London), Free plan, reached only through the hub's Elysia API.** *(amended 2026-08-15 — A-1)* | No browser ever holds a database credential. All authorization is server-side middleware. Cross-cloud from Cloud Run `europe-west4`; see I-8 and I-9 for the constraints this imposes. |
-| **D-7** | ~~Postgres is provisioned when the first mutable community feature ships~~ → **Postgres is provisioned now**, because the first mutable community feature (user-submitted mods) is committed scope. *(amended 2026-08-15 — A-2)* | The immutable catalog still ships as a static index (D-14); Postgres owns only mutable state. |
+| **D-6** | ~~One Cloud SQL for PostgreSQL instance, `europe-west4`~~ → ~~One Neon PostgreSQL 18 project, `aws-eu-west-2` (London)~~ → **Cloudflare D1 (SQLite), reached only through the hub's Elysia API, running as a Cloudflare Worker (D-17).** *(amended 2026-08-15 — A-1; superseded 2026-08-21 — A-12)* | No browser ever holds a database credential. All authorization is server-side middleware. D1 is a native Workers binding (`env.DB`) — no raw TCP socket, no Hyperdrive proxy, no cross-cloud hop. See §4.2 for why this supersedes A-1 rather than amending it. |
+| **D-7** | ~~Postgres is provisioned when the first mutable community feature ships~~ → **The mutable-state database is provisioned now**, because the first mutable community feature (user-submitted mods) is committed scope. *(amended 2026-08-15 — A-2; database vendor superseded 2026-08-21 — A-12)* | The immutable catalog still ships as a static index (D-14); the database owns only mutable state — accounts/identity, packs, pack_versions, save backups. |
 | **D-8** | **Local development uses real PostgreSQL** (Nix-provided), not pglite, not an emulator. | Local ≡ production. Removes the class of bug hit in C-374. |
 | **D-9** | **Drizzle owns SQL schema and migrations** for both the local SQLite plane and the server Postgres plane. They are separate schemas that share idiom, not definitions. | No hand-written DDL string arrays. No home-grown codegen. |
 | **D-10** | **Staging is on hold** until there is a working app and a user base. | Production-only spend. `firestack.config.ts` mode handling must not break. |
 | **D-11** | **No runtime Redis.** | Upstash stays in the deploy pipeline (`scripts/src/lib/deploy/cache.ts`) only. |
-| **D-12** | **Firebase Auth is kept.** No migration to Supabase Auth or any alternative. | Session cookies, custom claims, Storage rules and App Check all continue to work unchanged. |
-| **D-13** | **Cloudflare R2 is the origin for all catalog asset bytes. Firebase Storage keeps per-user save blobs.** *(added 2026-08-15 — A-3; costed A-10)* | Egress is free at any volume, which no GCP or AWS object store matches — see §4.1 for the verified comparison. The split is deliberate: R2 has no identity model, and Firebase Auth security rules are the right tool for `saves/{uid}/…`. The `'r2'` backend already exists in `asset_sources` (`migrations.ts:201`). |
+| **D-12** | ~~Firebase Auth is kept. No migration to Supabase Auth or any alternative.~~ → **Better Auth (D1-backed, Google OAuth) replaces Firebase Auth** for both the hub and the client. *(superseded 2026-08-21 — A-13)* | Session cookies and custom claims are reimplemented on Better Auth's session model. App Check is UNAFFECTED — it is orthogonal to which auth provider issues sessions (D-2's App Check line stands). Storage rules are moot once D-13 moves per-user blobs to R2. Rationale for reversing D-12 outright rather than amending: see §4.2. |
+| **D-13** | **Cloudflare R2 is the origin for all catalog asset bytes.** ~~Firebase Storage keeps per-user save blobs.~~ → **Per-user save blobs (Turso backup snapshots) also move to R2**, authorized by Better Auth-minted signed URLs. *(added 2026-08-15 — A-3; costed A-10; per-user blob clause superseded 2026-08-21 — A-14)* | Egress is free at any volume, which no GCP or AWS object store matches — see §4.1 for the verified comparison. The original split existed because **R2 has no identity model of its own** — that gap is what D-12's Better Auth migration closes (the hub now mints a short-lived signed URL per authenticated request, the same shape Firebase Storage security rules provided). The `'r2'` backend already exists in `asset_sources` (`migrations.ts:201`). |
 | **D-14** | **The catalog is a content-addressed static index on R2; Postgres holds only mutable state.** *(added 2026-08-15 — A-4)* | Browsing packs/LPC/maps/music/tilesets never touches Postgres. Ratings, install counts, submissions, ownership and moderation do. A self-hoster can point at a different index and run with no Postgres at all. |
 | **D-15** | **The hub is publicly readable without authentication.** Sign-in is required only to submit, rate, or manage owned content. *(added 2026-08-15 — A-5)* | Reverses the current route layout, where `+page.server.ts` redirects every anonymous visitor to `/login`. Follows from D-5 — a community catalog nobody can read without an account is not a community catalog. |
 | **D-16** | **The `AiProviderGateway` `service` mode is a thin metered proxy over Anthropic / OpenAI / Gemini — no GCP-hosted GPU inference.** *(added 2026-08-17 — A-11)* | Cloud Run GPU (L4) inference is rejected: ~$0.71/hr billed while warm, 20–30 s cold start that lands in the player's first dialogue turn, and quality capped by what fits on one L4. Self-hosted inference only wins at sustained high utilization, which a pre-revenue project does not have. The `service` adapter interface already exists (C-320); the swap is one layer (Directive #10). Revisit only at sustained near-continuous GPU utilization or a single-hosted-model quality gap that becomes product-limiting. |
+| **D-17** | **The hub moves from Cloud Run (fronted by Firebase Hosting) to a Cloudflare Worker** — SSR via `@sveltejs/adapter-cloudflare`, same `hub.bearlysleeping.com` custom domain, using the Worker deploy pipeline `client`/`site`/`docs` already use (`scripts/src/lib/deploy/cloudflare.ts`). *(added 2026-08-21 — A-15)* | This is the change that forces D-6: a plain Worker cannot open the raw `node:net` socket `pg` needs to reach Neon (see the NOTE already recorded in `cloudflare.ts` anticipating exactly this). D1 is a binding, not a socket, so it needs no Hyperdrive detour. Firebase Hosting's rewrite-to-Cloud-Run config for the hub site is retired; `apps/frontend/hub/scripts/deploy.ts` (the Firebase Hosting deploy script) is deleted. |
 
 ## 2. The three planes
 
@@ -50,18 +51,24 @@
 │ No credential, no Postgres, no request path through the hub.│
 └─────────────────────────────────────────────────────────────┘
 ┌─ ACCOUNT & MUTABLE METADATA ────────────────────────────────┐
-│ Neon Postgres 18 (aws-eu-west-2, London, 0.25↔2 CU)          │
-│ ratings · install counts · submissions · ownership          │
-│ moderation queue · publish history                          │
-│ Reached by: the hub's Elysia API ONLY. Never a browser.     │
+│ Cloudflare D1 (SQLite, Worker binding — D-17)                │
+│ Better Auth user/session/account/verification (D-12)         │
+│ ratings · install counts · submissions · ownership           │
+│ moderation queue · publish history · save-backup metadata    │
+│ Reached by: the hub's Elysia API ONLY. Never a browser.      │
 └─────────────────────────────────────────────────────────────┘
 ┌─ IDENTITY & PRIVATE BLOBS ──────────────────────────────────┐
-│ Firebase Auth · Storage · FCM · App Check                   │
-│ sign-in · per-user save blobs                               │
-│ Reached by: client via rules; server via Admin SDK.         │
-│ NOT catalog assets — those are D-13 (R2).                   │
+│ Better Auth (Google OAuth) · Cloudflare R2 (I-10) · FCM ·    │
+│ App Check                                                    │
+│ sign-in · per-user Turso save-backup blobs                   │
+│ Reached by: client + hub via Better Auth session; R2 objects │
+│ only via hub-minted signed URLs (I-10).                      │
+│ NOT catalog assets — those are D-13's R2 origin, public.     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+*(Diagram updated 2026-08-21 — A-12/A-13/A-14. Firebase's remaining role after
+this migration is FCM and App Check only — see D-2 and §5.3.)*
 
 ## 3. Invariants
 
@@ -87,11 +94,17 @@ Any change violating one of these is a bug, regardless of what a contract says.
   paint. Neon Free scale-to-zero (5 min, not disableable) makes a cold query a
   visible stall, so this is a correctness rule for perceived latency, not a
   micro-optimisation. *(added A-6)*
-- **I-9** — Nothing may depend on a Neon-proprietary surface: not Neon Auth,
+- **I-9** — ~~Nothing may depend on a Neon-proprietary surface: not Neon Auth,
   not the Neon Data API, not `@neondatabase/serverless`, not branching as a
   runtime mechanism. Plain `pg` over the pooled endpoint, plus Drizzle. This
   invariant is the entire reason "start on Neon, move to Cloud SQL later" is a
-  connection-string change rather than a rewrite. *(added A-6)*
+  connection-string change rather than a rewrite.~~ *(added A-6; MOOT 2026-08-21 — A-12: Neon is gone, so there is no Neon-proprietary surface left to avoid. Recorded rather than deleted so a future reader knows the portability concern was resolved by removal, not forgotten.)*
+- **I-10** — No R2 object under a per-user prefix (`saves/{accountId}/…`) is
+  ever public or content-addressed by a guessable key. Every read and write
+  goes through a Better Auth session check on the hub, which mints a
+  short-lived signed URL scoped to that one object. This is the R2 analogue
+  of the Firebase Storage security rule D-13 originally relied on for
+  `saves/{uid}/…`. *(added 2026-08-21 — A-14)*
 
 ## 4. Explicitly rejected
 
@@ -161,6 +174,63 @@ point — the obvious answer (MinIO) is a container, which collides with C-387's
 "No Docker" directive. C-395 must decide whether local development points at
 the real bucket, a separate dev bucket, or the filesystem.
 
+### 4.2 Why D-6, D-12 and D-13 are superseded outright, not amended *(added 2026-08-21 — A-12/A-13/A-14)*
+
+A-1 through A-11 all amended decisions in place — the underlying trade-off
+stayed the same and only a parameter changed (region, timing, a cost table).
+This one is different: **D-17 (hub hosting moves to a Cloudflare Worker) changes
+which trade-offs are even available**, so three prior decisions are reversed
+rather than tuned.
+
+- **D-6 (Neon → D1).** D-6/A-1's entire argument was "no Neon GCP region, so
+  cross-cloud from Cloud Run is unavoidable — I-9 keeps the eventual move
+  cheap." That argument presumes the compute side stays on a platform that can
+  open a raw `pg` socket. Once the hub is a Worker, it can't — `pg` needs
+  `node:net`, and a plain Worker has no TCP. The options at that point are (a)
+  add a Hyperdrive binding in front of Neon, keeping Postgres but adding a proxy
+  hop and a second piece of Cloudflare-side config, or (b) use D1, which is a
+  binding (`env.DB`), not a socket, with no proxy needed. (b) removes an entire
+  moving part that (a) would keep paying for indefinitely. I-9 (stay
+  Neon-portable) becomes moot rather than violated — there is no Neon left to
+  be locked into.
+- **D-12 (Firebase Auth → Better Auth).** D-12 was correct in 2026-08-12: no
+  other part of the stack needed Firebase Auth to move, so migrating it was
+  pure risk for zero gain. That calculus changes once D-13's per-user save
+  blobs move to R2 (next bullet) — R2 has no security-rules concept, so
+  *something* has to mint per-request authorization for `saves/{accountId}/…`.
+  Better Auth already has to exist to satisfy D-6/D-17 running natively on D1
+  without a second identity system bolted on top; reusing it for the R2
+  signed-URL check is one authorization surface instead of two live ones
+  (Firebase Auth sessions serving the R2 path, Better Auth serving the D1
+  path). App Check and FCM are untouched — D-12 never depended on them, only
+  on "Auth" specifically.
+- **D-13 per-user blobs (Firebase Storage → R2).** The original split (catalog
+  bytes on R2, save blobs on Firebase Storage) existed *solely* because R2 had
+  no identity model to authorize `saves/{uid}/…` reads. D-12's supersession
+  removes that reason: Better Auth sessions, verified hub-side, can mint the
+  same short-lived signed URL either object store would need. Keeping save
+  blobs on Firebase Storage after Auth has already moved away would mean
+  running Firebase Storage security rules against a Better Auth session they
+  were never designed to read — a worse position than either "both on
+  Firebase" or "both on Cloudflare." I-10 (added alongside) is the new
+  invariant that replaces the security-rule guarantee.
+
+**What does NOT change:** D-2 (Firebase still provides FCM and App Check — this
+migration touches Auth and per-user blob storage only, not push notifications
+or bot protection), D-3/D-5 (device-plane Turso remains the source of truth;
+the hub still never reads player-owned data directly — it only stores an
+opaque backup blob a player explicitly chose to upload), D-14/D-15 (the public,
+unauthenticated catalog browse path is unaffected — D1 replaces Postgres as the
+mutable-metadata store but the read-path shape is identical), I-1 through I-8
+(no browser holds a database credential, no asset bytes through the database, no
+database query in a statically-renderable render path — all still hold, now
+against D1 instead of Postgres).
+
+See C-426 for the executing contract and its own Migration & Rollback section
+for the cutover sequence (ADR amendment lands first, then infrastructure, then
+traffic cutover, with the prior stack left intact until each phase's AC is
+verified).
+
 ## 5. Contract sequence
 
 Each is independently mergeable and leaves the repo consistent if the next
@@ -215,6 +285,23 @@ sandbox (WASM or a locked-down interpreter), a permissions surface in the UI,
 and a review process that reads code rather than validating a schema. If they
 are ever wanted, they are a separate ADR, not an amendment to this one.
 
+### 5.3 Cloudflare-native identity & hosting sequence *(added 2026-08-21 — A-12/A-13/A-14/A-15)*
+
+Supersedes D-6, D-12 and D-13's original clauses (§4.2). One contract, phased
+internally so each phase is independently verifiable — see
+[C-426](../contracts/C-426-cloudflare-native-identity-and-hosting.md).
+
+| Contract | Scope | Depends on |
+|---|---|---|
+| **C-426** | D1 schema (replaces C-394's Neon schema) + Better Auth (Google OAuth, D1-backed) + hub SSR on Cloudflare Workers + client/hub login cutover + Turso save-backup to R2 under I-10. | C-394 (schema shape it carries forward), C-395 (R2 origin it reuses), D-17 |
+
+This retires C-394's Neon project once C-426 lands (its schema — `packs`,
+`pack_versions` — is carried forward verbatim into D1; only the `accounts`
+table is retired, replaced by Better Auth's own `user` table). C-395's R2
+bucket is reused, not replaced — save backups land under a `saves/` prefix
+alongside the existing catalog prefix, distinguished by I-10's access-control
+rule rather than a separate bucket.
+
 ## 6. Amendments
 
 | # | Date | Change | Approved by |
@@ -230,3 +317,7 @@ are ever wanted, they are a separate ADR, not an amendment to this one.
 | A-9 | 2026-08-15 | **D-6/D-8 reconciled against the provisioned project.** The Neon project was created on **PostgreSQL 18** (not 17), AWS `eu-west-2`, compute 0.25 ↔ 2 CU, history retention 6 hours. D-8 (local ≡ production) therefore requires re-pinning C-387's devShell from `pkgs.postgresql_17` to `pkgs.postgresql_18` — verified available as 18.4. C-387's Watch Points already authorised this as a one-line re-pin that does not reopen that contract; it is carried out in C-394. Note the two operational consequences recorded in C-394's Gotchas: CU-hours bill at the *scaled* size, so the 2 CU ceiling can exhaust the 100 CU-hour monthly allowance in ~50 hours; and 6-hour history retention is the entire point-in-time-restore window, so migrations take a logical backup first. | snorreks (via Claude) |
 | A-10 | 2026-08-15 | **§4.1 added** — D-13 costed against Firebase Storage rather than asserted. Key finding: the `*.firebasestorage.app` free tier is documented as US-region-only (`us-central1`/`us-west1`/`us-east1`), so a `europe-west4` bucket pays Cloud Storage rates from the first byte; the project's actual bucket location needs confirming in the console. Egress is the deciding term ($0 vs ~$0.12/GB), worth ~$112/mo per 10,000 full-library downloads. Also recorded what R2 *costs*: no identity model (hence the save-blob split), a second vendor, and no local emulator — the last collides with C-387's no-Docker directive and is handed to C-395 to resolve. | snorreks (via Claude) |
 | A-11 | 2026-08-17 | **D-16 added** — the Cloud Run GPU inference plan is reversed (see `docs/strategy/mvp-assessment-2026-08-16.md` §2.4). `service` mode is a thin metered proxy over Anthropic / OpenAI / Gemini, not GCP-hosted GPUs; Cloud Run GPU (L4) at ~$0.71/hr with 20–30 s cold starts only wins at sustained high utilization, which a pre-revenue project does not have. The `deferred.md` marker's contract reference is updated from C-413 to C-418. No code changes — the `service` adapter interface already exists from C-320. | snorreks (via Claude) |
+| A-12 | 2026-08-21 | **D-6/D-7 superseded** — Neon PostgreSQL → Cloudflare D1. Forced by D-17 (hub hosting moves to a Cloudflare Worker, which cannot open the raw `pg` socket Neon needs). D1 is a Worker binding, needs no Hyperdrive proxy. I-9 (no Neon-proprietary surface) becomes moot rather than violated. See §4.2. | snorreks (via Claude) |
+| A-13 | 2026-08-21 | **D-12 superseded** — Firebase Auth → Better Auth (D1-backed, Google OAuth), for both the hub and the client. D-12's 2026-08-12 rationale ("no gain from migrating") no longer holds once D-13 (next) needs a per-request authorization surface R2 doesn't provide natively — Better Auth is that surface, and having it also serve D1's identity plane avoids running two live auth systems. FCM and App Check (D-2) are unaffected. See §4.2. | snorreks (via Claude) |
+| A-14 | 2026-08-21 | **D-13 per-user blob clause superseded; I-10 added** — per-user Turso save-backup blobs move from Firebase Storage to Cloudflare R2, authorized by Better Auth-minted short-lived signed URLs (I-10) rather than Firebase Storage security rules. Catalog bytes (the rest of D-13) are unaffected — already on R2, already public. See §4.2. | snorreks (via Claude) |
+| A-15 | 2026-08-21 | **D-17 added; §5.3 added** — the hub moves from Cloud Run (fronted by Firebase Hosting) to a Cloudflare Worker, reusing the SSR-Worker deploy path `cloudflare.ts` already anticipated (`assetsOnly: false` branch of `CloudflareAppConfig`) and already NOTEd as blocked on exactly this Neon/`pg` constraint. Executing contract: C-426. | snorreks (via Claude) |
