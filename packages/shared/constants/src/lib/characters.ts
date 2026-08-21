@@ -1,31 +1,9 @@
 // packages/shared/constants/src/lib/characters.ts
 //
-// Character onboarding data: pronouns, play-style tags, class presets,
+// Character onboarding data: play-style tags, class presets,
 // species options, starter heroes, appearance presets, random names,
 // ability labels, and onboarding step constants.
 // Contract: C-319 Replace /setup with Fast Character Onboarding
-
-// ── Pronouns ─────────────────────────────────────────────────────────
-
-export type PronounSet = {
-  id: string;
-  subjective: string; // "he", "she", "they"
-  objective: string; // "him", "her", "them"
-  possessive: string; // "his", "her", "their"
-  reflexive: string; // "himself", "herself", "themself"
-};
-
-export const PRONOUN_SETS: readonly PronounSet[] = [
-  { id: 'he_him', subjective: 'he', objective: 'him', possessive: 'his', reflexive: 'himself' },
-  { id: 'she_her', subjective: 'she', objective: 'her', possessive: 'her', reflexive: 'herself' },
-  {
-    id: 'they_them',
-    subjective: 'they',
-    objective: 'them',
-    possessive: 'their',
-    reflexive: 'themself',
-  },
-] as const;
 
 // ── Play-Style Tags ──────────────────────────────────────────────────
 
@@ -206,13 +184,16 @@ export const SPECIES_OPTIONS: readonly SpeciesOption[] = [
 export type StarterHero = {
   id: string;
   name: string;
-  pronouns: PronounSet;
   race: string;
   class: string;
   alignment: string;
   abilityScores: Record<string, number>;
   equipment: string[];
   appearance: string;
+  /** LPC layer mappings: slot name → variant assetId. */
+  lpcRecipe: Record<string, string>;
+  /** Optional per-slot palette overrides: slot name → 6-char hex (e.g. "FF44AA"). */
+  paletteOverrides?: Record<string, string>;
   personalityTraits: string;
   background: string;
   flavorText: string;
@@ -224,13 +205,6 @@ export const STARTER_HEROES: readonly StarterHero[] = [
   {
     id: 'starter_thaldrin',
     name: 'Thaldrin',
-    pronouns: {
-      id: 'he_him',
-      subjective: 'he',
-      objective: 'him',
-      possessive: 'his',
-      reflexive: 'himself',
-    },
     race: 'Human',
     class: 'Fighter',
     alignment: 'Lawful Good',
@@ -245,6 +219,14 @@ export const STARTER_HEROES: readonly StarterHero[] = [
     equipment: ['Longsword', 'Shield', 'Chain Mail', "Explorer's Pack"],
     appearance:
       'Tall and broad-shouldered with short brown hair and a scar across his left cheek. Wears polished chain mail with a faded military tabard.',
+    lpcRecipe: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_muscular',
+      hair: 'hair/messy2_adult',
+      torso: 'torso/armour/plate_male',
+      legs: 'legs/armour/plate_male',
+      feet: 'feet/boots/basic_male',
+    },
     personalityTraits: 'Disciplined and protective. Believes in second chances.',
     background:
       'A former town guard who left his post after failing to prevent a tragedy. Seeks redemption through heroic deeds.',
@@ -254,13 +236,6 @@ export const STARTER_HEROES: readonly StarterHero[] = [
   {
     id: 'starter_lyra',
     name: 'Lyra',
-    pronouns: {
-      id: 'she_her',
-      subjective: 'she',
-      objective: 'her',
-      possessive: 'her',
-      reflexive: 'herself',
-    },
     race: 'Elf',
     class: 'Wizard',
     alignment: 'Neutral Good',
@@ -275,6 +250,15 @@ export const STARTER_HEROES: readonly StarterHero[] = [
     equipment: ['Spellbook', 'Quarterstaff', 'Component Pouch', "Scholar's Pack"],
     appearance:
       'Slender with silver-white hair and violet eyes. Wears deep blue robes embroidered with silver constellations.',
+    lpcRecipe: {
+      head: 'head/heads/human_female',
+      body: 'body/bodies_female',
+      hair: 'hair/page_adult',
+      torso: 'torso/clothes/robe_female',
+      legs: 'legs/formal_thin',
+      feet: 'feet/shoes/basic_thin',
+    },
+    paletteOverrides: { hair: 'C0C0C0' },
     personalityTraits: 'Curious and analytical. Speaks in precise, measured sentences.',
     background:
       'A former apprentice at the Arcane Academy who discovered forbidden knowledge about the Fading Ward. Now seeks to understand and contain the threat.',
@@ -284,13 +268,6 @@ export const STARTER_HEROES: readonly StarterHero[] = [
   {
     id: 'starter_zeph',
     name: 'Zeph',
-    pronouns: {
-      id: 'they_them',
-      subjective: 'they',
-      objective: 'them',
-      possessive: 'their',
-      reflexive: 'themself',
-    },
     race: 'Tiefling',
     class: 'Rogue',
     alignment: 'Chaotic Good',
@@ -305,6 +282,14 @@ export const STARTER_HEROES: readonly StarterHero[] = [
     equipment: ['Shortsword', 'Shortbow', 'Leather Armor', "Thieves' Tools", "Burglar's Pack"],
     appearance:
       'Lean with deep crimson skin, curved horns, and a perpetual smirk. Wears dark fitted leather with too many hidden pockets.',
+    lpcRecipe: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_male',
+      hair: 'hair/swoop_adult',
+      torso: 'torso/clothes/vest_male',
+      legs: 'legs/cuffed_male',
+      feet: 'feet/boots/basic_male',
+    },
     personalityTraits: 'Charming and irreverent. Uses humor to deflect serious situations.',
     background:
       'Grew up on the streets of a port city, running cons on corrupt merchants. Stole the wrong artifact and now has bounty hunters on their trail.',

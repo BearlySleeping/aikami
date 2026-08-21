@@ -34,14 +34,49 @@ $effect(() => {
     aria-label="Character appearance preview"
   ></canvas>
 
-  <button
-    type="button"
-    class="btn btn-sm btn-ghost"
-    aria-pressed={viewModel.isPlaying}
-    onclick={() => viewModel.togglePlayback()}
-  >
-    {viewModel.isPlaying ? '⏸ Pause' : '▶ Play Walk Animation'}
-  </button>
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      class="btn btn-sm btn-ghost"
+      aria-pressed={viewModel.isPlaying}
+      onclick={() => viewModel.togglePlayback()}
+    >
+      {viewModel.isPlaying ? '⏸ Pause' : '▶ Play Walk Animation'}
+    </button>
+
+    <!-- Zoom control -->
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="btn btn-xs btn-ghost"
+        aria-label="Zoom out"
+        onclick={() => viewModel.setZoom(Math.max(0.5, viewModel.zoom - 0.25))}
+      >
+        −
+      </button>
+      <input
+        type="range"
+        min="0.5"
+        max="3"
+        step="0.1"
+        class="range range-xs w-24"
+        value={viewModel.zoom}
+        aria-label="Zoom level"
+        oninput={(e) => viewModel.setZoom(Number((e.target as HTMLInputElement).value))}
+      >
+      <button
+        type="button"
+        class="btn btn-xs btn-ghost"
+        aria-label="Zoom in"
+        onclick={() => viewModel.setZoom(Math.min(3, viewModel.zoom + 0.25))}
+      >
+        +
+      </button>
+      <span class="text-xs text-base-content/60 w-10 text-right tabular-nums">
+        {Math.round(viewModel.zoom * 100)}%
+      </span>
+    </div>
+  </div>
 
   {#if viewModel.missingAssets.length > 0}
     <span

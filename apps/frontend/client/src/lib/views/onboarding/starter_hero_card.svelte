@@ -40,8 +40,6 @@ const { hero, onclick }: Props = $props();
 
     <div class="flex items-center gap-1 text-xs text-base-content/50 mt-2">
       <span>{hero.alignment}</span>
-      <span aria-hidden="true">·</span>
-      <span>{hero.pronouns.subjective}/{hero.pronouns.objective}</span>
     </div>
   </div>
 </button>

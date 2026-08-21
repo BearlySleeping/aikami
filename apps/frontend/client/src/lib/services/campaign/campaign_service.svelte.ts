@@ -12,7 +12,7 @@ import {
 } from '@aikami/frontend/services';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
 import { AiTextProviderRequiredError } from '@aikami/utils';
-import { aiSettingsService } from '$services';
+import { aiSettingsService, configService } from '$services';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
 import { campaignStorage } from './campaign_storage.svelte.ts';
@@ -82,16 +82,35 @@ const DEFAULT_CAMPAIGN_ID = 'default-emberwatch';
 /** Creates a deterministic seed from the current timestamp. */
 const generateSeed = (): number => Math.floor(Date.now() / 1000);
 
+/** Local text providers that don't require an API key. */
+const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
+
+/**
+ * Whether a connection for the given capability is configured. Reads the
+ * C-230 connections (where API keys actually live) rather than the legacy
+ * `aiSettingsService` provider config, which is no longer populated from
+ * connections. Local text providers count as configured without a key.
+ */
+const hasConnectionForCapability = (capability: string): boolean => {
+  const connections = configService.state.connections ?? [];
+  return connections.some((c) => {
+    if ((c.capability ?? 'text') !== capability) {
+      return false;
+    }
+    if (capability === 'text' && LOCAL_TEXT_PROVIDERS.has(c.provider)) {
+      return true;
+    }
+    return Boolean(c.apiKey || (c.baseUrl && c.model));
+  });
+};
+
 /** Builds a capability profile from current AI settings. */
 const buildCapabilityProfile = (): CapabilityProfile => {
-  const { textProvider, ttsProvider, imageProvider } = aiSettingsService;
+  const { ttsProvider, imageProvider } = aiSettingsService;
   return {
-    textProvider: !!(
-      textProvider.apiKey ||
-      (textProvider.endpoint?.includes('localhost') && textProvider.model)
-    ),
-    imageProvider: !!(imageProvider.apiKey || imageProvider.endpoint),
-    voiceProvider: !!(ttsProvider.apiKey || ttsProvider.endpoint),
+    textProvider: hasConnectionForCapability('text'),
+    imageProvider: hasConnectionForCapability('image') || !!(imageProvider.apiKey || imageProvider.endpoint),
+    voiceProvider: hasConnectionForCapability('voice') || !!(ttsProvider.apiKey || ttsProvider.endpoint),
   };
 };
 

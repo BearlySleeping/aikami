@@ -53,7 +53,7 @@ let _isHovered = $state(false);
 
     <!-- Hover overlay: Expand + Regenerate (AC-2) — shown via CSS group-hover -->
     <div
-      class="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 transition-opacity"
+      class="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
     >
       <button
         type="button"

@@ -28,13 +28,9 @@ const abilityKeys = $derived(Object.keys(viewModel.abilityScores) as string[]);
         >
       </div>
 
-      <!-- Alignment + pronouns -->
+      <!-- Alignment -->
       <div class="flex items-center gap-3 text-sm text-base-content/70">
         <span>{viewModel.alignment}</span>
-        <span aria-hidden="true">·</span>
-        <span
-          >{viewModel.selectedPronoun ? `${viewModel.selectedPronoun.subjective}/${viewModel.selectedPronoun.objective}` : 'they/them'}</span
-        >
       </div>
 
       <!-- Appearance -->
@@ -81,6 +77,7 @@ const abilityKeys = $derived(Object.keys(viewModel.abilityScores) as string[]);
         {@const score = viewModel.abilityScores[key] ?? 10}
         {@const modifier = Math.floor((score - 10) / 2)}
         {@const modStr = modifier >= 0 ? `+${modifier}` : `${modifier}`}
+        {@const atBudget = viewModel.abilityScoreTotal >= viewModel.abilityScoreBudget}
         <div class="card bg-base-200 border border-base-300 p-3 text-center">
           <div class="text-xs font-mono text-base-content/50">{label.label}</div>
           <div class="text-xl font-bold font-mono text-base-content">{score}</div>
@@ -101,7 +98,7 @@ const abilityKeys = $derived(Object.keys(viewModel.abilityScores) as string[]);
               type="button"
               class="btn btn-xs btn-ghost"
               onclick={() => viewModel.adjustAbilityScore(key, 1)}
-              disabled={score >= 15}
+              disabled={score >= 15 || atBudget}
               aria-label="Increase {label.label}"
             >
               +
@@ -114,6 +111,14 @@ const abilityKeys = $derived(Object.keys(viewModel.abilityScores) as string[]);
     <p class="text-xs text-base-content/50 mt-1" aria-live="polite">
       Scores range from 8 to 15. Modifier shown in <span class="text-success">green</span> /
       <span class="text-error">red</span>.
+    </p>
+    <p class="text-xs mt-1">
+      <span class="font-semibold">Total:</span>
+      <span class="font-mono">{viewModel.abilityScoreTotal} / {viewModel.abilityScoreBudget}</span>
+      <span class="text-base-content/50">
+        ({viewModel.abilityScoreBudget - viewModel.abilityScoreTotal}
+        points remaining)
+      </span>
     </p>
   </fieldset>
 </div>

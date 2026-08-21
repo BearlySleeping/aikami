@@ -39,6 +39,15 @@ let _textProviderApiKey = '';
 let _textProviderEndpoint = 'http://localhost:11434';
 let _textProviderModel = 'llama3';
 
+/** Mutable C-230 connections — the source the gate now reads for text. */
+let _connections: Array<{
+  capability: string;
+  provider: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}> = [{ capability: 'text', provider: 'ollama', apiKey: '', baseUrl: '', model: 'llama3' }];
+
 mock.module('$services', () => ({
   aiSettingsService: {
     get textProvider() {
@@ -50,6 +59,13 @@ mock.module('$services', () => ({
     },
     imageProvider: { apiKey: '', endpoint: '' },
     ttsProvider: { apiKey: '', endpoint: '' },
+  },
+  configService: {
+    state: {
+      get connections() {
+        return _connections;
+      },
+    },
   },
   capabilityService: {
     detectText: mock(async () => 'not_found'),
@@ -132,6 +148,8 @@ describe('CampaignService', () => {
     if ('_campaigns' in svc) {
       (svc as Record<string, unknown>)._campaigns = [];
     }
+    // Default: a local text provider is configured so the gate passes
+    _connections = [{ capability: 'text', provider: 'ollama', apiKey: '', baseUrl: '', model: 'llama3' }];
   });
 
   test('hasCampaigns returns false when no campaigns exist', () => {
@@ -207,18 +225,14 @@ describe('CampaignService', () => {
   // ── AC-1: Gate rejection when text provider is false ──────────────────
 
   test('startNewCampaign throws AiTextProviderRequiredError when textProvider is false', async () => {
-    // Disable all text providers
-    _textProviderApiKey = '';
-    _textProviderEndpoint = '';
-    _textProviderModel = '';
+    // Disable all text providers (no connections)
+    _connections = [];
 
     await expect(getSvc().startNewCampaign()).rejects.toBeInstanceOf(AiTextProviderRequiredError);
   });
 
   test('gate rejection message includes actionable guidance', async () => {
-    _textProviderApiKey = '';
-    _textProviderEndpoint = '';
-    _textProviderModel = '';
+    _connections = [];
 
     try {
       await getSvc().startNewCampaign();
@@ -230,9 +244,7 @@ describe('CampaignService', () => {
   });
 
   test('gate rejection does not persist campaign to DB', async () => {
-    _textProviderApiKey = '';
-    _textProviderEndpoint = '';
-    _textProviderModel = '';
+    _connections = [];
 
     // Count campaigns before the rejected attempt
     await getSvc().refreshCampaigns();
@@ -252,9 +264,7 @@ describe('CampaignService', () => {
   // ── AC-4: QA/CI bypass allows creation without text provider ──────────
 
   test('startNewCampaign succeeds with textProvider:false when bypass window flag is set', async () => {
-    _textProviderApiKey = '';
-    _textProviderEndpoint = '';
-    _textProviderModel = '';
+    _connections = [];
 
     // Set the bypass flag
     (window as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__ = true;
@@ -269,9 +279,7 @@ describe('CampaignService', () => {
   });
 
   test('startNewCampaign with explicit capabilityProfile overrides buildCapabilityProfile', async () => {
-    _textProviderApiKey = 'test-key';
-    _textProviderEndpoint = '';
-    _textProviderModel = '';
+    _connections = [{ capability: 'text', provider: 'openrouter', apiKey: 'test-key', baseUrl: '', model: 'x' }];
 
     const campaign = await getSvc().startNewCampaign({
       capabilityProfile: {

@@ -27,6 +27,6 @@
   "devDependencies": {
     "@sveltejs/kit": "2.70.3",
     "svelte": "5.56.9",
-    "vite": "8.2.1"
+    "vite": "8.2.2"
   }
 }
