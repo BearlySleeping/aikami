@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8x7k3j9m2p1r"]
+
+[ext_resource type="Script" path="res://src/scenes/test/managers_test.ts" id="1_def456"]
+
+[node name="ManagersTest" type="Node"]
+script = ExtResource("1_def456")
