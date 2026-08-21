@@ -37,7 +37,7 @@ let lastAction = $state<MessageAction | null>(null);
   <title>Message Actions A11y (C-423) — Aikami Dev</title>
 </svelte:head>
 
-<div class="min-h-screen bg-base-100 p-6">
+<div class="min-h-screen bg-base-100 p-6" data-testid="message-actions-sandbox">
   <h1 class="mb-6 text-lg font-bold text-base-content" data-testid="message-actions-heading">
     Message Actions A11y (C-423)
   </h1>

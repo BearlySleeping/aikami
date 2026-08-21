@@ -34,17 +34,30 @@ const gotoDialogue = async (page: Page): Promise<void> => {
   await page.waitForTimeout(300);
 };
 
-/** Asserts a focused action button is fully visible (non-zero computed opacity). */
-const expectFocusedVisible = async (button: ReturnType<Page['getByRole']>): Promise<void> => {
-  await button.focus();
-  const opacity = await button.evaluate((el) => getComputedStyle(el).opacity);
-  expect(parseFloat(opacity)).toBeGreaterThan(0);
+/**
+ * Computed opacity of the button's direct parent action container.
+ * The container (not the button) carries the `opacity-0` hover/focus toggle, so
+ * asserting the container's opacity is what actually verifies visibility.
+ */
+const containerOpacity = async (button: ReturnType<Page['getByRole']>): Promise<number> => {
+  const opacity = await button.evaluate((el) => {
+    const container = el.parentElement;
+    return container ? getComputedStyle(container).opacity : '0';
+  });
+  return parseFloat(opacity);
 };
 
-/** Asserts an action button is visible WITHOUT hover/focus (touch-width persistent). */
+/** Asserts a focused action button's container is fully visible (non-zero computed opacity). */
+const expectFocusedVisible = async (button: ReturnType<Page['getByRole']>): Promise<void> => {
+  await button.focus();
+  // Poll: the container fades in over the 150ms transition-opacity, so wait
+  // for it to reach a non-zero opacity rather than asserting immediately.
+  await expect.poll(async () => containerOpacity(button)).toBeGreaterThan(0);
+};
+
+/** Asserts an action button's container is visible WITHOUT hover/focus (touch-width persistent). */
 const expectVisibleWithoutHover = async (button: ReturnType<Page['getByRole']>): Promise<void> => {
-  const opacity = await button.evaluate((el) => getComputedStyle(el).opacity);
-  expect(parseFloat(opacity)).toBeGreaterThan(0);
+  await expect.poll(async () => containerOpacity(button)).toBeGreaterThan(0);
 };
 
 /** Asserts no serious/critical axe violations within the given scope. */
@@ -86,7 +99,7 @@ test.describe('Message actions a11y (C-423 AC-1)', () => {
 
     test('no serious/critical axe violations on the message-actions sandbox', async ({ page }) => {
       await gotoMessageActions(page);
-      await expectNoSeriousAxe(page, '[data-testid="message-actions-heading"]');
+      await expectNoSeriousAxe(page, '[data-testid="message-actions-sandbox"]');
     });
 
     test('no serious/critical axe violations on the dialogue overlay', async ({ page }) => {
