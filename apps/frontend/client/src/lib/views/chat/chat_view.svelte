@@ -6,6 +6,7 @@ import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
+import SuggestionChips from '$lib/components/messaging/suggestion_chips.svelte';
 import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
 import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
 import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
@@ -83,7 +84,7 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             messages={viewModel.messages}
             bind:containerElement={viewModel.messageContainerElement}
             containerClass="flex-1 overflow-y-auto border border-base-300 rounded-lg p-4 space-y-2 min-h-0"
-            emptyText="No messages yet. Start the conversation!"
+            emptyText="Start the conversation with a suggestion below."
             isStreaming={viewModel.isTyping}
           >
             {#snippet renderRow(message)}
@@ -149,6 +150,14 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
                 }
               }}
             >
+              {#snippet above()}
+                <!-- Suggestion chips — shared component (C-420) -->
+                <SuggestionChips
+                  chips={viewModel.suggestedChips}
+                  disabled={viewModel.isSending || viewModel.isImpersonationDrafting}
+                  onSelect={(chipId) => viewModel.handleChipTap(chipId)}
+                />
+              {/snippet}
               {#snippet extras()}
                 {#if viewModel.impersonationConfig.quickButtonEnabled}
                   <button
