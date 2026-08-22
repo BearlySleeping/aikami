@@ -1,6 +1,5 @@
 // apps/frontend/hub/src/hooks.server.ts
 
-import { getUserSession } from '@aikami/backend/svelte-kit/auth.ts';
 import { getCookie } from '@aikami/backend/svelte-kit/cookies.ts';
 import {
   apiMethodGuard,
@@ -14,15 +13,25 @@ import {
   rewriteForwardedHost,
 } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
-import { verifyAppCheck } from '@aikami/backend/svelte-kit/verify_app_check';
-import { isAppCheckEnabled } from '@aikami/frontend/configs';
-import type { LogContext } from '@aikami/types';
+import { toUserSessionData } from '@aikami/backend-auth/better-auth';
+import type { LogContext, UserSessionData } from '@aikami/types';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
+import { getBetterAuth, setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { logger } from '$logger';
 import { logContextStore } from '$loggerServer';
 import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
+
+/** Security headers applied to every SSR response (matching _headers in Workers deployments). */
+const SECURITY_HEADERS: Record<string, string> = {
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+};
 
 // The `client` app (Firebase Hosting, no server of its own) forwards its
 // browser logger's HTTP sink here cross-origin — see
@@ -33,20 +42,15 @@ const allowExtensionCors = true;
 // lives in packages/backend/svelte-kit/src/lib/hooks_helpers.ts
 // (isAikamiWebOrigin), shared with tests.
 
-// App Check is enabled via the shared predicate in
-// packages/frontend/configs/environment.ts (isAppCheckEnabled) — the same
-// rules the client uses: not explicitly disabled (PUBLIC_DISABLE_APP_CHECK
-// = 1 or true), a real reCAPTCHA site key is configured, and the mode is
-// production. Aligning server and client prevents the hub from demanding
-// tokens the client cannot produce (e.g. non-production modes or no
-// recaptcha key).
-const enforceAppCheck = isAppCheckEnabled();
+// App Check enforcement was removed from the hub (C-426): it was the last
+// remaining `firebase-admin` dependency in the Worker bundle, and the hub's
+// sensitive endpoints are now session-gated by Better Auth. The client may
+// still attach App Check tokens; the hub simply no longer verifies them.
 
 // Browser log ingestion must never be gated on App Check — the logger's
 // HTTP sink is fire-and-forget and cannot attach an App Check token.
 // /api/ask is also excluded: its caller (apps/frontend/site, a static
 // Firebase Hosting page) has no Firebase app / App Check config of its own.
-const appCheckExcludePaths = ['/api/internal_logging', '/api/ask'];
 
 // /api/ask's cross-origin caller is specifically the landing page
 // (production: bearlysleeping.com — the bare apex, which isAikamiWebOrigin's
@@ -58,27 +62,21 @@ const askOriginPattern = /^https:\/\/(stg\.)?bearlysleeping\.com$|^http:\/\/loca
 const isAskOrigin = (origin: string | null | undefined): origin is string =>
   !!origin && askOriginPattern.test(origin);
 
-// C-418 Feature D: hub-hosted auth endpoints that replaced the Firebase
-// Callable Functions `auth` / `poll_device_handoff`. The client app calls
-// them cross-origin in staging/production (the client runs on Firebase
-// Hosting, the hub on Cloud Run), so CORS is allowed for first-party
-// *.bearlysleeping.com origins and the Tauri webview origin on exactly
-// these two paths — never a wildcard, and never on any other /api route.
-// Credentials are NOT included: the auth route authenticates via the
-// Authorization header (Firebase ID token), not cookies.
+// C-426 AC-4: Better Auth auth endpoints under /api/auth/* (sign-in/email,
+// get-session, sign-out, …). The client app calls them cross-origin in
+// staging/production (the client runs on Firebase Hosting, the hub on a
+// Cloudflare Worker), so CORS is allowed for first-party *.bearlysleeping.com
+// origins and the Tauri webview origin on exactly these paths — never a
+// wildcard, and never on any other /api route. Credentials ARE included
+// (Better Auth uses a session cookie).
 //
-// These two paths are ALSO excluded from App Check enforcement: the client
-// auth transport (hub_api_client) attaches an App Check token when one is
-// available, but enforcement must not depend on both deployments sharing
-// the same PUBLIC_DISABLE_APP_CHECK/recaptcha configuration — an asymmetry
-// would silently break desktop/browser auth with a misleading 401. The
-// routes carry their own auth surface (ID-token verification on
-// /api/auth/action, unguessable single-use codes + a per-instance token
-// bucket on /api/auth/poll-device-handoff), so App Check adds defense in
-// depth rather than being load-bearing here.
-const clientAuthApiPaths = ['/api/auth/action', '/api/auth/poll-device-handoff'];
-
-const isClientAuthPath = (pathname: string): boolean => clientAuthApiPaths.includes(pathname);
+// These paths are ALSO excluded from App Check enforcement: the client's
+// Better Auth transport attaches no App Check token, and enforcement must not
+// depend on both deployments sharing the same PUBLIC_DISABLE_APP_CHECK/
+// recaptcha configuration — an asymmetry would silently break auth with a
+// misleading 401.
+const isClientAuthPath = (pathname: string): boolean =>
+  pathname === '/api/auth' || pathname.startsWith('/api/auth/');
 
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
@@ -133,14 +131,28 @@ export const handle: Handle = async ({ event, resolve }) => {
   // The app's own app.d.ts declaration merges additional fields.
   const locals = event.locals;
 
-  // ── 2. Auth: resolve user session from the __session cookie ──
-  // The session value inside the session cookie is set by the Elysia
-  // internal API (POST /api/auth/session).
-  const { userSession } = await getUserSession({
-    cookies: event.cookies,
-    request,
-    url,
-  });
+  // ── 2. Auth: resolve user session from the Better Auth session cookie ──
+  // The session cookie is set by Better Auth (mounted at /api/auth/*). The
+  // D1 binding is only available per-request via `platform.env`, so inject it
+  // before resolving the session. When D1 is unavailable (e.g. local dev
+  // without a Worker platform) the user is simply unauthenticated.
+  const platformEnv = event.platform?.env;
+  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+  setBetterAuthEnv(platformEnv?.DB ? { DB: platformEnv.DB } : undefined);
+  const auth = getBetterAuth();
+  let userSession: UserSessionData | undefined;
+  if (auth) {
+    try {
+      const session = await auth.api.getSession({ headers: request.headers });
+      if (session?.user) {
+        userSession = toUserSessionData(session.user);
+      }
+    } catch (error) {
+      // Failed session lookup (e.g. DB unavailable, corrupt token) leaves the
+      // request unauthenticated rather than failing the entire page load.
+      console.error('hooks.server:getSession-failed', error);
+    }
+  }
   locals.userSession = userSession;
 
   // ── 3. Device detection ──
@@ -183,11 +195,6 @@ export const handle: Handle = async ({ event, resolve }) => {
     const isLoggingEndpoint = isPathExcluded(pathname, ['/api/internal_logging']);
     const isAskEndpoint = isPathExcluded(pathname, ['/api/ask']);
     const isClientAuthRoute = isClientAuthPath(pathname);
-    // Drives the App Check skip below — logging, ask and client-auth share
-    // the same "caller has no Firebase app of its own" reasoning but each
-    // gets its own, narrower CORS origin allowance (isAikamiWebOrigin vs
-    // isAskOrigin vs Tauri webview origins).
-    const isAppCheckExcluded = isPathExcluded(pathname, appCheckExcludePaths);
 
     if (
       method === 'OPTIONS' &&
@@ -199,9 +206,9 @@ export const handle: Handle = async ({ event, resolve }) => {
       const isExtensionOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
       const isLoggingOrigin = isLoggingEndpoint && isAikamiWebOrigin(origin);
       const isAskOriginMatch = isAskEndpoint && isAskOrigin(origin);
-      // The two client-auth routes are reached from the Tauri desktop webview
+      // The Better Auth paths are reached from the Tauri desktop webview
       // (tauri://localhost / http(s)://tauri.localhost) as well as first-party
-      // browser origins — C-418 Feature D. Scoped to exactly those paths.
+      // browser origins. Scoped to exactly /api/auth/*.
       const isClientAuthOrigin =
         isClientAuthRoute && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin));
       const preflightHeaders = new Headers();
@@ -212,41 +219,29 @@ export const handle: Handle = async ({ event, resolve }) => {
         preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
         preflightHeaders.set(
           'Access-Control-Allow-Headers',
-          isClientAuthOrigin
-            ? 'Content-Type, Authorization, X-Firebase-AppCheck'
-            : 'Content-Type, Cookie, x-aikami-session',
+          isClientAuthOrigin ? 'Content-Type, Cookie' : 'Content-Type, Cookie, x-aikami-session',
         );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
-        // Logging and ask need no cookies/credentials — only grant
-        // Allow-Credentials for the extension case, which does.
-        if (isExtensionOrigin) {
+        // Better Auth authenticates via a session cookie, so the client-auth
+        // preflight must grant credentials (as must the extension case).
+        if (isExtensionOrigin || isClientAuthOrigin) {
           preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
         }
+      }
+      // Apply security headers to preflight responses.
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+        preflightHeaders.set(key, value);
       }
       return new Response(null, { status: 204, headers: preflightHeaders });
     }
 
     const guardResponse = apiMethodGuard(pathname, method);
     if (guardResponse) {
-      return guardResponse;
-    }
-
-    // ── App Check verification (skip OPTIONS + excluded paths) ──
-    // Exclude /api/internal_logging, /api/ask and the two client-auth paths
-    // only when the pathname is EXACTLY that endpoint or begins with it
-    // followed by '/' — never a bare unbounded startsWith() so similarly
-    // prefixed routes stay protected.
-    if (
-      enforceAppCheck &&
-      method !== 'OPTIONS' &&
-      !isAppCheckExcluded &&
-      !isClientAuthPath(pathname)
-    ) {
-      try {
-        await verifyAppCheck(request);
-      } catch {
-        return new Response('Unauthorized: Invalid App Check token', { status: 401 });
+      // Apply security headers to guard responses (405, etc).
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+        guardResponse.headers.set(key, value);
       }
+      return guardResponse;
     }
 
     const response = await logContextStore.run(logContext, () => resolve(event));
@@ -263,6 +258,12 @@ export const handle: Handle = async ({ event, resolve }) => {
       response.headers.set('Access-Control-Allow-Origin', origin);
     } else if (isClientAuthRoute && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin))) {
       response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+
+    // Apply security headers to API responses.
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(key, value);
     }
 
     return response;
@@ -276,6 +277,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     pathname: url.pathname,
     routeId,
   });
+
+  // Apply security headers to every SSR response (matching _headers in Workers deployments).
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(key, value);
+  }
 
   return response;
 };

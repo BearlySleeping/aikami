@@ -27,7 +27,7 @@
     {
       "binding": "DB",
       "database_name": "aikami-hub",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "bf77e365-058f-408f-871c-4a0567c9aa10"
     }
   ],
   "r2_buckets": [

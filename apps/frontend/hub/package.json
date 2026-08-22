@@ -34,7 +34,7 @@
     "daisyui": "5.7.19",
     "playwright": "1.62.1",
     "rollup-plugin-visualizer": "7.1.1",
-    "svelte": "5.56.9",
+    "svelte": "5.56.10",
     "svelte-adapter-bun": "1.0.1",
     "svelte-check": "4.7.6",
     "svelte-fast-check": "^0.4.5",
@@ -56,8 +56,6 @@
     "@google-cloud/secret-manager": "*",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.29",
-    "eruda": "3.4.3",
-    "firebase": "12.18.0",
-    "firebase-admin": "14.3.0"
+    "eruda": "3.4.3"
   }
 }

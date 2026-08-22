@@ -19,7 +19,6 @@ declare namespace App {
     userSession?: UserSessionData;
     currentRoute?: RouteName;
     sessionId?: string;
-    customFirebaseSignInToken?: string;
   }
 
   interface Error {

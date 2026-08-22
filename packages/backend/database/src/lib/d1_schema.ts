@@ -102,6 +102,36 @@ export const verifications = sqliteTable('verification', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
 });
 
+/**
+ * A Better Auth device-authorization code (C-426 AC-5 device handoff).
+ * One row per pending/approved/denied device sign-in request. Column JS
+ * property names match the device-authorization plugin's camelCase fields.
+ */
+export const deviceCodes = sqliteTable(
+  'deviceCode',
+  {
+    id: text('id').primaryKey(),
+    deviceCode: text('device_code').notNull(),
+    userCode: text('user_code').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    status: text('status').notNull(),
+    lastPolledAt: integer('last_polled_at', { mode: 'timestamp_ms' }),
+    pollingInterval: integer('polling_interval'),
+    clientId: text('client_id'),
+    scope: text('scope'),
+    // The device-authorization plugin does not populate these, so keep them
+    // nullable (unlike the core identity tables where Better Auth sets them).
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('device_code_device_code_unique').on(table.deviceCode),
+    uniqueIndex('device_code_user_code_unique').on(table.userCode),
+    index('device_code_user_id_idx').on(table.userId),
+  ],
+);
+
 // ── Catalog tables (carried forward from schema.ts, FK retargeted) ──────
 
 /** packs.visibility — a SQLite CHECK constraint (no pgEnum in the sqlite dialect). */
@@ -210,6 +240,7 @@ export type D1UserRow = typeof users.$inferSelect;
 export type D1SessionRow = typeof sessions.$inferSelect;
 export type D1AccountRow = typeof accounts.$inferSelect;
 export type D1VerificationRow = typeof verifications.$inferSelect;
+export type D1DeviceCodeRow = typeof deviceCodes.$inferSelect;
 export type D1PackRow = typeof packs.$inferSelect;
 export type D1PackVersionRow = typeof packVersions.$inferSelect;
 export type D1AccountBackupRow = typeof accountBackups.$inferSelect;

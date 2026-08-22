@@ -33,7 +33,7 @@
     "@fontsource/inter": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "firebase": "12.18.0",
-    "pixi.js": "8.19.0"
+    "pixi.js": "8.20.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",

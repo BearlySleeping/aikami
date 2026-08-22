@@ -7,5 +7,4 @@ export type AdminHookData = {
   currentRoute?: RouteName;
   logLevel?: LogLevel;
   sessionId?: string;
-  customFirebaseSignInToken?: string;
 };

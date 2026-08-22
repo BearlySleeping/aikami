@@ -12,7 +12,7 @@
 // mounted handler responds 503 — the existing Firebase auth path keeps
 // serving until the cutover completes.
 
-import { createBetterAuth } from '@aikami/backend/auth';
+import { createBetterAuth } from '@aikami/backend-auth/better-auth';
 import { d1 } from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
 import { env } from '$env/dynamic/private';
@@ -27,9 +27,12 @@ let _auth: ReturnType<typeof createBetterAuth> | undefined;
 
 /** Inject the per-request Worker env (called by the catch-all route). */
 export const setBetterAuthEnv = (envValue: BetterAuthEnv | undefined): void => {
-  _env = envValue;
-  // A changed env invalidates the cached instance (e.g. test reset).
-  _auth = undefined;
+  // Invalidate the cached instance only when the binding identity changes
+  // (e.g. test reset). Reuse the instance when the same binding is re-set.
+  if (_env !== envValue) {
+    _env = envValue;
+    _auth = undefined;
+  }
 };
 
 /** The Better Auth instance bound to D1, or undefined when D1 is unavailable. */
@@ -53,7 +56,47 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
       secret: secret ?? 'dev-secret-not-for-production',
       googleClientId: env.GOOGLE_CLIENT_ID,
       googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+      // SSO: share the session cookie across the client (`aikami.`) and hub
+      // (`hub.`) subdomains of the same root domain.
+      cookieDomain: deriveCookieDomain(),
     });
   }
   return _auth;
+};
+
+/**
+ * Derive the shared cookie domain from explicit configuration. Returns
+ * undefined when no explicit domain is configured (localhost / bare hosts
+ * keep cookies host-scoped). Avoids inferring the registrable domain by
+ * label count to prevent producing public suffixes (e.g. co.uk).
+ */
+const deriveCookieDomain = (): string | undefined => {
+  // When explicitly configured (production), use that domain for cross-subdomain
+  // cookies. Otherwise (dev/emulator), return undefined so cookies are host-scoped.
+  const explicitDomain = env.BETTER_AUTH_COOKIE_DOMAIN;
+  if (explicitDomain && explicitDomain.length > 0) {
+    return explicitDomain;
+  }
+  return undefined;
+};
+
+/**
+ * Shared setup for Better Auth route handlers — inject the D1 binding from
+ * the Worker platform and return the configured auth instance, or respond 503
+ * when auth is unavailable (e.g. missing D1 binding).
+ */
+export const setupBetterAuthHandler = (
+  platform: App.Platform | undefined,
+): ReturnType<typeof createBetterAuth> | Response => {
+  const env = platform?.env;
+  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+  setBetterAuthEnv(env?.DB ? { DB: env.DB } : undefined);
+  const auth = getBetterAuth();
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'auth_unconfigured' }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  return auth;
 };

@@ -198,11 +198,16 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
   if (!cf) {
     return;
   }
-  const outputDir = join(appRoot, cf.buildOutputDir);
-  if (!existsSync(outputDir)) {
+  // For SSR Workers (hub), write _headers to the assets directory (cf.assetsDir)
+  // which is uploaded by wrangler as the public static directory. For assets-only
+  // Workers, write to buildOutputDir (the single directory for everything).
+  const targetDir = cf.assetsOnly
+    ? join(appRoot, cf.buildOutputDir)
+    : join(appRoot, cf.assetsDir ?? cf.buildOutputDir);
+  if (!existsSync(targetDir)) {
     return;
   }
-  const headersPath = join(outputDir, '_headers');
+  const headersPath = join(targetDir, '_headers');
 
   // When a headersSource is configured, copy it into the build output so the
   // committed source of truth is what ships. This preserves the existing
@@ -269,18 +274,23 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     };
   } else {
     json.main = cf.main;
-    json.assets = { binding: 'ASSETS', directory: assetDir };
+    // SSR Workers serve their static client assets from `assetsDir` (e.g.
+    // `build/client`), NOT `buildOutputDir` — the latter also contains the
+    // server `_worker.js`, which must never be uploaded as a public asset.
+    json.assets = { binding: 'ASSETS', directory: cf.assetsDir ?? assetDir };
     // C-426 AC-3: SSR Workers (hub) need their D1 + R2 bindings and the
     // nodejs_compat flag in the generated per-mode wrangler config.
-    if (cf.d1Databases?.length) {
-      json.d1_databases = cf.d1Databases.map((d) => ({
+    const d1Databases = typeof cf.d1Databases === 'function' ? cf.d1Databases(mode) : cf.d1Databases;
+    if (d1Databases?.length) {
+      json.d1_databases = d1Databases.map((d) => ({
         binding: d.binding,
         database_name: d.databaseName,
         database_id: d.databaseId,
       }));
     }
-    if (cf.r2Buckets?.length) {
-      json.r2_buckets = cf.r2Buckets.map((r) => ({
+    const r2Buckets = typeof cf.r2Buckets === 'function' ? cf.r2Buckets(mode) : cf.r2Buckets;
+    if (r2Buckets?.length) {
+      json.r2_buckets = r2Buckets.map((r) => ({
         binding: r.binding,
         bucket_name: r.bucketName,
       }));
