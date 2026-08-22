@@ -21,7 +21,7 @@
 // the Firebase path used, but exchanging a Better Auth session instead of a
 // `customFirebaseSignInToken`.
 
-import type { CurrentUser, FirebaseSignInProviderName, SignInProvider } from '@aikami/types';
+import type { CurrentUser, SignInProvider, SignInProviderName } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { hubApiBase } from '../api/hub_api_client';
 
@@ -162,6 +162,10 @@ export const signOutBetterAuth = async (): Promise<void> => {
     method: 'POST',
     headers: jsonHeaders,
     credentials: 'include',
+    // Better Auth's /sign-out body schema is optional but the endpoint still
+    // parses the body when Content-Type: application/json is sent — an empty
+    // body fails with "Invalid JSON in request body". Send an empty object.
+    body: '{}',
   });
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);
@@ -185,15 +189,34 @@ export const sendPasswordResetEmail = async (email: string): Promise<void> => {
 };
 
 /**
- * Google OAuth via redirect to the hub's Better Auth social sign-in. The hub
- * redirects back to `callbackURL` with a session cookie set. Used on the
- * browser path where a full-page redirect is viable.
+ * Google OAuth via the hub's Better Auth social sign-in. The hub redirects
+ * back to `callbackURL` with a session cookie set. Used on the browser path
+ * where a full-page redirect is viable.
+ *
+ * Better Auth's /sign-in/social is a POST endpoint that returns the provider
+ * authorize URL ({ url, redirect: true }) — it is NOT a GET redirect. POST,
+ * then navigate to the returned URL. The callback lands on the client home
+ * page, where app boot reads the session and routes the user.
  */
-export const socialSignInRedirect = (provider: FirebaseSignInProviderName): void => {
-  const callbackURL = `${window.location.origin}/auth/callback`;
-  window.location.assign(
-    `${hubApiBase()}/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(callbackURL)}`,
-  );
+export const socialSignInRedirect = async (provider: SignInProviderName): Promise<void> => {
+  const callbackURL = `${window.location.origin}/`;
+  const response = await fetch(`${hubApiBase()}/auth/sign-in/social`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    // Cross-origin (client → hub): must send/receive cookies so the hub's
+    // OAuth state cookie (Set-Cookie on this response) is stored — otherwise
+    // the Google callback finds no state and fails with `state_mismatch`.
+    credentials: 'include',
+    body: JSON.stringify({ provider, callbackURL }),
+  });
+  if (!response.ok) {
+    throw await toAppErrorFromResponse(response);
+  }
+  const data = (await response.json()) as { url?: string };
+  if (!data.url) {
+    throw new Error('Social sign-in returned no authorize URL');
+  }
+  window.location.assign(data.url);
 };
 
 /** Better Auth device-authorization client id (no validateClient on the hub). */

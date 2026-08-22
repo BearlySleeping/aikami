@@ -73,11 +73,10 @@ class LoginViewModel
 
     this._isSigningIn = true;
     this.errorMessage = undefined;
-    authService.setIsChangingAuthState(true);
 
     try {
       const response = await authService.socialSignIn('google');
-      // socialSignIn always uses the popup flow in the browser (the Tauri
+      // socialSignIn uses a full-page redirect in the browser (the Tauri
       // path hands off to the /link device page instead). Callers that need
       // to act once signed in (e.g. the /link handoff) react to
       // authService.isLoggedIn rather than the response, which covers every
@@ -89,7 +88,6 @@ class LoginViewModel
       this.errorMessage = error instanceof Error ? error.message : 'Sign-in failed';
       this.debug('signIn:error', { error: String(error) });
     } finally {
-      authService.setIsChangingAuthState(false);
       this._isSigningIn = false;
     }
   }

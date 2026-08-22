@@ -5,109 +5,49 @@
 // redirects to `/login` exactly as before); a signed-in visitor sees the
 // account menu in place of the anonymous login affordance.
 //
-// The signed-in session is minted directly against the Firebase Auth
-// emulator and synced through the hub's own POST /api/auth/session — the
-// same flow the hub's login page uses.
+// The signed-in session is minted directly against the hub's Better Auth
+// endpoints and injected as a session cookie — the same flow the hub's
+// login page uses.
 
 import { expect, test } from '@playwright/test';
-import { EMULATOR_PORTS, FIREBASE_API_KEY } from '../../src/config';
+import { EMULATOR_PORTS } from '../../src/config';
 
-const AUTH_EMULATOR_URL = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
-const AUTH_STORAGE_KEY = `firebase:authUser:${FIREBASE_API_KEY}:[DEFAULT]`;
+const HUB_BASE_URL = `http://localhost:${EMULATOR_PORTS.hub}`;
 
 /**
- * Create a Firebase emulator user and inject its auth state into the
- * browser's IndexedDB BEFORE the app initialises — the same pattern as
- * apps/e2e/src/auth.setup.ts. Firebase Auth restores the session on load and
- * the hub's AuthService syncs the SSR session cookie itself.
+ * Sign up + sign in a test user against the hub's Better Auth endpoints and
+ * inject the session cookie into the browser context BEFORE the app
+ * initialises — the same pattern as apps/e2e/src/auth.setup.ts. Better Auth
+ * restores the session from the cookie on load and the hub's AuthService
+ * syncs the SSR session.
  */
 const seedSignedInState = async (page: import('@playwright/test').Page): Promise<void> => {
-  const response = await fetch(
-    `${AUTH_EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: `hub-e2e-${Date.now()}@example.com`,
-        password: 'asdasd',
-        returnSecureToken: true,
-      }),
-    },
-  );
-  expect(response.ok).toBe(true);
-  const data = (await response.json()) as {
-    idToken: string;
-    refreshToken: string;
-    localId: string;
-    email: string;
-  };
-  expect(data.idToken).toBeTruthy();
+  const email = `hub-e2e-${Date.now()}@example.com`;
+  const password = 'asdasd123';
 
-  await page.addInitScript(
-    (state: {
-      key: string;
-      idToken: string;
-      refreshToken: string;
-      email: string;
-      uid: string;
-      apiKey: string;
-    }) =>
-      new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('firebaseLocalStorageDb', 1);
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains('firebaseLocalStorage')) {
-            db.createObjectStore('firebaseLocalStorage');
-          }
-        };
-        request.onblocked = () => {
-          // Another connection holds the DB open — the promise must still
-          // settle instead of hanging the page load forever.
-          reject(new Error('indexedDB.open was blocked by an existing connection'));
-        };
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction(['firebaseLocalStorage'], 'readwrite');
-          const store = tx.objectStore('firebaseLocalStorage');
-          store.put({
-            name: state.key,
-            value: {
-              uid: state.uid,
-              email: state.email,
-              emailVerified: false,
-              isAnonymous: false,
-              providerData: [{ providerId: 'password', uid: state.email, email: state.email }],
-              stsTokenManager: {
-                refreshToken: state.refreshToken,
-                accessToken: state.idToken,
-                expirationTime: Date.now() + 3_600_000,
-              },
-              createdAt: String(Date.now()),
-              lastLoginAt: String(Date.now()),
-              apiKey: state.apiKey,
-              appName: '[DEFAULT]',
-            },
-          });
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(tx.error);
-          };
-        };
-        request.onerror = () => reject(request.error);
-      }),
+  await fetch(`${HUB_BASE_URL}/api/auth/sign-up/email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Hub E2E', email, password }),
+  }).catch(() => undefined);
+
+  const res = await fetch(`${HUB_BASE_URL}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  expect(res.ok).toBe(true);
+  const setCookie = res.headers.get('set-cookie');
+  expect(setCookie).toBeTruthy();
+  const cookie = setCookie?.split(';')[0] ?? '';
+
+  await page.context().addCookies([
     {
-      key: AUTH_STORAGE_KEY,
-      idToken: data.idToken,
-      refreshToken: data.refreshToken,
-      email: data.email,
-      uid: data.localId,
-      apiKey: FIREBASE_API_KEY,
+      name: cookie.split('=')[0] ?? 'better-auth.session_token',
+      value: cookie.split('=').slice(1).join('='),
+      url: `http://localhost:${EMULATOR_PORTS.client}`,
     },
-  );
+  ]);
 };
 
 test.describe('Catalog public shell — C-396 AC-1', () => {
@@ -158,12 +98,12 @@ test.describe('Catalog public shell — C-396 AC-1', () => {
   });
 
   test('signed-in visitor sees the account menu, not the login affordance', async ({ page }) => {
-    // Seed a real Firebase emulator session (IndexedDB) BEFORE first paint.
+    // Seed a real Better Auth session cookie BEFORE first paint.
     await seedSignedInState(page);
 
-    // Firebase Auth restores the session on load; the hub AuthService syncs
-    // the SSR session cookie. Both anonymous-render and signed-in-render must
-    // work on the public catalog.
+    // Better Auth restores the session from the cookie on load; the hub
+    // AuthService syncs the SSR session. Both anonymous-render and
+    // signed-in-render must work on the public catalog.
     const response = await page.goto('/');
     expect(response?.status()).toBe(200);
     await expect(page.locator('[aria-label="Profile menu"]')).toBeVisible();

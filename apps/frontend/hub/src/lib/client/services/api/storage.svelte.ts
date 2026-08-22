@@ -2,12 +2,12 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  type FirebaseStorageServiceInterface,
-  firebaseStorageService,
+  createR2Storage,
+  type R2StorageInterface,
 } from '@aikami/frontend/services';
 
 export type StorageServiceOptions = BaseFrontendClassOptions & {
-  storage: FirebaseStorageServiceInterface;
+  storage: R2StorageInterface;
 };
 
 export type StorageServiceInterface = BaseFrontendClassInterface & {
@@ -23,7 +23,7 @@ class StorageService
   extends BaseFrontendClass<StorageServiceOptions>
   implements StorageServiceInterface
 {
-  private get _storage(): FirebaseStorageServiceInterface {
+  private get _storage(): R2StorageInterface {
     return this._options.storage;
   }
 
@@ -36,16 +36,13 @@ class StorageService
 
       this.log('uploadAvatar', { path });
 
-      // 1. Upload the file
+      // 1. Upload the file to R2 (via the hub's session-gated endpoint).
       const result = await this._storage.upload(path, file);
 
-      // 2. Fetch the download URL
-      // Note: Adjust 'getDownloadURL' if your custom interface uses a different method name
-      // and check if it expects 'result.ref' or 'result.ref.fullPath' as the argument.
+      // 2. Fetch the download URL.
       const downloadUrl = await this._storage.getDownloadURL(result.ref);
 
-      // Log only the storage path — the download URL embeds a signed bearer
-      // token that must never reach logs.
+      // Log only the storage path — the download URL must never reach logs.
       this.log('uploadAvatar uploaded', { path });
       return downloadUrl;
     } catch (error) {
@@ -56,6 +53,6 @@ class StorageService
 }
 
 export const storageService: StorageServiceInterface = StorageService.create({
-  storage: firebaseStorageService,
+  storage: createR2Storage('/api'),
   className: 'StorageService',
 });

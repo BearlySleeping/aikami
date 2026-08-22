@@ -1,16 +1,15 @@
 // apps/frontend/hub/src/lib/server/api/tests/auth.test.ts
 //
-// C-426 AC-4: the hub's login flow is served by Better Auth mounted in the
-// dedicated SvelteKit catch-all route (routes/api/auth/[...auth]/+server.ts),
-// backed by D1.
+// C-426 AC-4: the hub's login flow is served by Better Auth mounted inside the
+// Elysia app (src/lib/server/api/index.ts) via `.mount()`, backed by D1.
 
 // biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
 //
-// The route's `fallback` handler is a module singleton; the D1 database is
-// injected per-test via `platform.env.DB` with a mock D1Database backed by an
-// in-memory libsql instance (the same SQLite engine D1 uses, with the generated
-// D1 migration applied). This exercises the real production path: Better Auth
-// handler → drizzle D1 driver → D1 schema.
+// The Elysia app is a module singleton; the D1 database is injected via
+// `setBetterAuthEnv` with a mock D1Database backed by an in-memory libsql
+// instance (the same SQLite engine D1 uses, with the generated D1 migration
+// applied). This exercises the real production path: Better Auth handler →
+// drizzle D1 driver → D1 schema.
 
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -21,9 +20,7 @@ import { type Client, createClient } from '@libsql/client';
 // (better_auth.ts, the route) is loaded — hence dynamic imports below.
 mock.module('$env/dynamic/private', () => ({
   env: {
-    // biome-ignore lint/style/useNamingConvention: env key is a SCREAMING_SNAKE_CASE literal
     BETTER_AUTH_URL: 'http://localhost:5173',
-    // biome-ignore lint/style/useNamingConvention: env key is a SCREAMING_SNAKE_CASE literal
     BETTER_AUTH_SECRET: 'test-secret-that-is-long-enough-for-better-auth',
   } as Record<string, string | undefined>,
 }));
@@ -66,10 +63,8 @@ const createMockD1 = (dbClient: Client): unknown => {
 };
 
 let client: Client;
-let fallback: (v: {
-  request: Request;
-  platform?: { env: { DB: unknown } };
-}) => Response | Promise<Response>;
+let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
+let setBetterAuthEnv: (env: { DB: unknown } | undefined) => void;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -117,16 +112,18 @@ const get = (path: string, cookie: string) =>
 beforeAll(async () => {
   client = createClient({ url: ':memory:' });
   await applyD1Migrations();
-  const route = await import('../../../../routes/api/auth/[...auth]/+server.ts');
-  fallback = route.fallback;
+  const betterAuthModule = await import('../better_auth.ts');
+  setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
+  setBetterAuthEnv({ DB: createMockD1(client) });
+  ({ app } = await import('../index.ts'));
 });
 
 afterAll(async () => {
+  setBetterAuthEnv(undefined);
   await client.close();
 });
 
-const handle = (request: Request) =>
-  fallback({ request, platform: { env: { DB: createMockD1(client) } } });
+const handle = (request: Request) => app.handle(request);
 
 describe('hub Better Auth mount (AC-4)', () => {
   test('sign-up via /api/auth/sign-up/email creates a user in D1', async () => {
@@ -192,27 +189,25 @@ describe('hub Better Auth mount (AC-4)', () => {
     expect(res.status).not.toBe(200);
   });
 
-  test('getBetterAuth() returns undefined and the route 503s with no D1 env', async () => {
+  test('getBetterAuth() returns undefined and the mount 503s with no D1 env', async () => {
     const betterAuthModule = await import('../better_auth.ts');
-    const res = await fallback({
-      request: post('/api/auth/sign-in/email', {
-        email: 'alice@example.com',
-        password: 'password123',
-      }),
-      platform: undefined,
-    });
-    expect(betterAuthModule.getBetterAuth()).toBeUndefined();
-    expect(res.status).toBe(503);
+    setBetterAuthEnv(undefined);
+    try {
+      const res = await app.handle(
+        post('/api/auth/sign-in/email', {
+          email: 'alice@example.com',
+          password: 'password123',
+        }),
+      );
+      expect(betterAuthModule.getBetterAuth()).toBeUndefined();
+      expect(res.status).toBe(503);
+    } finally {
+      setBetterAuthEnv({ DB: createMockD1(client) });
+    }
   });
 
-  test('device route fallback handles /device/code requests (AC-5)', async () => {
-    const { fallback: deviceFallback } = await import(
-      '../../../routes/api/device/[...device]/+server.ts'
-    );
-    const res = await deviceFallback({
-      request: post('/api/device/code', { client_id: 'aikami-client' }),
-      platform: { env: { DB: client } },
-    });
+  test('device mount handles /api/auth/device/code requests (AC-5)', async () => {
+    const res = await app.handle(post('/api/auth/device/code', { client_id: 'aikami-client' }));
     // Device-code request succeeds (not 404) and returns a device_code + user_code.
     expect(res.status).not.toBe(404);
     if (res.status === 200) {

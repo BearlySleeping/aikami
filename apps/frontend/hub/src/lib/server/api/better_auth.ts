@@ -11,6 +11,10 @@
 // during the migration window) `getBetterAuth()` returns undefined and the
 // mounted handler responds 503 — the existing Firebase auth path keeps
 // serving until the cutover completes.
+//
+// Better Auth is mounted inside the Elysia app via `.mount()` (see
+// src/lib/server/api/index.ts), which runs the handler before Elysia parses
+// the request body.
 
 import { createBetterAuth } from '@aikami/backend-auth/better-auth';
 import { d1 } from '@aikami/backend-database';
@@ -78,25 +82,4 @@ const deriveCookieDomain = (): string | undefined => {
     return explicitDomain;
   }
   return undefined;
-};
-
-/**
- * Shared setup for Better Auth route handlers — inject the D1 binding from
- * the Worker platform and return the configured auth instance, or respond 503
- * when auth is unavailable (e.g. missing D1 binding).
- */
-export const setupBetterAuthHandler = (
-  platform: App.Platform | undefined,
-): ReturnType<typeof createBetterAuth> | Response => {
-  const env = platform?.env;
-  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  setBetterAuthEnv(env?.DB ? { DB: env.DB } : undefined);
-  const auth = getBetterAuth();
-  if (!auth) {
-    return new Response(JSON.stringify({ error: 'auth_unconfigured' }), {
-      status: 503,
-      headers: { 'content-type': 'application/json' },
-    });
-  }
-  return auth;
 };

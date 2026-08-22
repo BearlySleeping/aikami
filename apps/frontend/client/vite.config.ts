@@ -183,24 +183,6 @@ export default defineConfig(({ mode }) => {
       proxy:
         mode === 'emulator'
           ? {
-              // Proxy Firebase Auth emulator through the dev server so the
-              // popup, relay iframe, and main page all share localhost:5274.
-              // This fixes the "No matching frame" error in signInWithPopup.
-              '/emulator/auth': {
-                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
-                changeOrigin: true,
-              },
-              // Proxy Firebase Auth REST API calls to the emulator.
-              // The SDK calls identitytoolkit + securetoken endpoints to
-              // exchange OAuth credentials for Firebase tokens.
-              '/identitytoolkit.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
-                changeOrigin: true,
-              },
-              '/securetoken.googleapis.com': {
-                target: `http://localhost:${PORTS.emulator.auth + emulatorPortOffset}`,
-                changeOrigin: true,
-              },
               '/api/voice': {
                 target: `http://localhost:${PORTS.emulator.voice}`,
                 changeOrigin: true,
@@ -255,18 +237,12 @@ export default defineConfig(({ mode }) => {
           '**/examples/**',
           '**/references/**',
 
-          // 4. Firebase Emulator Churn (Very important!)
-          // The emulator constantly writes logs and database states which
-          // triggers unnecessary watcher events
-          '**/apps/backend/firebase/tmp/**',
-          '**/*.log',
-
-          // 5. Backend Generated Assets
+          // 4. Backend Generated Assets
           // Python/ComfyUI outputs that change rapidly and don't affect the PWA code
           '**/apps/backend/image/src/output/**',
           '**/apps/backend/image/src/cache/**',
 
-          // 6. E2E Test Artifacts (Playwright)
+          // 5. E2E Test Artifacts (Playwright)
           '**/playwright-report/**',
           '**/test-results/**',
           '**/blob-report/**',

@@ -31,7 +31,7 @@
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.2.0",
-    "daisyui": "5.7.19",
+    "daisyui": "5.7.20",
     "playwright": "1.62.1",
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.56.10",
@@ -52,8 +52,6 @@
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
-    "@google-analytics/data": "*",
-    "@google-cloud/secret-manager": "*",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.29",
     "eruda": "3.4.3"

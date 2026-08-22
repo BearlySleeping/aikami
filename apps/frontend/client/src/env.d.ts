@@ -8,7 +8,6 @@ declare module '*?worker&type=module' {
 
 declare module '$env/static/private' {
   export const GEMINI_API_KEY: string;
-  export const FIREBASE_SERVICE_ACCOUNT: string;
   export const MODE: Mode;
   export const LOG_LEVEL: Mode;
   export const GMAIL_CLIENT_ID: string;
@@ -17,12 +16,8 @@ declare module '$env/static/private' {
 declare module '$env/static/public' {
   /** Base URL for the voice/TTS microservice (Kokoro container). */
   export const PUBLIC_VOICE_URL: string;
-  export const PUBLIC_FIREBASE_API_KEY: string;
-  export const PUBLIC_FIREBASE_AUTH_DOMAIN: string;
-  export const PUBLIC_FIREBASE_STORAGE_BUCKET: string;
-  export const PUBLIC_FIREBASE_MESSAGING_SENDER_ID: string;
-  export const PUBLIC_FIREBASE_APP_ID: string;
-  export const PUBLIC_FIREBASE_MEASUREMENT_ID: string;
+  /** Public base URL for the R2 assets bucket (e.g. https://assets.bearlysleeping.com). */
+  export const PUBLIC_ASSETS_BASE_URL: string;
   export const PUBLIC_LOG_LEVEL: LogLevel;
   export const PUBLIC_MODE: Mode;
 }

@@ -7,7 +7,7 @@ import type { Mode } from '@aikami/types';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
-import { createLogger, defineConfig, loadEnv, type PluginOption, type ProxyOptions } from 'vite';
+import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 
@@ -15,36 +15,14 @@ const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
 // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline runs
-// so this app's Firebase Auth emulator proxy targets its own per-contract
-// emulator instance, not another contract's. 0 otherwise.
-const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-const emulatorAuthPort = PORTS.emulator.auth + emulatorPortOffset;
-
-/** Firebase Auth emulator proxies so the SDK's popup/relay share one origin. */
-// The auth emulator binds 127.0.0.1 only — target it directly (a `localhost`
-// target resolves to ::1 first and the proxy fails, leaving the popup
-// handler blank).
-const emulatorAuthProxy: Record<string, string | ProxyOptions> = {
-  '/emulator/auth': {
-    target: `http://127.0.0.1:${emulatorAuthPort}`,
-    changeOrigin: true,
-  },
-  '/identitytoolkit.googleapis.com': {
-    target: `http://127.0.0.1:${emulatorAuthPort}`,
-    changeOrigin: true,
-  },
-  '/securetoken.googleapis.com': {
-    target: `http://127.0.0.1:${emulatorAuthPort}`,
-    changeOrigin: true,
-  },
-};
+// so this app's dev server targets its own per-contract emulator instance,
+// not another contract's. 0 otherwise.
 
 // Generate a list of all native Node.js modules (e.g., 'fs', 'stream', 'node:fs')
 const NODE_BUILTINS = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 // Packages that are Node-only and should NEVER be bundled.
 const SERVER_ONLY_PACKAGES = [
-  'firebase-functions',
   '@google-cloud/secret-manager',
   'genkit',
   '@genkit-ai/google-genai',
@@ -52,8 +30,7 @@ const SERVER_ONLY_PACKAGES = [
 ];
 
 // Client packages that SHOULD be inlined during the SSR build
-// Note: Supplying the root package name ('firebase') handles all subpaths ('firebase/app', etc.)
-const BUNDLE_ONLY_PACKAGES = ['firebase'];
+const BUNDLE_ONLY_PACKAGES: string[] = [];
 
 // Packages that MUST be externalized even when pulled in transitively.
 // The ssr.external array alone doesn't catch subpath imports or transitive
@@ -89,9 +66,6 @@ function forceExternalPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
-  // Load the full env file for this mode so PUBLIC_MODE (set in .env.<mode>)
-  // drives runtime behaviour instead of the Vite mode argument.
-  const env = loadEnv(mode, projectDirectory, '');
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.hub || 5276);
 
   const plugins: PluginOption[] = [
@@ -222,15 +196,11 @@ export default defineConfig(({ mode }) => {
         allow: [rootDirectory],
       },
       headers: {
-        // Same-origin popup/iframe relay for the Firebase Auth emulator
-        // sign-in flow (matches the client app's cross-origin isolation
-        // headers — the hub has no SharedArrayBuffer usage, so COEP stays
-        // unset to keep the relay cross-origin-safe).
         'Cross-Origin-Opener-Policy': 'same-origin',
       },
       port,
       strictPort: true,
-      proxy: env.PUBLIC_MODE === 'emulator' ? emulatorAuthProxy : {},
+      proxy: {},
       watch: {
         ignored: [
           '**/examples/**',
@@ -241,7 +211,6 @@ export default defineConfig(({ mode }) => {
           '**/node_modules/**',
           '**/.git/**',
           '**/build/**',
-          '**/.firebase/**',
         ],
       },
     },

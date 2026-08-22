@@ -30,7 +30,6 @@ const formatTime = (date: Date): string =>
         type="button"
         class="btn btn-ghost btn-sm"
         aria-label="Close roll history"
-        autofocus
         onclick={onClose}
       >
         ✕

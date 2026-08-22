@@ -73,7 +73,7 @@ const slotLabels: Record<string, string> = {
   accessories: 'Accessories',
   hair: 'Hair',
   head: 'Head',
-  head_accessories: 'Head Accessories',
+  headAccessories: 'Head Accessories',
   torso: 'Torso',
   legs: 'Legs',
   feet: 'Feet',
@@ -195,9 +195,9 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
         <select
           id="lpc-slot-head-accessories"
           class="select select-bordered select-sm w-full"
-          value={viewModel.lpcRecipe.head_accessories ?? ''}
+          value={viewModel.lpcRecipe.headAccessories ?? ''}
           onchange={(e) =>
-            viewModel.setLpcLayer('head_accessories', (e.target as HTMLSelectElement).value)}
+            viewModel.setLpcLayer('headAccessories', (e.target as HTMLSelectElement).value)}
         >
           <option value="">—</option>
           {#each headAccessoryVariants as variant}

@@ -84,31 +84,6 @@ export default defineConfig({
         optional: false,
         default: '',
       }),
-      PUBLIC_FIREBASE_API_KEY: envField.string({
-        context: 'client',
-        access: 'public',
-        optional: true,
-      }),
-      PUBLIC_FIREBASE_AUTH_DOMAIN: envField.string({
-        context: 'client',
-        access: 'public',
-        optional: true,
-      }),
-      PUBLIC_FIREBASE_STORAGE_BUCKET: envField.string({
-        context: 'client',
-        access: 'public',
-        optional: true,
-      }),
-      PUBLIC_FIREBASE_MESSAGING_SENDER_ID: envField.string({
-        context: 'client',
-        access: 'public',
-        optional: true,
-      }),
-      PUBLIC_FIREBASE_APP_ID: envField.string({
-        context: 'client',
-        access: 'public',
-        optional: true,
-      }),
       PUBLIC_RECAPTCHA_SITE_KEY: envField.string({
         context: 'client',
         access: 'public',

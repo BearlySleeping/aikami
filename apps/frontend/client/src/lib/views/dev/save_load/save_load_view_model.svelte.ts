@@ -8,8 +8,8 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  type SaveSlotEntry,
 } from '@aikami/frontend/services';
+import type { SaveSlotEntry } from '@aikami/frontend-services/game-state-sync';
 import { authService, gameStateSyncService } from '$services';
 
 /** Sample ECS snapshot for dev sandbox pre-fill. */
@@ -61,9 +61,6 @@ export type SaveLoadViewModelInterface = BaseViewModelInterface & {
   /** Whether a save/load/delete operation is in progress. */
   readonly isBusy: boolean;
 
-  /** Whether an anonymous sign-in is in progress. */
-  readonly isSigningIn: boolean;
-
   /** Feedback message (success or error). */
   readonly message: string | undefined;
 
@@ -87,9 +84,6 @@ export type SaveLoadViewModelInterface = BaseViewModelInterface & {
 
   /** Deletes the selected slot. */
   deleteSlot(): Promise<void>;
-
-  /** Signs in anonymously via Firebase Auth. */
-  signInAnonymously(): Promise<void>;
 };
 
 export type SaveLoadViewModelOptions = BaseViewModelOptions;
@@ -103,7 +97,6 @@ class SaveLoadViewModel
   slotNumber = $state(1);
   payload = $state('');
   isBusy = $state(false);
-  isSigningIn = $state(false);
   message = $state<string | undefined>(undefined);
   loadedPayload = $state<string | undefined>(undefined);
 
@@ -113,9 +106,9 @@ class SaveLoadViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Ensure auth is initialized so Firebase SDK restores anonymous
-    // sessions from IndexedDB on page refresh (onIdTokenChanged listener).
-    // Safe to call repeatedly — AuthService guards with _initialized flag.
+    // Ensure auth is initialized so the session is resolved before loading
+    // slots. Safe to call repeatedly — AuthService guards with a cached
+    // in-flight promise.
     await authService.initialize();
 
     this.payload = DEFAULT_SNAPSHOT;
@@ -244,27 +237,6 @@ class SaveLoadViewModel
       this.debug('deleteSlot:error', { slot: this.slotNumber, error: msg });
     } finally {
       this.isBusy = false;
-    }
-  }
-
-  /** @inheritdoc */
-  async signInAnonymously(): Promise<void> {
-    this.isSigningIn = true;
-    this.message = undefined;
-
-    try {
-      const ok = await authService.signInAnonymously();
-      if (ok) {
-        this.message = 'Signed in anonymously.';
-        await this.loadSlots();
-      } else {
-        this.message = 'Anonymous sign-in failed.';
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.message = `Sign-in failed: ${msg}`;
-    } finally {
-      this.isSigningIn = false;
     }
   }
 }

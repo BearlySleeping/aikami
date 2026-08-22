@@ -227,14 +227,6 @@ const frontendServicesMock = {
   dialogService: {},
   routerService: {},
   gameStateSyncService: {},
-  firebaseAnalyticService: { logEvent: mock(async () => {}) },
-  firebaseAuthService: {
-    currentUser: null,
-    onAuthStateChanged: mock(() => () => {}),
-  },
-  firebaseCloudMessaging: {},
-  firebaseRemoteConfig: {},
-  firebaseStorageService: {},
   routerUtils: {},
   // biome-ignore lint/complexity/noStaticOnlyClass: mock must match real class shape
   PreferenceService: class {
@@ -326,8 +318,6 @@ const _localServicesMock = () => ({
   streamOrchestratorService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},
-  analyticService: _createServiceStub(),
-  AnalyticService: class {},
   appService: _createServiceStub(),
   AppService: class {},
   audioContextManager: _createServiceStub(),
@@ -703,12 +693,6 @@ mock.module('$app/state', () => ({
 
 process.env.PUBLIC_APP_ID = 'client';
 process.env.PUBLIC_MODE = 'testing';
-process.env.PUBLIC_FIREBASE_API_KEY = 'mock-api-key';
-process.env.PUBLIC_FIREBASE_AUTH_DOMAIN = 'mock.firebaseapp.com';
-process.env.PUBLIC_FIREBASE_STORAGE_BUCKET = 'mock.appspot.com';
-process.env.PUBLIC_FIREBASE_APP_ID = 'mock-app-id';
-process.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 'mock-sender-id';
-process.env.PUBLIC_FIREBASE_MEASUREMENT_ID = 'mock-measurement-id';
 process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
 
 // Ensure no OpenRouter API keys leak from the direnv environment.

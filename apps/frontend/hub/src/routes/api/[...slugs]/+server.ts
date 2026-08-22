@@ -11,13 +11,16 @@
 // C-426 AC-3/AC-4: the Worker bindings (D1 + R2) are only available per
 // request via `platform.env`. They are injected into the Better Auth /
 // save-backup modules before handling so production requests initialize
-// from the real DB. Better Auth sets its own session cookie directly on
-// the response — no `__session` merge shim is needed (that was the old
-// Firebase Hosting path, removed with the Firebase auth routes).
+// from the real DB. Better Auth (auth + device-authorization) is mounted
+// inside the Elysia app via `.mount()` — see src/lib/server/api/index.ts.
+// Better Auth sets its own session cookie directly on the response — no
+// `__session` merge shim is needed (that was the old Firebase Hosting path,
+// removed with the Firebase auth routes).
 
 import { app } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
+import { setStorageEnv } from '$lib/server/api/storage.ts';
 
 type RequestHandler = (v: {
   request: Request;
@@ -32,6 +35,8 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
   setBetterAuthEnv(env ? { DB: env.DB } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setStorageEnv(env ? { SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
 
   return await app.handle(request);
 };

@@ -25,19 +25,6 @@ const { viewModel }: Props = $props();
           <span class="text-sm text-warning">Not signed in</span>
         {/if}
       </div>
-      {#if !viewModel.uid}
-        <button
-          type="button"
-          class="btn btn-accent btn-xs"
-          disabled={viewModel.isSigningIn}
-          onclick={() => viewModel.signInAnonymously()}
-        >
-          {#if viewModel.isSigningIn}
-            <span class="loading loading-spinner loading-xs"></span>
-          {/if}
-          Sign In Anonymously
-        </button>
-      {/if}
     </div>
 
     <!-- Slot selector -->

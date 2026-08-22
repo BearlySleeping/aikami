@@ -32,7 +32,6 @@
     "@fontsource/instrument-serif": "5.3.0",
     "@fontsource/inter": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
-    "firebase": "12.18.0",
     "pixi.js": "8.20.0"
   },
   "devDependencies": {
@@ -45,7 +44,6 @@
     "astro": "7.2.4",
     "astro-compress": "2.4.3",
     "astro-robots-txt": "1.0.0",
-    "firebase-tools": "15.28.1",
     "lighthouse": "13.4.1",
     "tailwindcss": "4.3.3",
     "vite": "8.2.2",
