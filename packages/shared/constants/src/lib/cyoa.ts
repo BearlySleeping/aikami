@@ -8,9 +8,6 @@
 /** Built-in agent ID for the CYOA post-processing agent. */
 export const CYOA_AGENT_ID = 'cyoa';
 
-/** Built-in agent ID for the suggestion-chips post-processing agent (C-420). */
-export const SUGGESTION_CHIPS_AGENT_ID = 'suggestion-chips';
-
 /** Maximum number of choices the CYOA agent may propose per turn. */
 export const CYOA_MAX_CHOICES = 4;
 

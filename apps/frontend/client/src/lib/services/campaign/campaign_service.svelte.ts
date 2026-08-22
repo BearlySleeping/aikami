@@ -109,8 +109,10 @@ const buildCapabilityProfile = (): CapabilityProfile => {
   const { ttsProvider, imageProvider } = aiSettingsService;
   return {
     textProvider: hasConnectionForCapability('text'),
-    imageProvider: hasConnectionForCapability('image') || !!(imageProvider.apiKey || imageProvider.endpoint),
-    voiceProvider: hasConnectionForCapability('voice') || !!(ttsProvider.apiKey || ttsProvider.endpoint),
+    imageProvider:
+      hasConnectionForCapability('image') || !!(imageProvider.apiKey || imageProvider.endpoint),
+    voiceProvider:
+      hasConnectionForCapability('voice') || !!(ttsProvider.apiKey || ttsProvider.endpoint),
   };
 };
 

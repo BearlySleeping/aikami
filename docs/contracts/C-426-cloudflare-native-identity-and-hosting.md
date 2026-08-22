@@ -7,7 +7,8 @@ github:
     issue_number: null
     issue_url: null
     project_item_id: null
-    pr_url: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/172"
+    pr_number: 172
 created_at: "2026-08-21"
 ---
 
@@ -384,14 +385,16 @@ Changes to ACs or scope require a version bump and user approval.
 ### Summary
 Implemented the identity + hosting migration for C-426 across **AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7**. AC-1: the Cloudflare D1 schema (Drizzle sqlite dialect) carrying `packs`/`pack_versions` forward with the FK retargeted to Better Auth's `user.id`, plus Better Auth's identity tables and the new `account_backups` table, with a generated D1 migration. AC-2: Better Auth (email/password + Google) configured against D1 via the drizzle sqlite adapter, with an end-to-end test through its HTTP handler. AC-3: hub SvelteKit adapter swapped to `@sveltejs/adapter-cloudflare`, `wrangler.jsonc` with `DB`/`SAVES_BUCKET` bindings, `deployment_config.ts` hub entry moved to `cloudflare-worker`, and `app.d.ts` Platform env — build verified. AC-4: Better Auth mounted on the hub's Elysia app at `/api/auth/*` with a session check, tested through the real Elysia mount against a mock D1. AC-5: a fetch-based Better Auth client service (`better_auth_client.svelte.ts`) with email/password sign-in, session check, sign-out, and a device-handoff flow that adopts a Better Auth session via the same polling UX as the old Firebase flow, wired behind the `PUBLIC_AUTH_BACKEND` flag — unit tested. AC-6/AC-7: session-gated Turso save backup/restore to R2 (`account_backups` metadata written only after the R2 PUT; ownership-checked restore), tested end-to-end. **AC-8** (decommission) remains — manual and requires a production stability window.
 
+**Follow-up (full cutover, post-verification):** the dual-auth window was closed — the hub no longer bundles `firebase-admin` at all (verified 0 references in the Worker bundle), `hooks.server.ts` resolves sessions via Better Auth, the Firebase auth routes (`/api/auth/session`, `/api/auth/action`, `/api/auth/poll-device-handoff`) were removed, App Check enforcement was dropped (the last `firebase-admin` source), and the client was flipped to `PUBLIC_AUTH_BACKEND=better-auth`. The Tauri device handoff now uses Better Auth's **device-authorization plugin** (new `deviceCode` D1 table + migrations `0003`/`0004`, mounted on the hub, client `startDeviceHandoff`/`pollDeviceHandoff`/`approveDeviceHandoff` wired to `/api/auth/device/*`). Two Workers-specific fixes were required: Elysia's AOT handler uses `new Function` (disallowed in Workers) so the hub Elysia app runs with `aot: false`, and Better Auth is mounted in dedicated SvelteKit catch-all routes (`/api/auth/[...auth]`, `/api/device/[...]`) because Elysia consumes the request body and locks the ReadableStream. `BETTER_AUTH_URL`/`BETTER_AUTH_SECRET` are set as Wrangler secrets.
+
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | D1 sqlite schema + generated migration + `d1_schema.test.ts` (7 tests pass). |
 | AC-2 | ✅ | Better Auth against D1 (email/password + Google config) — `better_auth.test.ts` (4 tests pass). |
 | AC-3 | ✅ | Adapter swap + `wrangler.jsonc` + deploy config + Platform env — `hub:build` verified, `cloudflare_hub_deploy.test.ts` (4 tests pass). |
-| AC-4 | ✅ | Better Auth mounted on Elysia at `/api/auth/*` + session check — `auth.test.ts` (3 tests pass). |
-| AC-5 | ✅ | Better Auth client service + device handoff behind `PUBLIC_AUTH_BACKEND` flag — `better_auth_client.test.ts` (5 tests pass). |
+| AC-4 | ✅ | Hub login fully cut over from Firebase — `hooks.server.ts` resolves sessions via Better Auth, the Firebase auth routes are removed, and the hub bundle contains **zero** `firebase-admin` references. `auth.test.ts` (6 tests pass). |
+| AC-5 | ✅ | Client migrated to Better Auth (`PUBLIC_AUTH_BACKEND=better-auth` default) + device handoff via the device-authorization plugin — `device_handoff.spec.ts` (4 tests pass). |
 | AC-6 | ✅ | Save backup to R2, session-gated, metadata-after-PUT — `save_backup.test.ts` (5 tests pass). |
 | AC-7 | ✅ | Restore flow (list + ownership-checked download) — covered in `save_backup.test.ts`. |
 | AC-8 | ⚠️ | Deferred — decommission, manual, requires production stability window. |

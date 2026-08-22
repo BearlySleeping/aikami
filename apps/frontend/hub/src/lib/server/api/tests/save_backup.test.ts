@@ -2,6 +2,8 @@
 //
 // C-426 AC-6/AC-7: Turso save backup/restore to R2, gated by a verified
 // Better Auth session.
+
+// biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
 //
 // Uses the same mock D1Database (libsql-backed) as auth.test.ts plus an
 // in-memory mock R2 bucket. Verifies the session guard (401 without a
@@ -95,6 +97,10 @@ let setBetterAuthEnv: (
 ) => void;
 let setSaveBackupEnv: (env: unknown) => void;
 let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
+let authFallback: (v: {
+  request: Request;
+  platform?: { env: { DB: unknown } };
+}) => Response | Promise<Response>;
 let r2: ReturnType<typeof createMockR2>;
 
 const applyD1Migrations = async (): Promise<void> => {
@@ -150,14 +156,16 @@ const get = (path: string, cookie?: string) =>
 
 /** Sign up + sign in, returning the session cookie. */
 const signInCookie = async (email: string): Promise<string> => {
-  await app.handle(
+  const handleAuth = (request: Request) =>
+    authFallback({ request, platform: { env: { DB: createMockD1(client) } } });
+  await handleAuth(
     post('/api/auth/sign-up/email', {
       name: 'Alice',
       email,
       password: 'password123',
     }),
   );
-  const res = await app.handle(
+  const res = await handleAuth(
     post('/api/auth/sign-in/email', {
       email,
       password: 'password123',
@@ -179,6 +187,8 @@ beforeAll(async () => {
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setSaveBackupEnv({ DB: createMockD1(client), SAVES_BUCKET: r2 });
   ({ app } = await import('../index.ts'));
+  const authRoute = await import('../../../../routes/api/auth/[...auth]/+server.ts');
+  authFallback = authRoute.fallback;
 });
 
 afterAll(async () => {

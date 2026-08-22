@@ -41,7 +41,11 @@ export const parseDiceNotation = (input: string): DiceNotation | undefined => {
 
   // Reject any value that is not a safe integer (e.g. oversized digit strings
   // that overflow past Number.MAX_SAFE_INTEGER).
-  if (!Number.isSafeInteger(count) || !Number.isSafeInteger(sides) || !Number.isSafeInteger(modifier)) {
+  if (
+    !Number.isSafeInteger(count) ||
+    !Number.isSafeInteger(sides) ||
+    !Number.isSafeInteger(modifier)
+  ) {
     return undefined;
   }
 

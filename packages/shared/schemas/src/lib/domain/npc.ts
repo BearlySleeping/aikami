@@ -2,7 +2,6 @@
 // packages/shared/schemas/src/lib/domain/npc.ts
 import Type, { Composite } from 'typebox';
 import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
-import { NpcSuggestionChipSchema } from '../game/npc_dialogue_command.ts';
 import { BaseCharacterSheetSchema } from './character.ts';
 
 const _visibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('public')]);
@@ -32,13 +31,6 @@ export const NpcSheetSchema = Composite(
       Type.String({ description: 'ID of the original NPC this was forked from' }),
     ),
     expressions: Type.Optional(Type.Record(Type.String(), Type.String({ format: 'uri' }))),
-    /** Pre-authored suggestion chips shown with the NPC's initial greeting (C-420). */
-    initialSuggestions: Type.Optional(
-      Type.Array(NpcSuggestionChipSchema, {
-        maxItems: 4,
-        description: 'Pre-authored suggestion chips shown with the initial greeting',
-      }),
-    ),
   }),
 );
 

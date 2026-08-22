@@ -2,13 +2,16 @@
 export {
   type DialogServiceInterface,
   dialogService,
-  type GameStateSyncServiceInterface,
-  gameStateSyncService,
   type RouterServiceInterface,
   routerService,
   type SaveSlotEntry,
   type SaveSlotMetadata,
 } from '@aikami/frontend/services';
+
+export {
+  type GameStateSyncServiceInterface,
+  gameStateSyncService,
+} from '@aikami/frontend/services/game-state-sync';
 
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {

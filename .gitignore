@@ -294,3 +294,8 @@ artifacts/
 /*.jpeg
 /*.webp
 /*.gif
+
+# Drizzle D1 migration snapshots (generated, churn on every migration) — keep
+# the migration SQL files (drizzle-d1/*.sql) committed as the schema source of
+# truth, but ignore the meta/ snapshot JSON + journal.
+packages/backend/database/drizzle-d1/meta/

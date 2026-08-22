@@ -5,7 +5,7 @@ import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = (event) => {
   const { locals, url } = event;
-  const { currentRoute, device, userSession, sessionId, customFirebaseSignInToken } = locals;
+  const { currentRoute, device, userSession, sessionId } = locals;
   const { searchParams } = url;
 
   const logLevelParam = searchParams.get('logLevel') ?? undefined;
@@ -17,6 +17,5 @@ export const load: LayoutServerLoad = (event) => {
     logLevel,
     sessionId,
     userSession,
-    customFirebaseSignInToken,
   } satisfies AdminHookData;
 };

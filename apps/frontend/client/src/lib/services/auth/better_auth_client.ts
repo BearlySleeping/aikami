@@ -4,6 +4,8 @@
 // endpoints (mounted in the hub Elysia app — see
 // apps/frontend/hub/src/lib/server/api/index.ts). Replaces the Firebase Auth
 // SDK path when `PUBLIC_AUTH_BACKEND=better-auth`.
+
+// biome-ignore-all lint/style/useNamingConvention: Better Auth's device-authorization API uses snake_case fields (device_code, user_code, …)
 //
 // The hub's Better Auth instance (packages/backend/auth) owns email/password,
 // Google OAuth, session cookies, and device authorization. This client talks to
@@ -44,6 +46,10 @@ export type DeviceHandoffStart = {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
+  /** RFC 8628 polling interval (seconds) — how often to poll /device/token. */
+  interval: number;
+  /** Expiration (seconds from now) — deadline for completing the device auth. */
+  expiresIn: number;
 };
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -190,33 +196,109 @@ export const socialSignInRedirect = (provider: FirebaseSignInProviderName): void
   );
 };
 
+/** Better Auth device-authorization client id (no validateClient on the hub). */
+const DEVICE_CLIENT_ID = 'aikami-client';
+
 /**
  * Request a device authorization from the hub (Better Auth device-authorization
  * flow). Returns the device code and the verification URI to open in the system
  * browser (the /link page), where the user signs in and approves the device.
- *
- * 🔴 GATED: the hub's Better Auth device-authorization plugin is not yet
- * mounted, so this endpoint does not exist. Callers must not invoke it — the
- * Tauri path falls back to the Firebase device-link flow instead. This throws a
- * clear error rather than silently hitting a 404.
  */
 export const startDeviceHandoff = async (): Promise<DeviceHandoffStart> => {
-  throw toAppError({
-    errorType: 'unavailable',
-    errorMessage: 'Device authorization is not yet available on the hub.',
+  const response = await fetch(`${hubApiBase()}/auth/device/code`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    credentials: 'include',
+    body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
   });
+  if (!response.ok) {
+    throw await toAppErrorFromResponse(response);
+  }
+  const body = (await response.json()) as {
+    device_code?: string;
+    user_code?: string;
+    verification_uri?: string;
+    verification_uri_complete?: string;
+    interval?: number;
+    expires_in?: number;
+  };
+  if (!body.device_code || !body.user_code) {
+    throw toAppError({ errorType: 'unavailable', errorMessage: 'Device authorization failed' });
+  }
+  return {
+    deviceCode: body.device_code,
+    userCode: body.user_code,
+    verificationUri: body.verification_uri_complete ?? body.verification_uri ?? '/device',
+    interval: body.interval ?? 5,
+    expiresIn: body.expires_in ?? 1800,
+  };
 };
 
 /**
  * Poll the hub to check whether a device authorization was approved. Returns
- * the adopted `CurrentUser` once approved, or `undefined` while still pending
- * (the hub answers 202 for pending). The caller keeps polling on `undefined`.
- *
- * 🔴 GATED: see {@link startDeviceHandoff} — the hub plugin is not mounted.
+ * the adopted `CurrentUser` once approved, `undefined` while still pending,
+ * or signals slow_down when the server requests slower polling (RFC 8628).
+ * On approval the session token is stored as the Better Auth session cookie
+ * so subsequent requests are authenticated.
  */
-export const pollDeviceHandoff = async (_deviceCode: string): Promise<CurrentUser | undefined> => {
-  throw toAppError({
-    errorType: 'unavailable',
-    errorMessage: 'Device authorization is not yet available on the hub.',
+export const pollDeviceHandoff = async (
+  deviceCode: string,
+): Promise<{ user: CurrentUser } | { slowDown: true } | undefined> => {
+  const response = await fetch(`${hubApiBase()}/auth/device/token`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    credentials: 'include',
+    body: JSON.stringify({
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: deviceCode,
+      client_id: DEVICE_CLIENT_ID,
+    }),
   });
+  if (response.status === 400) {
+    // RFC 8628: inspect the error field to distinguish pending/slow_down/denied.
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (body.error === 'authorization_pending') {
+      return undefined;
+    }
+    if (body.error === 'slow_down') {
+      return { slowDown: true };
+    }
+    // access_denied, expired_token, or unknown error — surface via error path.
+    throw toAppError({
+      errorType: 'unauthorized',
+      errorMessage: body.error === 'access_denied' ? 'Device authorization denied' : 'Device authorization failed',
+    });
+  }
+  if (!response.ok) {
+    throw await toAppErrorFromResponse(response);
+  }
+  const body = (await response.json()) as { access_token?: string };
+  if (!body.access_token) {
+    throw toAppError({ errorType: 'unauthorized', errorMessage: 'Device authorization failed' });
+  }
+  setSessionCookie(body.access_token);
+  const user = await getBetterAuthSession();
+  return user ? { user } : undefined;
+};
+
+/**
+ * Store the Better Auth session token as the session cookie so subsequent
+ * `credentials: 'include'` requests are authenticated. Uses the hub origin
+ * for the cookie (hub.bearlysleeping.com or localhost) so it matches the
+ * server-set session cookie, avoiding conflicts between client and hub
+ * domain cookies in Tauri webviews.
+ */
+const setSessionCookie = (token: string): void => {
+  // No-op outside a browser (e.g. unit tests) — the cookie is only meaningful
+  // in the Tauri webview / browser where `window.location` exists.
+  if (typeof window === 'undefined' || !window.location) {
+    return;
+  }
+  const hubBase = hubApiBase();
+  const isSecure = hubBase.startsWith('https://');
+  // Derive cookie name: __Secure- prefix required for Secure cookies per spec.
+  const cookieName = isSecure ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
+  const secureAttr = isSecure ? 'Secure; ' : '';
+  // biome-ignore lint/suspicious/noDocumentCookie: adopting the Better Auth session cookie is the intended mechanism
+  document.cookie = `${cookieName}=${encodeURIComponent(token)}; Path=/; ${secureAttr}SameSite=Lax; Max-Age=2592000`;
 };

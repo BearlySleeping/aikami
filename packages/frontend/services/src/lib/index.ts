@@ -12,7 +12,6 @@ export * from './router/router_utils.ts';
 export * from './router/routes.ts';
 // services
 export * from './services/dialog.svelte.ts';
-export * from './services/game_state_sync.svelte.ts';
 export * from './services/router.svelte.ts';
 // types
 export * from './types/index.ts';
