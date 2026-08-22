@@ -1,6 +1,5 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
-import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -29,6 +28,15 @@ import {
   worldStateService,
 } from '$services';
 import type { ExpressionId } from '$types';
+import {
+  type CombatLogEntry,
+  type CombatLogServiceInterface,
+  getCombatLogService,
+} from './combat_log_service.svelte.ts';
+import {
+  getStatusEffectsService,
+  type StatusEffectsServiceInterface,
+} from './status_effects_service.svelte.ts';
 import type {
   DeathSaveState,
   DiceNotation,
@@ -52,29 +60,7 @@ import type {
 // CombatLogEntry — structured combat log entry (C-165)
 // ---------------------------------------------------------------------------
 
-/**
- * A single entry in the combat log, replacing the old flat string format.
- * Each entry tracks its turn, actor, narrative text, and optionally an
- * AI-generated inline image.
- *
- * Contract: C-165 Combat Inline Images & Gallery
- */
-export type CombatLogEntry = {
-  /** Unique ID for Svelte {#each} keying. */
-  readonly id: string;
-  /** Turn number this entry belongs to (monotonically increasing). */
-  readonly turnNumber: number;
-  /** Who performed the action — 'Player' or the enemy name. */
-  readonly actor: string;
-  /** Description of the action taken. */
-  readonly actionText: string;
-  /** Outcome or result of the action, if distinct from actionText. */
-  readonly outcomeText: string;
-  /** AI-generated image URL for this combat turn, if available. */
-  readonly imageUrl?: string;
-  /** Whether an image is currently being generated for this entry. */
-  readonly isGeneratingImage?: boolean;
-};
+export type { CombatLogEntry } from './combat_log_service.svelte.ts';
 
 export type CombatViewModelOptions = BaseViewModelOptions & {
   /**
@@ -484,17 +470,37 @@ export class CombatViewModel
   /** C-234: Current turn state. */
   turnState: TurnState | null = $state(null);
 
+  /** C-338: Status effects + death saves — owned by the composed sub-service (C-425). */
+  private readonly _statusEffects: StatusEffectsServiceInterface;
+
+  /** C-165: Combat-log entry domain logic — owned by the composed sub-service (C-425). */
+  private readonly _combatLog: CombatLogServiceInterface;
+
   /** C-338: Active status effects on the player entity, keyed by effect ID. */
-  playerStatusEffects: StatusEffectDisplay[] = $state([]);
+  get playerStatusEffects(): StatusEffectDisplay[] {
+    return this._statusEffects.playerStatusEffects;
+  }
 
   /** C-338: Active status effects on enemy entities, keyed by entity ID. */
-  enemyStatusEffects: Record<number, StatusEffectDisplay[]> = $state({});
+  get enemyStatusEffects(): Record<number, StatusEffectDisplay[]> {
+    return this._statusEffects.enemyStatusEffects;
+  }
 
   /** C-338: Death save state for the player (null when not downed). */
-  deathSaveState: DeathSaveState | null = $state(null);
+  get deathSaveState(): DeathSaveState | null {
+    return this._statusEffects.deathSaveState;
+  }
 
   /** C-338: Whether any entity is currently downed. */
-  isAnyEntityDowned: boolean = $state(false);
+  get isAnyEntityDowned(): boolean {
+    return this._statusEffects.isAnyEntityDowned;
+  }
+
+  constructor(options: CombatViewModelOptions) {
+    super(options);
+    this._statusEffects = getStatusEffectsService({ className: 'StatusEffectsService' });
+    this._combatLog = getCombatLogService({ className: 'CombatLogService' });
+  }
 
   /** Timeout handle for clearing the active dice roll after animation. */
   private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -701,10 +707,7 @@ export class CombatViewModel
       };
 
       // C-338: Reset status effects + death saves on combat start
-      this.playerStatusEffects = [];
-      this.enemyStatusEffects = {};
-      this.deathSaveState = null;
-      this.isAnyEntityDowned = false;
+      this._statusEffects.reset();
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
@@ -822,43 +825,17 @@ export class CombatViewModel
 
     const removeStatusApplied = bridge.on('STATUS_APPLIED', (event) => {
       this.debug('STATUS_APPLIED', { effectId: event.effectId, targetId: event.targetId });
-
-      // Resolve effect definition from registry
-      const effectDef = STATUS_EFFECT_REGISTRY[event.effectId];
-      const effectName = effectDef?.name ?? event.effectId;
-      const effectTag = effectDef?.tag ?? 'neutral';
-
-      const display: StatusEffectDisplay = {
+      this._statusEffects.applyStatus({
         effectId: event.effectId,
-        name: effectName,
-        tag: effectTag,
-        remainingDuration: event.duration,
-        sourceEntityId: event.sourceId,
-      };
-      if (event.targetId === 1) {
-        this.playerStatusEffects = [...this.playerStatusEffects, display];
-      } else {
-        const existing = this.enemyStatusEffects[event.targetId] ?? [];
-        this.enemyStatusEffects = {
-          ...this.enemyStatusEffects,
-          [event.targetId]: [...existing, display],
-        };
-      }
+        targetId: event.targetId,
+        duration: event.duration,
+        sourceId: event.sourceId,
+      });
     });
 
     const removeStatusExpired = bridge.on('STATUS_EXPIRED', (event) => {
       this.debug('STATUS_EXPIRED', { effectId: event.effectId, targetId: event.targetId });
-      if (event.targetId === 1) {
-        this.playerStatusEffects = this.playerStatusEffects.filter(
-          (e) => e.effectId !== event.effectId,
-        );
-      } else {
-        const existing = this.enemyStatusEffects[event.targetId] ?? [];
-        this.enemyStatusEffects = {
-          ...this.enemyStatusEffects,
-          [event.targetId]: existing.filter((e) => e.effectId !== event.effectId),
-        };
-      }
+      this._statusEffects.expireStatus(event.effectId, event.targetId);
     });
 
     const removeStatusTick = bridge.on('STATUS_TICK', (_event) => {
@@ -881,24 +858,17 @@ export class CombatViewModel
 
     const removeEntityDowned = bridge.on('ENTITY_DOWNED', (event) => {
       this.debug('ENTITY_DOWNED', { entityId: event.entityId });
-      this.isAnyEntityDowned = true;
-      if (event.entityId === 1) {
-        this.deathSaveState = { successes: 0, failures: 0 };
-      }
+      this._statusEffects.setEntityDowned(event.entityId);
     });
 
     const removeDeathSaveRolled = bridge.on('DEATH_SAVE_ROLLED', (event) => {
       this.debug('DEATH_SAVE_ROLLED', event);
-      this.deathSaveState = {
-        successes: event.cumulativeSuccesses,
-        failures: event.cumulativeFailures,
-      };
+      this._statusEffects.setDeathSave(event.cumulativeSuccesses, event.cumulativeFailures);
     });
 
     const removeEntityRevived = bridge.on('ENTITY_REVIVED', (event) => {
       this.debug('ENTITY_REVIVED', event);
-      this.isAnyEntityDowned = false;
-      this.deathSaveState = null;
+      this._statusEffects.revive(event.entityId);
     });
 
     this._disposeListeners.push(
@@ -964,10 +934,8 @@ export class CombatViewModel
     this.queuedRolls = [];
     this.initiativeEntries = [];
     this.turnState = null;
-    this.playerStatusEffects = [];
-    this.enemyStatusEffects = {};
-    this.deathSaveState = null;
-    this.isAnyEntityDowned = false;
+    // C-338: Reset status effects + death saves via the composed sub-service
+    this._statusEffects.reset();
     this._logEntryCounter = 0;
     this._turnCounter = 0;
 
@@ -1388,13 +1356,7 @@ export class CombatViewModel
    * "Enemy attacks...". Fallback to "System" if unrecognized.
    */
   private _parseActorFromMessage(message: string): string {
-    if (message.startsWith('Player ')) {
-      return 'Player';
-    }
-    if (message.startsWith('Enemy ')) {
-      return this.enemyName || 'Enemy';
-    }
-    return 'System';
+    return this._combatLog.parseActor(message, this.enemyName);
   }
 
   /**
@@ -1409,20 +1371,7 @@ export class CombatViewModel
    *   `isGeneratingImage` without setting an image.
    */
   private _updateLogEntryImage(entryId: string, imageUrl: string | undefined): void {
-    const idx = this.combatLog.findIndex((e) => e.id === entryId);
-    if (idx === -1) {
-      return;
-    }
-    const old = this.combatLog[idx];
-    const updated: CombatLogEntry = {
-      ...old,
-      imageUrl: imageUrl ?? old.imageUrl,
-      isGeneratingImage: false,
-    };
-    // Replace the entry in place to trigger Svelte reactivity
-    const copy = [...this.combatLog];
-    copy[idx] = updated;
-    this.combatLog = copy;
+    this.combatLog = this._combatLog.updateEntryImage(this.combatLog, entryId, imageUrl);
   }
 
   // -----------------------------------------------------------------------
