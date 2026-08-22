@@ -47,8 +47,15 @@ const jsonMode = args.includes('--json');
 const sinceIndex = args.indexOf('--since');
 const sinceMs = sinceIndex >= 0 ? parseSince(args[sinceIndex + 1]) : undefined;
 
-const events = readInfraIssues(process.cwd());
-const summary = summarizeInfraIssues(events, { sinceMs });
+const allEvents = readInfraIssues(process.cwd());
+const summary = summarizeInfraIssues(allEvents, { sinceMs });
+
+// Count only the events that match the filter (respecting --since)
+const cutoff = sinceMs !== undefined ? Date.now() - sinceMs : undefined;
+const filteredEventCount =
+  cutoff !== undefined
+    ? allEvents.filter((e) => new Date(e.timestamp).getTime() >= cutoff).length
+    : allEvents.length;
 
 if (jsonMode) {
   console.log(JSON.stringify(summary, undefined, 2));
@@ -56,7 +63,7 @@ if (jsonMode) {
   console.log(`${ansi.green}✓${ansi.reset} No infrastructure issues recorded.`);
 } else {
   console.log(
-    `\n${ansi.bold}Infrastructure issues (${summary.length} distinct, ${events.length} total)${ansi.reset}`,
+    `\n${ansi.bold}Infrastructure issues (${summary.length} distinct, ${filteredEventCount} total)${ansi.reset}`,
   );
   for (const s of summary) {
     console.log(

@@ -43,7 +43,6 @@ Suites:
   schema-check      Validate Zod schemas + TypeScript types
   client            Client browser tests (requires Client dev server)
   comfyui           ComfyUI image service tests
-  cross-service     Multi-service flow tests
 
 Examples:
   bun run test:blackbox                         # All suites

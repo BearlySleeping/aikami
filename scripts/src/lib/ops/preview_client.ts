@@ -167,8 +167,8 @@ const ensureDevServer = async (mode: AikamiMode): Promise<void> => {
       await waitForReady({ services: ['hub'], mode }, 60_000);
     }
   } else {
-    // Ensure client tab exists
-    await startServices({ mode, services: ['client'] });
+    // Ensure all mode-specific services are running (not just client)
+    await startServices({ mode, services });
   }
 
   // Wait for client to be ready

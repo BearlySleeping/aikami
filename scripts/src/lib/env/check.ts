@@ -89,7 +89,7 @@ async function checkGcp(): Promise<boolean> {
 
     warn('No GCP authentication found.');
     warn('Options:');
-    warn('  1. Run: gcloud auth application-default login');
+    warn('  1. Run: gcloud auth login --update-adc');
     warn("  2. Or switch to emulator: echo 'AIKAMI_MODE=emulator' > .env.local");
     return false;
   } catch {
