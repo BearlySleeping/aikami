@@ -23,7 +23,7 @@ const MAX_WORKERS = 8;
 const AUTH_DIR = './.auth';
 
 const TEST_EMAIL = 'user@example.com';
-const TEST_PASSWORD = 'asdasd';
+const TEST_PASSWORD = 'asdasd123';
 
 // ── Better Auth session helpers ─────────────────────────────
 

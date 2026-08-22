@@ -1,12 +1,12 @@
 // apps/frontend/client/src/lib/views/link/link_view_model.svelte.ts
 //
 // ViewModel for /link — the device-link handoff page opened by the Tauri
-// desktop app's system browser (see auth_service.svelte.ts's _deviceHandoff).
+// desktop app's system browser (see auth_service.svelte.ts's _betterAuthDeviceHandoff).
 // Runs as a normal browser tab on a real domain, so Google sign-in works here
 // even though it can't inside the Tauri webview. Once the user explicitly
 // confirms, approves the device authorization via completeDeviceHandoff so the
 // polling desktop client can exchange it for a session token — see
-// auth_service.svelte.ts's _awaitDeviceApproval for the receiving side.
+// auth_service.svelte.ts's _awaitBetterAuthDeviceApproval for the receiving side.
 //
 // Sign-in itself is handled by the shared LoginView (views/auth/login) —
 // this VM only owns the link-specific handoff. When auth is ready and the

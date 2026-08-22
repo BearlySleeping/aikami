@@ -245,7 +245,7 @@ export class AuthService
     // UX as before.
     if (!isTauri()) {
       try {
-        await socialSignInRedirect(provider);
+        await socialSignInRedirect(provider as import('@aikami/types').SignInSocialProvider);
       } catch (error) {
         this.error('socialSignIn:redirect', error);
         return {

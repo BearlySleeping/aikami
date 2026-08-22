@@ -23,7 +23,7 @@ const HUB_BASE_URL = `http://localhost:${EMULATOR_PORTS.hub}`;
  */
 const seedSignedInState = async (page: import('@playwright/test').Page): Promise<void> => {
   const email = `hub-e2e-${Date.now()}@example.com`;
-  const password = 'asdasd';
+  const password = 'asdasd123';
 
   await fetch(`${HUB_BASE_URL}/api/auth/sign-up/email`, {
     method: 'POST',

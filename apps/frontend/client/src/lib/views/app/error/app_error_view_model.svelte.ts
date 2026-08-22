@@ -136,9 +136,12 @@ class AppErrorViewModel
   override async initialize(): Promise<void> {
     const { error, status, url } = page;
 
-    void error;
-    void url;
-    void status;
+    // Record error telemetry for debugging
+    this.error('app-error-page', {
+      error: error instanceof Error ? error.message : String(error),
+      status,
+      url: url.pathname,
+    });
   }
 
   async handleRetry(): Promise<void> {
